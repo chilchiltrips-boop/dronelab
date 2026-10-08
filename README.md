@@ -1,56 +1,84 @@
-# ZEBJUS Drone Lab — Simple Edition
+# ZEBJUS Drone Lab · Foundation v0.1
 
-A browser-only control simulation made with three files. No npm, framework,
-build step, server, external fonts, or downloaded libraries are needed.
+Three connected pages for building a drone learning workspace, step by step.
+Plain HTML, CSS and JavaScript; no dependencies, npm or build step.
 
-| File | Purpose |
-| --- | --- |
-| `index.html` | Page and controls |
-| `style.css` | Desktop and mobile layout |
-| `script.js` | Demo controls, telemetry and link recovery |
+| Page | File | Working features |
+| --- | --- | --- |
+| **Forge** | `index.html` | Five assembly stages, layer schematic, checklist progress and retained control simulation |
+| **Trace** | `trace.html` | Logical 2D wiring practice, connection checks, reference wiring and remove/clear controls |
+| **Core** | `core.html` | Firmware file preview and editable workspace settings |
 
-## Open locally
+All pages share `style.css` and `script.js`. Open `index.html` locally or serve
+this repository root as a static website. Links and asset paths are relative,
+so GitHub Pages project paths work without routing configuration.
 
-Extract the ZIP and double-click `index.html`. Keep all three files together.
+## Forge
 
-## Publish on GitHub Pages
+Select an assembly stage, use Previous/Next, and mark each stage complete.
+Checklist progress survives reloads in the same browser. Reset affects only
+this checklist. The assembly layer view is a schematic; this release does not
+include interactive 3D models, component placement or a physics simulator.
 
-1. Create a new repository for this demo.
-2. Upload `index.html`, `style.css` and `script.js` directly into the repository
-   root. Do not upload only the ZIP or put the files inside an extra folder.
-3. Commit the upload to `main`.
-4. Open **Settings → Pages → Build and deployment**.
-5. Set **Source** to **Deploy from a branch**.
-6. Choose branch **main** and folder **/(root)**, then **Save**.
-7. Wait for deployment. Use the site URL shown on the Pages settings screen.
+Expand **Control simulation** to use the original joystick demo. Connect,
+arm at minimum throttle, adjust the inputs, and simulate link loss. The demo
+resets and disarms, reconnects after 3 seconds, and enables inputs again.
+Rearming remains explicit. Stop cancels recovery; Escape or focus loss also
+stops an active simulation. No device commands are sent.
 
-Official instructions:
-https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+## Trace
 
-These files were prepared for upload. No repository has been changed and no
-site has been published as part of this delivery.
+Choose the controller and component endpoints, then connect the wire. The app
+rejects mismatched and duplicate connections. Show reference wiring draws all
+eight demo signal connections. Individual wires can be removed or all cleared.
+Connections survive reloads in the same browser.
 
-## Try the demo
+This is a logical practice map. OUT1–OUT4 are abstract signal labels, not GPIO
+numbers. IMU power and reference endpoints are illustrative. It is not a verified
+board pinout, complete power circuit or electrical simulator. Exact hardware
+pinouts, voltage compatibility and motor/power wiring need a later hardware
+integration step.
 
-- Connect the demo. Arm with throttle at 1000 µs.
-- Drag the joystick to change roll/pitch; release to center. The sliders also
-  allow keyboard control. Adjust throttle and yaw to change demo telemetry.
-- Simulate link loss. Inputs reset and the demo disarms immediately. It
-  reconnects after 3 seconds; controls become available automatically.
-- Arm again to resume. Arming is never restored automatically.
-- Stop & reset or press Escape to disarm and reset all controls. Stop also
-  cancels a pending reconnect. Leaving the page disarms an active simulation.
+## Core
 
-## Hardware scope
+Set the project name, frame, controller and IMU profile. Save settings to this
+browser; the project name appears across all three pages. Download exports the
+saved settings as JSON. Reset restores the workspace defaults.
 
-This is a UI simulation, not a flight controller or a physics simulator. Motor
-output is a percentage calculated from the throttle slider while armed.
-Telemetry values are simulated inputs; they are not IMU measurements.
+Firmware selection displays the file name and size. It accepts a non-empty
+`.bin` file up to 16 MB for preview, but does not verify firmware authenticity,
+board compatibility, image structure or partition layout. No firmware is flashed.
+No firmware binaries are included in this repository.
 
-There is no ESP32 connection, AP/STA connection, USB flashing, authentication,
-cloud relay, or Android APK. Real hardware integration needs the controller's
-actual communication protocol and a separately validated transport. Do not
-treat the demo reconnect timer as a hardware failsafe.
+## Storage and device scope
 
-All asset paths are relative so the page can run under a GitHub project path.
-The app keeps no saved control state and registers no service worker.
+Storage uses the `zebjus.lab.*` browser storage keys. If storage is unavailable,
+changes work for the current page session and the interface reports that they
+were not persisted. Malformed saved data falls back to defaults. No credentials,
+network configuration or active controls are saved.
+
+There is no USB/OTA transport, ESP32/AP/STA connection, cloud backend or APK in
+this foundation release. Settings never write to a flight controller.
+
+## GitHub Pages
+
+In **Settings → Pages**, choose **Deploy from a branch**, branch **main**,
+folder **/(root)**, then Save. GitHub displays the deployed URL after the build.
+This source update does not change Pages settings.
+
+## Validation
+
+- JavaScript syntax and all three pages' local links, IDs and asset references.
+- Programmatic DOM tests for checklist navigation/persistence, wiring checks,
+  settings persistence/export/reset, firmware selection guards, storage failure
+  recovery and the retained connection-loss simulation.
+- Local HTTP responses for all three pages.
+- Visual browser QA was unavailable in the authoring environment. Layout uses
+  responsive CSS, with a single-column lab layout on smaller screens.
+
+## Next steps
+
+Replace the assembly schematic with a proper interactive model, extend the
+wiring workspace with component movement, then add verified hardware transport
+and firmware release handling. These are future implementation steps, not
+features of v0.1.

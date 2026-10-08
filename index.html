@@ -3,21 +3,46 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="A simple ZEBJUS Drone Lab browser simulation.">
-  <title>ZEBJUS · Drone Lab</title>
+  <meta name="description" content="Drone assembly lab">
+  <title>Forge · ZEBJUS Drone Lab</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131e2b'/%3E%3Cpath d='M9 9h14L9 23h14' fill='none' stroke='%2344e0bd' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
   <script src="./script.js" defer></script>
 </head>
-<body>
-  <div class="app">
-    <header>
-      <a class="brand" href="./"><span class="mark" aria-hidden="true">Z</span><span>ZEBJUS <small>DRONE LAB</small></span></a>
-      <span class="badge">BROWSER SIMULATION</span>
-    </header>
-    <main>
-      <section class="intro"><div><p class="eyebrow">CONTROL DESK / 01</p><h1>Ready for a test flight.</h1><p>Practice controls and connection recovery. No hardware is connected.</p></div></section>
-      <section class="connection panel" aria-label="Demo connection">
+<body data-page="forge">
+<a class="skip" href="#main">Skip to content</a>
+<div class="app">
+  <header><a class="brand" href="./index.html"><span class="mark" aria-hidden="true">Z</span><span>ZEBJUS <small>DRONE LAB</small></span></a><span class="badge">FOUNDATION · V0.1</span></header>
+  <nav class="lab-nav" aria-label="Labs"><a href="index.html" aria-current="page"><span>01</span> Forge</a><a href="trace.html"><span>02</span> Trace</a><a href="core.html"><span>03</span> Core</a></nav>
+  <main id="main">
+    <section class="intro"><p class="eyebrow">FORGE / DRONE ASSEMBLY LAB</p><h1>Start with the build.</h1><p class="kit-line">Project: <strong id="kitLabel">zebjus_drone_1</strong> <span>· Browser workspace</span></p></section>
+    <div class="lab-grid">
+  <section class="panel padded" aria-labelledby="assemblyTitle">
+    <div class="panel-heading"><h2 id="assemblyTitle">Assembly sequence</h2><span id="assemblyCount" class="badge">0 / 5</span></div>
+    <progress id="assemblyProgress" max="5" value="0" aria-label="Assembly checklist progress"></progress>
+    <div id="assemblySteps" class="steps"></div>
+    <button id="resetAssembly" class="subtle">Reset checklist</button>
+  </section>
+  <section class="panel padded" aria-labelledby="stageTitle">
+    <p class="eyebrow" id="stageNumber">STAGE 01</p><h2 id="stageTitle">Frame</h2><p id="stageDescription" class="stage-description"></p>
+    <div class="assembly-map">
+      <svg viewBox="0 0 500 300" role="img" aria-labelledby="mapTitle mapDesc">
+        <title id="mapTitle">Assembly layer map</title><desc id="mapDesc">A schematic stack of the frame, motors, power system, controller and final checks. It is not a 3D model.</desc>
+        <path d="M250 47V253" fill="none" stroke="#486179" stroke-width="2" stroke-dasharray="5 5"/>
+        <g id="layer0"><rect x="100" y="15" width="300" height="42" rx="8"/><text x="250" y="42">01 · FRAME</text></g>
+        <g id="layer1"><rect x="80" y="70" width="340" height="42" rx="8"/><text x="250" y="97">02 · MOTORS</text></g>
+        <g id="layer2"><rect x="110" y="125" width="280" height="42" rx="8"/><text x="250" y="152">03 · POWER SYSTEM</text></g>
+        <g id="layer3"><rect x="130" y="180" width="240" height="42" rx="8"/><text x="250" y="207">04 · CONTROLLER + IMU</text></g>
+        <g id="layer4"><rect x="100" y="235" width="300" height="42" rx="8"/><text x="250" y="262">05 · FINAL CHECKS</text></g>
+      </svg><span class="label">ASSEMBLY MAP · SCHEMATIC</span>
+    </div>
+    <ul id="stageTasks" class="task-list"></ul>
+    <div class="button-row"><button id="previousStage">Previous</button><button id="completeStage" class="primary">Mark complete</button><button id="nextStage">Next</button></div>
+    <p id="assemblyMessage" class="message" role="status" aria-live="polite">Checklist progress is stored in this browser.</p>
+  </section>
+</div>
+<div class="next-lab"><p>Assembly planned? Practice the signal connections next.</p><a class="button-link" href="./trace.html">Open Trace</a></div>
+<details class="panel simulation"><summary>Control simulation <span>Joystick · Arm/disarm · Link recovery</span></summary><div class="simulation-body"><section class="connection panel" aria-label="Demo connection">
         <div><span class="label">DEMO LINK</span><strong id="connectionState">Disconnected</strong></div>
         <div class="connection-actions"><button id="connect" class="primary">Connect demo</button><button id="timeout" disabled>Simulate link loss</button></div>
       </section>
@@ -48,9 +73,10 @@
           <div class="motor-bar" role="meter" aria-label="Simulated motor output" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="motorBar"></div></div>
           <div class="note"><strong>Test the recovery</strong><p>Connect, arm at minimum throttle, then simulate link loss. The demo resets and reconnects after 3 seconds. Arm again to resume.</p></div>
         </section>
-      </div>
-    </main>
-    <footer><span>ZEBJUS · SIMPLE EDITION</span><span>Simulation only · No device commands</span></footer>
-  </div>
+      </div></div></details>
+  </main>
+  <footer><span>ZEBJUS · DRONE LAB</span><span>Step 1 · Learning workspace · No hardware connected</span></footer>
+</div>
+<noscript><p class="noscript">Enable JavaScript to use the labs. No controller connection is active.</p></noscript>
 </body>
 </html>

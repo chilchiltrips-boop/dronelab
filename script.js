@@ -1,5 +1,8 @@
 "use strict";
 
+// The original control demo runs only on Forge. No hardware transport.
+if (document.getElementById("connect")) {
+
 // Browser simulation only. This file sends no hardware commands.
 const $ = (id) => document.getElementById(id);
 const state = { connected:false, armed:false, recovering:false, throttle:1000, roll:0, pitch:0, yaw:0, heading:0 };
@@ -125,3 +128,150 @@ setInterval(() => {
   }
 }, 50);
 render();
+
+
+}
+
+// Local learning workspace. No network, GPIO mapping, flashing or device writes.
+(() => {
+  const byId = (id) => document.getElementById(id);
+  const defaults = { kitName:'zebjus_drone_1', frame:'F450', board:'ESP32-C3', imu:'MPU6050' };
+  const stages = [
+    { name:'Frame', description:'Plan the frame and confirm its orientation.', tasks:['Identify the front of the frame.','Check the plates, arms and mounting hardware.','Keep the assembly unpowered.'] },
+    { name:'Motors', description:'Plan one motor at each arm position.', tasks:['Identify four motor positions in your build.','Check motor mounting against the frame instructions.','Keep propellers removed during bench work.'] },
+    { name:'Power system', description:'Plan the ESC and power distribution positions.', tasks:['Choose a position for the ESC and power distribution.','Plan cable routing and insulation.','Leave the battery disconnected.'] },
+    { name:'Controller + IMU', description:'Plan controller orientation and the sensor mount.', tasks:['Identify the controller forward direction.','Plan the IMU orientation for your firmware.','Identify signal connections using the exact board pinout.'] },
+    { name:'Final checks', description:'Review the assembly plan before continuing.', tasks:['Review fasteners, cable routing and connector labels.','Confirm that no propellers are installed for bench checks.','Continue to Trace for logical wiring practice.'] }
+  ];
+  const nets = [
+    { id:'out1', from:'OUT1', to:'ESC1 input', color:'#44e0bd' },
+    { id:'out2', from:'OUT2', to:'ESC2 input', color:'#67c8fa' },
+    { id:'out3', from:'OUT3', to:'ESC3 input', color:'#dca5ff' },
+    { id:'out4', from:'OUT4', to:'ESC4 input', color:'#ffd080' },
+    { id:'sda', from:'SDA', to:'IMU SDA', color:'#e5a0a0' },
+    { id:'scl', from:'SCL', to:'IMU SCL', color:'#a9bfff' },
+    { id:'power', from:'3V3 (demo)', to:'IMU VCC (demo)', color:'#ff917b' },
+    { id:'ground', from:'GND', to:'Common GND', color:'#b2becb' }
+  ];
+  function read(key, fallback) { try { return JSON.parse(localStorage.getItem('zebjus.lab.' + key)) ?? fallback; } catch { return fallback; } }
+  function save(key, data) { try { localStorage.setItem('zebjus.lab.' + key, JSON.stringify(data)); return true; } catch { return false; } }
+  function validSettings(data) {
+    return data && typeof data.kitName === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(data.kitName) &&
+      ['F450','QAV250','Custom'].includes(data.frame) && ['ESP32-C3','ESP32-C6','Custom'].includes(data.board) && ['MPU6050','LSM6DS3','ISM330DHCX','Custom'].includes(data.imu);
+  }
+  const stored = read('settings', defaults);
+  let settings = validSettings(stored) ? stored : { ...defaults };
+  byId('kitLabel').textContent = settings.kitName;
+
+  if (document.body.dataset.page === 'forge') {
+    const loaded = read('assembly', []);
+    let completed = Array.from({length:5}, (_,i) => Array.isArray(loaded) && loaded[i] === true);
+    let current = Math.max(0, completed.findIndex(v => !v));
+    function renderAssembly() {
+      const count = completed.filter(Boolean).length;
+      byId('assemblyCount').textContent = `${count} / 5`;
+      byId('assemblyProgress').value = count;
+      byId('assemblySteps').replaceChildren();
+      stages.forEach((stage,i) => {
+        const button = document.createElement('button');
+        button.className = 'step' + (i === current ? ' selected' : '');
+        button.setAttribute('aria-pressed', String(i === current));
+        const number = document.createElement('span'); number.textContent = String(i+1).padStart(2,'0');
+        const name = document.createElement('strong'); name.textContent = stage.name;
+        button.append(number, name);
+        if (completed[i]) { const done = document.createElement('em'); done.textContent = 'Done'; button.append(done); }
+        button.addEventListener('click', () => { current=i; renderAssembly(); });
+        byId('assemblySteps').append(button);
+        byId('layer'+i).classList.toggle('active', i === current);
+        byId('layer'+i).classList.toggle('done', completed[i]);
+      });
+      byId('stageNumber').textContent = `STAGE ${String(current+1).padStart(2,'0')}`;
+      byId('stageTitle').textContent = stages[current].name;
+      byId('stageDescription').textContent = stages[current].description;
+      byId('stageTasks').replaceChildren(...stages[current].tasks.map(text => { const li=document.createElement('li'); li.textContent=text; return li; }));
+      byId('previousStage').disabled = current === 0;
+      byId('nextStage').disabled = current === 4;
+      byId('completeStage').textContent = completed[current] ? 'Mark incomplete' : 'Mark complete';
+    }
+    byId('previousStage').addEventListener('click', () => { current=Math.max(0,current-1); renderAssembly(); });
+    byId('nextStage').addEventListener('click', () => { current=Math.min(4,current+1); renderAssembly(); });
+    byId('completeStage').addEventListener('click', () => {
+      completed[current] = !completed[current];
+      const saved = save('assembly', completed);
+      byId('assemblyMessage').textContent = saved ? (completed.every(Boolean) ? 'All five checklist stages complete. Continue to Trace.' : 'Checklist updated in this browser.') : 'Checklist updated for this session. Browser storage is unavailable.';
+      renderAssembly();
+    });
+    byId('resetAssembly').addEventListener('click', () => { completed=Array(5).fill(false); current=0; const saved=save('assembly',completed); renderAssembly(); byId('assemblyMessage').textContent=saved?'Checklist reset.':'Checklist reset for this session. Browser storage is unavailable.'; });
+    renderAssembly();
+  }
+
+  if (document.body.dataset.page === 'trace') {
+    const loaded = read('wires', []);
+    let wires = Array.isArray(loaded) ? [...new Set(loaded.filter(id => nets.some(n => n.id === id)))] : [];
+    nets.forEach(net => {
+      for (const [select,label] of [['wireFrom',net.from],['wireTo',net.to]]) {
+        const option = document.createElement('option'); option.value=net.id; option.textContent=label; byId(select).append(option);
+      }
+    });
+    function draw() {
+      const svg = byId('wireDiagram');
+      // All labels below come from the fixed demo net catalog, never user text.
+      svg.innerHTML = '<title>Logical controller to component connections</title><rect x="10" y="15" width="150" height="400" rx="10" fill="#1b2b3d" stroke="#415771"/><rect x="360" y="15" width="170" height="400" rx="10" fill="#1b2b3d" stroke="#415771"/><text x="85" y="42" text-anchor="middle" fill="#edf4fc" font-size="15">CONTROLLER</text><text x="445" y="42" text-anchor="middle" fill="#edf4fc" font-size="15">COMPONENTS</text>';
+      nets.forEach((net,i) => {
+        const y=75+i*43, linked=wires.includes(net.id);
+        svg.innerHTML += `<text x="26" y="${y+5}" fill="#dce6f2" font-size="14">${net.from}</text><text x="382" y="${y+5}" fill="#dce6f2" font-size="14">${net.to}</text><circle cx="160" cy="${y}" r="5" fill="${net.color}"/><circle cx="360" cy="${y}" r="5" fill="${net.color}"/>`;
+        if(linked) svg.innerHTML += `<path d="M160 ${y} C220 ${y},300 ${y},360 ${y}" stroke="${net.color}" stroke-width="3" fill="none"/>`;
+      });
+    }
+    function renderWires() {
+      byId('wireCount').textContent=`${wires.length} / 8`;
+      byId('wireList').replaceChildren();
+      if (!wires.length) { const li=document.createElement('li'); li.className='empty'; li.textContent='No wires connected yet.'; byId('wireList').append(li); }
+      wires.forEach(id => {
+        const net=nets.find(n=>n.id===id), li=document.createElement('li'), span=document.createElement('span'), button=document.createElement('button');
+        span.textContent=`${net.from} — ${net.to}`; button.textContent='Remove'; button.setAttribute('aria-label',`Remove ${net.from} connection`);
+        button.addEventListener('click',()=>{wires=wires.filter(w=>w!==id); persistWires('Wire removed.');});
+        li.append(span,button); byId('wireList').append(li);
+      });
+      draw();
+    }
+    function persistWires(text) { const saved=save('wires',wires); renderWires(); byId('wireMessage').textContent=text+(saved?'':' Browser storage unavailable; changes last for this session.'); }
+    byId('wireForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const from=byId('wireFrom').value,to=byId('wireTo').value,net=nets.find(n=>n.id===from);
+      if (!net) return;
+      if(from !== to) { byId('wireMessage').textContent=`Connection mismatch: ${net.from} matches ${net.to}.`; return; }
+      if(wires.includes(from)) { byId('wireMessage').textContent='This wire is already connected.'; return; }
+      wires.push(from); persistWires(wires.length===8?'All eight demo signal connections complete.':'Wire connected.');
+    });
+    byId('autoWire').addEventListener('click',()=>{wires=nets.map(n=>n.id);persistWires('Reference wiring shown: eight logical demo connections.');});
+    byId('clearWires').addEventListener('click',()=>{wires=[];persistWires('All demo wires cleared.');});
+    renderWires();
+  }
+
+  if (document.body.dataset.page === 'core') {
+    function fillSettings() { Object.keys(defaults).forEach(key=>{byId(key).value=settings[key];}); byId('kitLabel').textContent=settings.kitName; }
+    byId('settingsForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const next=Object.fromEntries(Object.keys(defaults).map(key=>[key,byId(key).value]));
+      if(!validSettings(next)) { byId('settingsMessage').textContent='Check the project name and profile selections.'; return; }
+      settings=next; const saved=save('settings',settings); fillSettings();
+      byId('settingsMessage').textContent=saved?'Workspace settings saved in this browser. No hardware settings changed.':'Settings applied for this session. Browser storage unavailable.';
+    });
+    byId('resetSettings').addEventListener('click',()=>{settings={...defaults};const saved=save('settings',settings);fillSettings();byId('settingsMessage').textContent=saved?'Workspace settings reset.':'Settings reset for this session. Browser storage unavailable.';});
+    byId('exportSettings').addEventListener('click',()=>{
+      const url=URL.createObjectURL(new Blob([JSON.stringify({schemaVersion:1,workspace:settings},null,2)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='zebjus-workspace-settings.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      byId('settingsMessage').textContent='Downloaded current saved settings. Save form changes before downloading.';
+    });
+    byId('firmwareFile').addEventListener('change',()=>{
+      const file=byId('firmwareFile').files[0];
+      byId('firmwareName').textContent=file?.name || 'No file selected';
+      byId('firmwareSize').textContent=file?`${(file.size/1024).toFixed(1)} KB`:'—';
+      const valid=file && /\.bin$/i.test(file.name) && file.size>0 && file.size<=16*1024*1024;
+      byId('firmwareStatus').textContent=!file?'Waiting for a file':valid?'File selected · compatibility unchecked':'File selection rejected';
+      byId('firmwareMessage').textContent=!file?'Hardware flashing will be added in a later step.':valid?'File preview only. No firmware was flashed.':'Select a non-empty .bin file up to 16 MB. No file was flashed.';
+    });
+    fillSettings();
+  }
+})();

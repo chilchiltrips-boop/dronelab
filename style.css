@@ -54,3 +54,29 @@ input:disabled { opacity:.45; cursor:not-allowed; }
 footer { padding:28px 0; color:var(--muted); font-size:12px; }
 @media (max-width:700px) { .app { padding:0 16px; } header { min-height:84px; }.workspace { grid-template-columns:1fr; }.connection { flex-direction:column; align-items:stretch; padding:18px; }.connection-actions button { flex:1; }.controls,.telemetry { padding:20px; } header>.badge { max-width:125px; text-align:center; font-size:11px; } footer { flex-direction:column; align-items:flex-start; gap:6px; } }
 @media (prefers-reduced-motion:no-preference) { button { transition:filter .15s; } }
+
+
+/* Three lab pages share the original demo theme. */
+.app { max-width:1280px; }
+.skip { position:absolute; top:-100px; left:20px; z-index:20; padding:12px; background:var(--accent); color:var(--bg); }.skip:focus { top:12px; }
+.lab-nav { display:flex; gap:10px; padding:18px 0; border-bottom:1px solid var(--border); }
+.lab-nav a { padding:12px 22px; border-radius:8px; text-decoration:none; color:var(--muted); font-weight:700; }.lab-nav a span { font-size:12px; margin-right:10px; font-weight:400; }
+.lab-nav a[aria-current=page] { color:var(--bg); background:var(--accent); }.lab-nav a:hover { outline:1px solid var(--border); }
+.kit-line { font-size:14px; }.kit-line strong { color:var(--text); overflow-wrap:anywhere; }
+.lab-grid { display:grid; grid-template-columns:minmax(280px,.85fr) minmax(0,1.4fr); gap:22px; align-items:start; }
+.padded { padding:24px; min-width:0; }
+progress { accent-color:var(--accent); width:100%; height:8px; margin:24px 0; }
+.steps { display:grid; gap:10px; margin-bottom:22px; }.step { display:flex; width:100%; gap:12px; align-items:center; text-align:left; padding:14px; }.step span { color:var(--accent); font-size:12px; min-width:28px; }.step em { margin-left:auto; color:var(--accent); font-size:12px; font-style:normal; }.step.selected { border-color:var(--accent); background:#203b3c; }
+.subtle { background:transparent; color:var(--muted); }.stage-description { color:var(--muted); }
+.assembly-map { background:#0d1722; border:1px solid var(--border); border-radius:10px; padding:12px; text-align:center; margin:22px 0; }.assembly-map svg { display:block; width:100%; max-height:290px; }.assembly-map rect { fill:#1c2b3c; stroke:#415771; }.assembly-map text { fill:#a5b6c9; font:14px system-ui,sans-serif; text-anchor:middle; }.assembly-map .active rect { fill:#254a46; stroke:var(--accent); }.assembly-map .active text { fill:var(--text); }.assembly-map .done rect { stroke:var(--accent); }
+.task-list { padding-left:22px; color:var(--muted); }.task-list li { margin:8px 0; }
+.next-lab { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:22px 0; padding:18px 24px; border-left:3px solid var(--accent); background:#121e2b; }.next-lab p { margin:0; font-size:14px; color:var(--muted); }
+.button-link { display:inline-block; padding:12px 18px; background:var(--accent); color:#08231d; border:1px solid var(--accent); border-radius:8px; text-decoration:none; font-size:14px; font-weight:600; white-space:nowrap; }
+.simulation { margin:24px 0; }.simulation summary { padding:20px 24px; cursor:pointer; font-weight:700; }.simulation summary span { font-size:14px; color:var(--muted); font-weight:400; margin-left:12px; }.simulation-body { padding:0 24px 24px; }
+.form-stack { display:flex; flex-direction:column; gap:12px; margin:20px 0; }.form-stack label { margin-bottom:-4px; }
+select,input[type=text] { width:100%; min-height:46px; padding:10px 12px; background:#0e1723; color:var(--text); border:1px solid #425268; border-radius:8px; font:16px system-ui,sans-serif; }
+input[type=file] { max-width:100%; font:14px system-ui,sans-serif; color:var(--muted); } input[type=file]::file-selector-button { padding:12px 16px; background:#1b293a; color:var(--text); border:1px solid #425268; border-radius:8px; margin-right:12px; cursor:pointer; }
+.file-label { margin:24px 0 10px; }.file-details { margin:22px 0; }.file-details div { display:grid; grid-template-columns:65px minmax(0,1fr); gap:20px; padding:12px 0; border-bottom:1px solid var(--border); }.file-details dt { color:var(--muted); font-size:14px; }.file-details dd { margin:0; overflow-wrap:anywhere; font-size:14px; }
+h3 { font-size:16px; margin:22px 0 12px; }.wire-list { list-style:none; padding:0; }.wire-list li { display:flex; justify-content:space-between; align-items:center; gap:10px; font-size:14px; padding:12px 0; border-bottom:1px solid var(--border); }.wire-list button { padding:6px 10px; font-size:12px; min-height:40px; }.empty { color:var(--muted); }
+.wiring-canvas { margin:24px 0; border:1px solid var(--border); border-radius:10px; background:#0b1722; padding:8px; }.wiring-canvas svg { display:block; width:100%; }.next-link { margin-top:24px; }.noscript { padding:20px; color:#ffb7b7; }
+@media (max-width:800px) { .lab-grid { grid-template-columns:1fr; }.lab-nav { gap:4px; }.lab-nav a { flex:1; text-align:center; padding:12px 8px; font-size:14px; }.lab-nav a span { margin-right:5px; }.next-lab { flex-direction:column; align-items:flex-start; }.padded { padding:20px; }.simulation-body { padding:0 16px 16px; }.simulation summary span { display:block; margin:6px 0 0; }.button-row { flex-wrap:wrap; }.button-row button { min-width:85px; } }
