@@ -55,7 +55,9 @@ Edit `js/config.js` for the brand name, logo letter, watermark and external shop
 
 All browser asset and module URLs are relative. The same folder works at `/dronelab/` or another repository subdirectory without a bundler or router configuration. GitHub Pages serves the repository root from `main`. The `.nojekyll` file keeps these static assets unchanged.
 
-Live app: https://chilchiltrips-boop.github.io/dronelab/
+Live app: https://chilchiltrips-boop.github.io/dronelab/lab.html
+
+`lab.html` is an identical entry point for the same two-page app. The root `index.html` also serves the app; the explicit entry avoids a cached foundation homepage after an update.
 
 ## Checks
 
