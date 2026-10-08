@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A simple ZEBJUS Drone Lab browser simulation.">
+  <title>ZEBJUS · Drone Lab</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131e2b'/%3E%3Cpath d='M9 9h14L9 23h14' fill='none' stroke='%2344e0bd' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./script.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <a class="brand" href="./"><span class="mark" aria-hidden="true">Z</span><span>ZEBJUS <small>DRONE LAB</small></span></a>
+      <span class="badge">BROWSER SIMULATION</span>
+    </header>
+    <main>
+      <section class="intro"><div><p class="eyebrow">CONTROL DESK / 01</p><h1>Ready for a test flight.</h1><p>Practice controls and connection recovery. No hardware is connected.</p></div></section>
+      <section class="connection panel" aria-label="Demo connection">
+        <div><span class="label">DEMO LINK</span><strong id="connectionState">Disconnected</strong></div>
+        <div class="connection-actions"><button id="connect" class="primary">Connect demo</button><button id="timeout" disabled>Simulate link loss</button></div>
+      </section>
+      <p id="message" class="message" role="status" aria-live="polite">Connect the demo to begin.</p>
+      <div class="workspace">
+        <section class="panel controls" aria-labelledby="controlsTitle">
+          <div class="panel-heading"><h2 id="controlsTitle">Flight controls</h2><span id="armState" class="badge">DISARMED</span></div>
+          <p class="hint">Drag the stick for roll and pitch. Release to center.</p>
+          <div id="stick" class="stick" role="group" aria-label="Roll and pitch joystick">
+            <span class="north" aria-hidden="true">FORWARD</span><span class="south" aria-hidden="true">BACK</span><span class="west" aria-hidden="true">L</span><span class="east" aria-hidden="true">R</span>
+            <div id="knob" class="knob" aria-hidden="true"></div>
+          </div>
+          <div class="axis-inputs">
+            <label for="roll">Roll <output id="rollValue">0°</output></label><input id="roll" type="range" min="-20" max="20" value="0" disabled>
+            <label for="pitch">Pitch <output id="pitchValue">0°</output></label><input id="pitch" type="range" min="-20" max="20" value="0" disabled>
+          </div>
+          <div class="range-field"><label for="throttle">Throttle <output id="throttleValue">1000 µs</output></label><input id="throttle" type="range" min="1000" max="2000" value="1000" step="10" disabled><div class="range-labels"><span>MIN · 1000</span><span>MAX · 2000</span></div></div>
+          <div class="range-field"><label for="yaw">Yaw <output id="yawValue">0°/s</output></label><input id="yaw" type="range" min="-90" max="90" value="0" disabled></div>
+          <div class="button-row"><button id="arm" class="primary" disabled>Arm demo</button><button id="stop" class="danger">Stop &amp; reset</button></div>
+          <p class="hint">Arming requires minimum throttle. Stop resets all inputs.</p>
+        </section>
+        <section class="panel telemetry" aria-labelledby="telemetryTitle">
+          <div class="panel-heading"><h2 id="telemetryTitle">Demo telemetry</h2><span class="label">SIMULATED</span></div>
+          <div class="attitude" role="img" aria-label="Simulated attitude indicator">
+            <div id="horizon" class="horizon"><div class="horizon-line"></div></div><div class="crosshair"></div><span class="attitude-caption">ATTITUDE</span>
+          </div>
+          <div class="readings"><div><span>Roll</span><strong id="telemetryRoll">0.0<small>°</small></strong></div><div><span>Pitch</span><strong id="telemetryPitch">0.0<small>°</small></strong></div><div><span>Yaw</span><strong id="telemetryYaw">0.0<small>°</small></strong></div><div><span>Motor output</span><strong id="motorValue">0<small>%</small></strong></div></div>
+          <div class="motor-bar" role="meter" aria-label="Simulated motor output" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="motorBar"></div></div>
+          <div class="note"><strong>Test the recovery</strong><p>Connect, arm at minimum throttle, then simulate link loss. The demo resets and reconnects after 3 seconds. Arm again to resume.</p></div>
+        </section>
+      </div>
+    </main>
+    <footer><span>ZEBJUS · SIMPLE EDITION</span><span>Simulation only · No device commands</span></footer>
+  </div>
+</body>
+</html>
