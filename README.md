@@ -1,84 +1,69 @@
-# ZEBJUS Drone Lab · Foundation v0.1
+# DroneLab — Assembly Lab & 2D Wiring
 
-Three connected pages for building a drone learning workspace, step by step.
-Plain HTML, CSS and JavaScript; no dependencies, npm or build step.
+A static, two-page ES-module application extracted from the supplied ZEBJUS V18.3.82 UI reference. No backend, account, npm installation or build step is required. All models, thumbnails and Three.js are local.
 
-| Page | File | Working features |
-| --- | --- | --- |
-| **Forge** | `index.html` | Five assembly stages, layer schematic, checklist progress and retained control simulation |
-| **Trace** | `trace.html` | Logical 2D wiring practice, connection checks, reference wiring and remove/clear controls |
-| **Core** | `core.html` | Firmware file preview and editable workspace settings |
+## Run
 
-All pages share `style.css` and `script.js`. Open `index.html` locally or serve
-this repository root as a static website. Links and asset paths are relative,
-so GitHub Pages project paths work without routing configuration.
+Extract this folder, open a terminal inside it, and run either:
 
-## Forge
+```sh
+python3 -m http.server 8080
+```
 
-Select an assembly stage, use Previous/Next, and mark each stage complete.
-Checklist progress survives reloads in the same browser. Reset affects only
-this checklist. The assembly layer view is a schematic; this release does not
-include interactive 3D models, component placement or a physics simulator.
+Open `http://localhost:8080/`. Alternatively, with Node 18+:
 
-Expand **Control simulation** to use the original joystick demo. Connect,
-arm at minimum throttle, adjust the inputs, and simulate link loss. The demo
-resets and disarms, reconnects after 3 seconds, and enables inputs again.
-Rearming remains explicit. Stop cancels recovery; Escape or focus loss also
-stops an active simulation. No device commands are sent.
+```sh
+npm run dev
+```
 
-## Trace
+Open `http://localhost:4173/`. Use HTTP rather than double-clicking `index.html`: ES modules and GLB fetching require an HTTP origin. For the 3D workbench, use a browser with WebGL enabled. When WebGL is unavailable, a clearly labelled recovery panel keeps logical assembly and wiring usable; it never presents an image or cube as the 3D bench.
 
-Choose the controller and component endpoints, then connect the wire. The app
-rejects mismatched and duplicate connections. Show reference wiring draws all
-eight demo signal connections. Individual wires can be removed or all cleared.
-Connections survive reloads in the same browser.
+## Use
 
-This is a logical practice map. OUT1–OUT4 are abstract signal labels, not GPIO
-numbers. IMU power and reference endpoints are illustrative. It is not a verified
-board pinout, complete power circuit or electrical simulator. Exact hardware
-pinouts, voltage compatibility and motor/power wiring need a later hardware
-integration step.
+- **ASSEMBLY LAB:** Guided mode follows 17 ordered steps. Select or drag a shelf component, then click/drop near its highlighted snap target. One drag installs the full 12-frame-screw or 16-motor-screw set. Installed parts leave the shelf. Select installed parts and press Delete to return them. Undo/Redo cover both pages. Object, Wiring map, Frame/FC X-ray, Top, Front, 3D, Exploded and Auto rotate use the original Three scene.
+- **2D WIRING:** Drag objects in the 1500×900 SVG canvas. Click the mode badge or press W to enable connections, then select two endpoints. F flips connector sides without mirroring text; R rotates the selected object. Delete removes selected wires or attached objects. Reset layout preserves wiring; Clear wires preserves installed parts; Reference wiring adds the original 34 fixed connections plus the optional-device reference plan. The small-screen toolbars and canvas scroll horizontally as in the source.
+- **Virtual testing:** Correct phase and battery/PDB connections make each motor ready. Run the PWM test and raise throttle to at least 1100 µs. Each motor checkbox works independently; swapping two phases reverses its direction. M1 front-left / CW, M2 front-right / CCW, M3 rear-right / CW, M4 rear-left / CCW. Tests stop when leaving the wiring page, hiding the tab or losing focus. Battery and motor actions are virtual only.
+- **Shared state:** Edits autosave under `dronelab.assembly-wiring.project.v1`. The new key contains logical assembly, connections, layout, optional devices, GPS reference mode and shared Undo/Redo snapshots. Reset is undoable. No source storage keys or saved network/account values are imported.
 
-## Core
+## Short file map
 
-Set the project name, frame, controller and IMU profile. Save settings to this
-browser; the project name appears across all three pages. Download exports the
-saved settings as JSON. Reset restores the workspace defaults.
+| File | Role |
+| --- | --- |
+| `index.html` | Only Assembly Lab and 2D Wiring DOM |
+| `styles.css`, `lab-workflow.css` | Complete source CSS, including every later override, in original order |
+| `project.css` | Small scoped shell, accessibility and narrow-screen corrections after source CSS |
+| `js/app.js`, `js/ui-controls.js` | Boot, page switching, keyboard shortcuts, responsive layout and controls |
+| `js/catalog.js` | Component data, 17 steps, physical snap datums and local orbit controls |
+| `js/project-state.js` | Shared logical state, transactions, persistence, reset, Undo/Redo |
+| `js/model-assets.js` | GLB preloading, source datum normalization and material-preserving cloning |
+| `js/assembly-scene.js` | Three scene, bench, placement, screw animations, x-rays, wiring overlays and cameras |
+| `js/shared-ui.js` | Shelf, Current Step, Build Check and assembly/wiring progress synchronization |
+| `js/wiring-renderer.js` | SVG nodes, connector geometry, routing, transforms and optional pin plan |
+| `js/wiring-validation.js` | Electrical validation, phase permutations, SVG refresh and virtual PWM animation |
+| `js/sound-power.js` | Synthetic audio and virtual XT60/LED effects |
+| `js/config.js` | Project branding, shop links and storage key |
+| `*.glb`, `thumb_*.png`, `ref_*.png`, `fc_top_layout.png` | Local component and image assets actually used by this implementation |
+| `three.module.min.js`, `glb-loader.js`, `THREE-LICENSE.txt` | Local Three runtime, supplied loader and vendor license |
+| `tools/` | Dependency-free model, state and electrical regression checks |
+| `CHECKS.md` | Verification results and the WebGL inspection limitation |
 
-Firmware selection displays the file name and size. It accepts a non-empty
-`.bin` file up to 16 MB for preview, but does not verify firmware authenticity,
-board compatibility, image structure or partition layout. No firmware is flashed.
-No firmware binaries are included in this repository.
+The reference intentionally draws its current arc guards and bright CW/CCW propellers with detailed procedural Three geometry rather than the older packaged meshes. This implementation preserves that source visual override; all 15 supplied GLBs are preloaded and decoded, and the other model-backed components use their original GLB meshes and materials.
 
-## Storage and device scope
+## Configuration and GitHub Pages hosting
 
-Storage uses the `zebjus.lab.*` browser storage keys. If storage is unavailable,
-changes work for the current page session and the interface reports that they
-were not persisted. Malformed saved data falls back to defaults. No credentials,
-network configuration or active controls are saved.
+Edit `js/config.js` for the brand name, logo letter, watermark and external shop link. Set `shopUrl` to an empty string to hide shop links. Actual component/model descriptions still identify the referenced hardware.
 
-There is no USB/OTA transport, ESP32/AP/STA connection, cloud backend or APK in
-this foundation release. Settings never write to a flight controller.
+All browser asset and module URLs are relative. The same folder works at `/dronelab/` or another repository subdirectory without a bundler or router configuration. GitHub Pages serves the repository root from `main`. The `.nojekyll` file keeps these static assets unchanged.
 
-## GitHub Pages
+Live app: https://chilchiltrips-boop.github.io/dronelab/
 
-In **Settings → Pages**, choose **Deploy from a branch**, branch **main**,
-folder **/(root)**, then Save. GitHub displays the deployed URL after the build.
-This source update does not change Pages settings.
+## Checks
 
-## Validation
+With Node 22+:
 
-- JavaScript syntax and all three pages' local links, IDs and asset references.
-- Programmatic DOM tests for checklist navigation/persistence, wiring checks,
-  settings persistence/export/reset, firmware selection guards, storage failure
-  recovery and the retained connection-loss simulation.
-- Local HTTP responses for all three pages.
-- Visual browser QA was unavailable in the authoring environment. Layout uses
-  responsive CSS, with a single-column lab layout on smaller screens.
+```sh
+npm run check
+npm test
+```
 
-## Next steps
-
-Replace the assembly schematic with a proper interactive model, extend the
-wiring workspace with component movement, then add verified hardware transport
-and firmware release handling. These are future implementation steps, not
-features of v0.1.
+There are no install-time dependencies. Python, flight, hardware I/O, firmware, provisioning, relay and Android runtime/vendor files are excluded.
