@@ -57,7 +57,7 @@ All browser asset and module URLs are relative. The same folder works at `/drone
 
 Live app: https://chilchiltrips-boop.github.io/dronelab/lab.html
 
-`lab.html` is an identical entry point for the same two-page app. The root `index.html` also serves the app; the explicit entry avoids a cached foundation homepage after an update.
+`lab.html` is an identical entry point for the same two-page app. The root `index.html` also serves the same app.
 
 ## Checks
 
