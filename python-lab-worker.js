@@ -1,7 +1,7 @@
 'use strict';
 // Isolated Python 3 / Pyodide runtime adapted from Aerion Python Lab.
 // Reuses official Pyodide assets hosted by the original Aerion project.
-const PYODIDE_INDEX=new URL('/zebjus-drone-simulator-lab/vendor/pyodide/',self.location.origin).href;
+const PYODIDE_INDEX=new URL('./vendor/pyodide/',self.location.href).href;
 const pending=new Map();let py=null,sequence=0,running=false;
 const send=(type,data={})=>postMessage({type,...data});
 function rpc(method,args={}){
