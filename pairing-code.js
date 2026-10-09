@@ -30,7 +30,7 @@ async function digest(offer,code){
  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 function cloudPeer(Peer,id){
- return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'}]},debug:0});
+ return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]},debug:0});
 }
 function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
  let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0;
@@ -60,7 +60,23 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
     if(ended||peer!==own){conn.close();return}
     if(connection&&connection!==conn){conn.close();return}
     connection=conn;
-    const authTimeout=setTimeout(()=>{if(connection===conn){conn.close();connection=null}},6000);
+    // PeerJS 'connection' fires as soon as an OFFER is received, BEFORE the
+    // WebRTC DataChannel is open. Starting the 6s auth timeout here closed
+    // valid sessions on slower college Wi-Fi/LAN before a challenge arrived.
+    let authTimeout=null;
+    let iceTimeout=setTimeout(()=>{
+     if(connection===conn&&!conn.open){
+      onStatus('Wi-Fi/college firewall delayed device connection • trying a new connection may help');
+      conn.close();connection=null;
+     }
+    },35000);
+    conn.on('open',()=>{
+     clearTimeout(iceTimeout);
+     onStatus('College PC connected • verifying pairing session…');
+     authTimeout=setTimeout(()=>{
+      if(connection===conn){onStatus('PC did not verify pairing in time • try Connect with Code again');conn.close();connection=null}
+     },22000);
+    });
     conn.on('data',async msg=>{
      if(ended||peer!==own||!isCurrent(expires)){conn.close();return}
      if(msg?.type!=='auth'||msg.sid?.length!==24||typeof msg.proof!=='string'){conn.close();return}
@@ -71,8 +87,8 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
       onStatus('Answer sent securely • Waiting for Web App to confirm pairing');
      }catch(e){onStatus('Code response error: '+e.message)}
     });
-    conn.on('close',()=>{clearTimeout(authTimeout);if(connection===conn)connection=null});
-    conn.on('error',e=>onStatus('Online code connection: '+(e?.message||e)));
+    conn.on('close',()=>{clearTimeout(iceTimeout);clearTimeout(authTimeout);if(connection===conn)connection=null});
+    conn.on('error',e=>{clearTimeout(iceTimeout);clearTimeout(authTimeout);onStatus('Online code connection: '+(e?.message||e))});
    });
   }
   timeout=setTimeout(()=>{if(!ended){onStatus('Pairing code expired • scan new Web QR');stop()}},Math.min(MAX_MS,Math.max(1,expires-Date.now())));
@@ -87,8 +103,8 @@ async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{}}){
  const proof=await digest(offer,code),Peer=await loadPeer();
  return new Promise((resolve,reject)=>{
   let peer,conn,done=false;
-  const deadline=Math.min(18000,Math.max(1000,expires-Date.now()));
-  const timer=setTimeout(()=>finish(Error('No Android response. Check same Wi-Fi, phone code and Internet.')),deadline);
+  const deadline=Math.min(42000,Math.max(1000,expires-Date.now()));
+  const timer=setTimeout(()=>finish(Error('Timed out waiting for Android. If the phone says Code ready, College Wi-Fi/LAN may block direct PeerJS connections. Try mobile hotspot or QR mode; a TURN relay may be required.')),deadline);
   function finish(error,answer){
    if(done)return;
    done=true;clearTimeout(timer);
@@ -102,7 +118,8 @@ async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{}}){
     if(done)return;
     onStatus('Looking for Android code '+code+'…');
     conn=peer.connect(PREFIX+code,{reliable:true});
-    conn.on('open',()=>{if(done)return;onStatus('Verifying pairing with Android…');conn.send({type:'auth',sid,proof})});
+    onStatus('Signaling found • negotiating direct Wi-Fi/LAN WebRTC (may take up to 40 seconds)…');
+    conn.on('open',()=>{if(done)return;onStatus('PeerJS DataChannel open • verifying Android response…');conn.send({type:'auth',sid,proof})});
     conn.on('data',m=>{
      if(m?.type!=='answer'||m?.sid!==sid||typeof m.answer!=='string'||!m.answer.startsWith('zj1:'))return finish(Error('Android response failed verification'));
      onStatus('Phone answer received • establishing WebRTC…');
@@ -111,7 +128,7 @@ async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{}}){
     conn.on('error',e=>finish(Error('Android code connection: '+(e?.message||e))));
     conn.on('close',()=>{if(!done)finish(Error('Android closed code connection. Try another code.'))});
    });
-   peer.on('error',e=>finish(Error('Online signaling unavailable: '+(e?.message||e))));
+   peer.on('error',e=>finish(Error('Online signaling issue: '+(e?.type||e?.message||e)+'. Check campus restrictions, firewall, Internet and code.')));
   }catch(e){finish(e)}
  });
 }
