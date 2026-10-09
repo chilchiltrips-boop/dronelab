@@ -62,3 +62,16 @@
 .qr-advanced .qr-data{margin-top:8px}
 #pairScanVideo{border:2px solid #319a7d;min-height:180px;max-height:340px;width:100%;object-fit:contain}
 #pairAnswerState{overflow-wrap:anywhere}
+
+
+/* V1.4 optional camera-free six-digit connect */
+.qr-pair-methods{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin-bottom:14px}
+.qr-pair-methods button{min-width:min(230px,100%);font-size:12px}
+#pairCameraSection,#pairCodeSection{display:flex;flex-direction:column;gap:12px}
+#pairCameraSection[hidden],#pairCodeSection[hidden]{display:none!important}
+.qr-code-entry{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#pairPhoneCode{flex:1 1 175px;min-width:0;letter-spacing:.17em;font:bold 24px/1.1 ui-monospace,monospace;text-align:center;height:52px;background:#071926;border:2px solid #3e8c77;border-radius:10px;color:#d1fff2;padding:10px}
+#pairPhoneCode:focus{outline:2px solid #86efc4;outline-offset:2px}
+#pairCodeSection p{font-size:11px;line-height:1.5;color:#b9d1d6}
+#pairCodeStatus{color:#a6f4d2;background:#0b2c2a;border:1px solid #256c5a;border-radius:9px;padding:11px;overflow-wrap:anywhere}
+@media(max-width:620px){.qr-pair-methods button{width:100%}.qr-code-entry button{width:100%}}
