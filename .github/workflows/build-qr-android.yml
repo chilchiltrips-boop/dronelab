@@ -1,7 +1,7 @@
-name: Build QR Android Test APK
+name: Build QR Android Companion APK
 on:
   push:
-    branches: [testing/two-way-qr-pairing]
+    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
@@ -16,7 +16,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: qr-android-apk-testing
+  group: qr-android-apk-${{ github.ref_name }}
   cancel-in-progress: false
 jobs:
   android:
@@ -46,6 +46,8 @@ jobs:
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
           test -s mobile-android/app/src/main/assets/vendor/qrgen.js
+      - name: Validate camera permission regression
+        run: node --test tools/android-camera-permission.test.mjs
       - name: Build installable Android debug APK
         run: gradle -p mobile-android :app:assembleDebug --stacktrace --no-daemon
       - name: Verify APK content and copy download
@@ -53,19 +55,19 @@ jobs:
           set -eux
           test -s mobile-android/app/build/outputs/apk/debug/app-debug.apk
           mkdir -p mobile-apk
-          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk
+          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_V1_1_1_CAMERA_FIX.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | tee mobile-apk/SHA256SUMS.txt
           unzip -l mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|vendor/jsqr.js|vendor/qrgen.js)'
       - uses: actions/upload-artifact@v4
         with:
-          name: ZEBJUS_DroneLab_QR_Android_Test_APK
+          name: ZEBJUS_DroneLab_QR_Android_Camera_Fix_APK
           path: mobile-apk/
           retention-days: 30
-      - name: Publish APK to QR TESTING branch only
+      - name: Publish APK to current branch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk mobile-apk/SHA256SUMS.txt
-          git diff --cached --quiet || git commit -m 'Publish QR companion test APK [skip ci]'
-          git pull --rebase origin testing/two-way-qr-pairing
-          git push origin HEAD:testing/two-way-qr-pairing
+          git diff --cached --quiet || git commit -m 'Publish QR companion camera-fix APK [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"
