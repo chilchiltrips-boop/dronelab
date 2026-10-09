@@ -1,7 +1,11 @@
 import * as THREE from '../three.module.min.js';
-import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID} from './tripod-physics.js';
+import {loadGLB} from '../glb-loader.js';
+import {createTripodAudio} from './tripod-audio.js';
+import {enhanceTripodScene} from './tripod-realism.js';
+import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,startTuningPulse} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map();
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,audio=null,soundOn=false,volume=.55,selectedAxis='roll';
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.70,selectedAxis='roll';
+const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
 const makeMat=(color,metalness=.2,roughness=.5)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
 const COLORS={dark:makeMat('#111f2c',.65,.34),silver:makeMat('#7897a5',.76,.35),red:makeMat('#ee514f',.28,.5),white:makeMat('#e4edf1',.23,.48),green:makeMat('#23d9b1',.2,.42),black:makeMat('#101921',.2,.7),copper:makeMat('#be8f51',.65,.32)};
@@ -77,6 +81,9 @@ function makeScene(){
   }
   dustGeometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
   const dust=new THREE.Points(dustGeometry,new THREE.PointsMaterial({color:0x8bcab4,size:.035,transparent:true,opacity:0,depthWrite:false}));scene.add(dust);
+  const realism=enhanceTripodScene(THREE,drone,motors,{loadGLB,onAssets:(loaded,total)=>{
+    $('tpSceneStatus').textContent=loaded?'3D ACTIVE • '+loaded+'/'+total+' REAL PARTS':'3D ACTIVE • PROCEDURAL';
+  }});
   let radius=13.7,azimuth=.67,elevation=.33;
   const resize=()=>{const {width,height}=stage.getBoundingClientRect();if(width<1||height<1)return;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)};
   const observer=new ResizeObserver(resize);observer.observe(stage);resize();
@@ -84,8 +91,12 @@ function makeScene(){
   return {renderer,scene,camera,pivot,propGroups,blurs,wash,groundDiscs,dust,positions,seeds,motors,observer,
    getCamera:()=>({radius,azimuth,elevation}),orbit:(dx,dy)=>{azimuth+=dx*.005;elevation=clamp(elevation+dy*.004,-.18,1.15)},
    zoom:delta=>{radius=clamp(radius+delta*.014,6,24)},
+   setView:name=>{
+    const angles={isometric:[.67,.33],front:[0,.20],back:[Math.PI,.20],left:[Math.PI/2,.24],right:[-Math.PI/2,.24],top:[0,1.53]};
+    const pose=angles[name]||angles.isometric;azimuth=pose[0];elevation=pose[1];
+   },
    draw:(snapshot,dt)=>{
-    const a=readable(snapshot.roll,1),b=readable(snapshot.pitch,1);
+    realism.update(snapshot.motors);
     pivot.rotation.set(rad(snapshot.pitch),rad(snapshot.yaw),rad(snapshot.roll),'YXZ');
     pivot.position.y=3.48+snapshot.lift*.22;
     const vibration=snapshot.running?Math.min(.006,Math.abs(snapshot.rollRate+snapshot.pitchRate)*.00002):0;
@@ -93,12 +104,12 @@ function makeScene(){
     for(let i=0;i<4;i++){
       const speed=snapshot.running?snapshot.motors[i]/100:0;
       if(speed>.005)propGroups[i].rotation.y+=(i%2?1:-1)*dt*(1+speed*138);
-      blurs[i].material.opacity=speed*.31;
-      wash[i].cone.material.opacity=speed*.045;
+      blurs[i].material.opacity=Math.pow(speed,.75)*.49;blurs[i].scale.setScalar(1+speed*.12);
+      wash[i].cone.material.opacity=speed*.13;wash[i].cone.scale.set(1+speed*.38,1+speed*.3,1+speed*.38);
       for(let n=0;n<8;n++){const ring=wash[i].rings[n],phase=(snapshot.running?s.time*.6*speed:0)+n/8;
         ring.position.y=3.10-((phase%1)*2.7);const scale=.52+(1-(ring.position.y/3.5))*.95;
-        ring.scale.setScalar(scale);ring.material.opacity=speed*.14*(1-n/14);}
-      groundDiscs[i].material.opacity=speed*.12;
+        ring.scale.setScalar(scale);ring.material.opacity=speed*.37*(1-n/11);}
+      groundDiscs[i].material.opacity=speed*.25;groundDiscs[i].scale.setScalar(1+speed*.72);
     }
     for(let n=0;n<180;n++){const seed=seeds[n],speed=snapshot.motors[seed.arm]/100,drift=(s.time*.21*speed+seed.radius)%1.75;
       positions[n*3]=motors[seed.arm].x+Math.cos(seed.angle)*(.3+drift);positions[n*3+1]=.055+Math.sin(n*4.1+s.time*8)*.025*speed;
@@ -129,33 +140,9 @@ function drawFallback(canvas,snapshot){
  }
  c.restore();c.fillStyle='#bcebd7';c.textAlign='center';c.font='13px sans-serif';c.fillText('2D fallback • enable WebGL for full tripod scene',cx,h-28);
 }
-function audioStart(){
- if(!soundOn||audio||!s.running)return;
- const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;
- try{
-  const ctx=new AudioContext(),out=ctx.createGain();out.gain.value=.75;out.connect(ctx.destination);
-  const voices=[];
-  for(let i=0;i<7;i++){const osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-   osc.type=i%2?'triangle':'sine';osc.frequency.value=70+i*3;filter.type='lowpass';filter.frequency.value=800;gain.gain.value=0;
-   osc.connect(filter);filter.connect(gain);gain.connect(out);osc.start();voices.push({osc,filter,gain})}
-  audio={ctx,out,voices};
- }catch(e){console.info('Audio unavailable:',e.message);soundOn=false;$('tpSound').textContent='♫ Sound Off'}
-}
-function audioTick(){
- if(!audio||!s.running||!soundOn)return;
- const t=audio.ctx.currentTime,avg=s.motors.reduce((a,b)=>a+b,0)/400,imbalance=(Math.max(...s.motors)-Math.min(...s.motors))/100;
- audio.voices.forEach(({osc,filter,gain},i)=>{
-  const speed=i<4?s.motors[i]/100:avg,layer=i>=4,detune=i*3;
-  osc.frequency.setTargetAtTime((layer?92:70)+speed*(layer?360:440)+detune,t,.055);
-  filter.frequency.setTargetAtTime(800+speed*3000,t,.065);
-  const level=(layer?.0014:.0015+speed*.0065)*volume*(speed>.006?1:0)*(1+(layer?imbalance*.2:0));
-  gain.gain.setTargetAtTime(level,t,.05);
- });
-}
-function audioStop(){if(!audio)return;const a=audio;audio=null;const t=a.ctx.currentTime;
- for(const v of a.voices){try{v.gain.gain.setTargetAtTime(0,t,.012);v.osc.stop(t+.055)}catch{}}
- setTimeout(()=>a.ctx.close().catch(()=>{}),130);
-}
+function audioStart(){if(soundOn&&s.running)audioEngine.start()}
+function audioTick(){if(soundOn)audioEngine.update(s.motors)}
+function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(){stopSimulator(s);audioStop();setStatus('MOTORS OFF');syncActions();drawUI()}
 function start(){
@@ -237,27 +224,43 @@ function coach(){
  else if(p.d===0&&bank!=='rateYaw'&&bank!=='angleRateYaw')msg='LOW D: observe overshoot and add damping gradually if needed.';
  $('tpCoach').textContent=msg+' Observe live P / I / D terms; this is a teaching heuristic, not a hardware recommendation.';
 }
+function triggerTuningResponse(){
+ const axis=$('tpPidAxis').value;
+ if(!startTuningPulse(s,axis,14))return false;
+ $('tpChartAxis').value=axis;history.length=0;setStatus('PID TEST • '+axis.toUpperCase()+' TARGET PULSE');
+ return true;
+}
 function updateControls(){
  $('tpMode').onchange=e=>{setFlightMode(s,e.target.value);history.length=0;updatePidEditor();coach()};
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
  $('tpReset').onclick=()=>{resetSimulator(s);releaseAll();history.length=0;audioStop();syncActions();setStatus('RESET • MOTORS OFF');drawUI()};
  $('tpCalibrate').onclick=()=>{calibrateLevel(s);setStatus('LEVEL TRIM SAVED (VIRTUAL)')};
  $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Manual Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
- $('tpSound').onclick=e=>{soundOn=!soundOn;e.currentTarget.setAttribute('aria-pressed',String(soundOn));e.currentTarget.textContent=soundOn?'♫ Sound On':'♫ Sound Off';if(soundOn)audioStart();else audioStop()};
- $('tpVolume').oninput=e=>{volume=Number(e.target.value)/100;$('tpVolumeOut').textContent=Math.round(volume*100)+'%'};
+ $('tpSound').onclick=e=>{
+   soundOn=audioEngine.toggle();e.currentTarget.setAttribute('aria-pressed',String(soundOn));e.currentTarget.textContent=soundOn?'♫ Sound On':'♫ Sound Off';
+   if(soundOn&&s.running)audioStart();
+ };
+
+ $('tpVolume').oninput=e=>{
+  volume=Number(e.target.value)/100;audioEngine.setVolume(volume);$('tpVolumeOut').textContent=Math.round(volume*100)+'%';
+ };audioEngine.setVolume(volume);
  $('tpPidAxis').onchange=()=>{updatePidEditor();coach()};$('tpPidLoop').onchange=()=>{updatePidEditor();coach()};
  $('tpApplyPid').onclick=()=>{const values={p:Number($('tpPidP').value),i:Number($('tpPidI').value),d:Number($('tpPidD').value)};
   const valid=['p','i','d'].every(k=>$('tpPid'+k.toUpperCase()).value.trim()!==''&&Number.isFinite(values[k]));
   if(!valid||!setPID(s,pidBank(),values)){setStatus('INVALID PID VALUES • 0–100');return}
-  setStatus('SIMULATOR PID APPLIED');history.length=0;coach()};
+  history.length=0;coach();if(!triggerTuningResponse())setStatus('PID APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');};
  $('tpPreset').onchange=e=>{const mode=e.target.value;if(!mode)return;const bank=pidBank(),base={...DEFAULT_PID[bank]},values={...base};
   if(mode==='lowP')values.p=base.p*.35;if(mode==='highP')values.p=base.p*2.8;
   if(mode==='lowI')values.i=base.i*.2;if(mode==='highI')values.i=base.i*2.4;
   if(mode==='lowD')values.d=0;if(mode==='highD')values.d=base.d?base.d*3.5:.11;
-  setPID(s,bank,values);updatePidEditor();coach();history.length=0;e.target.value='';setStatus('VIRTUAL PRESET APPLIED')};
+  setPID(s,bank,values);updatePidEditor();coach();history.length=0;e.target.value='';
+  if(!triggerTuningResponse())setStatus('PRESET APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');
+ };
  const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s']];
  for(const [id,key,format] of envPairs)$( 'tp'+id).oninput=e=>{s.environment[key]=Number(e.target.value);$('tp'+id+'Out').textContent=format(e.target.value)};
  $('tpChartAxis').onchange=()=>history.length=0;
+ $('tpTestResponse').onclick=()=>{if(!triggerTuningResponse())setStatus('RUN AND RAISE THROTTLE ABOVE 1250 µs FOR PID TEST')};
+ $('tpCameraView').onchange=e=>{visual?.setView?.(e.target.value);$('tpViewReadout').textContent=e.target.options[e.target.selectedIndex].text};
  bindStick('tpLeftPad','left');bindStick('tpRightPad','right');bindCamera();
  window.addEventListener('keydown',e=>keyHandler(e,true));window.addEventListener('keyup',e=>keyHandler(e,false));
  window.addEventListener('blur',()=>releaseAll(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
@@ -297,6 +300,11 @@ function drawUI(){
  const selected=pidBank(),live=s.memory[selected];
  for(const [id,key] of [['tpPidError','error'],['tpPidPTerm','p'],['tpPidITerm','i'],['tpPidDTerm','d'],['tpPidOutput','output']])$(id).textContent=readable(live[key],2);
  $('tpPidTargetActual').textContent='Target '+readable(live.target,1)+(selected.startsWith('angle')&&!selected.startsWith('angleRate')?'°':'°/s')+' • Actual '+readable(live.actual,1);
+ $('tpTrackingError').textContent=readable(v.metrics.rmsError,1)+(s.mode==='angle'?'°':'°/s');
+ $('tpPeakRate').textContent=readable(v.metrics.peakRate,0)+'°/s';
+ $('tpMotorSpread').textContent=readable(v.metrics.motorSpread,1)+'%';
+ $('tpRingingCount').textContent=String(v.metrics.ringing);
+ for(let i=1;i<=4;i++)$('tpMotor'+i).classList.toggle('active-motor',v.motors[i-1]>8);
  drawChart();
 }
 function frame(time){

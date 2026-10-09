@@ -13,8 +13,21 @@ try{
  const nav=await page.locator('a[href="./index.html#python"]').count();
  if(nav!==1)throw Error('Missing navigation back to Python Lab');
  if(!(await page.locator('#tpRun').isEnabled()))throw Error('Run not enabled at safe throttle');
+ if((await page.locator('#tpSound').getAttribute('aria-pressed'))!=='true')throw Error('Motor sound is not enabled by default');
+ if((await page.locator('#tpCameraView option').count())<6)throw Error('Missing camera angle views');
+ if(!((await page.locator('.tp-orientation-hint').textContent())||'').includes('FRONT'))throw Error('Drone orientation labels missing');
+ await page.locator('#tpCameraView').selectOption('front');
+ if((await page.locator('#tpViewReadout').textContent())!=='Front view')throw Error('Camera preset not reflected');
+ await page.locator('#tpCameraView').selectOption('isometric');
  await page.locator('#tpRun').click();
  if(!(await page.locator('#tpStop').isEnabled()))throw Error('Virtual motor run failed');
+ await page.waitForFunction(()=>/AUDIO ACTIVE|AUDIO UNAVAILABLE/.test(document.querySelector('#tpAudioStatus')?.textContent||''),null,{timeout:6000});
+ if(!(await page.locator('#tpAudioStatus').textContent()).includes('AUDIO ACTIVE'))throw Error('User-gesture Web Audio engine failed to start');
+ if((await page.locator('#tpSceneStatus').textContent()).startsWith('3D ACTIVE')){
+   await page.waitForFunction(()=>/REAL PARTS|PROCEDURAL/.test(document.querySelector('#tpSceneStatus')?.textContent||''),null,{timeout:9000});
+   const assetsStatus=await page.locator('#tpSceneStatus').textContent();
+   if(!assetsStatus.includes('REAL PARTS'))throw Error('Local GLB F450 parts failed to load: '+assetsStatus);
+ }
  await page.locator('body').click({position:{x:30,y:160}});
  await page.keyboard.press('w');await page.keyboard.press('w');await page.keyboard.press('w');
  await page.waitForFunction(()=>document.querySelector('#tpThrottleInput')?.textContent.includes('1075'),null,{timeout:4000});
@@ -28,6 +41,21 @@ try{
  await page.locator('#tpPidAxis').selectOption('roll');await page.locator('#tpPidLoop').selectOption('rate');
  await page.locator('#tpPidP').fill('1.25');await page.locator('#tpApplyPid').click();
  if(!((await page.locator('#tpStatus').textContent())||'').includes('PID APPLIED'))throw Error('PID update failed');
+ await page.locator('body').click({position:{x:30,y:162}});
+ for(let i=0;i<10;i++)await page.keyboard.press('w');
+ await page.waitForFunction(()=>Number(document.querySelector('#tpThrottleReadout').textContent.split(' ')[0])>=1300,{timeout:7000});
+ await page.locator('#tpPidAxis').selectOption('roll');
+ await page.locator('#tpTestResponse').click();
+ await page.waitForFunction(()=>document.querySelector('#tpStatus')?.textContent.includes('PID TEST'));
+ await page.waitForTimeout(900);
+ const measured=await page.locator('#tpPeakRate').textContent();
+ if(Number.parseFloat(measured)<.01)throw Error('PID training pulse did not change measured angular rate');
+ await page.locator('#tpPreset').selectOption('highP');
+ await page.waitForFunction(()=>document.querySelector('#tpStatus')?.textContent.includes('PID TEST'));
+ await page.locator('#tpSound').click();
+ if((await page.locator('#tpSound').getAttribute('aria-pressed'))!=='false')throw Error('Mute control failed');
+ await page.locator('#tpSound').click();
+ if((await page.locator('#tpSound').getAttribute('aria-pressed'))!=='true')throw Error('Sound restore failed');
  await page.locator('#tpMode').selectOption('angle');
  await page.locator('#tpPidLoop').selectOption('angle');await page.locator('#tpCalibrate').click();
  await page.locator('#tpWind').fill('20');await page.locator('#tpWind').dispatchEvent('input');
@@ -39,6 +67,6 @@ try{
  const metrics=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,heading:document.querySelector('h1')?.textContent}));
  if(metrics.width>metrics.viewport+2)throw Error('Tripod layout has horizontal overflow: '+JSON.stringify(metrics));
  if(errors.length)throw Error('Uncaught page errors: '+errors.join(' | '));
- console.log('PASS Tripod page: real page, local controls, mode change, keyboard throttle, joysticks, virtual PID, motor Stop, desktop/mobile, no hardware controls');
+ console.log('PASS Tripod page: real page, local controls, mode change, keyboard throttle, joysticks, virtual PID pulse, motor/audio Stop, six camera views, desktop/mobile, no hardware controls');
 }catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/tripod-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}
 finally{await browser.close()}

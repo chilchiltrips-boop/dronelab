@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSimulator,startSimulator,stopSimulator,resetSimulator,setFlightMode,clearPID,stepSimulator,advanceSimulator,disturb,setPID,releaseInputs,degToRad} from '../js/tripod-physics.js';
+import {createSimulator,startSimulator,stopSimulator,resetSimulator,setFlightMode,clearPID,stepSimulator,advanceSimulator,disturb,setPID,releaseInputs,degToRad,startTuningPulse,getSnapshot} from '../js/tripod-physics.js';
 test('safe arm, stop and reset never energize outside local simulation',()=>{
  const s=createSimulator();assert.equal(s.running,false);assert.deepEqual(s.motors,[0,0,0,0]);s.throttle=1400;assert.equal(startSimulator(s),false);s.throttle=1000;assert.equal(startSimulator(s),true);
  s.throttle=1450;for(let i=0;i<500;i++)stepSimulator(s);assert.ok(s.motors.every(x=>x>0));
@@ -41,4 +41,41 @@ test('module has no browser, hardware or network dependency',async()=>{
  const {readFileSync}=await import('node:fs');
  const source=readFileSync(new URL('../js/tripod-physics.js',import.meta.url),'utf8');
  assert.doesNotMatch(source,/\bfetch\s*\(|\bWebSocket\b|\bSerial\b|\bnavigator\b|\bdocument\b|\bwindow\b|RTCPeerConnection/);
+});
+
+
+test('motor lag physically changes the attitude trajectory and not merely animation',()=>{
+ function experiment(lag){
+  const s=createSimulator();setFlightMode(s,'acro');s.environment.lag=lag;
+  startSimulator(s);s.throttle=1500;assert.ok(startTuningPulse(s,'roll',14));
+  for(let n=0;n<130;n++)stepSimulator(s); // 0.52 s target pulse
+  return {roll:s.roll,rate:s.rollRate,motors:[...s.motors]};
+ }
+ const fast=experiment(.04),slow=experiment(.30);
+ assert.ok(Math.abs(fast.roll-slow.roll)>.02, 'Motor lag did not affect Roll: '+JSON.stringify({fast,slow}));
+ assert.ok(Math.abs(fast.rate-slow.rate)>.02,'Motor lag did not affect Rate');
+});
+test('PID gains and presets produce measurable different response to identical pulse',()=>{
+ function experiment(p){
+  const s=createSimulator();setFlightMode(s,'acro');setPID(s,'rateRoll',{p,i:15,d:.03});
+  startSimulator(s);s.throttle=1500;startTuningPulse(s,'roll',14);
+  for(let n=0;n<200;n++)stepSimulator(s);
+  return getSnapshot(s);
+ }
+ const low=experiment(.30),high=experiment(2.80);
+ assert.ok(Math.abs(low.roll-high.roll)>.05,'PID gains did not visibly change Roll response');
+ assert.ok(Math.abs(low.metrics.peakRate-high.metrics.peakRate)>.1,'PID gains did not change peak response');
+});
+test('ANGLE training pulse level-holds; ACRO pulse ends in zero rate without angle return',()=>{
+ const a=createSimulator();startSimulator(a);a.throttle=1450;assert.ok(startTuningPulse(a,'pitch',13));
+ for(let k=0;k<175;k++)stepSimulator(a);assert.equal(a.targetPitch,a.trimPitch);
+ const b=createSimulator();setFlightMode(b,'acro');startSimulator(b);b.throttle=1450;assert.ok(startTuningPulse(b,'roll',12));
+ for(let k=0;k<180;k++)stepSimulator(b);
+ assert.equal(b.targetRollRate,0);assert.ok(Math.abs(b.roll)>0.1,'ACRO pulse did not rotate the model');
+ for(let k=0;k<1000;k++)stepSimulator(b);
+ const settledTilt=b.roll;
+ for(let k=0;k<1000;k++)stepSimulator(b);
+ assert.ok(Math.abs(settledTilt)>3,'ACRO training pulse unexpectedly returned to level');
+ assert.ok(Math.abs(b.roll-settledTilt)<1.0,'Centered ACRO drifted after angular rate settled: '+b.roll);
+ assert.ok(Math.abs(b.rollRate)<.35,'ACRO failed to settle angular rate at zero stick');
 });

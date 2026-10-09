@@ -1,12 +1,14 @@
 name: Tripod PID Simulator Tests
 on:
   push:
-    branches: [feature/tripod-pid-simulator-v1.5.0, main]
+    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, main]
     paths:
       - 'tripod.html'
       - 'tripod.css'
       - 'js/tripod-physics.js'
       - 'js/tripod-page.js'
+      - 'js/tripod-audio.js'
+      - 'js/tripod-realism.js'
       - 'tools/tripod-physics.test.mjs'
       - 'tools/tripod-browser.mjs'
       - 'sw.js'
@@ -27,8 +29,11 @@ jobs:
         run: |
           node --check js/tripod-physics.js
           node --check js/tripod-page.js
+          node --check js/tripod-audio.js
+          node --check js/tripod-realism.js
           node --test tools/tripod-physics.test.mjs
           npm run check
+          npm test
       - name: Install isolated Chromium test environment
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
