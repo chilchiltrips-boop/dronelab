@@ -254,23 +254,46 @@ function updateControls(){
  $('tpVolume').oninput=e=>{
   volume=Number(e.target.value)/100;audioEngine.setVolume(volume);$('tpVolumeOut').textContent=Math.round(volume*100)+'%';
  };audioEngine.setVolume(volume);
+ $('tpSoundPreset').onchange=e=>audioEngine.setProfile(e.target.value);
+ audioEngine.setProfile($('tpSoundPreset').value);
  $('tpPidAxis').onchange=()=>{updatePidEditor();coach()};$('tpPidLoop').onchange=()=>{updatePidEditor();coach()};
  $('tpApplyPid').onclick=()=>{const values={p:Number($('tpPidP').value),i:Number($('tpPidI').value),d:Number($('tpPidD').value)};
   const valid=['p','i','d'].every(k=>$('tpPid'+k.toUpperCase()).value.trim()!==''&&Number.isFinite(values[k]));
   if(!valid||!setPID(s,pidBank(),values)){setStatus('INVALID PID VALUES • 0–100');return}
-  history.length=0;coach();if(!triggerTuningResponse())setStatus('PID APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');};
+  coach();setStatus('PID APPLIED LIVE • '+pidBank()+' • TEST RESPONSE WHEN READY');};
  $('tpPreset').onchange=e=>{const mode=e.target.value;if(!mode)return;const bank=pidBank(),base={...DEFAULT_PID[bank]},values={...base};
+  if(mode==='custom')return;
   if(mode==='lowP')values.p=base.p*.35;if(mode==='highP')values.p=base.p*2.8;
   if(mode==='lowI')values.i=base.i*.2;if(mode==='highI')values.i=base.i*2.4;
   if(mode==='lowD')values.d=0;if(mode==='highD')values.d=base.d?base.d*3.5:.11;
-  setPID(s,bank,values);updatePidEditor();coach();history.length=0;e.target.value='';
-  if(!triggerTuningResponse())setStatus('PRESET APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');
+  setPID(s,bank,values);updatePidEditor();coach();e.target.value='';
+  setStatus('PRESET APPLIED LIVE • '+bank+' • SELECT TEST RESPONSE');
  };
  const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s']];
  for(const [id,key,format] of envPairs)$( 'tp'+id).oninput=e=>{s.environment[key]=Number(e.target.value);$('tp'+id+'Out').textContent=format(e.target.value)};
- $('tpChartAxis').onchange=()=>history.length=0;
+ $('tpChartAxis').onchange=()=>{history.length=0;drawUI()};
+ $('tpPauseGraph').onclick=e=>{graphPaused=!graphPaused;e.target.textContent=graphPaused?'Resume Graph':'Pause Graph'};
+ $('tpClearGraph').onclick=()=>{history.length=0;drawChart()};
+ $('tpResetIntegrators').onclick=()=>{resetIntegrators(s);setStatus('PID INTEGRATORS RESET • MOTORS STILL '+(s.running?'ON':'OFF'))};
+ $('tpAbGain').onchange=()=>{const gain=$('tpAbGain').value,base=s.pid[pidBank()][gain];
+  $('tpAbLow').value=Number((base*.4).toFixed(3));$('tpAbHigh').value=Number((base===0?.15:base*2.8).toFixed(3));
+ };
+ $('tpCompare').onclick=()=>{
+  try{
+   const bank=pidBank(),gain=$('tpAbGain').value,a=Number($('tpAbLow').value),b=Number($('tpAbHigh').value);
+   const axis=$('tpPidAxis').value,study=simulateResponse({basePID:s.pid,bank,gain,values:[a,b],mode:s.mode,axis,environment:s.environment,duration:gain==='i'?5:6});
+   drawComparison(study);
+   const [A,B]=study.results;
+   $('tpCompareResult').textContent='A '+gain.toUpperCase()+'='+a+' vs B '+gain.toUpperCase()+'='+b+
+     ' • RMS '+readable(A.metrics.rms,2)+' / '+readable(B.metrics.rms,2)+
+     ' • Peak rate '+readable(A.metrics.peakRate,1)+' / '+readable(B.metrics.peakRate,1)+'°/s'+
+     ' • Late error '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+
+     ' • Same throttle/initial state/disturbance; no change to live gains.';
+  }catch(error){$('tpCompareResult').textContent='Comparison error: '+error.message}
+ };
+ $('tpAbGain').onchange();
  $('tpTestResponse').onclick=()=>{if(!triggerTuningResponse())setStatus('RUN AND RAISE THROTTLE ABOVE 1250 µs FOR PID TEST')};
- $('tpCameraView').onchange=e=>{visual?.setView?.(e.target.value);$('tpViewReadout').textContent=e.target.options[e.target.selectedIndex].text};
+ $('tpCameraView').onchange=e=>visual?.setView?.(e.target.value);
  bindStick('tpLeftPad','left');bindStick('tpRightPad','right');bindCamera();
  window.addEventListener('keydown',e=>keyHandler(e,true));window.addEventListener('keyup',e=>keyHandler(e,false));
  window.addEventListener('blur',()=>releaseAll(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
@@ -278,24 +301,45 @@ function updateControls(){
  updatePidEditor();coach();syncActions();
 }
 function sampleChart(){
- const axis=$('tpChartAxis').value,angular=axis==='yaw'||s.mode==='acro';
- const axisC=axis[0].toUpperCase()+axis.slice(1);
- const target=axis==='yaw'?s.targetYawRate:angular?s['target'+axisC+'Rate']:s['target'+axisC];
- const actual=axis==='yaw'?s.yawRate:angular?s[axis+'Rate']:s[axis];
- history.push({target,actual});if(history.length>180)history.shift();
+ const axis=$('tpPidAxis').value,bank=pidBank(),m=s.memory[bank],r={};
+ for(const name of ['roll','pitch','yaw']){
+  const c=name[0].toUpperCase()+name.slice(1);
+  r[name]={target:s['target'+c],actual:s[name]};
+  r[name+'Rate']={target:s['target'+c+'Rate'],actual:s[name+'Rate']};
+ }
+ r.terms=[m.p,m.i,m.d];r.motors=[...s.motors];r.error=[m.error];history.push(r);
+ if(history.length>180)history.shift();
 }
-function drawChart(){
- const canvas=$('tpChart'),box=canvas.getBoundingClientRect(),width=box.width,height=box.height;
- if(width<10)return;const dpr=Math.min(devicePixelRatio||1,2);
+function drawMultiLine(canvas,series){
+ const box=canvas.getBoundingClientRect(),width=box.width,height=box.height;if(width<5||height<5)return;
+ const dpr=Math.min(devicePixelRatio||1,2);
  if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr)}
  const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,width,height);
- const pad=16,scale=Math.max(15,...history.flatMap(v=>[Math.abs(v.target),Math.abs(v.actual)]))*1.13,mid=height/2;
- c.lineWidth=1;c.strokeStyle='#294655';
- for(let i=0;i<5;i++){const y=pad+(height-2*pad)*i/4;c.beginPath();c.moveTo(0,y);c.lineTo(width,y);c.stroke()}
- c.setLineDash([4,4]);c.beginPath();c.moveTo(0,mid);c.lineTo(width,mid);c.strokeStyle='#416270';c.stroke();c.setLineDash([]);
- const plot=(key,color)=>{c.beginPath();c.strokeStyle=color;c.lineWidth=2;history.forEach((v,i)=>{const x=pad+(width-2*pad)*i/179,y=mid-clamp(v[key]/scale,-1,1)*(height/2-pad);if(i===0)c.moveTo(x,y);else c.lineTo(x,y)});c.stroke()};
- plot('target','#56d5e7');plot('actual','#7aedb3');
- c.fillStyle='#8caebd';c.font='10px sans-serif';c.fillText('+'+readable(scale,0),3,12);c.fillText('0',3,mid-4);c.fillText('-'+readable(scale,0),3,height-3);
+ const max=Math.max(10,...series.flatMap(v=>v.values.map(Math.abs)))*1.12,pad=14,mid=height/2;
+ c.strokeStyle='#2b4b5b';c.lineWidth=1;
+ for(let i=0;i<=4;i++){const y=pad+(height-pad*2)*i/4;c.beginPath();c.moveTo(0,y);c.lineTo(width,y);c.stroke()}
+ c.setLineDash([4,4]);c.beginPath();c.moveTo(0,mid);c.lineTo(width,mid);c.stroke();c.setLineDash([]);
+ for(const line of series){if(!line.values.length)continue;c.beginPath();c.lineWidth=2;c.strokeStyle=line.color;
+  line.values.forEach((v,i)=>{const x=pad+(width-pad*2)*(i/Math.max(1,line.values.length-1)),y=mid-clamp(v/max,-1,1)*(height/2-pad);
+   i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();}
+}
+function drawChart(){
+ const mode=$('tpChartAxis').value,colors=['#56d5e7','#7aedb3','#e2b56d','#ff8fa1'];
+ let traces=[];
+ if(['roll','pitch','yaw','rollRate','pitchRate'].includes(mode))
+  traces=[{values:history.map(h=>h[mode]?.target||0),color:colors[0]},{values:history.map(h=>h[mode]?.actual||0),color:colors[1]}];
+ else if(mode==='pidTerms')traces=[0,1,2].map((i)=>({values:history.map(h=>h.terms[i]),color:colors[i]}));
+ else if(mode==='motorOutputs')traces=[0,1,2,3].map((i)=>({values:history.map(h=>h.motors[i]),color:colors[i]}));
+ else traces=[{values:history.map(h=>h.error[0]),color:colors[3]}];
+ drawMultiLine($('tpChart'),traces);
+}
+function drawComparison(comparison){
+ const colors=['#56d5e7','#ffad89'],plots=comparison.results.map((r,i)=>({
+  color:colors[i],values:r.samples.map(s=>s.actual)
+ }));
+ const reference=comparison.results[0].samples.map(s=>s.target);
+ plots.unshift({color:'#4a8d8a',values:reference});
+ drawMultiLine($('tpCompareChart'),plots);
 }
 function drawUI(){
  const v=getSnapshot(s),angular=s.mode==='acro',axis=$('tpChartAxis').value,axisC=axis[0].toUpperCase()+axis.slice(1);
@@ -304,9 +348,11 @@ function drawUI(){
  $('tpThrottleInput').textContent=s.throttle+' µs';$('tpLeftReadout').textContent='YAW '+readable(s.cmdYaw,2);$('tpRightReadout').textContent='R '+readable(s.cmdRoll,2)+' / P '+readable(s.cmdPitch,2);
  $('tpLiftDisplay').textContent='LIFT CUE '+readable(v.lift*100,0)+'%';
  for(let i=0;i<4;i++){const el=$('tpMotor'+(i+1));el.querySelector('strong').textContent=readable(v.motors[i],0)+'%';el.querySelector('i').style.width=readable(v.motors[i],0)+'%'}
- const target=axis==='yaw'?v.targetYawRate:angular?v['target'+axisC+'Rate']:v['target'+axisC];
- const actual=axis==='yaw'?v.yawRate:angular?v[axis+'Rate']:v[axis],unit=(angular||axis==='yaw')?'°/s':'°';
- $('tpTargetLabel').textContent='Target '+axis+' '+readable(target)+unit;$('tpActualLabel').textContent='Actual '+axis+' '+readable(actual)+unit;
+ const isRate=angular||axis==='yaw'||axis.endsWith('Rate');
+ const baseAxis=axis.replace('Rate',''),c=baseAxis[0].toUpperCase()+baseAxis.slice(1);
+ const target=(axis==='yaw'||isRate)?v['target'+c+'Rate']:v['target'+c];
+ const actual=isRate?v[baseAxis+'Rate']:v[baseAxis],unit=isRate?'°/s':'°';
+ $('tpTargetLabel').textContent='Target '+axis+' '+readable(Number(target)||0)+unit;$('tpActualLabel').textContent='Actual '+axis+' '+readable(Number(actual)||0)+unit;
  const selected=pidBank(),live=s.memory[selected];
  for(const [id,key] of [['tpPidError','error'],['tpPidPTerm','p'],['tpPidITerm','i'],['tpPidDTerm','d'],['tpPidOutput','output']])$(id).textContent=readable(live[key],2);
  $('tpPidTargetActual').textContent='Target '+readable(live.target,1)+(selected.startsWith('angle')&&!selected.startsWith('angleRate')?'°':'°/s')+' • Actual '+readable(live.actual,1);
@@ -314,7 +360,18 @@ function drawUI(){
  $('tpPeakRate').textContent=readable(v.metrics.peakRate,0)+'°/s';
  $('tpMotorSpread').textContent=readable(v.metrics.motorSpread,1)+'%';
  $('tpRingingCount').textContent=String(v.metrics.ringing);
- for(let i=1;i<=4;i++)$('tpMotor'+i).classList.toggle('active-motor',v.motors[i-1]>8);
+ for(let i=1;i<=4;i++){
+  const el=$('tpMotor'+i);el.classList.toggle('active-motor',v.motors[i-1]>8);
+  el.querySelector('strong').title=readable(v.motorRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
+ }
+ const axisForPID=$('tpPidAxis').value,cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
+ const outer=s.memory['angle'+cAxis],inner=s.memory[(s.mode==='angle'?'angleRate':'rate')+cAxis];
+ $('tpOuterLoop').textContent=outer&&s.mode==='angle'?'Angle '+readable(outer.target)+'° → '+readable(outer.output)+'°/s':'ACRO • outer loop bypassed';
+ $('tpOuterTerms').textContent=outer&&s.mode==='angle'?'P '+readable(outer.p)+' • I '+readable(outer.i)+' • D '+readable(outer.d):'Pure angular-rate target';
+ $('tpInnerLoop').textContent='Target '+readable(inner.target,1)+'°/s → Actual '+readable(inner.actual,1)+'°/s';
+ $('tpInnerTerms').textContent='P '+readable(inner.p)+' • I '+readable(inner.i)+' • D '+readable(inner.d);
+ $('tpActuator').textContent=readable(v.motorRPM.reduce((a,b)=>a+b,0)/4,0)+' avg RPM';
+ $('tpActuatorInfo').textContent='Total thrust '+readable(v.motorThrust.reduce((a,b)=>a+b,0),1)+' N • Saturation '+readable(100*v.metrics.saturation/Math.max(1,v.metrics.samples),1)+'%';
  drawChart();
 }
 function frame(time){
@@ -322,7 +379,7 @@ function frame(time){
  const left=pointers.get('left');if(left&&s.running)s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
  inputAxes();advanceSimulator(s,dt);const snapshot=getSnapshot(s);
  visual?.draw(snapshot,dt);
- if(time-lastChart>75){sampleChart();lastChart=time}
+ if(time-lastChart>75){if(!graphPaused)sampleChart();lastChart=time}
  if(time-lastUI>100){drawUI();lastUI=time}
  if(time-lastAudio>33){audioTick();lastAudio=time}
  raf=requestAnimationFrame(frame);
