@@ -75,3 +75,18 @@
 #pairCodeSection p{font-size:11px;line-height:1.5;color:#b9d1d6}
 #pairCodeStatus{color:#a6f4d2;background:#0b2c2a;border:1px solid #256c5a;border-radius:9px;padding:11px;overflow-wrap:anywhere}
 @media(max-width:620px){.qr-pair-methods button{width:100%}.qr-code-entry button{width:100%}}
+
+
+/* Fast Phone QR scanning: Step 2 is centered; camera never autostarts. */
+#pairCameraSection{align-items:center;gap:12px}
+#pairCameraSection .qr-step2-instruction{max-width:490px;text-align:center;font-size:12px;line-height:1.6}
+.qr-step2-buttons{justify-content:center;width:100%}
+.qr-step2-buttons button{min-width:155px}
+.qr-step2-frame{position:relative;display:grid;place-items:center;align-self:center;width:min(100%,520px);min-height:260px;aspect-ratio:4/3;background:#071b27;border:2px solid #306b6c;border-radius:14px;overflow:hidden}
+.qr-step2-frame.scanning{border-color:#4fe1a3;box-shadow:0 0 0 3px #3bea9a22}
+#pairScanVideo.qr-scan-preview{position:absolute;inset:0;width:100%;height:100%;max-height:none;min-height:0;object-fit:contain;background:#071b27;border:none;border-radius:0;transform:none}
+.qr-step2-placeholder{font-size:13px;text-align:center;max-width:250px;line-height:1.6;font-weight:700;color:#8eb9c7;padding:20px}
+.qr-step2-frame .qr-scan-target{pointer-events:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60%;height:75%;max-width:320px;max-height:320px;border-radius:16px;opacity:.26;background:linear-gradient(#71ffba,#71ffba) 0 0/24px 3px no-repeat,linear-gradient(#71ffba,#71ffba) 0 0/3px 24px no-repeat,linear-gradient(#71ffba,#71ffba) 100% 0/24px 3px no-repeat,linear-gradient(#71ffba,#71ffba) 100% 0/3px 24px no-repeat,linear-gradient(#71ffba,#71ffba) 0 100%/24px 3px no-repeat,linear-gradient(#71ffba,#71ffba) 0 100%/3px 24px no-repeat,linear-gradient(#71ffba,#71ffba) 100% 100%/24px 3px no-repeat,linear-gradient(#71ffba,#71ffba) 100% 100%/3px 24px no-repeat}
+.qr-step2-frame.scanning .qr-scan-target{opacity:.9}
+.qr-step2-status{text-align:center;display:block;width:100%;min-height:29px;font-weight:750}
+@media(max-width:590px){.qr-step2-frame{aspect-ratio:1/1;min-height:240px}.qr-step2-buttons button{flex:1 1 180px}}
