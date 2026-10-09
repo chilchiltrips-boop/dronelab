@@ -1,7 +1,7 @@
 /* ZEBJUS v1.3.0 Smart Two-Way QR • static GitHub Pages / no signaling server.
    Refresh clears all QR sessions, answer data, and control privileges. */
 const $=id=>document.getElementById(id);
-let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0;
+let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='camera',codeBusy=false;
 function stamp(text){const e=$('ledActivityLog');e.textContent=(e.textContent+'\n'+new Date().toLocaleTimeString()+'  '+text).slice(-6800);e.scrollTop=e.scrollHeight}
 function status(text){
  $('pairStatus').textContent=text;$('pairTopStatus').textContent=text;
@@ -48,6 +48,42 @@ function callbacks(){
  };
 }
 function startHost(){host=ZebjusP2P.session('host',callbacks());sync()}
+function selectMode(mode){
+ pairMode=mode==='code'?'code':'camera';
+ const camera=pairMode==='camera';
+ $('pairCameraMode').className='btn '+(camera?'primary':'ghost');
+ $('pairCodeMode').className='btn '+(!camera?'primary':'ghost');
+ $('pairCameraMode').setAttribute('aria-pressed',String(camera));
+ $('pairCodeMode').setAttribute('aria-pressed',String(!camera));
+ $('pairCameraSection').hidden=!camera;$('pairCodeSection').hidden=camera;
+ $('pairStep2Title').textContent=camera?'Step 2 • Scan Phone QR':'Step 2 • Type Android Code';
+ if(!camera){stopCamera();if(!host.status().paired)$('pairAnswerState').textContent='Type the Android 6-digit CONNECT code. No webcam needed.'}
+ else if(offer&&!host.status().paired)void scanResponse();
+}
+async function connectWithCode(){
+ const raw=$('pairPhoneCode').value.replace(/\D/g,'').slice(0,6);
+ if(!ZebjusCodePair.validCode(raw)){ $('pairCodeStatus').textContent='Enter the 6 digits displayed on Android.';return }
+ const state=host.status(),ticket=offerEpoch;
+ if(!offer||!state.sessionId||!state.expires){$('pairCodeStatus').textContent='Click Pair Mobile to create a Web QR first.';return}
+ if(state.paired||state.connected){$('pairCodeStatus').textContent='Already connected; confirm existing session.';return}
+ if(codeBusy)return;
+ codeBusy=true;$('pairConnectCodeBtn').disabled=true;
+ try{
+  const answer=await ZebjusCodePair.resolveAnswer({
+   offer,code:raw,sid:state.sessionId,expires:state.expires,
+   onStatus:s=>{if(ticket===offerEpoch)$('pairCodeStatus').textContent=s}
+  });
+  if(ticket!==offerEpoch)return;
+  $('pairCodeStatus').textContent='Answer authenticated • waiting for WebRTC connection…';
+  await receiveResponse(answer);
+ }catch(error){
+  if(ticket===offerEpoch){
+   $('pairCodeStatus').textContent='Code pairing failed: '+error.message+'. Check both devices have Internet or use Camera mode.';
+   stamp('Six-digit code error: '+error.message);
+  }
+ }finally{codeBusy=false;$('pairConnectCodeBtn').disabled=!ZebjusCodePair.validCode($('pairPhoneCode').value)}
+}
+
 function stopCamera(){ZebjusQR.stop();scanStop=null}
 async function receiveResponse(raw){
  if(answerProcessing)return;
@@ -67,6 +103,7 @@ async function receiveResponse(raw){
  }finally{answerProcessing=false;sync()}
 }
 async function scanResponse(){
+ if(pairMode!=='camera')return;
  stopCamera();
  if(!host.status().sessionId){$('pairAnswerState').textContent='Click Pair Mobile to create a fresh QR first.';return}
  if(host.status().paired){$('pairAnswerState').textContent='Already paired. Disconnect before scanning another phone.';return}
@@ -87,6 +124,7 @@ async function createOffer(){
  const ticket=++offerEpoch;
  $('pairCreateBtn').disabled=true;stopCamera();answerProcessing=false;
  offer='';$('pairOfferText').value='';$('pairAnswerText').value='';$('pairCode').textContent='------';
+ $('pairPhoneCode').value='';$('pairConnectCodeBtn').disabled=true;
  $('pairOfferCanvas').hidden=true;$('pairOfferBox').querySelector('p')?.removeAttribute('hidden');
  $('pairAnswerState').textContent='Preparing new QR…';host.close('Starting fresh QR pairing');
  try{
@@ -99,8 +137,9 @@ async function createOffer(){
   $('pairAnswerState').textContent='Scan Web QR on Android. Phone response QR appears automatically; show it to the laptop webcam.';
   status('Waiting for Android QR');go('settings');
   stamp('Web QR ready; expiry in 3 minutes');
-  // Camera start is automatic, but the user can use Start Camera if permission is denied.
-  void scanResponse();
+  // Only open a laptop webcam when Camera mode is selected.
+  if(pairMode==='camera')void scanResponse();
+  else $('pairCodeStatus').textContent='Web QR ready. Scan it on Android; type the phone CONNECT code here.';
  }catch(err){$('pairAnswerState').textContent='Could not generate QR: '+err.message;stamp('QR failure: '+err.message)}
  finally{$('pairCreateBtn').disabled=false;sync()}
 }
@@ -108,6 +147,7 @@ function disconnect(reason='Disconnected by Web App'){
  ++offerEpoch;stopCamera();host.close(reason);offer='';answerProcessing=false;
  $('pairOfferCanvas').hidden=true;$('pairOfferBox').querySelector('p')?.removeAttribute('hidden');
  $('pairOfferText').value='';$('pairAnswerText').value='';$('pairCode').textContent='------';
+ $('pairPhoneCode').value='';$('pairConnectCodeBtn').disabled=true;
  $('pairExpiry').textContent='New QR required';$('pairAnswerState').textContent=reason;
  status('Disconnected');sync();
 }
@@ -115,6 +155,11 @@ async function showVersion(){try{const r=await fetch('./app-version.json',{cache
 function bind(){
  $('topPairMobileBtn').onclick=()=>{go('settings');void createOffer()};
  $('pairCreateBtn').onclick=createOffer;
+ $('pairCameraMode').onclick=()=>selectMode('camera');
+ $('pairCodeMode').onclick=()=>selectMode('code');
+ $('pairPhoneCode').oninput=()=>{const e=$('pairPhoneCode');e.value=e.value.replace(/\D/g,'').slice(0,6);$('pairConnectCodeBtn').disabled=!ZebjusCodePair.validCode(e.value)||codeBusy};
+ $('pairConnectCodeBtn').onclick=()=>void connectWithCode();
+ $('pairPhoneCode').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();void connectWithCode()}};
  $('pairCancelBtn').onclick=()=>disconnect('Pairing cancelled');
  $('pairDisconnectBtn').onclick=()=>disconnect('Disconnected');
  $('pairRejectBtn').onclick=()=>{host.decline();disconnect('Pairing rejected')};
@@ -143,5 +188,5 @@ function bind(){
  },1000);
  window.addEventListener('pagehide',()=>{++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
 }
-function init(){if(!$('topPairMobileBtn'))return;startHost();bind();void showVersion();status('Disconnected');sync()}
+function init(){if(!$('topPairMobileBtn'))return;startHost();bind();selectMode('camera');void showVersion();status('Disconnected');sync()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
