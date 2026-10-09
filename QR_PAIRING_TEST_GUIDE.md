@@ -1,33 +1,38 @@
-# ZEBJUS DroneLab V1.3.0 — Smart Two-Way QR Pairing
+# ZEBJUS DroneLab V1.4.0 — Two-Way QR + No-Camera 6-Digit Code
 
-**No cloud, no laptop ZIP extraction, no Python server, no extra local bridge.**
+Open the hosted **[Web App](https://chilchiltrips-boop.github.io/dronelab/)** on the college PC. Install the **[Android Companion](https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk)**. **No software/ZIP/Python install on the college PC.**
 
-## Install and pair
+Both PC (Wi-Fi or Ethernet) and Android phone (Wi-Fi) should be able to reach each other on the same local network. The code mode additionally requires Internet on **both** devices.
 
-1. On your **laptop**, open [DroneLab Web App](https://chilchiltrips-boop.github.io/dronelab/) in current Chrome/Edge and go to **Settings**.
-2. On your **Android phone**, install [ZEBJUS DroneLab Smart QR V1.3.0 APK](https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk).
-3. Connect both devices to the **same Wi-Fi network** (not isolated guest/client network).
-4. On Web App, click **Pair Mobile**. A 3-minute QR + 6-digit code appear. Laptop camera scanner starts automatically after camera permission approval.
-5. On Android, tap **Scan Web QR** and point the phone at the Web QR. Android automatically produces a **Phone Response QR**; no extra Accept/Generate action.
-6. Show that Phone Response QR to the laptop webcam. Web App reads it and connects through WebRTC. If laptop webcam is unavailable, Android **Copy Response Text** → Web App Settings **Advanced** → paste.
-7. Compare the six-digit code on both devices and click **Confirm Pairing** on the Web App.
-8. On phone, tap **Take Control**. On the laptop header flip **Grant Mobile Control** ON. Android LED ON/OFF buttons become enabled after Web App grants control; command acknowledgements update the LED state on both devices.
-9. Flip Grant Mobile Control OFF to revoke mobile LED control. The Web App LED testing panel can then use **Take Control (Web)**.
+## Method A — PC has a webcam (Two-Way QR; no signaling server)
 
-## Safety and recovery
+1. Web App **Settings → Pair Mobile → Camera • Two-Way QR**.
+2. Tap **Pair Mobile**. Web App shows the offer QR and starts the laptop camera when permitted.
+3. Android **Scan Web QR**. The response QR automatically appears on the phone.
+4. Point laptop webcam at phone QR; response is scanned automatically.
+5. Verify the Web App **Safety Verification PIN** matches Android's confirmation PIN, and click **Confirm Pairing**.
+6. Android **Take Control** → Web App header **Grant Mobile Control ON** → LED ON/OFF. Responses are ACK-confirmed.
 
-- **Refresh, app restart, Wi-Fi changes, expired QR, connection failure**: mobile control is revoked; select **Pair Mobile** again, scan a fresh Web QR then phone QR, reconfirm and re-grant control.
-- The header shows **Mobile: Disconnected** in red and **Connected** in green. The control switch is disabled until pairing is approved.
-- The QR scanner auto-steps zoom on Android cameras that support digital zoom and attempts continuous focus where supported; unsupported camera hardware continues scanning normally. If QR is difficult to scan, use **Expand Response QR** on the Android phone.
-- Data flows directly via encrypted WebRTC DataChannel on local Wi-Fi; QR images carry the signaling information **in both directions**. No Firebase, signaling server, STUN/TURN or ESP32 kit required.
-- The public website may need Internet to load unless previously cached. The subsequent paired peer-to-peer transport is LAN direct; P2P still requires the Wi-Fi access point not to block local devices and firewall to permit the connection.
-- The Android APK is **debug-signed for testing**. A previous Android debug APK with a different certificate may require uninstall/reinstall, resetting its saved settings.
-- Physical Android camera/WebView, webcam permissions, QR recognition under lighting conditions, and different router/firewall configurations require actual phone and laptop testing; Chromium CI simulates the camera callback and validates actual QR pixels.
+## Method B — College PC without a camera (6-digit CONNECT code)
 
-## Recovery / backups
+1. Web App **Settings → No Camera • 6-Digit Code → Pair Mobile**. Laptop camera will not be requested.
+2. Android **Scan Web QR**. Android generates BOTH a response QR and a temporary six-digit **CONNECT code**, for example `482731`. Wait until the code field shows real digits rather than dashes.
+3. Type the Android **CONNECT code** into the **PC No Camera code input** → **Connect with Code**. You never need a PC webcam, secondary QR scan, laptop app, Python server, or long answer text.
+4. This optional flow uses the public **PeerJS Cloud signaling service** to privately authenticate the QR session and transfer the phone's WebRTC answer to the browser. The service is third-party, **requires Internet**, may be blocked by college firewalls, and is **not an owned production service**. If unavailable use Method A or Advanced manual QR transfer.
+5. Once Connected, compare the **Safety Verification PIN** shown in the Web App and Android App (different from the CONNECT code) → **Confirm Pairing**.
+6. Android **Take Control** → Web App header **Grant Mobile Control ON** → LED ON/OFF.
 
-- `backup/stable-v1.2.0-before-two-way` — safe V1.2.0 before QR improvements.
-- `backup/stable-v1.1.1-before-one-scan` — prior two-way implementation.
-- `backup/stable-2026-10-09-before-qr` — earliest safe baseline.
+## Technical and security limits
 
-The QR paired LED is a **virtual simulator**; it does not control flight motors or hardware.
+- A six-digit number **alone** cannot carry the WebRTC SDP. The code names an expiring remote peer at a signaling broker; an authenticated challenge derived from the QR offer and typed code is required before the phone sends its answer. The code expires with the QR (three minutes).
+- No flight motors or real drone actuators are exposed by this demo.
+- The online broker sees connection metadata such as peer IDs/IPs; do not describe code mode as cloud-free.
+- The real LED-control data travels over encrypted direct WebRTC peer-to-peer DataChannel after host authentication/confirmation; the online broker is only for the optional *pairing answer*.
+- Even with working Internet, the PC and phone must allow WebRTC peer connectivity; campus VLAN isolation, firewall restrictions and VPNs can prevent it. In that case a production TURN relay or network adjustment would be needed.
+- If the Web page refreshes, Android App restarts, or the phone changes networks, existing pairing/control rights are lost. Repeat QR scan + response/coded answer, approval, and grant mobile control.
+- Android camera autofocus/zoom steps are opportunistic where supported.
+- The APK is a debug/test build. Field test must validate actual Android WebView, college network, PeerJS Cloud reachability, and real mobile camera permissions before large-scale use. For production deployment, use an owned PeerServer with monitoring/rate limits rather than a free shared public signaling broker.
+
+## Backups
+
+`backup/stable-v1.3.0-before-code-pairing` is the pre-code-pairing safe point. Older `backup/stable-v1.2.0-before-two-way` also remains available.
