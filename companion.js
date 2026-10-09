@@ -47,11 +47,18 @@ async function loadOffer(raw){
  }catch(e){$('offerState').textContent=e.message;message('Invalid QR: '+e.message)}
 }
 async function scanOffer(){
+ $('offerState').textContent='Opening camera • approve Android camera permission…';
  try{
   scannerStop=await ZebjusQR.scan({video:$('scanVideo'),canvas:$('scanCanvas'),
    onData:txt=>{scannerStop?.();scannerStop=null;void loadOffer(txt)},
    onStatus:s=>$('offerState').textContent=s,onError:e=>$('offerState').textContent=e.message});
- }catch(e){$('offerState').textContent=e.message}
+ }catch(e){
+  const denied=e?.name==='NotAllowedError'||e?.name==='PermissionDeniedError'||/denied|permission/i.test(e?.message||'');
+  const help=denied?'Camera denied. Android Settings → Apps → ZEBJUS DroneLab QR → Permissions → Camera → Allow only while using the app.':String(e?.message||e);
+  $('offerState').textContent=denied?'CAMERA PERMISSION DENIED':'Camera unavailable';
+  $('cameraPermissionHelp').textContent=help;
+  message('QR scanner: '+help);
+ }
 }
 async function acceptOffer(){
  if(!rawOffer)return;
