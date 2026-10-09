@@ -1,10 +1,11 @@
 import * as THREE from '../three.module.min.js';
 import {loadGLB} from '../glb-loader.js';
 import {createTripodAudio} from './tripod-audio.js';
-import {enhanceTripodScene} from './tripod-realism.js';
-import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,startTuningPulse} from './tripod-physics.js';
+import {loadAssemblyTripod} from './tripod-assembly-model.js';
+import {simulateResponse} from './tripod-experiments.js';
+import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map();
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.70,selectedAxis='roll';
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.30,selectedAxis='roll',graphPaused=false;
 const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
 const makeMat=(color,metalness=.2,roughness=.5)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
@@ -25,17 +26,17 @@ function makeScene(){
  try{
   const test=document.createElement('canvas');if(!test.getContext('webgl2')&&!test.getContext('webgl'))throw Error('WebGL unavailable');
   const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0x071723);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0x071723);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
   renderer.domElement.setAttribute('aria-label','Three-dimensional F450 quadcopter fixed to an interactive tripod');
   stage.prepend(renderer.domElement);
-  const scene=new THREE.Scene();scene.background=new THREE.Color('#071521');scene.fog=new THREE.Fog(0x071521,17,38);
+  const scene=new THREE.Scene();scene.background=new THREE.Color('#112431');scene.fog=new THREE.Fog(0x112431,18,39);
   const camera=new THREE.PerspectiveCamera(46,1,.1,100);
-  scene.add(new THREE.AmbientLight(0xa9d9e3,.55));scene.add(new THREE.HemisphereLight(0x9fe5f3,0x16202c,1.4));
+  scene.add(new THREE.AmbientLight(0xffffff,.72));scene.add(new THREE.HemisphereLight(0xf2fbff,0x71818b,1.28));
   const directional=(color,intensity,x,y,z)=>{const light=new THREE.DirectionalLight(color,intensity);light.position.set(x,y,z);scene.add(light);return light};
-  const key=directional(0xcfffe9,3.1,6,11,6);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-9;key.shadow.camera.right=9;key.shadow.camera.top=9;key.shadow.camera.bottom=-9;
-  directional(0x398ecc,1,-5,5,-6);directional(0xd7a79f,.6,4,3,-5);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(28,28),makeMat('#0e2630',0,.93));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
-  const grid=new THREE.GridHelper(28,28,0x285b62,0x173742);grid.position.y=.012;scene.add(grid);
+  const key=directional(0xffffff,2.35,6,10,8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-9;key.shadow.camera.right=9;key.shadow.camera.top=9;key.shadow.camera.bottom=-9;
+  directional(0xc9e6ff,1.15,-7,6,4);directional(0x9beeff,.82,-4,5,-8);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(28,28),makeMat('#243039',.05,.82));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+  const grid=new THREE.GridHelper(28,28,0x48606e,0x324651);grid.position.y=.012;scene.add(grid);
   const stand=new THREE.Group();scene.add(stand);cylinder(stand,.35,.47,.22,COLORS.black,0,.19,0);
   for(let i=0;i<3;i++){const a=(i*2*Math.PI/3)+Math.PI/6,px=Math.sin(a)*2.5,pz=Math.cos(a)*2.5;
    rod(stand,[0,.35,0],[px,.17,pz],.065,COLORS.dark);
@@ -81,29 +82,35 @@ function makeScene(){
   }
   dustGeometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
   const dust=new THREE.Points(dustGeometry,new THREE.PointsMaterial({color:0x8bcab4,size:.035,transparent:true,opacity:0,depthWrite:false}));scene.add(dust);
-  const realism=enhanceTripodScene(THREE,drone,motors,{loadGLB,onAssets:(loaded,total)=>{
-    $('tpSceneStatus').textContent=loaded?'3D ACTIVE • '+loaded+'/'+total+' REAL PARTS':'3D ACTIVE • PROCEDURAL';
-  }});
-  let radius=13.7,azimuth=.67,elevation=.33;
+  // The completed F450 comes from Assembly Lab's own GLB assets/slot table.
+  // Hide the temporary procedural body only after the authoritative model loads.
+  loadAssemblyTripod(THREE,loadGLB,{onAsset:(n,total)=>{
+    $('tpSceneStatus').textContent=n?'3D ACTIVE • '+n+'/'+total+' REAL PARTS':'3D ACTIVE • PROCEDURAL FALLBACK';
+  }}).then(assembly=>{
+    if(assembly.loaded<8){$('tpSceneStatus').textContent='3D ACTIVE • MODEL FALLBACK';return}
+    pivot.add(assembly.root);drone.visible=false;
+    propGroups.splice(0,propGroups.length,...assembly.propGroups);
+    blurs.splice(0,blurs.length,...assembly.blurs);
+    $('tpSceneStatus').textContent='3D ACTIVE • ASSEMBLY LAB F450';
+  }).catch(err=>console.warn('Assembly Lab tripod model unavailable',err));
+  let radius=11.1,azimuth=.67,elevation=.33,wantedAzimuth=.67,wantedElevation=.33,view='isometric';
   const resize=()=>{const {width,height}=stage.getBoundingClientRect();if(width<1||height<1)return;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)};
   const observer=new ResizeObserver(resize);observer.observe(stage);resize();
   $('tpSceneStatus').textContent='3D ACTIVE';$('tpSceneTip').textContent='Drag to orbit • Scroll to zoom';
   return {renderer,scene,camera,pivot,propGroups,blurs,wash,groundDiscs,dust,positions,seeds,motors,observer,
-   getCamera:()=>({radius,azimuth,elevation}),orbit:(dx,dy)=>{azimuth+=dx*.005;elevation=clamp(elevation+dy*.004,-.18,1.15)},
+   getCamera:()=>({radius,azimuth,elevation}),orbit:(dx,dy)=>{wantedAzimuth+=dx*.005;wantedElevation=clamp(wantedElevation+dy*.004,-.18,1.53);view='manual'},
    zoom:delta=>{radius=clamp(radius+delta*.014,6,24)},
    setView:name=>{
-    const angles={isometric:[.67,.33],front:[0,.20],back:[Math.PI,.20],left:[Math.PI/2,.24],right:[-Math.PI/2,.24],top:[0,1.53]};
-    const pose=angles[name]||angles.isometric;azimuth=pose[0];elevation=pose[1];
+    const angles={isometric:[.67,.33],front:[0,.20],back:[Math.PI,.20],left:[Math.PI/2,.24],right:[-Math.PI/2,.24],top:[0,1.53],follow:[.67,.33]};
+    const pose=angles[name]||angles.isometric;view=name;wantedAzimuth=pose[0];wantedElevation=pose[1];
    },
    draw:(snapshot,dt)=>{
-    realism.update(snapshot.motors);
     pivot.rotation.set(rad(snapshot.pitch),rad(snapshot.yaw),rad(snapshot.roll),'YXZ');
-    pivot.position.y=3.48+snapshot.lift*.22;
-    const vibration=snapshot.running?Math.min(.006,Math.abs(snapshot.rollRate+snapshot.pitchRate)*.00002):0;
-    pivot.position.x=vibration*Math.sin(snapshot.yawRate+snapshot.roll);
+    pivot.position.y=3.48; // constrained physical tripod swivel
+    pivot.position.x=0; // no scripted vibration: attitude follows motor torque only
     for(let i=0;i<4;i++){
-      const speed=snapshot.running?snapshot.motors[i]/100:0;
-      if(speed>.005)propGroups[i].rotation.y+=(i%2?1:-1)*dt*(1+speed*138);
+      const speed=snapshot.running?Math.sqrt(Math.max(0,snapshot.motorThrust[i])/8):0;
+      if(speed>.005)propGroups[i].rotation.y+=(i%2?1:-1)*dt*(.5+speed*132);
       blurs[i].material.opacity=Math.pow(speed,.75)*.49;blurs[i].scale.setScalar(1+speed*.12);
       wash[i].cone.material.opacity=speed*.13;wash[i].cone.scale.set(1+speed*.38,1+speed*.3,1+speed*.38);
       for(let n=0;n<8;n++){const ring=wash[i].rings[n],phase=(snapshot.running?s.time*.6*speed:0)+n/8;
@@ -115,6 +122,9 @@ function makeScene(){
       positions[n*3]=motors[seed.arm].x+Math.cos(seed.angle)*(.3+drift);positions[n*3+1]=.055+Math.sin(n*4.1+s.time*8)*.025*speed;
       positions[n*3+2]=motors[seed.arm].z+Math.sin(seed.angle)*(.3+drift)}
     dust.geometry.attributes.position.needsUpdate=true;dust.material.opacity=snapshot.running?Math.max(...snapshot.motors)/100*.4:0;
+    if(view==='follow')wantedAzimuth=.67+rad(snapshot.yaw);
+    azimuth+=Math.atan2(Math.sin(wantedAzimuth-azimuth),Math.cos(wantedAzimuth-azimuth))*Math.min(1,dt*8);
+    elevation+=(wantedElevation-elevation)*Math.min(1,dt*8);
     camera.position.set(Math.sin(azimuth)*radius*Math.cos(elevation),2.65+Math.sin(elevation)*radius,Math.cos(azimuth)*radius*Math.cos(elevation));camera.lookAt(0,2.65,0);
     renderer.render(scene,camera);
    },
