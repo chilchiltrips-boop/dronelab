@@ -1,9 +1,9 @@
-name: Build Aerion FlightCore A1 and A2
+name: Build Aerion I2C scanner A1 and A2
 on:
   push:
     branches: [main]
     paths:
-      - FlightCore_Firmware/ZEBJUS_FLIGHTCORE.ino
+      - FlightCore_Firmware/AERION_I2C_SCANNER.ino
   workflow_dispatch:
 permissions:
   contents: write
@@ -29,5 +29,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add FlightCore_Firmware VERSION.txt firmware-catalog.json firmware-latest.json
-          git diff --cached --quiet || git commit -m 'Release Aerion FC A1 and A2 18.3.84 with serial I2C scanner'
+          git diff --cached --quiet || git commit -m 'Release Aerion FC A1 and A2 I2C scanner 1.0.0'
           git push

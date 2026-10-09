@@ -1,8 +1,7 @@
 {
   "schema": 2,
-  "product": "ZEBJUS_FLIGHTCORE",
-  "version": "18.3.84",
-  "builtAt": "2026-10-09T06:55:36Z",
+  "product": "AERION_I2C_SCANNER",
+  "version": "1.0.0",
   "catalog": "firmware-catalog.json",
-  "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
+  "note": "Scanner-only USB diagnostic release. Images become available after verified compilation."
 }

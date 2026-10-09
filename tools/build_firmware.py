@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'FlightCore_Firmware'
-SRC=OUT/'ZEBJUS_FLIGHTCORE.ino'
+SRC=OUT/'AERION_I2C_SCANNER.ino'
 CAT=OUT/'catalog.json'
 VERSION_FILE=ROOT/'VERSION.txt'
 CORE_VERSION='3.3.12'
@@ -80,19 +80,6 @@ def verify_build(build, board, version):
     return {'boardId':board['id'],'fqbn':board['build']['fqbn'],'chipId':chip,'appBytes':len(app),'otaSlots':slots,'factoryBytes':len(merged),'factoryAddress':'0x0','checks':['image magic','profile chip ID','release version','dual OTA slots','slot size','factory bootloader at 0x0','factory/APP identical']}
 
 
-def verify_monitor_stack(build):
-    # Direct frame only: leave the remaining task stack for ROM/library calls.
-    frames=[]
-    for path in build.rglob('*.su'):
-        for line in path.read_text().splitlines():
-            fields=line.split('\t')
-            if len(fields)>=3 and 'void rcMonitorTask(void*)' in fields[0]:
-                frames.append((int(fields[1]),fields[2]))
-    if len(frames)!=1 or frames[0][1]!='static' or frames[0][0]>1024:
-        raise RuntimeError(f'RC monitor stack frame exceeds its 1024-byte budget or is unmeasured: {frames}')
-    return {'taskStackBytes':8192,'directFrameBytes':frames[0][0],'directFrameLimitBytes':1024,'includesROMCallDepth':False}
-
-
 def sync_catalog_version(catalog,version):
     catalog['version']=version
     for board in catalog.get('boards',[]):
@@ -104,7 +91,7 @@ def write_metadata(catalog,version,built_at):
     catalog['builtAt']=built_at
     data=json.dumps(catalog,indent=2)+'\n'
     CAT.write_text(data); (ROOT/'firmware-catalog.json').write_text(data)
-    sub={'schema':2,'product':'ZEBJUS_FLIGHTCORE','version':version,'builtAt':built_at,'catalog':'catalog.json','note':'Board-aware firmware catalog. Build automation marks each verified package available after compilation.'}
+    sub={'schema':2,'product':'AERION_I2C_SCANNER','version':version,'builtAt':built_at,'catalog':'catalog.json','note':'Board-aware firmware catalog. Build automation marks each verified package available after compilation.'}
     top={**sub,'catalog':'firmware-catalog.json'}
     (OUT/'latest.json').write_text(json.dumps(sub,indent=2)+'\n')
     (ROOT/'firmware-latest.json').write_text(json.dumps(top,indent=2)+'\n')
@@ -138,14 +125,12 @@ def main():
     for b in targets:
         cfg=b['build']; pkg=b['latest']['app']; filename=pkg['file']
         with tempfile.TemporaryDirectory(prefix='zfc-build-') as td:
-            td=Path(td); sketch=td/'ZEBJUS_FLIGHTCORE'; sketch.mkdir(); shutil.copy2(SRC,sketch/'ZEBJUS_FLIGHTCORE.ino')
-            for pattern in ('*.h','*.hpp','*.c','*.cpp','partitions.csv'):
-                for extra in OUT.glob(pattern): shutil.copy2(extra,sketch/extra.name)
-            if (OUT/'src').is_dir(): shutil.copytree(OUT/'src',sketch/'src')
+            td=Path(td); sketch=td/'AERION_I2C_SCANNER'; sketch.mkdir(); shutil.copy2(SRC,sketch/'AERION_I2C_SCANNER.ino')
+            shutil.copy2(OUT/'partitions.csv',sketch/'partitions.csv')
             build=td/'build'; build.mkdir()
             print(f'\n=== BUILD {b["id"]} • {b["name"]} • {cfg["fqbn"]} ===',flush=True)
             run(command+['compile','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
-            verified=verify_build(build,b,version);verified['rcMonitorStack']=verify_monitor_stack(build);report['boards'].append(verified)
+            verified=verify_build(build,b,version);report['boards'].append(verified)
             srcbin=find_app_bin(build); dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
             build_id=f'{version}-{b["id"]}-{digest[:12]}'
             pkg.update({'available':True,'sha256':digest,'size':dst.stat().st_size,'builtAt':built_at,'buildId':build_id}); b['latest']['builtAt']=built_at
