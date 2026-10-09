@@ -20,7 +20,7 @@ try{
  await Promise.all([web.goto(url,{waitUntil:'domcontentloaded'}),phone.goto(url+'companion.html',{waitUntil:'domcontentloaded'})]);
  await web.locator('[data-tab="settings"]').click();
  await web.locator('#webappVersion').waitFor();
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.1.0'))throw Error('Web version missing');
+ if(!/^v1\.1\.\d+/.test((await web.locator('#webappVersion').textContent())||''))throw Error('Web release version missing');
  const phoneButtons=await phone.locator('#mobileLedOn').isDisabled();if(!phoneButtons)throw Error('Unpaired LED button must be disabled');
  await web.locator('#pairCreateBtn').click();
  await web.waitForFunction(()=>document.getElementById('pairOfferText')?.value.startsWith('zj1:'),null,{timeout:25000});
