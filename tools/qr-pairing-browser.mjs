@@ -1,79 +1,89 @@
+/* V1.2.0 Cloud-free One-Scan WebRTC integration test using local Python signaling bridge.
+   Browser Android surrogate uses same companion.js and QR payload; native HTTP callback is
+   separately validated by Android APK build and source/tests. */
 import {chromium} from 'playwright';
 import {mkdirSync} from 'node:fs';
+mkdirSync('test-output',{recursive:true});
 const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-fake-ui-for-media-stream']});
-const ctx=await browser.newContext({viewport:{width:1480,height:900}}),web=await ctx.newPage(),phone=await ctx.newPage();
-const fails=[],logs=[];
-for(const p of [web,phone]){
- p.on('pageerror',e=>fails.push(e.message));
- p.on('console',m=>{if(m.type()==='error')logs.push(m.text())});
-}
-const url='http://127.0.0.1:8765/';
-async function qrDecoded(page,canvasId,expected){
- const actual=await page.locator('#'+canvasId).evaluate(el=>{
-  const c=el.getContext('2d',{willReadFrequently:true}),d=c.getImageData(0,0,el.width,el.height);
-  return jsQR(d.data,el.width,el.height,{inversionAttempts:'attemptBoth'})?.data||null
- });
- if(actual!==expected)throw Error(canvasId+' QR encode/decode mismatch; decoded size '+actual?.length+', expected '+expected.length);
-}
-const log=message=>console.log('CHECK:',message);
-try{
- await Promise.all([web.goto(url,{waitUntil:'domcontentloaded'}),phone.goto(url+'companion.html',{waitUntil:'domcontentloaded'})]);
- await web.locator('[data-tab="settings"]').click();
- await web.locator('#webappVersion').waitFor();
- if(!/^v1\.1\.\d+/.test((await web.locator('#webappVersion').textContent())||''))throw Error('Web release version missing');
- const phoneButtons=await phone.locator('#mobileLedOn').isDisabled();if(!phoneButtons)throw Error('Unpaired LED button must be disabled');
+const ctx=await browser.newContext({viewport:{width:1450,height:920}}),web=await ctx.newPage(),android=await ctx.newPage();
+const failures=[];
+for(const p of [web,android])p.on('pageerror',e=>failures.push(e.message));
+const base='http://127.0.0.1:8765/';
+async function connect(){
  await web.locator('#pairCreateBtn').click();
- await web.waitForFunction(()=>document.getElementById('pairOfferText')?.value.startsWith('zj1:'),null,{timeout:25000});
+ await web.waitForFunction(()=>document.getElementById('pairOfferText')?.value.startsWith('zj1:'),null,{timeout:20000});
  const offer=await web.locator('#pairOfferText').inputValue();
- await qrDecoded(web,'pairOfferCanvas',offer);
- log('Web offer QR generated, encoded and decoded offline');
- await phone.locator('#offerInput').fill(offer);
- await phone.locator('#useOfferBtn').click();
- await phone.waitForFunction(()=>!document.getElementById('createAnswerBtn').disabled||document.getElementById('offerState').textContent.includes('Invalid'),null,{timeout:12000});
- if(await phone.locator('#createAnswerBtn').isDisabled())throw Error('Phone did not accept Web pairing offer: '+await phone.locator('#offerState').textContent());
- const firstCode=await web.locator('#pairCode').textContent(),secondCode=await phone.locator('#appPairCode').textContent();
- if(firstCode!==secondCode||!/^\d{6}$/.test(firstCode))throw Error('Pairing PIN mismatch');
- await phone.locator('#createAnswerBtn').click();
- try{await phone.waitForFunction(()=>document.getElementById('answerText')?.value.startsWith('zj1:'),null,{timeout:25000})}
- catch(e){throw Error('Android answer was not created: '+(await phone.locator('#answerState').textContent())+'; LOG '+(await phone.locator('#mobileLog').textContent()).slice(-750))}
- const answer=await phone.locator('#answerText').inputValue();
- await qrDecoded(phone,'answerCanvas',answer);
- log('Android companion answer QR generated and decoded; matching PIN '+firstCode);
- await web.locator('#pairAnswerText').fill(answer);
- await web.locator('#pairUseAnswerBtn').click();
- await web.locator('#pairConfirmBtn').waitFor({state:'visible'});
- await web.waitForFunction(()=>document.getElementById('pairConfirmBtn')&&!document.getElementById('pairConfirmBtn').disabled,null,{timeout:30000});
+ const qr=await web.locator('#pairOfferCanvas').evaluate(c=>{
+  const ctx=c.getContext('2d',{willReadFrequently:true}),pixels=ctx.getImageData(0,0,c.width,c.height);
+  return jsQR(pixels.data,c.width,c.height,{inversionAttempts:'attemptBoth'})?.data;
+ });
+ if(qr!==offer)throw Error('Offer QR was not camera-decodable');
+ await android.locator('#offerInput').fill(offer);
+ await android.locator('#useOfferBtn').click(); // Simulates the result of the SINGLE Android QR scan.
+ await android.waitForFunction(()=>document.getElementById('answerState').textContent.includes('Answer delivered'),null,{timeout:30000});
+ await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:30000});
+ const webPin=await web.locator('#pairCode').textContent(),phonePin=await android.locator('#appPairCode').textContent();
+ if(webPin!==phonePin||!(/^[0-9]{6}$/.test(webPin)))throw Error('QR pairing PIN mismatch');
  await web.locator('#pairConfirmBtn').click();
- await phone.waitForFunction(()=>document.getElementById('requestControlBtn')&&!document.getElementById('requestControlBtn').disabled,null,{timeout:12000});
- log('WebRTC peer connected and human confirmation approved');
- await phone.locator('#requestControlBtn').click();
- await web.locator('#pairGrantControlBtn').waitFor({state:'visible'});
- await web.waitForFunction(()=>!document.getElementById('pairGrantControlBtn').disabled,null,{timeout:10000});
- await web.locator('#pairGrantControlBtn').click();
- await phone.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:10000});
- log('Single-controller lock granted explicitly to Android');
- await phone.locator('#mobileLedOn').click();
+ await android.waitForFunction(()=>!document.getElementById('requestControlBtn').disabled,null,{timeout:15000});
+ return webPin;
+}
+try{
+ await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),android.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
+ await web.locator('[data-tab="settings"]').click();
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.2.0'))throw Error('Missing V1.2 version');
+ if(!((await web.locator('#mobileHeaderStatus').getAttribute('class'))||'').includes('disconnected'))throw Error('Disconnected must be red');
+ if(!(await android.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired Android LED must be disabled');
+ const pin=await connect();
+ console.log('PASS single Android QR, automatic authenticated LAN answer, WebRTC, human confirmation PIN '+pin);
+ if(!(await web.locator('#topGrantMobileSwitch').isEnabled()))throw Error('Header Grant Mobile Control toggle not enabled');
+ await android.locator('#requestControlBtn').click();
+ await web.locator('.qr-header-switch').click();
+ await android.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:12000});
+ if(await web.locator('#webLedOn').isEnabled())throw Error('Web LED must be locked when Android controls it');
+ await android.locator('#mobileLedOn').click();
  await web.waitForFunction(()=>document.getElementById('ledState').textContent==='LED ON',null,{timeout:10000});
- try{await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON'&&/confirm/i.test(document.getElementById('commandStatus').textContent),null,{timeout:10000})}
- catch(e){throw Error('LED ON not acknowledged on phone. '+JSON.stringify(await phone.evaluate(()=>({state:document.getElementById('mobileLedState').textContent,command:document.getElementById('commandStatus').textContent,log:document.getElementById('mobileLog').textContent.slice(-800)}))))}
- if(await web.locator('#webLedOn').isEnabled())throw Error('Web LED button must be locked while Android owns control');
- await phone.locator('#mobileLedOff').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF'&&/confirm/i.test(document.getElementById('commandStatus').textContent),null,{timeout:10000});
- log('LED ON and OFF commands acknowledged and synchronized');
- await web.locator('[data-tab="led"]').click();
- await web.screenshot({path:'test-output/qr-led-desktop.png',fullPage:true});
- await phone.screenshot({path:'test-output/qr-companion-phone.png',fullPage:true});
+ await android.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON',null,{timeout:10000});
+ await android.locator('#mobileLedOff').click();
+ await android.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF',null,{timeout:10000});
+ await web.locator('.qr-header-switch').click();
+ await android.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:10000});
+ console.log('PASS top control toggle ON/OFF and ACK-synchronized LED state');
+ await web.locator('.qr-header-switch').click();
+ await android.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:10000});
+ await android.evaluate(()=>window.zebjusNetworkChanged());
+ await android.waitForFunction(()=>document.getElementById('mobileLedOn').disabled&&document.getElementById('appPairCode').textContent==='------',null,{timeout:10000});
+ await web.waitForFunction(()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'),null,{timeout:12000});
+ console.log('PASS Wi-Fi change revokes stale pairing, session and controller lock');
+ await web.locator('#pairCreateBtn').click();
+ await web.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'),null,{timeout:20000});
+ const fresh=await web.locator('#pairOfferText').inputValue();
+ await android.locator('#offerInput').fill(fresh);
+ await android.locator('#useOfferBtn').click();
+ await android.waitForFunction(()=>document.getElementById('answerState').textContent.includes('Answer delivered'),null,{timeout:30000});
+ await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:30000});
+ await web.locator('#pairConfirmBtn').click();
+ await android.waitForFunction(()=>!document.getElementById('requestControlBtn').disabled,null,{timeout:15000});
+ await android.locator('#requestControlBtn').click();
+ await web.locator('.qr-header-switch').click();
+ await android.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:10000});
+ await android.locator('#mobileLedOn').click();
+ await android.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON',null,{timeout:10000});
+ console.log('PASS QR re-pairing after Wi-Fi change restores LED control');
+ await web.screenshot({path:'test-output/one-scan-web-settings.png',fullPage:true});
+ await android.screenshot({path:'test-output/one-scan-android-companion.png',fullPage:true});
  await web.reload({waitUntil:'domcontentloaded'});
- await web.waitForFunction(()=>document.getElementById('mobileHeaderStatus')?.textContent.includes('Disconnected'),null,{timeout:10000});
- await phone.waitForFunction(()=>document.getElementById('mobileLedOn')?.disabled===true,null,{timeout:15000});
- const lastCode=await web.locator('#pairCode').textContent();
- if(lastCode!=='------')throw Error('Refreshing the Web App must destroy session QR and code');
- log('Web App refresh invalidates pairing; Android LED buttons disabled');
- if(fails.length)throw Error('Uncaught JavaScript errors: '+fails.join(' | '));
- console.log('PASS no-cloud WebRTC QR test: offer and answer QR, correct PIN, pairing approval, exclusive lock, authoritative LED ACKs, refresh disconnect');
+ await web.waitForFunction(()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'),null,{timeout:8000});
+ await android.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:12000});
+ if((await web.locator('#pairCode').textContent())!=='------')throw Error('Refresh preserved old pairing code');
+ if(failures.length)throw Error('Uncaught JS: '+failures.join(' | '));
+ console.log('SUCCESS V1.2: one QR scan, no cloud, automatic answer, exclusive grant toggle, LED ACKs, Wi-Fi re-pair, page-refresh invalidation');
 }catch(e){
- console.error('FAIL QR P2P:',e.stack||e);console.error('BROWSER ERRORS:',fails.slice(-10));console.error('CONSOLE ERRORS:',logs.slice(-10));
- await web.screenshot({path:'test-output/qr-error-web.png',fullPage:true}).catch(()=>{});
- await phone.screenshot({path:'test-output/qr-error-phone.png',fullPage:true}).catch(()=>{});
+ console.error('ONE-SCAN E2E FAILED:',e.stack||e);
+ console.error('WEB STATUS:',await web.locator('#pairAnswerState').textContent().catch(()=>''),'ANDROID STATUS:',await android.locator('#answerState').textContent().catch(()=>''));
+ console.error('LOG:',(await android.locator('#mobileLog').textContent().catch(()=>''))?.slice(-900));
+ console.error('JS ERRORS:',failures);
+ await web.screenshot({path:'test-output/one-scan-failed-web.png',fullPage:true}).catch(()=>{});
+ await android.screenshot({path:'test-output/one-scan-failed-android.png',fullPage:true}).catch(()=>{});
  process.exitCode=1;
 }finally{await browser.close()}
