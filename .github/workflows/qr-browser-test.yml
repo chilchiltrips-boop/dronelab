@@ -16,6 +16,7 @@ on:
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
       - 'tools/qr-pairing-browser.mjs'
+      - 'tools/code-live-smoke.mjs'
       - '.github/workflows/qr-browser-test.yml'
   workflow_dispatch:
 permissions:
@@ -47,6 +48,10 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &
           sleep 3
           node tools/qr-pairing-browser.mjs
+      - name: Optional live PeerJS Cloud code pairing smoke
+        continue-on-error: true
+        timeout-minutes: 2
+        run: node tools/code-live-smoke.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
