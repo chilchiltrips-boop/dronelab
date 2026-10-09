@@ -20,13 +20,13 @@ try{
  await page.keyboard.press('Escape');
  await page.keyboard.press('ControlOrMeta+End');
  await page.keyboard.insertText('\nprint("UNDO_REDO_TEST")');
- const textAfterEdit=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ const textAfterEdit=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(!textAfterEdit.includes('UNDO_REDO_TEST'))throw Error('Monaco typing did not reach editor');
  await page.locator('#pythonUndoFileBtn').click();
- const textAfterUndo=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ const textAfterUndo=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(textAfterUndo===textAfterEdit)throw Error('Undo toolbar did not change Python code');
  await page.locator('#pythonRedoFileBtn').click();
- const textAfterRedo=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ const textAfterRedo=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(textAfterRedo!==textAfterEdit)throw Error('Redo toolbar did not restore Python code');
  page.once('dialog',dialog=>dialog.accept());
 
