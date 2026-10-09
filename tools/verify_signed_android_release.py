@@ -43,7 +43,7 @@ def run():
     if len(sys.argv) == 5:
         previous = sys.argv[4]
         old_signatures = output([apksigner, "verify", "--verbose", "--print-certs", previous])
-        old_certs = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", old_signatures)
+        old_certs = re.findall(r"(?:V2 Signer:|Signer #\d+) certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", old_signatures)
         assert len(old_certs) == 1 and old_certs[0].lower() == EXPECTED_CERT_SHA256, "Published baseline has an incompatible certificate"
         old_manifest = output([aapt, "dump", "badging", previous])
         old_package = re.search(r"^package:\s+name='([^']+)'\s+versionCode='(\d+)'", old_manifest, re.M)

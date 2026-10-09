@@ -22,7 +22,12 @@ async function unpack(payload){
  if(typeof payload!=='string'||payload.length>16000||!payload.startsWith('zj1:'))throw Error('Not a ZEBJUS pairing QR');
  const match=payload.match(/^zj1:([01]):([A-Za-z0-9_-]+)$/);if(!match)throw Error('Invalid pairing QR');
  let arr=decode(match[2]);
- if(match[1]==='1'){if(!root.DecompressionStream)throw Error('Browser needs QR decompression support');const stream=new Blob([arr]).stream().pipeThrough(new DecompressionStream('gzip'));arr=new Uint8Array(await new Response(stream).arrayBuffer())}
+ if(match[1]==='1'){
+  if(!root.DecompressionStream)throw Error('Browser needs QR decompression support');
+  const reader=new Blob([arr]).stream().pipeThrough(new DecompressionStream('gzip')).getReader(),chunks=[];let total=0;
+  try{while(true){const {value,done}=await reader.read();if(done)break;total+=value.byteLength;if(total>24000){await reader.cancel();throw Error('QR message too large')}chunks.push(value)}}finally{reader.releaseLock()}
+  arr=new Uint8Array(total);let offset=0;for(const chunk of chunks){arr.set(chunk,offset);offset+=chunk.byteLength}
+ }
  if(arr.length>24000)throw Error('QR message too large');
  const obj=JSON.parse(new TextDecoder().decode(arr));
  if(obj.v!==VERSION||!['offer','answer'].includes(obj.kind)||typeof obj.sid!=='string'||obj.sid.length!==24||!/^[0-9a-f]{24}$/.test(obj.sid)||typeof obj.pin!=='string'||!/^\d{6}$/.test(obj.pin)||!positiveInt(obj.expires)||Date.now()>obj.expires)throw Error('Invalid or expired pairing session');

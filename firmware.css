@@ -74,3 +74,9 @@
 .firmware-page .fw-plot-series{display:inline-flex;align-items:center;gap:5px}
 .firmware-page .fw-plot-series i{display:inline-block;width:9px;height:9px;border-radius:50%}
 @media(max-width:590px){.firmware-page .fw-serial-toolbar{align-items:stretch}.firmware-page .fw-serial-tabs{width:100%}.firmware-page .fw-serial-tabs .btn{flex:1}.firmware-page .fw-serial-send{flex-wrap:wrap}.firmware-page .fw-serial-send input{flex-basis:100%}.firmware-page .fw-serial-baud{flex:1}.firmware-page .fw-serial-console{min-height:200px}}
+
+/* A column flex-basis is a height, not the intended button width. */
+@media(max-width:620px){
+ .firmware-page .firmware-recovery-actions .btn{flex:0 0 auto;min-height:44px;padding:10px 12px}
+ .firmware-page .firmware-source-actions .btn,.firmware-page .firmware-file-label,.firmware-page .fw-serial-tabs .btn{min-height:44px}
+}

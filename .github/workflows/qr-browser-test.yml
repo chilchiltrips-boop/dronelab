@@ -17,6 +17,7 @@ on:
       - 'vendor/jsqr.js'
       - 'tools/qr-pairing-browser.mjs'
       - 'tools/audit-browser.mjs'
+      - 'tools/controls-browser.mjs'
       - 'tools/browser-harness.mjs'
       - 'tools/offline-browser.mjs'
       - 'sw.js'
@@ -58,6 +59,7 @@ jobs:
           npm run verify:firmware
           node tools/qr-pairing-browser.mjs
           node tools/audit-browser.mjs
+          node tools/controls-browser.mjs
           node tools/offline-browser.mjs
       - name: Optional live PeerJS Cloud code pairing smoke
         continue-on-error: true

@@ -11,5 +11,9 @@
 @media(min-width:1251px){#tab-assembly.assembly-grid.active{grid-template-columns:250px minmax(0,1fr) 325px!important}}
 .stage-toolbar{height:auto;min-height:65px;flex-wrap:wrap;gap:8px}
 .stage-toolbar .view-switch,.stage-toolbar .camera-actions{flex-wrap:wrap}
-#wiringSvg{touch-action:none}
 @media(pointer:coarse){.btn,.view-btn,.mode,.tab{min-height:44px!important}.build-step{min-height:48px}}
+
+/* Wrap the actual wiring toolbar rather than the legacy class name. */
+.wiring-card .section-toolbar .toolbar-row{display:flex;flex-wrap:wrap!important;overflow-x:visible;gap:8px;min-width:0;max-width:100%}
+.wiring-card .section-toolbar .toolbar-row .btn{flex:0 0 auto;max-width:100%}
+@media(pointer:coarse){#wiringSvg{touch-action:pan-x pan-y}#wiringSvg .wire-node-v8,#wiringSvg .port-v8{touch-action:none}}

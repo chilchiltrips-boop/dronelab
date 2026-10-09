@@ -36,6 +36,8 @@ try{
    await page.locator('[data-tab='+tab+']').click();await page.screenshot({path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
    const metric=await page.evaluate(({tab,width,height})=>({tab,width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight,panelHeight:document.querySelector('#tab-'+tab).getBoundingClientRect().height}),{tab,width,height});
    metrics.push(metric);check(metric.scrollWidth<=width,'Horizontal overflow '+tab+' '+width);
+   if(tab==='wiring')check(await page.evaluate(()=>[...document.querySelectorAll('.wiring-card .toolbar-row button')].every(b=>{const r=b.getBoundingClientRect(),p=b.parentElement.getBoundingClientRect();return r.right<=p.right+1})), 'Clipped wiring toolbar '+width);
+   if(tab==='firmware'&&width===390)check(await page.locator('#fwReconnectBtn').evaluate(b=>b.getBoundingClientRect().height<80),'Oversized firmware recovery button');
    if(width===1366)await inventory(tab);
   }
  }
@@ -65,7 +67,19 @@ try{
   await page.setViewportSize({width,height});await page.screenshot({path:`${dir}/companion-${width}x${height}.png`,fullPage:true});
   const m=await page.evaluate(({width,height})=>({tab:'companion',width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight}),{width,height});metrics.push(m);check(m.scrollWidth<=width,'Companion overflow');
  }
- await inventory('companion');check(!errors.length,'JavaScript errors: '+errors.join('; '));check(!failed.length,'Failed local assets: '+JSON.stringify(failed));
+ await inventory('companion');
+ await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=async()=>{throw new DOMException('Permission denied for test','NotAllowedError')}});
+ await page.locator('#scanOfferBtn').click();await page.waitForFunction(()=>document.getElementById('offerState').textContent==='CAMERA PERMISSION DENIED');
+ check(await page.locator('#scanOfferBtn').isEnabled(),'Phone denied camera remains disabled');
+ await page.evaluate(()=>{navigator.mediaDevices.getUserMedia=()=>new Promise(r=>window.__phoneCameraResolve=r)});
+ await page.locator('#scanOfferBtn').click();await page.locator('#stopCameraBtn').click();
+ await page.evaluate(()=>{const c=document.createElement('canvas');window.__phoneLateStream=c.captureStream(1);window.__phoneCameraResolve(window.__phoneLateStream)});
+ await page.waitForFunction(()=>window.__phoneLateStream.getTracks().every(t=>t.readyState==='ended'));
+ check(await page.locator('#scanOfferBtn').isEnabled(),'Phone cancelled camera remains disabled');
+ await page.locator('#offerInput').fill('not-a-pairing-qr');await page.locator('#useOfferBtn').click();
+ await page.waitForFunction(()=>document.getElementById('offerState').textContent==='Invalid or expired QR');
+ await page.locator('#resetPairBtn').click();check(await page.locator('#useOfferBtn').isDisabled(),'Reset retains manual offer');
+ check(!errors.length,'JavaScript errors: '+errors.join('; '));check(!failed.length,'Failed local assets: '+JSON.stringify(failed));
  console.log('PASS: 45 viewport screenshots, compact steps, hashes, permission denied/cancel/reopen, camera tab cleanup, virtual LED, unavailable firmware controls; 0 JS errors/failed local assets');
 }finally{
  writeFileSync(dir+'/metrics.json',JSON.stringify({environment:process.env.DRONELAB_TEST_FILE_ROUTES==='1'?'file-route sandbox; ICE timing simulated for QR rendering':'HTTP Chromium',errors,failed,data:metrics},null,2));
