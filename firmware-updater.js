@@ -341,7 +341,7 @@ async function reconnectSerialMonitor(){
 }
 async function sendSerialMessage(){
  const port=monitorPort,input=$('#fwSerialInput');if(!port||!input)return;
- const endings=$('#fwSerialLineEnding')?.value||'';
+ const lineMode=$('#fwSerialLineEnding')?.value||'',endings=({nl:'\n',cr:'\r',crlf:'\r\n'})[lineMode]||'';
  const writer=port.writable?.getWriter?.();if(!writer){log('This port is not writable.');return}
  try{await writer.write(new TextEncoder().encode(input.value+endings));input.value=''}
  catch(e){log('Serial send failed: '+e.message)}
