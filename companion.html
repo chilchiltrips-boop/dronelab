@@ -1,9 +1,9 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/><meta name="theme-color" content="#07111b"/><title>ZEBJUS DroneLab Companion</title><link rel="stylesheet" href="companion.css"/></head><body>
-<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Companion • v1.1.0-QR-BETA.1</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
+<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Companion • v1.1.1 CAMERA FIX</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
 <main>
 <section class="hero"><small>KIT-FREE • SAME WIFI • NO CLOUD</small><h1>Mobile LED Controller</h1><p>Pair with DroneLab on your laptop using two-way QR codes. Connection and controller rights are cleared when the app or website reloads.</p></section>
 <section class="card"><div class="section-title"><strong>1. Scan Web App Offer</strong><span id="offerState">Waiting for QR</span></div>
-<div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="stopCameraBtn">Close Camera</button></div><video id="scanVideo" autoplay muted playsinline hidden></video><canvas id="scanCanvas" hidden></canvas>
+<div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="stopCameraBtn">Close Camera</button></div><p class="hint" id="cameraPermissionHelp">Tap Scan Web QR to request Android Camera permission. If no popup appears, open Android Settings → Apps → ZEBJUS DroneLab QR → Permissions → Camera → Allow only while using the app.</p><video id="scanVideo" autoplay muted playsinline hidden></video><canvas id="scanCanvas" hidden></canvas>
 <textarea id="offerInput" placeholder="Alternatively paste Web App pairing offer here"></textarea>
 <div class="actions"><button id="useOfferBtn">Use Pasted Offer</button><button id="resetPairBtn" class="danger">Cancel / New Pairing</button></div>
 <div class="pin-box"><span>Confirmation code — verify on Web App</span><strong id="appPairCode">------</strong></div>
