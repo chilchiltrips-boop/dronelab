@@ -55,7 +55,7 @@ export function enhanceTripodScene(THREE,drone,motors,{loadGLB,onAssets=()=>{}}=
  // The procedural body remains usable if any existing GLB is absent.
  async function fitAsset(name,position,targetSize,opacity=1){
   if(typeof loadGLB!=='function')return false;
-  const obj=await loadGLB('../'+name);
+  const obj=await loadGLB('./'+name);
   const bounds=new THREE.Box3().setFromObject(obj),size=bounds.getSize(new THREE.Vector3()),center=bounds.getCenter(new THREE.Vector3());
   if(Math.min(size.x,size.y,size.z)<1e-6)return false;
   const scl=Math.min(...[0,1,2].map(i=>targetSize[i]/size.getComponent(i)));
