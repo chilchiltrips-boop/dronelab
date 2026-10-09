@@ -1,0 +1,47 @@
+name: Tripod PID Simulator Tests
+on:
+  push:
+    branches: [feature/tripod-pid-simulator-v1.5.0, main]
+    paths:
+      - 'tripod.html'
+      - 'tripod.css'
+      - 'js/tripod-physics.js'
+      - 'js/tripod-page.js'
+      - 'tools/tripod-physics.test.mjs'
+      - 'tools/tripod-browser.mjs'
+      - 'sw.js'
+      - '.github/workflows/tripod-simulator.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tripod:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate code and pure physics
+        run: |
+          node --check js/tripod-physics.js
+          node --check js/tripod-page.js
+          node --test tools/tripod-physics.test.mjs
+          npm run check
+      - name: Install isolated Chromium test environment
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Validate rendered Tripod page, joystick input and responsive UI
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/tripod-http.log 2>&1 &
+          sleep 3
+          node tools/tripod-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tripod-simulator-desktop-mobile
+          path: test-output/
+          if-no-files-found: ignore
