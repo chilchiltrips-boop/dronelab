@@ -390,5 +390,60 @@ function frame(time){
  if(time-lastAudio>33){audioTick();lastAudio=time}
  raf=requestAnimationFrame(frame);
 }
-function boot(){visual=makeScene();updateControls();drawUI();raf=requestAnimationFrame(frame)}
+
+/* Optional receiver for same-origin parent WebApp's authenticated WebRTC host.
+ * Standalone tripod.html remains local-only; physical hardware is never reachable. */
+let remoteSession='',remoteSeq=0,remoteAt=0,remoteNeedsDisarm=false;
+function inEmbeddedMode(){
+ if(window.parent===window||!new URLSearchParams(location.search).has('embedded'))return false;
+ try{const ref=new URL(document.referrer);return ref.origin===location.origin&&
+  (ref.pathname.endsWith('/index.html')||ref.pathname.endsWith('/lab.html')||ref.pathname.endsWith('/'))}catch{return false}
+}
+function receiverStop(){
+ stop();remoteAt=0;remoteNeedsDisarm=true;
+}
+window.addEventListener('message',event=>{
+ if(!inEmbeddedMode()||event.source!==parent||event.origin!==location.origin)return;
+ const m=event.data;if(!m||typeof m!=='object')return;
+ if(m.type==='ZJ_SIM_STOP'){receiverStop();return}
+ if(m.type!=='ZJ_SIM_CONTROL')return;
+ const ack={type:'ZJ_SIM_ACK',seq:m.seq,accepted:false};
+ const respond=()=>parent.postMessage(ack,location.origin);
+ if(!Number.isSafeInteger(m.seq)||m.seq<=0||typeof m.sessionId!=='string'||m.sessionId.length<8||
+   !['angle','acro'].includes(m.mode)||typeof m.armed!=='boolean'||
+   !Number.isInteger(m.throttle)||m.throttle<1000||m.throttle>2000||
+   !m.axes||['roll','pitch','yaw'].some(k=>!Number.isFinite(m.axes[k])||Math.abs(m.axes[k])>1)){
+  ack.reason='Malformed virtual flight controls';respond();return;
+ }
+ if(m.sessionId!==remoteSession){
+  receiverStop();remoteSession=m.sessionId;remoteSeq=0;remoteNeedsDisarm=false;
+ }
+ if(m.seq<=remoteSeq){ack.reason='Stale controls';respond();return}
+ remoteSeq=m.seq;
+ if(!m.armed){stopSimulator(s);remoteNeedsDisarm=false;releaseAll();syncActions();ack.accepted=true}
+ else{
+  if(remoteNeedsDisarm){ack.reason='Send DISARM before new ARM after timeout';respond();return}
+  if(!s.running){
+   if(m.throttle>1050){ack.reason='Arm requires throttle ≤1050 µs';respond();return}
+   s.throttle=1000;if(!startSimulator(s)){ack.reason='Virtual arming refused';respond();return}
+  }
+  setFlightMode(s,m.mode);s.throttle=m.throttle;
+  s.cmdRoll=m.axes.roll;s.cmdPitch=m.axes.pitch;s.cmdYaw=m.axes.yaw;
+  syncActions();ack.accepted=true;
+ }
+ if(ack.accepted){
+  remoteAt=performance.now();
+  ack.applied={mode:s.mode,armed:s.running,throttle:s.throttle,
+   axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw}};
+ }
+ respond();
+});
+setInterval(()=>{
+ if(inEmbeddedMode()&&remoteAt&&performance.now()-remoteAt>450)receiverStop();
+},100);
+
+function boot(){
+ visual=makeScene();updateControls();drawUI();raf=requestAnimationFrame(frame);
+ if(inEmbeddedMode())window.parent.postMessage({type:'ZJ_TRIPOD_READY'},location.origin);
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();

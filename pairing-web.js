@@ -2,6 +2,35 @@
    Refresh clears all QR sessions, answer data, and control privileges. */
 const $=id=>document.getElementById(id);
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
+let simulatorReady=false,lastSimulatorFrame=0,pendingSimulator=new Map(),flightWatchdog=null;
+function frame(){return document.getElementById('simRemoteFrame')}
+function stopSimulatorRemote(reason='Control lost'){
+ for(const p of pendingSimulator.values()){clearTimeout(p.timer);p.resolve({accepted:false,reason})}
+ pendingSimulator.clear();lastSimulatorFrame=0;
+ if(simulatorReady)frame()?.contentWindow?.postMessage({type:'ZJ_SIM_STOP',reason},location.origin);
+ const status=document.getElementById('simControlInfo');if(status)status.textContent='STOP • '+reason;
+}
+function forwardSimulatorControl(m){
+ if(!simulatorReady||!frame()?.contentWindow)return {accepted:false,reason:'Open ANDROID FLIGHT page on Web App'};
+ return new Promise(resolve=>{
+  const timer=setTimeout(()=>{pendingSimulator.delete(m.seq);resolve({accepted:false,reason:'Simulator did not acknowledge'})},650);
+  pendingSimulator.set(m.seq,{resolve,timer});lastSimulatorFrame=performance.now();
+  frame().contentWindow.postMessage({type:'ZJ_SIM_CONTROL',...m},location.origin);
+ });
+}
+function onSimulatorMessage(event){
+ if(event.origin!==location.origin||event.source!==frame()?.contentWindow)return;
+ const m=event.data;if(!m||typeof m!=='object')return;
+ if(m.type==='ZJ_TRIPOD_READY'){
+  simulatorReady=true;const e=document.getElementById('simReceiverState');if(e)e.textContent='SIMULATOR READY • VIRTUAL ONLY';
+ }else if(m.type==='ZJ_SIM_ACK'){
+  const p=pendingSimulator.get(m.seq);if(!p)return;
+  clearTimeout(p.timer);pendingSimulator.delete(m.seq);p.resolve(m);
+  const e=document.getElementById('simControlInfo');if(e)e.textContent=m.accepted?
+   'Mobile control #'+m.seq+' • '+m.applied.mode.toUpperCase()+' • '+m.applied.throttle+' µs • '+(m.applied.armed?'VIRTUAL ARMED':'DISARMED'):
+   'Control denied: '+(m.reason||'Unknown');
+ }
+}
 function openStep(number){
  const s=host.status();
  if((number===2&&!offer)||(number===3&&!s.connected))return;
@@ -85,11 +114,13 @@ function callbacks(){
   connected:()=>{clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
   paired:()=>{status('Connected • paired');scanFeedback('✓ Pairing confirmed • Turn ON Grant Mobile Control after Android Take Control','success');stamp('Pairing approved, mobile needs control permission');sync()},
   led:v=>{sync();stamp('LED '+(v.led?'ON':'OFF')+' • rev '+v.revision+' • '+v.origin)},
-  control:()=>{sync();stamp('Control: '+(host.status().controller||'none'))},
+  control:()=>{if(host.status().controller!=='mobile')stopSimulatorRemote('Ownership released');sync();stamp('Control: '+(host.status().controller||'none'))},
+  simControl:forwardSimulatorControl,
+  simStop:d=>stopSimulatorRemote(d?.reason||'Pairing stopped'),
   controlRequest:d=>{$('pairAnswerState').textContent='Android requested control: turn ON the header Grant Mobile Control toggle.';stamp('Mobile requests control • '+d.deviceId);sync()},
   heartbeat:at=>$('pairHeartbeat').textContent='Last heartbeat: '+new Date(at).toLocaleTimeString(),
   reconnecting:()=>{status('Reconnecting • control released');sync()},
-  disconnected:reason=>{if(offer){++offerEpoch;offer='';answerAccepted=false;answerProcessing=false;cancelCode();stopCamera();clearOfferUi()}status('Disconnected');scanFeedback('Mobile disconnected • Create a new QR','error');stamp(reason);sync();$('pairAnswerState').textContent='Connection lost. Pair Mobile → new QR.'},
+  disconnected:reason=>{stopSimulatorRemote(reason);if(offer){++offerEpoch;offer='';answerAccepted=false;answerProcessing=false;cancelCode();stopCamera();clearOfferUi()}status('Disconnected');scanFeedback('Mobile disconnected • Create a new QR','error');stamp(reason);sync();$('pairAnswerState').textContent='Connection lost. Pair Mobile → new QR.'},
   error:reason=>{$('pairAnswerState').textContent=reason;stamp('Pairing error: '+reason);sync()}
  };
 }
@@ -221,6 +252,17 @@ function disconnect(reason='Disconnected by Web App'){
 }
 async function showVersion(){try{const r=await fetch('./app-version.json',{cache:'no-store'});if(r.ok){const meta=await r.json();$('webappVersion').textContent='v'+meta.version+' • '+meta.channel.toUpperCase()}}catch{}}
 function bind(){
+ window.addEventListener('message',onSimulatorMessage);
+ $('simRemoteStop').onclick=()=>stopSimulatorRemote('Web emergency STOP');
+ window.addEventListener('dronelab:tab',e=>{
+  if(e.detail?.name==='simcontrol'&&!frame().getAttribute('src')){
+   frame().setAttribute('src','./tripod.html?embedded=1');simulatorReady=false;
+  }
+ });
+ flightWatchdog=setInterval(()=>{
+  if(lastSimulatorFrame&&performance.now()-lastSimulatorFrame>450&&host.status().controller==='mobile')
+    stopSimulatorRemote('Control timeout • virtual motors off');
+ },100);
  $('topPairMobileBtn').onclick=()=>{go('settings');void createOffer()};
  $('pairCreateBtn').onclick=createOffer;
  $('pairCameraMode').onclick=()=>selectMode('camera');
@@ -259,7 +301,7 @@ function bind(){
   }
   if(s.connected&&s.lastHeartbeat&&Date.now()-s.lastHeartbeat>9500)$('pairHeartbeat').textContent='Heartbeat delayed; check Wi-Fi';
  },1000);
- window.addEventListener('pagehide',()=>{++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
+ window.addEventListener('pagehide',()=>{stopSimulatorRemote('Page closed');clearInterval(flightWatchdog);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
  window.addEventListener('dronelab:tab',e=>{if(e.detail?.name!=='settings')stopCamera()});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCamera();if(host.status().controller==='mobile')host.releaseControl()}});
 }

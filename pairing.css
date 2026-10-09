@@ -166,3 +166,11 @@
  .qr-pair-flow .qr-step1-layout .qr-data-card{grid-column:2;align-self:start;width:100%;gap:10px}
  .qr-pair-flow .qr-step1-layout .qr-next-button{margin-top:8px;min-height:44px}
 }
+
+/* Android WebRTC joystick receiver: embeds the existing safe Tripod page. */
+#tab-simcontrol{min-height:calc(100vh - 170px);padding:12px}
+#tab-simcontrol .qr-hero{margin-bottom:10px}
+.sim-remote-bar{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px;color:#b6e8dd;font-size:11px;flex-wrap:wrap}
+.sim-remote-bar .btn{flex-shrink:0}
+#simRemoteFrame{display:block;width:100%;height:clamp(480px,74vh,920px);min-height:480px;background:#091b29;border:1px solid #285569;border-radius:14px}
+@media(max-width:700px){#simRemoteFrame{height:72vh;min-height:420px}#tab-simcontrol{padding:7px}}
