@@ -206,7 +206,7 @@ function bindCamera(){
  stage.addEventListener('wheel',e=>{e.preventDefault();visual?.zoom?.(e.deltaY)},{passive:false});
 }
 function keyHandler(e,down){
- const target=e.target;if(target?.closest?.('input,textarea,select,button,[contenteditable]'))return;
+ const target=e.target;if(target?.closest?.('input,textarea,select,[contenteditable]'))return;
  const key=e.key.length===1?e.key.toLowerCase():e.key;
  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','w','s','a','d','r'].includes(key))e.preventDefault();else return;
  if(key==='r'){if(down&&!e.repeat)toggleRun();return}
