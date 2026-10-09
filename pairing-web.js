@@ -77,7 +77,7 @@ async function pollAnswer(){
  pollBusy=true;const session=bridgeSession;
  try{
   const u=new URL('/__pairing/poll',location.origin);
-  u.searchParams.set('sid',session.sid);u.searchParams.set('secret',session.secret);
+  u.searchParams.set('sid',session.sid);u.searchParams.set('secret',session.secret);u.searchParams.set('tick',String(Date.now()));
   const res=await fetch(u,{cache:'no-store'}),data=await res.json();
   if(session!==bridgeSession)return;
   if(!res.ok)throw Error(data.error||'Bridge poll error');
