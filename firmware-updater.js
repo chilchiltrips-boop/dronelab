@@ -230,7 +230,7 @@ function pushSerialLines(data){
  const lines=monitorLineBuffer.split(/\r\n|\n|\r/);
  monitorLineBuffer=lines.pop()||'';
  if(monitorLineBuffer.length>2048)monitorLineBuffer=monitorLineBuffer.slice(-2048);
- for(const line of lines)serialPlotter?.pushLine(line);
+ for(const line of lines){serialPlotter?.pushLine(line);try{window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,at:Date.now()}}))}catch{}}
 }
 function appendSerialOutput(value){
  if(!value)return;
@@ -351,6 +351,16 @@ async function disconnectAllUsb(){
  await closeSerialMonitor();await disconnectUsb();usbLastPort=null;usbLastInfo=null;monitorPendingScan=false;
 }
 function initSerialTools(){
+ window.DroneLabSerial={
+   connect:()=>openSerialMonitor(),
+   reconnect:()=>reconnectSerialMonitor(),
+   disconnect:()=>closeSerialMonitor(),
+   reset:()=>resetSerialBoard(),
+   isOpen:()=>!!monitorPort,
+   isFlashing:()=>!!busy,
+   baud:()=>serialBaud(),
+   status:()=>monitorPort?'connected':busy?'busy':'disconnected'
+ };
  const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
  serialPlotterPromise=import('./js/serial-plotter.js').then(({createSerialPlotter})=>{
   if(plotCanvas)serialPlotter=createSerialPlotter(plotCanvas,plotLegend);
