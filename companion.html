@@ -1,5 +1,34 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/><meta name="theme-color" content="#07111b"/><title>ZEBJUS DroneLab Companion</title><link rel="stylesheet" href="companion.css"/></head><body>
-<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Companion • v1.4.5 SMART PAIR</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
+<div id="flightSplash" class="flight-splash" hidden aria-hidden="true"><div class="splash-grid"></div><div class="splash-icon"><i></i><i></i><i></i><i></i><b>Z</b></div><div class="splash-title">ZEBJUS <span>FLIGHT CONTROL</span></div><small>SECURE WEBRTC SIMULATOR TRANSMITTER</small><div class="splash-progress"><i></i></div></div>
+<section id="flightCockpit" class="flight-cockpit" aria-label="Landscape joystick flight simulator controller" hidden>
+ <header class="flight-topbar"><span class="flight-brand"><b>Z</b><span>ZEBJUS <em>FLIGHT CONTROL</em></span></span>
+ <span id="flightConnection" class="flight-state">DISCONNECTED</span><span id="flightOwner" class="flight-state">VIEW ONLY</span>
+ <select id="flightMode" aria-label="Flight simulator mode"><option value="angle">ANGLE</option><option value="acro">ACRO / RATE</option></select>
+ <button id="flightArm" class="flight-arm" disabled>ARM</button><button id="flightStop" class="flight-stop">■ STOP</button>
+ <button id="flightSettings" class="flight-small" aria-label="Joystick response settings">⚙</button><button id="flightPair" class="flight-small">PAIR / QR</button></header>
+ <div class="flight-options" id="flightOptions" hidden><label for="flightPreset">JOYSTICK RESPONSE</label>
+ <select id="flightPreset"><option value="Slow">Slow</option><option value="Medium">Medium</option><option value="Fast">Fast</option></select>
+ <small>Exactly 3 profiles • throttle holds on release • simulation only</small></div>
+ <div class="flight-field">
+ <div id="flightLeftZone" class="flight-touch-zone" aria-label="Left joystick yaw and throttle" role="application">
+  <span class="flight-zone-title">LEFT STICK <b>YAW / THROTTLE</b></span>
+  <span class="flight-axis-label up">THROTTLE +</span><span class="flight-axis-label down">THROTTLE −</span>
+  <div id="flightLeftRing" class="flight-ring"><span class="flight-cross x"></span><span class="flight-cross y"></span><div id="flightLeftKnob" class="flight-knob"></div></div>
+  <span id="flightLeftTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
+ <div class="flight-center"><div class="flight-heading">VIRTUAL TRANSMITTER <small>NO PHYSICAL MOTORS</small></div>
+ <div class="flight-readouts"><div><small>THROTTLE</small><b id="flightThrottle">1000 µs</b></div><div><small>ROLL</small><b id="flightRoll">0%</b></div><div><small>PITCH</small><b id="flightPitch">0%</b></div><div><small>YAW</small><b id="flightYaw">0%</b></div></div>
+ <div class="flight-center-state"><span id="flightModeState">ANGLE</span><span>SEQ <b id="flightSent">#0</b></span><span>RTT <b id="flightLatency">—</b></span></div>
+ <div id="flightFeedback" class="flight-feedback">NO ACK</div><p id="flightWarning" class="flight-warning">PAIR WITH WEB APP TO ENABLE FLIGHT</p></div>
+ <div id="flightRightZone" class="flight-touch-zone" aria-label="Right joystick roll and pitch" role="application">
+  <span class="flight-zone-title">RIGHT STICK <b>ROLL / PITCH</b></span>
+  <span class="flight-axis-label up">PITCH +</span><span class="flight-axis-label down">PITCH −</span>
+  <div id="flightRightRing" class="flight-ring"><span class="flight-cross x"></span><span class="flight-cross y"></span><div id="flightRightKnob" class="flight-knob"></div></div>
+  <span id="flightRightTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
+ </div>
+ <footer class="flight-footer">Left stick Yaw direction matches reversed Tripod V1.5.3 • WebRTC DataChannel only • STOP always available</footer>
+</section>
+<button id="flightBack" class="flight-back" type="button" hidden>↩ BACK TO CONTROLLER</button>
+<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Flight Controller • v1.6.0 WEBRTC</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
 <main>
 <section class="hero"><small>KIT-FREE • SAME WI-FI • QR OFFLINE / CODE ONLINE</small><h1>Mobile LED Controller</h1><p><strong>Recommended: 6-Digit CONNECT Code.</strong> Scan the Web App QR, then type the short code shown here on your College PC. Camera-based response QR is also available.</p></section>
 <section class="card"><div class="section-title"><strong>1. Scan Web App Offer</strong><span id="offerState">Waiting for QR</span></div>
@@ -17,4 +46,4 @@
 <p class="hint">LED changes here only after Web App acknowledgement. One device can control the LED at a time.</p><pre id="mobileLog">Android companion ready. Scan the Web App QR.</pre></section>
 <section class="card"><div class="section-title"><strong>App Updates</strong><span>Permanent ZEBJUS release signing</span></div><p class="hint">From V1.4.2 onward, download the newer APK and tap Update. You won't need to uninstall again as long as the official ZEBJUS certificate remains unchanged and the version increases. Older debug APKs require one final uninstall to migrate.</p><a id="downloadStableApk" class="primary" href="https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk">Check / Download Latest Android APK</a></section><footer>Official stable-signed ZEBJUS Android APK • WebRTC DataChannel • Local Wi-Fi</footer>
 </main>
-<script src="vendor/qrgen.js"></script><script src="vendor/jsqr.js"></script><script src="pairing-core.js"></script><script src="pairing-code.js"></script><script src="pairing-qr-ui.js"></script><script src="companion.js"></script></body></html>
+<script src="vendor/qrgen.js"></script><script src="vendor/jsqr.js"></script><script src="pairing-core.js"></script><script src="pairing-code.js"></script><script src="pairing-qr-ui.js"></script><script src="companion.js"></script><script src="flight-input.js"></script><script src="companion-flight.js"></script></body></html>

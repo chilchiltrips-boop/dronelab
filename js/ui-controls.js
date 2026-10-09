@@ -32,7 +32,7 @@ export function initControls(ctx){
   ctx.stopMotorTest=()=>{ctx.wireMotorRun=false;ctx.destroyMotorAudio('wire');
     $('#wireRunBtn').textContent='RUN MOTOR TEST';ctx.updateMotorTestUI();};
   ctx.setActiveTab=name=>{
-    if(!['assembly','wiring','python','firmware','led','settings'].includes(name))return;
+    if(!['assembly','wiring','python','firmware','led','settings','simcontrol'].includes(name))return;
     if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
@@ -99,6 +99,6 @@ export function initControls(ctx){
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
   const linkedTab=location.hash.slice(1);
-  ctx.setActiveTab(['assembly','wiring','python','firmware','led','settings'].includes(linkedTab)?linkedTab:'assembly');
+  ctx.setActiveTab(['assembly','wiring','python','firmware','led','settings','simcontrol'].includes(linkedTab)?linkedTab:'assembly');
   addEventListener('hashchange',()=>{const name=location.hash.slice(1);ctx.setActiveTab(name)});applyBranding(ctx);
 }

@@ -44,25 +44,27 @@ function waitIce(pc,timeout=12000){
  });
 }
 function session(role,events={}){
- const emit=(event,detail)=>{try{events[event]?.(detail)}catch(e){console.error(e)}};
- let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,led=false,revision=0,deviceId=randomId(8),pending=new Map(),generation=0;
+ const emit=(event,detail)=>{try{return events[event]?.(detail)}catch(e){console.error(e);return false}};
+ let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,led=false,revision=0,deviceId=randomId(8),pending=new Map(),generation=0,lastSimSeq=0,simulatorReady=false;
  const error=(err)=>emit('error',String(err?.message||err));
  const state=(s)=>emit('status',s);
  const rejectOutstanding=reason=>{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error(reason))}pending.clear()};
  function close(reason='Disconnected'){
   generation++;
+  if(role==='host')emit('simStop',{reason});lastSimSeq=0;
   clearInterval(heartbeat);clearTimeout(dropTimer);heartbeat=null;dropTimer=null;
   rejectOutstanding(reason);
   const oldChannel=channel,oldPeer=peer;channel=null;peer=null;
   try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
-  controller=null;sessionId=null;code=null;expires=0;lastHeartbeat=0;
+  controller=null;simulatorReady=false;sessionId=null;code=null;expires=0;lastHeartbeat=0;
   if(role==='mobile'){led=false;revision=0;emit('led',{led,revision,origin:'reset'})}
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
  function send(m){if(channel?.readyState!=='open')return false;try{channel.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
- function broadcast(){if(role!=='host')return;send({type:'STATE',led,revision,controller,paired:approved,at:Date.now(),deviceId})}
- function dropControl(reason){if(controller&&role==='host'){controller=null;emit('control',{owner:null,reason});broadcast()}}
+ function broadcast(){if(role!=='host')return;send({type:'STATE',led,revision,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
+ function setSimulatorReady(value){if(role!=='host')return false;simulatorReady=!!value;broadcast();return true}
+ function dropControl(reason){if(controller&&role==='host'){emit('simStop',{reason});lastSimSeq=0;controller=null;emit('control',{owner:null,reason});broadcast()}}
  function startHeartbeat(){
   clearInterval(heartbeat);lastHeartbeat=Date.now();
   heartbeat=setInterval(()=>{
@@ -71,6 +73,20 @@ function session(role,events={}){
    if(now-lastHeartbeat>TIMEOUT_MS){close('Heartbeat timed out • pair again');return}
    send({type:'PING',at:now});
   },HEARTBEAT_MS);
+ }
+ function validSimFrame(m){
+  return Number.isSafeInteger(m.seq)&&m.seq>0&&m.sessionId===sessionId&&
+   ['angle','acro'].includes(m.mode)&&typeof m.armed==='boolean'&&
+   Number.isInteger(m.throttle)&&m.throttle>=1000&&m.throttle<=2000&&
+   m.axes&&typeof m.axes==='object'&&!Array.isArray(m.axes)&&Object.keys(m.axes).length===3&&
+   ['roll','pitch','yaw'].every(k=>typeof m.axes[k]==='number'&&Number.isFinite(m.axes[k])&&Math.abs(m.axes[k])<=1);
+ }
+ function sendSimulatorControl(m,critical=false){
+  if(role!=='mobile'||!connected||!paired||controller!=='mobile'||channel?.readyState!=='open')return false;
+  if(!validSimFrame(m))return false;
+  if(channel.bufferedAmount>(critical?131072:32768))return false;
+  return send({type:'SIM_CONTROL',seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
+   throttle:m.throttle,axes:m.axes});
  }
  function onData(raw){
   if(typeof raw!=='string'||raw.length>5000)return;
@@ -82,6 +98,21 @@ function session(role,events={}){
   if(m.type==='PAIR_APPROVED'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST'});return}
   if(m.type==='PAIR_REJECTED'){close('Pairing rejected');return}
   if(role==='host'){
+   if(m.type==='SIM_CONTROL'){
+    const fail=reason=>send({type:'SIM_ACK',ackSeq:Number.isSafeInteger(m.seq)?m.seq:0,accepted:false,reason});
+    if(!approved||!connected||controller!=='mobile')return fail('Mobile control not granted');
+    if(!validSimFrame(m))return fail('Invalid session or simulator control fields');
+    if(m.seq<=lastSimSeq)return fail('Stale or out-of-order control');
+    lastSimSeq=m.seq;
+    const ticket=generation;
+    Promise.resolve(emit('simControl',{seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
+     throttle:m.throttle,axes:{...m.axes}})).then(result=>{
+       if(ticket!==generation||controller!=='mobile'||!approved)return;
+       if(result?.accepted&&result.applied)send({type:'SIM_ACK',ackSeq:m.seq,accepted:true,applied:result.applied});
+       else fail(result?.reason||'Virtual simulator receiver not ready');
+    }).catch(()=>{if(ticket===generation)fail('Simulator feedback timeout')});
+    return;
+   }
    if(m.type==='SYNC_REQUEST'){if(approved)broadcast();return}
    if(m.type==='REQUEST_CONTROL'){
     if(!approved)return send({type:'CONTROL_DENIED',reason:'Pairing not approved'});
@@ -96,9 +127,10 @@ function session(role,events={}){
     return;
    }
   }else{
-   if(m.type==='STATE'){if(!paired||!positiveInt(m.revision))return;led=!!m.led;revision=m.revision;controller=m.controller||null;emit('led',{led,revision,origin:'web'});emit('control',{owner:controller});return}
+   if(m.type==='STATE'){if(!paired||!positiveInt(m.revision))return;led=!!m.led;revision=m.revision;controller=m.controller||null;simulatorReady=m.simulatorReady===true;emit('led',{led,revision,origin:'web'});emit('control',{owner:controller});emit('simReady',{ready:simulatorReady});return}
    if(m.type==='CONTROL_GRANTED'){controller='mobile';emit('control',{owner:'mobile'});send({type:'SYNC_REQUEST'});return}
    if(m.type==='CONTROL_DENIED'){emit('denied',m.reason||'Control denied');return}
+   if(m.type==='SIM_ACK'){emit('simAck',m);return}
    if(m.type==='ACK'){
     const p=pending.get(m.id);if(!p)return;
     clearTimeout(p.timer);pending.delete(m.id);
@@ -192,9 +224,9 @@ function session(role,events={}){
   });
  }
  return {
-  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,toggleWebLed,commandLed,
+  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,toggleWebLed,commandLed,sendSimulatorControl,setSimulatorReady,
   requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
-  status:()=>({role,connected,paired,approved,controller,led,revision,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
+  status:()=>({role,connected,paired,approved,controller,led,revision,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
   get channel(){return channel},get peer(){return peer}
  };
 }

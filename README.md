@@ -70,3 +70,7 @@ The local simulation uses fixed 4ms steps, actual motor RPM-squared thrust, 3-ax
 
 ## Tripod yaw polarity (V1.5.3)
 The standalone Tripod simulator reverses **both left-stick horizontal yaw and keyboard A/D yaw input**. Moving the left stick right / pressing D now requests negative yaw angular rate; left / A requests positive yaw rate. Roll/Pitch, internal yaw PID and IMU/body-rate sign convention, motor mixing, graphs and simulation-only safety are unchanged. Keyboard + pointer polarity are verified by the Chromium Tripod browser test.
+
+## Android v1.6.0 — landscape WebRTC virtual flight controller
+
+The Android app has an optional full-screen landscape cockpit with simultaneous floating joystick zones and 3 Slow/Medium/Fast response presets. Existing QR/code WebRTC pairing and explicit owner grant are mandatory. Reuses authenticated WebRTC DataChannel SIM_CONTROL/SIM_ACK; no UDP, AP, STA, hotspot or physical motors. Open ANDROID FLIGHT Web App tab for the embedded virtual Tripod simulator. STOP, control loss and stale timeouts disarm. Only receiver-applied state is ACKed. Android application ID and release cert remain unchanged; versionCode increased 10→11 for in-place updates.
