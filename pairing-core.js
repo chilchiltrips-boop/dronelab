@@ -1,5 +1,5 @@
-/* ZEBJUS local WebRTC pairing • v1.2 • no STUN/TURN/cloud.
-   One-scan QR carries an ephemeral LAN bridge address and authentication token.
+/* ZEBJUS local WebRTC pairing • v1.3 • no STUN/TURN/cloud.
+   WebRTC offer and answer travel only in human-scanned two-way QR codes.
    Always volatile: refresh / app restart discards keys, peers and controller leases. */
 (function(root){
 'use strict';
@@ -118,12 +118,12 @@ function session(role,events={}){
   const pc=new RTCPeerConnection({iceServers:[],iceCandidatePoolSize:0});
   peer=pc;return pc;
  }
- async function makeOffer(localBridge){
+ async function makeOffer(){
   close('New pairing session');sessionId=randomId(12);code=pin();expires=Date.now()+EXPIRY_MS;
   const pc=makePC(),dc=pc.createDataChannel('zebjus-led-v1',{ordered:true});setup(pc,dc);
   await pc.setLocalDescription(await pc.createOffer());state('Gathering local Wi-Fi connection candidates');
   await waitIce(pc);state('Waiting for Android QR response');
-  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp,...(localBridge||{})});
+  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
   return {qr,pin:code,expires,sessionId};
  }
  async function makeAnswer(offerText){
@@ -137,7 +137,7 @@ function session(role,events={}){
   await waitIce(pc);
   const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
   state('Show response QR to Web App');
-  return {qr,pin:code,expires,bridge:offer.bridge||null,secret:offer.secret||null,sid:sessionId};
+  return {qr,pin:code,expires,sid:sessionId};
  }
  async function receiveAnswer(answerText){
   if(role!=='host'||!peer||!sessionId)throw Error('Create a fresh Web App QR first');
