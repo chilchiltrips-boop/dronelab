@@ -18,6 +18,8 @@ on:
       - 'tools/qr-pairing-browser.mjs'
       - 'tools/audit-browser.mjs'
       - 'tools/controls-browser.mjs'
+      - 'tools/*.test.mjs'
+      - 'package.json'
       - 'tools/browser-harness.mjs'
       - 'tools/offline-browser.mjs'
       - 'sw.js'

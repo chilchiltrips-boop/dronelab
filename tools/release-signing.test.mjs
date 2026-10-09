@@ -30,3 +30,8 @@ test('release workflow only distributes certificate-pinned signed release APKs',
  const ignore=read('.gitignore');
  assert.match(ignore,/\*\.p12/);
 });
+
+test('production web version stamping derives release version from package metadata',()=>{
+ const workflow=read('.github/workflows/version-stamp.yml');
+ assert.match(workflow,/Path\('package.json'\)/);assert.doesNotMatch(workflow,/meta\['version'\]='1\.4\.4/);
+});
