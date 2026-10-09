@@ -6,11 +6,11 @@ function draw(canvas,text){
  if(typeof text!=='string'||text.length<5)throw Error('Nothing to encode');
  const code=root.qrcode(0,'L');code.addData(text,'Byte');code.make();
  const count=code.getModuleCount(),quiet=4,modules=count+quiet*2;
- const size=Math.max(350,Math.min(800,modules*5)),unit=size/modules;
+ const modulePx=Math.max(4,Math.min(8,Math.floor(840/modules))),size=modulePx*modules;
  canvas.width=size;canvas.height=size;
  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#ffffff';ctx.fillRect(0,0,size,size);
  ctx.fillStyle='#07111b';
- for(let r=0;r<count;r++)for(let c=0;c<count;c++)if(code.isDark(r,c))ctx.fillRect(Math.floor((c+quiet)*unit),Math.floor((r+quiet)*unit),Math.ceil(unit+1),Math.ceil(unit+1));
+ for(let r=0;r<count;r++)for(let c=0;c<count;c++)if(code.isDark(r,c))ctx.fillRect((c+quiet)*modulePx,(r+quiet)*modulePx,modulePx,modulePx);
  return count;
 }
 let currentScanner=null;
