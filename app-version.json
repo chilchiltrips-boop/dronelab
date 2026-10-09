@@ -1,5 +1,5 @@
 {
-  "version": "1.4.2+11",
+  "version": "1.4.2+12",
   "channel": "release",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -15,5 +15,5 @@
     "Permanent Android APK release certificate and versioned in-place upgrades"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "c7c0c54041a9"
+  "buildCommit": "003f7eac36d1"
 }
