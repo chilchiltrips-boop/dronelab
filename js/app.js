@@ -33,6 +33,7 @@ ctx.renderAssemblyUI=()=>{renderAssembly();
 const renderWiring=ctx.render2D;
 ctx.render2D=()=>{renderWiring();applyBranding(ctx);ctx.historyButtons();};
 initControls(ctx);initResponsive(ctx);initFirmwarePage();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(error=>console.info('Offline cache unavailable:',error.message));
 async function boot(){
   ctx.setBootStatus('Starting local 3D renderer…');
   let graphics=true;

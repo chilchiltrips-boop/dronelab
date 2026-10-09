@@ -1,0 +1,99 @@
+{
+  "schema": 2,
+  "product": "ZEBJUS_FLIGHTCORE",
+  "version": "18.3.83",
+  "defaultBoardId": "ZFC-A1",
+  "boards": [
+    {
+      "id": "ZFC-A1",
+      "name": "ZEBJUS FlightCore A1 \u2022 ESP32-C3",
+      "appAddress": "0x10000",
+      "flashMode": "dio",
+      "flashFreq": "80m",
+      "flashSize": "4MB",
+      "latest": {
+        "version": "18.3.83",
+        "app": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
+          "sha256": "59580332d736d8611c44aba2498dd953d7719c95204555f70e91ad095277d337",
+          "size": 1264752,
+          "builtAt": "2026-10-09T05:59:14Z",
+          "buildId": "18.3.83-ZFC-A1-59580332d736"
+        },
+        "factory": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
+          "sha256": "df3e2e20105a4e429797c5d7e83ace89ba8c2bd8a854980f917a828a30cca5d4",
+          "size": 4194304,
+          "builtAt": "2026-10-09T05:59:14Z",
+          "buildId": "18.3.83-ZFC-A1-FACTORY-df3e2e20105a"
+        },
+        "builtAt": "2026-10-09T05:59:14Z"
+      },
+      "usbMatch": [
+        "ESP32-C3",
+        "ESP32C3"
+      ],
+      "flasher": "serial-loader-v1",
+      "build": {
+        "builder": "arduino-cli",
+        "fqbn": "esp32:esp32:esp32c3"
+      },
+      "imageChipIds": [
+        5
+      ],
+      "supportedSensors": [
+        "LSM6DS3",
+        "MPU6050"
+      ],
+      "recommendedSensor": "LSM6DS3"
+    },
+    {
+      "id": "ZFC-A2",
+      "name": "ZEBJUS FlightCore A2 \u2022 ZEBJUS Aerion F1",
+      "appAddress": "0x10000",
+      "flashMode": "dio",
+      "flashFreq": "80m",
+      "flashSize": "4MB",
+      "latest": {
+        "version": "18.3.83",
+        "app": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
+          "sha256": "6f77fd4dfdb1cc0e4912efc0549771d125b7bda416fdd954d5b4918d8010eaab",
+          "size": 1355424,
+          "builtAt": "2026-10-09T05:59:14Z",
+          "buildId": "18.3.83-ZFC-A2-6f77fd4dfdb1"
+        },
+        "factory": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
+          "sha256": "164613ee23f1170e303c10f2952b4b3dcbaa188f021b8f36b244f1685c287f23",
+          "size": 4194304,
+          "builtAt": "2026-10-09T05:59:14Z",
+          "buildId": "18.3.83-ZFC-A2-FACTORY-164613ee23f1"
+        },
+        "builtAt": "2026-10-09T05:59:14Z"
+      },
+      "usbMatch": [
+        "ZEBJUS Aerion F1",
+        "ESP32C6"
+      ],
+      "flasher": "serial-loader-v1",
+      "build": {
+        "builder": "arduino-cli",
+        "fqbn": "esp32:esp32:XIAO_ESP32C6"
+      },
+      "imageChipIds": [
+        13
+      ],
+      "supportedSensors": [
+        "MPU6050",
+        "LSM6DS3"
+      ],
+      "recommendedSensor": "MPU6050"
+    }
+  ],
+  "builtAt": "2026-10-09T05:59:14Z"
+}

@@ -39,3 +39,24 @@
 .firmware-card pre{white-space:pre-wrap;overflow:auto;max-height:205px;min-height:90px;background:#061923;border:1px solid #294b59;border-radius:8px;padding:12px;font:11px/1.5 ui-monospace,SFMono-Regular,monospace;color:#a4c9cb}
 @media(max-width:850px){.firmware-layout{grid-template-columns:1fr}.firmware-page{padding:14px}.firmware-intro{padding:8px 2px 17px}}
 @media(max-width:490px){.firmware-card{padding:16px}.fw-choice{grid-template-columns:1fr}.fw-spec-grid strong{font-size:11px}.firmware-intro{flex-wrap:wrap}}
+.firmware-page .firmware-card label:has(select){margin:0}
+.firmware-page .fw-choice select{margin-top:8px}
+.firmware-page .fw-choice{align-items:end}
+.firmware-page .fw-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:17px}
+.fw-meta>div{min-width:0;padding:12px;border:1px solid #294b59;background:#071925;border-radius:9px;display:grid;gap:5px}
+.fw-meta small{font-size:10px;letter-spacing:.06em;color:#69bfae;font-weight:700}
+.fw-meta strong,.fw-meta em,.fw-meta code{font-size:12px;overflow-wrap:anywhere}
+.fw-meta strong{color:#e2f7f7}.fw-meta em{font-style:normal;color:#92b4c3}
+.fw-meta .fw-meta-wide{grid-column:1/-1}.fw-meta code{color:#b8e7dd;user-select:all}
+.fw-meta .fw-good{color:#72d7ab}.fw-meta .fw-warning{color:#ffba7f}
+.fw-drop{border:1px dashed #518b91;border-radius:11px;background:#0b2731;padding:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fw-drop.drag{border-color:#6cebb8;background:#154337}
+.fw-drop span{font-size:12px;color:#90b8ba}
+.fw-check{display:flex!important;align-items:flex-start;gap:9px;line-height:1.45;cursor:pointer}
+.fw-check input{margin-top:2px;width:18px!important;height:18px!important;display:inline-block!important;flex:none;accent-color:#49d1a9}
+.fw-link-button{text-decoration:none!important;display:inline-flex;align-items:center}
+.firmware-state[data-tone=good]{color:#8af0be;border-color:#3eaa80}
+.firmware-state[data-tone=warn]{color:#ffce8d;border-color:#a57a41}
+.firmware-state[data-tone=danger]{color:#ff9c9c;border-color:#a65353}
+.firmware-page .fw-spec-grid strong{overflow-wrap:anywhere}
+@media(max-width:490px){.firmware-page .fw-meta,.firmware-page .fw-choice{grid-template-columns:1fr}.firmware-page .fw-meta-wide{grid-column:auto}.firmware-page .fw-button-row .btn{max-width:100%}}

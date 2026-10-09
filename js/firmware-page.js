@@ -1,107 +1,117 @@
-import {BOARD,inspectImage,sha256,md5Hex} from './firmware-image.js';
-
+import {inspectImage,imageType,ensureOtaReady,usbWritePlan,postBootVerified,sha256,md5Hex,FLASH_BYTES} from './firmware-image.js';
+import {KitApClient} from './kit-ap.js';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const formatBytes=n=>`${Number(n||0).toLocaleString()} bytes`;
+const DB='dronelab.release-images.v2';
+function imageDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('images');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function cache(action,key,value){const db=await imageDb();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('images',action==='get'?'readonly':'readwrite'),store=tx.objectStore('images'),r=action==='get'?store.get(key):action==='delete'?store.delete(key):store.put(value,key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}finally{db.close()}}
 export function initFirmwarePage(){
-  const $=id=>document.getElementById(id);
-  let image=null,loader=null,transport=null,connected=false,busy=false,wifiInfo=null;
-  const log=message=>{$('fwLog').textContent=`${new Date().toLocaleTimeString()}  ${message}\n${$('fwLog').textContent}`.slice(0,10000)};
-  const progress=(value,label,phase)=>{const p=Math.max(0,Math.min(100,Math.round(value)));$('fwProgress').value=p;$('fwProgressPercent').textContent=p+'%';$('fwProgressLabel').textContent=label;
-    ['prepare','transfer','verify','reboot'].forEach((name,i)=>{$('fwStages').children[i].className=i<['prepare','transfer','verify','reboot'].indexOf(phase)?'done':name===phase?'active':''});};
-  function refresh(){
-    $('fwConnect').disabled=busy||connected;$('fwDisconnect').disabled=busy||!connected;
-    $('fwFlashUsb').disabled=busy||!connected||!image;
-    $('fwCheckWifi').disabled=busy||location.hostname!=='localhost'&&location.hostname!=='127.0.0.1';
-    $('fwFlashWifi').disabled=busy||!wifiInfo||!image||image.kind!=='app';
-    for(const id of ['fwFile','fwSampleFactory','fwSampleApp','fwHost','fwOtaKey'])$(id).disabled=busy;
-    $('fwState').textContent=busy?'WORKING':connected?'USB CONNECTED':wifiInfo?'WI-FI READY':'READY';
+  const $=id=>document.getElementById(id),kit=new KitApClient();let catalog=null,image=null,usb=null,transport=null,usbBoard=null,usbFlashBytes=0,busy=false,cancel=false,watchId=null,readbackDeadline=0;
+  const board=()=>catalog?.boards.find(b=>b.id===$('fwBoard').value);
+  function log(message){$('fwLog').textContent=`${new Date().toLocaleTimeString()}  ${message}\n${$('fwLog').textContent}`.slice(0,18000)}
+  function badge(value,tone=''){$('fwState').textContent=value;$('fwState').dataset.tone=tone}
+  function progress(p,label,phase){$('fwProgress').value=Math.max(0,Math.min(100,Math.round(p)));$('fwProgressPercent').textContent=$('fwProgress').value+'%';$('fwProgressLabel').textContent=label;if(phase){const names=['Prepare','Flash','Verify','Reboot','Reconnect'];[...$('fwStages').children].forEach((node,i)=>{node.className=i<names.indexOf(phase)?'done':names[i]===phase?'active':''})}}
+  const stagesDone=()=>[...$('fwStages').children].forEach(x=>x.className='done');
+  function match(){if(!image)return '—';const target=usbBoard?.id||kit.status?.boardId||board()?.id;return target===image.boardId?'MATCH':`MISMATCH · ${target||'unknown'} target`}
+  function render(){
+    $('fwConnect').disabled=busy||!!usb;$('fwDisconnect').disabled=busy||!usb;
+    $('fwFlashUsb').disabled=busy||!usb||!image||image.boardId!==usbBoard?.id||(image.kind==='app'&&!$('fwAppReady').checked);
+    $('fwEraseFactory').disabled=busy||!usb||!image||image.kind!=='factory'||image.boardId!==usbBoard?.id;
+    $('fwFlashOta').disabled=busy||!image||image.kind!=='app'||!kit.owner||kit.status?.boardId!==image.boardId||kit.status?.armed!==false;
+    $('fwConnectKit').disabled=busy;$('fwTakeControl').disabled=busy||!kit.channel||kit.owner;
+    $('fwAuto').disabled=busy;$('fwDownload').disabled=!image||busy;$('fwForget').disabled=busy;
+    $('fwBoard').disabled=busy;$('fwKind').disabled=busy;$('fwFile').disabled=busy;$('fwBaud').disabled=busy;
+    $('fwImageName').textContent=image?`${image.name} · ${image.kind==='app'?'Application / OTA':'Factory / Merged'}`:'No image loaded';
+    $('fwOrigin').textContent=image?.origin||'—';$('fwImageBoard').textContent=image?`${image.board.name} [${image.boardId}]`:'—';$('fwMatch').textContent=match();$('fwMatch').className=match()==='MATCH'?'fw-good':'fw-warning';
+    $('fwVersion').textContent=image?.version||'—';$('fwBuildId').textContent=image?.buildId||'—';$('fwBuilt').textContent=image?.builtAt?new Date(image.builtAt).toLocaleString():'—';$('fwBytes').textContent=image?formatBytes(image.bytes.length):'—';$('fwHash').textContent=image?.hash||'—';
+    $('fwUsbBoard').textContent=usbBoard?`${usbBoard.name} [${usbBoard.id}]`:'Not connected';$('fwUsbFlash').textContent=usb?`${usbFlashBytes/1048576} MB · Web Serial port open`:'—';
+    $('fwDeviceId').textContent=kit.deviceId||'—';$('fwKitBoard').textContent=kit.info?`${kit.info.boardName} [${kit.info.boardId}]`:'—';$('fwCurrent').textContent=kit.info?.firmware||'—';$('fwKitStatus').textContent=kit.status?`AP online · ${kit.owner?'Owner':'View only'} · ${kit.status.armed?'ARMED':'DISARMED'}`:'Not connected';$('fwPartition').textContent=kit.info?`${kit.info.partitionLayout} · ${formatBytes(kit.info.freeSketchBytes)}`:'—';
   }
-  const withBusy=async fn=>{if(busy)return;busy=true;refresh();try{await fn()}catch(e){progress($('fwProgress').value,'Failed: '+e.message,'');log('ERROR: '+e.message)}finally{busy=false;refresh()}};
-  async function installImage(bytes,name,kind,sample,knownHash=''){
-    const meta=inspectImage(bytes,kind),hash=await sha256(bytes);
-    if(knownHash&&knownHash!==hash)throw Error('Bundled sample SHA-256 mismatch.');
-    image={bytes,name,kind,sample,hash,...meta};$('fwImageName').textContent=name;
-    $('fwDownload').hidden=!sample;$('fwDownload').href=sample?'./firmware/'+encodeURIComponent(name):'';$('fwDownload').download=sample?name:'';
-    $('fwImageDetails').textContent=`${kind==='factory'?'Factory @ 0x0':'App @ 0x10000'} · ${(bytes.length/1048576).toFixed(2)} MB · SHA-256 ${hash.slice(0,16)}…`;
-    progress(0,'Verified image ready','prepare');log(`Image verified: ${name} (${kind}, ESP32-C6).`);refresh();
+  async function run(fn){if(busy)return;busy=true;render();try{await fn()}catch(e){badge('BLOCKED / FAILED','danger');log('ERROR: '+e.message);progress($('fwProgress').value,e.message);console.warn('Firmware operation:',e)}finally{busy=false;render()}}
+  async function loadCatalog(){if(catalog)return catalog;const r=await fetch('./firmware-catalog.json',{cache:'no-store'});if(!r.ok)throw Error('Firmware catalog is unavailable. Import a verified matching .bin or open the complete offline bundle.');catalog=await r.json();if(catalog.schema!==2||!Array.isArray(catalog.boards))throw Error('Firmware catalog format is invalid.');return catalog}
+  function versionIn(bytes,expected=''){const t=new TextDecoder('latin1').decode(bytes),m=expected&&t.includes(expected)?expected:t.match(/\b(?:1[0-9]|[2-9][0-9])\.\d{1,3}\.\d{1,3}\b/)?.[0];return m||'Custom · readback required'}
+  async function install(bytes,name,origin,metadata=null){
+    await loadCatalog();const selected=board(),kind=imageType(bytes),info=inspectImage(bytes,kind,selected,catalog),hash=await sha256(bytes);
+    if(metadata&&(hash.toLowerCase()!==metadata.sha256.toLowerCase()||bytes.length!==metadata.size))throw Error('Release size or SHA-256 mismatch. This file is blocked.');
+    image={bytes,name,kind,board:selected,boardId:info.boardId,hash,origin,version:metadata?selected.latest.version:versionIn(bytes,catalog.version),buildId:metadata?.buildId||'Imported / custom',builtAt:metadata?.builtAt||''};
+    try{await cache('put',`${image.boardId}:${kind}`,{...image,bytes:bytes.buffer,board:undefined})}catch(e){log('Browser cache unavailable: '+e.message)}
+    progress(0,'Image verified; ready to select a target','Prepare');badge('IMAGE VERIFIED','good');log(`${origin}: ${name} · ${formatBytes(bytes.length)} · SHA-256 ${hash}`);render();
   }
-  async function loadSample(kind){
-    await withBusy(async()=>{
-      image=null;wifiInfo=null;$('fwDownload').hidden=true;$('fwFile').value='';$('fwSampleFactory').classList.toggle('selected',kind==='factory');$('fwSampleApp').classList.toggle('selected',kind==='app');
-      progress(0,'Loading sample image','prepare');const catalog=await fetch('./firmware/sample.json',{cache:'no-store'});if(!catalog.ok)throw Error('Sample manifest is missing.');
-      const manifest=await catalog.json(),entry=manifest[kind];if(manifest.boardId!==BOARD.id||!entry?.file)throw Error('Sample does not match selected board.');
-      const response=await fetch('./firmware/'+entry.file,{cache:'no-store'});if(!response.ok)throw Error('Sample .bin is missing.');
-      const bytes=new Uint8Array(await response.arrayBuffer());await installImage(bytes,entry.file,kind,true,entry.sha256);
-    });
+  async function autoLoad(){await run(async()=>{await loadCatalog();const b=board(),kind=$('fwKind').value,entry=b?.latest?.[kind];image=null;render();
+    if(!entry?.available||!entry.file||!entry.sha256||!entry.size)throw Error(`No verified ${kind} image is published for ${b?.id}.`);
+    badge('LOADING');progress(0,`Loading ${b.id} ${kind} image…`,'Prepare');
+    let response;try{response=await fetch(`./FlightCore_Firmware/${entry.file}`,{cache:'no-store'})}catch(e){throw Error('Release image unavailable. Import the correct .bin or use the complete offline bundle. '+e.message)}
+    if(!response.ok)throw Error(`Release image unavailable (HTTP ${response.status}); no older image will be relabelled.`);
+    const bytes=new Uint8Array(await response.arrayBuffer());await install(bytes,entry.file,'Bundled release',entry);
+  })}
+  async function importFile(file){if(!file)return;await run(async()=>{if(!/\.bin$/i.test(file.name))throw Error('Choose a compiled .bin file.');const bytes=new Uint8Array(await file.arrayBuffer());await install(bytes,file.name,'Manual import');$('fwKind').value=image.kind})}
+  function chooseDetected(id){if(!catalog?.boards.some(b=>b.id===id))throw Error(`Unsupported detected board ${id}. No write was started.`);$('fwBoard').value=id;const b=board();if(image&&image.boardId!==id){log(`Detected ${id}; previously loaded ${image.boardId} image cannot flash this target.`);image=null}render();return b}
+  function compatibility(loader){const detect=loader.detectChip;loader.detectChip=async function(mode){await detect.call(this,mode);if(this.chip?.IMAGE_CHIP_ID!==13||this.chip.CHIP_NAME!=='ESP32-C6')return;const c=this.chip;c.SPI_REG_BASE=0x60003000;c.getPkgVersion=async l=>((await l.readReg(c.EFUSE_BASE+0x50))>>>24)&7;c.getChipRevision=async l=>((await l.readReg(c.EFUSE_BASE+0x50))>>>18)&15;c.getChipDescription=async()=> 'ESP32-C6'};const old=loader.runStub;loader.runStub=async function(){const r=await old.call(this);if(this.syncStubDetected)this.IS_STUB=true;return r}}
+  async function disconnectUsb(){try{await transport?.disconnect()}catch{}usb=null;transport=null;usbBoard=null;usbFlashBytes=0;render()}
+  async function connectUsb(){await run(async()=>{
+    if(!globalThis.isSecureContext||!navigator.serial)throw Error('Web Serial requires desktop Chrome/Edge on HTTPS or localhost. Android WebView USB is unsupported.');
+    const port=await navigator.serial.requestPort();await disconnectUsb();const module=await import('../vendor/esptool/bundle.mjs'),chosen=Number($('fwBaud').value),rates=chosen===115200?[115200]:[chosen,115200];let last;
+    for(const rate of rates){try{transport=new module.Transport(port,true);usb=new module.ESPLoader({transport,baudrate:rate,terminal:{clean(){},writeLine(x){if(x?.trim())log('[BOOT] '+x.trim())},write(x){if(x?.trim())log('[BOOT] '+x.trim())}}});compatibility(usb);const signature=await usb.main('default_reset');
+      const chip=usb.chip?.IMAGE_CHIP_ID,b=catalog?.boards.find(b=>b.imageChipIds.includes(chip));if(!b)throw Error(`Unknown USB chip ${chip} (${signature}); no erase or write started.`);
+      if(chip===13)usb.chip.SPI_REG_BASE=0x60003000;
+      let id=await usb.readFlashId();if(!id||id===0xffffff){await usb.flashSpiAttach(0);await sleep(80);id=await usb.readFlashId()}
+      const exp=(id>>>16)&255,capacity=exp>=18&&exp<=28?2**exp:0;if(!id||id===0xffffff||!capacity)throw Error('Flash ID/capacity probe failed. No erase or write started.');if(capacity<FLASH_BYTES)throw Error('Flash capacity is below the 4 MB board profile. No write started.');
+      usbBoard=chooseDetected(b.id);usbFlashBytes=capacity;$('fwBaud').value=String(rate);badge('USB READY','good');progress(0,'Bootloader and flash capacity verified','Prepare');log(`USB ${signature} · chip ID ${chip} · flash ID 0x${id.toString(16)} · ${formatBytes(capacity)}`);return;
+    }catch(e){last=e;await disconnectUsb();if(rate!==115200)log(`USB handshake/probe at ${rate} failed; retrying 115200.`)}}
+    throw Error((last?.message||'USB connect failed')+' Close Serial Monitor, then hold BOOT, tap RESET, release BOOT and reconnect.');
+  })}
+  function confirmTarget(kind,erase=false){const line=`${image.name}\n${image.board.name} [${image.boardId}]\n${formatBytes(image.bytes.length)} · SHA-256 ${image.hash}\nTarget: ${kind}\nDevice ID: ${kit.deviceId||'USB bootloader (AP not connected)'}`;
+    return confirm(`Confirm firmware target and image:\n\n${line}\n\n${erase?'ERASE ALL FLASH. Saved settings and calibration may be cleared.':'Remove propellers and use stable power.'}\n\nContinue?`)}
+  async function flashUsb(erase=false){await run(async()=>{
+    if(!usb||!usbBoard||!usbFlashBytes||!image)throw Error('Connect and verify USB, flash capacity and image first.');
+    if(kit.status?.armed)throw Error('Kit is ARMED. DISARM before flashing.');if(image.boardId!==usbBoard.id||!usbBoard.imageChipIds.includes(usb.chip?.IMAGE_CHIP_ID))throw Error('Selected image differs from actual USB chip/board.');
+    inspectImage(image.bytes,image.kind,usbBoard,catalog);
+    const plan=usbWritePlan({image,board:usbBoard,chipId:usb.chip?.IMAGE_CHIP_ID,flashBytes:usbFlashBytes,erase,appReady:$('fwAppReady').checked,armed:kit.status?.armed});const address=plan.address;
+    if(!confirmTarget(`USB ${usbBoard.id} @ 0x${address.toString(16)}`,erase))return;
+    progress(0,'Preparing verified image','Prepare');badge('FLASHING');let written=false;
+    try{if(erase){log('Explicit erase requested; clearing entire flash.');await usb.eraseFlash()}
+      progress(1,'Writing image…','Flash');await usb.writeFlash({fileArray:[{data:image.bytes,address}],...plan,compress:true,calculateMD5Hash:md5Hex,reportProgress:(i,w,total)=>{progress(1+w/total*85,`USB ${formatBytes(w)} / ${formatBytes(total)}`,'Flash');$('fwTransferred').textContent=`${formatBytes(w)} / ${formatBytes(total)}`}});
+      written=true;progress(88,'Bytes written; transfer integrity checked','Verify');log('USB write returned with flash MD5 transfer check. This does not confirm boot.');
+      progress(92,'Requesting controller reset','Reboot');await usb.after('hard_reset');await disconnectUsb();progress(96,'Reset requested; waiting for kit AP readback','Reconnect');badge('FLASHED · BOOT / RECONNECT PENDING','warn');startWatch(image.version,image.boardId,kit.deviceId);
+    }catch(e){if(written){log('Write succeeded but reset/reconnect is pending: '+e.message);await disconnectUsb();progress(96,'Bytes written; boot or reconnect pending','Reconnect');badge('FLASHED · BOOT / RECONNECT PENDING','warn');startWatch(image.version,image.boardId,kit.deviceId)}else throw e}
+  })}
+  async function connectKit(expected=''){await run(async()=>{badge('CONNECTING');await kit.connect(expected);chooseDetected(kit.info.boardId);render();badge('KIT AP CONNECTED','good');log(`Authenticated ZFC3 AP session · ${kit.deviceId} · ${kit.info.boardId} · running ${kit.info.firmware}`)})}
+  async function takeControl(){await run(async()=>{await kit.takeControl();render();badge('OWNER CONTROL','good');log(`Take Control confirmed for ${kit.deviceId}.`)})}
+  async function flashOta(){await run(async()=>{
+    if(!image||!kit.channel)throw Error('Load a verified APP and connect kit AP.');await kit.refresh();
+    const status={...kit.info,...kit.status};ensureOtaReady({info:status,deviceId:kit.deviceId,boardId:kit.info.boardId,image,owner:kit.owner});
+    const hash=await sha256(image.bytes);if(hash!==image.hash)throw Error('Loaded image changed since verification.');
+    if(!confirmTarget(`AP OTA ${kit.deviceId} (${kit.info.boardId})`))return;
+    cancel=false;$('fwCancel').disabled=false;badge('OTA UPLOADING');progress(1,'Authenticated begin request','Prepare');log(`ZFC3 begin: ${image.bytes.length} bytes · SHA-256 ${hash}`);
+    let verified=false;
+    try{progress(2,'Sending sequential encrypted chunks','Flash');const result=await kit.upload(image.bytes,image.boardId,hash,(sent,total)=>{progress(2+sent/total*83,`AP OTA ${formatBytes(sent)} / ${formatBytes(total)}`,'Flash');$('fwTransferred').textContent=`${formatBytes(sent)} / ${formatBytes(total)}`},()=>cancel);
+      if(result.ok===false)throw Error(result.message||'Controller rejected OTA end verification.');verified=true;progress(88,'Controller verified digest and image','Verify');log('Controller accepted OTA end. Image verified; boot remains unconfirmed.');
+    }finally{$('fwCancel').disabled=true}
+    if(!verified)return;
+    progress(91,'Controller rebooting','Reboot');badge('FLASHED · BOOT / RECONNECT PENDING','warn');startWatch(image.version,image.boardId,kit.deviceId);
+  })}
+  function stopWatch(){clearTimeout(watchId);watchId=null}
+  function startWatch(expected,boardId,deviceId){stopWatch();readbackDeadline=Date.now()+300000;const started=Date.now();let count=0;
+    const tick=async()=>{if(Date.now()>readbackDeadline){log('Five-minute readback watch ended. Use manual Reconnect or USB recovery.');return}
+      try{if(deviceId)await kit.reconnect(deviceId);else await kit.connect();const info=kit.info;if(info.boardId!==boardId||kit.deviceId!==deviceId&&deviceId)throw Error('Readback board or Device ID mismatch.');
+        $('fwReadback').textContent=`${info.firmware} · ${info.boardId} · ${kit.deviceId}`;
+        if(!postBootVerified({reported:info,expectedVersion:expected,boardId,deviceId,selectedDeviceId:kit.deviceId})){badge('FLASHED · VERSION READBACK PENDING','warn');log(`Kit booted with ${info.firmware}; expected ${expected}. Check image/version.`)}else{progress(100,`New firmware ${info.firmware} booted and read back`,'Reconnect');stagesDone();badge('COMPLETE · BOOT VERIFIED','good');log(`Boot readback verified: ${info.firmware} · ${info.boardId} · ${kit.deviceId}`);render();return}
+      }catch(e){if(count++%8===0)log('Reconnect pending: '+e.message)}
+      const sec=Math.round((Date.now()-started)/1000);progress(Math.min(99,92+Math.min(sec,120)/120*7),sec<120?`Waiting for same kit AP · ${sec}s / 120s`:'Still watching readback · up to 5 minutes','Reconnect');badge('FLASHED · BOOT / RECONNECT PENDING','warn');watchId=setTimeout(tick,Math.min(4500,1200+count*250));
+    };watchId=setTimeout(tick,1700);
   }
-  async function disconnect(silent=false){try{await transport?.disconnect()}catch{}loader=null;transport=null;connected=false;$('fwDetected').textContent='No board connected';if(!silent)log('USB disconnected.');refresh()}
-  async function connect(){await withBusy(async()=>{
-    if(!navigator.serial||!isSecureContext)throw Error('Web Serial needs desktop Chrome or Edge on HTTPS or localhost.');
-    progress(1,'Choose the XIAO serial port','prepare');const port=await navigator.serial.requestPort();
-    await disconnect(true);const mod=await import('../vendor/esptool/bundle.mjs');transport=new mod.Transport(port,true);
-    loader=new mod.ESPLoader({transport,baudrate:115200,terminal:{clean(){},writeLine(x){if(x?.trim())log('[USB] '+x.trim())},write(x){if(x?.trim())log('[USB] '+x.trim())}}});
-    try{
-      const signature=await loader.main('default_reset');
-      if(loader.chip?.IMAGE_CHIP_ID!==BOARD.chipId)throw Error(`Connected ${signature}; select a XIAO ESP32-C6.`);
-      // Some bundled esptool-js builds predate the ESP32-C6 SPI1 address correction.
-      loader.chip.SPI_REG_BASE=0x60003000;
-      let flashId=await loader.readFlashId();if(!flashId||flashId===0xffffff){await loader.flashSpiAttach(0);flashId=await loader.readFlashId()}
-      const cap=(flashId>>>16)&255;if(cap<22||cap>30)throw Error('Could not verify at least 4 MB of flash. No write was started.');
-      connected=true;$('fwDetected').textContent=`ESP32-C6 • ${2**cap/1048576} MB • ${String(signature).slice(0,58)}`;
-      progress(4,'Board and flash chip verified','prepare');log(`ESP32-C6 connected, flash ID 0x${flashId.toString(16)}.`);
-    }catch(error){await disconnect(true);throw error}
-  })}
-  async function flashUsb(){await withBusy(async()=>{
-    if(!connected||!loader||!image)throw Error('Connect USB and verify an image first.');
-    inspectImage(image.bytes,image.kind);if(loader.chip?.IMAGE_CHIP_ID!==BOARD.chipId)throw Error('USB chip is not ESP32-C6.');
-    const note=image.kind==='factory'?'Factory flash replaces the bootloader, partitions, saved Wi-Fi and installed program.':'Application flash replaces the installed application at 0x10000.';
-    if(!confirm(`Flash ${image.name} to the connected XIAO ESP32-C6?\n\n${note}\n\nKeep USB power connected until verification completes.`)){progress(0,'Flash cancelled','');return}
-    progress(5,'Preparing USB flash','prepare');log('USB flash started.');let written=false;
-    try{
-      await loader.writeFlash({fileArray:[{data:image.bytes,address:image.address}],flashMode:'keep',flashFreq:'keep',flashSize:'keep',eraseAll:false,compress:true,calculateMD5Hash:md5Hex,reportProgress:(i,w,total)=>progress(7+Math.round(w/total*82),`Transferring ${(w/1024).toFixed(0)} / ${(total/1024).toFixed(0)} KiB`,'transfer')});
-      written=true;progress(94,'Write complete; flash readback verified','verify');log('Firmware transfer and esptool readback completed.');
-      await loader.after('hard_reset');progress(98,'Reset sent; waiting for device boot','reboot');await disconnect(true);
-      progress(99,'Written and reset; boot requires a live device check','reboot');log('USB write verified. Connect to sample Wi-Fi or inspect Serial at 115200 to confirm boot.');
-    }catch(error){if(written){await disconnect(true);progress(98,'Written; reset or boot not verified','reboot')}throw error}
-  })}
-  const bridgeAvailable=()=>location.hostname==='localhost'||location.hostname==='127.0.0.1';
-  function bridgeInput(){const host=$('fwHost').value.trim(),key=$('fwOtaKey').value.trim();if(!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host)||host.split('.').some(x=>+x>255))throw Error('Enter a numeric IPv4 address.');if(key.length<12||key.length>96)throw Error('Enter the OTA key printed in Serial Monitor.');return {host,key}}
-  async function deviceInfo(){if(!bridgeAvailable())throw Error('Wi-Fi update requires npm run dev at http://localhost:4173.');const {host,key}=bridgeInput();
-    const r=await fetch(`/api/device/info?host=${encodeURIComponent(host)}`,{headers:{'X-OTA-Key':key},cache:'no-store'});
-    const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||`Device check failed (HTTP ${r.status}).`);
-    if(d.board!=='XIAO_ESP32C6'||d.chip!=='ESP32-C6'||d.protocol!=='dronelab-c6-sample-v1'||d.armed!==false)throw Error('Board is not the disarmed XIAO ESP32-C6 sample OTA target.');
-    return d;
-  }
-  async function checkWifi(){await withBusy(async()=>{
-    wifiInfo=null;progress(2,'Checking local OTA device','prepare');wifiInfo=await deviceInfo();
-    $('fwWifiDetected').textContent=`${wifiInfo.board} • ${wifiInfo.version} • ${wifiInfo.ip||$('fwHost').value}`;
-    progress(5,'OTA device authenticated','prepare');log('Wi-Fi device checked: '+wifiInfo.version+'.');
-  })}
-  async function flashWifi(){await withBusy(async()=>{
-    if(!wifiInfo||!image||image.kind!=='app')throw Error('Check the sample OTA device and select an ESP32-C6 application .bin.');
-    const {host,key}=bridgeInput();const fresh=await deviceInfo();if(fresh.armed!==false)throw Error('Device is armed.');
-    if(image.bytes.length>Number(fresh.freeSketchBytes||0))throw Error('Application exceeds free OTA partition.');
-    const customNote=image.sample?'':"\nA custom app must use this board's partition layout. It may not keep the sample OTA endpoint.";
-    if(!confirm(`Send ${image.name} to XIAO ESP32-C6 over local Wi-Fi?\nKeep the board powered until it reboots.${customNote}`)){progress(0,'Update cancelled','');return}
-    progress(5,'Starting local OTA transfer','prepare');log('Wi-Fi upload started.');
-    const r=await fetch(`/api/device/firmware?host=${encodeURIComponent(host)}`,{method:'POST',headers:{'Content-Type':'application/octet-stream','X-OTA-Key':key,'X-Firmware-SHA256':image.hash},body:image.bytes});
-    if(!r.body)throw Error('Local bridge did not provide a status stream.');
-    const reader=r.body.getReader(),decode=new TextDecoder();let pending='',flashed=false;
-    while(true){const {value,done}=await reader.read();if(done)break;pending+=decode.decode(value,{stream:true});let i;while((i=pending.indexOf('\n'))>=0){const line=pending.slice(0,i);pending=pending.slice(i+1);if(!line)continue;const status=JSON.parse(line);
-      if(status.error)throw Error(status.error);
-      if(status.phase==='upload')progress(6+status.percent*.8,`Wi-Fi transfer ${status.percent}%`,'transfer');
-      if(status.phase==='written'){flashed=true;progress(91,'Device accepted image; checking reboot','verify');log('Device accepted update: '+status.message)}
-    }}
-    if(!flashed)throw Error('Device did not confirm the firmware write.');
-    progress(96,'Waiting for ESP32-C6 to reboot','reboot');
-    if(!image.sample){progress(99,'Custom image written; confirm boot on the board','reboot');log('OTA write verified. The custom application boot and future OTA endpoint need a device check.');return}
-    for(let i=0;i<15;i++){await new Promise(r=>setTimeout(r,1000));try{const d=await deviceInfo();if(d.version==='sample-1.0.0'){wifiInfo=d;progress(100,'Device reconnected; sample firmware verified','reboot');log('OTA completed and firmware readback verified.');return}}catch{}}
-    progress(99,'Image written; Wi-Fi reconnect pending','reboot');log('The update was written. Rejoin the device AP and check firmware version if its IP changed.');
-  })}
-  $('fwConnect').onclick=connect;$('fwDisconnect').onclick=()=>disconnect();$('fwFlashUsb').onclick=flashUsb;
-  $('fwCheckWifi').onclick=checkWifi;$('fwFlashWifi').onclick=flashWifi;
-  $('fwSampleFactory').onclick=()=>loadSample('factory');$('fwSampleApp').onclick=()=>loadSample('app');
-  $('fwFile').onchange=()=>withBusy(async()=>{const f=$('fwFile').files?.[0];if(!f)return;const bytes=new Uint8Array(await f.arrayBuffer()),kind=bytes.length>BOARD.appOffset+32768&&bytes[BOARD.appOffset]===0xe9?'factory':'app';image=null;wifiInfo=null;$('fwDownload').hidden=true;$('fwSampleFactory').classList.remove('selected');$('fwSampleApp').classList.remove('selected');await installImage(bytes,f.name,kind,false)});
-  $('fwProjectName').value=localStorage.getItem('dronelab.firmware.project-name.v1')||'DroneLab';
-  $('fwSaveSettings').onclick=()=>{const name=$('fwProjectName').value.trim().slice(0,40);if(!name)return;localStorage.setItem('dronelab.firmware.project-name.v1',name);log('Project name saved in this browser.')};
-  if(!bridgeAvailable())$('fwWifiHelp').textContent='Open this project on your computer with npm run dev at http://localhost:4173 for local Wi-Fi upload. GitHub Pages can be used for USB flash.';
-  addEventListener('pagehide',()=>{if(transport&&!busy)disconnect(true)});refresh();loadSample('factory');
+  $('fwConnect').onclick=connectUsb;$('fwDisconnect').onclick=()=>disconnectUsb();$('fwFlashUsb').onclick=()=>flashUsb(false);$('fwEraseFactory').onclick=()=>flashUsb(true);
+  $('fwConnectKit').onclick=()=>connectKit(kit.deviceId);$('fwTakeControl').onclick=takeControl;$('fwFlashOta').onclick=flashOta;
+  $('fwReconnect').onclick=()=>{if(readbackDeadline>Date.now()&&image)startWatch(image.version,image.boardId,kit.deviceId);else connectKit(kit.deviceId)};
+  $('fwRecovery').onclick=()=>{$('fwConnect').focus();log('USB recovery: connect bootloader at 115200, load matching Factory image, confirm target, flash @ 0x0.')};
+  $('fwCancel').onclick=()=>{cancel=true;$('fwCancel').disabled=true;log('Cancellation requested; current chunk will finish, then OTA stops without commit.')};
+  $('fwAuto').onclick=autoLoad;$('fwFile').onchange=()=>importFile($('fwFile').files?.[0]);
+  $('fwBoard').onchange=()=>{image=null;render();autoLoad()};$('fwKind').onchange=()=>{image=null;render();autoLoad()};$('fwAppReady').onchange=render;
+  $('fwDownload').onclick=()=>{if(!image)return;const url=URL.createObjectURL(new Blob([image.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=image.name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+  $('fwForget').onclick=()=>run(async()=>{await loadCatalog();await cache('delete',`${$('fwBoard').value}:${$('fwKind').value}`);image=null;render();log('Cached image for selected board/type forgotten.')});
+  for(const event of ['dragenter','dragover'])$('fwDrop').addEventListener(event,e=>{e.preventDefault();$('fwDrop').classList.add('drag')});
+  for(const event of ['dragleave','drop'])$('fwDrop').addEventListener(event,e=>{e.preventDefault();$('fwDrop').classList.remove('drag')});$('fwDrop').addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]));
+  $('fwProjectName').value=localStorage.getItem('dronelab.firmware.project-name.v2')||'DroneLab';$('fwSaveSettings').onclick=()=>{const name=$('fwProjectName').value.trim().slice(0,40);if(name)localStorage.setItem('dronelab.firmware.project-name.v2',name);log('Project name saved locally.')};
+  addEventListener('pagehide',()=>{stopWatch();if(!busy)disconnectUsb()});render();
+  loadCatalog().then(async()=>{const b=board();$('fwSourceHelp').textContent=`Catalog ${catalog.version} · ${b.name} · ${b.build.fqbn}. Bundle or cache the .bin before joining the kit AP.`;try{const saved=await cache('get',`${b.id}:${$('fwKind').value}`);if(saved?.bytes)await install(new Uint8Array(saved.bytes),saved.name,'Browser cache',b.latest[saved.kind]?.sha256===saved.hash?b.latest[saved.kind]:null)}catch(e){log('Cache check: '+e.message)}}).catch(e=>log(e.message));
 }

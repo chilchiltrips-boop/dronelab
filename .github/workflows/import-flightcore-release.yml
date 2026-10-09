@@ -1,0 +1,38 @@
+name: Import verified FlightCore release
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-flightcore-release.yml
+      - tools/verify_release.py
+      - firmware-catalog.json
+permissions:
+  contents: write
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/checkout@v4
+        with:
+          repository: chilchiltrips-boop/zebjus-drone-simulator-lab
+          ref: e3573addbbdc74e444b2dbcc1e1663f1fe39e3e6
+          path: source-release
+      - name: Copy matching source and compiled images
+        run: |
+          cp -a source-release/FlightCore_Firmware ./FlightCore_Firmware
+          cp source-release/VERSION.txt ./VERSION.txt
+          cmp source-release/firmware-catalog.json firmware-catalog.json
+          cmp source-release/firmware-latest.json firmware-latest.json
+          python3 tools/verify_release.py
+          rm -rf source-release
+      - name: Commit verified release assets
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add FlightCore_Firmware VERSION.txt
+          git diff --cached --quiet || git commit -m 'Ship verified A1 and A2 FlightCore release images'
+          git push

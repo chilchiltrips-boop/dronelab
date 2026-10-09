@@ -1,84 +1,40 @@
-# DroneLab — Assembly Lab, 2D Wiring & Firmware
+# ZEBJUS Drone Lab
 
-A three-page ES-module application extracted from the supplied ZEBJUS V18.3.82 UI reference. The assembly and wiring pages run without a backend, account, npm installation or build step. All models, thumbnails and Three.js are local. USB flashing uses local esptool-js in the browser; Wi-Fi flashing uses a small localhost bridge.
+Three connected pages: **Assembly Lab**, **2D Wiring**, and **Firmware · Settings**. The first two pages preserve the supplied UI kit's Three.js workbench, SVG wiring workspace, shared local state, guided build, and virtual motor test. The third page adds board-matched FlightCore firmware management. No motor output is sent by the firmware page.
 
 ## Run
 
-Extract this folder, open a terminal inside it, and run either:
+Open `index.html` through an HTTP server: `npm run dev`, then visit `http://localhost:4173/#firmware`. Node 22+ is sufficient; no install step or backend is required for kit OTA. GitHub Pages serves the same relative paths at `/dronelab/`. Desktop Chrome/Edge on HTTPS or localhost is needed for Web Serial. Android WebView is not a supported USB target.
 
-```sh
-npm run dev
-```
+Before leaving internet access, open the page once and load/download the correct image. The service worker caches the static shell, component assets, USB flasher, catalog and all published A1/A2 APP/Factory binaries for use on the kit AP. A manual `.bin` import also works offline. A browser may block HTTPS-to-local HTTP requests; when that happens, use `npm run dev` on the same computer while joined to the kit AP, or open the offline copy over localhost.
 
-Open `http://localhost:4173/`. Node 18+ is needed for the local Wi-Fi bridge. For assembly, wiring, or USB flashing alone, a plain HTTP server also works:
+## Firmware workflow
 
-```sh
-python3 -m http.server 8080
-```
+- **Source:** Board profile defaults to the principal XIAO ESP32-C6 **ZFC-A2** (FQBN `esp32:esp32:XIAO_ESP32C6`, image chip 13). **ZFC-A1** is ESP32-C3 (`esp32:esp32:esp32c3`, chip 5). Connecting a kit or USB changes the displayed target to its actual board; an image from another board is cleared and blocked. Auto Load Latest reads `firmware-catalog.json` and fetches the corresponding compiled release file from `FlightCore_Firmware/`, then checks exact byte size, SHA-256, ESP image headers/chip ID, app descriptor and factory partition table. Missing or mismatched assets are blocked. Manual import and drag/drop validate the same structural checks, compute SHA-256, and cache the selected file in IndexedDB. Download Loaded saves exactly those bytes.
+- **USB:** Connect the board at 115200; 460800/921600 may be selected with a 115200 retry. The bootloader chip and physical flash ID/capacity must be recognized before erase/write. Complete Factory/Merged writes at `0x0`; APP writes at `0x10000` only after confirming an existing matching bootloader and dual OTA partitions. Erase + Factory requires its own warning. esptool-js keeps image flash header settings and performs MD5 transfer integrity checking. After write/reset, the monitor waits for same-Device-ID AP readback; successful transfer alone remains **FLASHED · BOOT / RECONNECT PENDING**.
+- **Kit AP OTA:** Join the kit Wi-Fi, whose SSID is the kit name (e.g. `zebjus_drone_1`), default password `12345678`, API `http://192.168.4.1`. Connect kit AP performs ZFC3 SRP-3072 authenticated AP Wi-Fi pairing and AES-256-GCM secure requests using the reference protocol. No raw unauthenticated firmware upload or pairing-code form is used. Take Control must grant owner status; the kit must be disarmed, idle, the exact Device ID and board must match, the `ZFC_DUAL_1E0000` layout must be present, and free sketch space must fit the APP. OTA sends SHA-256 in `begin`, sequential encrypted 1024-byte-or-smaller hex chunks with acknowledged offsets, then `end`. Cancel before `end` leaves a partial inactive upload that can be retried from the beginning. The monitor watches AP firmware readback for roughly two minutes and continues in the background up to five minutes. If boot is unconfirmed, reconnect or use USB recovery.
 
-Open `http://localhost:8080/`. Use HTTP rather than double-clicking `index.html`: ES modules and GLB fetching require an HTTP origin. For the 3D workbench, use a browser with WebGL enabled. When WebGL is unavailable, a clearly labelled recovery panel keeps logical assembly and wiring usable; it never presents an image or cube as the 3D bench.
+A1 and A2 dual OTA slots are `0x10000` and `0x1f0000`, each `0x1e0000` bytes. A first flash or partition migration, especially on A2, needs USB Factory. Factory/erase can clear saved settings and calibration. Remove propellers and use stable USB/power. A firmware version readback does not establish flight readiness.
 
-## Use
+## Release assets and build
 
-- **ASSEMBLY LAB:** Guided mode follows 17 ordered steps. Select or drag a shelf component, then click/drop near its highlighted snap target. One drag installs the full 12-frame-screw or 16-motor-screw set. Installed parts leave the shelf. Select installed parts and press Delete to return them. Undo/Redo cover both pages. Object, Wiring map, Frame/FC X-ray, Top, Front, 3D, Exploded and Auto rotate use the original Three scene.
-- **2D WIRING:** Drag objects in the 1500×900 SVG canvas. Click the mode badge or press W to enable connections, then select two endpoints. F flips connector sides without mirroring text; R rotates the selected object. Delete removes selected wires or attached objects. Reset layout preserves wiring; Clear wires preserves installed parts; Reference wiring adds the original 34 fixed connections plus the optional-device reference plan. The small-screen toolbars and canvas scroll horizontally as in the source.
-- **Virtual testing:** Correct phase and battery/PDB connections make each motor ready. Run the PWM test and raise throttle to at least 1100 µs. Each motor checkbox works independently; swapping two phases reverses its direction. M1 front-left / CW, M2 front-right / CCW, M3 rear-right / CW, M4 rear-left / CCW. Tests stop when leaving the wiring page, hiding the tab or losing focus. Battery and motor actions are virtual only.
-- **Shared state:** Edits autosave under `dronelab.assembly-wiring.project.v1`. The new key contains logical assembly, connections, layout, optional devices, GPS reference mode and shared Undo/Redo snapshots. Reset is undoable. No source storage keys or saved network/account values are imported.
-- **FIRMWARE · SETTINGS:** Select the Seeed Studio XIAO ESP32-C6 (4 MB) and the verified sample factory image for the first USB install. Desktop Chrome/Edge Web Serial checks the chip and flash ID, transfers to 0x0, verifies esptool flash MD5, and resets the board. The sample app-only image writes at 0x10000. Custom ESP32-C6 application or full factory images can be selected for USB; verify their partition layout before using an app-only update. USB flashing replaces the board's installed program, and the factory image also replaces partitions and saved settings. The status panel reports prepare, transfer, verification, and reboot separately; a successful boot needs checking on the real board.
+`firmware-catalog.json` and `firmware-latest.json` record the verified current release and build IDs. `FlightCore_Firmware/` includes the matching original source, `partitions.csv`, catalog, build report and four compiled APP/Factory images imported from a pinned reference commit by `.github/workflows/import-flightcore-release.yml`. `tools/verify_release.py` checks each SHA-256, size, image magic and chip, embedded release version, dual OTA partition table, 4 MB factory bootloader and exact APP bytes embedded in Factory. `tools/build_firmware.py` rebuilds from source using Arduino ESP32 core **3.3.12**; A2 uses the XIAO-specific FQBN. A build must update catalog and binaries together. No firmware version or digest is hard-coded in the UI.
 
-## Wi-Fi sample OTA
+The source repository's legacy sample build files can still be present in older checkouts but are not referenced by this page. Do not flash the older sample in place of the FlightCore release.
 
-First flash `firmware/XIAO_C6_SAMPLE_FACTORY.bin` by USB. The standalone sample blinks the board LED and creates a `DroneLab-C6-…` access point. At 115200 baud the board's Serial Monitor prints the generated AP password, OTA key and IP address. These secrets are generated by the board and are never included in the repository or browser storage. Disconnect Web Serial before opening a Serial Monitor. Connect the computer to the board's AP, run `npm run dev` on that same computer, open `http://localhost:4173/#firmware`, enter the board IP (normally `192.168.4.1`) and OTA key, then click **Check device**. Select **Sample • app update** or a compatible ESP32-C6 application `.bin`, click **Flash app image by Wi-Fi**, and keep the board powered until it reboots. The local bridge streams transfer status and checks a disarmed board identity, OTA protocol and free sketch space. For the sample update, the browser checks the device again after reboot. A custom app must use the same partition layout; its boot cannot be confirmed by this page if it removes the sample's OTA endpoint. GitHub Pages supports the USB flow, while Wi-Fi upload runs only through localhost because a hosted HTTPS page cannot directly post to the board's private HTTP endpoint.
+## Files
 
-This demo does not drive motors or provide flight firmware. A physical board was not available to this repository's automated checks; confirm actual boot and OTA behavior on your XIAO before relying on the firmware. To rebuild the binaries, run the included GitHub Actions workflow or compile `firmware/xiao_c6_sample` with Arduino ESP32 core 3.3.10 and board `esp32:esp32:XIAO_ESP32C6:CDCOnBoot=cdc`, then run `python3 tools/build_sample.py build` against its output folder. The USB CDC setting makes the sample's generated AP password and OTA key visible through the USB Serial Monitor.
-
-## Short file map
-
-| File | Role |
+| Path | Role |
 | --- | --- |
-| `index.html`, `lab.html` | Three page entry points: Assembly Lab, 2D Wiring and Firmware · Settings |
-| `styles.css`, `lab-workflow.css` | Complete source CSS, including every later override, in original order |
-| `project.css` | Small scoped shell, accessibility and narrow-screen corrections after source CSS |
-| `js/app.js`, `js/ui-controls.js` | Boot, page switching, keyboard shortcuts, responsive layout and controls |
-| `js/catalog.js` | Component data, 17 steps, physical snap datums and local orbit controls |
-| `js/project-state.js` | Shared logical state, transactions, persistence, reset, Undo/Redo |
-| `js/model-assets.js` | GLB preloading, source datum normalization and material-preserving cloning |
-| `js/assembly-scene.js` | Three scene, bench, placement, screw animations, x-rays, wiring overlays and cameras |
-| `js/shared-ui.js` | Shelf, Current Step, Build Check and assembly/wiring progress synchronization |
-| `js/wiring-renderer.js` | SVG nodes, connector geometry, routing, transforms and optional pin plan |
-| `js/wiring-validation.js` | Electrical validation, phase permutations, SVG refresh and virtual PWM animation |
-| `js/sound-power.js` | Synthetic audio and virtual XT60/LED effects |
-| `js/config.js` | Project branding, shop links and storage key |
-| `firmware.css`, `js/firmware-page.js`, `js/firmware-image.js` | Firmware UI, Web Serial and Wi-Fi flows, image and hash checks |
-| `firmware/XIAO_C6_SAMPLE_FACTORY.bin`, `firmware/XIAO_C6_SAMPLE_APP.bin`, `firmware/sample.json` | Verified XIAO ESP32-C6 sample images and SHA-256 manifest |
-| `firmware/xiao_c6_sample/`, `tools/build_sample.py`, `.github/workflows/sample-firmware.yml` | Sample source and reproducible build/packing pipeline |
-| `server.cjs`, `tools/ota-bridge.cjs` | Local static server and authenticated private-network OTA bridge |
-| `vendor/esptool/` | Local esptool-js browser bundle and upstream license |
-| `*.glb`, `thumb_*.png`, `ref_*.png`, `fc_top_layout.png` | Local component and image assets actually used by this implementation |
-| `three.module.min.js`, `glb-loader.js`, `THREE-LICENSE.txt` | Local Three runtime, supplied loader and vendor license |
-| `tools/` | Dependency-free model, state and electrical regression checks |
-| `CHECKS.md` | Verification results and the WebGL inspection limitation |
-
-The reference intentionally draws its current arc guards and bright CW/CCW propellers with detailed procedural Three geometry rather than the older packaged meshes. This implementation preserves that source visual override; all 15 supplied GLBs are preloaded and decoded, and the other model-backed components use their original GLB meshes and materials.
-
-## Configuration and GitHub Pages hosting
-
-Edit `js/config.js` for the brand name, logo letter, watermark and external shop link. Set `shopUrl` to an empty string to hide shop links. Actual component/model descriptions still identify the referenced hardware.
-
-All browser asset and module URLs are relative. The same folder works at `/dronelab/` or another repository subdirectory without a bundler or router configuration. GitHub Pages serves the repository root from `main`. The `.nojekyll` file keeps these static assets unchanged.
-
-Live app: https://chilchiltrips-boop.github.io/dronelab/lab.html
-
-`lab.html` and root `index.html` are identical entry points for the three-page app. USB works on the hosted HTTPS page in compatible desktop browsers; local Wi-Fi update requires `npm run dev`.
+| `index.html`, `lab.html`; `styles.css`, `lab-workflow.css`, `project.css`, `firmware.css` | Three-page shell, original assembly/wiring design and firmware cards |
+| `js/app.js`, `js/ui-controls.js`, `js/project-state.js`, `js/assembly-scene.js`, `js/wiring-renderer.js` | Shared page/state interactions, interactive 3D bench and 2D wiring |
+| `js/firmware-page.js`, `js/firmware-image.js`, `js/firmware-hashes.js` | Firmware source, USB, OTA monitor, validation and hashes |
+| `js/kit-ap.js`, `js/kit-security.js`, `vendor/crypto/` | Kit AP client and source-compatible authenticated ZFC3 transport, with licenses |
+| `vendor/esptool/bundle.mjs`, `vendor/esptool/LICENSE` | Local Web Serial bootloader/flash bundle |
+| `firmware-catalog.json`, `firmware-latest.json`, `FlightCore_Firmware/` | Release metadata, source and four compiled board-matched images |
+| `sw.js` | Repository-relative offline cache |
+| `tools/verify_release.py`, `tools/build_firmware.py`, `tools/firmware.test.mjs` | Image verification, pinned build and mock protocol/guard checks |
 
 ## Checks
 
-With Node 22+:
-
-```sh
-npm run check
-npm test
-npm run verify:firmware
-```
-
-There are no install-time npm dependencies. The firmware page adds USB Web Serial and an optional Node localhost Wi-Fi bridge. Python Lab, flight control, motor commands, cloud relay and Android runtime files are excluded.
+Run `npm test` for mocked logic and assembly/wiring regressions; `npm run verify:firmware` for the actual release binaries; `npm run check` for project assets. Tests with mocked USB/AP do **not** constitute a physical ESP32-C6 flash or flight validation. A real XIAO ESP32-C6 still needs USB handshake/flash, AP OTA, boot readback and recovery testing with propellers removed.

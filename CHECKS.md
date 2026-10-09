@@ -1,37 +1,7 @@
-# Verification — 2026-10-09
+# Verification · Firmware / Settings
 
-The required README, FILE_GUIDE, all page-layout fragments, original index, complete stylesheet cascade, lab-workflow stylesheet and relevant app.js routines were inspected before implementing the new app. The original `reference-runtime/preview.html` was served over HTTP and opened alongside the extracted app.
-
-## Passed
-
-- Direct desktop comparison: original three-column Assembly panel proportions, shelf cards/thumbnails, stage toolbar, Current Step and Build Check; original large wiring SVG, toolbar and sidebar. The two original stylesheets are preserved in full and loaded in source order before scoped project rules.
-- Browser: page switching, guided rejection of the wrong component, installation and progress, Free mode, shelf availability, Undo/Redo, wire endpoint creation, selected-wire deletion and Wire undo.
-- Browser: real pointer drag of a battery node, F connector flip, R rotation, Reset layout, Clear wires and recovery, reference wiring (34 fixed connections), assembly sync (4/4), electrical validation, optional servo insertion/deletion and shared undo, local project/undo restoration after reload.
-- Browser: virtual XT60 disconnect/reconnect, complete 16-screw set installation and undo, virtual PWM test at 2000 µs, independent M2 disable with M1/M3/M4 running, correct CW/CCW state, stopped test on page/focus changes, keyboard W ignored while a select is focused.
-- Browser: desktop 1363×936, tablet 768×850, mobile 390×850 and narrow 320×850. No page-width overflow or overlapping action buttons; narrow toolbar/canvas overflow stays within the intended scroll containers.
-- Assets: 15/15 real GLBs loaded in the browser and decoded by the actual supplied loader; 35 literal model/image references exist; shelf images have no failed loads. No missing backend or unused original vendor runtime.
-- Static checks: 11 ES modules parse, unique DOM IDs, no unrelated hardware UI.
-- Automated regression suite: all 10 tests pass — actual GLB geometry/materials/bounds, motor positions, phase direction, electrical faults, wire color/gauge, exact installed datums/straps, cross-page optional deletion/undo, full screw-set transaction/undo, orbit-camera presets/exploded restoration, individual PWM toggles.
-
-## Inspection limit
-
-The cloud Chrome environment reports `GL_RENDERER = Disabled`, so both the untouched source preview and the new app cannot create a WebGL context there. Browser Assembly installation checks therefore used the clearly labelled WebGL recovery controls. Actual model decoding, material cloning, scene installation, snap datums, straps, screw transactions, camera presets and exploded positions were separately verified using the real Three.js engine and supplied GLB loader.
-
-Rendered 3D lighting, camera appearance, pointer snapping and screw animation appearance still need a visual pass in a WebGL-enabled browser. This is an environment limit, not a claim that those visuals were browser-verified. The recovery path catches this failure; no uncaught application errors were observed in the remaining browser interactions. Browser-extension logging is outside this application's code.
-
-## Deliberate extraction corrections
-
-- Camera presets synchronize the local orbit state, so its next animation update preserves Top/Front/3D camera positions.
-- PDB negative wires are consistently thick brown-black rather than falling through to orange.
-- Motor checkboxes are independent of the master checkbox.
-- All project/history writes use one new storage key; resets never delete another application's data.
-- Undo cancels stale screw-completion callbacks.
-- Shortcuts ignore inputs, textareas, selects and editable text.
-- The third Firmware · Settings tree is initialized with the two existing pages. Branding/shop settings remain local configuration.
-
-## Firmware page
-
-- Arduino CLI with Espressif core 3.3.10 compiled the standalone sketch for `esp32:esp32:XIAO_ESP32C6` in the repository's GitHub Actions build. The 4 MB factory image and app image were packed, chip descriptor and flash offsets checked, and SHA-256 digests recorded in `firmware/sample.json`.
-- Browser preview: firmware page layout, XIAO board metadata, app sample fetch, SHA-256 match, download link, status stages, and routing among all three pages. The factory sample is also built and included in the published tree; its local reconstruction was checked separately against the manifest.
-- Automated regression: correct ESP32-C6 app/factory headers, descriptor, partition offset, private IP/origin checks, MD5, Web Crypto SHA-256 and pure JS SHA-256 fallback. All JavaScript files parse.
-- This environment has no physical XIAO ESP32-C6 or local Wi-Fi AP. USB port handshake, flash write/readback, sample boot, OTA upload and post-reboot status require a real board pass. The UI reports an unverified boot distinctly from a verified transfer.
+- Browser preview at 1363×936: new third page and navigation loaded; the two original page links stayed present. Board/image selectors, USB and AP target cards, five-stage monitor and no-image guard rendered. The unavailable binary returned HTTP 404 and Flash remained disabled; no older image was relabelled.
+- `npm test`: assembly/wiring regression suite and seven firmware mock groups passed. Firmware mocks cover A1/A2 image/chip/factory layout, wrong board and damaged headers, USB offset/erase/armed/capacity guards, OTA owner/identity/armed/training/legacy-layout/free-space guards, encrypted chunk offsets and interruption, SHA mismatch, and post-boot readback semantics. These are mocks, not physical flashing.
+- Direct `node --check` for new JavaScript modules and service worker passed. `npm run check` uses a nested Node spawn that this sandbox rejects with EPERM; individual syntax and browser checks were used here.
+- `npm run verify:firmware` must run after the import workflow has copied the four compiled reference binaries and source. It checks SHA-256, size, embedded release version, chip header, complete 4 MB factory image, dual OTA slots and byte-identical embedded APP.
+- No USB controller or kit AP was attached to this environment. Web Serial permission, real chip/flash probe, USB write/MD5, secure AP pairing, OTA upload and post-reboot readback still require a physical XIAO ESP32-C6 pass with propellers removed.

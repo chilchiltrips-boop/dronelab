@@ -1,0 +1,11 @@
+{
+  "packages": {
+    "@noble/hashes": "2.4.0",
+    "@noble/ciphers": "2.4.0",
+    "esbuild": "0.25.10"
+  },
+  "sha256": "2bf24ea5581d3738b51f11e5ec403e9ef2c4a39af50e98af3957c318b22d8422",
+  "buildRun": 37596479362,
+  "localPatch": "Expose the existing IIFE API as CommonJS for cross-language tests."
+}
+
