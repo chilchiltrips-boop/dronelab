@@ -47,7 +47,9 @@ function session(role,events={}){
  function close(reason='Disconnected'){
   clearInterval(heartbeat);clearTimeout(dropTimer);heartbeat=null;dropTimer=null;
   rejectOutstanding(reason);
-  channel?.close();peer?.close();peer=null;channel=null;connected=false;paired=false;approved=false;
+  const oldChannel=channel,oldPeer=peer;channel=null;peer=null;
+  try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
+  connected=false;paired=false;approved=false;
   controller=null;pendingCode=null;sessionId=null;code=null;expires=0;lastHeartbeat=0;
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
@@ -100,9 +102,10 @@ function session(role,events={}){
   }
  }
  function setup(pc,dc){
-  if(dc){channel=dc;dc.onmessage=e=>onData(e.data);dc.onopen=()=>{connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{connected=false;clearInterval(heartbeat);dropControl('DataChannel closed');state('Disconnected • new QR required');emit('disconnected','New QR pairing required')}}
-  pc.ondatachannel=e=>setup(pc,e.channel);
+  if(dc){channel=dc;dc.onmessage=e=>onData(e.data);dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;connected=false;clearInterval(heartbeat);dropControl('DataChannel closed');state('Disconnected • new QR required');emit('disconnected','New QR pairing required')}}
+  pc.ondatachannel=e=>{if(peer===pc)setup(pc,e.channel)};
   pc.onconnectionstatechange=()=>{
+   if(peer!==pc)return;
    const s=pc.connectionState;
    if(s==='connected'){clearTimeout(dropTimer);state(paired?'Connected':'Connected • awaiting approval')}
    if(s==='disconnected'){state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(pc.connectionState!=='connected')close('Connection lost • new QR required')},RETRY_GRACE_MS)}
