@@ -35,3 +35,22 @@
 .qr-qr-wrap[hidden],.qr-card[hidden],[hidden].qr-led-note{display:none!important}
 @media(max-width:1050px){.qr-led-grid,.qr-settings-grid{grid-template-columns:1fr}.qr-header-controls{margin:6px 0 0}.qr-header-status{max-width:160px}}
 @media(max-width:700px){.qr-header-controls{width:100%;justify-content:flex-start}.qr-hero{padding:13px}.qr-card{padding:11px}.qr-pair-code{font-size:23px}.qr-code-box{min-height:230px;width:min(100%,300px)}}
+
+
+/* One-scan v1.2.0: high-visibility status, top control toggle and tactile buttons */
+#mobileHeaderStatus.disconnected,.qr-header-status.disconnected{color:#ff929c!important;background:#3c121d!important;border:1px solid #b83c51!important;font-weight:900}
+#ledPeerState.disconnected{color:#ff99a2!important;background:#3c121d!important;border:1px solid #b83c51!important}
+.qr-header-switch{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #36645c;border-radius:10px;background:#0e302d;color:#c4f9e3;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}
+.qr-header-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.qr-switch-track{display:inline-block;flex:none;width:40px;height:22px;border-radius:999px;background:#536273;border:1px solid #718093;position:relative;transition:background .16s ease}
+.qr-switch-track::before{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:#eee;border-radius:50%;transition:transform .16s}
+.qr-header-switch input:checked+.qr-switch-track{background:#17b481;border-color:#7bffbb}
+.qr-header-switch input:checked+.qr-switch-track::before{transform:translateX(17px)}
+.qr-header-switch input:disabled+.qr-switch-track{opacity:.45}
+.qr-header-switch:has(input:disabled){opacity:.65;cursor:not-allowed}
+.qr-header-switch:has(input:focus-visible){outline:2px solid #9fffe0;outline-offset:2px}
+#tab-led button,#tab-settings button,.qr-header-controls button{transition:transform .12s,filter .12s,box-shadow .12s}
+#tab-led button:active:not(:disabled),#tab-settings button:active:not(:disabled),.qr-header-controls button:active:not(:disabled){transform:scale(.952);filter:brightness(1.25);box-shadow:0 0 0 3px #6ee7b744}
+#tab-led button:focus-visible,#tab-settings button:focus-visible,.qr-header-controls button:focus-visible{outline:2px solid #7fffd2;outline-offset:2px}
+@media(max-width:720px){.qr-header-switch{font-size:10px;padding:5px 7px}.qr-header-switch>span:first-child{max-width:94px;white-space:normal}.qr-header-controls{gap:5px}}
+@media(prefers-reduced-motion:reduce){#tab-led button,#tab-settings button,.qr-header-controls button,.qr-switch-track,.qr-switch-track::before{transition:none}}
