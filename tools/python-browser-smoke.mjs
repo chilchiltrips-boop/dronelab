@@ -34,9 +34,18 @@ try{
  await page.locator('#pythonFileList').getByText('browser_test.py').waitFor({timeout:5000});
  const fileCount=await page.locator('#pythonFileList [role=tab]').count();
  if(fileCount<2)throw Error('New Python file not added');
+ page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('basic');
  const modelValue=await page.evaluate(()=>window.monaco.editor.getModels().map(m=>m.getValue()).join('\n'));
  if(!modelValue.includes('Finished! Total'))throw Error('Example selection did not update editor model');
+ const infinite='import asyncio\nprint("Loop started")\nwhile True:\n    print("tick")\n    await asyncio.sleep(0.15)\n';
+ await page.evaluate(code=>{const m=window.monaco.editor.getModels().find(x=>x.uri.toString().includes('browser_test.py'));if(!m)throw Error('Test Python file model missing');m.setValue(code)},infinite);
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('Loop started'),null,{timeout:90000});
+ await page.locator('#stopPythonBtn').click();
+ if(!((await page.locator('#pyLastRun').textContent())||'').includes('STOPPED'))throw Error('Stop did not terminate while True');
+ if(!(await page.locator('#runPythonBtn').isEnabled()))throw Error('Run button did not reactivate after Stop');
+
  await page.setViewportSize({width:390,height:800});
  await page.locator('#tab-python.active').waitFor();
  await page.screenshot({path:'test-output/python-lab-mobile.png',fullPage:true});
