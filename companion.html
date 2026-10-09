@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/><meta name="theme-color" content="#07111b"/><title>ZEBJUS DroneLab Companion</title><link rel="stylesheet" href="companion.css"/></head><body>
+<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Companion • v1.1.0-QR-BETA.1</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
+<main>
+<section class="hero"><small>KIT-FREE • SAME WIFI • NO CLOUD</small><h1>Mobile LED Controller</h1><p>Pair with DroneLab on your laptop using two-way QR codes. Connection and controller rights are cleared when the app or website reloads.</p></section>
+<section class="card"><div class="section-title"><strong>1. Scan Web App Offer</strong><span id="offerState">Waiting for QR</span></div>
+<div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="stopCameraBtn">Close Camera</button></div><video id="scanVideo" autoplay muted playsinline hidden></video><canvas id="scanCanvas" hidden></canvas>
+<textarea id="offerInput" placeholder="Alternatively paste Web App pairing offer here"></textarea>
+<div class="actions"><button id="useOfferBtn">Use Pasted Offer</button><button id="resetPairBtn" class="danger">Cancel / New Pairing</button></div>
+<div class="pin-box"><span>Confirmation code — verify on Web App</span><strong id="appPairCode">------</strong></div>
+<p id="offerExpiry" class="hint">QR expires after 3 minutes.</p><button class="primary wide" id="createAnswerBtn" disabled>Accept Pairing & Generate Answer QR</button></section>
+<section class="card"><div class="section-title"><strong>2. Show Android Answer QR</strong><span id="answerState">No response yet</span></div>
+<div class="answer-qr"><div class="qr-frame"><canvas id="answerCanvas" hidden></canvas><span id="answerPlaceholder">Answer QR appears here after you accept pairing</span></div></div>
+<p class="hint">Show this QR to the laptop webcam. On Web App click Scan Response QR → verify the matching code → Confirm Pairing.</p><textarea id="answerText" readonly placeholder="Encoded answer for manual copy"></textarea><button id="copyAnswerBtn">Copy Answer Text</button></section>
+<section class="card"><div class="section-title"><strong>3. Mobile Control</strong><span id="controlState">NO CONTROL</span></div>
+<div class="status-grid"><div><small>CONNECTION</small><b id="connectionDetail">Disconnected</b></div><div><small>CONTROLLER</small><b id="controllerDetail">None</b></div><div><small>HEARTBEAT</small><b id="heartbeatDetail">—</b></div></div>
+<div class="actions"><button id="requestControlBtn" class="primary" disabled>Take Control</button><button id="releaseControlBtn" disabled>Release Control</button><button id="disconnectBtn" class="danger">Disconnect</button></div>
+<div class="led-panel"><div id="mobileLedBulb" class="led-bulb" role="img" aria-label="LED is off"></div><strong id="mobileLedState">LED OFF</strong><span id="commandStatus">Waiting for Web App pairing and approval</span></div>
+<div class="actions split"><button id="mobileLedOn" class="primary" disabled>LED ON</button><button id="mobileLedOff" disabled>LED OFF</button></div>
+<p class="hint">LED changes here only after Web App acknowledgement. One device can control the LED at a time.</p><pre id="mobileLog">Android companion ready. Scan the Web App QR.</pre></section>
+<footer>WebRTC DataChannel • Local Wi-Fi • No STUN/TURN or cloud backend • APK test build</footer>
+</main>
+<script src="qrgen.js"></script><script src="jsqr.js"></script><script src="pairing-core.js"></script><script src="pairing-qr-ui.js"></script><script src="companion.js"></script></body></html>
