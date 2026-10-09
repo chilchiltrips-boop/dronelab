@@ -77,12 +77,17 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError, UnicodeError, json.JSONDecodeError):
             return None
     def require_origin(self):
-        # Only this browser on localhost may register/poll or cancel a session.
+        # Only a browser on this laptop may register, poll or cancel a session.
+        # Browsers omit Origin on some same-origin GET requests; use Referer then.
         origin = self.headers.get("Origin", "")
-        if origin not in ("http://localhost:%d" % self.server.server_port,
-                          "http://127.0.0.1:%d" % self.server.server_port):
-            return False
-        return ipaddress.ip_address(self.client_address[0]).is_loopback
+        if not origin:
+            referer = self.headers.get("Referer", "")
+            if referer:
+                u = urlsplit(referer)
+                origin = "%s://%s" % (u.scheme, u.netloc)
+        allowed = ("http://localhost:%d" % self.server.server_port,
+                   "http://127.0.0.1:%d" % self.server.server_port)
+        return origin in allowed and ipaddress.ip_address(self.client_address[0]).is_loopback
     def do_GET(self):
         u = urlsplit(self.path)
         if u.path == "/__pairing/info":
