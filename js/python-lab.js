@@ -114,6 +114,7 @@ function makeWorker(){
  w.onmessage=e=>{
   if(worker!==w)return;const m=e.data||{};
   if(m.type==='rpc')return void onRpc(w,m);
+  if(m.type==='image')return showPythonPlot(m);
   if(m.type==='stdout'||m.type==='stderr')return terminal(m.text,m.type==='stderr'?'error':'out');
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
@@ -213,27 +214,124 @@ async function enableMonaco(){
   requestAnimationFrame(()=>{editor.layout();editorPosition()});status('PyCharm-style Python editor ready','good');updateButtons();
  }catch(e){$('pythonMonaco').style.display='none';$('pythonEditor').style.display='block';status('Basic editor fallback','warn');terminal('[Editor] '+e.message+'\n')}
 }
+
+function initPythonWorkspaceResizers(){
+ const tab=$('tab-python'),side=$('pythonSideStack'),col=$('pythonColResizer'),row=$('pythonRowResizer');if(!tab||layoutReady)return;
+ layoutReady=true;
+ try{const d=JSON.parse(localStorage.getItem(LAYOUT_KEY)||'{}');
+  if(Number.isFinite(+d.side)&&+d.side>=320)tab.style.setProperty('--py-side-w',clamp(+d.side,330,860)+'px');
+  if(Number.isFinite(+d.terminal)&&+d.terminal>=190)tab.style.setProperty('--py-terminal-h',clamp(+d.terminal,190,850)+'px');
+ }catch{}
+ const saveLayout=()=>{try{localStorage.setItem(LAYOUT_KEY,JSON.stringify({side:parseFloat(tab.style.getPropertyValue('--py-side-w'))||side.getBoundingClientRect().width,terminal:parseFloat(tab.style.getPropertyValue('--py-terminal-h'))||$('pythonTerminal').getBoundingClientRect().height}))}catch{}};
+ const drag=(target,onMove)=>{
+  if(!target)return;
+  target.addEventListener('pointerdown',down=>{
+   if(down.button!==0)return;
+   if(target===col&&window.innerWidth<=1150)return;
+   down.preventDefault();target.classList.add('dragging');
+   target.setPointerCapture?.(down.pointerId);
+   const move=event=>{onMove(event.clientX,event.clientY);requestAnimationFrame(()=>editor?.layout())};
+   const finish=()=>{
+    target.classList.remove('dragging');window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish);
+    saveLayout();requestAnimationFrame(()=>editor?.layout());
+   };
+   window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish,{once:true});window.addEventListener('pointercancel',finish,{once:true});
+  });
+ };
+ const sizeSide=x=>{
+  const layout=$('pythonIdeLayout')?.getBoundingClientRect();if(!layout||window.innerWidth<=1150)return;
+  const maximum=Math.min(860,layout.width-390),next=clamp(layout.right-x-5,330,Math.max(330,maximum));
+  tab.style.setProperty('--py-side-w',Math.round(next)+'px');
+  col.setAttribute('aria-valuenow',String(Math.round(next)));
+ };
+ const sizeTerminal=y=>{
+  const r=side.getBoundingClientRect();if(!r.height||window.innerWidth<=1150)return;
+  const height=clamp(r.bottom-y,190,Math.max(190,r.height-150));
+  tab.style.setProperty('--py-terminal-h',Math.round(height)+'px');
+  row.setAttribute('aria-valuenow',String(Math.round(height)));
+ };
+ drag(col,sizeSide);drag(row,(x,y)=>sizeTerminal(y));
+ col.addEventListener('dblclick',()=>{tab.style.setProperty('--py-side-w','37%');saveLayout();editor?.layout()});
+ row.addEventListener('dblclick',()=>{tab.style.setProperty('--py-terminal-h','350px');saveLayout();editor?.layout()});
+ for(const [el,isCol] of [[col,true],[row,false]]){
+  el?.addEventListener('keydown',e=>{
+   const delta=(e.key==='ArrowRight'||e.key==='ArrowDown')?-26:(e.key==='ArrowLeft'||e.key==='ArrowUp')?26:0;
+   if(!delta)return;e.preventDefault();
+   if(isCol){const r=side.getBoundingClientRect();sizeSide(r.left-delta)}
+   else{const r=$('pythonTerminal').closest('.python-terminal-card').getBoundingClientRect();sizeTerminal(r.top-delta)}
+   saveLayout();editor?.layout();
+  });
+ }
+ window.addEventListener('resize',()=>requestAnimationFrame(()=>editor?.layout()));
+}
+async function startCamera(){
+ if(cameraStream)return;
+ if(!navigator.mediaDevices?.getUserMedia){$('pythonCameraStatus').textContent='Camera requires HTTPS and browser permissions.';return}
+ try{
+  cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480}},audio:false});
+  const video=$('pythonCameraVideo');video.srcObject=cameraStream;video.hidden=false;await video.play();
+  $('pythonCameraStatus').textContent='Live browser camera preview • Close Camera to release it.';
+ }catch(e){$('pythonCameraStatus').textContent='Camera unavailable: '+e.message}
+}
+function stopCamera(){
+ for(const track of cameraStream?.getTracks?.()||[])track.stop();
+ cameraStream=null;
+ const video=$('pythonCameraVideo');video.pause();video.srcObject=null;video.hidden=true;
+ $('pythonCameraStatus').textContent='Camera stopped. Open Camera to preview again.';
+}
+function openPlotWindow(){
+ const el=$('pythonOutputWindow');if(!plotUrl){$('pythonVisualTools').open=true;$('pythonCameraStatus').textContent='Run a Matplotlib example to create a Python plot.';return}
+ el.hidden=false;$('pythonOutputImage').src=plotUrl;
+}
+function showPythonPlot(message){
+ const base64=String(message.base64||'');
+ if(!/^[A-Za-z0-9+/=]+$/.test(base64)||base64.length>4500000){terminal('[Plot output is empty or too large]\n','warn');return}
+ plotUrl='data:image/png;base64,'+base64;
+ const image=$('pythonInlinePlot');image.src=plotUrl;image.hidden=false;
+ $('pythonCameraStatus').textContent='Python Matplotlib figure generated. Click Open Plot Window to enlarge.';
+ $('pythonVisualTools').open=true;
+ openPlotWindow();
+}
+function bindPlotWindow(){
+ const modal=$('pythonOutputWindow'),title=$('pythonOutputDrag');
+ $('pythonOutputClose').onclick=()=>{modal.hidden=true};
+ $('pythonOutputOpen').onclick=openPlotWindow;
+ $('pythonCameraStart').onclick=startCamera;$('pythonCameraStop').onclick=stopCamera;
+ title?.addEventListener('pointerdown',e=>{
+  if(e.target.closest('button'))return;
+  e.preventDefault();const box=modal.getBoundingClientRect(),dx=e.clientX-box.left,dy=e.clientY-box.top;
+  const move=ev=>{modal.style.left=clamp(ev.clientX-dx,0,innerWidth-80)+'px';modal.style.top=clamp(ev.clientY-dy,0,innerHeight-45)+'px'};
+  const finish=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish)};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish,{once:true});
+ });
+}
+async function copyTerminal(){
+ const value=$('pythonTerminal').textContent;
+ if(!value.trim())return status('Terminal is empty','warn');
+ try{await navigator.clipboard.writeText(value);$('copyTerminalBtn').textContent='Copied ✓';setTimeout(()=>{$('copyTerminalBtn').textContent='Copy Output'},1400)}
+ catch(e){status('Select terminal text and use Ctrl/⌘+C','warn')}
+}
 function bind(){
  $('pythonNewFileBtn').onclick=newFile;$('pythonSaveFileBtn').onclick=()=>{save();status('Project saved','good')};
  $('pythonUndoFileBtn').onclick=()=>undoRedo(false);$('pythonRedoFileBtn').onclick=()=>undoRedo(true);
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pyExampleI2C').onclick=()=>applyExample('scanner');$('pyExampleCustom').onclick=()=>applyExample('custom');
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);if(e.target.value==='scanner'||e.target.value==='custom')$('pythonTarget').value='usb';else $('pythonTarget').value='python';e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
- $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=()=>navigator.clipboard?.writeText($('pythonTerminal').textContent);
- $('pythonEditor').oninput=e=>recordText(e.target.value);
- $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}};
+ $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();
+ $('pythonEditor').oninput=e=>{recordText(e.target.value);editorPosition()};$('pythonEditor').onkeyup=editorPosition;$('pythonEditor').onclick=editorPosition;
+ $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editor){e.preventDefault();undoRedo(e.shiftKey)}};
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
- window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>editor?.layout())});
- window.addEventListener('pagehide',()=>{worker?.terminate();bridge.close()});
+ window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()})});
+ window.addEventListener('pagehide',()=>{worker?.terminate();stopCamera();bridge.close()});
  bridge.subscribe(data=>{
   $('pyDeviceAddresses').textContent=data.addresses.join('  ')||'No devices';
   $('pyScanStatus').textContent='Last scan: '+data.total+' device(s) • '+new Date(data.timestamp).toLocaleTimeString();
   usbStatus();
  });
- setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;
+ setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;updateButtons();
 }
 function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bind();usbStatus();void enableMonaco()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
