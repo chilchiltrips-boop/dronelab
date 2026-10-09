@@ -13,3 +13,10 @@ button:focus-visible{outline:2px solid #69efc0;outline-offset:2px}
 .qr-phone-frame canvas{width:100%;height:auto;image-rendering:pixelated}
 .qr-phone-frame.qr-large{width:100%;padding:3px;border:3px solid #22c58e}
 #answerState{font-weight:800;color:#b3ffe0}
+
+
+/* V1.4 college camera-free pairing */
+.phone-code-panel{display:grid;gap:10px;padding:12px;border:1px solid #3c806b;border-radius:13px;background:#0b2b2a}
+.phone-code-panel #phoneShortCode{color:#bcffcc;letter-spacing:.19em;font-size:29px;font-weight:900;font-family:ui-monospace,monospace}
+.phone-code-panel #phoneShortCodeStatus{color:#c3e5d6;line-height:1.6}
+.phone-code-panel #phoneRetryCode{width:100%}
