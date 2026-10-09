@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.0+6",
   "channel": "release",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -14,5 +14,5 @@
     "Wi-Fi transition control reset"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "1903b445092b"
+  "buildCommit": "155ba86aba0f"
 }
