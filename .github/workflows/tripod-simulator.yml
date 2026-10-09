@@ -15,6 +15,8 @@ on:
       - 'js/tripod-experiments.js'
       - 'tools/tripod-physics.test.mjs'
       - 'tools/tripod-browser.mjs'
+      - 'tools/tripod-quality-browser.mjs'
+      - 'tools/export-flight-bench.mjs'
       - 'sw.js'
       - '.github/workflows/tripod-simulator.yml'
   workflow_dispatch:
@@ -50,6 +52,8 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/tripod-http.log 2>&1 &
           sleep 3
           node tools/tripod-browser.mjs
+          node tools/tripod-quality-browser.mjs
+          node tools/export-flight-bench.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -26,6 +26,7 @@ for spec in '720 1280 16x9' '720 1560 19_5x9'; do
   read -r display_w display_h label <<< "$spec"
   adb shell wm size "${display_w}x${display_h}"
   run_case "touch-${label}" -e expectedPreset Fast
+  run_case "touch-reverse-${label}" -e expectedPreset Fast -e reverse true
   adb shell am start -n in.zebjus.dronelab.companion/.MainActivity
   sleep 6
   adb exec-out screencap -p > "test-output/native/landscape-${label}.png"

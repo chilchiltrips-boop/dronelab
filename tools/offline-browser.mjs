@@ -17,5 +17,14 @@ try{
  page.once('dialog',d=>d.accept());await page.locator('#pythonQuickHardware').selectOption('plot');await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.screenshot({path:'test-output/offline-python-plot.png',fullPage:true});
- console.log('PASS real Service Worker: fresh offline firmware catalog/4MB factory image, Monaco and first Matplotlib plot');
+ await page.goto(base+'tripod.html');
+ await page.waitForFunction(()=>window.ZebjusTraining&&document.getElementById('tpSceneStatus').textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
+ await page.locator('#tpRun').click();await page.locator('body').click({position:{x:20,y:180}});for(let n=0;n<24;n++)await page.keyboard.press('w');
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().throttle===1600&&window.ZebjusTraining.snapshot().motors.rpm.every(v=>v>1000));
+ await page.locator('#topPairMobileBtn').click();await page.locator('#connectionStop').click();await page.locator('#connectionClose').click();
+ await page.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(v=>v===0));
+ await page.screenshot({path:'test-output/offline-flight-training.png',fullPage:true});
+ await page.goto(base+'companion.html');await page.waitForFunction(()=>window.ZebjusFlightApp&&!document.getElementById('flightCockpit').hidden);
+ if(!await page.locator('#flightArm').isDisabled())throw Error('Offline companion armed without a peer');
+ console.log('PASS real Service Worker: fresh offline firmware/4MB factory image, Monaco/Matplotlib, Flight Training GLBs/controls/gear STOP, companion preview');
 }finally{await browser.close()}

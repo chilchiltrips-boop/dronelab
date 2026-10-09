@@ -233,6 +233,7 @@ function bind(){
  window.addEventListener('zebjus:training-ready',()=>{host.setSimulatorReady(true);sync()});
  window.addEventListener('zebjus:training-stop',e=>host.emergencyStop(e.detail?.reason||'Web STOP'));
  $('simRemoteStop').onclick=()=>host.emergencyStop('Web emergency STOP');
+ $('connectionStop').onclick=()=>host.emergencyStop('Connection settings STOP');
  flightTimer=setInterval(()=>{training()?.tick();host.sendTelemetry(training()?.snapshot())},100);
  statsTimer=setInterval(async()=>{
   const pc=host.peer,dc=host.channel;if(!pc){$('pairLinkStats').textContent='DataChannel closed • RTT —';return}

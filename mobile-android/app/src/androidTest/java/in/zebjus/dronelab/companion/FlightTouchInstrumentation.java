@@ -99,14 +99,34 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         Bundle result=new Bundle();
         try{
             Intent intent=new Intent(getTargetContext(),MainActivity.class);intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            activity=startActivitySync(intent);runOnMainSync(()->web=findWeb(activity.getWindow().getDecorView()));
+            activity=startActivitySync(intent);
+            if(args!=null&&"true".equals(args.getString("reverse"))){
+                ActivityMonitor monitor=addMonitor(MainActivity.class.getName(),null,false);
+                runOnMainSync(()->activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE));
+                Activity rotated=monitor.waitForActivityWithTimeout(3000);if(rotated!=null)activity=rotated;removeMonitor(monitor);
+                waitForIdleSync();SystemClock.sleep(600);
+            }
+            runOnMainSync(()->web=findWeb(activity.getWindow().getDecorView()));
             if(web==null)throw new AssertionError("Native WebView missing");
             waitJs("document.readyState==='complete' && window.ZebjusFlightApp");
-            if(args!=null&&"true".equals(args.getString("baselineOnly"))){js("localStorage.setItem('zebjus.flight.preset.v1','Fast');true");result.putString("stream","PASS baseline preference fixture persisted\n");finish(Activity.RESULT_OK,result);return;}
-            if(args!=null&&args.getString("expectedPreset")!=null)check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
+            if(args!=null&&"true".equals(args.getString("baselineOnly"))){
+                js("localStorage.setItem('zebjus.flight.preset.v1','Fast');true");check("localStorage.getItem('zebjus.flight.preset.v1')==='Fast'");
+                if(!getTargetContext().getSharedPreferences("native-upgrade-fixture",0).edit().putString("retained","version-11").commit())throw new AssertionError("Native preference fixture write failed");
+                // Finish the old activity gracefully so Chromium flushes its
+                // asynchronous DOM-storage journal before the shell force-stop.
+                runOnMainSync(()->activity.finish());waitForIdleSync();SystemClock.sleep(2500);
+                result.putString("stream","PASS baseline preference fixture persisted and activity closed\n");finish(Activity.RESULT_OK,result);return;
+            }
+            if(args!=null&&args.getString("expectedPreset")!=null){
+                if(!"version-11".equals(getTargetContext().getSharedPreferences("native-upgrade-fixture",0).getString("retained","")))throw new AssertionError("In-place upgrade lost native app data");
+                check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
+            }
             multitouch();
             result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout.\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
-        }catch(Throwable failure){result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);}
+        }catch(Throwable failure){
+            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight})");}catch(Exception ignored){}
+            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
+        }
     }
 }

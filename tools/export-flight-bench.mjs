@@ -7,7 +7,7 @@ const s=createSimulator();for(const b of Object.keys(s.pid))setPID(s,b,{p:0,i:0,
 const rows=[['time_s','throttle_us','requested_rpm','actual_rpm','motor_thrust_N','total_upward_thrust_N','weight_N','thrust_weight','z_cm','v_cm_s','accel_m_s2','stop']];
 for(const throttle of [1000,1200,1400,1600,1800,1400,1200,1000,0]){
  if(!throttle)stopSimulator(s);else s.throttle=throttle;
- for(let n=0;n<500;n++){stepSimulator(s);if(n%5===0)rows.push([rows.length*STEP*5,s.throttle,s.motorRequestedRPM[0],s.motorRPM[0],s.motorThrust[0],s.vertical.thrust,s.vertical.weight,s.vertical.ratio,s.vertical.z*100,s.vertical.velocity*100,s.vertical.acceleration,s.vertical.stop]);}
+ for(let n=0;n<500;n++){stepSimulator(s);if(n%5===0)rows.push([s.time,s.throttle,s.motorRequestedRPM[0],s.motorRPM[0],s.motorThrust[0],s.vertical.thrust,s.vertical.weight,s.vertical.ratio,s.vertical.z*100,s.vertical.velocity*100,s.vertical.acceleration,s.vertical.stop]);}
 }
 writeFileSync(dir+'/vertical-thrust.csv',rows.map(r=>r.join(',')).join('\n')+'\n');
 const configurations=[['Stable','p',.9],['Low P','p',.3],['High P','p',2.8],['Low I','i',0],['High I','i',50],['Low D','d',0],['High D','d',.16]];

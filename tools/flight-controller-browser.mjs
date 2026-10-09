@@ -32,6 +32,25 @@ try{
  // Local tuning remains available during mobile ownership.
  await web.locator('#tpPidP').fill('1.1');await web.locator('#tpApplyPid').click();await wait(web,()=>document.getElementById('tpStatus').textContent.includes('PID APPLIED LIVE'));
  await phone.locator('#flightMode').selectOption('acro');await wait(web,()=>window.ZebjusTraining.snapshot().mode==='acro');
+ // Delay/reorder actual receiver feedback before it enters the encrypted
+ // channel. Drop every seventh ACK: payloads still come from the real plant.
+ await web.evaluate(()=>{
+  const channel=window.__testPeer.channel,send=channel.send.bind(channel);
+  window.__feedbackSend=send;window.__feedbackTimers=[];
+  channel.send=raw=>{
+   const m=JSON.parse(raw);
+   if(m.type==='SIM_ACK'||m.type==='SIM_TELEMETRY'){
+    if(m.type==='SIM_ACK'&&m.ackSeq%7===0)return;
+    const n=m.ackSeq??m.applied.seq,delay=[300,80,220][n%3];
+    window.__feedbackTimers.push(setTimeout(()=>{if(channel.readyState==='open')send(raw)},delay));return;
+   }send(raw);
+  };
+ });
+ await phone.locator('#flightMode').selectOption('angle');await phone.waitForTimeout(50);await phone.locator('#flightMode').selectOption('acro');
+ await phone.waitForTimeout(1000);await wait(web,()=>window.ZebjusTraining.snapshot().mode==='acro');
+ if(await phone.locator('#flightMode').inputValue()!=='acro'||!await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Delayed old ACK overwrote mode/ARM');
+ const delayedAck=await phone.locator('#flightFeedback').textContent();measurements.push({feedbackJitterMs:[80,220,300],reorderedAck:true,droppedEverySeventhAck:true,feedback:delayedAck});
+ await web.evaluate(()=>{window.__feedbackTimers.forEach(clearTimeout);window.__testPeer.channel.send=window.__feedbackSend});
  // Malformed and replayed packets cannot mutate the plant.
  const prior=await web.evaluate(()=>window.ZebjusTraining.snapshot().seq);
  await phone.evaluate(()=>{const p=window.__testPeer;p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:1,sessionId:p.status().sessionId,mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}));p.channel.send('null');p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:999,sessionId:'wrong-session',mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}))});
@@ -44,13 +63,14 @@ try{
  await wait(phone,()=>document.getElementById('flightArm').getAttribute('aria-pressed')==='false');await wait(web,()=>!window.ZebjusTraining.snapshot().armed);
  // A paused sender leaves motors off within the receiver's 450ms watchdog.
  await wait(phone,()=>!document.getElementById('flightArm').disabled);await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
- await phone.evaluate(()=>{window.__originalSend=window.__testPeer.sendSimulatorControl;window.__testPeer.sendSimulatorControl=()=>true});
- await wait(web,()=>!window.ZebjusTraining.snapshot().armed,2500);await phone.evaluate(()=>window.__testPeer.sendSimulatorControl=window.__originalSend);await phone.waitForTimeout(200);
+ await phone.evaluate(()=>{Object.defineProperty(window.__testPeer.channel,'bufferedAmount',{configurable:true,get:()=>140000});});
+ await wait(web,()=>!window.ZebjusTraining.snapshot().armed,2500);await phone.evaluate(()=>{delete window.__testPeer.channel.bufferedAmount});await phone.waitForTimeout(200);
  if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Watchdog auto re-armed');
+ measurements.push({backpressureBytes:140000,normalAndCriticalSendsRejected:true,watchdogMs:450});
  await safeShot(phone,'test-output/android-stop.png');
  await phone.evaluate(()=>window.zebjusNetworkChanged());await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
  if(!await web.locator('#tpRun').isEnabled())throw Error('Web control did not return after disconnect');
  if(errors.length)throw Error('JavaScript errors: '+errors.join(' | '));
  writeFileSync('test-output/webrtc-applied-evidence.json',JSON.stringify({transport:'Real Chromium DTLS/SCTP WebRTC DataChannel',measurements,replayAfter:prior,errors},null,2));
- console.log('PASS real WebRTC: one plant, applied mirror, throttle hold, multitouch, exclusive ownership, live PID, mode, replay rejection, dual STOP, 450ms watchdog, network reset');
+ console.log('PASS real WebRTC: one plant, applied mirror, throttle hold, multitouch, exclusive ownership, live PID, mode, 80–300ms reordered/dropped feedback, replay rejection, dual STOP, bounded backpressure/450ms watchdog, network reset');
 }catch(e){console.error(e.stack||e);console.error(errors);await safeShot(web,'test-output/flight-error-web.png').catch(()=>{});await safeShot(phone,'test-output/flight-error-phone.png').catch(()=>{});process.exitCode=1}finally{await browser.close()}

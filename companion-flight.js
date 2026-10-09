@@ -1,7 +1,7 @@
 /* Landscape input preview + authenticated virtual-flight transmitter. */
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
-let peer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null;
+let peer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null;
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
@@ -37,7 +37,7 @@ function render(){
  const preview=current(),a=isOwned()&&armed&&lastApplied?.armed?lastApplied:null;
  const m=a?{...a.axes,throttle:a.throttle}:preview;
  $('flightThrottle').textContent=m.throttle+' µs';$('flightRoll').textContent=Math.round(m.roll*100)+'%';$('flightPitch').textContent=Math.round(m.pitch*100)+'%';$('flightYaw').textContent=Math.round(m.yaw*100)+'%';
- $('flightMode').value=mode;$('flightModeState').textContent=(a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+(mode==='acro'?'ACRO / RATE':'ANGLE');
+ $('flightMode').value=mode;$('flightModeState').textContent=(a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+((a?.mode||mode)==='acro'?'ACRO / RATE':'ANGLE');
  $('flightArm').textContent=armed?'DISARM':'ARM';$('flightArm').disabled=!isOwned()||(!armed&&(!ready||throttle>1050));$('flightArm').setAttribute('aria-pressed',String(armed));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
@@ -106,6 +106,9 @@ function onAck(a){
 function onTelemetry(packet){
  if(packet?.sessionId!==peer?.status().sessionId||!validApplied(packet.applied))return;
  const a=packet.applied;
+ // Telemetry may already be queued before ARM or a newer ACK. It must never
+ // overwrite that command or interpret an old DISARM as a fresh receiver STOP.
+ if(isOwned()&&(!Number.isSafeInteger(a.seq)||a.seq<Math.max(lastAckSeq,armed?armRequestSeq:0)))return;
  $('flightAppliedControls').textContent='APPLIED • '+a.throttle+' µs '+a.mode.toUpperCase()+' • '+(a.armed?'VIRTUAL ARMED':'DISARMED')+' • '+(a.source||'web').toUpperCase()+' #'+a.seq;
  if(a.angles&&a.motors&&a.vertical){
   const finite=v=>Number.isFinite(v)?v:0;
@@ -123,11 +126,14 @@ function bind(){
  $('flightArm').onclick=()=>{
   if(armed){doStop();return}if(!isOwned()||!ready){updateStatus('PAIR, GRANT CONTROL AND WAIT FOR RECEIVER');return}
   if(throttle>1050){updateStatus('THROTTLE MUST BE ≤1050');return}
-  clearTouches();armed=true;halted=false;lastAckAt=performance.now();sent.clear();
+  clearTouches();armed=true;halted=false;lastAckAt=performance.now();sent.clear();armRequestSeq=seq+1;
   if(!send(true)){doStop();return}updateStatus('VIRTUAL ARM REQUESTED');render();
  };
  $('flightStop').onclick=doStop;$('mobileSettingsStop').onclick=doStop;
- $('flightMode').onchange=e=>{mode=e.target.value==='acro'?'acro':'angle';render();if(isOwned())send(true)};
+ $('flightMode').onchange=e=>{mode=e.target.value==='acro'?'acro':'angle';render();if(isOwned()){
+  // A mode change supersedes in-flight ACKs from the previous requested mode.
+  sent.clear();send(true);
+ }};
  $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
  $('flightPair').onclick=openConnection;$('flightBack').onclick=closeConnection;$('flightSettings').onclick=openConnection;
  $('mobileConnection').addEventListener('close',()=>{window.ZebjusPairingStopCamera?.();$('flightSettings').setAttribute('aria-expanded','false')});
