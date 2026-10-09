@@ -31,11 +31,11 @@ test('Android permission denial offers user direct app-settings recovery',()=>{
 
 test('APK increments version code to allow upgrade and companion UI explains permissions',()=>{
  const build=read('mobile-android/app/build.gradle');
- assert.ok(build.includes('versionCode 3'));
- assert.ok(build.includes("versionName '1.2.0-one-scan'"));
+ assert.ok(build.includes('versionCode 4'));
+ assert.ok(build.includes("versionName '1.3.0-two-way'"));
  const html=read('companion.html'),js=read('companion.js');
  assert.ok(html.includes('id="cameraPermissionHelp"'));
  assert.ok(html.includes('Allow only while using the app.'));
  assert.ok(js.includes("e?.name==='NotAllowedError'"));
- assert.ok(js.includes("message('QR scanner: '+text)"));
+ assert.ok(js.includes("message('QR scanner: '+help)"));
 });
