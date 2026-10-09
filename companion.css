@@ -20,3 +20,27 @@ button:focus-visible{outline:2px solid #69efc0;outline-offset:2px}
 .phone-code-panel #phoneShortCode{color:#bcffcc;letter-spacing:.19em;font-size:29px;font-weight:900;font-family:ui-monospace,monospace}
 .phone-code-panel #phoneShortCodeStatus{color:#c3e5d6;line-height:1.6}
 .phone-code-panel #phoneRetryCode{width:100%}
+
+
+/* V1.4.3: six-digit code is first-class; Android scanner gives visible feedback. */
+.phone-code-panel{order:0;border:2px solid #46e5a1;background:linear-gradient(120deg,#124637,#0c292c);box-shadow:0 0 22px #40ee9922}
+.phone-code-panel .pin-box{padding:14px 12px;display:grid;justify-items:center;gap:7px;border:2px solid #50f3a9;background:#05251f}
+.phone-code-panel #phoneShortCode{font-size:clamp(30px,10vw,48px);letter-spacing:.19em;text-align:center;color:#e4ffe5;text-shadow:0 0 15px #2aff9250;font-variant-numeric:tabular-nums}
+.phone-code-panel .section-title strong{color:#b8ffde}
+.qr-phone-alternative{background:#0d2331;border:1px solid #2c5e6c;padding:12px;border-radius:10px}
+.qr-phone-alternative summary{cursor:pointer;font-size:12px;font-weight:850;color:#b2dff8}
+.phone-scan-feedback{border:1px solid #387864;background:#103830;color:#bcffe4;padding:10px 13px;min-height:42px;border-radius:10px;text-align:center;font-size:12px;font-weight:850;transition:background .15s,border-color .15s}
+.phone-scan-feedback[data-status="success"]{background:#104b34;border-color:#4ff4a1;color:#e0ffe8;animation:mobile-scan-success .34s ease-out}
+.phone-scan-feedback[data-status="scanning"]{background:#133442;border-color:#4aa8bc;color:#dbf7ff}
+.phone-scan-feedback[data-status="error"]{background:#4d202a;border-color:#d46b76;color:#ffccd6}
+.phone-scan-frame{position:relative;display:grid;place-items:center;min-height:240px;border-radius:12px;border:2px solid #43ce95;overflow:hidden;background:#020e17}
+.phone-scan-frame #scanVideo{width:100%;max-height:420px;object-fit:contain;margin:0}
+.phone-scan-guide{position:absolute;top:50%;left:50%;width:67%;aspect-ratio:1;max-width:330px;transform:translate(-50%,-50%);pointer-events:none;border:3px solid #67ffc2;border-radius:14px;box-shadow:0 0 0 100vw #0002 inset}
+#phoneTorchBtn:not(:disabled){background:#183c40;border-color:#59d5a8;color:#e0fff0}
+#phoneTorchBtn[data-enabled="true"]{background:#f8d56f;border-color:#fff6b1;color:#3a2c04}
+#scanOfferBtn:not(:disabled){background:linear-gradient(110deg,#0bb47d,#05785a);border:2px solid #99ffd0;box-shadow:0 3px 13px #16bf773b}
+button:active:not(:disabled){transform:scale(.94)!important;filter:brightness(1.28)}
+button:focus-visible{outline:3px solid #b8ffde;outline-offset:3px}
+#phoneShortCodeStatus{font-size:12px;font-weight:700}
+@keyframes mobile-scan-success{0%{transform:scale(.95)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.phone-scan-feedback[data-status="success"]{animation:none}}
