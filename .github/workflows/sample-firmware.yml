@@ -21,7 +21,7 @@ jobs:
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.10 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
       - name: Compile sample for Seeed XIAO ESP32-C6
-        run: arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32C6 --export-binaries --output-dir build firmware/xiao_c6_sample
+        run: arduino-cli compile --fqbn esp32:esp32:XIAO_ESP32C6:CDCOnBoot=cdc --export-binaries --output-dir build firmware/xiao_c6_sample
       - name: Pack and validate flash images
         run: python3 tools/build_sample.py build
       - uses: actions/upload-artifact@v4
@@ -30,6 +30,8 @@ jobs:
           path: |
             firmware/XIAO_C6_SAMPLE_FACTORY.bin
             firmware/XIAO_C6_SAMPLE_APP.bin
+            firmware/XIAO_C6_BOOTLOADER.bin
+            firmware/XIAO_C6_PARTITIONS.bin
             firmware/sample.json
           retention-days: 7
       - name: Save verified binaries on build branch
@@ -37,6 +39,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add firmware/XIAO_C6_SAMPLE_FACTORY.bin firmware/XIAO_C6_SAMPLE_APP.bin firmware/sample.json
+          git add firmware/XIAO_C6_SAMPLE_FACTORY.bin firmware/XIAO_C6_SAMPLE_APP.bin firmware/XIAO_C6_BOOTLOADER.bin firmware/XIAO_C6_PARTITIONS.bin firmware/sample.json
           git commit -m 'Add compiled XIAO ESP32-C6 sample images'
           git push origin HEAD:sample-build

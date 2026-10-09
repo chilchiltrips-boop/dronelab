@@ -26,6 +26,8 @@ def build(folder: Path):
     boot=unique(folder,'.bootloader.bin').read_bytes()
     partitions=unique(folder,'.partitions.bin').read_bytes()
     image_check(app)
+    if partitions[:2]!=b'\xaa\x50':
+        raise ValueError('ESP partition table magic missing')
     if len(boot)>0x8000 or len(partitions)>0x8000 or len(app)>0x140000:
         raise ValueError('Image or partition data exceeds its flash slot')
     factory=bytearray(b'\xff'*FLASH_SIZE)
@@ -34,6 +36,8 @@ def build(folder: Path):
     image_check(factory,APP_OFFSET)
     if factory[0]!=0xe9: raise ValueError('Bootloader header missing')
     output=ROOT/'firmware'
+    (output/'XIAO_C6_BOOTLOADER.bin').write_bytes(boot.ljust(0x8000,b'\xff'))
+    (output/'XIAO_C6_PARTITIONS.bin').write_bytes(partitions.ljust(0x8000,b'\xff'))
     files={'factory':('XIAO_C6_SAMPLE_FACTORY.bin',bytes(factory)),'app':('XIAO_C6_SAMPLE_APP.bin',app)}
     catalog={'schema':1,'boardId':'xiao-c6','board':'XIAO_ESP32C6','version':'sample-1.0.0','appOffset':'0x10000','flashBytes':FLASH_SIZE}
     for kind,(name,data) in files.items():
