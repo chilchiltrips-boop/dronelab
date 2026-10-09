@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0-qr-beta.2",
+  "version": "1.1.0-qr-beta.3",
   "channel": "testing",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -9,5 +9,5 @@
     "Android companion"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "a27ff9934937"
+  "buildCommit": "b01d6f1f9821"
 }
