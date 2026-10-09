@@ -15,6 +15,10 @@ on:
       - 'tripod.html'
       - 'tools/flight-controller-browser.mjs'
       - 'tools/flight-input.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/python-lab.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/release-signing.test.mjs'
       - '.github/workflows/android-flight-controller.yml'
   workflow_dispatch:
 permissions:
