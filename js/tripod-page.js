@@ -383,7 +383,8 @@ function drawUI(){
 function frame(time){
  const dt=lastFrame?clamp((time-lastFrame)/1000,0,.064):.016;lastFrame=time;
  const left=pointers.get('left');if(left&&s.running)s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
- inputAxes();advanceSimulator(s,dt);const snapshot=getSnapshot(s);
+ if(!(inEmbeddedMode()&&remoteAt&&performance.now()-remoteAt<=450))inputAxes();
+ advanceSimulator(s,dt);const snapshot=getSnapshot(s);
  visual?.draw(snapshot,dt);
  if(time-lastChart>75){if(!graphPaused)sampleChart();lastChart=time}
  if(time-lastUI>100){drawUI();lastUI=time}
