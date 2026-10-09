@@ -256,7 +256,7 @@ function bind(){
  $('simRemoteStop').onclick=()=>stopSimulatorRemote('Web emergency STOP');
  window.addEventListener('dronelab:tab',e=>{
   if(e.detail?.name==='simcontrol'&&!frame().getAttribute('src')){
-   frame().setAttribute('src','./tripod.html?embedded=1');simulatorReady=false;
+   simulatorReady=false;host?.setSimulatorReady(false);frame().setAttribute('src','./tripod.html?embedded=1');
   }
  });
  flightWatchdog=setInterval(()=>{
