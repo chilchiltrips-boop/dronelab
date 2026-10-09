@@ -1,5 +1,5 @@
 {
-  "version": "1.5.2+21",
+  "version": "1.5.3+22",
   "channel": "release",
   "previousStable": "c1ac834fb398818641dd5e0dd930a8f12d337d56",
   "features": [
@@ -18,5 +18,5 @@
     "Compact step-by-step pairing, safe session/camera cancellation and offline cache fixes"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "99b8600f5160"
+  "buildCommit": "7c7378c98a2e"
 }
