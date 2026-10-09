@@ -72,6 +72,10 @@ test('ANGLE training pulse level-holds; ACRO pulse ends in zero rate without ang
  const b=createSimulator();setFlightMode(b,'acro');startSimulator(b);b.throttle=1450;assert.ok(startTuningPulse(b,'roll',12));
  for(let k=0;k<180;k++)stepSimulator(b);
  assert.equal(b.targetRollRate,0);assert.ok(Math.abs(b.roll)>0.1,'ACRO pulse did not rotate the model');
- const tilt=b.roll;for(let k=0;k<1000;k++)stepSimulator(b);
- assert.ok(Math.abs(b.roll-tilt)<3.0,'ACRO auto-leveled after a rate pulse');
+ for(let k=0;k<1000;k++)stepSimulator(b);
+ const settledTilt=b.roll;
+ for(let k=0;k<1000;k++)stepSimulator(b);
+ assert.ok(Math.abs(settledTilt)>3,'ACRO training pulse unexpectedly returned to level');
+ assert.ok(Math.abs(b.roll-settledTilt)<1.0,'Centered ACRO drifted after angular rate settled: '+b.roll);
+ assert.ok(Math.abs(b.rollRate)<.35,'ACRO failed to settle angular rate at zero stick');
 });
