@@ -36,6 +36,6 @@ test('APK increments version code to allow upgrade and companion UI explains per
  const html=read('companion.html'),js=read('companion.js');
  assert.ok(html.includes('id="cameraPermissionHelp"'));
  assert.ok(html.includes('Allow only while using the app.'));
- assert.ok(js.includes("e?.name==='NotAllowedError'"));
+ assert.ok(js.includes("err?.name==='NotAllowedError'"));
  assert.ok(js.includes("message('QR scanner: '+help)"));
 });
