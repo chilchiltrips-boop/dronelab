@@ -1,7 +1,7 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, main]
+    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, main]
     paths:
       - 'pairing-core.js'
       - 'pairing-qr-ui.js'
@@ -15,8 +15,6 @@ on:
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
       - 'tools/qr-pairing-browser.mjs'
-      - 'tools/local_pair_server.py'
-      - 'tools/one-scan-bridge.test.mjs'
       - '.github/workflows/qr-browser-test.yml'
   workflow_dispatch:
 permissions:
@@ -44,7 +42,7 @@ jobs:
       - name: Test two real WebRTC peers and all LED protocol checks
         run: |
           mkdir -p test-output
-          python3 tools/local_pair_server.py --lan-ip 127.0.0.1 --port 8765 > /tmp/qr-pairing-http.log 2>&1 &
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &
           sleep 3
           node tools/qr-pairing-browser.mjs
       - uses: actions/upload-artifact@v4
