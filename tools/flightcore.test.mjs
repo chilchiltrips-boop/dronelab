@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-const root=new URL('./',import.meta.url);
+const root=new URL('../',import.meta.url);
 const catalog=JSON.parse(readFileSync(new URL('./firmware-catalog.json',root),'utf8'));
 const updater=readFileSync(new URL('./firmware-updater.js',root),'utf8');
 const sketch=readFileSync(new URL('./FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino',root),'utf8');
