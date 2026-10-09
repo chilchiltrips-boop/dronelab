@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "boardId": "xiao-c6",
+  "board": "XIAO_ESP32C6",
+  "version": "sample-1.0.0",
+  "appOffset": "0x10000",
+  "flashBytes": 4194304,
+  "factory": {
+    "file": "XIAO_C6_SAMPLE_FACTORY.bin",
+    "bytes": 4194304,
+    "sha256": "3a29618e54f7c7a95667139486ba5b878772ad179ec754ac8d86ac53bf996915"
+  },
+  "app": {
+    "file": "XIAO_C6_SAMPLE_APP.bin",
+    "bytes": 1002336,
+    "sha256": "5d24a93a0f8bcd647d12c5066ead134263263def2744eca4833f5e51e52ec7a9"
+  }
+}
