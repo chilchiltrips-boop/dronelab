@@ -1,13 +1,22 @@
 import {createI2CBridge} from './usb-i2c-bridge.js';
-const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1';
-const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Change print() to your own custom message.\nwhile True:\n    i2c_scan_result = await i2c_scan()\n    print('I2C scan result =', i2c_scan_result['addresses'])\n    print('Total devices =', i2c_scan_result['total'])\n    await asyncio.sleep(0.1)\n","custom":"import asyncio\nfrom zebjus import i2c_scan\n\nwhile True:\n    result = await i2c_scan()\n    device_list = ', '.join(result['addresses']) or 'No devices'\n    print('My custom message: Found', result['total'], 'I2C devices')\n    print('Addresses ->', device_list)\n    await asyncio.sleep(0.1)\n"};
+const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
+const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Change print() to your own custom message.\nwhile True:\n    i2c_scan_result = await i2c_scan()\n    print('I2C scan result =', i2c_scan_result['addresses'])\n    print('Total devices =', i2c_scan_result['total'])\n    await asyncio.sleep(0.1)\n","custom":"import asyncio\nfrom zebjus import i2c_scan\n\nwhile True:\n    result = await i2c_scan()\n    device_list = ', '.join(result['addresses']) or 'No devices'\n    print('My custom message: Found', result['total'], 'I2C devices')\n    print('Addresses ->', device_list)\n    await asyncio.sleep(0.1)\n","basic":"import asyncio\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\n# A real Python graph appears in the Python Plot Window.\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n"};
 const bridge=createI2CBridge();
-let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false;
+const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
+let cameraStream=null,plotUrl=null,outputWindowDragging=false,layoutReady=false;
+let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false;
 const fallbacks=new Map();
 function editHistory(){if(!fallbacks.has(active))fallbacks.set(active,{undo:[],redo:[]});return fallbacks.get(active)}
-function status(msg,kind=''){const p=$('pyStatus'),r=$('pyRuntimeState');if(p)p.textContent=msg;if(r){r.textContent=msg.toUpperCase();r.className='status '+kind}}
-function terminal(v){const box=$('pythonTerminal');if(!box)return;const t=String(v??'');box.textContent=(box.textContent+t).slice(-54000);box.scrollTop=box.scrollHeight;terminalLines+=(t.match(/\n/g)||[]).length;$('pyLineCount').textContent=terminalLines+' lines'}
-function clearTerminal(){const e=$('pythonTerminal');if(e)e.textContent='';terminalLines=0;$('pyLineCount').textContent='0 lines'}
+function status(msg,kind=''){const p=$('pyStatus'),r=$('pyRuntimeState');if(p)p.textContent=msg;if(r){r.textContent=String(msg).length>34?String(msg).slice(0,34).toUpperCase()+'…':String(msg).toUpperCase();r.className='status '+kind}}
+function terminal(v,kind='out'){
+ const box=$('pythonTerminal');if(!box)return;
+ const t=String(v??'');if(!t)return;
+ const span=document.createElement('span');span.className=kind==='error'?'python-terminal-error':kind==='warn'?'python-terminal-warn':'python-terminal-out';span.textContent=t;box.append(span);
+ terminalLines+=(t.match(/\n/g)||[]).length;$('pyLineCount').textContent=terminalLines+' lines';
+ if(box.textContent.length>64000)box.textContent='… older terminal output trimmed …\n'+box.textContent.slice(-50000);
+ box.scrollTop=box.scrollHeight;
+}
+function clearTerminal(){const e=$('pythonTerminal');if(e)e.replaceChildren();terminalLines=0;$('pyLineCount').textContent='0 lines'}
 function currentCode(){return editor?editor.getValue():$('pythonEditor')?.value||''}
 function save(){
  if(!loading)files[active]=currentCode();
@@ -57,7 +66,7 @@ function deleteFile(){
 }
 function applyExample(key){
  const code=EXAMPLES[key];if(!code)return;
- if(currentCode()!==EXAMPLES.scanner&&currentCode()!==EXAMPLES.custom&&!confirm('Replace the selected file with the example?'))return;
+ if(!Object.values(EXAMPLES).includes(currentCode())&&!confirm('Replace the selected file with the example?'))return;
  setCode(code);save();
 }
 function exportProject(){
@@ -87,7 +96,7 @@ async function connectUsb(){
 }
 function stopPython(notify=true){
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
- if(notify){terminal('\n[Python stopped]\n');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
+ updateButtons();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
 }
 async function onRpc(w,m){
  try{
@@ -105,13 +114,13 @@ function makeWorker(){
  w.onmessage=e=>{
   if(worker!==w)return;const m=e.data||{};
   if(m.type==='rpc')return void onRpc(w,m);
-  if(m.type==='stdout'||m.type==='stderr')return terminal(m.text);
+  if(m.type==='stdout'||m.type==='stderr')return terminal(m.text,m.type==='stderr'?'error':'out');
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
   if(m.type==='done'||m.type==='error'){
-   if(m.type==='error'){terminal('\n[Python error]\n'+m.error+'\n');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
+   if(m.type==='error'){terminal('\n[Python error]\n'+m.error+'\n','error');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
    else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE'}
-   running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
+   running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;updateButtons();
   }
  };
  w.onerror=e=>{if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
@@ -120,9 +129,10 @@ function makeWorker(){
 function runPython(){
  if(running)return;
  const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
+ if(/\bi2c_scan\s*\(/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this I2C script.\n','error');status('USB connection required','warn');return}
  files[active]=code;save();if(worker){worker.terminate();worker=null}
- worker=makeWorker();running=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
- clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');
+ worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
+ clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
  worker.postMessage({type:'run',filename:active,code,files});
 }
 function addCompletions(M){
