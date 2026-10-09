@@ -68,7 +68,7 @@ try{
  if((await web.locator('#pairCodeMode').getAttribute('aria-pressed'))!=='true')throw Error('Code mode must be prioritized');
  if(!((await web.locator('#pairScanHint').textContent())||'').includes('Recommended'))throw Error('Default code path not explained');
  if(!((await phone.locator('#phoneShortCode').count())===1&&await phone.locator('.phone-code-panel').isVisible()))throw Error('Android primary code panel missing');
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.3'))throw Error('Web version not updated to 1.4.3');
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.4'))throw Error('Web version not updated to 1.4.4');
  if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
  if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
  // CI camera surrogate: Step 2 manually starts scanning; Step 1 MUST NOT.
@@ -133,7 +133,7 @@ try{
  await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:15000});
  if((await web.locator('#pairCode').textContent())!=='------')throw Error('Refresh did not discard PIN');
  if(errors.length)throw Error('JS errors: '+errors.join(' | '));
- console.log('SUCCESS Smart Two-Way QR 1.4.3: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
+ console.log('SUCCESS Smart Two-Way QR 1.4.4: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
 }catch(err){
  console.error('SMART TWO-WAY QR TEST FAILED:',err.stack||err);
  console.error('WEB:',await web.locator('#pairAnswerState').textContent().catch(()=>''),'PHONE:',await phone.locator('#answerState').textContent().catch(()=>''));
