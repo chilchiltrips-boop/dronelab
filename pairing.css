@@ -90,3 +90,34 @@
 .qr-step2-frame.scanning .qr-scan-target{opacity:.9}
 .qr-step2-status{text-align:center;display:block;width:100%;min-height:29px;font-weight:750}
 @media(max-width:590px){.qr-step2-frame{aspect-ratio:1/1;min-height:240px}.qr-step2-buttons button{flex:1 1 180px}}
+
+
+/* V1.4.3: center the Step ONE Web QR; the code path is primary. */
+.qr-step1-layout{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;width:100%}
+.qr-step1-qr{margin-inline:auto;min-height:280px;width:min(100%,370px);border-width:3px;box-shadow:0 5px 22px #0005}
+.qr-step1-qr canvas{max-width:100%;image-rendering:pixelated}
+.qr-scanned-note{width:min(100%,450px);padding:10px 13px;text-align:center;border-radius:10px;border:1px solid #36756e;background:#0b2934;color:#b8eff7;font-size:12px;font-weight:850;min-height:37px}
+.qr-scanned-note[data-status="ready"]{color:#b9ffe4;border-color:#26795c;background:#103a30}
+.qr-scanned-note[data-status="processing"]{color:#ffe0a5;border-color:#94723a;background:#3d3019}
+.qr-scanned-note[data-status="success"]{color:#c4ffe7;border-color:#2cbb83;background:#124634;animation:qr-feedback-pop .36s ease-out}
+.qr-scanned-note[data-status="error"]{color:#ffc4cc;border-color:#a94156;background:#401b24}
+.qr-step1-layout .qr-data-card{width:min(100%,450px);text-align:center;flex:none;justify-items:center;padding:5px 2px}
+.qr-priority-button{font-weight:950!important;background:linear-gradient(105deg,#0e9d70,#075f56)!important;border:2px solid #81ffcf!important;color:#fff!important;box-shadow:0 0 0 2px #14c89135}
+.qr-recommended{border-radius:40px;background:#d6ffe5;color:#115b42;padding:3px 6px;font-size:9px;font-weight:1000;letter-spacing:.025em}
+.qr-confirm-panel{border-radius:13px;padding:15px;display:grid;gap:12px;border:2px solid #3b5361;background:#0b212e;transition:background .18s,border-color .18s,box-shadow .18s}
+.qr-confirm-panel.waiting{opacity:.84}
+.qr-confirm-panel.ready{background:#163b2a;border-color:#62f3a2;box-shadow:0 0 0 3px #4fe89c25,0 0 28px #5bea8d30}
+.qr-confirm-panel.confirmed{background:#103f33;border-color:#44bd86}
+.qr-confirm-hint{font-weight:850;font-size:13px;color:#d5f2ee;line-height:1.5}
+.qr-confirm-panel.ready .qr-confirm-hint{color:#bbffda}
+.qr-confirm-button{min-width:210px!important;flex:1;min-height:51px!important;font-size:15px!important;font-weight:1000!important;border:2px solid #455869!important;color:#a5b8be!important;background:#1b2830!important;cursor:not-allowed}
+.qr-confirm-button.ready:not(:disabled){background:linear-gradient(115deg,#00ba64,#05855a)!important;border-color:#b1ffd1!important;color:white!important;cursor:pointer!important;box-shadow:0 0 0 3px #34efa754;animation:qr-confirm-attention 1.6s ease-in-out 3}
+.qr-confirm-panel.confirmed .qr-confirm-button{background:#236e57!important;color:#d1ffed!important;border-color:#47c799!important}
+#pairConnectCodeBtn.is-ready:not(:disabled){color:white!important;background:linear-gradient(110deg,#078a74,#15ad6b)!important;box-shadow:0 0 0 3px #4bffab26}
+.qr-confirm-actions{align-items:stretch}
+#tab-settings button:not(:disabled):active{transform:scale(.95);filter:brightness(1.15)}
+#tab-settings button:focus-visible{outline:3px solid #99ffd8;outline-offset:2px}
+@keyframes qr-confirm-attention{0%,100%{box-shadow:0 0 0 3px #47efaa44;transform:scale(1)}50%{box-shadow:0 0 0 7px #47efaa66;transform:scale(1.025)}}
+@keyframes qr-feedback-pop{0%{transform:scale(.96)}100%{transform:scale(1)}}
+@media(max-width:680px){.qr-priority-button{width:100%}.qr-confirm-button{width:100%}.qr-step1-qr{width:min(100%,330px)}}
+@media(prefers-reduced-motion:reduce){.qr-confirm-button.ready:not(:disabled),.qr-scanned-note[data-status="success"]{animation:none}}
