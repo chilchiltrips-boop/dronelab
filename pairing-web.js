@@ -58,7 +58,7 @@ function selectMode(mode){
  $('pairCameraSection').hidden=!camera;$('pairCodeSection').hidden=camera;
  $('pairStep2Title').textContent=camera?'Step 2 • Scan Phone QR':'Step 2 • Type Android Code';
  if(!camera){stopCamera();if(!host.status().paired)$('pairAnswerState').textContent='Type the Android 6-digit CONNECT code. No webcam needed.'}
- else if(offer&&!host.status().paired)void scanResponse();
+ else if(offer&&!host.status().paired)$('pairAnswerState').textContent='Step 2 ready • Show Android Phone QR, then click Start Camera.';
 }
 async function connectWithCode(){
  const raw=$('pairPhoneCode').value.replace(/\D/g,'').slice(0,6);
@@ -84,7 +84,11 @@ async function connectWithCode(){
  }finally{codeBusy=false;$('pairConnectCodeBtn').disabled=!ZebjusCodePair.validCode($('pairPhoneCode').value)}
 }
 
-function stopCamera(){ZebjusQR.stop();scanStop=null}
+function stopCamera(){
+ ZebjusQR.stop();scanStop=null;
+ $('pairScanFrame')?.classList.remove('scanning');
+ if($('pairScanPlaceholder'))$('pairScanPlaceholder').hidden=false;
+}
 async function receiveResponse(raw){
  if(answerProcessing)return;
  const ticket=offerEpoch;answerProcessing=true;stopCamera();
@@ -108,14 +112,18 @@ async function scanResponse(){
  if(!host.status().sessionId){$('pairAnswerState').textContent='Click Pair Mobile to create a fresh QR first.';return}
  if(host.status().paired){$('pairAnswerState').textContent='Already paired. Disconnect before scanning another phone.';return}
  $('pairScanAnswerBtn').disabled=true;
+ $('pairAnswerState').textContent='Step 2 initializing • allow laptop camera permission…';
+ $('pairScanFrame')?.classList.add('scanning');
+ if($('pairScanPlaceholder'))$('pairScanPlaceholder').hidden=true;
  try{
   scanStop=await ZebjusQR.scan({
    video:$('pairScanVideo'),canvas:$('pairScanCanvas'),
-   onData:text=>{stopCamera();void receiveResponse(text)},
+   onData:text=>{stopCamera();$('pairAnswerState').textContent='QR detected instantly • verifying WebRTC response…';void receiveResponse(text)},
    onError:err=>{$('pairAnswerState').textContent='Camera error: '+err.message},
    onStatus:message=>{$('pairAnswerState').textContent=message}
   });
  }catch(err){
+  stopCamera();
   $('pairAnswerState').textContent='Laptop camera unavailable: '+err.message+'. Use Advanced → manual response as a fallback.';
   stamp('Laptop camera blocked/unavailable: '+err.message);
  }finally{$('pairScanAnswerBtn').disabled=false}
@@ -134,11 +142,11 @@ async function createOffer(){
   $('pairOfferText').value=data.qr;$('pairCode').textContent=data.pin;
   ZebjusQR.draw($('pairOfferCanvas'),data.qr);
   $('pairOfferCanvas').hidden=false;$('pairOfferBox').querySelector('p')?.setAttribute('hidden','');
-  $('pairAnswerState').textContent='Scan Web QR on Android. Phone response QR appears automatically; show it to the laptop webcam.';
+  $('pairAnswerState').textContent='Step 1 ready. Scan the Web QR with Android. When Phone Response QR appears, initialize Step 2 by clicking Start Camera.';
   status('Waiting for Android QR');go('settings');
   stamp('Web QR ready; expiry in 3 minutes');
-  // Only open a laptop webcam when Camera mode is selected.
-  if(pairMode==='camera')void scanResponse();
+  // The webcam must NEVER open during Step 1. Step 2 explicitly starts it.
+  if(pairMode==='camera')$('pairAnswerState').textContent='Step 2 ready • Show Android Phone QR, then press Start Camera.';
   else $('pairCodeStatus').textContent='Web QR ready. Scan it on Android; type the phone CONNECT code here.';
  }catch(err){$('pairAnswerState').textContent='Could not generate QR: '+err.message;stamp('QR failure: '+err.message)}
  finally{$('pairCreateBtn').disabled=false;sync()}
