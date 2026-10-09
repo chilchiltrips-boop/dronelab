@@ -14,8 +14,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 8
-    versionName '1.4.3-fast-qr'
+    versionCode 9
+    versionName '1.4.4-smart-pair'
   }
   signingConfigs {
     zebjusRelease {
