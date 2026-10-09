@@ -7,3 +7,9 @@ button:focus-visible{outline:2px solid #69efc0;outline-offset:2px}
 .conn-status.disconnected{border:1px solid #ae354a;color:#ff939c;background:#351521;font-weight:900}
 #answerState,#networkState{overflow-wrap:anywhere}
 @media(prefers-reduced-motion:reduce){button{transition:none}}
+
+/* Full-width phone response QR, no manual accept action. */
+.qr-phone-frame{width:min(100%,440px);min-height:250px;padding:9px;transition:width .2s}
+.qr-phone-frame canvas{width:100%;height:auto;image-rendering:pixelated}
+.qr-phone-frame.qr-large{width:100%;padding:3px;border:3px solid #22c58e}
+#answerState{font-weight:800;color:#b3ffe0}
