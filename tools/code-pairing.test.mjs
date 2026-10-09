@@ -7,7 +7,7 @@ import {webcrypto} from 'node:crypto';
 const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 
-function peerSimulator(){
+function peerSimulator(delayMs=0){
  const peers=new Map();let generated=0;
  class Channel{
   listeners=new Map();other=null;closed=false;
@@ -23,14 +23,14 @@ function peerSimulator(){
   emit(n,v){for(const cb of this.listeners.get(n)||[])cb(v)}
   connect(id){const p=peers.get(id),local=new Channel(),remote=new Channel();local.other=remote;remote.other=local;
    if(!p){queueMicrotask(()=>this.emit('error',{type:'peer-unavailable',message:'Peer not registered'}));return local}
-   queueMicrotask(()=>{p.emit('connection',remote);queueMicrotask(()=>local.emit('open'))});
+   queueMicrotask(()=>{p.emit('connection',remote);setTimeout(()=>{remote.emit('open');local.emit('open')},delayMs)});
    return local;
   }
   destroy(){this.destroyed=true;peers.delete(this.id)}
  };
 }
-function createRuntime(){
- const context={crypto:webcrypto,TextEncoder,Uint8Array,console,setTimeout,clearTimeout,Peer:peerSimulator(),URL};
+function createRuntime(delayMs=0){
+ const context={crypto:webcrypto,TextEncoder,Uint8Array,console,setTimeout,clearTimeout,Peer:peerSimulator(delayMs),URL};
  context.globalThis=context;vm.runInNewContext(read('pairing-code.js'),context,{filename:'pairing-code.js'});return context.ZebjusCodePair;
 }
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -53,6 +53,21 @@ test('6-digit code advertises only answer, authenticates via Web QR secret and e
   console.log('PASS authenticated six-digit code -> WebRTC answer, expired code and invalid code rejected');
  }finally{phone.stop()}
 });
+test('College network ICE negotiation > 6 seconds does not prematurely close Android answer',async()=>{
+ const app=createRuntime(6700);
+ const offer='zj1:1:'+('A'.repeat(400)),answer='zj1:1:'+('B'.repeat(450)),sid='0123456789abcdef01234567';
+ let current='',status='';
+ const phone=app.beginPhone({offer,answer,expires:Date.now()+90000,onCode:c=>current=c,onStatus:m=>status=m});
+ try{
+  await phone.start();await wait(50);
+  assert.match(current,/^[1-9]\d{5}$/);
+  const received=await app.resolveAnswer({offer,code:current,sid,expires:Date.now()+90000});
+  assert.equal(received,answer);
+  assert.ok(/answer sent securely|Android/i.test(status),status);
+  console.log('PASS slow PeerJS ICE > 6s reaches answer without premature auth-timeout');
+ }finally{phone.stop()}
+},{timeout:15000});
+
 test('both QR pairing and code pairing scripts and UI remain available',()=>{
  const web=read('pairing-web.js'),html=read('index.html'),mobile=read('companion.js'),app=read('companion.html'),css=read('pairing.css');
  assert.ok(web.includes('ZebjusCodePair.resolveAnswer'));
