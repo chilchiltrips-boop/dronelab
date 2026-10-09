@@ -115,6 +115,13 @@ public class MainActivity extends Activity {
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
                 Uri url = request.getUrl();
+                // Only this official release APK link is allowed to open externally.
+                // Android/Chrome handles download + user-approved package update.
+                if ("https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk".equals(url.toString())) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, url)); }
+                    catch (Exception ignored) { /* User can download from GitHub website */ }
+                    return true;
+                }
                 return !"https".equals(url.getScheme()) || !"appassets.androidplatform.net".equals(url.getHost());
             }
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
