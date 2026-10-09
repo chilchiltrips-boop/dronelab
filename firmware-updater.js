@@ -17,7 +17,7 @@ function formatBuildTime(v){if(!v)return'--';const d=new Date(v);return Number.i
 function stage(name,state){const e=$('#fwStage'+name);if(e)e.className=state||''}
 function resetStages(){['Prepare','Flash','Verify','Reboot','Reconnect'].forEach(x=>stage(x,''))}
 function progress(p,title){p=Math.max(0,Math.min(100,Math.round(p)));const b=$('#fwProgressBar');if(b)b.style.width=p+'%';text('#fwProgressPct',p+'%');if(title)text('#fwProgressTitle',title)}
-function setBusy(on){busy=!!on;['#fwAutoLoadBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on){busy=!!on;['#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){try{const h=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch{return''}}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
@@ -164,7 +164,7 @@ function usbMd5Hex(bytes){
 async function connectUsb(){
  if(busy)return;if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
  try{
-  const port=await navigator.serial.requestPort();if(monitorPort)await closeSerialMonitor();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);usbLastPort=port;await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
+  const port=await navigator.serial.requestPort();if(monitorPort)await closeSerialMonitor();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
   for(let attempt=0;attempt<rates.length;attempt++){
    try{serialPort=port;transport=new mod.Transport(port,true);loader=new mod.ESPLoader({transport,baudrate:rates[attempt],terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}});installUsbCompatibility(loader);usbSignature=await loader.main(mode);usbBoardId=mapHardwareSignature(usbSignature);const board=boardById(usbBoardId);if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');await probeUsbFlash(loader,board);if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(rates[attempt]);break}
    catch(error){await disconnectUsb(false);if(attempt+1===rates.length||/Unsupported USB chip|smaller than/.test(error.message))throw error;log('USB handshake failed at '+rates[attempt]+' baud; retrying the same port at 115200.');}
@@ -196,8 +196,8 @@ async function usbFlash(){
   written=true;stage('Flash','done');stage('Verify','done');stage('Reboot','active');progress(90,'Firmware written • requesting reset…');await loader.after('hard_reset');
   progress(94,'Reset requested • opening live USB Serial Monitor');log('USB scanner image written and transfer MD5 checked.');stage('Reboot','done');monitorPendingScan=true;await disconnectUsb(false);stage('Reconnect','active');
   await sleep(350);
-  try{await openSerialMonitor();progress(96,'Serial opened • waiting for a real I2C scan line');badge('#fwOverallBadge','WAITING FOR SCANNER OUTPUT','warn')}
-  catch(error){monitorPendingScan=false;progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);appendSerialOutput('USB flash finished. Click Serial Monitor and select the board port to read its real output.\n')}
+  try{await openSerialMonitor({allowPrompt:false});progress(96,'Serial opened • waiting for firmware output');badge('#fwOverallBadge','WAITING FOR SERIAL OUTPUT','warn')}
+  catch(error){monitorPendingScan=false;progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);log('Use Open Serial Port to select the device, or press its RESET button if it is still in bootloader mode.')}
  }catch(e){
   if(written){log('USB bytes written but reset/Serial confirmation pending: '+e.message);monitorPendingScan=false;await disconnectUsb(false);progress(96,'Written • open Serial Monitor to verify boot');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn')}
   else{stage('Flash','error');badge('#fwOverallBadge','FAILED','danger');progress(0,'USB flash failed');log('USB flash failed: '+e.message);await disconnectUsb(false);log('Reconnect USB at 115200 before retrying. Use BOOT + RESET if the kit remains in download mode.')}
@@ -205,58 +205,188 @@ async function usbFlash(){
 }
 async function disconnectUsb(update=true){try{if(transport)await transport.disconnect()}catch{}loader=null;transport=null;serialPort=null;usbSignature='';usbBoardId='';text('#fwUsbChip','--');text('#fwUsbState','Not connected');const b=$('#fwSerialBadge');if(b){b.textContent='USB NOT CONNECTED';b.className='firmware-badge offline'}if(update){log('USB disconnected.');await targetBoardId(true)}}
 // USB Serial Monitor is mutually exclusive with the flashing transport.
+// Firmware-agnostic Web Serial tools. Flashing owns USB exclusively; monitor releases it before flashing.
+let monitorWanted=false,monitorLineBuffer='',serialPlotter=null,serialPlotterPromise=null,monitorIdleTimer=null,monitorReceivedBytes=0,monitorAutoReset=false,usbLastInfo=null;
+function usbPortInfo(port){try{return port?.getInfo?.()||null}catch{return null}}
+function matchingUsbPort(port){const p=usbPortInfo(port);return !usbLastInfo||!p||(!usbLastInfo.usbVendorId&&!usbLastInfo.usbProductId)||(p.usbVendorId===usbLastInfo.usbVendorId&&p.usbProductId===usbLastInfo.usbProductId)}
+function serialBaud(){const n=Number($('#fwSerialBaud')?.value||115200);return Number.isFinite(n)&&n>=300&&n<=2000000?n:115200}
+function serialUi(on,msg){
+ const rate=serialBaud();text('#fwSerialStatus',msg||(on?'Listening • '+rate+' baud':'Disconnected'));
+ text('#fwSerialMonitorBtn',on?'Close Serial Port':'Open Serial Port');
+ const send=$('#fwSerialSendBtn');if(send)send.disabled=!on;
+}
+function selectSerialView(view){
+ const plot=view==='plotter';
+ const monitorPane=$('#fwSerialMonitorPane'),plotPane=$('#fwSerialPlotterPane');
+ if(monitorPane)monitorPane.hidden=plot;
+ if(plotPane)plotPane.hidden=!plot;
+ for(const [id,active] of [['#fwSerialTabMonitor',!plot],['#fwSerialTabPlotter',plot]]){
+  const button=$(id);if(button){button.classList.toggle('primary',active);button.classList.toggle('ghost',!active);button.setAttribute('aria-pressed',String(active))}
+ }
+ if(plot){serialPlotterPromise?.then(()=>requestAnimationFrame(()=>serialPlotter?.draw()));serialPlotter?.draw()}
+}
+function pushSerialLines(data){
+ monitorLineBuffer+=data;
+ const lines=monitorLineBuffer.split(/\r\n|\n|\r/);
+ monitorLineBuffer=lines.pop()||'';
+ if(monitorLineBuffer.length>2048)monitorLineBuffer=monitorLineBuffer.slice(-2048);
+ for(const line of lines)serialPlotter?.pushLine(line);
+}
 function appendSerialOutput(value){
- const out=$('#fwSerialOutput');if(!out||!value)return;
- out.textContent=(out.textContent+value).slice(-24000);
- out.scrollTop=out.scrollHeight;
- if(monitorPendingScan&&out.textContent.includes('Scanning I2C bus...')){
-  monitorPendingScan=false;stage('Reconnect','done');progress(100,'Scanner boot confirmed by real Serial output');badge('#fwOverallBadge','SCANNER RUNNING','good');log('Verified real I2C scan output through USB Serial at 115200.');
+ if(!value)return;
+ const out=$('#fwSerialOutput');
+ if(out){
+  const scroll=$('#fwSerialAutoScroll')?.checked!==false;
+  out.textContent=(out.textContent+value).slice(-48000);
+  if(scroll)out.scrollTop=out.scrollHeight;
+ }
+ pushSerialLines(value);
+ // A firmware write is not proof of a running board: verify actual bytes from the serial device.
+ if(monitorPendingScan){
+  monitorPendingScan=false;stage('Reconnect','done');progress(100,'Firmware running • genuine USB serial data received');
+  badge('#fwOverallBadge','SERIAL OUTPUT RECEIVED','good');
+  log('Received real firmware output via USB Serial.');
  }
 }
-function serialUi(on,msg){
- text('#fwSerialStatus',msg|| (on?'Listening • 115200':'Not monitoring'));
- text('#fwSerialMonitorBtn',on?'Close Serial Monitor':'Serial Monitor · 115200');
-}
-async function closeSerialMonitor(){
+function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';monitorLineBuffer=''}
+function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
+async function closeSerialMonitor(keepWanted=false){
+ if(!keepWanted)monitorWanted=false;
+ clearMonitorTimer();
  const reader=monitorReader,port=monitorPort,task=monitorTask;
  monitorPort=null;monitorReader=null;monitorTask=null;
  try{await reader?.cancel()}catch{}
  try{await task}catch{}
  try{await port?.close()}catch{}
- serialUi(false);
+ serialUi(false,keepWanted?'Reconnecting…':'Disconnected');
 }
-async function openSerialMonitor(){
- if(monitorStarting)return;
- if(!globalThis.isSecureContext||!navigator.serial)throw Error('USB Serial Monitor requires desktop Chrome/Edge and HTTPS or localhost.');
- monitorStarting=true;
+async function resetSerialBoard(automatic=false){
+ if(!monitorPort){if(!automatic)log('Open a USB serial port to reset the board.');return false}
  try{
-  // Prefer the USB port that the browser already granted for flashing.
-  // requestPort() is only called directly from the button click when no port was granted.
-  const port=usbLastPort||await navigator.serial.requestPort();
-  if(monitorPort)await closeSerialMonitor();
-  if(loader){try{await loader.after('hard_reset')}catch(e){log('Hardware reset before Serial Monitor: '+e.message)}await disconnectUsb(false);await sleep(350)}
-  usbLastPort=port;try{await port.open({baudRate:115200})}catch(e){usbLastPort=null;throw Error('Could not reopen USB port. Reconnect the board and select its Serial port again: '+e.message)}monitorPort=port;
-  serialUi(true,'Listening to board • 115200');log('Serial Monitor opened at 115200. Hardware output appears in the live console.');
-  appendSerialOutput('\n── USB Serial connected @ 115200 baud ──\n');
+  // DTR inactive keeps GPIO0 released. RTS then pulses EN on UART bridge boards.
+  // Native USB-Serial-JTAG can ignore this: in that case use the physical RESET button.
+  await monitorPort.setSignals({dataTerminalReady:false,requestToSend:true});
+  await sleep(130);
+  await monitorPort.setSignals({dataTerminalReady:true,requestToSend:false});
+  serialUi(true,automatic?'Reset pulse sent • waiting for output':'Reset requested • waiting for output');
+  return true;
+ }catch(e){serialUi(true,'Reset signal unsupported • press physical RESET');if(!automatic)log('Software reset unsupported: '+e.message);return false}
+}
+function serialIdleWatch(port,initialBytes){
+ clearMonitorTimer();
+ monitorIdleTimer=setTimeout(async()=>{
+  if(monitorPort!==port||monitorReceivedBytes!==initialBytes)return;
+  if(monitorPendingScan&&!monitorAutoReset){
+   monitorAutoReset=true;
+   await resetSerialBoard(true);
+   if(monitorPort!==port)return;
+   serialIdleWatch(port,monitorReceivedBytes);
+  }else{
+   serialUi(true,'Connected, no data • Reset Board / reconnect USB');
+  }
+ },7000);
+}
+async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
+ if(monitorStarting||monitorPort)return;
+ if(!globalThis.isSecureContext||!navigator.serial)throw Error('Serial Monitor requires desktop Chrome or Edge and HTTPS / localhost.');
+ monitorWanted=true;monitorStarting=true;
+ try{
+  // Capture user activation for first-time port selection before the first async operation.
+  const selection=givenPort||usbLastPort||((allowPrompt)?navigator.serial.requestPort():null);
+  let port=await selection;
+  if(!port){
+   const ports=await navigator.serial.getPorts();
+   port=ports.find(matchingUsbPort)||ports[0]||null;
+  }
+  if(!port){serialUi(false,'Board not detected • reconnect USB');throw Error('No authorized USB serial port is available. Reconnect the board and press Open Serial Port.')}
+  if(loader){try{await loader.after('hard_reset')}catch(e){log('Bootloader reset: '+e.message)}await disconnectUsb(false);await sleep(500)}
+  usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;
+  const baud=serialBaud();
+  try{await port.open({baudRate:baud})}catch(e){usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
+  monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
+  // Native CDC firmware often waits for DTR before delivering Serial.println() messages.
+  try{await port.setSignals({dataTerminalReady:true,requestToSend:false})}catch{}
+  serialUi(true,'Listening • '+baud+' baud');
   const reader=port.readable.getReader();monitorReader=reader;
   const decoder=new TextDecoder();
   monitorTask=(async()=>{
-   try{while(monitorPort===port){const {value,done}=await reader.read();if(done)break;if(value?.length)appendSerialOutput(decoder.decode(value,{stream:true}));}}
-   catch(e){if(monitorPort===port)appendSerialOutput('\nSerial read ended: '+e.message+'\n')}
-   finally{try{reader.releaseLock()}catch{}if(monitorPort===port){monitorPort=null;monitorReader=null;monitorTask=null;try{await port.close()}catch{}serialUi(false,'USB stream ended')}}
+   try{
+    while(monitorPort===port){
+     const {value,done}=await reader.read();if(done)break;
+     if(value?.length){
+      monitorReceivedBytes+=value.length;
+      clearMonitorTimer();
+      serialUi(true,'Receiving • '+baud+' baud');
+      appendSerialOutput(decoder.decode(value,{stream:true}));
+     }
+    }
+   }catch(e){if(monitorPort===port)log('Serial stream ended: '+e.message)}
+   finally{
+    try{reader.releaseLock()}catch{}
+    if(monitorPort===port){monitorPort=null;monitorReader=null;monitorTask=null;clearMonitorTimer();try{await port.close()}catch{}serialUi(false,monitorWanted?'USB stream lost • reconnect board':'Disconnected')}
+   }
   })();
+  serialIdleWatch(port,0);
  }finally{monitorStarting=false}
 }
 async function toggleSerialMonitor(){
  if(monitorPort){await closeSerialMonitor();return}
- try{await openSerialMonitor()}catch(e){log('Serial Monitor: '+e.message);appendSerialOutput('\nCould not open Serial: '+e.message+'\n');serialUi(false,'Connection failed')}
+ try{await openSerialMonitor()}catch(e){log('Serial Monitor: '+e.message);serialUi(false,'Unable to open serial port')}
 }
-async function disconnectAllUsb(){await closeSerialMonitor();await disconnectUsb();usbLastPort=null;monitorPendingScan=false}
-
+async function reconnectSerialMonitor(){
+ const port=monitorPort||usbLastPort;
+ monitorWanted=true;
+ await closeSerialMonitor(true);
+ try{await openSerialMonitor({port,allowPrompt:true})}catch(e){log('Serial reconnect: '+e.message);serialUi(false,'Reconnect failed • select the USB port')}
+}
+async function sendSerialMessage(){
+ const port=monitorPort,input=$('#fwSerialInput');if(!port||!input)return;
+ const endings=$('#fwSerialLineEnding')?.value||'';
+ const writer=port.writable?.getWriter?.();if(!writer){log('This port is not writable.');return}
+ try{await writer.write(new TextEncoder().encode(input.value+endings));input.value=''}
+ catch(e){log('Serial send failed: '+e.message)}
+ finally{writer.releaseLock()}
+}
+async function disconnectAllUsb(){
+ await closeSerialMonitor();await disconnectUsb();usbLastPort=null;usbLastInfo=null;monitorPendingScan=false;
+}
+function initSerialTools(){
+ const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
+ serialPlotterPromise=import('./js/serial-plotter.js').then(({createSerialPlotter})=>{
+  if(plotCanvas)serialPlotter=createSerialPlotter(plotCanvas,plotLegend);
+ }).catch(e=>log('Serial Plotter module failed: '+e.message));
+ $('#fwSerialTabMonitor')?.addEventListener('click',()=>selectSerialView('monitor'));
+ $('#fwSerialTabPlotter')?.addEventListener('click',()=>selectSerialView('plotter'));
+ $('#fwSerialReconnectBtn')?.addEventListener('click',reconnectSerialMonitor);
+ $('#fwSerialResetBtn')?.addEventListener('click',()=>resetSerialBoard());
+ $('#fwSerialSendBtn')?.addEventListener('click',sendSerialMessage);
+ $('#fwSerialInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendSerialMessage()}});
+ $('#fwPlotClearBtn')?.addEventListener('click',()=>serialPlotter?.clear());
+ $('#fwSerialBaud')?.addEventListener('change',()=>{
+  if(monitorPort)reconnectSerialMonitor();
+  else serialUi(false);
+ });
+ if(navigator.serial?.addEventListener){
+  navigator.serial.addEventListener('disconnect',e=>{
+   const port=e.port||e.target;
+   if(port!==monitorPort&&port!==usbLastPort)return;
+   const wants=monitorWanted;
+   if(port===usbLastPort)usbLastPort=null;
+   if(port===monitorPort){void closeSerialMonitor(wants).then(()=>{if(wants)serialUi(false,'USB unplugged • reconnect board')})}
+  });
+  navigator.serial.addEventListener('connect',e=>{
+   const port=e.port||e.target;
+   if(!monitorWanted||monitorPort||monitorStarting||busy||!matchingUsbPort(port))return;
+   usbLastPort=port;
+   void openSerialMonitor({port,allowPrompt:false}).catch(error=>log('USB auto reconnect: '+error.message));
+  });
+ }
+ serialUi(false);selectSerialView('monitor');
+}
 async function rebootKit(){const{s,d,online}=kitStatus();if(!online)return log('Kit is offline.');if(d.armed)return log('Reboot blocked: DISARM the kit first.');if(!s?.canControl?.())return log('Take Control before reboot.');if(!await confirmInLab('Reboot the selected flight controller now?'))return;try{badge('#fwOverallBadge','REBOOTING','warn');resetStages();stage('Reboot','active');progress(45,'Sending reboot command…');const j=await s.client.reboot();if(j?.ok===false)throw new Error(j.message||'Reboot failed');s.markOffline?.('Manual reboot');stage('Reboot','done');stage('Reconnect','active');progress(65,'Waiting for kit…');for(let i=0;i<20;i++){await sleep(1000);const d2=await s.reconnectNow?.().catch(()=>null);if(d2?.online){stage('Reconnect','done');progress(100,'Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good');return}}throw new Error('Reconnect timed out')}catch(e){badge('#fwOverallBadge','RECONNECT','warn');log(e.message)}}
 async function reconnectKit(){const s=school();if(!s)return;stage('Reconnect','active');progress(60,'Reconnecting to kit…');try{const d=await s.reconnectNow?.(true);if(d?.online){stage('Reconnect','done');progress(100,'Kit online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}else throw new Error('Kit not found yet.')}catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}}
 function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
-function bind(){$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',()=>{const out=$('#fwSerialOutput');if(out)out.textContent='';});$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+function bind(){initSerialTools();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}await autoLoad()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();
