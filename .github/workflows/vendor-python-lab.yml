@@ -40,12 +40,40 @@ jobs:
             vendor/monaco/min/vs/base/worker/workerMain.js
             vendor/monaco/min/vs/base/browser/ui/codicons/codicon/codicon.ttf
           )
+          # Browser Matplotlib requires Pyodide wheels beyond the base runtime.
+          # Copy exactly the transitive dependencies in the pinned lockfile.
+          files+=(vendor/pyodide/contourpy-1.3.0-cp312-cp312-pyodide_2024_0_wasm32.whl)
+          files+=(vendor/pyodide/cycler-0.12.1-py3-none-any.whl)
+          files+=(vendor/pyodide/fonttools-4.51.0-py3-none-any.whl)
+          files+=(vendor/pyodide/kiwisolver-1.4.5-cp312-cp312-pyodide_2024_0_wasm32.whl)
+          files+=(vendor/pyodide/matplotlib-3.8.4-cp312-cp312-pyodide_2024_0_wasm32.whl)
+          files+=(vendor/pyodide/matplotlib_pyodide-0.2.3-py3-none-any.whl)
+          files+=(vendor/pyodide/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl)
+          files+=(vendor/pyodide/packaging-24.2-py3-none-any.whl)
+          files+=(vendor/pyodide/pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl)
+          files+=(vendor/pyodide/pyparsing-3.1.2-py3-none-any.whl)
+          files+=(vendor/pyodide/python_dateutil-2.9.0.post0-py2.py3-none-any.whl)
+          files+=(vendor/pyodide/pytz-2024.1-py2.py3-none-any.whl)
+          files+=(vendor/pyodide/six-1.16.0-py2.py3-none-any.whl)
           for path in "${files[@]}"; do
             mkdir -p "$(dirname "$path")"
             curl --fail --location --silent --show-error --retry 4 --retry-delay 2 "$base/$path" --output "$path"
             test -s "$path"
             echo "$path $(wc -c < "$path") bytes"
           done
+      - name: Verify Matplotlib Python wheel integrity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          pkg=json.loads(Path('vendor/pyodide/pyodide-lock.json').read_text())['packages']
+          for name in ["matplotlib","contourpy","numpy","cycler","six","fonttools","kiwisolver","packaging","pillow","pyparsing","python-dateutil","pytz","matplotlib-pyodide"]:
+              d=pkg[name]; f=Path('vendor/pyodide')/d['file_name']
+              assert f.is_file(),str(f)
+              digest=hashlib.sha256(f.read_bytes()).hexdigest()
+              assert digest==d['sha256'],f'{name} wheel SHA mismatch'
+              print('VERIFIED',name,f.stat().st_size,'bytes')
+          PY
       - name: Verify source libraries
         run: |
           node --check vendor/pyodide/pyodide.js
