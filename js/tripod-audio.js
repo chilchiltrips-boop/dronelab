@@ -58,10 +58,10 @@ export function createTripodAudio(onStatus=()=>{}){
   }).catch(err=>onStatus('TAP SOUND ON TO UNLOCK AUDIO'));
   tone(260,0,.052); // a single soft ready tone
  }
- function update(motors){
+ function update(motors,rpms=null){
   if(!nodes||!ctx||!enabled||ctx.state!=='running')return;
   const t=ctx.currentTime;if(t-lastUpdate<1/35)return;lastUpdate=t;
-  const powers=motors.map(n=>Math.max(0,Math.min(1,n/100)));
+  const powers=motors.map((n,i)=>Math.max(0,Math.min(1,Number.isFinite(rpms?.[i])?rpms[i]/8500:n/100)));
   const avg=powers.reduce((a,b)=>a+b,0)/4,imbalance=Math.max(...powers)-Math.min(...powers);
   const toneLevel={quiet:.50,normal:1,detailed:1.16}[profile]??1,airLevel=profile==='quiet'?.30:profile==='detailed'?.80:.48;
   nodes.motors.forEach(({a,b,filter,gain},i)=>{
