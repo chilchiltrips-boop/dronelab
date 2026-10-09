@@ -1,7 +1,7 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [testing/stable-android-signing-v1.4.2, main]
+    branches: [testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, main]
     paths:
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
@@ -103,7 +103,7 @@ jobs:
           cp mobile-android/app/build/outputs/apk/release/app-release.apk mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.4.2\nVersionCode: 7\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.4.3\nVersionCode: 8\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
 
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main'
