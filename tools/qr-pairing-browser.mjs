@@ -80,6 +80,36 @@ try{
  await phone.locator('#mobileLedOn').click();
  await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON',null,{timeout:12000});
  console.log('PASS fresh QR re-pair after Wi-Fi change restores LED control');
+ // Verify camera-free UI orchestration with mocked *signaling* transport:
+ // actual WebRTC connections, confirmation, lock and ACK remain real.
+ await web.locator('#pairDisconnectBtn').click();
+ await phone.locator('#resetPairBtn').click();
+ await web.locator('#pairCodeMode').click();
+ if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('No Camera mode opens webcam');
+ await web.locator('#pairCreateBtn').click();
+ await web.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'),null,{timeout:22000});
+ const codeOffer=await web.locator('#pairOfferText').inputValue();
+ await phone.locator('#offerInput').fill(codeOffer);
+ await phone.locator('#useOfferBtn').click();
+ await phone.waitForFunction(()=>document.getElementById('answerText').value.startsWith('zj1:'),null,{timeout:22000});
+ const codeAnswer=await phone.locator('#answerText').inputValue();
+ await web.exposeFunction('__testCodeReply',()=>codeAnswer);
+ await web.evaluate(()=>{window.ZebjusCodePair.resolveAnswer=async ({code})=>{
+   if(code!=='654321')throw Error('Wrong test connect code');
+   return window.__testCodeReply();
+ }});
+ await web.locator('#pairPhoneCode').fill('654321');
+ await web.locator('#pairConnectCodeBtn').click();
+ await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:17000});
+ await web.locator('#pairConfirmBtn').click();
+ await phone.waitForFunction(()=>!document.getElementById('requestControlBtn').disabled,null,{timeout:17000});
+ await phone.locator('#requestControlBtn').click();
+ await web.locator('.qr-header-switch').click();
+ await phone.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:14000});
+ await phone.locator('#mobileLedOff').click();
+ await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF',null,{timeout:12000});
+ console.log('PASS No Camera six-digit entry -> answer -> WebRTC/LED ACK, no webcam. PeerJS credential transport separately tested.');
+
  await web.screenshot({path:'test-output/smart-qr-web-settings.png',fullPage:true});
  await phone.screenshot({path:'test-output/smart-qr-android-response.png',fullPage:true});
  await web.reload({waitUntil:'domcontentloaded'});
