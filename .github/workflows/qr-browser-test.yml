@@ -1,9 +1,10 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, main]
+    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, main]
     paths:
       - 'pairing-core.js'
+      - 'pairing-code.js'
       - 'pairing-qr-ui.js'
       - 'pairing-web.js'
       - 'companion.js'
@@ -31,6 +32,7 @@ jobs:
       - name: Syntax validation
         run: |
           node --check pairing-core.js
+          node --check pairing-code.js
           node --check pairing-qr-ui.js
           node --check pairing-web.js
           node --check companion.js
