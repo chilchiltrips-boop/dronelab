@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "product": "AERION_I2C_SCANNER",
-  "version": "1.0.0",
-  "builtAt": "2026-10-09T07:02:09Z",
+  "product": "ZEBJUS_FLIGHTCORE",
+  "version": "18.3.83",
+  "builtAt": "2026-10-09T05:59:14Z",
   "catalog": "catalog.json",
   "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
 }
