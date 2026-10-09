@@ -1,0 +1,68 @@
+name: Build QR Android Test APK
+on:
+  push:
+    branches: [testing/two-way-qr-pairing]
+    paths:
+      - 'mobile-android/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'pairing-core.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - '.github/workflows/build-qr-android.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: qr-android-apk-testing
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Package offline companion, shared QR and WebRTC assets
+        run: |
+          set -eux
+          mkdir -p mobile-android/app/src/main/assets
+          cp companion.html companion.css companion.js pairing-core.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/
+          test -s mobile-android/app/src/main/assets/companion.html
+          test -s mobile-android/app/src/main/assets/jsqr.js
+          test -s mobile-android/app/src/main/assets/qrgen.js
+      - name: Build installable Android debug APK
+        run: gradle -p mobile-android :app:assembleDebug --stacktrace --no-daemon
+      - name: Verify APK content and copy download
+        run: |
+          set -eux
+          test -s mobile-android/app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p mobile-apk
+          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk
+          sha256sum mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | tee mobile-apk/SHA256SUMS.txt
+          unzip -l mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|jsqr.js|qrgen.js)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZEBJUS_DroneLab_QR_Android_Test_APK
+          path: mobile-apk/
+          retention-days: 30
+      - name: Publish APK to QR TESTING branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk mobile-apk/SHA256SUMS.txt
+          git diff --cached --quiet || git commit -m 'Publish QR companion test APK [skip ci]'
+          git pull --rebase origin testing/two-way-qr-pairing
+          git push origin HEAD:testing/two-way-qr-pairing
