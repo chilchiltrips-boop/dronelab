@@ -8,5 +8,6 @@
     "QR offer answer",
     "Android companion"
   ],
-  "publishedAt": "2026-10-09"
+  "publishedAt": "2026-10-09",
+  "buildCommit": "c988a61d0843"
 }
