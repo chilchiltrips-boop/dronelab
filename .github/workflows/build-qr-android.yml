@@ -41,10 +41,11 @@ jobs:
           set -eux
           mkdir -p mobile-android/app/src/main/assets
           cp companion.html companion.css companion.js pairing-core.js pairing-qr-ui.js mobile-android/app/src/main/assets/
-          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/
+          mkdir -p mobile-android/app/src/main/assets/vendor
+          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
-          test -s mobile-android/app/src/main/assets/jsqr.js
-          test -s mobile-android/app/src/main/assets/qrgen.js
+          test -s mobile-android/app/src/main/assets/vendor/jsqr.js
+          test -s mobile-android/app/src/main/assets/vendor/qrgen.js
       - name: Build installable Android debug APK
         run: gradle -p mobile-android :app:assembleDebug --stacktrace --no-daemon
       - name: Verify APK content and copy download
@@ -54,7 +55,7 @@ jobs:
           mkdir -p mobile-apk
           cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | tee mobile-apk/SHA256SUMS.txt
-          unzip -l mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|jsqr.js|qrgen.js)'
+          unzip -l mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|vendor/jsqr.js|vendor/qrgen.js)'
       - uses: actions/upload-artifact@v4
         with:
           name: ZEBJUS_DroneLab_QR_Android_Test_APK
