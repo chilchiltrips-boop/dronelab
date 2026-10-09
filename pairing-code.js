@@ -60,16 +60,18 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
     if(ended||peer!==own){conn.close();return}
     if(connection&&connection!==conn){conn.close();return}
     connection=conn;
+    const authTimeout=setTimeout(()=>{if(connection===conn){conn.close();connection=null}},6000);
     conn.on('data',async msg=>{
      if(ended||peer!==own||!isCurrent(expires)){conn.close();return}
      if(msg?.type!=='auth'||msg.sid?.length!==24||typeof msg.proof!=='string'){conn.close();return}
-     if(msg.proof!==expected){wrong++;conn.close();connection=null;if(wrong>5){onStatus('Too many invalid attempts. Scan a fresh QR.');stop()}return}
+     if(msg.proof!==expected){clearTimeout(authTimeout);wrong++;conn.close();connection=null;if(wrong>5){onStatus('Too many invalid attempts. Scan a fresh QR.');stop()}return}
+     clearTimeout(authTimeout);
      try{
       conn.send({type:'answer',sid:msg.sid,answer,version:PROTOCOL});
       onStatus('Answer sent securely • Waiting for Web App to confirm pairing');
      }catch(e){onStatus('Code response error: '+e.message)}
     });
-    conn.on('close',()=>{if(connection===conn)connection=null});
+    conn.on('close',()=>{clearTimeout(authTimeout);if(connection===conn)connection=null});
     conn.on('error',e=>onStatus('Online code connection: '+(e?.message||e)));
    });
   }
