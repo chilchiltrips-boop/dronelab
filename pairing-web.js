@@ -22,7 +22,7 @@ function onSimulatorMessage(event){
  if(event.origin!==location.origin||event.source!==frame()?.contentWindow)return;
  const m=event.data;if(!m||typeof m!=='object')return;
  if(m.type==='ZJ_TRIPOD_READY'){
-  simulatorReady=true;const e=document.getElementById('simReceiverState');if(e)e.textContent='SIMULATOR READY • VIRTUAL ONLY';
+  simulatorReady=true;host?.setSimulatorReady(true);const e=document.getElementById('simReceiverState');if(e)e.textContent='SIMULATOR READY • VIRTUAL ONLY';
  }else if(m.type==='ZJ_SIM_ACK'){
   const p=pendingSimulator.get(m.seq);if(!p)return;
   clearTimeout(p.timer);pendingSimulator.delete(m.seq);p.resolve(m);
