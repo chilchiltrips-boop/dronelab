@@ -13,45 +13,90 @@ function draw(canvas,text){
  for(let r=0;r<count;r++)for(let c=0;c<count;c++)if(code.isDark(r,c))ctx.fillRect((c+quiet)*modulePx,(r+quiet)*modulePx,modulePx,modulePx);
  return count;
 }
-let currentScanner=null;
+let currentScanner=null,scannerEpoch=0;
 async function scan({video,canvas,onData,onError,onStatus}){
- if(currentScanner)currentScanner.stop();
+ // Cancels pending camera permission dialogs as well as active streams.
+ stop();
+ const epoch=++scannerEpoch;
  if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera scanning requires HTTPS and camera permission');
- const media=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
- video.srcObject=media;video.hidden=false;await video.play();const ctx=canvas.getContext('2d',{willReadFrequently:true});
- let running=true,last='',zoomBusy=false,lastZoom=0,zoomStep=0;
- const track=media.getVideoTracks()[0],caps=track?.getCapabilities?.()||{},zoom=caps.zoom;
- const supportedZoom=zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min;
- const zoomSettings=supportedZoom?[zoom.min,Math.min(zoom.max,Math.max(zoom.min,1.6)),Math.min(zoom.max,Math.max(zoom.min,2.3)),Math.min(zoom.max,Math.max(zoom.min,1.25))]:[];
- if(caps.focusMode?.includes('continuous'))track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
- async function autoZoom(now){
-  if(!running||!supportedZoom||zoomBusy||now-lastZoom<1800)return;
-  lastZoom=now;zoomBusy=true;
-  try{
-   const z=zoomSettings[(++zoomStep)%zoomSettings.length];
-   await track.applyConstraints({advanced:[{zoom:z}]});
-   if(running)onStatus?.('Camera scanning • auto zoom '+z.toFixed(1)+'× • move toward QR');
-  }catch{}finally{zoomBusy=false}
- }
- const tick=()=>{
+ const stream=await navigator.mediaDevices.getUserMedia({
+  video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},audio:false
+ });
+ // A camera permission prompt may resolve after Step 2 was cancelled.
+ if(epoch!==scannerEpoch){stream.getTracks().forEach(t=>t.stop());throw Error('Camera start cancelled')}
+ let running=true,raf=0,lastDecode=0,frame=0,zoomBusy=false,lastZoom=0,zoomIndex=0,reported='';
+ const track=stream.getVideoTracks()[0],caps=track?.getCapabilities?.()||{},zoom=caps.zoom;
+ const zoomSupported=zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min;
+ const zoomValues=zoomSupported?[zoom.min,Math.min(zoom.max,Math.max(zoom.min,1.35)),Math.min(zoom.max,Math.max(zoom.min,1.75)),zoom.min]:[];
+ const ctx=canvas.getContext('2d',{willReadFrequently:true});
+ function report(text){if(running&&text!==reported){reported=text;onStatus?.(text)}}
+ const stopThis=()=>{
   if(!running)return;
-  try{
-   if(video.readyState>=2&&video.videoWidth&&root.jsQR){
-    void autoZoom(performance.now());
-    const width=Math.min(video.videoWidth,900),height=Math.round(width*video.videoHeight/video.videoWidth);
-    canvas.width=width;canvas.height=height;
-    ctx.drawImage(video,0,0,width,height);
-    const pixels=ctx.getImageData(0,0,width,height);
-    const parsed=root.jsQR(pixels.data,width,height,{inversionAttempts:'attemptBoth'});
-    if(parsed?.data&&parsed.data!==last){last=parsed.data;onData(parsed.data);return}
-   }
-  }catch(e){onError?.(e)}
-  if(running)requestAnimationFrame(tick);
+  running=false;cancelAnimationFrame(raf);
+  try{video.pause()}catch{}
+  stream.getTracks().forEach(t=>t.stop());
+  if(video.srcObject===stream)video.srcObject=null;
+  video.hidden=true;
+  if(currentScanner?.stop===stopThis)currentScanner=null;
  };
- const stop=()=>{running=false;video.pause();media.getTracks().forEach(t=>t.stop());video.srcObject=null;video.hidden=true;if(currentScanner?.stop===stop)currentScanner=null;onStatus?.('Camera closed')};
- currentScanner={stop};onStatus?.(supportedZoom?'Camera scanning • automatic zoom/focus enabled':'Camera scanning • point at pairing QR (zoom unsupported on this camera)');requestAnimationFrame(tick);return stop;
+ currentScanner={stop:stopThis};
+ try{
+  video.srcObject=stream;video.hidden=false;
+  await video.play();
+  if(!running||epoch!==scannerEpoch){stopThis();throw Error('Camera start cancelled')}
+  if(caps.focusMode?.includes('continuous'))
+   track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+  const scanningStart=performance.now();
+  async function adjustZoom(now){
+   // A camera continuously changing magnification makes dense phone QR codes
+   // blur and fail detection. Give auto-focus 5 seconds before any zoom.
+   if(!zoomSupported||zoomBusy||!running||now-scanningStart<5000||now-lastZoom<5000)return;
+   zoomBusy=true;lastZoom=now;zoomIndex=(zoomIndex+1)%zoomValues.length;
+   try{
+    const amount=zoomValues[zoomIndex];
+    await track.applyConstraints({advanced:[{zoom:amount}]});
+    report('Searching QR • auto zoom '+amount.toFixed(1)+'×');
+   }catch{}finally{zoomBusy=false}
+  }
+  function decode(now){
+   if(!running)return;
+   raf=requestAnimationFrame(decode);
+   // jsQR is CPU heavy. Limit work to ~10 frames/second to preserve preview FPS.
+   if(now-lastDecode<95||video.readyState<2||!video.videoWidth||!root.jsQR)return;
+   lastDecode=now;frame++;
+   try{
+    const vw=video.videoWidth,vh=video.videoHeight;
+    // Two central passes for every full-image fallback: the phone QR is
+    // normally held in the center, where a square crop preserves detail.
+    const central=frame%3!==0;
+    let sx=0,sy=0,sw=vw,sh=vh,w,h;
+    if(central){
+     const side=Math.min(vw,vh)*0.93;
+     sx=(vw-side)/2;sy=(vh-side)/2;sw=side;sh=side;
+     w=Math.min(680,Math.round(side));h=w;
+    }else{
+     w=Math.min(800,vw);h=Math.max(1,Math.round(w*vh/vw));
+    }
+    // Resizing the canvas every frame resets canvas state and wastes memory.
+    if(canvas.width!==w)canvas.width=w;
+    if(canvas.height!==h)canvas.height=h;
+    ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
+    const image=ctx.getImageData(0,0,w,h);
+    const result=root.jsQR(image.data,w,h,{inversionAttempts:frame%9===0?'attemptBoth':'dontInvert'});
+    if(result?.data){
+     stopThis(); // prevents duplicate frames and releases camera on success
+     onData?.(result.data);
+     return;
+    }
+    void adjustZoom(now);
+   }catch(e){onError?.(e)}
+  }
+  report('Camera ready • hold Phone QR at the CENTER of the frame');
+  raf=requestAnimationFrame(decode);
+  return stopThis;
+ }catch(error){stopThis();throw error}
 }
-function stop(){currentScanner?.stop()}
+function stop(){scannerEpoch++;currentScanner?.stop();currentScanner=null}
 function copy(text){return navigator.clipboard?.writeText?.(text)||Promise.reject(Error('Clipboard unavailable. Select and copy manually.'))}
 root.ZebjusQR={draw,scan,stop,copy};
 })(typeof window!=='undefined'?window:globalThis);
