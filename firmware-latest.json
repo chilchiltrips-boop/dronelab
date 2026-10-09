@@ -2,6 +2,7 @@
   "schema": 2,
   "product": "AERION_I2C_SCANNER",
   "version": "1.0.0",
+  "builtAt": "2026-10-09T07:02:09Z",
   "catalog": "firmware-catalog.json",
-  "note": "Scanner-only USB diagnostic release. Images become available after verified compilation."
+  "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
 }
