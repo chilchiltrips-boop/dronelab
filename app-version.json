@@ -1,6 +1,6 @@
 {
-  "version": "1.4.5-audit",
-  "channel": "testing",
+  "version": "1.4.5+15",
+  "channel": "release",
   "previousStable": "c1ac834fb398818641dd5e0dd930a8f12d337d56",
   "features": [
     "Direct two-way QR pairing; optional online code signaling",
@@ -18,5 +18,5 @@
     "Compact step-by-step pairing, safe session/camera cancellation and offline cache fixes"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "testing/audit-compact-pairing-v1.4.5"
+  "buildCommit": "1f6e289e9eca"
 }
