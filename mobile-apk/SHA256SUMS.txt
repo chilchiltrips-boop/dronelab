@@ -1,1 +1,1 @@
-a9655257116984f2dc77f1df9faab03fce962057e5ae7c4bd6c53cdcddc2bc11  mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk
+f3a0d30bc182d66bf61172a7ba1362a0ebea86ea7e391e7c94ac3a2c7980ebda  mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
