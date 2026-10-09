@@ -24,16 +24,10 @@ async function inventory(screen){
 try{
  await page.goto(base+'#settings');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  check(await page.locator('[data-tab=settings]').getAttribute('class').then(x=>x.includes('active')),'Settings deep link ignored');
- check((await page.locator('#pairStep1').getAttribute('open'))!==null,'Step 1 must be open');
- check((await page.locator('#pairStep2').getAttribute('open'))===null,'Step 2 opens prematurely');
- check(await page.locator('#pairStep1NextBtn').isDisabled(),'Next enabled before offer');
- await page.evaluate(()=>{window.__cameraCalls=0;window.__nativeGetUserMedia=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);navigator.mediaDevices.getUserMedia=async()=>{window.__cameraCalls++;throw new DOMException('Permission denied for test','NotAllowedError')}});
- await page.locator('#pairCreateBtn').click();await page.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
- check(await page.evaluate(()=>window.__cameraCalls===0),'Step 1 starts laptop webcam');
  for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[1024,768],[390,844],[844,390],[915,412]]){
   await page.setViewportSize({width,height});
-  for(const tab of ['assembly','wiring','python','led','settings','firmware']){
-   await page.locator('[data-tab='+tab+']').click();await page.screenshot({path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
+  for(const tab of ['assembly','wiring','python','settings','firmware']){
+   await page.locator('[data-tab='+tab+']').click();await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
    const metric=await page.evaluate(({tab,width,height})=>({tab,width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight,panelHeight:document.querySelector('#tab-'+tab).getBoundingClientRect().height}),{tab,width,height});
    metrics.push(metric);check(metric.scrollWidth<=width,'Horizontal overflow '+tab+' '+width);
    if(tab==='wiring')check(await page.evaluate(()=>[...document.querySelectorAll('.wiring-card .toolbar-row button')].every(b=>{const r=b.getBoundingClientRect(),p=b.parentElement.getBoundingClientRect();return r.right<=p.right+1})), 'Clipped wiring toolbar '+width);
@@ -41,9 +35,16 @@ try{
    if(width===1366)await inventory(tab);
   }
  }
- await page.setViewportSize({width:1366,height:768});await page.locator('[data-tab=settings]').click();
+ await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html');await page.locator('#topPairMobileBtn').click();
+ check((await page.locator('#pairStep1').getAttribute('open'))!==null,'Step 1 must be open');
+ check((await page.locator('#pairStep2').getAttribute('open'))===null,'Step 2 opens prematurely');
+ check(await page.locator('#pairStep1NextBtn').isDisabled(),'Next enabled before offer');
+ await page.evaluate(()=>{window.__cameraCalls=0;window.__nativeGetUserMedia=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);navigator.mediaDevices.getUserMedia=async()=>{window.__cameraCalls++;throw new DOMException('Permission denied for test','NotAllowedError')}});
+ await page.locator('#pairCreateBtn').click();await page.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
+ check(await page.evaluate(()=>window.__cameraCalls===0),'Step 1 starts laptop webcam');
+
  await page.locator('#pairStep1NextBtn').click();check(await page.locator('#pairStep1').getAttribute('open')===null,'Step 1 not collapsed on Next');
- await page.screenshot({path:dir+'/settings-step2-code-1366x768.png',fullPage:true});await inventory('pair-step2-code');
+ await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:dir+'/settings-step2-code-1366x768.png',fullPage:true});await inventory('pair-step2-code');
  await page.locator('#pairCameraMode').click();await page.locator('#pairScanAnswerBtn').click();
  await page.waitForFunction(()=>document.getElementById('pairAnswerState').textContent.includes('denied')||document.getElementById('pairAnswerState').textContent.includes('Permission'));
  check(await page.locator('#pairScanAnswerBtn').isEnabled(),'Denied camera leaves Start disabled');
@@ -54,17 +55,17 @@ try{
  check(await page.locator('#pairScanAnswerBtn').isEnabled(),'Cancelled pending camera leaves Start disabled');
  await page.evaluate(()=>{HTMLMediaElement.prototype.play=async()=>{};navigator.mediaDevices.getUserMedia=async()=>{const c=document.createElement('canvas');c.width=640;c.height=480;window.__reopenStream=c.captureStream(1);return window.__reopenStream}});
  await page.locator('#pairScanAnswerBtn').click();await page.locator('#pairStopScanBtn').waitFor({state:'visible'});
- await page.screenshot({path:dir+'/settings-step2-camera-1366x768.png',fullPage:true});await inventory('pair-step2-camera');
- await page.locator('[data-tab=led]').click();await page.waitForFunction(()=>window.__reopenStream.getTracks().every(t=>t.readyState==='ended'));
- await page.locator('#ledTakeWeb').click();await page.locator('#webLedOn').click();check((await page.locator('#ledState').textContent())==='LED ON','Web LED ON failed');await page.locator('#webLedOff').click();await page.locator('#ledRelease').click();check(await page.locator('#webLedOn').isDisabled(),'LED remains enabled after release');
+ await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:dir+'/settings-step2-camera-1366x768.png',fullPage:true});await inventory('pair-step2-camera');
+ await page.locator('#connectionClose').click();await page.waitForFunction(()=>window.__reopenStream.getTracks().every(t=>t.readyState==='ended'));
+ await page.locator('#topPairMobileBtn').click();await page.locator('#pairStep2BackBtn').click();await page.locator('#pairCancelBtn').click();check(await page.locator('#pairStep1NextBtn').isDisabled(),'Cancel retains old offer');
+ await page.goto(base+'#firmware');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  await page.locator('[data-tab=firmware]').click();check(await page.locator('#fwUsbFlashBtn').isDisabled(),'Flash enabled before USB connection');check(await page.locator('#fwReconnectBtn').isDisabled(),'Unavailable kit reconnect enabled');
  await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
- await page.locator('[data-tab=settings]').click();await page.locator('#pairStep2BackBtn').click();await page.locator('#pairCancelBtn').click();check(await page.locator('#pairStep1NextBtn').isDisabled(),'Cancel retains old offer');
  await page.evaluate(()=>{location.hash='wiring'});await page.locator('#tab-wiring.active').waitFor();
- await page.goto(base+'companion.html');check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
+ await page.goto(base+'companion.html');await page.locator('#flightSettings').click();check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
  check(await page.locator('#copyAnswerBtn').isDisabled(),'Copy response enabled without response');
  for(const [width,height] of [[390,844],[844,390],[915,412]]){
-  await page.setViewportSize({width,height});await page.screenshot({path:`${dir}/companion-${width}x${height}.png`,fullPage:true});
+  await page.setViewportSize({width,height});await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/companion-${width}x${height}.png`,fullPage:true});
   const m=await page.evaluate(({width,height})=>({tab:'companion',width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight}),{width,height});metrics.push(m);check(m.scrollWidth<=width,'Companion overflow');
  }
  await inventory('companion');
@@ -80,7 +81,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('offerState').textContent==='Invalid or expired QR');
  await page.locator('#resetPairBtn').click();check(await page.locator('#useOfferBtn').isDisabled(),'Reset retains manual offer');
  check(!errors.length,'JavaScript errors: '+errors.join('; '));check(!failed.length,'Failed local assets: '+JSON.stringify(failed));
- console.log('PASS: 45 viewport screenshots, compact steps, hashes, permission denied/cancel/reopen, camera tab cleanup, virtual LED, unavailable firmware controls; 0 JS errors/failed local assets');
+ console.log('PASS: viewport screenshots, compact steps, hashes, permission denied/cancel/reopen, camera dialog cleanup, Flight Training, unavailable firmware controls; 0 JS errors/failed local assets');
 }finally{
  writeFileSync(dir+'/metrics.json',JSON.stringify({environment:process.env.DRONELAB_TEST_FILE_ROUTES==='1'?'file-route sandbox; ICE timing simulated for QR rendering':'HTTP Chromium',errors,failed,data:metrics},null,2));
  writeFileSync(dir+'/controls.json',JSON.stringify(controls,null,2));

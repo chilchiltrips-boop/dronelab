@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-test('No Camera code pairing is first and selected by default on both hosted pages',()=>{
+test('No Camera code pairing is first and selected by default on canonical Flight Training page',()=>{
  const web=read('pairing-web.js');
  assert.match(web,/pairMode='code'/);
  assert.match(web,/selectMode\('code'\)/);
- for(const p of ['index.html','lab.html']){
+ for(const p of ['tripod.html']){
   const h=read(p);
   assert.ok(h.indexOf('id="pairCodeMode"')<h.indexOf('id="pairCameraMode"'));
   assert.ok(h.includes('id="pairCameraSection" hidden'));

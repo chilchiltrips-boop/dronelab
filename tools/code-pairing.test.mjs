@@ -69,7 +69,7 @@ test('College network ICE negotiation > 6 seconds does not prematurely close And
 },{timeout:15000});
 
 test('both QR pairing and code pairing scripts and UI remain available',()=>{
- const web=read('pairing-web.js'),html=read('index.html'),mobile=read('companion.js'),app=read('companion.html'),css=read('pairing.css');
+ const web=read('pairing-web.js'),html=read('tripod.html'),mobile=read('companion.js'),app=read('companion.html'),css=read('pairing.css');
  assert.ok(web.includes('ZebjusCodePair.resolveAnswer'));
  assert.ok(web.includes("pairMode==='camera'"));
  assert.ok(web.includes("$('pairCameraMode').onclick"));

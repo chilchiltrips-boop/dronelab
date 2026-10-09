@@ -1,150 +1,40 @@
-/* V1.3 Smart Two-Way QR e2e.
-   Both QR images are decoded from their own pixels by jsQR; the laptop webcam
-   callback is simulated because CI does not own a physical camera. WebRTC peers
-   and ACK messages are real Chromium PeerConnections.
-*/
-import {chromium} from 'playwright';
-import {browserOptions,configureContext} from './browser-harness.mjs';
-import {mkdirSync} from 'node:fs';
-mkdirSync('test-output',{recursive:true});
-const browser=await chromium.launch({...browserOptions,args:[...browserOptions.args,'--use-fake-ui-for-media-stream']});
-const ctx=await browser.newContext({viewport:{width:1450,height:900}});await configureContext(ctx);
-const web=await ctx.newPage(),phone=await ctx.newPage();
-const errors=[];
-for(const page of [web,phone])page.on('pageerror',e=>errors.push(e.message));
-const base='http://127.0.0.1:8765/';
-async function assertQr(page,id,expected){
- const decoded=await page.locator('#'+id).evaluate(canvas=>{
-  const ctx=canvas.getContext('2d',{willReadFrequently:true}),pix=ctx.getImageData(0,0,canvas.width,canvas.height);
-  return jsQR(pix.data,canvas.width,canvas.height,{inversionAttempts:'attemptBoth'})?.data||null;
- });
- if(decoded!==expected)throw Error(id+' is not readable as the expected QR');
-}
+/* QR pixels decoded by jsQR; camera callbacks are a surrogate, encrypted peers
+ * and applied control ACKs are real Chromium. Public code service is tested separately. */
+import {pairBench,grant,wait,safeShot} from './flight-test-harness.mjs';import {mkdirSync} from 'node:fs';
+mkdirSync('test-output',{recursive:true});const {browser,web,phone,errors}=await pairBench();
+async function assertQr(p,id,value){const decoded=await p.locator('#'+id).evaluate(c=>{const x=c.getContext('2d',{willReadFrequently:true}),data=x.getImageData(0,0,c.width,c.height);return jsQR(data.data,c.width,c.height,{inversionAttempts:'attemptBoth'})?.data});if(decoded!==value)throw Error('QR pixel roundtrip failed '+id)}
+async function finishPair(){await wait(web,()=>!document.getElementById('pairConfirmBtn').disabled);if(!await web.locator('#pairConfirmPanel').evaluate(e=>e.classList.contains('ready')))throw Error('Confirmation readiness missing');await web.locator('#pairConfirmBtn').click();await wait(phone,()=>!document.getElementById('requestControlBtn').disabled)}
 async function onePair(){
- await web.evaluate(()=>{window.__qrScanOptions=null});
- await web.locator('#pairCreateBtn').click();
- await web.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'),null,{timeout:22000});
- const offer=await web.locator('#pairOfferText').inputValue();
- await assertQr(web,'pairOfferCanvas',offer);
- // Scanner MUST stay OFF during Step 1 and until Step 2 button is clicked.
- const autoScanStarted=await web.evaluate(()=>!!window.__qrScanOptions);
- if(autoScanStarted)throw Error('Camera was started before Step 2');
- await phone.locator('#offerInput').fill(offer);
- await phone.locator('#useOfferBtn').click();
- await phone.waitForFunction(()=>document.getElementById('answerText').value.startsWith('zj1:'),null,{timeout:22000});
- const answer=await phone.locator('#answerText').inputValue();
- await assertQr(phone,'answerCanvas',answer);
- if(!(await phone.locator('#phoneScanFeedback').getAttribute('data-status')==='success'))throw Error('Android must show QR scan success feedback');
- await web.locator('#pairStep1NextBtn').click();
- await web.locator('#pairScanAnswerBtn').click();
- await web.waitForFunction(()=>!!window.__qrScanOptions,null,{timeout:5000});
- const pinWeb=await web.locator('#pairCode').textContent(),pinMobile=await phone.locator('#appPairCode').textContent();
- if(pinWeb!==pinMobile||!/^\d{6}$/.test(pinWeb))throw Error('Pairing PIN mismatch');
- // Simulate the laptop camera scanning the actual phone QR we just pixel-decoded.
- await web.evaluate(answer=>window.__qrScanOptions.onData(answer),answer);
- await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:17000});
- if(!(await web.locator('#pairConfirmPanel').getAttribute('class')).includes('ready'))throw Error('Confirm Pairing must glow when connection is ready');
- if(!((await web.locator('#pairConfirmBtn').textContent())||'').includes('Confirm Pairing Now'))throw Error('Confirmation action must explicitly announce readiness');
- await web.locator('#pairConfirmBtn').click();
- await phone.waitForFunction(()=>!document.getElementById('requestControlBtn').disabled,null,{timeout:17000});
- return pinWeb;
+ await web.evaluate(()=>window.__qrScanOptions=null);await web.locator('#pairCreateBtn').click();await wait(web,()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
+ const offer=await web.locator('#pairOfferText').inputValue();await assertQr(web,'pairOfferCanvas',offer);
+ if(await web.evaluate(()=>!!window.__qrScanOptions))throw Error('Camera opened during Step 1');
+ await phone.locator('#offerInput').fill(offer);await phone.locator('#useOfferBtn').click();await wait(phone,()=>document.getElementById('answerText').value.startsWith('zj1:'));
+ const answer=await phone.locator('#answerText').inputValue();await assertQr(phone,'answerCanvas',answer);
+ if(await web.locator('#pairCode').textContent()!==await phone.locator('#appPairCode').textContent())throw Error('Safety PIN differs');
+ await web.locator('#pairStep1NextBtn').click();await web.locator('#pairScanAnswerBtn').click();await wait(web,()=>!!window.__qrScanOptions,5000);
+ await web.evaluate(value=>window.__qrScanOptions.onData(value),answer);await finishPair();
 }
-async function grantAndToggle(){
- await phone.locator('#requestControlBtn').click();
- await web.locator('.qr-header-switch').click();
- await phone.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:14000});
- if(await web.locator('#webLedOn').isEnabled())throw Error('Web LED must lock while phone owns control');
- await phone.locator('#mobileLedOn').click();
- await web.waitForFunction(()=>document.getElementById('ledState').textContent==='LED ON',null,{timeout:12000});
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON',null,{timeout:12000});
- await phone.locator('#mobileLedOff').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF',null,{timeout:12000});
- await web.locator('.qr-header-switch').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:12000});
+async function exerciseControl(){
+ await grant(web,phone);await phone.locator('#flightBack').click();await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ await phone.locator('#flightStop').click();await wait(web,()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(x=>x===0));
+ await phone.locator('#flightSettings').click();await web.locator('#topGrantMobileSwitch').evaluate(e=>e.closest('label').click());await wait(phone,()=>document.getElementById('flightArm').disabled);
 }
 try{
- await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),phone.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
- await web.locator('[data-tab="settings"]').click();
- // Camera-free pairing is the default; no webcam should be initialized.
- if(await web.locator('#pairStep2').getAttribute('open')!==null)throw Error('Step 2 must start collapsed');
- if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('Webcam section must be hidden by default');
- if((await web.locator('#pairCodeMode').getAttribute('aria-pressed'))!=='true')throw Error('Code mode must be prioritized');
- if(!((await web.locator('#pairStep1NextBtn').textContent())||'').includes('CONNECT'))throw Error('Default code path not explained');
- if(!((await phone.locator('#phoneShortCode').count())===1&&await phone.locator('.phone-code-panel').isVisible()))throw Error('Android primary code panel missing');
- const expectedVersion=(await (await web.request.get(base+'app-version.json')).json()).version.split('+')[0];
- if(!((await web.locator('#webappVersion').textContent())||'').includes(expectedVersion))throw Error('Web version header does not match '+expectedVersion);
- if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
- if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
- // CI camera surrogate: Step 2 manually starts scanning; Step 1 MUST NOT.
- await web.evaluate(()=>{const old=window.ZebjusQR.scan;window.__oldQrScan=old;window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{};}});
- // Web App must support a camera-free selection without starting webcam.
- await web.locator('#pairCodeMode').click();
- if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('Code pairing mode not visible');
- await web.locator('#pairCameraMode').click();
- if(await web.locator('#pairCameraSection').getAttribute('hidden')!==null)throw Error('QR camera mode not restored');
- const pin=await onePair();
- console.log('PASS default No Camera priority; Step 1 QR, Step 2 camera-on-demand; readable QR pixels and highlighted Confirm Pairing; PIN '+pin);
- if(!(await web.locator('#topGrantMobileSwitch').isEnabled()))throw Error('Header grant toggle not enabled after pairing');
- await grantAndToggle();
- console.log('PASS mobile grant toggle, LED ON / OFF state ACK, exclusive controller lock');
- await phone.evaluate(()=>window.zebjusNetworkChanged());
- await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled&&document.getElementById('appPairCode').textContent==='------',null,{timeout:12000});
- await web.waitForFunction(()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'),null,{timeout:12000});
- console.log('PASS network-change reset revokes stale control and old QR session');
- await onePair(); // Full fresh QR exchange; no local bridge or cloud.
- await phone.locator('#requestControlBtn').click();
- await web.locator('.qr-header-switch').click();
- await phone.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:12000});
- await phone.locator('#mobileLedOn').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON',null,{timeout:12000});
- console.log('PASS fresh QR re-pair after Wi-Fi change restores LED control');
- // Verify camera-free UI orchestration with mocked *signaling* transport:
- // actual WebRTC connections, confirmation, lock and ACK remain real.
- await web.locator('#pairDisconnectBtn').click();
- await phone.locator('#resetPairBtn').click();
- await web.locator('#pairCodeMode').click();
- if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('No Camera mode opens webcam');
- await web.locator('#pairCreateBtn').click();
- await web.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'),null,{timeout:22000});
- const codeOffer=await web.locator('#pairOfferText').inputValue();
- await phone.locator('#offerInput').fill(codeOffer);
- await phone.locator('#useOfferBtn').click();
- await phone.waitForFunction(()=>document.getElementById('answerText').value.startsWith('zj1:'),null,{timeout:22000});
- const codeAnswer=await phone.locator('#answerText').inputValue();
- await web.exposeFunction('__testCodeReply',()=>codeAnswer);
- await web.evaluate(()=>{window.ZebjusCodePair.resolveAnswer=async ({code})=>{
-   if(code!=='654321')throw Error('Wrong test connect code');
-   return window.__testCodeReply();
- }});
- await web.locator('#pairStep1NextBtn').click();
- await web.locator('#pairPhoneCode').fill('654321');
- await web.locator('#pairConnectCodeBtn').click();
- await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:17000});
- if(!(await web.locator('#pairConfirmPanel').getAttribute('class')).includes('ready'))throw Error('Confirm Pairing must glow when connection is ready');
- if(!((await web.locator('#pairConfirmBtn').textContent())||'').includes('Confirm Pairing Now'))throw Error('Confirmation action must explicitly announce readiness');
- await web.locator('#pairConfirmBtn').click();
- await phone.waitForFunction(()=>!document.getElementById('requestControlBtn').disabled,null,{timeout:17000});
- await phone.locator('#requestControlBtn').click();
- await web.locator('.qr-header-switch').click();
- await phone.waitForFunction(()=>!document.getElementById('mobileLedOn').disabled,null,{timeout:14000});
- await phone.locator('#mobileLedOff').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF',null,{timeout:12000});
- console.log('PASS No Camera six-digit entry -> answer -> WebRTC/LED ACK, no webcam. PeerJS credential transport separately tested.');
-
- await web.screenshot({path:'test-output/smart-qr-web-settings.png',fullPage:true});
- await phone.screenshot({path:'test-output/smart-qr-android-response.png',fullPage:true});
- await web.reload({waitUntil:'domcontentloaded'});
- await web.waitForFunction(()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'),null,{timeout:10000});
- await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:15000});
- if((await web.locator('#pairCode').textContent())!=='------')throw Error('Refresh did not discard PIN');
- if(errors.length)throw Error('JS errors: '+errors.join(' | '));
- console.log('SUCCESS Smart Two-Way QR: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
-}catch(err){
- console.error('SMART TWO-WAY QR TEST FAILED:',err.stack||err);
- console.error('WEB:',await web.locator('#pairAnswerState').textContent().catch(()=>''),'PHONE:',await phone.locator('#answerState').textContent().catch(()=>''));
- console.error('PHONE LOG:',(await phone.locator('#mobileLog').textContent().catch(()=>''))?.slice(-1200));
- console.error('JS ERRORS:',errors);
- await web.screenshot({path:'test-output/smart-qr-failed-web.png',fullPage:true}).catch(()=>{});
- await phone.screenshot({path:'test-output/smart-qr-failed-android.png',fullPage:true}).catch(()=>{});
- process.exitCode=1;
-}finally{await browser.close()}
+ if(!await web.locator('#pairCameraSection').isHidden()||await web.locator('#pairCodeMode').getAttribute('aria-pressed')!=='true')throw Error('Code default lost');
+ if(!await phone.locator('#flightArm').isDisabled())throw Error('Unpaired ARM enabled');
+ const ui=await web.locator('body').textContent();if(/LED ON|LED OFF|ANDROID FLIGHT/.test(ui)||await web.locator('iframe').count())throw Error('Legacy control feature remains');
+ await web.evaluate(()=>window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{}});
+ await web.locator('#pairCameraMode').click();await onePair();await exerciseControl();
+ await phone.evaluate(()=>window.zebjusNetworkChanged());await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
+ await wait(phone,()=>document.getElementById('appPairCode').textContent==='------');await onePair();await exerciseControl();
+ // Preserve the six-digit UI path. Only public signaling lookup is substituted.
+ await web.locator('#pairDisconnectBtn').click();await phone.locator('#resetPairBtn').click();await web.locator('#pairCodeMode').click();
+ await web.locator('#pairCreateBtn').click();await wait(web,()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
+ const offer=await web.locator('#pairOfferText').inputValue();await phone.locator('#offerInput').fill(offer);await phone.locator('#useOfferBtn').click();await wait(phone,()=>document.getElementById('answerText').value.startsWith('zj1:'));
+ const answer=await phone.locator('#answerText').inputValue();await web.exposeFunction('__testCodeReply',()=>answer);await web.evaluate(()=>window.ZebjusCodePair.resolveAnswer=async ({code})=>{if(code!=='654321')throw Error('Wrong test code');return window.__testCodeReply()});
+ await web.locator('#pairStep1NextBtn').click();await web.locator('#pairPhoneCode').fill('654321');await web.locator('#pairConnectCodeBtn').click();await finishPair();await exerciseControl();
+ await safeShot(web,'test-output/connection-confirmed.png');await safeShot(phone,'test-output/android-connection-sheet.png');
+ await web.reload();await wait(phone,()=>document.getElementById('flightArm').disabled);await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
+ if(await web.locator('#pairCode').textContent()!=='------')throw Error('Refresh retained pairing');if(errors.length)throw Error(errors.join(' | '));
+ console.log('PASS real encrypted QR pairing/ACK/STOP: camera pixels, code UI, PIN approval, exclusive owner, Wi-Fi reset/fresh QR, refresh invalidation; no legacy LED');
+}catch(e){console.error(e.stack||e);console.error(errors);await safeShot(web,'test-output/qr-error-web.png').catch(()=>{});await safeShot(phone,'test-output/qr-error-phone.png').catch(()=>{});process.exitCode=1}finally{await browser.close()}

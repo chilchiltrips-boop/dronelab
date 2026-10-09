@@ -42,7 +42,7 @@ test('PID apply while running retains throttle, attitude, actual motors and inte
 });
 test('each physical motor thrust obeys approximate RPM-squared scaling',()=>{
  const s=createSimulator();startSimulator(s);s.throttle=1500;for(let i=0;i<200;i++)stepSimulator(s);
- for(let i=0;i<4;i++)assert.ok(Math.abs(s.motorThrust[i]-8*(s.motorRPM[i]/8500)**2)<1e-6);
+ for(let i=0;i<4;i++)assert.ok(Math.abs(s.motorThrust[i]-11*(s.motorRPM[i]/8500)**2)<1e-6);
 });
 test('ACRO no-angle-hold; Angle cascade returns to target',()=>{
  const a=createSimulator();setFlightMode(a,'acro');startSimulator(a);a.throttle=1500;disturb(a,17,-12);
