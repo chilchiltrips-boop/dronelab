@@ -3,6 +3,19 @@ on:
   push:
     branches: [testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'mobile-android/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
       - 'app-version.json'
       - 'docs/flight-training/**'
       - '.github/workflows/browser-python-lab.yml'

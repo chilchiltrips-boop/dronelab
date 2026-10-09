@@ -125,3 +125,26 @@ html.cockpit-active>body>.app-top,html.cockpit-active>body>main,html.cockpit-act
 @media(max-height:400px){.flight-topbar{padding:3px 7px;gap:4px}.flight-brand{flex:1 1 85px}.flight-brand>span{font-size:9px}.flight-state{font-size:8px;padding:4px}.flight-topbar #flightOwner{max-width:100px}.flight-center{gap:3px}.flight-readouts{gap:4px}.flight-feedback,#flightAppliedTelemetry{font-size:8px}.flight-ring{height:82px;width:82px}.flight-cockpit select{max-width:100px}}
 
 .flight-applied-controls{font:8px/1.4 ui-monospace,monospace;color:#9af1d5;text-align:center;margin:0;max-width:290px}
+
+/* Android density can yield a 488x227 CSS viewport on a 1280x720 display.
+ * Keep 44px actions in two rows instead of pushing STOP off-screen. */
+@media(max-width:600px) and (orientation:landscape){
+ .flight-topbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;grid-template-areas:'brand connection owner gear' 'mode mode arm stop';gap:3px;padding:3px 6px}
+ .flight-brand{grid-area:brand;min-width:0;gap:4px}.flight-brand>b{width:25px;height:25px}.flight-brand>span{font-size:8px}.flight-brand em{font-size:6px}
+ #flightConnection{grid-area:connection;max-width:92px;white-space:normal;text-align:center;font-size:7px}
+ #flightOwner{grid-area:owner;max-width:95px!important;font-size:7px}
+ #flightSettings{grid-area:gear;min-width:44px}#flightMode{grid-area:mode;width:100%;max-width:none!important}
+ #flightArm{grid-area:arm;min-width:66px}#flightStop{grid-area:stop;min-width:76px;padding-inline:8px}
+ .flight-field{grid-template-columns:minmax(0,1fr) minmax(135px,.95fr) minmax(0,1fr)}
+}
+@media(max-height:300px) and (orientation:landscape){
+ .flight-center{gap:2px;padding:2px}.flight-heading{font-size:8px}.flight-heading small{display:none}
+ .flight-readouts{gap:2px}.flight-readouts>div{padding:2px}.flight-readouts small{font-size:6px}.flight-readouts b{font-size:10px}
+ .flight-center-state{gap:2px;font-size:6px}.flight-center-state>span{padding:2px}
+ .flight-feedback,#flightAppliedTelemetry,.flight-applied-controls{font-size:7px;line-height:1.1;max-height:19px;overflow:auto}
+ .flight-warning{font-size:7px;line-height:1.1;margin:0;max-height:17px;overflow:auto}
+ .flight-zone-title{top:3%;font-size:7px}.flight-zone-title b{font-size:8px;margin-top:1px}
+ .flight-axis-label{font-size:6px}.flight-axis-label.up{top:24%}.flight-axis-label.down{bottom:10%}
+ .flight-touch-readout{font-size:7px;bottom:1%}.flight-ring{height:65px;width:65px}.flight-knob{width:23px;height:23px}
+ .flight-footer{padding:2px;font-size:6px}
+}

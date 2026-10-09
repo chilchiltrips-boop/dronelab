@@ -3,6 +3,19 @@ on:
   push:
     branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'mobile-android/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
       - 'app-version.json'
       - 'docs/flight-training/**'
       - 'tripod.html'

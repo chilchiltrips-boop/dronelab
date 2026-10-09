@@ -59,6 +59,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private void multitouch() throws Exception {
         check("window.ZebjusFlightApp && !document.getElementById('flightCockpit').hidden");
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
+        check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
         float[] l=point("flightLeftZone",.50f,.65f),r=point("flightRightZone",.50f,.65f);
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightLeftRing').classList.contains('dragging')");
@@ -125,7 +126,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout.\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
-            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight})");}catch(Exception ignored){}
+            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent})");}catch(Exception ignored){}
             result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
         }
     }

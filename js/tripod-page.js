@@ -361,6 +361,7 @@ function updateControls(){
  window.addEventListener('keydown',e=>keyHandler(e,true));window.addEventListener('keyup',e=>keyHandler(e,false));
  window.addEventListener('blur',()=>releaseAll(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
  window.addEventListener('pagehide',()=>{stop();cancelAnimationFrame(raf);audioStop();visual?.dispose?.()});
+ $('tpStop').addEventListener('pointerdown',e=>{e.preventDefault();stop()});
  updatePidEditor();coach();syncActions();
 }
 function sampleChart(){

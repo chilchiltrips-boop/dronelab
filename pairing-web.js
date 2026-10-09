@@ -234,6 +234,7 @@ function bind(){
  window.addEventListener('zebjus:training-stop',e=>host.emergencyStop(e.detail?.reason||'Web STOP'));
  $('simRemoteStop').onclick=()=>host.emergencyStop('Web emergency STOP');
  $('connectionStop').onclick=()=>host.emergencyStop('Connection settings STOP');
+ for(const id of ['connectionStop','simRemoteStop'])$(id).addEventListener('pointerdown',e=>{e.preventDefault();host.emergencyStop('Web emergency STOP')});
  flightTimer=setInterval(()=>{training()?.tick();host.sendTelemetry(training()?.snapshot())},100);
  statsTimer=setInterval(async()=>{
   const pc=host.peer,dc=host.channel;if(!pc){$('pairLinkStats').textContent='DataChannel closed • RTT —';return}

@@ -99,6 +99,7 @@ function onAck(a){
  if(!a.accepted||!validApplied(a.applied)){stopLocally(a.reason||'INVALID RECEIVER FEEDBACK');return}
  lastApplied=a.applied;ready=true;
  if(armed&&!a.applied.armed){stopLocally('RECEIVER DISARMED');return}
+ if(armed&&a.applied.armed)updateStatus('VIRTUAL ARMED • RECEIVER APPLIED');
  // Fractional local throttle integrates continuously; applied integer readout comes from the ACK.
  if(a.applied.mode!==mode)mode=a.applied.mode;
  onTelemetry({sessionId:a.sessionId,applied:a.applied});render();
@@ -130,6 +131,11 @@ function bind(){
   if(!send(true)){doStop();return}updateStatus('VIRTUAL ARM REQUESTED');render();
  };
  $('flightStop').onclick=doStop;$('mobileSettingsStop').onclick=doStop;
+ for(const id of ['flightStop','mobileSettingsStop'])$(id).addEventListener('pointerdown',e=>{
+  // Non-primary third-finger touches may not synthesize click on Android.
+  // STOP must take effect immediately for every touchscreen pointer.
+  e.preventDefault();doStop();
+ });
  $('flightMode').onchange=e=>{mode=e.target.value==='acro'?'acro':'angle';render();if(isOwned()){
   // A mode change supersedes in-flight ACKs from the previous requested mode.
   sent.clear();send(true);
