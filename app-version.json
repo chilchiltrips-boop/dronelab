@@ -1,5 +1,5 @@
 {
-  "version": "1.1.1",
+  "version": "1.2.0",
   "channel": "release",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -7,7 +7,11 @@
     "virtual LED",
     "QR offer answer",
     "Android companion",
-    "Android WebView camera permission fix"
+    "Android WebView camera permission fix",
+    "Single Android QR scan with local LAN signaling",
+    "Adaptive QR camera zoom",
+    "Mobile control top switch",
+    "Wi-Fi transition control reset"
   ],
   "publishedAt": "2026-10-09",
   "buildCommit": "1903b445092b"
