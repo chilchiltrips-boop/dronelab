@@ -4,6 +4,7 @@ on:
     branches:
       - testing/two-way-qr-pairing
       - testing/one-scan-qr-v1.2.0
+      - testing/smart-two-way-qr-v1.3.0
   workflow_dispatch:
 permissions:
   contents: read
