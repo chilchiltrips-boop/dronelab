@@ -1,1 +1,1 @@
-e3c7af92d582d5320e59f7efafadf5d6c73be6b0504cb59cb053be8fee3c4744  mobile-apk/ZEBJUS_DroneLab_QR_V1_1_1_CAMERA_FIX.apk
+d29d90b10bf1200631cf13de839f02793cf77427b512dc16b69db03ad812e44d  mobile-apk/ZEBJUS_DroneLab_ONE_SCAN_V1_2_0_TEST.apk
