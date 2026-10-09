@@ -38,6 +38,7 @@ function initPeer(){
   control:d=>{sync();window.ZebjusFlightApp?.onStatus(peer?.status());if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
   simAck:ack=>window.ZebjusFlightApp?.onAck(ack),
+  simReady:()=>window.ZebjusFlightApp?.onStatus(peer?.status()),
   heartbeat:t=>{$('heartbeatDetail').textContent=new Date(t).toLocaleTimeString()},
   reconnecting:()=>{status('Reconnecting • control released');message('Wi-Fi interrupted, controls are locked until sync')},
   disconnected:r=>{if(!processing){++epoch;pending=false;stopScanner();stopPhoneCode();clearResponse()}status('Disconnected');message(r);$('answerState').textContent='Connection lost • scan NEW Web QR';sync()},
