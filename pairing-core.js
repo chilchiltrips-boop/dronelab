@@ -1,5 +1,5 @@
-/* ZEBJUS local WebRTC pairing • v1 • no STUN/TURN/signaling servers.
-   Offer and answer are transferred out of band using two-way QR/manual copy.
+/* ZEBJUS local WebRTC pairing • v1.2 • no STUN/TURN/cloud.
+   One-scan QR carries an ephemeral LAN bridge address and authentication token.
    Always volatile: refresh / app restart discards keys, peers and controller leases. */
 (function(root){
 'use strict';
@@ -51,6 +51,7 @@ function session(role,events={}){
   try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
   controller=null;pendingCode=null;sessionId=null;code=null;expires=0;lastHeartbeat=0;
+  if(role==='mobile'){led=false;revision=0;emit('led',{led,revision,origin:'reset'})}
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
  function send(m){if(channel?.readyState!=='open')return false;channel.send(JSON.stringify({...m,v:VERSION}));return true}
@@ -102,14 +103,14 @@ function session(role,events={}){
   }
  }
  function setup(pc,dc){
-  if(dc){channel=dc;dc.onmessage=e=>onData(e.data);dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;connected=false;clearInterval(heartbeat);dropControl('DataChannel closed');state('Disconnected • new QR required');emit('disconnected','New QR pairing required')}}
+  if(dc){channel=dc;dc.onmessage=e=>onData(e.data);dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;close('DataChannel closed • scan fresh QR')}}
   pc.ondatachannel=e=>{if(peer===pc)setup(pc,e.channel)};
   pc.onconnectionstatechange=()=>{
    if(peer!==pc)return;
    const s=pc.connectionState;
-   if(s==='connected'){clearTimeout(dropTimer);state(paired?'Connected':'Connected • awaiting approval')}
-   if(s==='disconnected'){state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(pc.connectionState!=='connected')close('Connection lost • new QR required')},RETRY_GRACE_MS)}
-   if(s==='failed'||s==='closed')close('Connection ended • new QR required');
+   if(s==='connected'){clearTimeout(dropTimer);state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
+   if(s==='disconnected'){dropControl('Wi-Fi changed');controller=null;rejectOutstanding('Wi-Fi changed');emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
+   if(s==='failed'||s==='closed')close('Connection ended • scan fresh QR');
   };
  }
  function makePC(){
@@ -117,12 +118,12 @@ function session(role,events={}){
   const pc=new RTCPeerConnection({iceServers:[],iceCandidatePoolSize:0});
   peer=pc;return pc;
  }
- async function makeOffer(){
+ async function makeOffer(localBridge){
   close('New pairing session');sessionId=randomId(12);code=pin();expires=Date.now()+EXPIRY_MS;
   const pc=makePC(),dc=pc.createDataChannel('zebjus-led-v1',{ordered:true});setup(pc,dc);
   await pc.setLocalDescription(await pc.createOffer());state('Gathering local Wi-Fi connection candidates');
   await waitIce(pc);state('Waiting for Android QR response');
-  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
+  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp,...(localBridge||{})});
   return {qr,pin:code,expires,sessionId};
  }
  async function makeAnswer(offerText){
@@ -136,7 +137,7 @@ function session(role,events={}){
   await waitIce(pc);
   const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
   state('Show response QR to Web App');
-  return {qr,pin:code,expires};
+  return {qr,pin:code,expires,bridge:offer.bridge||null,secret:offer.secret||null,sid:sessionId};
  }
  async function receiveAnswer(answerText){
   if(role!=='host'||!peer||!sessionId)throw Error('Create a fresh Web App QR first');
@@ -158,7 +159,8 @@ function session(role,events={}){
   controller='web';emit('control',{owner:'web'});broadcast();return true;
  }
  function grantMobileControl(){
-  if(role!=='host'||!approved||!connected||controller==='web')return false;
+  if(role!=='host'||!approved||!connected)return false;
+  if(controller==='web')dropControl('Transferred to Android');
   controller='mobile';send({type:'CONTROL_GRANTED',owner:'mobile'});emit('control',{owner:'mobile'});broadcast();return true;
  }
  function releaseControl(){
@@ -180,7 +182,7 @@ function session(role,events={}){
  }
  return {
   makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,toggleWebLed,commandLed,
-  requestControl:()=>send({type:'REQUEST_CONTROL',deviceId}),
+  requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
   status:()=>({role,connected,paired,approved,controller,led,revision,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
   get channel(){return channel},get peer(){return peer}
  };
