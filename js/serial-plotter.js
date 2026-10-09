@@ -8,12 +8,12 @@ export function parseSerialPlotLine(line){
  if(!s||s.length>512)return null;
  const matches=[...s.matchAll(pair)];
  if(matches.length){
-  if(s.replace(pair,'').replace(/[,;\\s]/g,'')!=='')return null;
+  if(s.replace(pair,'').replace(/[,;\s]/g,'')!=='')return null;
   const result={};
   for(const match of matches){const n=Number(match[2]);if(!Number.isFinite(n))return null;result[match[1]]=n}
   return Object.keys(result).length?result:null;
  }
- const values=s.split(/[,;\\t ]+/).filter(Boolean);
+ const values=s.split(/[,;\t ]+/).filter(Boolean);
  if(!values.length||values.length>8||!values.every(x=>numberOnly.test(x)))return null;
  const result={};
  values.forEach((x,i)=>{result[values.length===1?'Value':'Value '+(i+1)]=Number(x)});
