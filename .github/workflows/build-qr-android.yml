@@ -1,7 +1,7 @@
 name: Build QR Android Companion APK
 on:
   push:
-    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, main]
+    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, main]
     paths:
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
@@ -9,6 +9,7 @@ on:
       - 'companion.css'
       - 'companion.js'
       - 'pairing-core.js'
+      - 'pairing-code.js'
       - 'pairing-qr-ui.js'
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
@@ -41,14 +42,15 @@ jobs:
         run: |
           set -eux
           mkdir -p mobile-android/app/src/main/assets
-          cp companion.html companion.css companion.js pairing-core.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
           mkdir -p mobile-android/app/src/main/assets/vendor
           cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
+          test -s mobile-android/app/src/main/assets/pairing-code.js
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
           test -s mobile-android/app/src/main/assets/vendor/qrgen.js
       - name: Validate camera permission regression
-        run: node --test tools/android-camera-permission.test.mjs
+        run: node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs
       - name: Build installable Android debug APK
         run: gradle -p mobile-android :app:assembleDebug --stacktrace --no-daemon
       - name: Verify APK content and copy download
@@ -56,21 +58,21 @@ jobs:
           set -eux
           test -s mobile-android/app/build/outputs/apk/debug/app-debug.apk
           mkdir -p mobile-apk
-          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk
-          sha256sum mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk | tee mobile-apk/SHA256SUMS.txt
+          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk
+          sha256sum mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          unzip -l mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|vendor/jsqr.js|vendor/qrgen.js)'
-          test "$(stat -c %s mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk)" -gt 1000000
+          unzip -l mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk | grep -E 'assets/(companion.html|pairing-core.js|vendor/jsqr.js|vendor/qrgen.js)'
+          test "$(stat -c %s mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk)" -gt 1000000
       - uses: actions/upload-artifact@v4
         with:
-          name: ZEBJUS_DroneLab_Smart_Two_Way_QR_Android_APK
+          name: ZEBJUS_DroneLab_QR_and_Code_Android_APK
           path: mobile-apk/
           retention-days: 30
       - name: Publish APK to current branch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk mobile-apk/SHA256SUMS.txt
-          git diff --cached --quiet || git commit -m 'Publish V1.3.0 smart QR Android APK [skip ci]'
+          git add mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_0_TEST.apk mobile-apk/SHA256SUMS.txt
+          git diff --cached --quiet || git commit -m 'Publish V1.4.0 QR and code Android APK [skip ci]'
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin HEAD:"$GITHUB_REF_NAME"
