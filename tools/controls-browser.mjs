@@ -19,6 +19,15 @@ try{
  await page.locator('#wireModeBadge').focus();await page.keyboard.press('Space');await page.keyboard.press('Space');
  const node=page.locator('[data-node=M1]').first();await node.click({position:{x:30,y:15}});const before=await node.getAttribute('transform');await page.keyboard.press('r');const rotated=await node.getAttribute('transform');if(before===rotated)throw Error('Wiring rotation key did not update transform');await page.keyboard.press('f');
  results.push({id:'wiring-node',result:'select, rotate, flip verified'});await click('clearWireBtn');
+ if(await page.locator('#wireModeBadge').textContent()!=='WIRE MODE')await page.locator('#wireModeBadge').click();
+ const firstPort=page.locator('.port-v8[data-port="BAT.+"][tabindex="0"]'),secondPort=page.locator('.port-v8[data-port="PDB.BAT+"][tabindex="0"]');
+ await firstPort.focus();await page.keyboard.press('Enter');
+ if(await firstPort.getAttribute('aria-pressed')!=='true'||await page.evaluate(()=>document.activeElement?.dataset.port)!=='BAT.+')throw Error('Wiring keyboard selection/focus was lost on render');
+ await secondPort.focus();await page.keyboard.press('Space');
+ if(await page.locator('.wire-v8').count()!==1)throw Error('Keyboard port pair did not create exactly one virtual wire');
+ const uniquePorts=await page.locator('.port-v8[tabindex="0"]').evaluateAll(ps=>ps.map(p=>p.dataset.port));if(new Set(uniquePorts).size!==uniquePorts.length)throw Error('Duplicate FC overlay keyboard targets');
+ results.push({id:'wiring-port',result:'Enter/Space creates one virtual wire; focus survives render; FC overlay targets unique'});
+ await click('clearWireBtn');
  await page.locator('[data-tab=firmware]').click();
  await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('APP.bin'));
  await page.evaluate(()=>{Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>{throw new DOMException('Permission denied for test','NotAllowedError')},getPorts:async()=>[],addEventListener(){}}})});
