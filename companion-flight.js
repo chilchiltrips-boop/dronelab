@@ -1,13 +1,13 @@
 /* ZEBJUS v1.6 landscape virtual flight transmitter. Physical motors are NEVER driven. */
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
-let peer=null,active=false,splashTimer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,lastSentAt=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,shown=false;
+let peer=null,active=false,splashTimer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,lastSentAt=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,shown=false,lastApplied=null;
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
 function stopLocally(message='STOP • DISARMED'){
  armed=false;halted=true;throttle=1000;left=right=null;
- drag.left=drag.right=null;sent.clear();ready=false;
+ drag.left=drag.right=null;sent.clear();ready=false;lastApplied=null;
  render();updateStatus(message);
 }
 function updateStatus(message){
@@ -42,7 +42,8 @@ function render(){
  $('flightArm').textContent=armed?'DISARM':'ARM';$('flightArm').disabled=!isOwned()||(!armed&&throttle>1050);
  $('flightArm').setAttribute('aria-pressed',String(armed));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
- $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(Date.now()-lastAckAt>400?'STALE':$('flightLatency').textContent):'NO ACK';
+ $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(lastApplied?' • APPLIED '+lastApplied.throttle+' µs '+lastApplied.mode.toUpperCase():''):'NO ACK';
+ for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').setAttribute('aria-disabled',String(!isOwned()||!armed));
  $('flightSent').textContent='#'+seq;
  for(const side of ['left','right'])stickRender(side,drag[side]);
 }
@@ -55,7 +56,7 @@ function setupStick(side){
   render();
  };
  pad.addEventListener('pointerdown',e=>{
-  if(drag[side]||e.pointerType==='mouse'&&e.button!==0)return;
+  if(!isOwned()||!armed||halted||drag[side]||e.pointerType==='mouse'&&e.button!==0)return;
   e.preventDefault();
   const zone=pad.getBoundingClientRect();
   drag[side]={id:e.pointerId,cx:e.clientX,cy:e.clientY,
@@ -108,7 +109,7 @@ function onAck(a){
  const sentTime=sent.get(a.ackSeq);if(sentTime==null)return;
  sent.delete(a.ackSeq);
  if(a.ackSeq<=lastAckSeq)return;
- lastAckSeq=a.ackSeq;lastAckAt=performance.now();
+ lastAckSeq=a.ackSeq;lastAckAt=performance.now();lastApplied=a.accepted?a.applied||null:null;
  const ms=Math.round(lastAckAt-sentTime);
  $('flightLatency').textContent=ms+' ms';
  if(!a.accepted){stopLocally(a.reason||'RECEIVER REJECTED CONTROL');return}
