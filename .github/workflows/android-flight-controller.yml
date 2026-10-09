@@ -1,0 +1,55 @@
+name: Android Landscape Flight WebRTC Tests
+on:
+  push:
+    branches: [feature/android-landscape-flight-controller-v1.6.0, main]
+    paths:
+      - 'flight-input.js'
+      - 'companion-flight.js'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'pairing-core.js'
+      - 'pairing-web.js'
+      - 'js/tripod-page.js'
+      - 'js/ui-controls.js'
+      - 'tripod.html'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-input.test.mjs'
+      - '.github/workflows/android-flight-controller.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web-rtc-joystick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check simulator-only joystick and repository regressions
+        run: |
+          node --check companion-flight.js
+          node --check flight-input.js
+          node --check pairing-core.js
+          node --check pairing-web.js
+          node --test tools/flight-input.test.mjs
+          npm test
+          npm run check
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Real paired WebRTC and landscape cockpit smoke test
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/flight-http.log 2>&1 &
+          sleep 3
+          node tools/flight-controller-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-flight-landscape-webrtc
+          path: test-output/
+          if-no-files-found: ignore
