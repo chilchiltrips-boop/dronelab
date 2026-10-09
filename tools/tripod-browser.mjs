@@ -40,6 +40,7 @@ try{
  await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 1.00'));
  await page.keyboard.up('a');
  await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
+ await page.locator('#tpLeftPad').scrollIntoViewIfNeeded();
  const yawPad=await page.locator('#tpLeftPad').boundingBox();
  await page.mouse.move(yawPad.x+yawPad.width*.82,yawPad.y+yawPad.height*.50);
  await page.mouse.down();
