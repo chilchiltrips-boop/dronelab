@@ -98,5 +98,5 @@ export function initControls(ctx){
   addEventListener('blur',stop);addEventListener('pagehide',stop);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
-  ctx.setActiveTab(['#wiring','#firmware'].includes(location.hash)?location.hash.slice(1):'assembly');applyBranding(ctx);
+  ctx.setActiveTab(['#wiring','#python','#firmware'].includes(location.hash)?location.hash.slice(1):'assembly');applyBranding(ctx);
 }
