@@ -121,3 +121,15 @@
 @keyframes qr-feedback-pop{0%{transform:scale(.96)}100%{transform:scale(1)}}
 @media(max-width:680px){.qr-priority-button{width:100%}.qr-confirm-button{width:100%}.qr-step1-qr{width:min(100%,330px)}}
 @media(prefers-reduced-motion:reduce){.qr-confirm-button.ready:not(:disabled),.qr-scanned-note[data-status="success"]{animation:none}}
+
+
+/* Use the full desktop grid width for Step 1: dense WebRTC QR needs large,
+   crisp modules for phone cameras to decode quickly from a monitor. */
+.qr-settings-grid>.qr-step-one{grid-column:1/-1;align-items:center}
+.qr-step-one>h3{text-align:center}
+.qr-step-one>.qr-actions{justify-content:center}
+.qr-step-one .qr-step1-qr{width:min(100%,510px);min-height:330px;box-shadow:0 9px 30px #0007}
+.qr-step-one .qr-qr-wrap{max-width:700px;margin-inline:auto}
+.qr-step-one .qr-data-card{width:min(100%,540px);max-width:540px}
+.qr-step-one .qr-scanned-note{width:min(100%,540px)}
+@media(max-width:700px){.qr-step-one .qr-step1-qr{width:min(100%,390px);min-height:290px}}
