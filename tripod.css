@@ -46,3 +46,22 @@
 #tpSound:focus-visible,#tpResetIntegrators:focus-visible,#tpCompare:focus-visible{outline:2px solid #67e9ca;outline-offset:2px}
 @media(max-width:760px){.tp-cascade{grid-template-columns:1fr}.tp-ab-inputs{grid-template-columns:repeat(3,minmax(0,1fr))}.tp-ab-inputs .action{grid-column:1/-1}.tp-command .tp-audio{flex:1 1 100%}.tp-compare-chart{height:135px}}
 @media(max-width:400px){.tp-ab-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}.tp-ab-inputs label:first-child{grid-column:1/-1}.tp-ab-inputs .action{grid-column:1/-1}}
+
+/* Flight Training: one receiver, accessible connection sheet and measured travel. */
+.tp-nav a.active{text-decoration:none;border-bottom:1px solid #277d5f}
+.action{min-height:44px}.tp-heading h1 span{display:inline-block;margin-top:4px}
+.tp-connection-dialog{color:var(--text);width:min(1000px,96vw);max-height:90svh;border:1px solid #376777;border-radius:20px;background:#081b29;padding:0;box-shadow:0 25px 90px #0009}
+.tp-connection-dialog::backdrop{background:#020c16c9;backdrop-filter:blur(5px)}
+.tp-dialog-header{position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;background:#0a2230;border-bottom:1px solid #345565}
+.tp-dialog-header h2{font-size:18px;margin:0}.tp-dialog-header p{font-size:12px;color:#9ec2ce;margin:6px 0 0}
+#connectionFlow{padding:16px}#connectionFlow .btn{background:#123044;color:#d9f5f8;border:1px solid #41687b;padding:12px;border-radius:10px;min-height:44px;font-size:12px;font-weight:800;cursor:pointer}
+#connectionFlow .btn.primary{background:#126348;border-color:#55c99a}#connectionFlow .btn.danger{background:#713244;border-color:#db8596}#connectionFlow .btn:disabled{opacity:.45;cursor:not-allowed}
+#connectionFlow button:focus-visible,#connectionFlow summary:focus-visible{outline:3px solid #8ce9c9;outline-offset:3px}
+#connectionFlow .qr-pair-methods{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}#connectionFlow .qr-card{margin:10px 0}
+#connectionFlow .qr-settings-grid{grid-template-columns:1fr}#connectionFlow .qr-header-switch{margin:12px 0}
+.tp-vertical{padding-bottom:14px}.tp-vertical-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 14px}
+.tp-vertical-grid>div{border:1px solid #294e60;background:#081d2a;padding:10px;border-radius:10px;min-width:0}.tp-vertical-grid small{display:block;font-size:9px;color:#94becb}.tp-vertical-grid b{display:block;color:#b2f5df;font-variant-numeric:tabular-nums;font-size:13px;margin-top:7px}
+#tpTravelMeter{display:block;width:calc(100% - 28px);height:16px;margin:14px;accent-color:#62e5c3}.tp-motor-detail{display:block;font-size:9px;color:#a6c8d4;min-height:16px;margin:5px 0}
+.tp-stick-pad[data-pointer]::after{content:'';pointer-events:none;position:absolute;left:var(--anchor-x);top:var(--anchor-y);width:72%;height:72%;transform:translate(-50%,-50%);border-radius:50%;border:1px solid #6de9ce77;background:#1fd1b20d}
+.tp-stick-pad[data-remote=true]{border-color:#55c9dc;cursor:default}.tp-stick-knob{z-index:1}
+@media(max-width:540px){.tp-brand small{display:none}.tp-brand strong{font-size:12px}.tp-header-state{gap:5px}.tp-header-state #mobileHeaderStatus{font-size:9px}.tp-header-state .qr-build-version{display:none}.tp-vertical-grid{grid-template-columns:repeat(2,1fr)}.tp-connection-dialog{width:98vw;max-height:96svh}#connectionFlow{padding:10px}.tp-dialog-header{padding:12px}.tp-dialog-header h2{font-size:15px}}

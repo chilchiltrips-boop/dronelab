@@ -17,10 +17,6 @@ function sync(){
  $('controlState').textContent=canControl?'CONTROL GRANTED':ready?'PAIRED • VIEW ONLY':'NO CONTROL';
  $('requestControlBtn').disabled=!ready||canControl;
  $('releaseControlBtn').disabled=!canControl;
- $('mobileLedOn').disabled=!canControl||pending;$('mobileLedOff').disabled=!canControl||pending;
- $('mobileLedBulb').classList.toggle('on',ready&&s.led);
- $('mobileLedBulb').setAttribute('aria-label','LED '+(ready&&s.led?'on':'off'));
- $('mobileLedState').textContent='LED '+(ready&&s.led?'ON':'OFF');
  $('scanOfferBtn').disabled=processing||scannerStarting;
  $('stopCameraBtn').disabled=!scannerStarting&&!scannerStop;
  $('useOfferBtn').disabled=processing||!$('offerInput').value.trim();
@@ -34,10 +30,11 @@ function initPeer(){
   status:s=>{status(s);window.ZebjusFlightApp?.onStatus(peer?.status())},
   connected:()=>{status('Connected • awaiting Web approval');message('WebRTC connected. Confirm code on laptop.')},
   paired:()=>{stopPhoneCode();$('phoneShortCodeStatus').textContent='Paired successfully; code expired.';status('Connected • Paired');message('Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
-  led:d=>{sync();if(peer.status().paired){$('commandStatus').textContent='Confirmed by Web App • revision '+d.revision;message('LED '+(d.led?'ON':'OFF')+' ACK / revision '+d.revision)}},
   control:d=>{sync();window.ZebjusFlightApp?.onStatus(peer?.status());if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
   simAck:ack=>window.ZebjusFlightApp?.onAck(ack),
+  simTelemetry:d=>window.ZebjusFlightApp?.onTelemetry(d),
+  simStop:d=>window.ZebjusFlightApp?.remoteStop(d?.reason),
   simReady:()=>window.ZebjusFlightApp?.onStatus(peer?.status()),
   heartbeat:t=>{$('heartbeatDetail').textContent=new Date(t).toLocaleTimeString()},
   reconnecting:()=>{status('Reconnecting • control released');message('Wi-Fi interrupted, controls are locked until sync')},
@@ -167,12 +164,6 @@ function expandQR(){
  $('showAnswerBtn').textContent=opened?'Normal QR Size':'Expand Response QR';
  el.scrollIntoView({behavior:'smooth',block:'center'});
 }
-async function ledCommand(value){
- if(pending)return;pending=true;$('commandStatus').textContent='Waiting for Web App acknowledgement…';sync();
- try{const reply=await peer.commandLed(value);$('commandStatus').textContent='Web confirmed '+(reply.led?'ON':'OFF')+' • revision '+reply.revision}
- catch(err){$('commandStatus').textContent=err.message;message('Command failed: '+err.message)}
- finally{pending=false;sync()}
-}
 function reset(reason='Disconnected • scan a new Web QR'){
  ++epoch;processing=false;pending=false;stopScanner();stopPhoneCode();peer?.close(reason);
  scanFeedback('Ready for a new Web QR scan','waiting');
@@ -212,7 +203,6 @@ function bind(){
  $('disconnectBtn').onclick=()=>reset('Disconnected • scan a fresh Web QR');
  $('requestControlBtn').onclick=()=>{if(peer.requestControl()){$('commandStatus').textContent='Requested control • Web App header switch ON';message('Mobile Take Control requested')}else $('commandStatus').textContent='Not connected or not paired'};
  $('releaseControlBtn').onclick=()=>{peer.releaseControl();sync();message('Control released')};
- $('mobileLedOn').onclick=()=>ledCommand(true);$('mobileLedOff').onclick=()=>ledCommand(false);
  expiryTimer=setInterval(()=>{
   const s=peer?.status();if(!s)return;
   if(s.expires&&!s.paired&&Date.now()>s.expires){reset('QR expired • scan fresh Web QR')}
@@ -222,6 +212,7 @@ function bind(){
  document.addEventListener('visibilitychange',()=>{if(document.hidden)window.zebjusAppPaused()});
  window.addEventListener('pagehide',()=>{++epoch;stopScanner();stopPhoneCode();peer?.close('App closed / re-pair required');clearInterval(expiryTimer)});
 }
+window.ZebjusPairingStopCamera=stopScanner;
 function init(){initPeer();bind();status('Disconnected')}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

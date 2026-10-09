@@ -1,22 +1,15 @@
 {
-  "version": "1.6.0+23",
-  "channel": "release",
-  "previousStable": "c1ac834fb398818641dd5e0dd930a8f12d337d56",
+  "version": "1.6.1",
+  "channel": "review",
+  "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
-    "Direct two-way QR pairing; optional online code signaling",
-    "Automatic Android response QR",
-    "Laptop webcam scans phone QR",
-    "Virtual LED ACK sync and header control switch",
-    "Red disconnected status and tactile UI feedback",
-    "Adaptive QR zoom/focus and Wi-Fi reset",
-    "Optional No Camera: authenticated 6-digit code over online signaling",
-    "Camera Two-Way QR pairing still available without signaling service",
-    "Fix six-digit code handshake premature auth timeout and show ICE diagnostics",
-    "Permanent Android APK release certificate and versioned in-place upgrades",
-    "Center-focused QR scanning and user-activated Step 2 camera",
-    "Default 6-digit code pairing, centered Step 1 QR, Android QR detect feedback, highlight Confirm Pairing and low-light scanning",
-    "Compact step-by-step pairing, safe session/camera cancellation and offline cache fixes"
+    "One canonical Flight Training page with top-right WebRTC connection gear",
+    "Existing two-way QR and authenticated optional six-digit code pairing",
+    "Android independent floating multitouch preview with explicit virtual ARM and ownership",
+    "Applied control ACK and 10 Hz bidirectional simulator telemetry; no virtual LED demo",
+    "250 Hz RPM-squared thrust, constrained mount travel and Rate/Angle cascade PID",
+    "Quiet persistent audio preferences, actual-RPM effects and adaptive graphics"
   ],
-  "publishedAt": "2026-10-09",
-  "buildCommit": "02204be8af01"
+  "publishedAt": null,
+  "buildCommit": "pending-ci"
 }

@@ -23,7 +23,7 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
    const sign=Math.abs(err)>.5?Math.sign(err):0;if(sign&&lastSign&&sign!==lastSign)reversals++;if(sign)lastSign=sign;
    for(let m=0;m<4;m++){motorActivity+=(s.motorCommands[m]-cmdPrev[m])**2;cmdPrev[m]=s.motorCommands[m];}
    if(s.motorSaturated.some(Boolean))saturation++;
-   if(t%15===0)samples.push({t:s.time,target,actual,integral:s.memory[bank].i,output:s.memory[bank].output,motors:[...s.motors]});
+   if(t%15===0)samples.push({t:s.time,target,actual,integral:s.memory[bank].i,output:s.memory[bank].output,terms:{p:s.memory[bank].p,i:s.memory[bank].i,d:s.memory[bank].d},motors:[...s.motorCommands],rpm:[...s.motorRPM],thrust:[...s.motorThrust],vertical:{...s.vertical},outerRate:s['target'+axisC+'Rate'],measuredRate:s[axis+'Rate']});
   }
   const late=samples.slice(-35),lateError=late.reduce((total,x)=>total+Math.abs(x.target-x.actual),0)/late.length;
   // Rise time is 10→90% of initial commanded pulse, not a hand-authored visual.
@@ -42,10 +42,10 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
     settlingTime=after[i].t-(startTime+.56);break;
    }
   }
-  const overshootPct=commandPeak>1?100*Math.max(0,peakAbs-commandPeak)/commandPeak:0;
+  const overshootPct=commandPeak>1?100*Math.max(0,peakAbs-commandPeak)/commandPeak:null;
   return {value,bank,gain,scenario,mode:flightMode,axis,samples,
    metrics:{peak:peakAbs,peakRate,rms:Math.sqrt(errorSum/steps),lateError,overshoot,overshootPct,riseTime,settlingTime,
-    motorActivity:Math.sqrt(motorActivity/steps),reversals,saturationPct:100*saturation/steps,
+    motorActivity:Math.sqrt(motorActivity/steps),reversals,saturationPct:100*saturation/steps,saturationSeconds:saturation*.004,verticalPeak:Math.max(...samples.map(x=>x.vertical.z)),verticalFinal:s.vertical.z,
     finalAngle:s[axis]??0,integral:s.memory[bank].i,finalRate:s[axis+'Rate']??0}};
  });
  return {bank,gain,scenario,axis,mode:flightMode,results};

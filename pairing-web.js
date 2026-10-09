@@ -2,35 +2,21 @@
    Refresh clears all QR sessions, answer data, and control privileges. */
 const $=id=>document.getElementById(id);
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
-let simulatorReady=false,lastSimulatorFrame=0,pendingSimulator=new Map(),flightWatchdog=null;
-function frame(){return document.getElementById('simRemoteFrame')}
+let flightTimer=null,statsTimer=null;
+const training=()=>window.ZebjusTraining;
 function stopSimulatorRemote(reason='Control lost'){
- for(const p of pendingSimulator.values()){clearTimeout(p.timer);p.resolve({accepted:false,reason})}
- pendingSimulator.clear();lastSimulatorFrame=0;
- if(simulatorReady)frame()?.contentWindow?.postMessage({type:'ZJ_SIM_STOP',reason},location.origin);
- const status=document.getElementById('simControlInfo');if(status)status.textContent='STOP • '+reason;
+ training()?.stop(reason);
+ const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
 }
 function forwardSimulatorControl(m){
- if(!simulatorReady||!frame()?.contentWindow)return {accepted:false,reason:'Open ANDROID FLIGHT page on Web App'};
- return new Promise(resolve=>{
-  const timer=setTimeout(()=>{pendingSimulator.delete(m.seq);resolve({accepted:false,reason:'Simulator did not acknowledge'})},650);
-  pendingSimulator.set(m.seq,{resolve,timer});lastSimulatorFrame=performance.now();
-  frame().contentWindow.postMessage({type:'ZJ_SIM_CONTROL',...m},location.origin);
- });
+ const result=training()?.apply(m)||{accepted:false,reason:'Flight Training receiver is not ready'};
+ $('simControlInfo').textContent=result.accepted?
+  'Applied #'+m.seq+' • '+result.applied.mode.toUpperCase()+' • '+result.applied.throttle+' µs • '+(result.applied.armed?'VIRTUAL ARMED':'DISARMED'):
+  'Control denied: '+result.reason;
+ return result;
 }
-function onSimulatorMessage(event){
- if(event.origin!==location.origin||event.source!==frame()?.contentWindow)return;
- const m=event.data;if(!m||typeof m!=='object')return;
- if(m.type==='ZJ_TRIPOD_READY'){
-  simulatorReady=true;host?.setSimulatorReady(true);const e=document.getElementById('simReceiverState');if(e)e.textContent='SIMULATOR READY • VIRTUAL ONLY';
- }else if(m.type==='ZJ_SIM_ACK'){
-  const p=pendingSimulator.get(m.seq);if(!p)return;
-  clearTimeout(p.timer);pendingSimulator.delete(m.seq);p.resolve(m);
-  const e=document.getElementById('simControlInfo');if(e)e.textContent=m.accepted?
-   'Mobile control #'+m.seq+' • '+m.applied.mode.toUpperCase()+' • '+m.applied.throttle+' µs • '+(m.applied.armed?'VIRTUAL ARMED':'DISARMED'):
-   'Control denied: '+(m.reason||'Unknown');
- }
-}
+function openSettings(){const dialog=$('connectionDialog');if(!dialog.open)dialog.showModal()}
+function closeSettings(){stopCamera();$('connectionDialog').close();$('topPairMobileBtn').focus()}
 function openStep(number){
  const s=host.status();
  if((number===2&&!offer)||(number===3&&!s.connected))return;
@@ -45,7 +31,7 @@ function clearOfferUi(){
  $('pairPhoneCode').value='';$('pairExpiry').textContent='New QR required';$('pairHeartbeat').textContent='Last heartbeat: —';
  openStep(1);
 }
-function stamp(text){const e=$('ledActivityLog');e.textContent=(e.textContent+'\n'+new Date().toLocaleTimeString()+'  '+text).slice(-6800);e.scrollTop=e.scrollHeight}
+function stamp(text){const e=$('pairActivityLog');if(e){e.textContent=(e.textContent+'\n'+new Date().toLocaleTimeString()+'  '+text).slice(-6800);e.scrollTop=e.scrollHeight}}
 function scanFeedback(text,state='waiting'){
  const target=$('pairScanHint');if(!target)return;
  target.textContent=text;target.dataset.status=state;
@@ -59,15 +45,8 @@ function status(text){
 }
 function sync(){
  const s=host.status();
- $('ledBulb').classList.toggle('on',s.led);$('ledBulb').setAttribute('aria-label','Virtual LED '+(s.led?'on':'off'));
- $('ledState').textContent=s.led?'LED ON':'LED OFF';
- $('ledRevision').textContent='State revision '+s.revision;
- $('ledController').textContent='CONTROL: '+(s.controller||'none').toUpperCase();
- $('ledPeerState').textContent=s.connected?'MOBILE CONNECTED':'MOBILE DISCONNECTED';
- $('ledPeerState').classList.toggle('disconnected',!s.connected);
- $('ledControlNote').textContent=s.controller==='mobile'?'Android has exclusive control. Turn OFF Grant Mobile Control first.':s.controller==='web'?'Web App holds LED control.':'Take Control (Web) or grant control to the Android app.';
- $('webLedOn').disabled=s.controller!=='web';$('webLedOff').disabled=s.controller!=='web';
- $('ledRelease').disabled=!s.controller;$('pairReleaseBtn').disabled=!s.controller;
+ training()?.setOwner(s.connected&&s.approved&&s.controller==='mobile'?'mobile':'web');
+ $('pairReleaseBtn').disabled=!s.controller;
  const confirm=$('pairConfirmBtn'),panel=$('pairConfirmPanel'),hint=$('pairConfirmHint');
  confirm.disabled=!s.connected||s.approved;
  panel.classList.toggle('ready',s.connected&&!s.approved);
@@ -78,7 +57,7 @@ function sync(){
  hint.textContent=s.approved?'Paired successfully • Android can request control':s.connected?'✓ ANDROID CONNECTED • Compare the Safety Verification PIN on both screens, then press the glowing Confirm Pairing button.':'Step 1: Android scans Web QR → Step 2: enter CONNECT code → Confirm Pairing unlocks automatically.';
  $('pairConnectCodeBtn').classList.toggle('is-ready',pairMode==='code'&&offer&&!codeBusy&&ZebjusCodePair.validCode($('pairPhoneCode').value));
  $('pairCreateBtn').disabled=creatingOffer;
- $('topPairMobileBtn').disabled=creatingOffer;
+
  $('pairCancelBtn').disabled=!creatingOffer&&!offer&&!s.connected;
  $('pairDisconnectBtn').disabled=!offer&&!s.connected;
  $('pairRejectBtn').disabled=!s.connected;
@@ -95,7 +74,7 @@ function sync(){
  $('pairCopyOfferBtn').disabled=!offer;
  $('pairStep2').querySelector('summary').setAttribute('aria-disabled',String(!offer));
  $('pairStep3').querySelector('summary').setAttribute('aria-disabled',String(!s.connected));
- for(const id of ['ledTakeWeb','pairTakeWebBtn'])$(id).disabled=s.controller==='mobile';
+ $('pairTakeWebBtn').disabled=s.controller==='mobile';
  const toggle=$('topGrantMobileSwitch');toggle.checked=s.controller==='mobile';toggle.disabled=!s.connected||!s.approved;
  $('pairControlStatus').textContent='Controller: '+(s.controller||'none')+' • '+(s.approved?'Paired':'Not approved');
  $('pairDeviceList').replaceChildren();
@@ -107,24 +86,23 @@ function sync(){
  }else $('pairDeviceList').textContent='No mobile device connected.';
  status($('pairStatus').textContent);
 }
-function go(section){document.querySelector('.tab[data-tab="'+section+'"]')?.click();location.hash='#'+section}
+function go(){openSettings()}
 function callbacks(){
  return {
   status:s=>{status(s);sync()},
-  connected:()=>{clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
+  connected:()=>{host.setSimulatorReady(!!training());clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
   paired:()=>{status('Connected • paired');scanFeedback('✓ Pairing confirmed • Turn ON Grant Mobile Control after Android Take Control','success');stamp('Pairing approved, mobile needs control permission');sync()},
-  led:v=>{sync();stamp('LED '+(v.led?'ON':'OFF')+' • rev '+v.revision+' • '+v.origin)},
-  control:()=>{if(host.status().controller!=='mobile')stopSimulatorRemote('Ownership released');sync();stamp('Control: '+(host.status().controller||'none'))},
+  control:()=>{sync();stamp('Control: '+(host.status().controller||'none'))},
   simControl:forwardSimulatorControl,
   simStop:d=>stopSimulatorRemote(d?.reason||'Pairing stopped'),
-  controlRequest:d=>{$('pairAnswerState').textContent='Android requested control: turn ON the header Grant Mobile Control toggle.';stamp('Mobile requests control • '+d.deviceId);sync()},
+  controlRequest:d=>{$('pairAnswerState').textContent='Android requested control: turn ON Grant Mobile Control below.';stamp('Mobile requests control • '+d.deviceId);sync()},
   heartbeat:at=>$('pairHeartbeat').textContent='Last heartbeat: '+new Date(at).toLocaleTimeString(),
   reconnecting:()=>{status('Reconnecting • control released');sync()},
   disconnected:reason=>{stopSimulatorRemote(reason);if(offer){++offerEpoch;offer='';answerAccepted=false;answerProcessing=false;cancelCode();stopCamera();clearOfferUi()}status('Disconnected');scanFeedback('Mobile disconnected • Create a new QR','error');stamp(reason);sync();$('pairAnswerState').textContent='Connection lost. Pair Mobile → new QR.'},
   error:reason=>{$('pairAnswerState').textContent=reason;stamp('Pairing error: '+reason);sync()}
  };
 }
-function startHost(){host=ZebjusP2P.session('host',callbacks());sync()}
+function startHost(){host=ZebjusP2P.session('host',callbacks());host.setSimulatorReady(!!training());sync()}
 function selectMode(mode){
  cancelCode();
  pairMode=mode==='code'?'code':'camera';
@@ -252,18 +230,21 @@ function disconnect(reason='Disconnected by Web App'){
 }
 async function showVersion(){try{const r=await fetch('./app-version.json',{cache:'no-store'});if(r.ok){const meta=await r.json();$('webappVersion').textContent='v'+meta.version+' • '+meta.channel.toUpperCase()}}catch{}}
 function bind(){
- window.addEventListener('message',onSimulatorMessage);
- $('simRemoteStop').onclick=()=>stopSimulatorRemote('Web emergency STOP');
- window.addEventListener('dronelab:tab',e=>{
-  if(e.detail?.name==='simcontrol'&&!frame().getAttribute('src')){
-   simulatorReady=false;host?.setSimulatorReady(false);frame().setAttribute('src','./tripod.html?embedded=1');
-  }
- });
- flightWatchdog=setInterval(()=>{
-  if(lastSimulatorFrame&&performance.now()-lastSimulatorFrame>450&&host.status().controller==='mobile')
-    stopSimulatorRemote('Control timeout • virtual motors off');
- },100);
- $('topPairMobileBtn').onclick=()=>{go('settings');void createOffer()};
+ window.addEventListener('zebjus:training-ready',()=>{host.setSimulatorReady(true);sync()});
+ window.addEventListener('zebjus:training-stop',e=>host.emergencyStop(e.detail?.reason||'Web STOP'));
+ $('simRemoteStop').onclick=()=>host.emergencyStop('Web emergency STOP');
+ flightTimer=setInterval(()=>{training()?.tick();host.sendTelemetry(training()?.snapshot())},100);
+ statsTimer=setInterval(async()=>{
+  const pc=host.peer,dc=host.channel;if(!pc){$('pairLinkStats').textContent='DataChannel closed • RTT —';return}
+  try{const stats=await pc.getStats();if(pc!==host.peer)return;
+   let rtt=null;stats.forEach(r=>{if(r.type==='candidate-pair'&&r.state==='succeeded'&&r.nominated&&Number.isFinite(r.currentRoundTripTime))rtt=Math.round(r.currentRoundTripTime*1000)});
+   $('pairLinkStats').textContent='DataChannel '+(dc?.readyState||'closed')+' • RTT '+(rtt==null?'—':rtt+' ms')+' • Queued '+(dc?.bufferedAmount||0)+' B';
+  }catch{}
+ },2000);
+ $('topPairMobileBtn').onclick=openSettings;
+ $('connectionClose').onclick=closeSettings;
+ $('connectionDialog').addEventListener('close',stopCamera);
+ $('connectionDialog').addEventListener('cancel',stopCamera);
  $('pairCreateBtn').onclick=createOffer;
  $('pairCameraMode').onclick=()=>selectMode('camera');
  $('pairCodeMode').onclick=()=>selectMode('code');
@@ -288,11 +269,8 @@ function bind(){
   else{host.releaseControl();stamp('Android control OFF')}
   sync();
  };
- $('ledTakeWeb').onclick=$('pairTakeWebBtn').onclick=()=>{if(!host.takeWebControl())stamp('Release Android control first');sync()};
- $('ledRelease').onclick=$('pairReleaseBtn').onclick=()=>{host.releaseControl();sync()};
- $('webLedOn').onclick=()=>{host.toggleWebLed(true);sync()};
- $('webLedOff').onclick=()=>{host.toggleWebLed(false);sync()};
- $('ledGoSettings').onclick=()=>go('settings');
+ $('pairTakeWebBtn').onclick=()=>{if(!host.takeWebControl())stamp('Release Android control first');sync()};
+ $('pairReleaseBtn').onclick=()=>{host.releaseControl();sync()};
  expiryTimer=setInterval(()=>{
   const s=host.status();if(s.expires&&!s.approved){
    const remain=Math.max(0,Math.ceil((s.expires-Date.now())/1000));
@@ -301,9 +279,8 @@ function bind(){
   }
   if(s.connected&&s.lastHeartbeat&&Date.now()-s.lastHeartbeat>9500)$('pairHeartbeat').textContent='Heartbeat delayed; check Wi-Fi';
  },1000);
- window.addEventListener('pagehide',()=>{stopSimulatorRemote('Page closed');clearInterval(flightWatchdog);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
- window.addEventListener('dronelab:tab',e=>{if(e.detail?.name!=='settings')stopCamera()});
+ window.addEventListener('pagehide',()=>{stopSimulatorRemote('Page closed');clearInterval(flightTimer);clearInterval(statsTimer);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCamera();if(host.status().controller==='mobile')host.releaseControl()}});
 }
-function init(){if(!$('topPairMobileBtn'))return;startHost();bind();selectMode('code');void showVersion();status('Disconnected');sync()}
+function init(){if(!$('topPairMobileBtn'))return;startHost();bind();selectMode('code');void showVersion();status('Disconnected');sync();if(new URLSearchParams(location.search).has('connection'))openSettings()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
