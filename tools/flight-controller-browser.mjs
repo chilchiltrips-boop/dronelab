@@ -4,6 +4,9 @@ mkdirSync('test-output',{recursive:true});const {browser,ctx,web,phone,errors}=a
 try{
  await phone.setViewportSize({width:844,height:390});await exchange(web,phone);await grant(web,phone);
  await web.locator('#connectionClose').click();await phone.locator('#flightBack').click();
+ // Keep the software-rendered CI bench below its expensive shadow workload;
+ // adaptive/default quality is independently exercised in the rendering suite.
+ await web.locator('#tpQuality').selectOption('low');
  if(await web.locator('iframe').count())throw Error('Flight Training must not contain an iframe');
  if(!await web.locator('#tpRun').isDisabled()||!await web.locator('#tpMode').isDisabled())throw Error('Local controls can fight mobile ownership');
  await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
@@ -19,8 +22,12 @@ try{
  await wait(phone,()=>parseInt(document.getElementById('flightYaw').textContent)<-5&&parseInt(document.getElementById('flightRoll').textContent)>5);
  const mirror=await web.evaluate(()=>({a:window.ZebjusTraining.snapshot(),left:document.getElementById('tpLeftKnob').style.left,right:document.getElementById('tpRightKnob').style.left}));
  if(mirror.a.axes.yaw>=0||mirror.a.axes.roll<=0||mirror.a.sticks.left.x<=0||mirror.a.sticks.right.x<=0)throw Error('Applied dual-stick mirror missing');
- const before=await web.locator('#tpThrottleReadout').textContent();await web.locator('body').click({position:{x:20,y:180}});await web.keyboard.press('w');
- if(await web.locator('#tpThrottleReadout').textContent()!==before)throw Error('Web keys fought Android');
+ // Send actual Web keyboard input without focusing the phone out of its
+ // captured touch session. Compare applied plant state, not a 10-Hz UI sample.
+ const before=await web.evaluate(()=>window.ZebjusTraining.snapshot());await web.keyboard.press('w');
+ const after=await web.evaluate(()=>window.ZebjusTraining.snapshot());
+ if(!after.armed)throw Error('Receiver safety-stopped during ownership keyboard check: '+await web.locator('#tpStatus').textContent());
+ if(after.source!=='mobile'||after.throttle!==before.throttle)throw Error('Web keys changed Android-applied throttle: '+before.throttle+' -> '+after.throttle);
  await safeShot(web,'test-output/web-mobile-mirror.png');await safeShot(phone,'test-output/android-connected.png');measurements.push({heldThrottle:held,appliedAxes:mirror.a.axes,knobs:{left:mirror.left,right:mirror.right}});
  await event('touchEnd',[l]);await wait(web,()=>window.ZebjusTraining.snapshot().axes.yaw===0&&window.ZebjusTraining.snapshot().axes.roll>0);
  await event('touchEnd',[]);await wait(web,()=>Object.values(window.ZebjusTraining.snapshot().axes).every(v=>v===0));
