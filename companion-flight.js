@@ -59,7 +59,7 @@ function setupStick(side){
   e.preventDefault();
   const zone=pad.getBoundingClientRect();
   drag[side]={id:e.pointerId,cx:e.clientX,cy:e.clientY,
-   radius:Math.min(zone.width,zone.height)*.28,data:{x:0,y:0}};
+   radius:Math.min($(side==='left'?'flightLeftRing':'flightRightRing').getBoundingClientRect().width*.32,Math.min(zone.width,zone.height)*.28),data:{x:0,y:0}};
   pad.setPointerCapture(e.pointerId);move(e,true);
  });
  pad.addEventListener('pointermove',e=>{if(drag[side]?.id===e.pointerId){e.preventDefault();move(e,false)}});
