@@ -1,15 +1,8 @@
 package in.zebjus.dronelab.companion;
 
 import android.Manifest;
-import android.webkit.JavascriptInterface;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import org.json.JSONObject;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.io.OutputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -18,7 +11,6 @@ import android.net.Uri;
 import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
@@ -26,7 +18,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import androidx.webkit.WebViewAssetLoader;
 import java.util.Arrays;
 
@@ -99,63 +90,6 @@ public class MainActivity extends Activity {
             else { req.deny(); explainDeniedCameraPermission(); }
         }
     }
-    // The Android app's origin is HTTPS appassets; calling LAN HTTP from WebView
-    // would be blocked as mixed content. Only this audited native method can
-    // submit a WebRTC answer to an RFC1918 laptop IPv4 address on port 8765.
-    private boolean privateIpv4(String host) {
-        if (host == null || !host.matches("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$")) return false;
-        String[] parts = host.split("\\.");
-        int[] numbers = new int[4];
-        try { for (int i = 0; i < 4; i++) { numbers[i] = Integer.parseInt(parts[i]); if (numbers[i] < 0 || numbers[i] > 255) return false; } }
-        catch (NumberFormatException ex) { return false; }
-        return numbers[0] == 10 || (numbers[0] == 172 && numbers[1] >= 16 && numbers[1] <= 31) ||
-               (numbers[0] == 192 && numbers[1] == 168) ||
-               (numbers[0] == 127 && numbers[1] == 0 && numbers[2] == 0 && numbers[3] == 1);
-    }
-    private void reportAnswer(String id, boolean ok, String message) {
-        if (view == null) return;
-        String script = "window.ZebjusNativeReply && window.ZebjusNativeReply(" +
-                JSONObject.quote(id) + "," + ok + "," + JSONObject.quote(message) + ")";
-        view.post(() -> { if (view != null) view.evaluateJavascript(script, null); });
-    }
-    private class NativePairingBridge {
-        @JavascriptInterface public void sendAnswer(String bridge, String json, String callbackId) {
-            new Thread(() -> {
-                HttpURLConnection conn = null;
-                try {
-                    if (callbackId == null || !callbackId.matches("[0-9a-f]{16}")) throw new Exception("Invalid callback");
-                    Uri uri = Uri.parse(bridge);
-                    String host = uri.getHost();
-                    if (!"http".equals(uri.getScheme()) || uri.getPort() != 8765 ||
-                        !privateIpv4(host) || (uri.getEncodedAuthority() != null &&
-                        uri.getEncodedAuthority().contains("@")) ||
-                        (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath())) ||
-                        uri.getQuery() != null || uri.getFragment() != null)
-                        throw new Exception("QR laptop address must be private Wi-Fi IPv4, port 8765");
-                    if (json == null || json.length() > 22000) throw new Exception("Pairing response too large");
-                    JSONObject data = new JSONObject(json);
-                    if (!data.optString("sid").matches("[0-9a-f]{24}") ||
-                        !data.optString("secret").matches("[0-9a-f]{48}") ||
-                        !data.optString("answer").startsWith("zj1:"))
-                        throw new Exception("Invalid one-time QR pairing credentials");
-                    URL target = new URL("http://" + host + ":8765/__pairing/answer");
-                    conn = (HttpURLConnection)target.openConnection();
-                    conn.setInstanceFollowRedirects(false);
-                    conn.setConnectTimeout(4000);conn.setReadTimeout(5000);
-                    conn.setRequestMethod("POST");conn.setDoOutput(true);
-                    conn.setRequestProperty("Content-Type", "application/json");
-                    byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-                    conn.setFixedLengthStreamingMode(bytes.length);
-                    try (OutputStream out = conn.getOutputStream()) { out.write(bytes); }
-                    int code = conn.getResponseCode();
-                    if (code != 200) throw new Exception("Laptop bridge HTTP " + code + ". Check QR expiry and use New Pair Mobile QR.");
-                    reportAnswer(callbackId, true, "Answer delivered");
-                } catch (Exception ex) {
-                    reportAnswer(callbackId, false, ex.getMessage() == null ? "Could not reach laptop local bridge" : ex.getMessage());
-                } finally { if (conn != null) conn.disconnect(); }
-            }, "ZebjusLocalPairAnswer").start();
-        }
-    }
     private void signalNetworkChange() {
         if (view != null) view.post(() -> {
             if (view != null) view.evaluateJavascript(
@@ -173,7 +107,6 @@ public class MainActivity extends Activity {
         view = new WebView(this);
         view.setBackgroundColor(Color.rgb(7, 17, 27));
         view.getSettings().setJavaScriptEnabled(true);
-        view.addJavascriptInterface(new NativePairingBridge(), "ZebjusNativeBridge");
         view.getSettings().setDomStorageEnabled(true);
         view.getSettings().setMediaPlaybackRequiresUserGesture(false);
         view.getSettings().setAllowFileAccess(false);
