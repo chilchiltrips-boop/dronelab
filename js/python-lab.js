@@ -35,22 +35,22 @@ function syncEditor(){
   editor.setModel(model);editor.layout();
  }else if($('pythonEditor'))$('pythonEditor').value=files[active]||'';
  $('pythonEditorTitle').textContent=active;
- loading=false;
+ loading=false;editorPosition();updateButtons();
 }
-function renderFiles(){const root=$('pythonFileList');root.replaceChildren();for(const name of Object.keys(files)){const b=document.createElement('button');b.type='button';b.className='python-file-entry'+(name===active?' active':'');b.textContent='🐍 '+name;b.onclick=()=>switchFile(name);root.append(b)}}
+function renderFiles(){const root=$('pythonFileList');root.replaceChildren();for(const name of Object.keys(files)){const b=document.createElement('button');b.type='button';b.className='python-file-entry'+(name===active?' active':'');b.textContent=name;b.setAttribute('role','tab');b.setAttribute('aria-selected',String(name===active));b.onclick=()=>switchFile(name);root.append(b)}updateButtons()}
 function switchFile(name){if(!Object.hasOwn(files,name))return;files[active]=currentCode();active=name;syncEditor();renderFiles();autosave()}
 function setCode(code){
  if(editor){editor.executeEdits('python-lab',[{range:editor.getModel().getFullModelRange(),text:code,forceMoveMarkers:true}]);editor.focus()}
  else{const h=editHistory();h.undo.push(currentCode());h.redo=[];$('pythonEditor').value=code}
- files[active]=code;autosave();
+ files[active]=code;autosave();updateButtons();editorPosition();
 }
 function recordText(next){
- if(loading||next===files[active])return;const h=editHistory();h.undo.push(files[active]||'');if(h.undo.length>150)h.undo.shift();h.redo=[];files[active]=next;autosave();
+ if(loading||next===files[active])return;const h=editHistory();h.undo.push(files[active]||'');if(h.undo.length>150)h.undo.shift();h.redo=[];files[active]=next;autosave();updateButtons();editorPosition();
 }
 function undoRedo(redo=false){
  if(editor){editor.trigger('toolbar',redo?'redo':'undo',null);editor.focus();return}
  const h=editHistory(),from=redo?h.redo:h.undo,to=redo?h.undo:h.redo;if(!from.length)return;
- to.push(currentCode());const code=from.pop();files[active]=code;$('pythonEditor').value=code;autosave();
+ to.push(currentCode());const code=from.pop();files[active]=code;$('pythonEditor').value=code;autosave();updateButtons();editorPosition();
 }
 function newFile(){
  if(Object.keys(files).length>=20)return alert('Maximum 20 files.');
@@ -135,20 +135,62 @@ function runPython(){
  clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
  worker.postMessage({type:'run',filename:active,code,files});
 }
+
+function updateButtons(){
+ const h=fallbacks.get(active);
+ const u=$('pythonUndoFileBtn'),r=$('pythonRedoFileBtn');
+ if(u){u.disabled=!!running||(!editor&&!h?.undo?.length);u.title='Undo (Ctrl/⌘+Z)'}
+ if(r){r.disabled=!!running||(!editor&&!h?.redo?.length);r.title='Redo (Ctrl/⌘+Shift+Z)'}
+ $('rerunPythonBtn').disabled=running||!hasRun;
+ $('runPythonBtn').disabled=running;
+ $('stopPythonBtn').disabled=!running;
+}
+function editorPosition(){
+ const pos=editor?.getPosition?.(),box=$('pythonEditor'),line=box?box.value.slice(0,box.selectionStart).split('\n'):[''];
+ $('pythonEditorPosition').textContent=pos?'Line '+pos.lineNumber+', Col '+pos.column:'Line '+line.length+', Col '+(line.at(-1).length+1);
+}
 function addCompletions(M){
- const snippets=[
-  ['while True','while True:\n    result = await i2c_scan()\n    print(result)\n    await asyncio.sleep(0.1)'],
-  ['i2c_scan','await i2c_scan()'],
-  ['print result','print("I2C scan result =", result["addresses"])'],
-  ['import zebjus','from zebjus import i2c_scan'],
-  ['import asyncio','import asyncio'],
-  ['asyncio.sleep','await asyncio.sleep(0.1)'],
-  ['latest_i2c_scan','await latest_i2c_scan()']
+ const K=M.languages.CompletionItemKind;
+ const examples=[
+ ['print','print("Hello from ZEBJUS Python Lab")',K.Snippet,'Write to Python terminal'],
+ ['if','if condition:\n    pass',K.Snippet,'Python conditional'],
+ ['for','for item in range(5):\n    print(item)',K.Snippet,'Python for loop'],
+ ['while','while True:\n    result = await i2c_scan()\n    print(result["addresses"])\n    await asyncio.sleep(0.1)',K.Snippet,'USB I2C read loop'],
+ ['while True','while True:\n    print("running")\n    await asyncio.sleep(0.5)',K.Snippet,'Asynchronous loop, click Stop to finish'],
+ ['def','def function_name():\n    pass',K.Snippet,'Python function'],
+ ['async def','async def function_name():\n    pass',K.Snippet,'Asynchronous Python function'],
+ ['class','class ClassName:\n    def __init__(self):\n        pass',K.Snippet,'Python class'],
+ ['try','try:\n    pass\nexcept Exception as error:\n    print(error)',K.Snippet,'Python try/except'],
+ ['from zebjus import i2c_scan','from zebjus import i2c_scan',K.Module,'Import real USB I2C API'],
+ ['i2c_scan','await i2c_scan()',K.Method,'Await next complete USB I2C scan'],
+ ['latest_i2c_scan','await latest_i2c_scan()',K.Method,'Last completed scan without waiting'],
+ ['addresses','result["addresses"]',K.Variable,'I2C addresses from scan'],
+ ['total','result["total"]',K.Variable,'I2C device count'],
+ ['asyncio','import asyncio',K.Module,'Python asyncio'],
+ ['asyncio.sleep','await asyncio.sleep(0.1)',K.Snippet,'Non-blocking loop delay'],
+ ['matplotlib.pyplot','import matplotlib.pyplot as plt',K.Module,'Create Python plots'],
+ ['plt.show','plt.show()',K.Method,'Show Matplotlib plot output'],
+ ['json','import json',K.Module,'Python JSON module']
  ];
- M.languages.registerCompletionItemProvider('python',{provideCompletionItems(model,position){
-  const word=model.getWordUntilPosition(position),range={startLineNumber:position.lineNumber,endLineNumber:position.lineNumber,startColumn:word.startColumn,endColumn:word.endColumn};
-  return {suggestions:snippets.map(([label,insertText])=>({label,kind:M.languages.CompletionItemKind.Snippet,insertText,range,detail:'ZEBJUS USB I2C Python'}))};
- }});
+ M.languages.registerCompletionItemProvider('python',{
+  triggerCharacters:['.','_'],
+  provideCompletionItems(model,position){
+   const word=model.getWordUntilPosition(position);
+   const range={startLineNumber:position.lineNumber,endLineNumber:position.lineNumber,startColumn:word.startColumn,endColumn:word.endColumn};
+   const names=[],seen=new Set(examples.map(x=>x[0]));
+   const add=(name,kind,detail)=>{if(!name||seen.has(name)||name.startsWith('_'))return;seen.add(name);names.push([name,name,kind,detail])};
+   const code=model.getValue();
+   for(const m of code.matchAll(/^\s*([A-Za-z_]\w*)\s*=\s*/gm))add(m[1],K.Variable,'Your Python variable');
+   for(const m of code.matchAll(/^\s*for\s+([A-Za-z_]\w*)\s+in\s+/gm))add(m[1],K.Variable,'Python for-loop variable');
+   for(const m of code.matchAll(/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm))add(m[1],K.Function,'Your Python function');
+   for(const m of code.matchAll(/^\s*class\s+([A-Za-z_]\w*)/gm))add(m[1],K.Class,'Your Python class');
+   for(const m of code.matchAll(/^\s*(?:from\s+\S+\s+import|import)\s+([A-Za-z_]\w*)/gm))add(m[1],K.Module,'Imported Python name');
+   return {suggestions:[...names,...examples].map(([label,insertText,kind,documentation])=>({
+    label,kind,insertText,documentation,range,sortText:(names.some(n=>n[0]===label)?'0':'1')+label,
+    insertTextRules:kind===K.Snippet?M.languages.CompletionItemInsertTextRule.InsertAsSnippet:undefined
+   }))};
+  }
+ });
 }
 async function enableMonaco(){
  const vs=SOURCE+'vendor/monaco/min/vs';
@@ -161,12 +203,14 @@ async function enableMonaco(){
   window.require.config({paths:{vs}});
   const M=await new Promise((resolve,reject)=>window.require(['vs/editor/editor.main'],()=>resolve(window.monaco),reject));
   if(!M)throw Error('Monaco not initialized');monaco=M;addCompletions(M);
-  editor=M.editor.create($('pythonMonaco'),{value:files[active],language:'python',theme:'vs-dark',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',tabSize:4,insertSpaces:true,quickSuggestions:true,suggestOnTriggerCharacters:true,scrollBeyondLastLine:false});
+  M.editor.defineTheme('zebjus-pycharm',{base:'vs-dark',inherit:true,rules:[{token:'comment',foreground:'8193A2',fontStyle:'italic'},{token:'keyword',foreground:'CB7EFA'},{token:'string',foreground:'A5C86A'},{token:'number',foreground:'6CADD9'}],colors:{'editor.background':'#06111b','editor.foreground':'#D9E9F2','editorLineNumber.foreground':'#52697C','editorCursor.foreground':'#6BE9BC','editor.selectionBackground':'#21506E88','editorSuggestWidget.background':'#0b1d2a','editorSuggestWidget.border':'#315567'}});
+  editor=M.editor.create($('pythonMonaco'),{value:files[active],language:'python',theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
   models.set(active,editor.getModel());
-  editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave()});
+  editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
+  editor.onDidChangeCursorPosition(editorPosition);
   editor.addCommand(M.KeyMod.CtrlCmd|M.KeyCode.Enter,runPython);
   $('pythonEditor').style.display='none';$('pythonMonaco').style.display='block';
-  requestAnimationFrame(()=>editor.layout());status('Python suggestions ready','good');
+  requestAnimationFrame(()=>{editor.layout();editorPosition()});status('PyCharm-style Python editor ready','good');updateButtons();
  }catch(e){$('pythonMonaco').style.display='none';$('pythonEditor').style.display='block';status('Basic editor fallback','warn');terminal('[Editor] '+e.message+'\n')}
 }
 function bind(){
