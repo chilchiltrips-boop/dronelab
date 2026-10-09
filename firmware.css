@@ -52,3 +52,25 @@
 @media(max-width:980px){.firmware-page .firmware-grid{grid-template-columns:1fr}.firmware-page .firmware-live-status{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){.firmware-page{padding:8px!important}.firmware-page .firmware-file-info{grid-template-columns:repeat(2,minmax(0,1fr))}.firmware-page .firmware-board-detect{grid-template-columns:1fr 1fr}.firmware-page .firmware-live-status{grid-template-columns:1fr 1fr}.firmware-page .firmware-recovery-actions .btn{flex:1 1 135px}.firmware-page .firmware-stages{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:390px){.firmware-page .firmware-config-row{grid-template-columns:1fr}.firmware-page .firmware-board-detect{grid-template-columns:1fr}}
+
+
+/* Generic Arduino-style Serial Monitor and Serial Plotter */
+.firmware-page .fw-serial-head strong{color:#d2e8ee;letter-spacing:.07em}
+.firmware-page .fw-serial-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:7px 0 9px}
+.firmware-page .fw-serial-tabs{display:flex;gap:4px;margin-right:auto;flex-wrap:wrap}
+.firmware-page .fw-serial-tabs .btn{min-height:34px;padding:6px 10px}
+.firmware-page .fw-serial-baud{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11px}
+.firmware-page .fw-serial-baud select,.firmware-page .fw-serial-send select{background:#fff;color:#172331;border:1px solid #c7d5dd;border-radius:7px;padding:6px;font-size:12px;max-width:145px}
+.firmware-page #fwSerialMonitorPane[hidden],.firmware-page #fwSerialPlotterPane[hidden]{display:none!important}
+.firmware-page .fw-serial-console{min-height:225px;max-height:355px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#07151c;border:1px solid #24424c;border-radius:9px;color:#d8f7df;padding:10px;line-height:1.5}
+.firmware-page .fw-serial-send{display:flex;align-items:center;gap:7px;margin:8px 0}
+.firmware-page .fw-serial-send input{flex:1;min-width:100px;border:1px solid #9fb1bf;background:#fff;color:#172331;border-radius:7px;padding:9px 10px;font-size:12px}
+.firmware-page .fw-serial-send button{min-width:70px}
+.firmware-page .fw-serial-autoscroll{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin:4px 0}
+.firmware-page .fw-plot-wrap{border:1px solid #24424c;border-radius:9px;background:#07151c;overflow:hidden;width:100%}
+.firmware-page .fw-plot-wrap canvas{display:block;width:100%;height:290px}
+.firmware-page .fw-plot-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:7px}
+.firmware-page .fw-plot-legend{display:flex;gap:9px;flex-wrap:wrap;font-size:11px;color:#b6d0d8}
+.firmware-page .fw-plot-series{display:inline-flex;align-items:center;gap:5px}
+.firmware-page .fw-plot-series i{display:inline-block;width:9px;height:9px;border-radius:50%}
+@media(max-width:590px){.firmware-page .fw-serial-toolbar{align-items:stretch}.firmware-page .fw-serial-tabs{width:100%}.firmware-page .fw-serial-tabs .btn{flex:1}.firmware-page .fw-serial-send{flex-wrap:wrap}.firmware-page .fw-serial-send input{flex-basis:100%}.firmware-page .fw-serial-baud{flex:1}.firmware-page .fw-serial-console{min-height:200px}}
