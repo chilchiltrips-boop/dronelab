@@ -1,7 +1,7 @@
 name: Tripod PID Simulator Tests
 on:
   push:
-    branches: [feature/tripod-pid-simulator-v1.5.0, main]
+    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, main]
     paths:
       - 'tripod.html'
       - 'tripod.css'
