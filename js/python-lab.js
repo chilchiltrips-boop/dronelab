@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project
 const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Change print() to your own custom message.\nwhile True:\n    i2c_scan_result = await i2c_scan()\n    print('I2C scan result =', i2c_scan_result['addresses'])\n    print('Total devices =', i2c_scan_result['total'])\n    await asyncio.sleep(0.1)\n","custom":"import asyncio\nfrom zebjus import i2c_scan\n\nwhile True:\n    result = await i2c_scan()\n    device_list = ', '.join(result['addresses']) or 'No devices'\n    print('My custom message: Found', result['total'], 'I2C devices')\n    print('Addresses ->', device_list)\n    await asyncio.sleep(0.1)\n","basic":"import asyncio\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\n# A real Python graph appears in the Python Plot Window.\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n"};
 const bridge=createI2CBridge();
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
-let cameraStream=null,plotUrl=null,outputWindowDragging=false,layoutReady=false;
+let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false;
 const fallbacks=new Map();
 function editHistory(){if(!fallbacks.has(active))fallbacks.set(active,{undo:[],redo:[]});return fallbacks.get(active)}
@@ -62,7 +62,7 @@ function newFile(){
 function deleteFile(){
  if(Object.keys(files).length<=1)return alert('Keep at least one .py file.');
  if(!confirm('Delete '+active+'?'))return;
- models.get(active)?.dispose();models.delete(active);delete files[active];active=Object.keys(files)[0];syncEditor();renderFiles();save();
+ models.get(active)?.dispose();models.delete(active);fallbacks.delete(active);delete files[active];active=Object.keys(files)[0];syncEditor();renderFiles();save();
 }
 function applyExample(key){
  const code=EXAMPLES[key];if(!code)return;
@@ -80,7 +80,7 @@ async function importProject(file){
   const data=JSON.parse(await file.text()),f=Object.fromEntries(Object.entries(data.files||{}).filter(([name,v])=>/^[A-Za-z_][\w-]*\.py$/.test(name)&&typeof v==='string').slice(0,20));
   if(!Object.keys(f).length)throw Error('No valid .py files found');
   if(!confirm('Replace current project with imported files?'))return;
-  for(const model of models.values())model.dispose();models.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();renderFiles();save();status('Imported project','good');
+  for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();renderFiles();save();status('Imported project','good');
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
 function usbStatus(){
@@ -265,23 +265,37 @@ function initPythonWorkspaceResizers(){
  window.addEventListener('resize',()=>requestAnimationFrame(()=>editor?.layout()));
 }
 async function startCamera(){
- if(cameraStream)return;
+ if(cameraStream||cameraStarting)return;
  if(!navigator.mediaDevices?.getUserMedia){$('pythonCameraStatus').textContent='Camera requires HTTPS and browser permissions.';return}
+ const ticket=++cameraEpoch;cameraStarting=true;
+ $('pythonCameraStart').disabled=true;$('pythonCameraStop').disabled=false;
  try{
-  cameraStream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480}},audio:false});
+  const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480}},audio:false});
+  if(ticket!==cameraEpoch){for(const track of stream.getTracks())track.stop();return}
+  cameraStream=stream;
   const video=$('pythonCameraVideo');video.srcObject=cameraStream;video.hidden=false;await video.play();
+  if(ticket!==cameraEpoch)return;
   $('pythonCameraStatus').textContent='Live browser camera preview • Close Camera to release it.';
- }catch(e){$('pythonCameraStatus').textContent='Camera unavailable: '+e.message}
+ }catch(e){if(ticket===cameraEpoch){stopCamera();$('pythonCameraStatus').textContent='Camera unavailable: '+e.message}}
+ finally{if(ticket===cameraEpoch){cameraStarting=false;$('pythonCameraStart').disabled=!!cameraStream;$('pythonCameraStop').disabled=!cameraStream}}
 }
 function stopCamera(){
+ ++cameraEpoch;cameraStarting=false;
  for(const track of cameraStream?.getTracks?.()||[])track.stop();
  cameraStream=null;
  const video=$('pythonCameraVideo');video.pause();video.srcObject=null;video.hidden=true;
  $('pythonCameraStatus').textContent='Camera stopped. Open Camera to preview again.';
+ $('pythonCameraStart').disabled=false;$('pythonCameraStop').disabled=true;
+}
+function clampPlotWindow(){
+ const modal=$('pythonOutputWindow');if(modal.hidden)return;
+ const box=modal.getBoundingClientRect();
+ modal.style.left=clamp(box.left,0,Math.max(0,innerWidth-box.width))+'px';
+ modal.style.top=clamp(box.top,0,Math.max(0,innerHeight-box.height))+'px';
 }
 function openPlotWindow(){
  const el=$('pythonOutputWindow');if(!plotUrl){$('pythonVisualTools').open=true;$('pythonCameraStatus').textContent='Run a Matplotlib example to create a Python plot.';return}
- el.hidden=false;$('pythonOutputImage').src=plotUrl;
+ el.hidden=false;$('pythonOutputImage').src=plotUrl;clampPlotWindow();
 }
 function showPythonPlot(message){
  const base64=String(message.base64||'');
@@ -300,10 +314,11 @@ function bindPlotWindow(){
  title?.addEventListener('pointerdown',e=>{
   if(e.target.closest('button'))return;
   e.preventDefault();const box=modal.getBoundingClientRect(),dx=e.clientX-box.left,dy=e.clientY-box.top;
-  const move=ev=>{modal.style.left=clamp(ev.clientX-dx,0,innerWidth-80)+'px';modal.style.top=clamp(ev.clientY-dy,0,innerHeight-45)+'px'};
-  const finish=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish)};
-  window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish,{once:true});
+  const move=ev=>{modal.style.left=clamp(ev.clientX-dx,0,Math.max(0,innerWidth-box.width))+'px';modal.style.top=clamp(ev.clientY-dy,0,Math.max(0,innerHeight-box.height))+'px'};
+  const finish=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish)};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish,{once:true});window.addEventListener('pointercancel',finish,{once:true});
  });
+ window.addEventListener('resize',clampPlotWindow);
 }
 async function copyTerminal(){
  const value=$('pythonTerminal').textContent;
@@ -324,14 +339,15 @@ function bind(){
  $('pythonEditor').oninput=e=>{recordText(e.target.value);editorPosition()};$('pythonEditor').onkeyup=editorPosition;$('pythonEditor').onclick=editorPosition;
  $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editor){e.preventDefault();undoRedo(e.shiftKey)}};
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
- window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()})});
+ window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()});else stopCamera()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
  window.addEventListener('pagehide',()=>{worker?.terminate();stopCamera();bridge.close()});
  bridge.subscribe(data=>{
   $('pyDeviceAddresses').textContent=data.addresses.join('  ')||'No devices';
   $('pyScanStatus').textContent='Last scan: '+data.total+' device(s) • '+new Date(data.timestamp).toLocaleTimeString();
   usbStatus();
  });
- setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;updateButtons();
+ setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;$('pythonCameraStop').disabled=true;updateButtons();
 }
 function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bind();usbStatus();void enableMonaco()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();

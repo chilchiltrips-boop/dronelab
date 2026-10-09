@@ -6,3 +6,10 @@
 
 [hidden]{display:none!important}
 @media(max-width:700px){#threeWrap #snapMessage{bottom:78px;max-width:calc(100% - 24px);white-space:normal}.runtime-error-card{max-height:calc(100% - 115px);top:10%;bottom:auto;min-height:0;overflow:auto}.runtime-error-card b{font-size:16px}}
+
+/* Keep the existing three-column bench inside a 1280px laptop viewport. */
+@media(min-width:1251px){#tab-assembly.assembly-grid.active{grid-template-columns:250px minmax(0,1fr) 325px!important}}
+.stage-toolbar{height:auto;min-height:65px;flex-wrap:wrap;gap:8px}
+.stage-toolbar .view-switch,.stage-toolbar .camera-actions{flex-wrap:wrap}
+#wiringSvg{touch-action:none}
+@media(pointer:coarse){.btn,.view-btn,.mode,.tab{min-height:44px!important}.build-step{min-height:48px}}

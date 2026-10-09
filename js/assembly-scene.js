@@ -473,7 +473,7 @@ ctx.showGuides = function showGuides(){if(!ctx.guidesRoot)return;ctx.guidesRoot.
 ctx.resize3D = function resize3D(){if(!ctx.renderer||!ctx.camera)return;const e=ctx.$('#threeContainer');if(!e)return;const r=e.getBoundingClientRect(),w=Math.max(1,Math.round(e.clientWidth||r.width||900)),h=Math.max(1,Math.round(e.clientHeight||r.height||600));ctx.camera.aspect=w/h;ctx.camera.updateProjectionMatrix();ctx.renderer.setSize(w,h,false)};
 
 ctx.loop3D = function loop3D(t){
- requestAnimationFrame(loop3D);if(!ctx.$('#tab-assembly')?.classList.contains('active'))return;ctx.fpsFrames++;if(t-ctx.fpsLast>1000){ctx.runtimeFps=Math.round(ctx.fpsFrames*1000/(t-ctx.fpsLast));ctx.fpsFrames=0;ctx.fpsLast=t;}
+ requestAnimationFrame(loop3D);if(document.hidden||!ctx.$('#tab-assembly')?.classList.contains('active'))return;ctx.fpsFrames++;if(t-ctx.fpsLast>1000){ctx.runtimeFps=Math.round(ctx.fpsFrames*1000/(t-ctx.fpsLast));ctx.fpsFrames=0;ctx.fpsLast=t;}
  ctx.controls.autoRotate=ctx.state.autoRotate;ctx.controls.update();
  ctx.guidesRoot.children.forEach((g,i)=>{g.material.opacity=.3+.28*Math.sin(t*.006+i);g.scale.setScalar(1+.08*Math.sin(t*.007+i))});
  for(let i=ctx.animations.length-1;i>=0;i--){

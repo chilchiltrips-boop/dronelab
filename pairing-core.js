@@ -1,5 +1,5 @@
-/* ZEBJUS local WebRTC pairing • v1.3 • no STUN/TURN/cloud.
-   WebRTC offer and answer travel only in human-scanned two-way QR codes.
+/* ZEBJUS local WebRTC control • no STUN/TURN in the control connection.
+   Offer/answer travel in two-way QR or optional online code signaling.
    Always volatile: refresh / app restart discards keys, peers and controller leases. */
 (function(root){
 'use strict';
@@ -40,29 +40,31 @@ function waitIce(pc,timeout=12000){
 }
 function session(role,events={}){
  const emit=(event,detail)=>{try{events[event]?.(detail)}catch(e){console.error(e)}};
- let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,pendingCode=null,connected=false,controller=null,led=false,revision=0,deviceId=randomId(8),seq=0,pending=new Map();
+ let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,led=false,revision=0,deviceId=randomId(8),pending=new Map(),generation=0;
  const error=(err)=>emit('error',String(err?.message||err));
  const state=(s)=>emit('status',s);
  const rejectOutstanding=reason=>{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error(reason))}pending.clear()};
  function close(reason='Disconnected'){
+  generation++;
   clearInterval(heartbeat);clearTimeout(dropTimer);heartbeat=null;dropTimer=null;
   rejectOutstanding(reason);
   const oldChannel=channel,oldPeer=peer;channel=null;peer=null;
   try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
-  controller=null;pendingCode=null;sessionId=null;code=null;expires=0;lastHeartbeat=0;
+  controller=null;sessionId=null;code=null;expires=0;lastHeartbeat=0;
   if(role==='mobile'){led=false;revision=0;emit('led',{led,revision,origin:'reset'})}
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
- function send(m){if(channel?.readyState!=='open')return false;channel.send(JSON.stringify({...m,v:VERSION}));return true}
+ function send(m){if(channel?.readyState!=='open')return false;try{channel.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
  function broadcast(){if(role!=='host')return;send({type:'STATE',led,revision,controller,paired:approved,at:Date.now(),deviceId})}
  function dropControl(reason){if(controller&&role==='host'){controller=null;emit('control',{owner:null,reason});broadcast()}}
  function startHeartbeat(){
   clearInterval(heartbeat);lastHeartbeat=Date.now();
   heartbeat=setInterval(()=>{
    if(!channel||channel.readyState!=='open')return;
-   const now=Date.now();send({type:'PING',at:now});
-   if(now-lastHeartbeat>TIMEOUT_MS){dropControl('Heartbeat timed out');state('Reconnecting');emit('reconnecting');}
+   const now=Date.now();
+   if(now-lastHeartbeat>TIMEOUT_MS){close('Heartbeat timed out • pair again');return}
+   send({type:'PING',at:now});
   },HEARTBEAT_MS);
  }
  function onData(raw){
@@ -78,7 +80,6 @@ function session(role,events={}){
    if(m.type==='SYNC_REQUEST'){if(approved)broadcast();return}
    if(m.type==='REQUEST_CONTROL'){
     if(!approved)return send({type:'CONTROL_DENIED',reason:'Pairing not approved'});
-    if(controller===deviceId)return;
     if(controller==='mobile')return send({type:'CONTROL_GRANTED',owner:'mobile'});
     emit('controlRequest',{deviceId:m.deviceId||'Android phone'});return;
    }
@@ -108,8 +109,8 @@ function session(role,events={}){
   pc.onconnectionstatechange=()=>{
    if(peer!==pc)return;
    const s=pc.connectionState;
-   if(s==='connected'){clearTimeout(dropTimer);state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
-   if(s==='disconnected'){dropControl('Wi-Fi changed');controller=null;rejectOutstanding('Wi-Fi changed');emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
+   if(s==='connected'){clearTimeout(dropTimer);connected=channel?.readyState==='open';state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
+   if(s==='disconnected'){connected=false;dropControl('Wi-Fi changed');controller=null;rejectOutstanding('Wi-Fi changed');emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(peer===pc&&pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
    if(s==='failed'||s==='closed')close('Connection ended • scan fresh QR');
   };
  }
@@ -120,36 +121,41 @@ function session(role,events={}){
  }
  async function makeOffer(){
   close('New pairing session');sessionId=randomId(12);code=pin();expires=Date.now()+EXPIRY_MS;
-  const pc=makePC(),dc=pc.createDataChannel('zebjus-led-v1',{ordered:true});setup(pc,dc);
-  await pc.setLocalDescription(await pc.createOffer());state('Gathering local Wi-Fi connection candidates');
-  await waitIce(pc);state('Waiting for Android QR response');
-  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
+  const ticket=generation,pc=makePC(),dc=pc.createDataChannel('zebjus-led-v1',{ordered:true});setup(pc,dc);
+  const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
+  const description=await pc.createOffer();check();await pc.setLocalDescription(description);check();state('Gathering local Wi-Fi connection candidates');
+  await waitIce(pc);check();state('Waiting for Android QR response');
+  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});check();
   return {qr,pin:code,expires,sessionId};
  }
  async function makeAnswer(offerText){
   close('New pairing session');
-  const offer=await unpack(offerText);if(offer.kind!=='offer')throw Error('Expected a Web App offer QR');
+  const ticket=generation,offer=await unpack(offerText);if(ticket!==generation)throw Error('Pairing cancelled');if(offer.kind!=='offer')throw Error('Expected a Web App offer QR');
   sessionId=offer.sid;code=offer.pin;expires=offer.expires;
   const pc=makePC();setup(pc);
-  await pc.setRemoteDescription({type:'offer',sdp:offer.sdp});
-  await pc.setLocalDescription(await pc.createAnswer());
+  const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
+  await pc.setRemoteDescription({type:'offer',sdp:offer.sdp});check();
+  const description=await pc.createAnswer();check();await pc.setLocalDescription(description);check();
   state('Generating response QR');
-  await waitIce(pc);
-  const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});
+  await waitIce(pc);check();
+  const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});check();
   state('Show response QR to Web App');
   return {qr,pin:code,expires,sid:sessionId};
  }
  async function receiveAnswer(answerText){
   if(role!=='host'||!peer||!sessionId)throw Error('Create a fresh Web App QR first');
+  const ticket=generation,pc=peer;
   const answer=await unpack(answerText);
+  if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled');
   if(answer.kind!=='answer'||answer.sid!==sessionId||answer.pin!==code||answer.expires!==expires)throw Error('Answer does not match this pairing session');
   if(peer.signalingState!=='have-local-offer')throw Error('Pairing offer already answered');
-  await peer.setRemoteDescription({type:'answer',sdp:answer.sdp});
+  await pc.setRemoteDescription({type:'answer',sdp:answer.sdp});
+  if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled');
   state('Connecting via local Wi-Fi • approve on Web');
   return true;
  }
  function approvePairing(){
-  if(role!=='host'||!connected||!channel||Date.now()>expires)throw Error('Complete QR exchange and WebRTC connection first');
+  if(role!=='host'||!connected||channel?.readyState!=='open'||Date.now()>expires)throw Error('Complete QR exchange and WebRTC connection first');
   approved=true;paired=true;state('Connected');send({type:'PAIR_APPROVED'});broadcast();emit('paired');
  }
  function decline(){if(role==='host')send({type:'PAIR_REJECTED'});close('Pairing cancelled')}
@@ -159,7 +165,7 @@ function session(role,events={}){
   controller='web';emit('control',{owner:'web'});broadcast();return true;
  }
  function grantMobileControl(){
-  if(role!=='host'||!approved||!connected)return false;
+  if(role!=='host'||!approved||!connected||channel?.readyState!=='open'||Date.now()-lastHeartbeat>TIMEOUT_MS)return false;
   if(controller==='web')dropControl('Transferred to Android');
   controller='mobile';send({type:'CONTROL_GRANTED',owner:'mobile'});emit('control',{owner:'mobile'});broadcast();return true;
  }

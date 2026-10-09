@@ -1,7 +1,7 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, main]
     paths:
       - 'pairing-core.js'
       - 'pairing-code.js'
@@ -16,6 +16,12 @@ on:
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
       - 'tools/qr-pairing-browser.mjs'
+      - 'tools/audit-browser.mjs'
+      - 'tools/browser-harness.mjs'
+      - 'tools/offline-browser.mjs'
+      - 'sw.js'
+      - 'project.css'
+      - 'js/**'
       - 'tools/code-live-smoke.mjs'
       - '.github/workflows/qr-browser-test.yml'
   workflow_dispatch:
@@ -47,7 +53,12 @@ jobs:
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &
           sleep 3
+          npm run check
+          npm test
+          npm run verify:firmware
           node tools/qr-pairing-browser.mjs
+          node tools/audit-browser.mjs
+          node tools/offline-browser.mjs
       - name: Optional live PeerJS Cloud code pairing smoke
         continue-on-error: true
         timeout-minutes: 2

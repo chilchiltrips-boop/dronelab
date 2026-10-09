@@ -4,10 +4,12 @@
    and ACK messages are real Chromium PeerConnections.
 */
 import {chromium} from 'playwright';
+import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});
-const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-fake-ui-for-media-stream']});
-const ctx=await browser.newContext({viewport:{width:1450,height:900}}),web=await ctx.newPage(),phone=await ctx.newPage();
+const browser=await chromium.launch({...browserOptions,args:[...browserOptions.args,'--use-fake-ui-for-media-stream']});
+const ctx=await browser.newContext({viewport:{width:1450,height:900}});await configureContext(ctx);
+const web=await ctx.newPage(),phone=await ctx.newPage();
 const errors=[];
 for(const page of [web,phone])page.on('pageerror',e=>errors.push(e.message));
 const base='http://127.0.0.1:8765/';
@@ -33,6 +35,7 @@ async function onePair(){
  const answer=await phone.locator('#answerText').inputValue();
  await assertQr(phone,'answerCanvas',answer);
  if(!(await phone.locator('#phoneScanFeedback').getAttribute('data-status')==='success'))throw Error('Android must show QR scan success feedback');
+ await web.locator('#pairStep1NextBtn').click();
  await web.locator('#pairScanAnswerBtn').click();
  await web.waitForFunction(()=>!!window.__qrScanOptions,null,{timeout:5000});
  const pinWeb=await web.locator('#pairCode').textContent(),pinMobile=await phone.locator('#appPairCode').textContent();
@@ -63,21 +66,21 @@ try{
  await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),phone.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
  await web.locator('[data-tab="settings"]').click();
  // Camera-free pairing is the default; no webcam should be initialized.
- if(!(await web.locator('#pairCodeSection').isVisible()))throw Error('No Camera 6-digit code must be default');
+ if(await web.locator('#pairStep2').getAttribute('open')!==null)throw Error('Step 2 must start collapsed');
  if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('Webcam section must be hidden by default');
  if((await web.locator('#pairCodeMode').getAttribute('aria-pressed'))!=='true')throw Error('Code mode must be prioritized');
- if(!((await web.locator('#pairScanHint').textContent())||'').includes('Recommended'))throw Error('Default code path not explained');
+ if(!((await web.locator('#pairStep1NextBtn').textContent())||'').includes('CONNECT'))throw Error('Default code path not explained');
  if(!((await phone.locator('#phoneShortCode').count())===1&&await phone.locator('.phone-code-panel').isVisible()))throw Error('Android primary code panel missing');
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.4'))throw Error('Web version not updated to 1.4.4');
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.5'))throw Error('Web version not updated to 1.4.5');
  if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
  if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
  // CI camera surrogate: Step 2 manually starts scanning; Step 1 MUST NOT.
  await web.evaluate(()=>{const old=window.ZebjusQR.scan;window.__oldQrScan=old;window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{};}});
  // Web App must support a camera-free selection without starting webcam.
  await web.locator('#pairCodeMode').click();
- if(!(await web.locator('#pairCameraSection').isHidden())||!(await web.locator('#pairCodeSection').isVisible()))throw Error('Code pairing mode not visible');
+ if(!(await web.locator('#pairCameraSection').isHidden()))throw Error('Code pairing mode not visible');
  await web.locator('#pairCameraMode').click();
- if(!(await web.locator('#pairCameraSection').isVisible()))throw Error('QR camera mode not restored');
+ if(await web.locator('#pairCameraSection').getAttribute('hidden')!==null)throw Error('QR camera mode not restored');
  const pin=await onePair();
  console.log('PASS default No Camera priority; Step 1 QR, Step 2 camera-on-demand; readable QR pixels and highlighted Confirm Pairing; PIN '+pin);
  if(!(await web.locator('#topGrantMobileSwitch').isEnabled()))throw Error('Header grant toggle not enabled after pairing');
@@ -112,6 +115,7 @@ try{
    if(code!=='654321')throw Error('Wrong test connect code');
    return window.__testCodeReply();
  }});
+ await web.locator('#pairStep1NextBtn').click();
  await web.locator('#pairPhoneCode').fill('654321');
  await web.locator('#pairConnectCodeBtn').click();
  await web.waitForFunction(()=>!document.getElementById('pairConfirmBtn').disabled,null,{timeout:17000});
@@ -133,7 +137,7 @@ try{
  await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:15000});
  if((await web.locator('#pairCode').textContent())!=='------')throw Error('Refresh did not discard PIN');
  if(errors.length)throw Error('JS errors: '+errors.join(' | '));
- console.log('SUCCESS Smart Two-Way QR 1.4.4: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
+ console.log('SUCCESS Smart Two-Way QR 1.4.5: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
 }catch(err){
  console.error('SMART TWO-WAY QR TEST FAILED:',err.stack||err);
  console.error('WEB:',await web.locator('#pairAnswerState').textContent().catch(()=>''),'PHONE:',await phone.locator('#answerState').textContent().catch(()=>''));

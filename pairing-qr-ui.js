@@ -13,10 +13,10 @@ function draw(canvas,text){
  for(let r=0;r<count;r++)for(let c=0;c<count;c++)if(code.isDark(r,c))ctx.fillRect((c+quiet)*modulePx,(r+quiet)*modulePx,modulePx,modulePx);
  return count;
 }
-let currentScanner=null,scannerEpoch=0,activeTrack=null,torchEnabled=false;
+let currentScanner=null,scannerEpoch=0,activeTrack=null;
 async function torch(enabled){
  const track=activeTrack;if(!track||track.readyState!=='live'||!track.getCapabilities?.().torch)return false;
- try{await track.applyConstraints({advanced:[{torch:!!enabled}]});torchEnabled=!!enabled;return true}catch{return false}
+ try{await track.applyConstraints({advanced:[{torch:!!enabled}]});return activeTrack===track&&track.readyState==='live'}catch{return false}
 }
 function canTorch(){return !!(activeTrack&&activeTrack.readyState==='live'&&activeTrack.getCapabilities?.().torch)}
 async function scan({video,canvas,onData,onError,onStatus}){
@@ -24,6 +24,8 @@ async function scan({video,canvas,onData,onError,onStatus}){
  stop();
  const epoch=++scannerEpoch;
  if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera scanning requires HTTPS and camera permission');
+ const ctx=canvas?.getContext('2d',{willReadFrequently:true});
+ if(!ctx||!video)throw Error('Camera preview is unavailable');
  const stream=await navigator.mediaDevices.getUserMedia({
   video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},audio:false
  });
@@ -32,17 +34,16 @@ async function scan({video,canvas,onData,onError,onStatus}){
  let running=true,raf=0,lastDecode=0,frame=0,zoomBusy=false,lastZoom=0,zoomIndex=0,reported='',nativeBusy=false,lastNative=0;
  const nativeDetector=typeof root.BarcodeDetector==='function'?(()=>{try{return new root.BarcodeDetector({formats:['qr_code']})}catch{return null}})():null;
  const track=stream.getVideoTracks()[0],caps=track?.getCapabilities?.()||{},zoom=caps.zoom;
- activeTrack=track;torchEnabled=false;
+ activeTrack=track;
  const zoomSupported=zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min;
  const zoomValues=zoomSupported?[zoom.min,Math.min(zoom.max,Math.max(zoom.min,1.35)),Math.min(zoom.max,Math.max(zoom.min,1.75)),zoom.min]:[];
- const ctx=canvas.getContext('2d',{willReadFrequently:true});
  function report(text){if(running&&text!==reported){reported=text;onStatus?.(text)}}
  const stopThis=()=>{
   if(!running)return;
   running=false;cancelAnimationFrame(raf);
   try{video.pause()}catch{}
   stream.getTracks().forEach(t=>t.stop());
-  if(activeTrack===track){activeTrack=null;torchEnabled=false}
+  if(activeTrack===track)activeTrack=null;
   if(video.srcObject===stream)video.srcObject=null;
   video.hidden=true;
   if(currentScanner?.stop===stopThis)currentScanner=null;
@@ -72,7 +73,7 @@ async function scan({video,canvas,onData,onError,onStatus}){
    if(!running)return;
    raf=requestAnimationFrame(decode);
    // jsQR is CPU heavy. Limit work to ~10 frames/second to preserve preview FPS.
-   if(now-lastDecode<75||video.readyState<2||!video.videoWidth||!root.jsQR)return;
+   if(now-lastDecode<75||video.readyState<2||!video.videoWidth||(!root.jsQR&&!nativeDetector))return;
    if(nativeDetector&&!nativeBusy&&now-lastNative>190){
     nativeBusy=true;lastNative=now;
     nativeDetector.detect(video).then(items=>{
@@ -82,6 +83,7 @@ async function scan({video,canvas,onData,onError,onStatus}){
     }).catch(()=>{}).finally(()=>{nativeBusy=false});
    }
    lastDecode=now;frame++;
+   if(!root.jsQR)return;
    try{
     const vw=video.videoWidth,vh=video.videoHeight;
     // Two central passes for every full-image fallback: the phone QR is
@@ -107,7 +109,7 @@ async function scan({video,canvas,onData,onError,onStatus}){
      const improved=ctx.getImageData(0,0,w,h);
      result=root.jsQR(improved.data,w,h,{inversionAttempts:'dontInvert'});
     }
-    if(result?.data){
+    if(typeof result?.data==='string'&&result.data.startsWith('zj1:')){
      stopThis(); // prevents duplicate frames and releases camera on success
      onStatus?.('QR DETECTED ✓');onData?.(result.data);
      return;

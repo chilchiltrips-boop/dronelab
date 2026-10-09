@@ -12,11 +12,14 @@ import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Build;
+import android.view.WindowInsets;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.RenderProcessGoneDetail;
 import android.view.ViewGroup;
 import androidx.webkit.WebViewAssetLoader;
 import java.util.Arrays;
@@ -63,6 +66,7 @@ public class MainActivity extends Activity {
                 grantCamera(request);
                 return;
             }
+            if (pendingVideoRequest != null) pendingVideoRequest.deny();
             pendingVideoRequest = request;
             requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST);
         });
@@ -127,6 +131,18 @@ public class MainActivity extends Activity {
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
                 return assetLoader.shouldInterceptRequest(request.getUrl());
             }
+            @Override public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
+                // A terminated renderer cannot be reused; clear the old session safely.
+                if (v.getParent() instanceof ViewGroup) ((ViewGroup)v.getParent()).removeView(v);
+                v.destroy();
+                view = null;
+                if (!isFinishing()) new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("Companion stopped")
+                    .setMessage("Android stopped the web renderer. Reopen the companion and scan a fresh Web QR.")
+                    .setPositiveButton("Reopen", (dialog, which) -> recreate())
+                    .setNegativeButton("Close", (dialog, which) -> finish()).show();
+                return true;
+            }
         });
         view.setWebChromeClient(new WebChromeClient() {
             @Override public void onPermissionRequest(PermissionRequest request) { cameraPermission(request); }
@@ -146,7 +162,42 @@ public class MainActivity extends Activity {
         };
         if (connectivity != null) connectivity.registerDefaultNetworkCallback(networkCallback);
         setContentView(view, new ViewGroup.LayoutParams(-1, -1));
+        // targetSdk 35 draws edge-to-edge: keep QR, touch targets and the keyboard
+        // clear of system bars and camera cutouts in either orientation.
+        view.setOnApplyWindowInsetsListener((v, insets) -> {
+            int left, top, right, bottom;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() |
+                    WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                left = safe.left; top = safe.top; right = safe.right; bottom = safe.bottom;
+            } else {
+                left = insets.getSystemWindowInsetLeft(); top = insets.getSystemWindowInsetTop();
+                right = insets.getSystemWindowInsetRight(); bottom = insets.getSystemWindowInsetBottom();
+                if (Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) {
+                    left = Math.max(left, insets.getDisplayCutout().getSafeInsetLeft());
+                    top = Math.max(top, insets.getDisplayCutout().getSafeInsetTop());
+                    right = Math.max(right, insets.getDisplayCutout().getSafeInsetRight());
+                    bottom = Math.max(bottom, insets.getDisplayCutout().getSafeInsetBottom());
+                }
+            }
+            v.setPadding(left, top, right, bottom);
+            return insets;
+        });
+        view.requestApplyInsets();
         view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
+    }
+    @Override protected void onPause() {
+        // The Android permission dialog also pauses this activity. Let its
+        // pending getUserMedia request finish rather than cancelling the prompt.
+        if (view != null && pendingVideoRequest == null) {
+            view.evaluateJavascript("window.zebjusAppPaused && window.zebjusAppPaused()", null);
+            view.onPause();
+        }
+        super.onPause();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        if (view != null) view.onResume();
     }
     @Override protected void onDestroy() {
         if (connectivity != null && networkCallback != null) connectivity.unregisterNetworkCallback(networkCallback);

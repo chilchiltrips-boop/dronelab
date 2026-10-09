@@ -98,5 +98,7 @@ export function initControls(ctx){
   addEventListener('blur',stop);addEventListener('pagehide',stop);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
-  ctx.setActiveTab(['#wiring','#python','#firmware'].includes(location.hash)?location.hash.slice(1):'assembly');applyBranding(ctx);
+  const linkedTab=location.hash.slice(1);
+  ctx.setActiveTab(['assembly','wiring','python','firmware','led','settings'].includes(linkedTab)?linkedTab:'assembly');
+  addEventListener('hashchange',()=>{const name=location.hash.slice(1);ctx.setActiveTab(name)});applyBranding(ctx);
 }

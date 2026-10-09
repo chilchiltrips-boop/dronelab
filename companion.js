@@ -4,11 +4,11 @@
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-let peer=null,offer='',response='',scannerStop=null,expiryTimer=null,processing=false,pending=false,epoch=0,codeSession=null,codeGeneration=0;
+let peer=null,offer='',response='',scannerStop=null,scannerEpoch=0,scannerStarting=false,expiryTimer=null,processing=false,pending=false,epoch=0,codeSession=null,codeGeneration=0;
 function message(text){const e=$('mobileLog');e.textContent=(e.textContent+'\n'+new Date().toLocaleTimeString()+'  '+text).slice(-8500);e.scrollTop=e.scrollHeight}
 function status(s){
  $('connectionDetail').textContent=s;$('appConnection').textContent=s.toUpperCase();
- $('appConnection').className='conn-status '+(/connected|paired|granted/i.test(s)?'connected':'disconnected');sync();
+ $('appConnection').className='conn-status '+(peer?.status().connected?'connected':'disconnected');sync();
 }
 function sync(){
  if(!peer)return;
@@ -21,6 +21,12 @@ function sync(){
  $('mobileLedBulb').classList.toggle('on',ready&&s.led);
  $('mobileLedBulb').setAttribute('aria-label','LED '+(ready&&s.led?'on':'off'));
  $('mobileLedState').textContent='LED '+(ready&&s.led?'ON':'OFF');
+ $('scanOfferBtn').disabled=processing||scannerStarting;
+ $('stopCameraBtn').disabled=!scannerStarting&&!scannerStop;
+ $('useOfferBtn').disabled=processing||!$('offerInput').value.trim();
+ $('retryAnswerBtn').disabled=processing||!offer||s.connected;
+ $('showAnswerBtn').disabled=!response;
+ $('copyAnswerBtn').disabled=!response;
  if(!ready)$('commandStatus').textContent='Not paired • scan a fresh Web App QR';
 }
 function initPeer(){
@@ -33,7 +39,7 @@ function initPeer(){
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
   heartbeat:t=>{$('heartbeatDetail').textContent=new Date(t).toLocaleTimeString()},
   reconnecting:()=>{status('Reconnecting • control released');message('Wi-Fi interrupted, controls are locked until sync')},
-  disconnected:r=>{status('Disconnected');message(r);$('answerState').textContent='Connection lost • scan NEW Web QR';sync()},
+  disconnected:r=>{if(!processing){++epoch;pending=false;stopScanner();stopPhoneCode();clearResponse()}status('Disconnected');message(r);$('answerState').textContent='Connection lost • scan NEW Web QR';sync()},
   error:r=>{message('WebRTC: '+r)}
  });sync();
 }
@@ -42,9 +48,17 @@ function scanFeedback(text,state='waiting'){
  el.textContent=text;el.dataset.status=state;
 }
 function stopScanner(){
+ ++scannerEpoch;scannerStarting=false;
  ZebjusQR.stop();scannerStop=null;
- $('phoneTorchBtn').disabled=true;$('phoneTorchBtn').textContent='Flashlight OFF';
+ $('phoneTorchBtn').disabled=true;$('phoneTorchBtn').dataset.enabled='false';$('phoneTorchBtn').textContent='Flashlight OFF';
+ $('stopCameraBtn').disabled=true;$('scanOfferBtn').disabled=processing;$('scanOfferBtn').textContent='Scan Web QR';
  $('phoneScanFrame').hidden=true;
+}
+function clearResponse(){
+ offer='';response='';$('offerInput').value='';$('answerText').value='';
+ $('appPairCode').textContent='------';$('offerExpiry').textContent='QR expires after 3 minutes.';
+ $('answerCanvas').hidden=true;$('answerPlaceholder').hidden=false;$('heartbeatDetail').textContent='—';
+ $('showAnswerBtn').disabled=true;$('retryAnswerBtn').disabled=true;$('copyAnswerBtn').disabled=true;$('phoneRetryCode').disabled=true;
 }
 function stopPhoneCode(){
  ++codeGeneration;
@@ -54,6 +68,7 @@ function stopPhoneCode(){
  $('phoneRetryCode').disabled=!response;
 }
 async function createPhoneCode(){
+ if(peer?.status().connected)return;
  stopPhoneCode();
  if(!offer||!response||!peer?.status().expires)return;
  const key=codeGeneration;
@@ -80,9 +95,9 @@ async function createPhoneCode(){
 }
 
 async function prepareResponse(raw){
- const text=String(raw||'').trim();if(!text)return;
+ const text=String(raw||'').trim();if(!text||processing)return;
  const generation=++epoch;
- stopScanner();stopPhoneCode();processing=true;response='';
+ stopScanner();stopPhoneCode();processing=true;response='';sync();
  scanFeedback('✓ WEB QR SCANNED! Creating your secure CONNECT code…','success');
  try{navigator.vibrate?.(90)}catch{}
  $('phoneScanFeedback').scrollIntoView?.({behavior:'smooth',block:'nearest'});
@@ -117,29 +132,32 @@ async function prepareResponse(raw){
  }finally{if(generation===epoch){processing=false;sync()}}
 }
 async function scanWebQR(){
- stopScanner();if(processing)return;
+ if(processing||scannerStarting)return;stopScanner();const ticket=++scannerEpoch;scannerStarting=true;
  $('scanOfferBtn').disabled=true;
  $('scanOfferBtn').textContent='Scanning QR…';
+ $('stopCameraBtn').disabled=false;
  $('phoneScanFrame').hidden=false;
  scanFeedback('Camera starting • center Web QR, hold steady • Auto focus / light adjustment','scanning');
  $('offerState').textContent='Starting QR scanner • auto focus/exposure…';
  try{
-  scannerStop=await ZebjusQR.scan({
+  const stop=await ZebjusQR.scan({
    video:$('scanVideo'),canvas:$('scanCanvas'),
-   onData:raw=>{scanFeedback('✓ WEB QR DETECTED! Processing…','success');stopScanner();void prepareResponse(raw)},
-   onStatus:txt=>{if(!txt.startsWith('QR DETECTED')){$('offerState').textContent=txt}else scanFeedback('✓ WEB QR DETECTED','success')},
-   onError:e=>$('offerState').textContent='QR camera error: '+e.message
+   onData:raw=>{if(ticket!==scannerEpoch)return;scanFeedback('✓ WEB QR DETECTED! Processing…','success');stopScanner();void prepareResponse(raw)},
+   onStatus:txt=>{if(ticket!==scannerEpoch)return;if(!txt.startsWith('QR DETECTED')){$('offerState').textContent=txt}else scanFeedback('✓ WEB QR DETECTED','success')},
+   onError:e=>{if(ticket===scannerEpoch)$('offerState').textContent='QR camera error: '+e.message}
   });
+  if(ticket!==scannerEpoch){stop();return}scannerStop=stop;
   const supported=ZebjusQR.canTorch();
   $('phoneTorchBtn').disabled=!supported;
   $('phoneTorchBtn').textContent=supported?'Flashlight OFF':'Flashlight unavailable';
  }catch(err){
+  if(ticket!==scannerEpoch)return;
   stopScanner();scanFeedback('Camera unavailable • Check permission or use manual offer','error');
   const denied=err?.name==='NotAllowedError'||err?.name==='PermissionDeniedError'||/denied|permission/i.test(err?.message||'');
   const help=denied?'Camera access denied. Android Settings → Apps → ZEBJUS DroneLab QR → Permissions → Camera → Allow only while using the app.':String(err?.message||err);
   $('offerState').textContent=denied?'CAMERA PERMISSION DENIED':'Camera unavailable';
   $('cameraPermissionHelp').textContent=help;message('QR scanner: '+help);
- }finally{$('scanOfferBtn').disabled=false;$('scanOfferBtn').textContent='Scan Web QR'}
+ }finally{if(ticket===scannerEpoch){scannerStarting=false;$('scanOfferBtn').textContent='Scan Web QR';sync()}}
 }
 function expandQR(){
  if(!response)return;
@@ -156,7 +174,7 @@ async function ledCommand(value){
 function reset(reason='Disconnected • scan a new Web QR'){
  ++epoch;processing=false;pending=false;stopScanner();stopPhoneCode();peer?.close(reason);
  scanFeedback('Ready for a new Web QR scan','waiting');
- offer='';response='';
+ clearResponse();
  $('offerInput').value='';$('answerText').value='';$('appPairCode').textContent='------';
  $('answerCanvas').hidden=true;$('answerPlaceholder').hidden=false;
  $('answerState').textContent=reason;$('offerState').textContent='Waiting for Web QR';
@@ -172,6 +190,7 @@ window.zebjusNetworkChanged=()=>{
  $('networkState').textContent='Network changed. Rejoin laptop Wi-Fi and scan a NEW Web QR, then request control again.';
  message('Network switch cleared old WebRTC, session and controller rights');
 };
+window.zebjusAppPaused=()=>{stopScanner();if(peer?.status().controller==='mobile')peer.releaseControl();pending=false;sync();message('App paused • camera stopped and control released')};
 function bind(){
  $('scanOfferBtn').onclick=scanWebQR;
  $('phoneTorchBtn').onclick=async()=>{
@@ -182,6 +201,7 @@ function bind(){
  };
  $('stopCameraBtn').onclick=()=>{stopScanner();$('offerState').textContent='Camera stopped.';scanFeedback('Camera OFF • Tap Scan Web QR when ready','waiting')};
  $('useOfferBtn').onclick=()=>{if($('offerInput').value.trim())void prepareResponse($('offerInput').value)};
+ $('offerInput').addEventListener('input',sync);
  $('showAnswerBtn').onclick=expandQR;
  $('retryAnswerBtn').onclick=()=>{if(offer)void prepareResponse(offer)};
  $('phoneRetryCode').onclick=()=>void createPhoneCode();
@@ -197,6 +217,7 @@ function bind(){
   if(s.lastHeartbeat&&Date.now()-s.lastHeartbeat>9500)$('heartbeatDetail').textContent='Heartbeat delayed';
  },1200);
  window.addEventListener('offline',()=>reset('Network offline • new QR required'));
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)window.zebjusAppPaused()});
  window.addEventListener('pagehide',()=>{++epoch;stopScanner();stopPhoneCode();peer?.close('App closed / re-pair required');clearInterval(expiryTimer)});
 }
 function init(){initPeer();bind();status('Disconnected')}
