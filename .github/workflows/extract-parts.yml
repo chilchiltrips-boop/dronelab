@@ -1,0 +1,28 @@
+name: Extract compiled factory parts
+on:
+  push:
+    branches: [sample-build]
+    paths: [.github/workflows/extract-parts.yml]
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split factory image for local verification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          data=Path('firmware/XIAO_C6_SAMPLE_FACTORY.bin').read_bytes()
+          assert len(data)==4194304 and data[0]==0xe9 and data[0x8000:0x8002]==bytes.fromhex('aa50')
+          Path('firmware/XIAO_C6_BOOTLOADER.bin').write_bytes(data[:0x8000])
+          Path('firmware/XIAO_C6_PARTITIONS.bin').write_bytes(data[0x8000:0x10000])
+          PY
+      - name: Save binary slices
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add firmware/XIAO_C6_BOOTLOADER.bin firmware/XIAO_C6_PARTITIONS.bin
+          git commit -m 'Store factory boot and partition slices'
+          git push origin HEAD:sample-build
