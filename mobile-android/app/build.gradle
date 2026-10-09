@@ -6,8 +6,8 @@ android {
     applicationId 'in.zebjus.dronelab.companion'
     minSdk 26
     targetSdk 35
-    versionCode 2
-    versionName '1.1.1-camera-fix'
+    versionCode 3
+    versionName '1.2.0-one-scan'
   }
   buildTypes {
     debug {
