@@ -18,8 +18,14 @@ def run():
     apk, apksigner, aapt = sys.argv[1:]
     assert Path(apk).is_file(), "Missing signed APK"
     signatures = output([apksigner, "verify", "--verbose", "--print-certs", apk])
-    matches = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]+)", signatures)
-    assert len(matches) == 1, "Release must have exactly one signing certificate"
+    # Certificate fingerprints are PUBLIC; printing this subset is safe and
+    # helps diagnose different Android build-tools output conventions.
+    certificate_lines = [line.strip() for line in signatures.splitlines()
+                         if "certificate" in line.lower() or "scheme" in line.lower()]
+    print("Android APK signing metadata:")
+    for line in certificate_lines: print("  " + line, flush=True)
+    matches = re.findall(r"Signer #\\d+ certificate SHA-256 digest:\\s*([0-9a-fA-F]+)", signatures)
+    assert len(matches) == 1, f"Release must have exactly one signing certificate. Found {len(matches)}."
     assert matches[0].lower() == EXPECTED_CERT_SHA256, (
         "APK signed with WRONG key. Release certificate does not match ZEBJUS pinned certificate."
     )
