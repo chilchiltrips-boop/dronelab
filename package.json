@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.cjs",
     "check": "node tools/check.mjs",
-    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs tools/serial-tools.test.mjs tools/python-lab.test.mjs tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs",
+    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs tools/serial-tools.test.mjs tools/python-lab.test.mjs tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/qr-ux.test.mjs",
     "verify:firmware": "python3 tools/verify_release.py"
   }
 }
