@@ -21,7 +21,7 @@ jobs:
       - name: Synchronize and verify release images
         run: |
           cp FlightCore_Firmware/catalog.json firmware-catalog.json
-          python3 -c "import json,pathlib; pathlib.Path('VERSION.txt').write_text(json.loads(pathlib.Path('firmware-catalog.json').read_text())['version']+'\\n')"
+          python3 -c "import json; print(json.load(open('firmware-catalog.json'))['version'], file=open('VERSION.txt','w'))"
           python3 tools/verify_release.py
           npm test
       - name: Commit compiled images and matching metadata
