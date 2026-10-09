@@ -19,16 +19,21 @@ async function assertQr(page,id,expected){
  if(decoded!==expected)throw Error(id+' is not readable as the expected QR');
 }
 async function onePair(){
+ await web.evaluate(()=>{window.__qrScanOptions=null});
  await web.locator('#pairCreateBtn').click();
  await web.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'),null,{timeout:22000});
  const offer=await web.locator('#pairOfferText').inputValue();
  await assertQr(web,'pairOfferCanvas',offer);
- await web.waitForFunction(()=>!!window.__qrScanOptions,null,{timeout:5000});
+ // Scanner MUST stay OFF during Step 1 and until Step 2 button is clicked.
+ const autoScanStarted=await web.evaluate(()=>!!window.__qrScanOptions);
+ if(autoScanStarted)throw Error('Camera was started before Step 2');
  await phone.locator('#offerInput').fill(offer);
  await phone.locator('#useOfferBtn').click();
  await phone.waitForFunction(()=>document.getElementById('answerText').value.startsWith('zj1:'),null,{timeout:22000});
  const answer=await phone.locator('#answerText').inputValue();
  await assertQr(phone,'answerCanvas',answer);
+ await web.locator('#pairScanAnswerBtn').click();
+ await web.waitForFunction(()=>!!window.__qrScanOptions,null,{timeout:5000});
  const pinWeb=await web.locator('#pairCode').textContent(),pinMobile=await phone.locator('#appPairCode').textContent();
  if(pinWeb!==pinMobile||!/^\d{6}$/.test(pinWeb))throw Error('Pairing PIN mismatch');
  // Simulate the laptop camera scanning the actual phone QR we just pixel-decoded.
@@ -54,10 +59,10 @@ async function grantAndToggle(){
 try{
  await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),phone.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
  await web.locator('[data-tab="settings"]').click();
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.2'))throw Error('Web version not updated to 1.4.2');
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.3'))throw Error('Web version not updated to 1.4.3');
  if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
  if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
- // CI camera surrogate: check that pairing triggers scanning without another click.
+ // CI camera surrogate: Step 2 manually starts scanning; Step 1 MUST NOT.
  await web.evaluate(()=>{const old=window.ZebjusQR.scan;window.__oldQrScan=old;window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{};}});
  // Web App must support a camera-free selection without starting webcam.
  await web.locator('#pairCodeMode').click();
@@ -65,7 +70,7 @@ try{
  await web.locator('#pairCameraMode').click();
  if(!(await web.locator('#pairCameraSection').isVisible()))throw Error('QR camera mode not restored');
  const pin=await onePair();
- console.log('PASS QR offer + Android auto reply QR generated and pixel decoded; Web webcam auto callback; PIN '+pin);
+ console.log('PASS Step 1 camera OFF; Step 2 manual start; QR offer and reply pixel decoded; PIN '+pin);
  if(!(await web.locator('#topGrantMobileSwitch').isEnabled()))throw Error('Header grant toggle not enabled after pairing');
  await grantAndToggle();
  console.log('PASS mobile grant toggle, LED ON / OFF state ACK, exclusive controller lock');
@@ -117,7 +122,7 @@ try{
  await phone.waitForFunction(()=>document.getElementById('mobileLedOn').disabled,null,{timeout:15000});
  if((await web.locator('#pairCode').textContent())!=='------')throw Error('Refresh did not discard PIN');
  if(errors.length)throw Error('JS errors: '+errors.join(' | '));
- console.log('SUCCESS Smart Two-Way QR 1.3.0: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
+ console.log('SUCCESS Smart Two-Way QR 1.4.3: two camera-decodable QR payloads, WebRTC, control lock, ACK, fresh Wi-Fi re-pair, refresh invalidation');
 }catch(err){
  console.error('SMART TWO-WAY QR TEST FAILED:',err.stack||err);
  console.error('WEB:',await web.locator('#pairAnswerState').textContent().catch(()=>''),'PHONE:',await phone.locator('#answerState').textContent().catch(()=>''));
