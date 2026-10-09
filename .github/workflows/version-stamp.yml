@@ -1,7 +1,7 @@
 name: Stamp DroneLab WebApp Version
 on:
   push:
-    branches: [testing/two-way-qr-pairing]
+    branches: [main]
     paths-ignore:
       - 'app-version.json'
       - 'mobile-apk/**'
@@ -19,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-          ref: testing/two-way-qr-pairing
-      - name: Increase beta number for each WebApp source update
+          ref: main
+      - name: Increment production WebApp build version for each main update
         env:
           SOURCE_SHA: ${{ github.sha }}
           BUILD_NUMBER: ${{ github.run_number }}
@@ -30,17 +30,17 @@ jobs:
           import os,json
           f=Path('app-version.json')
           meta=json.loads(f.read_text())
-          meta['version']='1.1.0-qr-beta.'+os.environ['BUILD_NUMBER']
+          meta['version']='1.1.0+'+os.environ['BUILD_NUMBER']
           meta['buildCommit']=os.environ['SOURCE_SHA'][:12]
-          meta['channel']='testing'
+          meta['channel']='release'
           f.write_text(json.dumps(meta,indent=2)+'\n')
           print('WebApp version:',meta['version'],'source:',meta['buildCommit'])
           PY
-      - name: Save version stamp only to testing branch
+      - name: Save WebApp production version on main
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add app-version.json
-          git diff --cached --quiet || git commit -m 'Stamp testing WebApp version [version-stamp]'
-          git pull --rebase origin testing/two-way-qr-pairing
-          git push origin HEAD:testing/two-way-qr-pairing
+          git diff --cached --quiet || git commit -m 'Stamp main WebApp version [version-stamp]'
+          git pull --rebase origin main
+          git push origin HEAD:main
