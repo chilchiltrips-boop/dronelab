@@ -6,6 +6,7 @@ on:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/partitions.csv'
       - 'tools/build_scanner.py'
+      - 'tools/flightcore.test.mjs'
       - '.github/workflows/build-i2c-scanner.yml'
   workflow_dispatch:
 permissions:
