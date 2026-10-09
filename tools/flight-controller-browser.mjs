@@ -29,6 +29,8 @@ try{
  await wait(web,()=>document.getElementById('tpThrottleReadout').textContent==='1300 µs');await wait(phone,()=>document.getElementById('flightThrottle').textContent==='1300 µs');
  measurements.push({exact1300:true,receiver:await web.evaluate(()=>window.ZebjusTraining.snapshot().throttle)});
  await phone.evaluate(()=>window.__testPeer.sendSimulatorControl=window.__realSend);
+ // The main banner must reflect receiver-applied ARM, not a stale pairing STOP.
+ if(!await web.locator('#tpStatus').textContent().then(s=>s.includes('VIRTUAL ARMED')&&!s.includes('MOTORS OFF')))throw Error('Web banner disagrees with applied ARM');
  // Local tuning remains available during mobile ownership.
  await web.locator('#tpPidP').fill('1.1');await web.locator('#tpApplyPid').click();await wait(web,()=>document.getElementById('tpStatus').textContent.includes('PID APPLIED LIVE'));
  await phone.locator('#flightMode').selectOption('acro');await wait(web,()=>window.ZebjusTraining.snapshot().mode==='acro');
@@ -69,6 +71,7 @@ try{
  await event('touchStart',[l]);await event('touchMove',[{...l,x:l.x+30,y:l.y-20}]);await phone.locator('#flightStop').click();
  await wait(web,()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(v=>v===0));await event('touchCancel',[]);
  await wait(phone,()=>document.getElementById('flightThrottle').textContent==='1000 µs');
+ if(!await web.locator('#tpStatus').textContent().then(s=>s.includes('MOTORS OFF')))throw Error('Web banner did not reflect applied STOP');
  await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);await web.locator('#tpStop').click();
  await wait(phone,()=>document.getElementById('flightArm').getAttribute('aria-pressed')==='false');await wait(web,()=>!window.ZebjusTraining.snapshot().armed);
  // A paused sender leaves motors off within the receiver's 450ms watchdog.

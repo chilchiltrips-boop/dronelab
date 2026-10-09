@@ -197,7 +197,11 @@ function syncActions(){
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
  $('tpControlSource').textContent=remote?'ANDROID APPLIED • #'+receiver.snapshot().seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
- if(lastRunning&&!s.running)audioStop();if(!lastRunning&&s.running&&audioUnlocked)audioStart();lastRunning=s.running;
+ if(lastRunning!==s.running){
+  setStatus(s.running?(remote?'ANDROID • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • DISARMED');
+  if(s.running&&audioUnlocked)audioStart();else if(!s.running)audioStop();
+ }
+ lastRunning=s.running;
 }
 function releaseAll(stopMotor=false){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();if(localInput())releaseInputs(s);renderStickKnobs();if(stopMotor)stop('Page lost focus')}
 function deadband(x){if(Math.abs(x)<.04)return 0;const linear=(Math.abs(x)-.04)/.96,exposed=.8*linear+.2*linear**3;return Math.sign(x)*exposed}
