@@ -22,10 +22,16 @@ public class MainActivity extends Activity {
     private WebView view;
     private PermissionRequest pendingVideoRequest;
 
+    private boolean isLocalOrigin(PermissionRequest request) {
+        if (request == null || request.getOrigin() == null) return false;
+        android.net.Uri origin = request.getOrigin();
+        return "https".equals(origin.getScheme()) &&
+               "appassets.androidplatform.net".equals(origin.getHost());
+    }
     private void grantCamera(PermissionRequest request) {
         if (request == null) return;
         boolean permitted = Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
-        if (permitted && request.getOrigin() != null && LOCAL_ORIGIN.equals(request.getOrigin().toString())) {
+        if (permitted && request.getOrigin() != null && isLocalOrigin(request)) {
             request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
         } else request.deny();
     }
