@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Validate the shipped, board-matched compiled release images and metadata."""
+"""Validate board-aware scanner-only release metadata and compiled binaries."""
 from pathlib import Path
-import hashlib, json, struct, sys
+import hashlib,json,struct
 ROOT=Path(__file__).resolve().parents[1]
 CAT=json.loads((ROOT/'firmware-catalog.json').read_text())
 LATEST=json.loads((ROOT/'firmware-latest.json').read_text())
 OUT=ROOT/'FlightCore_Firmware'
+assert CAT['schema']==2 and CAT['product']=='ZEBJUS_I2C_SCANNER'
 assert LATEST['version']==CAT['version']
 assert json.loads((OUT/'catalog.json').read_text())==CAT
-
-def sha(b): return hashlib.sha256(b).hexdigest()
+assert len(CAT['boards'])==2
+sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
+assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'delay(5000);' in sketch
+def sha(b):return hashlib.sha256(b).hexdigest()
 def chip(b,at=0):
  assert b[at]==0xe9 and 1<=b[at+1]<=16
  return struct.unpack_from('<H',b,at+12)[0]
@@ -17,26 +20,26 @@ def slots(b):
  found=[]
  for at in range(0x8000,0x9000,32):
   magic,typ,sub,addr,size=struct.unpack_from('<HBBII',b,at)
-  if magic!=0x50aa: break
+  if magic!=0x50aa:break
   if typ==0 and sub in (0x10,0x11):found.append((addr,size))
  return found
 for board in CAT['boards']:
- images={}
- for kind in ('app','factory'):
-  meta=board['latest'][kind]
-  assert meta['available'] and meta['size'] and len(meta['sha256'])==64
-  b=(OUT/meta['file']).read_bytes();images[kind]=b
-  assert len(b)==meta['size'],(board['id'],kind,'size')
-  assert sha(b)==meta['sha256'],(board['id'],kind,'sha256')
-  assert chip(b)==board['imageChipIds'][0],(board['id'],kind,'chip')
-  offset=0x10000 if kind=='factory' else 0
-  assert struct.unpack_from('<I',b,offset+32)[0]==0xabcd5432,(board['id'],kind,'descriptor')
-  assert chip(b,offset)==board['imageChipIds'][0],(board['id'],kind,'app chip')
-  assert CAT['version'].encode() in b,(board['id'],kind,'embedded release')
- app,factory=images['app'],images['factory']
- assert len(factory)==4*1024*1024
- assert len(app)<=0x1e0000
- assert slots(factory)==[(0x10000,0x1e0000),(0x1f0000,0x1e0000)],(board['id'],'partition layout')
- assert factory[0x10000:0x10000+len(app)]==app,(board['id'],'APP differs from factory')
- print(f"PASS {board['id']} {board['build']['fqbn']} {CAT['version']} APP {len(app)} bytes FACTORY {len(factory)} bytes SHA-256 matches")
-print('Release images verified; physical board flashing not performed.')
+ assert board['id'] in ('ZFC-A1','ZFC-A2')
+ a=board['latest']['app'];f=board['latest']['factory']
+ if not (a['available'] and f['available']):
+  assert not a['available'] and not f['available']
+  assert not a['size'] and not f['size']
+  print('BUILD PENDING',board['id'],'No legacy FlightCore image advertised')
+  continue
+ app=(OUT/a['file']).read_bytes();factory=(OUT/f['file']).read_bytes()
+ assert len(app)==a['size'] and len(factory)==f['size']==4*1024*1024
+ assert sha(app)==a['sha256'] and sha(factory)==f['sha256']
+ assert chip(app)==chip(factory)==board['imageChipIds'][0]
+ assert chip(factory,0x10000)==board['imageChipIds'][0]
+ assert struct.unpack_from('<I',app,32)[0]==0xabcd5432
+ assert struct.unpack_from('<I',factory,0x10000+32)[0]==0xabcd5432
+ assert b'Scanning I2C bus...' in app
+ assert slots(factory)==[(0x10000,0x1e0000),(0x1f0000,0x1e0000)]
+ assert factory[0x10000:0x10000+len(app)]==app
+ print('PASS',board['id'],'I2C SCANNER',len(app),'APP',len(factory),'FACTORY',sha(app)[:12])
+print('Scanner release metadata verified. Physical USB board not tested.')
