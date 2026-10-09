@@ -8,7 +8,7 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
  const scenario=gain==='i'?'bias':'pulse';
  const results=values.map(value=>{
   const s=createSimulator();s.pid=JSON.parse(JSON.stringify(basePID));s.environment={...s.environment,...environment};
-  if(scenario==='bias'){s.environment.cgX=axis==='roll'?16:0;s.environment.cgY=axis==='pitch'?16:0;if(axis==='yaw')s.environment.wind=50;}
+  if(scenario==='bias'){s.environment.cgX=axis==='roll'?2:0;s.environment.cgY=axis==='pitch'?2:0;if(axis==='yaw')s.environment.wind=50;}
   setFlightMode(s,flightMode);setPID(s,bank,{...s.pid[bank],[gain]:value});
   startSimulator(s);s.throttle=1500;
   const samples=[],steps=Math.round(duration/.004);
