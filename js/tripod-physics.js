@@ -60,6 +60,8 @@ export function startTuningPulse(s,axis='roll',amplitude=14){
 function computePID(s,bank,target,actual,outer=false){
  const m=s.memory[bank],g=s.pid[bank],error=target-actual;
  m.sum=clamp(m.sum+error*STEP,outer?-45:-110,outer?45:110);
+ // Anti-windup: at neutral rate setpoint, reject residual gyro/integral bias.
+ if(!outer&&Math.abs(target)<1&&Math.abs(actual)<6)m.sum*=.99;
  const derivative=m.ready?(error-m.last)/STEP:0;
  m.ready=true;m.last=error;m.p=g.p*error;m.i=g.i*m.sum*(outer?1:.012);m.d=g.d*derivative;
  m.error=error;m.target=target;m.actual=actual;
@@ -73,7 +75,7 @@ export function stepSimulator(s){
  const pulse=s.pulse&&s.time<s.pulse.until?s.pulse:null;
  if(s.pulse&&s.time>=s.pulse.until)s.pulse=null;
  const angleBonus=axis=>pulse&&pulse.axis===axis?(pulse.amplitude):0;
- const rateBonus=axis=>pulse&&pulse.axis===axis?(axis==='yaw'?pulse.amplitude*6:pulse.amplitude*7):0;
+ const rateBonus=axis=>pulse&&pulse.axis===axis?(axis==='yaw'?pulse.amplitude*6:pulse.amplitude*4):0;
  const rKey=s.mode==='angle'?'angleRateRoll':'rateRoll',pKey=s.mode==='angle'?'angleRatePitch':'ratePitch',yKey=s.mode==='angle'?'angleRateYaw':'rateYaw';
  s.targetRoll=s.trimRoll+s.cmdRoll*26+(s.mode==='angle'?angleBonus('roll'):0);
  s.targetPitch=s.trimPitch+s.cmdPitch*26+(s.mode==='angle'?angleBonus('pitch'):0);
