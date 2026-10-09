@@ -1,0 +1,40 @@
+name: Build I2C Scanner A1 and A2
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
+      - 'FlightCore_Firmware/partitions.csv'
+      - 'tools/build_scanner.py'
+      - '.github/workflows/build-i2c-scanner.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: scanner-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Compile exact I2C Address Scanner for ESP32-C3 and XIAO ESP32-C6
+        run: python3 tools/build_scanner.py
+      - name: Validate both APP and Factory binaries
+        run: |
+          python3 tools/verify_release.py
+          npm test
+          npm run check
+          node --check firmware-updater.js
+      - name: Commit verified scanner images and SHA-256 metadata
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add FlightCore_Firmware firmware-catalog.json firmware-latest.json
+          git diff --cached --quiet || git commit -m 'Release scanner-only A1/A2 USB firmware 1.0.1'
+          git pull --rebase origin main
+          git push origin main
