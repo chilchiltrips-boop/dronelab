@@ -1,0 +1,47 @@
+name: Browser Test Python Lab
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/browser-python-lab.yml'
+      - 'tools/python-browser-smoke.mjs'
+      - 'python-lab.css'
+      - 'python-lab-worker.js'
+      - 'js/python-lab.js'
+      - 'js/usb-i2c-bridge.js'
+      - 'index.html'
+      - 'lab.html'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check Python IDE and Worker
+        run: |
+          node --check js/python-lab.js
+          node --check python-lab-worker.js
+          node --check tools/python-browser-smoke.mjs
+      - name: Install isolated Chromium test environment
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Test rendered Aerion-style Python Lab and real Python 3 execution
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/dronelab-http.log 2>&1 &
+          sleep 3
+          node tools/python-browser-smoke.mjs
+      - name: Publish desktop and mobile test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-lab-browser-screenshots
+          path: test-output/
+          if-no-files-found: ignore
