@@ -45,6 +45,18 @@ try{
  await page.locator('#stopPythonBtn').click();
  if(!((await page.locator('#pyLastRun').textContent())||'').includes('STOPPED'))throw Error('Stop did not terminate while True');
  if(!(await page.locator('#runPythonBtn').isEnabled()))throw Error('Run button did not reactivate after Stop');
+ page.once('dialog',dialog=>dialog.accept());
+ await page.locator('#pythonQuickHardware').selectOption('plot');
+ await page.locator('#runPythonBtn').click();
+ await page.locator('#pythonInlinePlot').waitFor({state:'visible',timeout:120000});
+ await page.waitForFunction(()=>{
+  const image=document.getElementById('pythonInlinePlot');
+  return image?.complete&&image.naturalWidth>10;
+ },null,{timeout:30000});
+ if(!(await page.locator('#pythonOutputWindow').isVisible()))throw Error('Python Plot Window did not open');
+ if(!(await page.locator('#pyLastRun').textContent()).includes('COMPLETE'))throw Error('Matplotlib example did not finish');
+ await page.locator('#pythonOutputClose').click();
+
 
  await page.setViewportSize({width:390,height:800});
  await page.locator('#tab-python.active').waitFor();
@@ -52,7 +64,7 @@ try{
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
- console.log('PASS Python Lab: Monaco smart editor, Python 3 output, responsive mobile layout, project files, persisted resizers');
+ console.log('PASS Python Lab: Monaco smart editor, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
 }catch(error){
  console.error('BROWSER SMOKE FAILED:',error.stack||error);
