@@ -47,6 +47,13 @@ export function usbWritePlan({image,board,chipId,flashBytes,erase=false,appReady
   if(address+image.bytes.length>flashBytes)throw Error('Image exceeds detected flash capacity.');
   return {address,eraseAll:false,flashMode:'keep',flashFreq:'keep',flashSize:'keep'};
 }
+export function inspectUsbLayout(boot,table,board){
+  if(!(boot instanceof Uint8Array)||boot.length<16||boot[0]!==0xe9||!board.imageChipIds.includes(boot[12]|boot[13]<<8))throw Error('Existing USB bootloader is missing or belongs to another chip.');
+  if(!(table instanceof Uint8Array)||table.length<64)throw Error('Existing partition table could not be read.');
+  const slots=[];for(let i=0;i+32<=table.length;i+=32){if(u16(table,i)!==0x50aa)break;if(table[i+2]===0&&[0x10,0x11].includes(table[i+3]))slots.push([u32(table,i+4),u32(table,i+8)])}
+  if(slots.length!==2||slots[0][0]!==APP_OFFSET||slots[1][0]!==0x1f0000||slots.some(x=>x[1]!==OTA_SLOT))throw Error('Existing partition table is not ZFC_DUAL_1E0000. Use USB Factory migration.');
+  return true;
+}
 export function postBootVerified({reported,expectedVersion,boardId,deviceId,selectedDeviceId}){
   return !!reported&&reported.boardId===boardId&&!!selectedDeviceId&&(!deviceId||deviceId===selectedDeviceId)&&reported.firmware===expectedVersion;
 }

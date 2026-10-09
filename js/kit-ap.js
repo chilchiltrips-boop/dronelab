@@ -50,7 +50,7 @@ export class KitApClient{
     this.heartbeat=setInterval(()=>this.request('/api/control/ping',{clientId,expectedDeviceId:this.deviceId},2500).then(x=>{if(x.ok===false)this.owner=false}).catch(()=>{this.owner=false}),3000);
     return r;
   }
-  async upload(bytes,boardId,hash,onProgress,cancelled=()=>false){
+  async upload(bytes,boardId,hash,onProgress,cancelled=()=>false,onEnd=()=>{}){
     if(!this.channel||!this.owner)throw Error('Authenticated owner and Take Control are required.');
     const base={clientId,expectedDeviceId:this.deviceId};
     await this.request('/api/firmware/begin',{...base,size:bytes.length,sha256:hash,boardId},6000);
@@ -62,7 +62,7 @@ export class KitApClient{
       onProgress?.(result.offset,bytes.length);
     }
     if(cancelled())throw Error('OTA interrupted before verification; retry from the beginning.');
-    return this.request('/api/firmware/end',base,12000);
+    onEnd();return this.request('/api/firmware/end',base,12000);
   }
   async reconnect(expected=this.deviceId){
     this.disconnect(false);
