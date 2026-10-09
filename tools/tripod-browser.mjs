@@ -21,6 +21,13 @@ try{
  await page.locator('#tpCameraView').selectOption('isometric');
  await page.locator('#tpRun').click();
  if(!(await page.locator('#tpStop').isEnabled()))throw Error('Virtual motor run failed');
+ await page.waitForFunction(()=>/AUDIO ACTIVE|AUDIO UNAVAILABLE/.test(document.querySelector('#tpAudioStatus')?.textContent||''),null,{timeout:6000});
+ if(!(await page.locator('#tpAudioStatus').textContent()).includes('AUDIO ACTIVE'))throw Error('User-gesture Web Audio engine failed to start');
+ if((await page.locator('#tpSceneStatus').textContent()).startsWith('3D ACTIVE')){
+   await page.waitForFunction(()=>/REAL PARTS|PROCEDURAL/.test(document.querySelector('#tpSceneStatus')?.textContent||''),null,{timeout:9000});
+   const assetsStatus=await page.locator('#tpSceneStatus').textContent();
+   if(!assetsStatus.includes('REAL PARTS'))throw Error('Local GLB F450 parts failed to load: '+assetsStatus);
+ }
  await page.locator('body').click({position:{x:30,y:160}});
  await page.keyboard.press('w');await page.keyboard.press('w');await page.keyboard.press('w');
  await page.waitForFunction(()=>document.querySelector('#tpThrottleInput')?.textContent.includes('1075'),null,{timeout:4000});
