@@ -1,0 +1,37 @@
+/* QR P2P testing UI. Main/backup branches never load these styles. */
+.qr-header-controls{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.qr-build-version{font:800 10px/1.2 ui-monospace,monospace;color:#8eeac8;border:1px solid #28715e;border-radius:8px;background:#0b302b;padding:7px 9px;white-space:nowrap}
+.qr-header-status{font-size:10px;font-weight:800;color:#a9c3d0;border:1px solid #344e60;background:#101e29;padding:8px 11px;border-radius:999px;max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.qr-header-status.good{color:#b6fbe0;border-color:#277d5f;background:#102f25}
+.qr-header-status.warn{color:#ffcd9c;border-color:#7c6341}
+.qr-hero{display:flex;justify-content:space-between;flex-wrap:wrap;align-items:center;gap:10px;padding:18px 20px;background:linear-gradient(115deg,#12303b,#0b1c2a);border:1px solid #2d5263;border-radius:14px;margin-bottom:14px}
+.qr-hero h2{font-size:23px;margin:4px 0 6px}
+.qr-hero p{font-size:12px;color:#a7bfca;max-width:650px;margin:0;line-height:1.5}
+.qr-hero small{font-size:10px;font-weight:800;letter-spacing:.11em;color:#64e6bd}
+.qr-card{min-width:0;background:#0a1b28;border:1px solid #254a5c;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.qr-card>h3{font-size:15px;margin:0}.qr-card p{color:#a8bfcb;font-size:11px;line-height:1.5;margin:0}
+.qr-led-grid,.qr-settings-grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:12px;align-items:stretch}
+.qr-led-widget{display:grid;place-items:center;gap:8px;background:#071622;border:1px solid #29495a;border-radius:12px;padding:20px 12px}
+.qr-led-disc{width:120px;height:120px;border-radius:50%;border:7px solid #50606b;background:radial-gradient(circle at 37% 26%,#899ba9,#445465 60%,#273a46);box-shadow:inset 0 -7px 13px #0007;transition:background .15s,box-shadow .15s}
+.qr-led-disc.on{background:radial-gradient(circle at 33% 24%,#e4ffdc,#43ff93 45%,#178b4b 84%);border-color:#6ff3ab;box-shadow:0 0 35px #3eff7990,0 0 75px #24be6550}
+.qr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.qr-actions button{min-width:105px}
+.qr-led-note{border-radius:9px;background:#0c2e2a;color:#b8fae2;padding:9px;font-size:11px;min-height:31px}
+.qr-qr-wrap{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.qr-code-box{padding:9px;border:2px solid #60d5ad;border-radius:12px;background:#fff;display:inline-grid;place-items:center;min-height:280px;width:min(100%,340px)}
+.qr-code-box canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+.qr-code-box p{color:#254056;text-align:center;font-size:12px}
+.qr-data-card{flex:1 1 240px;display:grid;gap:8px;min-width:0}
+.qr-pair-code{font:900 29px/1.3 ui-monospace,monospace;letter-spacing:.2em;color:#c8ffda}
+.qr-data{width:100%;min-width:0;height:78px;resize:vertical;border-radius:8px;border:1px solid #396073;background:#061723;color:#b9e8e0;padding:9px;font:10px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
+.qr-scan-preview{width:min(100%,350px);max-height:270px;border-radius:10px;object-fit:contain;background:#0a2332;min-height:80px}
+.qr-hardware-badge{color:#afe9db;background:#0c302a;padding:7px 11px;border:1px solid #286c5e;border-radius:8px;font-size:10px;display:inline-block}
+.qr-device-list{border:1px solid #295163;border-radius:12px;min-height:95px;padding:12px;display:grid;gap:6px}
+.qr-device-item{display:grid;gap:5px;padding:10px;border-radius:8px;background:#112738}
+.qr-device-item b{font-size:12px}.qr-device-item small{font-size:10px;color:#a6bfca}
+.qr-status-line{color:#99e6bf;font-size:11px;min-height:20px;overflow-wrap:anywhere}
+.qr-led-eventlog{min-height:110px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#06141f;color:#a8eec8;padding:12px;border:1px solid #26465b;border-radius:8px;font:11px/1.5 ui-monospace,monospace}
+.qr-settings-grid select,.qr-settings-grid input{min-height:36px;color:#d7f4ec;background:#0b2634;border-radius:8px;border:1px solid #36586a;padding:7px}
+.qr-qr-wrap[hidden],.qr-card[hidden],[hidden].qr-led-note{display:none!important}
+@media(max-width:1050px){.qr-led-grid,.qr-settings-grid{grid-template-columns:1fr}.qr-header-controls{margin:6px 0 0}.qr-header-status{max-width:160px}}
+@media(max-width:700px){.qr-header-controls{width:100%;justify-content:flex-start}.qr-hero{padding:13px}.qr-card{padding:11px}.qr-pair-code{font-size:23px}.qr-code-box{min-height:230px;width:min(100%,300px)}}
