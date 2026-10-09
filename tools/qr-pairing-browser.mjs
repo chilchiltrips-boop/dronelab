@@ -54,7 +54,7 @@ async function grantAndToggle(){
 try{
  await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),phone.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
  await web.locator('[data-tab="settings"]').click();
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.0'))throw Error('Web version not updated to 1.3');
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.1'))throw Error('Web version not updated to 1.4.1');
  if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
  if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
  // CI camera surrogate: check that pairing triggers scanning without another click.
