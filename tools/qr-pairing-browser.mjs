@@ -54,11 +54,16 @@ async function grantAndToggle(){
 try{
  await Promise.all([web.goto(base+'#settings',{waitUntil:'domcontentloaded'}),phone.goto(base+'companion.html',{waitUntil:'domcontentloaded'})]);
  await web.locator('[data-tab="settings"]').click();
- if(!((await web.locator('#webappVersion').textContent())||'').includes('1.3.0'))throw Error('Web version not updated to 1.3');
+ if(!((await web.locator('#webappVersion').textContent())||'').includes('1.4.0'))throw Error('Web version not updated to 1.3');
  if(!(await web.locator('#mobileHeaderStatus').getAttribute('class')).includes('disconnected'))throw Error('Disconnected status not red');
  if(!(await phone.locator('#mobileLedOn').isDisabled()))throw Error('Unpaired phone can control LED');
  // CI camera surrogate: check that pairing triggers scanning without another click.
  await web.evaluate(()=>{const old=window.ZebjusQR.scan;window.__oldQrScan=old;window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{};}});
+ // Web App must support a camera-free selection without starting webcam.
+ await web.locator('#pairCodeMode').click();
+ if(!(await web.locator('#pairCameraSection').isHidden())||!(await web.locator('#pairCodeSection').isVisible()))throw Error('Code pairing mode not visible');
+ await web.locator('#pairCameraMode').click();
+ if(!(await web.locator('#pairCameraSection').isVisible()))throw Error('QR camera mode not restored');
  const pin=await onePair();
  console.log('PASS QR offer + Android auto reply QR generated and pixel decoded; Web webcam auto callback; PIN '+pin);
  if(!(await web.locator('#topGrantMobileSwitch').isEnabled()))throw Error('Header grant toggle not enabled after pairing');
