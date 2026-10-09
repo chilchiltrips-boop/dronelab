@@ -1,0 +1,25 @@
+name: Verify Aerion scanner site and images
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-scanner.yml
+      - js/firmware-page.js
+      - js/firmware-image.js
+      - tools/scanner.test.mjs
+      - firmware-catalog.json
+      - sw.js
+      - index.html
+      - lab.html
+      - package.json
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+      - run: python3 tools/verify_release.py
+      - run: npm run check
+      - run: node --check js/firmware-page.js && node --check sw.js

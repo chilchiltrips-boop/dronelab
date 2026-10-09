@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node server.cjs",
     "check": "node tools/check.mjs",
-    "test": "node --test tools/project.test.mjs tools/firmware.test.mjs",
+    "test": "node --test tools/project.test.mjs tools/scanner.test.mjs",
     "verify:firmware": "python3 tools/verify_release.py"
   }
 }

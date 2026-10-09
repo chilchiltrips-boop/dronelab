@@ -1,4 +1,8 @@
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
-const {handleBridge}=require('./tools/ota-bridge.cjs');
-const root=process.cwd();const args=process.argv.slice(2),pi=args.indexOf('--port'),port=pi>=0?Number(args[pi+1]):4173;const mime={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mjs':'text/javascript','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.glb':'model/gltf-binary','.json':'application/json'};
-http.createServer(async(req,res)=>{let url,p;try{url=new URL(req.url,'http://localhost');if(await handleBridge(req,res,url))return;p=path.resolve(root,'.'+decodeURIComponent(url.pathname));}catch{res.writeHead(400).end();return;}if(!p.startsWith(root+path.sep)&&p!==root){res.writeHead(403).end();return;}if(fs.existsSync(p)&&fs.statSync(p).isDirectory())p=path.join(p,'index.html');fs.readFile(p,(e,b)=>{if(e){res.writeHead(404).end('Not found');return;}res.setHeader('Content-Type',mime[path.extname(p)]||'application/octet-stream');res.end(b);});}).listen(port,'127.0.0.1',()=>console.log('DroneLab running at http://localhost:'+port));
+const root=process.cwd(),args=process.argv.slice(2),pi=args.indexOf('--port'),port=pi>=0?Number(args[pi+1]):4173;
+const mime={'.html':'text/html','.css':'text/css','.js':'text/javascript','.mjs':'text/javascript','.png':'image/png','.jpg':'image/jpeg','.svg':'image/svg+xml','.glb':'model/gltf-binary','.json':'application/json'};
+http.createServer((req,res)=>{let p;try{const url=new URL(req.url,'http://localhost');p=path.resolve(root,'.'+decodeURIComponent(url.pathname));}catch{res.writeHead(400).end();return}
+  if(!p.startsWith(root+path.sep)&&p!==root){res.writeHead(403).end();return}
+  if(fs.existsSync(p)&&fs.statSync(p).isDirectory())p=path.join(p,'index.html');
+  fs.readFile(p,(e,b)=>{if(e){res.writeHead(404).end('Not found');return}res.setHeader('Content-Type',mime[path.extname(p)]||'application/octet-stream');res.end(b)});
+}).listen(port,'127.0.0.1',()=>console.log('DroneLab running at http://localhost:'+port));

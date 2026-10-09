@@ -27,16 +27,6 @@ export function inspectImage(bytes,kind,board,catalog){
   const detected=boardFromChip(catalog,u16(bytes,offset+12));
   return {kind,address:kind==='factory'?0:APP_OFFSET,chipId:u16(bytes,offset+12),boardId:detected?.id,bytes:bytes.length};
 }
-export function ensureOtaReady({info,deviceId,boardId,image,owner}){
-  if(!image||image.kind!=='app')throw Error('AP OTA requires an Application image.');
-  if(!deviceId||info.deviceId!==deviceId)throw Error('Kit Device ID changed. Reconnect the intended controller.');
-  if(info.boardId!==boardId||image.boardId!==boardId)throw Error('Kit board and firmware image do not match.');
-  if(info.armed!==false)throw Error('DISARM the kit before flashing.');
-  if(!owner||info.lockMine!==true)throw Error('Take Control as owner before flashing.');
-  if(info.benchMode&&!['NONE','none',0].includes(info.benchMode)||info.trainingActive||info.fcSetupActive)throw Error('Stop bench, setup and training activity before OTA.');
-  if(info.partitionLayout!=='ZFC_DUAL_1E0000')throw Error('Older partition layout. Use USB Factory to migrate.');
-  if(!Number.isFinite(+info.freeSketchBytes)||+info.freeSketchBytes<image.bytes.length)throw Error('Application exceeds the free OTA sketch space.');
-}
 export function usbWritePlan({image,board,chipId,flashBytes,erase=false,appReady=false,armed=false}){
   if(armed)throw Error('DISARM before flashing.');
   if(!image||!board||!board.imageChipIds.includes(chipId)||image.boardId!==board.id)throw Error('USB chip, board and image do not match.');
@@ -53,9 +43,6 @@ export function inspectUsbLayout(boot,table,board){
   const slots=[];for(let i=0;i+32<=table.length;i+=32){if(u16(table,i)!==0x50aa)break;if(table[i+2]===0&&[0x10,0x11].includes(table[i+3]))slots.push([u32(table,i+4),u32(table,i+8)])}
   if(slots.length!==2||slots[0][0]!==APP_OFFSET||slots[1][0]!==0x1f0000||slots.some(x=>x[1]!==OTA_SLOT))throw Error('Existing partition table is not ZFC_DUAL_1E0000. Use USB Factory migration.');
   return true;
-}
-export function postBootVerified({reported,expectedVersion,boardId,deviceId,selectedDeviceId}){
-  return !!reported&&reported.boardId===boardId&&!!selectedDeviceId&&(!deviceId||deviceId===selectedDeviceId)&&reported.firmware===expectedVersion;
 }
 export function usbConnectionError(error){
   const name=error?.name||'',message=String(error?.message||'');
