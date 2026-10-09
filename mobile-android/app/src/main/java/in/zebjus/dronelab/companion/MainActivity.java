@@ -2,6 +2,10 @@ package in.zebjus.dronelab.companion;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.os.Build;
@@ -35,20 +39,42 @@ public class MainActivity extends Activity {
             request.grant(new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE});
         } else request.deny();
     }
+    // Android WebView returns the origin as a Uri (often with a trailing '/').
+    // Comparing its toString() against LOCAL_ORIGIN incorrectly denied camera
+    // requests before Android could display the runtime permission popup.
     private void cameraPermission(PermissionRequest request) {
         runOnUiThread(() -> {
-            if (request == null || request.getOrigin() == null ||
-                !LOCAL_ORIGIN.equals(request.getOrigin().toString())) {
+            if (!isLocalOrigin(request)) {
                 if (request != null) request.deny();
+                return;
+            }
+            // Only permit the exact video resource; never grant getResources()
+            // wholesale (future resources may include microphone or other data).
+            if (!Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+                request.deny();
                 return;
             }
             if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 grantCamera(request);
-            } else {
-                pendingVideoRequest = request;
-                requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST);
+                return;
             }
+            pendingVideoRequest = request;
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_REQUEST);
         });
+    }
+    private void explainDeniedCameraPermission() {
+        new AlertDialog.Builder(this)
+            .setTitle("Camera permission required")
+            .setMessage("To scan the Web App QR, allow Camera access for ZEBJUS DroneLab QR. " +
+                "If Android no longer displays the permission popup, open App Settings > Permissions > Camera " +
+                "and select Allow only while using the app.")
+            .setNegativeButton("Later", (dialog, which) -> dialog.dismiss())
+            .setPositiveButton("Open App Settings", (dialog, which) -> {
+                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                intent.setData(Uri.fromParts("package", getPackageName(), null));
+                startActivity(intent);
+            })
+            .show();
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
@@ -56,7 +82,7 @@ public class MainActivity extends Activity {
             PermissionRequest req = pendingVideoRequest;
             pendingVideoRequest = null;
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) grantCamera(req);
-            else req.deny();
+            else { req.deny(); explainDeniedCameraPermission(); }
         }
     }
     @Override protected void onCreate(Bundle state) {
