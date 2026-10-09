@@ -4,6 +4,7 @@ on:
     branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, main]
     paths:
       - 'mobile-android/**'
+      - 'tools/android-camera-permission.test.mjs'
       - 'companion.html'
       - 'companion.css'
       - 'companion.js'
