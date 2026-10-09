@@ -13,6 +13,13 @@ try{
  await page.goto('http://127.0.0.1:8765/#python',{waitUntil:'domcontentloaded',timeout:30000});
  await page.locator('#tab-python.active').waitFor({timeout:30000});
  await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:45000});
+ // The active file, file chooser, example, target and execution controls must
+ // live together above the editor, without duplicate Run controls in its header.
+ const toolbarIds=['pythonActiveFileLabel','pythonNewFileBtn','pythonFileList','pythonQuickHardware','pythonTarget','stopPythonBtn','runPythonBtn','rerunPythonBtn'];
+ const toolbarOk=await page.evaluate(ids=>ids.every(id=>document.querySelector('.python-project-bar')?.contains(document.getElementById(id))),toolbarIds);
+ if(!toolbarOk)throw Error('Python file/target/examples/execution controls are not all in the top toolbar');
+ if(await page.locator('.python-editor-top #runPythonBtn, .python-editor-top #pythonTarget').count())throw Error('Old duplicate editor controls remain');
+ if((await page.locator('#pythonActiveFileLabel').textContent())!=='main.py')throw Error('Active filename not shown in top project heading');
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
  if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
  if(await page.locator('#pythonEditor').isVisible())throw Error('Textarea fallback is covering Monaco');
@@ -49,9 +56,14 @@ try{
  if(!(layout.side>330&&layout.terminal>350))throw Error('Layout dimensions were not saved: '+JSON.stringify(layout));
  page.once('dialog',dialog=>dialog.accept('browser_test.py'));
  await page.locator('#pythonNewFileBtn').click();
- await page.locator('#pythonFileList').getByText('browser_test.py').waitFor({timeout:5000});
- const fileCount=await page.locator('#pythonFileList [role=tab]').count();
+ await page.waitForFunction(()=>[...document.querySelectorAll('#pythonFileList option')].some(o=>o.value==='browser_test.py'));
+ const fileCount=await page.locator('#pythonFileList option').count();
  if(fileCount<2)throw Error('New Python file not added');
+ if((await page.locator('#pythonActiveFileLabel').textContent())!=='browser_test.py')throw Error('New file not reflected in heading');
+ await page.locator('#pythonFileList').selectOption('main.py');
+ if((await page.locator('#pythonActiveFileLabel').textContent())!=='main.py')throw Error('Python file picker failed to switch to main.py');
+ await page.locator('#pythonFileList').selectOption('browser_test.py');
+ if((await page.locator('#pythonActiveFileLabel').textContent())!=='browser_test.py')throw Error('Python file picker failed to restore working file');
  page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('basic');
  const modelValue=await page.evaluate(()=>window.monaco.editor.getModels().map(m=>m.getValue()).join('\n'));

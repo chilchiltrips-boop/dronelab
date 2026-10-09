@@ -34,10 +34,16 @@ function syncEditor(){
   if(!model){model=monaco.editor.createModel(files[active]||'','python',monaco.Uri.parse('inmemory://zebjus/'+active));models.set(active,model)}
   editor.setModel(model);editor.layout();
  }else if($('pythonEditor'))$('pythonEditor').value=files[active]||'';
- $('pythonEditorTitle').textContent=active;
+ $('pythonActiveFileLabel').textContent=active;
  loading=false;editorPosition();updateButtons();
 }
-function renderFiles(){const root=$('pythonFileList');root.replaceChildren();for(const name of Object.keys(files)){const b=document.createElement('button');b.type='button';b.className='python-file-entry'+(name===active?' active':'');b.textContent=name;b.setAttribute('role','tab');b.setAttribute('aria-selected',String(name===active));b.onclick=()=>switchFile(name);root.append(b)}updateButtons()}
+function renderFiles(){
+ const root=$('pythonFileList');root.replaceChildren();
+ for(const name of Object.keys(files)){const option=document.createElement('option');option.value=name;option.textContent=name;root.append(option)}
+ root.value=active;
+ const label=$('pythonActiveFileLabel');label.textContent=active;label.title='Active Python file: '+active;
+ updateButtons();
+}
 function switchFile(name){if(!Object.hasOwn(files,name))return;files[active]=currentCode();active=name;syncEditor();renderFiles();autosave()}
 function setCode(code){
  if(editor){editor.executeEdits('python-lab',[{range:editor.getModel().getFullModelRange(),text:code,forceMoveMarkers:true}]);editor.focus()}
@@ -205,8 +211,11 @@ async function enableMonaco(){
   const M=await new Promise((resolve,reject)=>window.require(['vs/editor/editor.main'],()=>resolve(window.monaco),reject));
   if(!M)throw Error('Monaco not initialized');monaco=M;addCompletions(M);
   M.editor.defineTheme('zebjus-pycharm',{base:'vs-dark',inherit:true,rules:[{token:'comment',foreground:'8193A2',fontStyle:'italic'},{token:'keyword',foreground:'CB7EFA'},{token:'string',foreground:'A5C86A'},{token:'number',foreground:'6CADD9'}],colors:{'editor.background':'#06111b','editor.foreground':'#D9E9F2','editorLineNumber.foreground':'#52697C','editorCursor.foreground':'#6BE9BC','editor.selectionBackground':'#21506E88','editorSuggestWidget.background':'#0b1d2a','editorSuggestWidget.border':'#315567'}});
-  editor=M.editor.create($('pythonMonaco'),{value:files[active],language:'python',theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
-  models.set(active,editor.getModel());
+  // Own all models explicitly: Monaco auto-disposes an editor-created default
+  // model after a switch, which breaks reopening previously selected .py files.
+  const initialModel=M.editor.createModel(files[active]||'','python',M.Uri.parse('inmemory://zebjus/'+active));
+  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
+  models.set(active,initialModel);
   editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
   editor.onDidChangeCursorPosition(editorPosition);
   editor.addCommand(M.KeyMod.CtrlCmd|M.KeyCode.Enter,runPython);
@@ -327,7 +336,7 @@ async function copyTerminal(){
  catch(e){status('Select terminal text and use Ctrl/⌘+C','warn')}
 }
 function bind(){
- $('pythonNewFileBtn').onclick=newFile;$('pythonSaveFileBtn').onclick=()=>{save();status('Project saved','good')};
+ $('pythonNewFileBtn').onclick=newFile;$('pythonFileList').onchange=e=>switchFile(e.target.value);$('pythonSaveFileBtn').onclick=()=>{save();status('Project saved','good')};
  $('pythonUndoFileBtn').onclick=()=>undoRedo(false);$('pythonRedoFileBtn').onclick=()=>undoRedo(true);
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();

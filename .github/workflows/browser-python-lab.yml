@@ -1,7 +1,7 @@
 name: Browser Test Python Lab
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, main]
     paths:
       - '.github/workflows/browser-python-lab.yml'
       - 'tools/python-browser-smoke.mjs'

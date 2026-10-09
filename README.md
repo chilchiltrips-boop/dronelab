@@ -41,3 +41,7 @@ Disconnect external wiring for bootloader recovery and use stable USB power. GPI
 Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, Android installation, USB flashes and campus Wi-Fi require device verification.
 
 Android updates preserve `in.zebjus.dronelab.companion` and the permanent pinned certificate. Signing secrets exist only in GitHub Actions. Candidate v1.4.5 uses versionCode **10** over the published v1.4.4 code **9**. The testing branch produces a verified signed review artifact; only an approved merge to main can publish the stable APK URL. See `ANDROID_SIGNING_SETUP.md`.
+
+## Python Lab toolbar (WebApp 1.4.6)
+
+The top project bar now shows the **active .py filename**, + New, a chooser for saved Python files, project examples, the Python 3/Simulator vs USB I²C target, and Stop / Run / Rerun. Save/Undo/Redo/Delete/Export/Import remain directly below these controls. The editor header only shows usage help. Files remain browser-local and preserve existing autosave/import/export behavior; this WebApp-only release does not change the Android APK or scanner firmware.
