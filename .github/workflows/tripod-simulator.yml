@@ -7,6 +7,8 @@ on:
       - 'tripod.css'
       - 'js/tripod-physics.js'
       - 'js/tripod-page.js'
+      - 'js/tripod-audio.js'
+      - 'js/tripod-realism.js'
       - 'tools/tripod-physics.test.mjs'
       - 'tools/tripod-browser.mjs'
       - 'sw.js'
@@ -27,6 +29,8 @@ jobs:
         run: |
           node --check js/tripod-physics.js
           node --check js/tripod-page.js
+          node --check js/tripod-audio.js
+          node --check js/tripod-realism.js
           node --test tools/tripod-physics.test.mjs
           npm run check
       - name: Install isolated Chromium test environment
