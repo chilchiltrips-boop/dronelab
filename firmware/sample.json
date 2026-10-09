@@ -8,11 +8,11 @@
   "factory": {
     "file": "XIAO_C6_SAMPLE_FACTORY.bin",
     "bytes": 4194304,
-    "sha256": "3a29618e54f7c7a95667139486ba5b878772ad179ec754ac8d86ac53bf996915"
+    "sha256": "5049209940364c4dc05ec6e82b7d7d0240a61a372a5cc8e70938da445e271e68"
   },
   "app": {
     "file": "XIAO_C6_SAMPLE_APP.bin",
-    "bytes": 1002336,
-    "sha256": "5d24a93a0f8bcd647d12c5066ead134263263def2744eca4833f5e51e52ec7a9"
+    "bytes": 1002352,
+    "sha256": "3b696de2f8d01e12bba65b7cbae9dcda03460c6cd98760f96f3b22e705e6e840"
   }
 }
