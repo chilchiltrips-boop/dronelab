@@ -26,9 +26,11 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
   for(const id of ['fwSerialOutput','fwSerialMonitorBtn','fwSerialReconnectBtn','fwSerialResetBtn','fwSerialTabMonitor','fwSerialTabPlotter','fwSerialPlotCanvas','fwSerialBaud','fwSerialInput','fwSerialSendBtn','fwSerialLineEnding','fwSerialClearBtn','fwPlotClearBtn'])assert.ok(page.includes('id="'+id+'"'),id);
   assert.ok(page.includes('USB SERIAL TOOLS'));
   assert.ok(page.includes('Flash I²C over USB'));
+  for(const ending of ['value="nl"','value="cr"','value="crlf"'])assert.ok(page.includes(ending),ending);
   assert.ok(!page.includes('LIVE I²C SCANNER OUTPUT'));
   assert.ok(!page.includes('Scans repeat every 5 seconds.'));
  }
  for(const term of ['setSignals','dataTerminalReady:true','requestToSend:false','navigator.serial.addEventListener','closeSerialMonitor','resetSerialBoard','sendSerialMessage','serialPlotter?.pushLine','import(\'./js/serial-plotter.js\')'])assert.ok(code.includes(term),term);
  assert.ok(!code.includes('── USB Serial connected'));
+ assert.ok(code.includes("nl:'\\n',cr:'\\r',crlf:'\\r\\n'"));
 });
