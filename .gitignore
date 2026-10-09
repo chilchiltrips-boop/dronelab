@@ -1,0 +1,20 @@
+# NEVER commit or publish Android signing secrets.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.asc
+*.secrets
+.env
+.env.*
+!/.env.example
+# Local Gradle/Android caches & build outputs
+.gradle/
+**/.gradle/
+**/build/
+local.properties
+.DS_Store
+node_modules/
+test-output/
