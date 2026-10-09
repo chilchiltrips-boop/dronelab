@@ -151,7 +151,7 @@ function drawFallback(canvas,snapshot){
  c.restore();c.fillStyle='#bcebd7';c.textAlign='center';c.font='13px sans-serif';c.fillText('2D fallback • enable WebGL for full tripod scene',cx,h-28);
 }
 function audioStart(){if(soundOn&&s.running)audioEngine.start()}
-function audioTick(){if(soundOn)audioEngine.update(s.motors)}
+function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(){stopSimulator(s);audioStop();setStatus('MOTORS OFF');syncActions();drawUI()}
@@ -288,6 +288,10 @@ function updateControls(){
      ' • RMS '+readable(A.metrics.rms,2)+' / '+readable(B.metrics.rms,2)+
      ' • Peak rate '+readable(A.metrics.peakRate,1)+' / '+readable(B.metrics.peakRate,1)+'°/s'+
      ' • Late error '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+
+     ' • Rise '+(A.metrics.riseTime==null?'N/A':readable(A.metrics.riseTime,2)+'s')+' / '+(B.metrics.riseTime==null?'N/A':readable(B.metrics.riseTime,2)+'s')+
+     ' • Settle '+(A.metrics.settlingTime==null?'N/A':readable(A.metrics.settlingTime,2)+'s')+' / '+(B.metrics.settlingTime==null?'N/A':readable(B.metrics.settlingTime,2)+'s')+
+     ' • Overshoot '+readable(A.metrics.overshootPct,0)+'% / '+readable(B.metrics.overshootPct,0)+'%'+
+     ' • Motor activity '+readable(A.metrics.motorActivity,2)+' / '+readable(B.metrics.motorActivity,2)+
      ' • Same throttle/initial state/disturbance; no change to live gains.';
   }catch(error){$('tpCompareResult').textContent='Comparison error: '+error.message}
  };
