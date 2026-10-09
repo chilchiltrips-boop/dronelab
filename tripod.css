@@ -19,3 +19,30 @@
 .tp-motor.active-motor i{box-shadow:0 0 10px #4fe4caaa}
 .tp-motor strong{transition:color .14s}
 @media(max-width:760px){.tp-view-actions{justify-content:flex-start;width:100%}.tp-view-actions .smallstate{margin-left:auto}.tp-view-actions select{max-width:145px}.tp-response-metrics{grid-template-columns:repeat(2,1fr)}.tp-orientation-hint{font-size:8px;top:43px;left:11px}.tp-audio-status{max-width:none;flex:1 1 100%}}
+
+
+/* V1.5.2 — immersive flight-control training workspace. */
+.tp-audio-style{display:flex!important;align-items:center;gap:5px}
+.tp-audio-style select{border:1px solid #316176;background:#082333;color:#cef1e6;padding:6px 8px;border-radius:8px;font-size:11px}
+.tp-cascade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0 14px 12px}
+.tp-cascade>div{display:flex;flex-direction:column;gap:5px;background:#081e2c;border:1px solid #2b4e61;border-radius:10px;padding:12px 10px}
+.tp-cascade small{font-size:9px;color:#75e0bc;font-weight:900}
+.tp-cascade strong{font-size:12px;color:#e5f9f1}
+.tp-cascade span{font-size:10px;color:#9cb7c9;line-height:1.45}
+.tp-pid-secondary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 14px 12px}
+.tp-pid-secondary small{flex:1 1 220px;color:#91b2c0;font-size:10px;line-height:1.4}
+.tp-ab-compare{margin:13px 14px;background:#071923;border:1px solid #274859;border-radius:11px;padding:4px 0 10px}
+.tp-ab-compare .panel-title{padding:10px 11px 8px}
+.tp-ab-compare .panel-title h2{font-size:13px}
+.tp-ab-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;padding:0 10px;align-items:end}
+.tp-ab-inputs label{display:flex;flex-direction:column;gap:5px;font-size:9px;color:#95b8c4;font-weight:850}
+.tp-ab-inputs select,.tp-ab-inputs input{width:100%;min-width:0;border:1px solid #2b5b6c;background:#0b2432;color:#e1faf0;border-radius:8px;padding:9px 6px;font-size:12px}
+.tp-ab-result{font-size:10px;color:#b6ded7;padding:10px 12px;line-height:1.6}
+.tp-compare-chart{height:160px;padding:0 12px}
+.tp-compare-chart canvas{width:100%;height:100%}
+.tp-chart-head button{min-height:30px;padding:6px 9px;font-size:10px}
+.tp-view-panel .tp-stage{background:#112431}
+.tp-stage-tip{background:#0b2634aa}
+#tpSound:focus-visible,#tpResetIntegrators:focus-visible,#tpCompare:focus-visible{outline:2px solid #67e9ca;outline-offset:2px}
+@media(max-width:760px){.tp-cascade{grid-template-columns:1fr}.tp-ab-inputs{grid-template-columns:repeat(3,minmax(0,1fr))}.tp-ab-inputs .action{grid-column:1/-1}.tp-command .tp-audio{flex:1 1 100%}.tp-compare-chart{height:135px}}
+@media(max-width:400px){.tp-ab-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}.tp-ab-inputs label:first-child{grid-column:1/-1}.tp-ab-inputs .action{grid-column:1/-1}}

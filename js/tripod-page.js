@@ -1,10 +1,11 @@
 import * as THREE from '../three.module.min.js';
 import {loadGLB} from '../glb-loader.js';
 import {createTripodAudio} from './tripod-audio.js';
-import {enhanceTripodScene} from './tripod-realism.js';
-import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,startTuningPulse} from './tripod-physics.js';
+import {loadAssemblyTripod} from './tripod-assembly-model.js';
+import {simulateResponse} from './tripod-experiments.js';
+import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map();
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.70,selectedAxis='roll';
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.30,selectedAxis='roll',graphPaused=false;
 const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
 const makeMat=(color,metalness=.2,roughness=.5)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
@@ -25,17 +26,17 @@ function makeScene(){
  try{
   const test=document.createElement('canvas');if(!test.getContext('webgl2')&&!test.getContext('webgl'))throw Error('WebGL unavailable');
   const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0x071723);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0x071723);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;
   renderer.domElement.setAttribute('aria-label','Three-dimensional F450 quadcopter fixed to an interactive tripod');
   stage.prepend(renderer.domElement);
-  const scene=new THREE.Scene();scene.background=new THREE.Color('#071521');scene.fog=new THREE.Fog(0x071521,17,38);
+  const scene=new THREE.Scene();scene.background=new THREE.Color('#112431');scene.fog=new THREE.Fog(0x112431,18,39);
   const camera=new THREE.PerspectiveCamera(46,1,.1,100);
-  scene.add(new THREE.AmbientLight(0xa9d9e3,.55));scene.add(new THREE.HemisphereLight(0x9fe5f3,0x16202c,1.4));
+  scene.add(new THREE.AmbientLight(0xffffff,.72));scene.add(new THREE.HemisphereLight(0xf2fbff,0x71818b,1.28));
   const directional=(color,intensity,x,y,z)=>{const light=new THREE.DirectionalLight(color,intensity);light.position.set(x,y,z);scene.add(light);return light};
-  const key=directional(0xcfffe9,3.1,6,11,6);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-9;key.shadow.camera.right=9;key.shadow.camera.top=9;key.shadow.camera.bottom=-9;
-  directional(0x398ecc,1,-5,5,-6);directional(0xd7a79f,.6,4,3,-5);
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(28,28),makeMat('#0e2630',0,.93));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
-  const grid=new THREE.GridHelper(28,28,0x285b62,0x173742);grid.position.y=.012;scene.add(grid);
+  const key=directional(0xffffff,2.35,6,10,8);key.castShadow=true;key.shadow.mapSize.set(1024,1024);key.shadow.camera.left=-9;key.shadow.camera.right=9;key.shadow.camera.top=9;key.shadow.camera.bottom=-9;
+  directional(0xc9e6ff,1.15,-7,6,4);directional(0x9beeff,.82,-4,5,-8);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(28,28),makeMat('#243039',.05,.82));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+  const grid=new THREE.GridHelper(28,28,0x48606e,0x324651);grid.position.y=.012;scene.add(grid);
   const stand=new THREE.Group();scene.add(stand);cylinder(stand,.35,.47,.22,COLORS.black,0,.19,0);
   for(let i=0;i<3;i++){const a=(i*2*Math.PI/3)+Math.PI/6,px=Math.sin(a)*2.5,pz=Math.cos(a)*2.5;
    rod(stand,[0,.35,0],[px,.17,pz],.065,COLORS.dark);
@@ -81,29 +82,35 @@ function makeScene(){
   }
   dustGeometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
   const dust=new THREE.Points(dustGeometry,new THREE.PointsMaterial({color:0x8bcab4,size:.035,transparent:true,opacity:0,depthWrite:false}));scene.add(dust);
-  const realism=enhanceTripodScene(THREE,drone,motors,{loadGLB,onAssets:(loaded,total)=>{
-    $('tpSceneStatus').textContent=loaded?'3D ACTIVE • '+loaded+'/'+total+' REAL PARTS':'3D ACTIVE • PROCEDURAL';
-  }});
-  let radius=13.7,azimuth=.67,elevation=.33;
+  // The completed F450 comes from Assembly Lab's own GLB assets/slot table.
+  // Hide the temporary procedural body only after the authoritative model loads.
+  loadAssemblyTripod(THREE,loadGLB,{onAsset:(n,total)=>{
+    $('tpSceneStatus').textContent=n?'3D ACTIVE • '+n+'/'+total+' REAL PARTS':'3D ACTIVE • PROCEDURAL FALLBACK';
+  }}).then(assembly=>{
+    if(assembly.loaded<8){$('tpSceneStatus').textContent='3D ACTIVE • MODEL FALLBACK';return}
+    pivot.add(assembly.root);drone.visible=false;
+    propGroups.splice(0,propGroups.length,...assembly.propGroups);
+    blurs.splice(0,blurs.length,...assembly.blurs);
+    $('tpSceneStatus').textContent='3D ACTIVE • ASSEMBLY LAB F450';
+  }).catch(err=>console.warn('Assembly Lab tripod model unavailable',err));
+  let radius=11.1,azimuth=.67,elevation=.33,wantedAzimuth=.67,wantedElevation=.33,view='isometric';
   const resize=()=>{const {width,height}=stage.getBoundingClientRect();if(width<1||height<1)return;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)};
   const observer=new ResizeObserver(resize);observer.observe(stage);resize();
   $('tpSceneStatus').textContent='3D ACTIVE';$('tpSceneTip').textContent='Drag to orbit • Scroll to zoom';
   return {renderer,scene,camera,pivot,propGroups,blurs,wash,groundDiscs,dust,positions,seeds,motors,observer,
-   getCamera:()=>({radius,azimuth,elevation}),orbit:(dx,dy)=>{azimuth+=dx*.005;elevation=clamp(elevation+dy*.004,-.18,1.15)},
+   getCamera:()=>({radius,azimuth,elevation}),orbit:(dx,dy)=>{wantedAzimuth+=dx*.005;wantedElevation=clamp(wantedElevation+dy*.004,-.18,1.53);view='manual'},
    zoom:delta=>{radius=clamp(radius+delta*.014,6,24)},
    setView:name=>{
-    const angles={isometric:[.67,.33],front:[0,.20],back:[Math.PI,.20],left:[Math.PI/2,.24],right:[-Math.PI/2,.24],top:[0,1.53]};
-    const pose=angles[name]||angles.isometric;azimuth=pose[0];elevation=pose[1];
+    const angles={isometric:[.67,.33],front:[0,.20],back:[Math.PI,.20],left:[Math.PI/2,.24],right:[-Math.PI/2,.24],top:[0,1.53],follow:[.67,.33]};
+    const pose=angles[name]||angles.isometric;view=name;wantedAzimuth=pose[0];wantedElevation=pose[1];
    },
    draw:(snapshot,dt)=>{
-    realism.update(snapshot.motors);
     pivot.rotation.set(rad(snapshot.pitch),rad(snapshot.yaw),rad(snapshot.roll),'YXZ');
-    pivot.position.y=3.48+snapshot.lift*.22;
-    const vibration=snapshot.running?Math.min(.006,Math.abs(snapshot.rollRate+snapshot.pitchRate)*.00002):0;
-    pivot.position.x=vibration*Math.sin(snapshot.yawRate+snapshot.roll);
+    pivot.position.y=3.48; // constrained physical tripod swivel
+    pivot.position.x=0; // no scripted vibration: attitude follows motor torque only
     for(let i=0;i<4;i++){
-      const speed=snapshot.running?snapshot.motors[i]/100:0;
-      if(speed>.005)propGroups[i].rotation.y+=(i%2?1:-1)*dt*(1+speed*138);
+      const speed=snapshot.running?Math.sqrt(Math.max(0,snapshot.motorThrust[i])/8):0;
+      if(speed>.005)propGroups[i].rotation.y+=(i%2?1:-1)*dt*(.5+speed*132);
       blurs[i].material.opacity=Math.pow(speed,.75)*.49;blurs[i].scale.setScalar(1+speed*.12);
       wash[i].cone.material.opacity=speed*.13;wash[i].cone.scale.set(1+speed*.38,1+speed*.3,1+speed*.38);
       for(let n=0;n<8;n++){const ring=wash[i].rings[n],phase=(snapshot.running?s.time*.6*speed:0)+n/8;
@@ -115,6 +122,9 @@ function makeScene(){
       positions[n*3]=motors[seed.arm].x+Math.cos(seed.angle)*(.3+drift);positions[n*3+1]=.055+Math.sin(n*4.1+s.time*8)*.025*speed;
       positions[n*3+2]=motors[seed.arm].z+Math.sin(seed.angle)*(.3+drift)}
     dust.geometry.attributes.position.needsUpdate=true;dust.material.opacity=snapshot.running?Math.max(...snapshot.motors)/100*.4:0;
+    if(view==='follow')wantedAzimuth=.67+rad(snapshot.yaw);
+    azimuth+=Math.atan2(Math.sin(wantedAzimuth-azimuth),Math.cos(wantedAzimuth-azimuth))*Math.min(1,dt*8);
+    elevation+=(wantedElevation-elevation)*Math.min(1,dt*8);
     camera.position.set(Math.sin(azimuth)*radius*Math.cos(elevation),2.65+Math.sin(elevation)*radius,Math.cos(azimuth)*radius*Math.cos(elevation));camera.lookAt(0,2.65,0);
     renderer.render(scene,camera);
    },
@@ -141,7 +151,7 @@ function drawFallback(canvas,snapshot){
  c.restore();c.fillStyle='#bcebd7';c.textAlign='center';c.font='13px sans-serif';c.fillText('2D fallback • enable WebGL for full tripod scene',cx,h-28);
 }
 function audioStart(){if(soundOn&&s.running)audioEngine.start()}
-function audioTick(){if(soundOn)audioEngine.update(s.motors)}
+function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(){stopSimulator(s);audioStop();setStatus('MOTORS OFF');syncActions();drawUI()}
@@ -244,23 +254,50 @@ function updateControls(){
  $('tpVolume').oninput=e=>{
   volume=Number(e.target.value)/100;audioEngine.setVolume(volume);$('tpVolumeOut').textContent=Math.round(volume*100)+'%';
  };audioEngine.setVolume(volume);
+ $('tpSoundPreset').onchange=e=>audioEngine.setProfile(e.target.value);
+ audioEngine.setProfile($('tpSoundPreset').value);
  $('tpPidAxis').onchange=()=>{updatePidEditor();coach()};$('tpPidLoop').onchange=()=>{updatePidEditor();coach()};
  $('tpApplyPid').onclick=()=>{const values={p:Number($('tpPidP').value),i:Number($('tpPidI').value),d:Number($('tpPidD').value)};
   const valid=['p','i','d'].every(k=>$('tpPid'+k.toUpperCase()).value.trim()!==''&&Number.isFinite(values[k]));
   if(!valid||!setPID(s,pidBank(),values)){setStatus('INVALID PID VALUES • 0–100');return}
-  history.length=0;coach();if(!triggerTuningResponse())setStatus('PID APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');};
+  coach();setStatus('PID APPLIED LIVE • '+pidBank()+' • TEST RESPONSE WHEN READY');};
  $('tpPreset').onchange=e=>{const mode=e.target.value;if(!mode)return;const bank=pidBank(),base={...DEFAULT_PID[bank]},values={...base};
+  if(mode==='custom')return;
   if(mode==='lowP')values.p=base.p*.35;if(mode==='highP')values.p=base.p*2.8;
   if(mode==='lowI')values.i=base.i*.2;if(mode==='highI')values.i=base.i*2.4;
   if(mode==='lowD')values.d=0;if(mode==='highD')values.d=base.d?base.d*3.5:.11;
-  setPID(s,bank,values);updatePidEditor();coach();history.length=0;e.target.value='';
-  if(!triggerTuningResponse())setStatus('PRESET APPLIED • RUN WITH THROTTLE ≥1250, THEN TEST');
+  setPID(s,bank,values);updatePidEditor();coach();e.target.value='';
+  setStatus('PRESET APPLIED LIVE • '+bank+' • SELECT TEST RESPONSE');
  };
  const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s']];
  for(const [id,key,format] of envPairs)$( 'tp'+id).oninput=e=>{s.environment[key]=Number(e.target.value);$('tp'+id+'Out').textContent=format(e.target.value)};
- $('tpChartAxis').onchange=()=>history.length=0;
+ $('tpChartAxis').onchange=()=>{history.length=0;drawUI()};
+ $('tpPauseGraph').onclick=e=>{graphPaused=!graphPaused;e.target.textContent=graphPaused?'Resume Graph':'Pause Graph'};
+ $('tpClearGraph').onclick=()=>{history.length=0;drawChart()};
+ $('tpResetIntegrators').onclick=()=>{resetIntegrators(s);setStatus('PID INTEGRATORS RESET • MOTORS STILL '+(s.running?'ON':'OFF'))};
+ $('tpAbGain').onchange=()=>{const gain=$('tpAbGain').value,base=s.pid[pidBank()][gain];
+  $('tpAbLow').value=Number((base*.4).toFixed(3));$('tpAbHigh').value=Number((base===0?.15:base*2.8).toFixed(3));
+ };
+ $('tpCompare').onclick=()=>{
+  try{
+   const bank=pidBank(),gain=$('tpAbGain').value,a=Number($('tpAbLow').value),b=Number($('tpAbHigh').value);
+   const axis=$('tpPidAxis').value,study=simulateResponse({basePID:s.pid,bank,gain,values:[a,b],mode:s.mode,axis,environment:s.environment,duration:gain==='i'?5:6});
+   drawComparison(study);
+   const [A,B]=study.results;
+   $('tpCompareResult').textContent='A '+gain.toUpperCase()+'='+a+' vs B '+gain.toUpperCase()+'='+b+
+     ' • RMS '+readable(A.metrics.rms,2)+' / '+readable(B.metrics.rms,2)+
+     ' • Peak rate '+readable(A.metrics.peakRate,1)+' / '+readable(B.metrics.peakRate,1)+'°/s'+
+     ' • Late error '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+
+     ' • Rise '+(A.metrics.riseTime==null?'N/A':readable(A.metrics.riseTime,2)+'s')+' / '+(B.metrics.riseTime==null?'N/A':readable(B.metrics.riseTime,2)+'s')+
+     ' • Settle '+(A.metrics.settlingTime==null?'N/A':readable(A.metrics.settlingTime,2)+'s')+' / '+(B.metrics.settlingTime==null?'N/A':readable(B.metrics.settlingTime,2)+'s')+
+     ' • Overshoot '+readable(A.metrics.overshootPct,0)+'% / '+readable(B.metrics.overshootPct,0)+'%'+
+     ' • Motor activity '+readable(A.metrics.motorActivity,2)+' / '+readable(B.metrics.motorActivity,2)+
+     ' • Same throttle/initial state/disturbance; no change to live gains.';
+  }catch(error){$('tpCompareResult').textContent='Comparison error: '+error.message}
+ };
+ $('tpAbGain').onchange();
  $('tpTestResponse').onclick=()=>{if(!triggerTuningResponse())setStatus('RUN AND RAISE THROTTLE ABOVE 1250 µs FOR PID TEST')};
- $('tpCameraView').onchange=e=>{visual?.setView?.(e.target.value);$('tpViewReadout').textContent=e.target.options[e.target.selectedIndex].text};
+ $('tpCameraView').onchange=e=>visual?.setView?.(e.target.value);
  bindStick('tpLeftPad','left');bindStick('tpRightPad','right');bindCamera();
  window.addEventListener('keydown',e=>keyHandler(e,true));window.addEventListener('keyup',e=>keyHandler(e,false));
  window.addEventListener('blur',()=>releaseAll(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
@@ -268,24 +305,45 @@ function updateControls(){
  updatePidEditor();coach();syncActions();
 }
 function sampleChart(){
- const axis=$('tpChartAxis').value,angular=axis==='yaw'||s.mode==='acro';
- const axisC=axis[0].toUpperCase()+axis.slice(1);
- const target=axis==='yaw'?s.targetYawRate:angular?s['target'+axisC+'Rate']:s['target'+axisC];
- const actual=axis==='yaw'?s.yawRate:angular?s[axis+'Rate']:s[axis];
- history.push({target,actual});if(history.length>180)history.shift();
+ const axis=$('tpPidAxis').value,bank=pidBank(),m=s.memory[bank],r={};
+ for(const name of ['roll','pitch','yaw']){
+  const c=name[0].toUpperCase()+name.slice(1);
+  r[name]={target:s['target'+c],actual:s[name]};
+  r[name+'Rate']={target:s['target'+c+'Rate'],actual:s[name+'Rate']};
+ }
+ r.terms=[m.p,m.i,m.d];r.motors=[...s.motors];r.error=[m.error];history.push(r);
+ if(history.length>180)history.shift();
 }
-function drawChart(){
- const canvas=$('tpChart'),box=canvas.getBoundingClientRect(),width=box.width,height=box.height;
- if(width<10)return;const dpr=Math.min(devicePixelRatio||1,2);
+function drawMultiLine(canvas,series){
+ const box=canvas.getBoundingClientRect(),width=box.width,height=box.height;if(width<5||height<5)return;
+ const dpr=Math.min(devicePixelRatio||1,2);
  if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr)}
  const c=canvas.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,width,height);
- const pad=16,scale=Math.max(15,...history.flatMap(v=>[Math.abs(v.target),Math.abs(v.actual)]))*1.13,mid=height/2;
- c.lineWidth=1;c.strokeStyle='#294655';
- for(let i=0;i<5;i++){const y=pad+(height-2*pad)*i/4;c.beginPath();c.moveTo(0,y);c.lineTo(width,y);c.stroke()}
- c.setLineDash([4,4]);c.beginPath();c.moveTo(0,mid);c.lineTo(width,mid);c.strokeStyle='#416270';c.stroke();c.setLineDash([]);
- const plot=(key,color)=>{c.beginPath();c.strokeStyle=color;c.lineWidth=2;history.forEach((v,i)=>{const x=pad+(width-2*pad)*i/179,y=mid-clamp(v[key]/scale,-1,1)*(height/2-pad);if(i===0)c.moveTo(x,y);else c.lineTo(x,y)});c.stroke()};
- plot('target','#56d5e7');plot('actual','#7aedb3');
- c.fillStyle='#8caebd';c.font='10px sans-serif';c.fillText('+'+readable(scale,0),3,12);c.fillText('0',3,mid-4);c.fillText('-'+readable(scale,0),3,height-3);
+ const max=Math.max(10,...series.flatMap(v=>v.values.map(Math.abs)))*1.12,pad=14,mid=height/2;
+ c.strokeStyle='#2b4b5b';c.lineWidth=1;
+ for(let i=0;i<=4;i++){const y=pad+(height-pad*2)*i/4;c.beginPath();c.moveTo(0,y);c.lineTo(width,y);c.stroke()}
+ c.setLineDash([4,4]);c.beginPath();c.moveTo(0,mid);c.lineTo(width,mid);c.stroke();c.setLineDash([]);
+ for(const line of series){if(!line.values.length)continue;c.beginPath();c.lineWidth=2;c.strokeStyle=line.color;
+  line.values.forEach((v,i)=>{const x=pad+(width-pad*2)*(i/Math.max(1,line.values.length-1)),y=mid-clamp(v/max,-1,1)*(height/2-pad);
+   i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();}
+}
+function drawChart(){
+ const mode=$('tpChartAxis').value,colors=['#56d5e7','#7aedb3','#e2b56d','#ff8fa1'];
+ let traces=[];
+ if(['roll','pitch','yaw','rollRate','pitchRate'].includes(mode))
+  traces=[{values:history.map(h=>h[mode]?.target||0),color:colors[0]},{values:history.map(h=>h[mode]?.actual||0),color:colors[1]}];
+ else if(mode==='pidTerms')traces=[0,1,2].map((i)=>({values:history.map(h=>h.terms[i]),color:colors[i]}));
+ else if(mode==='motorOutputs')traces=[0,1,2,3].map((i)=>({values:history.map(h=>h.motors[i]),color:colors[i]}));
+ else traces=[{values:history.map(h=>h.error[0]),color:colors[3]}];
+ drawMultiLine($('tpChart'),traces);
+}
+function drawComparison(comparison){
+ const colors=['#56d5e7','#ffad89'],plots=comparison.results.map((r,i)=>({
+  color:colors[i],values:r.samples.map(s=>s.actual)
+ }));
+ const reference=comparison.results[0].samples.map(s=>s.target);
+ plots.unshift({color:'#4a8d8a',values:reference});
+ drawMultiLine($('tpCompareChart'),plots);
 }
 function drawUI(){
  const v=getSnapshot(s),angular=s.mode==='acro',axis=$('tpChartAxis').value,axisC=axis[0].toUpperCase()+axis.slice(1);
@@ -294,9 +352,11 @@ function drawUI(){
  $('tpThrottleInput').textContent=s.throttle+' µs';$('tpLeftReadout').textContent='YAW '+readable(s.cmdYaw,2);$('tpRightReadout').textContent='R '+readable(s.cmdRoll,2)+' / P '+readable(s.cmdPitch,2);
  $('tpLiftDisplay').textContent='LIFT CUE '+readable(v.lift*100,0)+'%';
  for(let i=0;i<4;i++){const el=$('tpMotor'+(i+1));el.querySelector('strong').textContent=readable(v.motors[i],0)+'%';el.querySelector('i').style.width=readable(v.motors[i],0)+'%'}
- const target=axis==='yaw'?v.targetYawRate:angular?v['target'+axisC+'Rate']:v['target'+axisC];
- const actual=axis==='yaw'?v.yawRate:angular?v[axis+'Rate']:v[axis],unit=(angular||axis==='yaw')?'°/s':'°';
- $('tpTargetLabel').textContent='Target '+axis+' '+readable(target)+unit;$('tpActualLabel').textContent='Actual '+axis+' '+readable(actual)+unit;
+ const isRate=angular||axis==='yaw'||axis.endsWith('Rate');
+ const baseAxis=axis.replace('Rate',''),c=baseAxis[0].toUpperCase()+baseAxis.slice(1);
+ const target=(axis==='yaw'||isRate)?v['target'+c+'Rate']:v['target'+c];
+ const actual=isRate?v[baseAxis+'Rate']:v[baseAxis],unit=isRate?'°/s':'°';
+ $('tpTargetLabel').textContent='Target '+axis+' '+readable(Number(target)||0)+unit;$('tpActualLabel').textContent='Actual '+axis+' '+readable(Number(actual)||0)+unit;
  const selected=pidBank(),live=s.memory[selected];
  for(const [id,key] of [['tpPidError','error'],['tpPidPTerm','p'],['tpPidITerm','i'],['tpPidDTerm','d'],['tpPidOutput','output']])$(id).textContent=readable(live[key],2);
  $('tpPidTargetActual').textContent='Target '+readable(live.target,1)+(selected.startsWith('angle')&&!selected.startsWith('angleRate')?'°':'°/s')+' • Actual '+readable(live.actual,1);
@@ -304,7 +364,18 @@ function drawUI(){
  $('tpPeakRate').textContent=readable(v.metrics.peakRate,0)+'°/s';
  $('tpMotorSpread').textContent=readable(v.metrics.motorSpread,1)+'%';
  $('tpRingingCount').textContent=String(v.metrics.ringing);
- for(let i=1;i<=4;i++)$('tpMotor'+i).classList.toggle('active-motor',v.motors[i-1]>8);
+ for(let i=1;i<=4;i++){
+  const el=$('tpMotor'+i);el.classList.toggle('active-motor',v.motors[i-1]>8);
+  el.querySelector('strong').title=readable(v.motorRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
+ }
+ const axisForPID=$('tpPidAxis').value,cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
+ const outer=s.memory['angle'+cAxis],inner=s.memory[(s.mode==='angle'?'angleRate':'rate')+cAxis];
+ $('tpOuterLoop').textContent=outer&&s.mode==='angle'?'Angle '+readable(outer.target)+'° → '+readable(outer.output)+'°/s':'ACRO • outer loop bypassed';
+ $('tpOuterTerms').textContent=outer&&s.mode==='angle'?'P '+readable(outer.p)+' • I '+readable(outer.i)+' • D '+readable(outer.d):'Pure angular-rate target';
+ $('tpInnerLoop').textContent='Target '+readable(inner.target,1)+'°/s → Actual '+readable(inner.actual,1)+'°/s';
+ $('tpInnerTerms').textContent='P '+readable(inner.p)+' • I '+readable(inner.i)+' • D '+readable(inner.d);
+ $('tpActuator').textContent=readable(v.motorRPM.reduce((a,b)=>a+b,0)/4,0)+' avg RPM';
+ $('tpActuatorInfo').textContent='Total thrust '+readable(v.motorThrust.reduce((a,b)=>a+b,0),1)+' N • Saturation '+readable(100*v.metrics.saturation/Math.max(1,v.metrics.samples),1)+'%';
  drawChart();
 }
 function frame(time){
@@ -312,7 +383,7 @@ function frame(time){
  const left=pointers.get('left');if(left&&s.running)s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
  inputAxes();advanceSimulator(s,dt);const snapshot=getSnapshot(s);
  visual?.draw(snapshot,dt);
- if(time-lastChart>75){sampleChart();lastChart=time}
+ if(time-lastChart>75){if(!graphPaused)sampleChart();lastChart=time}
  if(time-lastUI>100){drawUI();lastUI=time}
  if(time-lastAudio>33){audioTick();lastAudio=time}
  raf=requestAnimationFrame(frame);

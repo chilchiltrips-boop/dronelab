@@ -1,7 +1,7 @@
 name: Tripod PID Simulator Tests
 on:
   push:
-    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, main]
+    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, main]
     paths:
       - 'tripod.html'
       - 'tripod.css'
@@ -9,6 +9,8 @@ on:
       - 'js/tripod-page.js'
       - 'js/tripod-audio.js'
       - 'js/tripod-realism.js'
+      - 'js/tripod-assembly-model.js'
+      - 'js/tripod-experiments.js'
       - 'tools/tripod-physics.test.mjs'
       - 'tools/tripod-browser.mjs'
       - 'sw.js'
@@ -31,6 +33,8 @@ jobs:
           node --check js/tripod-page.js
           node --check js/tripod-audio.js
           node --check js/tripod-realism.js
+          node --check js/tripod-assembly-model.js
+          node --check js/tripod-experiments.js
           node --test tools/tripod-physics.test.mjs
           npm run check
           npm test
