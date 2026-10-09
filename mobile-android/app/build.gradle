@@ -6,8 +6,8 @@ android {
     applicationId 'in.zebjus.dronelab.companion'
     minSdk 26
     targetSdk 35
-    versionCode 5
-    versionName '1.4.0-qr-code'
+    versionCode 6
+    versionName '1.4.1-code-fix'
   }
   buildTypes {
     debug {
