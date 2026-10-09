@@ -29,8 +29,8 @@ try{
  log('Web offer QR generated, encoded and decoded offline');
  await phone.locator('#offerInput').fill(offer);
  await phone.locator('#useOfferBtn').click();
- await phone.locator('#createAnswerBtn').waitFor({state:'visible'});
- if(await phone.locator('#createAnswerBtn').isDisabled())throw Error('Phone did not accept Web pairing offer');
+ await phone.waitForFunction(()=>!document.getElementById('createAnswerBtn').disabled||document.getElementById('offerState').textContent.includes('Invalid'),null,{timeout:12000});
+ if(await phone.locator('#createAnswerBtn').isDisabled())throw Error('Phone did not accept Web pairing offer: '+await phone.locator('#offerState').textContent());
  const firstCode=await web.locator('#pairCode').textContent(),secondCode=await phone.locator('#appPairCode').textContent();
  if(firstCode!==secondCode||!/^\d{6}$/.test(firstCode))throw Error('Pairing PIN mismatch');
  await phone.locator('#createAnswerBtn').click();
