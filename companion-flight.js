@@ -14,7 +14,7 @@ function updateStatus(message){
  $('flightWarning').textContent=message;
  $('flightConnection').textContent=peer?.status().connected?'WEBRTC CONNECTED':'DISCONNECTED';
  $('flightConnection').dataset.ready=String(isOwned());
- $('flightOwner').textContent=isOwned()?'CONTROL GRANTED':'VIEW ONLY';
+ $('flightOwner').textContent=isOwned()?'CONTROL GRANTED':peer?.status().controller==='mobile'?'OPEN WEB SIM':'VIEW ONLY';
 }
 function isOwned(){const s=peer?.status();return !!s?.connected&&!!s?.paired&&s.controller==='mobile'&&s.simulatorReady===true}
 function recenterView(side){
