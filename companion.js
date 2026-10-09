@@ -31,17 +31,18 @@ function sync(){
 }
 function initPeer(){
  peer=ZebjusP2P.session('mobile',{
-  status:s=>status(s),
+  status:s=>{status(s);window.ZebjusFlightApp?.onStatus(peer?.status())},
   connected:()=>{status('Connected • awaiting Web approval');message('WebRTC connected. Confirm code on laptop.')},
   paired:()=>{stopPhoneCode();$('phoneShortCodeStatus').textContent='Paired successfully; code expired.';status('Connected • Paired');message('Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
   led:d=>{sync();if(peer.status().paired){$('commandStatus').textContent='Confirmed by Web App • revision '+d.revision;message('LED '+(d.led?'ON':'OFF')+' ACK / revision '+d.revision)}},
-  control:d=>{sync();if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
+  control:d=>{sync();window.ZebjusFlightApp?.onStatus(peer?.status());if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
+  simAck:ack=>window.ZebjusFlightApp?.onAck(ack),
   heartbeat:t=>{$('heartbeatDetail').textContent=new Date(t).toLocaleTimeString()},
   reconnecting:()=>{status('Reconnecting • control released');message('Wi-Fi interrupted, controls are locked until sync')},
   disconnected:r=>{if(!processing){++epoch;pending=false;stopScanner();stopPhoneCode();clearResponse()}status('Disconnected');message(r);$('answerState').textContent='Connection lost • scan NEW Web QR';sync()},
   error:r=>{message('WebRTC: '+r)}
- });sync();
+ });window.ZebjusFlightApp?.connect(peer);sync();
 }
 function scanFeedback(text,state='waiting'){
  const el=$('phoneScanFeedback');if(!el)return;
@@ -190,7 +191,7 @@ window.zebjusNetworkChanged=()=>{
  $('networkState').textContent='Network changed. Rejoin laptop Wi-Fi and scan a NEW Web QR, then request control again.';
  message('Network switch cleared old WebRTC, session and controller rights');
 };
-window.zebjusAppPaused=()=>{stopScanner();if(peer?.status().controller==='mobile')peer.releaseControl();pending=false;sync();message('App paused • camera stopped and control released')};
+window.zebjusAppPaused=()=>{window.ZebjusFlightApp?.doStop();stopScanner();if(peer?.status().controller==='mobile')peer.releaseControl();pending=false;sync();message('App paused • camera stopped and control released')};
 function bind(){
  $('scanOfferBtn').onclick=scanWebQR;
  $('phoneTorchBtn').onclick=async()=>{
