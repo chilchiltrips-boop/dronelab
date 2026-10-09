@@ -1,0 +1,53 @@
+name: QR WebRTC Browser Pairing Test
+on:
+  push:
+    branches: [testing/two-way-qr-pairing]
+    paths:
+      - 'pairing-core.js'
+      - 'pairing-qr-ui.js'
+      - 'pairing-web.js'
+      - 'companion.js'
+      - 'companion.html'
+      - 'companion.css'
+      - 'pairing.css'
+      - 'index.html'
+      - 'lab.html'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/qr-pairing-browser.mjs'
+      - '.github/workflows/qr-browser-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  p2p-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax validation
+        run: |
+          node --check pairing-core.js
+          node --check pairing-qr-ui.js
+          node --check pairing-web.js
+          node --check companion.js
+          node --check tools/qr-pairing-browser.mjs
+      - name: Install isolated Chromium test dependencies
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Test two real WebRTC peers and all LED protocol checks
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &
+          sleep 3
+          node tools/qr-pairing-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qr-webapp-android-ui-browser-screenshots
+          path: test-output/
+          if-no-files-found: ignore
