@@ -211,8 +211,11 @@ async function enableMonaco(){
   const M=await new Promise((resolve,reject)=>window.require(['vs/editor/editor.main'],()=>resolve(window.monaco),reject));
   if(!M)throw Error('Monaco not initialized');monaco=M;addCompletions(M);
   M.editor.defineTheme('zebjus-pycharm',{base:'vs-dark',inherit:true,rules:[{token:'comment',foreground:'8193A2',fontStyle:'italic'},{token:'keyword',foreground:'CB7EFA'},{token:'string',foreground:'A5C86A'},{token:'number',foreground:'6CADD9'}],colors:{'editor.background':'#06111b','editor.foreground':'#D9E9F2','editorLineNumber.foreground':'#52697C','editorCursor.foreground':'#6BE9BC','editor.selectionBackground':'#21506E88','editorSuggestWidget.background':'#0b1d2a','editorSuggestWidget.border':'#315567'}});
-  editor=M.editor.create($('pythonMonaco'),{value:files[active],language:'python',theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
-  models.set(active,editor.getModel());
+  // Own all models explicitly: Monaco auto-disposes an editor-created default
+  // model after a switch, which breaks reopening previously selected .py files.
+  const initialModel=M.editor.createModel(files[active]||'','python',M.Uri.parse('inmemory://zebjus/'+active));
+  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
+  models.set(active,initialModel);
   editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
   editor.onDidChangeCursorPosition(editorPosition);
   editor.addCommand(M.KeyMod.CtrlCmd|M.KeyCode.Enter,runPython);
