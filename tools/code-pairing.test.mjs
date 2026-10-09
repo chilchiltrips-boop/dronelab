@@ -83,3 +83,14 @@ test('both QR pairing and code pairing scripts and UI remain available',()=>{
  assert.ok(!read('pairing-code.js').includes('LED_SET'),'public signaling must not control LED');
  console.log('PASS camera/no-camera UI integration and no LED commands via public server');
 });
+
+test('cancelling code lookup rejects promptly without a stale answer',async()=>{
+ const app=createRuntime(200),offer='zj1:1:'+('A'.repeat(400)),answer='zj1:1:'+('B'.repeat(450)),sid='0123456789abcdef01234567';
+ let code='';const phone=app.beginPhone({offer,answer,expires:Date.now()+60000,onCode:c=>code=c});
+ try{
+  await phone.start();await wait(20);const controller=new AbortController();
+  const lookup=app.resolveAnswer({offer,code,sid,expires:Date.now()+60000,signal:controller.signal});
+  await wait(30);controller.abort();await assert.rejects(lookup,/cancelled/);
+  await assert.rejects(app.resolveAnswer({offer,code,sid,expires:Date.now()+60000,signal:controller.signal}),/cancelled/);
+ }finally{phone.stop()}
+});

@@ -1,7 +1,7 @@
 name: Verify DroneLab FlightCore Firmware Center
 on:
   push:
-    branches: [main]
+    branches: [testing/audit-compact-pairing-v1.4.5, main]
     paths:
       - index.html
       - lab.html

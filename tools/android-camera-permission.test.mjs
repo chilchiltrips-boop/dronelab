@@ -31,11 +31,23 @@ test('Android permission denial offers user direct app-settings recovery',()=>{
 
 test('APK increments version code to allow upgrade and companion UI explains permissions',()=>{
  const build=read('mobile-android/app/build.gradle');
- assert.ok(build.includes('versionCode 9'));
- assert.ok(build.includes("versionName '1.4.4-smart-pair'"));
+ assert.ok(build.includes('versionCode 10'));
+ assert.ok(build.includes("versionName '1.4.5-compact-pair'"));
  const html=read('companion.html'),js=read('companion.js');
  assert.ok(html.includes('id="cameraPermissionHelp"'));
  assert.ok(html.includes('Allow only while using the app.'));
  assert.ok(js.includes("err?.name==='NotAllowedError'"));
  assert.ok(js.includes("message('QR scanner: '+help)"));
+});
+
+
+test('native safe-area padding is applied once and forwards zero handled insets',()=>{
+ const java=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
+ assert.ok(java.includes('container.setOnApplyWindowInsetsListener'));
+ assert.ok(java.includes('container.addView(view'));
+ assert.ok(java.includes('android.graphics.Insets.NONE'));
+ assert.ok(java.includes('WindowInsets.Type.ime()'));
+ assert.ok(!java.includes('WindowInsets.CONSUMED'));
+ assert.ok(java.includes('view.onPause()')&&java.includes('view.onResume()'));
+ assert.ok(java.includes('pendingVideoRequest == null'));
 });

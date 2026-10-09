@@ -44,3 +44,10 @@ button:focus-visible{outline:3px solid #b8ffde;outline-offset:3px}
 #phoneShortCodeStatus{font-size:12px;font-weight:700}
 @keyframes mobile-scan-success{0%{transform:scale(.95)}100%{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.phone-scan-feedback[data-status="success"]{animation:none}}
+
+button{min-height:44px}
+@media(max-height:500px) and (orientation:landscape){
+ .phone-scan-frame{min-height:180px}
+ .phone-scan-frame #scanVideo{max-height:230px}
+ .phone-scan-guide{max-width:200px}
+}

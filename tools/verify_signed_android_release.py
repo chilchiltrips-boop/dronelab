@@ -6,16 +6,16 @@ import sys
 from pathlib import Path
 
 APP_ID = "in.zebjus.dronelab.companion"
-EXPECTED_VERSION_CODE = 9
+EXPECTED_VERSION_CODE = 10
 EXPECTED_CERT_SHA256 = "f1b86575b3590734654f638e4e0d68056d37b2e8884ac7d6c24636fe9b516894"
 
 def output(cmd):
     return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
 
 def run():
-    if len(sys.argv) != 4:
-        raise SystemExit("Usage: verify_signed_android_release.py APK_PATH APKSIGNER_PATH AAPT_PATH")
-    apk, apksigner, aapt = sys.argv[1:]
+    if len(sys.argv) not in (4, 5):
+        raise SystemExit("Usage: verify_signed_android_release.py APK_PATH APKSIGNER_PATH AAPT_PATH [PREVIOUS_APK]")
+    apk, apksigner, aapt = sys.argv[1:4]
     assert Path(apk).is_file(), "Missing signed APK"
     signatures = output([apksigner, "verify", "--verbose", "--print-certs", apk])
     # Certificate fingerprints are PUBLIC; printing this subset is safe and
@@ -38,8 +38,18 @@ def run():
     app_id, version_code, version_name = package.groups()
     assert app_id == APP_ID, f"Unexpected app ID: {app_id}"
     assert int(version_code) == EXPECTED_VERSION_CODE, f"Release versionCode must be {EXPECTED_VERSION_CODE}, got {version_code}"
-    assert version_name.startswith("1.4.4"), "Unexpected Android release versionName"
+    assert version_name.startswith("1.4.5"), "Unexpected Android release versionName"
     assert "application-debuggable" not in manifest, "Release must not be debuggable"
+    if len(sys.argv) == 5:
+        previous = sys.argv[4]
+        old_signatures = output([apksigner, "verify", "--verbose", "--print-certs", previous])
+        old_certs = re.findall(r"(?:V2 Signer:|Signer #\d+) certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", old_signatures)
+        assert len(old_certs) == 1 and old_certs[0].lower() == EXPECTED_CERT_SHA256, "Published baseline has an incompatible certificate"
+        old_manifest = output([aapt, "dump", "badging", previous])
+        old_package = re.search(r"^package:\s+name='([^']+)'\s+versionCode='(\d+)'", old_manifest, re.M)
+        assert old_package and old_package[1] == APP_ID, "Published baseline package differs"
+        assert int(version_code) > int(old_package[2]), "Update versionCode must increase over published APK"
+        print(f"  Update identity verified against published versionCode {old_package[2]} (installation still needs a device)")
     print("PASS: non-debug ZEBJUS Android release")
     print(f"  Package: {app_id}")
     print(f"  VersionCode: {version_code} • VersionName: {version_name}")

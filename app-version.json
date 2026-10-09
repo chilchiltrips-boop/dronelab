@@ -1,9 +1,9 @@
 {
-  "version": "1.4.4+14",
-  "channel": "release",
-  "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
+  "version": "1.4.5-audit",
+  "channel": "testing",
+  "previousStable": "c1ac834fb398818641dd5e0dd930a8f12d337d56",
   "features": [
-    "Smart Two-Way QR pairing without bridge or cloud",
+    "Direct two-way QR pairing; optional online code signaling",
     "Automatic Android response QR",
     "Laptop webcam scans phone QR",
     "Virtual LED ACK sync and header control switch",
@@ -14,8 +14,9 @@
     "Fix six-digit code handshake premature auth timeout and show ICE diagnostics",
     "Permanent Android APK release certificate and versioned in-place upgrades",
     "Center-focused QR scanning and user-activated Step 2 camera",
-    "Default 6-digit code pairing, centered Step 1 QR, Android QR detect feedback, highlight Confirm Pairing and low-light scanning"
+    "Default 6-digit code pairing, centered Step 1 QR, Android QR detect feedback, highlight Confirm Pairing and low-light scanning",
+    "Compact step-by-step pairing, safe session/camera cancellation and offline cache fixes"
   ],
   "publishedAt": "2026-10-09",
-  "buildCommit": "82be7ef0c929"
+  "buildCommit": "testing/audit-compact-pairing-v1.4.5"
 }

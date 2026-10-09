@@ -15,7 +15,7 @@ function loadPeer(){
   s.crossOrigin='anonymous';s.referrerPolicy='no-referrer';
   let done=false;
   const timer=setTimeout(()=>finish(Error('Online signaling library unavailable. Check Internet and use the camera QR option.')),12000);
-  function finish(err){if(done)return;done=true;clearTimeout(timer);if(err){libraryPromise=null;reject(err)}else if(root.Peer)resolve(root.Peer);else{libraryPromise=null;reject(Error('Signaling library did not load'))}}
+  function finish(err){if(done)return;done=true;clearTimeout(timer);if(err){s.remove();libraryPromise=null;reject(err)}else if(root.Peer)resolve(root.Peer);else{s.remove();libraryPromise=null;reject(Error('Signaling library did not load'))}}
   s.onload=()=>finish();s.onerror=()=>finish(Error('Could not load PeerJS. Check Internet access.'));
   document.head.append(s);
  });
@@ -33,8 +33,8 @@ function cloudPeer(Peer,id){
  return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]},debug:0});
 }
 function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
- let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0;
- const stop=()=>{ended=true;clearTimeout(timeout);try{connection?.close()}catch{}try{peer?.destroy()}catch{}connection=null;peer=null;code='';onCode('')};
+ let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0,connectionCleanup=null;
+ const stop=()=>{ended=true;clearTimeout(timeout);connectionCleanup?.();connectionCleanup=null;try{connection?.close()}catch{}try{peer?.destroy()}catch{}connection=null;peer=null;code='';onCode('')};
  async function init(){
   const Peer=await loadPeer();
   if(ended)return;
@@ -64,6 +64,8 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
     // WebRTC DataChannel is open. Starting the 6s auth timeout here closed
     // valid sessions on slower college Wi-Fi/LAN before a challenge arrived.
     let authTimeout=null;
+    const cleanup=()=>{clearTimeout(iceTimeout);clearTimeout(authTimeout)};
+    connectionCleanup=cleanup;
     let iceTimeout=setTimeout(()=>{
      if(connection===conn&&!conn.open){
       onStatus('Wi-Fi/college firewall delayed device connection • trying a new connection may help');
@@ -71,6 +73,7 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
      }
     },35000);
     conn.on('open',()=>{
+     if(ended||peer!==own||connection!==conn){cleanup();conn.close();return}
      clearTimeout(iceTimeout);
      onStatus('College PC connected • verifying pairing session…');
      authTimeout=setTimeout(()=>{
@@ -87,8 +90,8 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
       onStatus('Answer sent securely • Waiting for Web App to confirm pairing');
      }catch(e){onStatus('Code response error: '+e.message)}
     });
-    conn.on('close',()=>{clearTimeout(iceTimeout);clearTimeout(authTimeout);if(connection===conn)connection=null});
-    conn.on('error',e=>{clearTimeout(iceTimeout);clearTimeout(authTimeout);onStatus('Online code connection: '+(e?.message||e))});
+    conn.on('close',()=>{cleanup();if(connection===conn){connection=null;connectionCleanup=null}});
+    conn.on('error',e=>{cleanup();if(!ended&&peer===own)onStatus('Online code connection: '+(e?.message||e));conn.close();if(connection===conn){connection=null;connectionCleanup=null}});
    });
   }
   timeout=setTimeout(()=>{if(!ended){onStatus('Pairing code expired • scan new Web QR');stop()}},Math.min(MAX_MS,Math.max(1,expires-Date.now())));
@@ -96,11 +99,15 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
  }
  return {start:init,stop,getCode:()=>code};
 }
-async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{}}){
+async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{},signal}){
+ const cancelled=()=>signal?.aborted;
+ if(cancelled())throw Error('Code pairing cancelled');
  if(!validCode(code))throw Error('Enter a valid six-digit code from Android');
  if(!isCurrent(expires))throw Error('Pairing QR expired. Generate a new QR.');
  if(!offer?.startsWith('zj1:')||!/^[0-9a-f]{24}$/.test(sid||''))throw Error('Create a new Web pairing QR first');
  const proof=await digest(offer,code),Peer=await loadPeer();
+ if(cancelled())throw Error('Code pairing cancelled');
+ if(!isCurrent(expires))throw Error('Pairing QR expired. Generate a new QR.');
  return new Promise((resolve,reject)=>{
   let peer,conn,done=false;
   const deadline=Math.min(42000,Math.max(1000,expires-Date.now()));
@@ -108,20 +115,25 @@ async function resolveAnswer({offer,code,sid,expires,onStatus=()=>{}}){
   function finish(error,answer){
    if(done)return;
    done=true;clearTimeout(timer);
+   signal?.removeEventListener('abort',abort);
    try{conn?.close()}catch{}
    try{peer?.destroy()}catch{}
    if(error)reject(error);else resolve(answer);
   }
+  const abort=()=>finish(Error('Code pairing cancelled'));
+  signal?.addEventListener('abort',abort,{once:true});
+  if(cancelled()){abort();return}
   try{
    peer=cloudPeer(Peer);
    peer.on('open',()=>{
     if(done)return;
     onStatus('Looking for Android code '+code+'…');
     conn=peer.connect(PREFIX+code,{reliable:true});
-    onStatus('Signaling found • negotiating direct Wi-Fi/LAN WebRTC (may take up to 40 seconds)…');
+    onStatus('Connecting to Android through signaling • campus Wi-Fi may take up to 40 seconds…');
     conn.on('open',()=>{if(done)return;onStatus('PeerJS DataChannel open • verifying Android response…');conn.send({type:'auth',sid,proof})});
     conn.on('data',m=>{
-     if(m?.type!=='answer'||m?.sid!==sid||typeof m.answer!=='string'||!m.answer.startsWith('zj1:'))return finish(Error('Android response failed verification'));
+     if(done)return;
+     if(m?.type!=='answer'||m?.sid!==sid||typeof m.answer!=='string'||m.answer.length>16000||!m.answer.startsWith('zj1:'))return finish(Error('Android response failed verification'));
      onStatus('Phone answer received • establishing WebRTC…');
      finish(null,m.answer);
     });

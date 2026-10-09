@@ -1,11 +1,15 @@
 name: Browser Test Python Lab
 on:
   push:
-    branches: [main]
+    branches: [testing/audit-compact-pairing-v1.4.5, main]
     paths:
       - '.github/workflows/browser-python-lab.yml'
       - 'tools/python-browser-smoke.mjs'
       - 'python-lab.css'
+      - 'project.css'
+      - 'styles.css'
+      - 'sw.js'
+      - 'tools/browser-harness.mjs'
       - 'python-lab-worker.js'
       - 'js/python-lab.js'
       - 'js/usb-i2c-bridge.js'

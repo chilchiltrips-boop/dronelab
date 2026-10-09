@@ -7,8 +7,8 @@ const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'
 test('stable Android package ID and strictly monotonic release versionCode',()=>{
  const gradle=read('mobile-android/app/build.gradle');
  assert.match(gradle,/applicationId 'in\.zebjus\.dronelab\.companion'/);
- assert.match(gradle,/versionCode\s+9\b/);
- assert.match(gradle,/versionName '1\.4\.4-smart-pair'/);
+ assert.match(gradle,/versionCode\s+10\b/);
+ assert.match(gradle,/versionName '1\.4\.5-compact-pair'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);
@@ -29,4 +29,9 @@ test('release workflow only distributes certificate-pinned signed release APKs',
  assert.match(verify,/application-debuggable/);
  const ignore=read('.gitignore');
  assert.match(ignore,/\*\.p12/);
+});
+
+test('production web version stamping derives release version from package metadata',()=>{
+ const workflow=read('.github/workflows/version-stamp.yml');
+ assert.match(workflow,/Path\('package.json'\)/);assert.doesNotMatch(workflow,/meta\['version'\]='1\.4\.4/);
 });

@@ -1,9 +1,11 @@
 // Real browser smoke test for the responsive Python IDE.
 // Uses localhost rather than file:// so Monaco, Workers, and WASM work correctly.
 import {chromium} from 'playwright';
+import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync} from 'node:fs';
-const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
-const page=await browser.newPage({viewport:{width:1600,height:930},deviceScaleFactor:1});
+const browser=await chromium.launch(browserOptions);
+const ctx=await browser.newContext({viewport:{width:1600,height:930},deviceScaleFactor:1});await configureContext(ctx);
+const page=await ctx.newPage();
 const failures=[],logs=[];
 page.on('pageerror',e=>failures.push(e.message));
 page.on('console',m=>{if(m.type()==='error')logs.push(m.text())});

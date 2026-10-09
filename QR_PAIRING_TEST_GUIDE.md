@@ -1,4 +1,4 @@
-# ZEBJUS DroneLab V1.4.3 — Fast Two-Way QR + No-Camera 6-Digit Code
+# ZEBJUS DroneLab V1.4.5 Candidate — Compact Smart Mobile Pairing
 
 Open the hosted **[Web App](https://chilchiltrips-boop.github.io/dronelab/)** on the college PC. Install the **[Android Companion](https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk)**. **No software/ZIP/Python install on the college PC.**
 
@@ -9,7 +9,7 @@ Both PC (Wi-Fi or Ethernet) and Android phone (Wi-Fi) should be able to reach ea
 1. Web App **Settings → Pair Mobile → Camera • Two-Way QR**.
 2. Tap **Pair Mobile**. Web App displays the offer QR, but keeps the laptop camera OFF until you press the Step 2 Start Camera button.
 3. Android **Scan Web QR**. The response QR automatically appears on the phone.
-4. When the Phone Response QR is visible, click **Step 2 • Start Camera & Scan**. Hold the phone QR in the middle of the centered scan frame. The scanner tries a central high-detail crop before periodically checking the full camera image.
+4. When the Phone Response QR is visible, click **Next • Scan Phone QR**, then **Step 2 • Start Camera & Scan**. Hold the phone QR in the middle of the centered scan frame. The scanner tries a central high-detail crop before periodically checking the full camera image.
 5. Verify the Web App **Safety Verification PIN** matches Android's confirmation PIN, and click **Confirm Pairing**.
 6. Android **Take Control** → Web App header **Grant Mobile Control ON** → LED ON/OFF. Responses are ACK-confirmed.
 
@@ -17,7 +17,7 @@ Both PC (Wi-Fi or Ethernet) and Android phone (Wi-Fi) should be able to reach ea
 
 1. Web App **Settings → No Camera • 6-Digit Code → Pair Mobile**. Laptop camera will not be requested.
 2. Android **Scan Web QR**. Android generates BOTH a response QR and a temporary six-digit **CONNECT code**, for example `482731`. Wait until the code field shows real digits rather than dashes.
-3. Type the Android **CONNECT code** into the **PC No Camera code input** → **Connect with Code**. You never need a PC webcam, secondary QR scan, laptop app, Python server, or long answer text.
+3. Click **Next • Enter CONNECT Code**, then type the Android **CONNECT code** into the **PC No Camera code input** → **Connect with Code**. You never need a PC webcam, secondary QR scan, laptop app, Python server, or long answer text.
 4. This optional flow uses the public **PeerJS Cloud signaling service** to privately authenticate the QR session and transfer the phone's WebRTC answer to the browser. The service is third-party, **requires Internet**, may be blocked by college firewalls, and is **not an owned production service**. If unavailable use Method A or Advanced manual QR transfer.
 5. Once Connected, compare the **Safety Verification PIN** shown in the Web App and Android App (different from the CONNECT code) → **Confirm Pairing**.
 6. Android **Take Control** → Web App header **Grant Mobile Control ON** → LED ON/OFF.
@@ -37,7 +37,7 @@ Both PC (Wi-Fi or Ethernet) and Android phone (Wi-Fi) should be able to reach ea
 
 `backup/stable-v1.3.0-before-code-pairing` is the pre-code-pairing safe point. Older `backup/stable-v1.2.0-before-two-way` also remains available.
 
-## V1.4.3 QR speed and camera behavior
+## Current QR speed and camera behavior
 
 - Step 1 `Pair Mobile` only generates the Web QR. Laptop webcam remains OFF.
 - Step 2 opens the camera only after **Start Camera & Scan** is clicked.
@@ -45,4 +45,11 @@ Both PC (Wi-Fi or Ethernet) and Android phone (Wi-Fi) should be able to reach ea
 - Zoom is not changed during the first 5 seconds to let the camera focus. Hardware zoom/focus controls are optional.
 - On detection or Cancel/Close, the camera stream is stopped and permission is not kept active.
 - Camera-less PCs can keep using the optional six-digit CONNECT code; that signaling service still requires Internet.
-- Android V1.4.3 remains the same app ID and permanent release-signing certificate as V1.4.2; versionCode increases from 7 to 8.
+- The v1.4.5 candidate keeps the same app ID and permanent certificate. Its versionCode is 10 over the published v1.4.4 code 9. The testing branch supplies a signed review artifact; the main APK URL continues serving the approved stable APK until release approval.
+
+
+## Compact step behavior and cancellation
+
+Only the active step expands. Step 1 displays the Web QR; Step 2 contains code/camera/manual entry; Step 3 opens when the DataChannel connects and requires Safety PIN confirmation. The previous step remains available through its summary or Back button. CONNECT and Safety PIN are different values.
+
+Check camera granted, denied, blocked, Close while the permission prompt is pending, reopen and detection. Late camera tracks must stop after cancellation. Check QR expiry, invalid response, duplicate response, connection timeout and lost heartbeat. Fresh pairing must not inherit a previous mobile control grant.
