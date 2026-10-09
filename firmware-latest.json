@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "product": "ZEBJUS_FLIGHTCORE",
-  "version": "18.3.83",
-  "builtAt": "2026-10-09T05:59:14Z",
+  "product": "ZEBJUS_I2C_SCANNER",
+  "version": "1.0.1",
+  "builtAt": "",
   "catalog": "firmware-catalog.json",
-  "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
+  "note": "Minimal I2C Address Scanner only • default SDA/SCL • 115200 baud"
 }
