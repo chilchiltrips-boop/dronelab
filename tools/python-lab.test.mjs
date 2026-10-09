@@ -35,7 +35,7 @@ test('Third page follows Python Lab project/editor/terminal design',()=>{
  for(const path of ['index.html','lab.html']){
   const html=file(path);
   const tabs=[...html.matchAll(/data-tab="([^"]+)"/g)].map(x=>x[1]);
-  assert.deepEqual(tabs.slice(0,6),['assembly','wiring','python','led','settings','firmware']);
+  assert.deepEqual(tabs.slice(0,7),['assembly','wiring','python','simcontrol','led','settings','firmware']);
   for(const id of ['tab-python','pythonMonaco','pythonEditor','pythonFileList','pythonUndoFileBtn','pythonRedoFileBtn','pythonNewFileBtn','pythonSaveFileBtn','runPythonBtn','stopPythonBtn','pythonTerminal','pyConnectUsbBtn']){
    assert.ok(html.includes('id="'+id+'"'),path+' '+id);
   }
