@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "builtAt": "2026-10-09T07:02:09Z",
+  "version": "18.3.83",
+  "builtAt": "2026-10-09T05:59:14Z",
   "arduinoEsp32": "3.3.12",
   "hardwareFlashingTested": false,
   "boards": [
@@ -8,7 +8,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3",
       "chipId": 5,
-      "appBytes": 308464,
+      "appBytes": 1264752,
       "otaSlots": [
         {
           "address": 65536,
@@ -29,13 +29,19 @@
         "slot size",
         "factory bootloader at 0x0",
         "factory/APP identical"
-      ]
+      ],
+      "rcMonitorStack": {
+        "taskStackBytes": 8192,
+        "directFrameBytes": 144,
+        "directFrameLimitBytes": 1024,
+        "includesROMCallDepth": false
+      }
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 283344,
+      "appBytes": 1355424,
       "otaSlots": [
         {
           "address": 65536,
@@ -56,7 +62,13 @@
         "slot size",
         "factory bootloader at 0x0",
         "factory/APP identical"
-      ]
+      ],
+      "rcMonitorStack": {
+        "taskStackBytes": 8192,
+        "directFrameBytes": 144,
+        "directFrameLimitBytes": 1024,
+        "includesROMCallDepth": false
+      }
     }
   ]
 }
