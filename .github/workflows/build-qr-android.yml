@@ -1,10 +1,12 @@
-name: Build QR Android Companion APK
+name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, main]
+    branches: [testing/stable-android-signing-v1.4.2, main]
     paths:
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/verify_signed_android_release.py'
       - 'companion.html'
       - 'companion.css'
       - 'companion.js'
@@ -18,8 +20,9 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: qr-android-apk-${{ github.ref_name }}
+  group: zebjus-android-release-${{ github.ref_name }}
   cancel-in-progress: false
+
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -38,48 +41,94 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Package offline companion, shared QR and WebRTC assets
+
+      - name: Package WebRTC, camera and LED assets
         run: |
-          set -eux
-          mkdir -p mobile-android/app/src/main/assets
-          cp companion.html companion.css companion.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor
+          cp companion.html companion.css companion.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
           cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
-          test -s mobile-android/app/src/main/assets/vendor/qrgen.js
-      - name: Validate camera permission regression
-        run: node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs
-      - name: Build installable Android debug APK
-        run: gradle -p mobile-android :app:assembleDebug --stacktrace --no-daemon
-      - name: Verify APK content and copy download
+
+      - name: Check Android camera, code pairing and permanent release-signing rules
+        run: node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs
+
+      - name: Validate debug compilation (never publish a debug APK)
+        run: gradle -p mobile-android :app:assembleDebug --no-daemon
+
+      - name: Load PRIVATE signing key from encrypted GitHub secrets
+        if: github.ref == 'refs/heads/main'
+        env:
+          ZEBJUS_ANDROID_KEYSTORE_B64: ${{ secrets.ZEBJUS_ANDROID_KEYSTORE_B64 }}
+          ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
         run: |
-          set -eux
-          test -s mobile-android/app/build/outputs/apk/debug/app-debug.apk
+          set -euo pipefail
+          if [[ -z "${ZEBJUS_ANDROID_KEYSTORE_B64}" || -z "${ZEBJUS_ANDROID_SIGNING_PASSWORD}" ]]; then
+            echo "::error::Missing release signing secrets. Set ZEBJUS_ANDROID_KEYSTORE_B64 and ZEBJUS_ANDROID_SIGNING_PASSWORD in GitHub Settings > Secrets and variables > Actions. See ANDROID_SIGNING_SETUP.md."
+            exit 1
+          fi
+          umask 077
+          KEYFILE="$RUNNER_TEMP/zebjus-release.p12"
+          printf '%s' "$ZEBJUS_ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYFILE"
+          test -s "$KEYFILE"
+          echo "ZEBJUS_ANDROID_RELEASE_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
+
+      - name: Assemble permanently signed non-debug release APK
+        if: github.ref == 'refs/heads/main'
+        env:
+          ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
+        run: gradle -p mobile-android :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Refuse wrong APK certificate or app identity
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          RELEASE_APK="mobile-android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$RELEASE_APK"
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -n 1)
+          test -x "$BUILD_TOOLS/apksigner"
+          test -x "$BUILD_TOOLS/aapt"
+          python3 tools/verify_signed_android_release.py "$RELEASE_APK" "$BUILD_TOOLS/apksigner" "$BUILD_TOOLS/aapt"
+          unzip -l "$RELEASE_APK" | grep -E 'assets/(companion.html|pairing-core.js|pairing-code.js|vendor/jsqr.js)'
+          test "$(stat -c %s "$RELEASE_APK")" -gt 1000000
+
+      - name: Package one stable Android APK update URL
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
           mkdir -p mobile-apk
-          cp mobile-android/app/build/outputs/apk/debug/app-debug.apk mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk
-          sha256sum mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk | tee mobile-apk/SHA256SUMS.txt
+          cp mobile-android/app/build/outputs/apk/release/app-release.apk mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
+          sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          unzip -l mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk | grep -E 'assets/(companion.html|pairing-core.js|vendor/jsqr.js|vendor/qrgen.js)'
-          test "$(stat -c %s mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk)" -gt 1000000
+          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.4.2\nVersionCode: 7\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
         with:
-          name: ZEBJUS_DroneLab_Code_Pairing_Fix_Android_APK
-          path: mobile-apk/
+          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK
+          path: |
+            mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
+            mobile-apk/SHA256SUMS.txt
+            mobile-apk/ANDROID_RELEASE_META.txt
           retention-days: 30
-      - name: Publish APK to current branch
+          if-no-files-found: error
+
+      - name: Publish VERIFIED signed APK to main (never publish debug)
+        if: github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          mkdir -p /tmp/zebjus-release
-          cp mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk mobile-apk/SHA256SUMS.txt /tmp/zebjus-release/
-          git fetch origin "$GITHUB_REF_NAME"
-          git checkout -B ci-apk-release "origin/$GITHUB_REF_NAME"
+          mkdir -p "$RUNNER_TEMP/zebjus-release-output"
+          cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt "$RUNNER_TEMP/zebjus-release-output/"
+          git fetch origin main
+          git checkout -B ci-signed-apk-release origin/main
           mkdir -p mobile-apk
-          cp /tmp/zebjus-release/* mobile-apk/
-          git add mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk mobile-apk/SHA256SUMS.txt
+          cp "$RUNNER_TEMP"/zebjus-release-output/* mobile-apk/
+          git add mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt
           if ! git diff --cached --quiet; then
-            git commit -m 'Publish V1.4.1 robust code pairing Android APK [skip ci]'
-            git push origin HEAD:"$GITHUB_REF_NAME"
+            git commit -m 'Publish permanent-signed ZEBJUS Android release APK [skip ci]'
+            git push origin HEAD:main
           fi
