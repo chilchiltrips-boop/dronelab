@@ -29,6 +29,7 @@ try{
  await wait(phone,()=>document.getElementById('answerText').value.startsWith('zj1:'));
  const answer=await phone.locator('#answerText').inputValue();
  await web.locator('#pairStep1NextBtn').click();
+ await web.locator('.qr-advanced').evaluate(el=>{el.open=true});
  await web.locator('#pairAnswerText').fill(answer);
  await web.locator('#pairUseAnswerBtn').click();
  await wait(web,()=>!document.getElementById('pairConfirmBtn').disabled);
