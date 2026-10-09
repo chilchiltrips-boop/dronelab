@@ -1,54 +1,33 @@
-# ZEBJUS DroneLab QR Pairing V1 — No Cloud Test Guide
+# ZEBJUS DroneLab V1.3.0 — Smart Two-Way QR Pairing
 
-**Testing branch only:** `testing/two-way-qr-pairing`. The `main` branch and live GitHub Pages website intentionally remain at the safe checkpoint until final approval.
+**No cloud, no laptop ZIP extraction, no Python server, no extra local bridge.**
 
-## Install Android test APK
+## Install and pair
 
-[Download test APK](https://raw.githubusercontent.com/chilchiltrips-boop/dronelab/testing/two-way-qr-pairing/mobile-apk/ZEBJUS_DroneLab_QR_V1_1_0_TEST.apk).
+1. On your **laptop**, open [DroneLab Web App](https://chilchiltrips-boop.github.io/dronelab/) in current Chrome/Edge and go to **Settings**.
+2. On your **Android phone**, install [ZEBJUS DroneLab Smart QR V1.3.0 APK](https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk).
+3. Connect both devices to the **same Wi-Fi network** (not isolated guest/client network).
+4. On Web App, click **Pair Mobile**. A 3-minute QR + 6-digit code appear. Laptop camera scanner starts automatically after camera permission approval.
+5. On Android, tap **Scan Web QR** and point the phone at the Web QR. Android automatically produces a **Phone Response QR**; no extra Accept/Generate action.
+6. Show that Phone Response QR to the laptop webcam. Web App reads it and connects through WebRTC. If laptop webcam is unavailable, Android **Copy Response Text** → Web App Settings **Advanced** → paste.
+7. Compare the six-digit code on both devices and click **Confirm Pairing** on the Web App.
+8. On phone, tap **Take Control**. On the laptop header flip **Grant Mobile Control** ON. Android LED ON/OFF buttons become enabled after Web App grants control; command acknowledgements update the LED state on both devices.
+9. Flip Grant Mobile Control OFF to revoke mobile LED control. The Web App LED testing panel can then use **Take Control (Web)**.
 
-This is a **debug-signed test build**, not a release signing certificate or a production app. Android 8.0+ is targeted. Install only after checking the repository and APK source, and allow camera permission to scan QR.
+## Safety and recovery
 
-## Open the testing Web App locally on a laptop
+- **Refresh, app restart, Wi-Fi changes, expired QR, connection failure**: mobile control is revoked; select **Pair Mobile** again, scan a fresh Web QR then phone QR, reconfirm and re-grant control.
+- The header shows **Mobile: Disconnected** in red and **Connected** in green. The control switch is disabled until pairing is approved.
+- The QR scanner auto-steps zoom on Android cameras that support digital zoom and attempts continuous focus where supported; unsupported camera hardware continues scanning normally. If QR is difficult to scan, use **Expand Response QR** on the Android phone.
+- Data flows directly via encrypted WebRTC DataChannel on local Wi-Fi; QR images carry the signaling information **in both directions**. No Firebase, signaling server, STUN/TURN or ESP32 kit required.
+- The public website may need Internet to load unless previously cached. The subsequent paired peer-to-peer transport is LAN direct; P2P still requires the Wi-Fi access point not to block local devices and firewall to permit the connection.
+- The Android APK is **debug-signed for testing**. A previous Android debug APK with a different certificate may require uninstall/reinstall, resetting its saved settings.
+- Physical Android camera/WebView, webcam permissions, QR recognition under lighting conditions, and different router/firewall configurations require actual phone and laptop testing; Chromium CI simulates the camera callback and validates actual QR pixels.
 
-Download the testing branch as ZIP from GitHub or clone it:
+## Recovery / backups
 
-```bash
-git clone --branch testing/two-way-qr-pairing https://github.com/chilchiltrips-boop/dronelab.git
-cd dronelab
-python3 -m http.server 8765 --bind 127.0.0.1
-```
+- `backup/stable-v1.2.0-before-two-way` — safe V1.2.0 before QR improvements.
+- `backup/stable-v1.1.1-before-one-scan` — prior two-way implementation.
+- `backup/stable-2026-10-09-before-qr` — earliest safe baseline.
 
-On the **same laptop** open desktop Chrome or Edge:
-`http://localhost:8765/#settings`.
-
-This localhost URL is a trusted browser context for WebRTC and webcam use. Both the laptop and Android phone must be on the same normal Wi-Fi network (guest Wi-Fi/client isolation may block direct P2P). No hosted server, Firebase, internet signaling, or ESP32 board is needed for the pairing test; assets are stored locally on the laptop and bundled inside the APK.
-
-**The public** `https://chilchiltrips-boop.github.io/dronelab/` **still serves main, not this QR testing branch.** Use the above localhost test for now.
-
-## Pairing and LED control
-
-1. In Web App Settings click **Pair Mobile**. A QR offer and six-digit code appear; QR expires in three minutes.
-2. In the Android app tap **Scan Web QR** and point the phone camera at the laptop. Verify the matching six-digit code.
-3. On Android tap **Accept Pairing & Generate Answer QR**. The app displays its answer QR.
-4. On Web App tap **Scan Response QR** and point the laptop webcam at the phone's answer. A manual copy/paste alternative is provided if needed.
-5. Wait until **Connected**; compare the six-digit codes; click **Confirm Pairing** on the laptop.
-6. On Android tap **Take Control**; on Web App Settings click **Grant Mobile Control**.
-7. Tap Android **LED ON** / **LED OFF**. The Web App LED changes and sends a matching command acknowledgement. The Android indicator updates **only after** that acknowledgement.
-8. Release Control to give it back to the Web App. The Web LED Test tab can then Take Control locally and operate the LED.
-9. Refresh the webpage or reload the Android app: the connection/session is invalidated, the lock clears, and a new Pair Mobile QR exchange is needed.
-
-## Reliability, trust and technical limits
-
-- WebRTC DataChannel uses encrypted DTLS transport, empty STUN/TURN server configuration, and WebRTC ICE host candidates. This can communicate over a single LAN without a backend if the router permits device-to-device traffic.
-- Pairing uses two-way QR signaling, session expiry and human approval. A six-digit code **alone** cannot establish a connection.
-- The Web App is the authoritative LED state owner; commands carry unique IDs, are permission-checked and receive ACK/state revision notifications.
-- Heartbeats monitor liveness. Brief Wi-Fi losses can recover in the existing session. A fully failed connection or refresh requires a fresh QR.
-- Only one mobile peer is in this V1 session; the Web App manages the single-controller lease.
-- Physical Android camera/WebView pairing across two actual devices still requires user acceptance testing. Automated Chromium testing exercises the same shared `companion.js`, QR and WebRTC protocol, but not Android's camera drivers.
-- This feature does **not** expose real drone motors, flight controls, or Python execution to mobile remote control.
-
-## Rollback and promotion
-
-Safe baseline: `backup/stable-2026-10-09-before-qr`, commit `f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb`.
-
-No QR testing commits are merged into `main` without approval. Testing branch APK downloads are not a promise that production signing, all Android versions or every router have been validated.
+The QR paired LED is a **virtual simulator**; it does not control flight motors or hardware.
