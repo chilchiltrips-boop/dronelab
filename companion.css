@@ -71,7 +71,7 @@ button{min-height:44px}
 .flight-options{position:absolute;right:14px;top:49px;z-index:8;background:#0b2737ed;border:1px solid #2d6579;box-shadow:0 10px 30px #0008;padding:13px;border-radius:11px;display:grid;gap:8px;max-width:230px}
 .flight-options[hidden]{display:none}.flight-options label{font-size:10px;color:#a8d4db}
 .flight-options small{color:#83afbf;font-size:9px;line-height:1.45}
-.flight-field{display:grid;grid-template-columns:minmax(150px,1fr) minmax(200px,.84fr) minmax(150px,1fr);gap:2px;flex:1 1 auto;min-height:0}
+.flight-field{display:grid;grid-template-columns:minmax(150px,1fr) minmax(200px,.84fr) minmax(150px,1fr);grid-template-rows:minmax(0,1fr);gap:2px;flex:1 1 auto;min-height:0}
 .flight-touch-zone{position:relative;min-width:0;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
 .flight-touch-zone::before{content:'';position:absolute;inset:12% 7% 10%;border:1px dashed #3e829137;border-radius:30px;pointer-events:none}
 .flight-zone-title{position:absolute;left:0;right:0;top:12%;font-size:9px;font-weight:900;text-align:center;color:#6499a8;letter-spacing:.15em;pointer-events:none}
@@ -83,7 +83,7 @@ button{min-height:44px}
 .flight-cross{position:absolute;background:#38879b55}.flight-cross.x{height:1px;left:8%;right:8%}.flight-cross.y{width:1px;top:8%;bottom:8%}
 .flight-knob{position:absolute;left:50%;top:50%;width:35%;height:35%;border-radius:50%;background:radial-gradient(circle at 28% 20%,#f7ffff,#75d6eb 54%,#2a6e90 91%);border:2px solid #7af5ee;box-shadow:0 4px 12px #0016;transform:translate(-50%,-50%)}
 .flight-touch-readout{position:absolute;bottom:2%;left:2%;right:2%;text-align:center;font:10px/1.3 ui-monospace,monospace;color:#a5f6e0;pointer-events:none}
-.flight-center{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:10px 4px;pointer-events:none}
+.flight-center{min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:10px 4px;pointer-events:none}
 .flight-heading{text-align:center;font-size:12px;font-weight:950;letter-spacing:.10em;color:#ddfaff}.flight-heading small{font-size:9px;display:block;font-weight:650;color:#7eb9cb;letter-spacing:0;margin-top:4px}
 .flight-readouts{display:grid;grid-template-columns:1fr 1fr;gap:7px;width:min(100%,290px)}
 .flight-readouts>div{padding:9px;background:#0a2736bc;border-radius:8px;border:1px solid #356276;text-align:center}
@@ -139,9 +139,10 @@ html.cockpit-active>body>.app-top,html.cockpit-active>body>main,html.cockpit-act
 }
 @media(max-height:300px) and (orientation:landscape){
  .flight-center{gap:2px;padding:2px}.flight-heading{font-size:8px}.flight-heading small{display:none}
- .flight-readouts{gap:2px}.flight-readouts>div{padding:2px}.flight-readouts small{font-size:6px}.flight-readouts b{font-size:10px}
+ .flight-readouts{gap:2px}.flight-readouts>div{padding:2px}.flight-readouts small{font-size:6px}.flight-readouts b{font-size:11px;margin-top:0}
  .flight-center-state{gap:2px;font-size:6px}.flight-center-state>span{padding:2px}
  .flight-feedback,#flightAppliedTelemetry,.flight-applied-controls{font-size:7px;line-height:1.1;max-height:19px;overflow:auto}
+ .flight-center-state>span:last-child{display:none}#flightFeedback{font-size:6px;white-space:nowrap;text-overflow:ellipsis;max-width:100%;overflow:hidden}#flightAppliedTelemetry{max-height:23px}
  .flight-warning{font-size:7px;line-height:1.1;margin:0;max-height:17px;overflow:auto}
  .flight-zone-title{top:3%;font-size:7px}.flight-zone-title b{font-size:8px;margin-top:1px}
  .flight-axis-label{font-size:6px}.flight-axis-label.up{top:24%}.flight-axis-label.down{display:none}

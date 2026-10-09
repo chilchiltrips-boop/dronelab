@@ -34,8 +34,9 @@ try{
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');
-  const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));
+  const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,footerTop:document.querySelector('.flight-footer').getBoundingClientRect().top,touchReadoutBottoms:['flightLeftTouch','flightRightTouch'].map(id=>document.getElementById(id).getBoundingClientRect().bottom),stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));
   if(layout.scroll>layout.width+1||layout.stop.right>width||layout.stop.height<44||layout.stop.y<0)throw Error('STOP clipped '+JSON.stringify(layout));
+  if(layout.touchReadoutBottoms.some(v=>v>layout.footerTop+1))throw Error('Thumb readout clipped by footer '+JSON.stringify(layout));
   if(errors.length)throw Error(errors.join(' | '));records.push({width,height,anchor,layout,errors});await c.close();
  }
  writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log('PASS Chromium touchscreen preview: 6 landscape sizes including native density, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands');

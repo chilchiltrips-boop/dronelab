@@ -67,6 +67,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         check("window.ZebjusFlightApp && !document.getElementById('flightCockpit').hidden");
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
+        check("['flightLeftTouch','flightRightTouch'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=document.querySelector('.flight-footer').getBoundingClientRect().top+1)");
         float[] l=point("flightLeftZone",.50f,.65f),r=point("flightRightZone",.50f,.65f);
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightLeftRing').classList.contains('dragging')");

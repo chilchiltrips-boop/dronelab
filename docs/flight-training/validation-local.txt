@@ -1,0 +1,7 @@
+Local final-source unit validation:102/102 PASS; no skips/failures.
+Six landscape CDP previews including488x227/595x227:PASS; independent pointer/cancel/edge/third-finger STOP/label bounds and preset persistence.
+102-unit log and final CI results are included in the separate live-release evidence package.
+Baseline83/83 passed before implementation.
+Asset/syntax:25 modules/35 asset references/15 GLBs PASS.
+Firmware hashes:preserved and PASS; no physical USB flash executed.
+Real WebRTC/Service Worker and native signing/touch proof comes from the linked GitHub Actions HTTP/emulator runs, not sandbox file routing.

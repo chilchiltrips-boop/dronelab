@@ -41,6 +41,8 @@ function render(){
  $('flightArm').textContent=armed?'DISARM':'ARM';$('flightArm').disabled=!isOwned()||(!armed&&(!ready||throttle>1050));$('flightArm').setAttribute('aria-pressed',String(armed));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
+ $('flightFeedback').hidden=!lastAckSeq;
+ if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!isOwned()||!armed);
  $('flightTakeControl').disabled=!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
  $('flightSent').textContent='#'+seq;
