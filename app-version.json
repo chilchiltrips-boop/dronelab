@@ -1,5 +1,5 @@
 {
-  "version": "1.4.3",
+  "version": "1.4.4",
   "channel": "release",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -13,7 +13,8 @@
     "Camera Two-Way QR pairing still available without signaling service",
     "Fix six-digit code handshake premature auth timeout and show ICE diagnostics",
     "Permanent Android APK release certificate and versioned in-place upgrades",
-    "Center-focused QR scanning and user-activated Step 2 camera"
+    "Center-focused QR scanning and user-activated Step 2 camera",
+    "Default 6-digit code pairing, centered Step 1 QR, Android QR detect feedback, highlight Confirm Pairing and low-light scanning"
   ],
   "publishedAt": "2026-10-09",
   "buildCommit": "003f7eac36d1"
