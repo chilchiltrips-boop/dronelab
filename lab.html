@@ -80,22 +80,95 @@
 </aside>
 </div>
 </section><section class="panel tab-panel python-lab-page" id="tab-python">
-<div class="py-hero"><div><span class="connect-kicker">PYTHON 3 • USB I²C • SMART EDITOR</span><h2>ZEBJUS Python Lab</h2><p>PyCharm-style editing and Python 3 execution in the browser. USB scanner results are available as Python variables, independent of raw Serial Monitor messages.</p></div><div class="py-hero-state"><span class="status" id="pyRuntimeState">PYTHON IDLE</span><span class="status" id="pyUsbState">USB DISCONNECTED</span></div></div>
-<div class="python-ide-layout">
-<aside class="python-project-card">
-<div class="python-pane-head"><div><small>PROJECT</small><b>Python Files</b></div><button class="btn ghost small" id="pythonNewFileBtn">+ New</button></div>
-<div class="python-file-list" id="pythonFileList"></div>
-<div class="python-project-actions"><button class="btn ghost small" id="pythonSaveFileBtn">Save</button><button class="btn ghost small" id="pythonUndoFileBtn">↶ Undo</button><button class="btn ghost small" id="pythonRedoFileBtn">↷ Redo</button><button class="btn danger ghost small" id="pythonDeleteFileBtn">Delete</button><button class="btn ghost small" id="pythonExportBtn">Export</button><button class="btn ghost small" id="pythonImportBtn">Import</button><input accept=".json,application/json" hidden id="pythonImportFile" type="file"/></div>
-<div class="py-samples"><b>EXAMPLES</b><button class="py-sample" id="pyExampleI2C" type="button">I²C Scan • while True</button><button class="py-sample" id="pyExampleCustom" type="button">Custom print() result</button><p>Editing an example replaces the selected file after confirmation. Save and export your Python code anytime.</p></div>
-<div class="py-usb-panel"><b>REAL USB HARDWARE</b><span>ESP32-C3 / ESP32-C6 • I²C Scanner firmware</span><button class="btn primary small" type="button" id="pyConnectUsbBtn">Connect USB Serial</button><span class="micro-note" id="pyScanStatus">Waiting for a complete I²C scan.</span><div class="py-device-pill" id="pyDeviceAddresses">No scan data yet</div><p class="micro-note">Python reads the next complete USB scan via the browser bridge. No firmware Wi-Fi or additional I²C library is necessary.</p></div>
-</aside>
-<div class="editor-card python-editor-card">
-<div class="section-toolbar"><div><b id="pythonEditorTitle">main.py</b><span>Real Python • code completion • auto-indentation • autosave</span></div><div class="python-toolbar-actions"><button class="btn danger ghost small" id="stopPythonBtn">Stop ■</button><button class="btn primary small" id="runPythonBtn">Run ▶</button><button class="btn ghost small" id="rerunPythonBtn">Rerun ↻</button></div></div>
-<div class="python-editor-shell"><div id="pythonMonaco" aria-label="Python smart code editor"></div><textarea id="pythonEditor" spellcheck="false" aria-label="Python editor fallback"></textarea></div>
-<div class="python-editor-footer"><span>Ctrl/⌘ + Space suggestions</span><span>Ctrl/⌘ + Enter Run</span><span>Ctrl/⌘ + Z / Shift+Z Undo / Redo</span><span>Python 3 / Pyodide</span></div>
+<div class="python-workspace">
+  <div class="python-project-bar">
+    <div class="python-project-heading"><small>PROJECT</small><strong>Student Python Files</strong><button class="btn ghost small" id="pythonNewFileBtn" type="button">+ New</button></div>
+    <div class="python-file-list" id="pythonFileList" role="tablist" aria-label="Python project files"></div>
+    <div class="python-project-actions">
+      <button class="btn ghost small" id="pythonSaveFileBtn" type="button">Save</button>
+      <button class="btn ghost small" id="pythonUndoFileBtn" type="button">↶ Undo</button>
+      <button class="btn ghost small" id="pythonRedoFileBtn" type="button">↷ Redo</button>
+      <button class="btn danger ghost small" id="pythonDeleteFileBtn" type="button">Delete</button>
+      <button class="btn ghost small" id="pythonExportBtn" type="button">Export</button>
+      <button class="btn ghost small" id="pythonImportBtn" type="button">Import</button>
+      <input accept=".json,application/json" hidden id="pythonImportFile" type="file"/>
+    </div>
+  </div>
+  <div class="python-ide-layout" id="pythonIdeLayout">
+    <div class="editor-card python-editor-card">
+      <div class="python-editor-top">
+        <div class="python-editor-label"><b id="pythonEditorTitle">main.py</b><span>Type normal Python • edit, run, undo, and use intelligent suggestions</span></div>
+        <div class="python-toolbar-actions">
+          <select id="pythonTarget" title="Python execution target" aria-label="Python execution target"><option value="python">Python 3 / Simulator</option><option value="usb">USB I²C Hardware</option></select>
+          <select id="pythonQuickHardware" title="Select a Python project example" aria-label="Python examples"><option value="">Python project examples…</option><option value="scanner">USB I²C Scanner • while True</option><option value="custom">Custom I²C Print Output</option><option value="basic">Python Basics • print and loops</option><option value="plot">Python Plot • matplotlib</option></select>
+          <button class="btn danger ghost small" id="stopPythonBtn" type="button">Stop ■</button>
+          <button class="btn primary small" id="runPythonBtn" type="button">Run ▶</button>
+          <button class="btn ghost small" id="rerunPythonBtn" type="button">Rerun ↻</button>
+        </div>
+      </div>
+      <div class="python-editor-shell">
+        <div id="pythonMonaco" aria-label="Python smart code editor"></div>
+        <textarea id="pythonEditor" spellcheck="false" aria-label="Python editor fallback"></textarea>
+      </div>
+      <div class="python-editor-footer">
+        <span>Ctrl/⌘ + Space • Suggestions</span><span>Ctrl/⌘ + Enter • Run</span>
+        <span>Ctrl/⌘ + Z / Shift+Z • Undo / Redo</span><span id="pythonEditorPosition">Line 1, Col 1</span>
+      </div>
+    </div>
+    <div class="python-col-resizer" id="pythonColResizer" role="separator" tabindex="0" aria-label="Resize Python editor and terminal horizontally" aria-orientation="vertical"></div>
+    <div class="python-side-stack" id="pythonSideStack">
+      <div class="python-tools-card">
+        <details class="python-tools-section" id="pythonUsbTools" open>
+          <summary>USB I²C • Python Hardware</summary>
+          <div class="python-usb-tools">
+            <div class="python-usb-head"><span id="pyUsbState" class="status">USB DISCONNECTED</span><button class="btn primary small" id="pyConnectUsbBtn" type="button">Connect USB Serial</button></div>
+            <span class="micro-note" id="pyScanStatus">Waiting for a complete I²C scan.</span>
+            <div class="py-device-pill" id="pyDeviceAddresses">No scan data yet</div>
+            <p class="micro-note">Read scan results in Python using <code>await i2c_scan()</code>. Python terminal shows your own <code>print()</code> messages, not raw Serial text.</p>
+          </div>
+        </details>
+        <details class="python-tools-section" id="pythonVisualTools">
+          <summary>Camera / Python plots</summary>
+          <div class="python-visual-tools">
+            <div class="python-visual-actions">
+              <button class="btn ghost small" id="pythonCameraStart" type="button">Open Camera</button>
+              <button class="btn ghost small" id="pythonCameraStop" type="button">Close Camera</button>
+              <button class="btn ghost small" id="pythonOutputOpen" type="button">Open Plot Window</button>
+            </div>
+            <div class="python-visual-preview">
+              <video id="pythonCameraVideo" autoplay muted playsinline hidden aria-label="Browser camera preview"></video>
+              <img id="pythonInlinePlot" hidden alt="Latest Python Matplotlib output"/>
+              <span id="pythonCameraStatus">Browser camera preview and Matplotlib figures. Native cvzone/MediaPipe modules require a desktop Python environment.</span>
+            </div>
+          </div>
+        </details>
+        <div class="python-market-card">
+          <div><small>BUILD • LEARN • CUSTOMIZE</small><b>ZEBJUS kits and student projects</b>
+          <p>Explore drone components, custom kits, tutorials and project support.</p>
+          <a href="https://www.zebjus.in/" rel="noopener" target="_blank">ZEBJUS learning ↗</a>
+          <a href="https://www.zebjus.in/category/all-products" rel="noopener" target="_blank">Components &amp; kits ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="python-row-resizer" id="pythonRowResizer" role="separator" tabindex="0" aria-label="Resize Python tools and terminal vertically" aria-orientation="horizontal"></div>
+      <div class="terminal-card python-terminal-card">
+        <div class="python-terminal-heading">
+          <div><b>Run / Terminal</b><span id="pyStatus">Python Lab ready</span></div>
+          <div class="python-terminal-actions"><span class="status" id="pyRuntimeState">READY</span><button class="btn ghost small" id="copyTerminalBtn" type="button">Copy Output</button><button class="btn ghost small" id="clearTerminalBtn" type="button">Clear</button></div>
+        </div>
+        <div class="python-runtime-help"><span>Python: isolated Worker • Stop terminates infinite loops • errors shown separately.</span><span>Drag separators to resize the editor and terminal.</span></div>
+        <pre class="terminal" id="pythonTerminal" tabindex="0" role="log" aria-live="off">Python Lab ready. Edit your Python script, then press Run.</pre>
+        <div class="py-terminal-status"><b id="pyLastRun">READY</b><span id="pyLineCount">0 lines</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="python-status-footer"><span>Python 3 • Pyodide • Monaco smart editor</span><span>USB I²C • ESP32-C3 / ESP32-C6</span><span>Resizing and project changes save automatically</span></div>
+  <div class="python-output-window" id="pythonOutputWindow" hidden role="dialog" aria-label="Python plot output">
+    <div class="python-output-title" id="pythonOutputDrag"><b id="pythonOutputTitle">Python Plot Output</b><button class="btn ghost small" id="pythonOutputClose" type="button">✕ Close</button></div>
+    <img id="pythonOutputImage" alt="Python graph output"/><p>Drag title to move • resize using lower-right corner</p>
+  </div>
 </div>
-<div class="terminal-card python-terminal-card"><div class="section-toolbar"><div><b>Python Run / Terminal</b><span id="pyStatus">Edit script then press Run</span></div><div class="terminal-toolbar-actions"><button class="btn ghost small" id="copyTerminalBtn">Copy</button><button class="btn ghost small" id="clearTerminalBtn">Clear</button></div></div><div class="py-runtime-notes"><span><b>Live output:</b> Python print(), not raw USB Serial.</span><span><b>Stop:</b> terminates Python Worker, including while True.</span></div><pre class="terminal" id="pythonTerminal" tabindex="0">Python Lab ready. Open USB Serial, then run main.py.</pre><div class="py-terminal-status"><b id="pyLastRun">READY</b><span id="pyLineCount">0 lines</span></div><div class="py-help-card"><b>Python USB I²C API</b><code>from zebjus import i2c_scan</code><code>result = await i2c_scan()</code><code>print("My result =", result["addresses"])</code><p>Each await waits for the next complete physical scan. The current Arduino firmware scans every 5 seconds.</p></div></div>
-</div></section><section class="panel tab-panel firmware-page" id="tab-firmware">
+</section><section class="panel tab-panel firmware-page" id="tab-firmware">
 <div class="firmware-hero">
 <div><span class="connect-kicker">USB FLASH • I²C SCANNER • SERIAL MONITOR</span><h2>ZEBJUS I²C Scanner Firmware Center</h2><p>Load only the I²C Address Scanner for ESP32-C3 or ESP32-C6. Connect USB to detect the board, flash, and view live I²C addresses at 115200 baud.</p></div>
 <div class="firmware-hero-badges"><span class="firmware-badge offline" id="fwKitBadge">KIT OFFLINE</span><span class="firmware-badge offline" id="fwSerialBadge">USB NOT CONNECTED</span></div>
