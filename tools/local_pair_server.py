@@ -87,7 +87,16 @@ class Handler(SimpleHTTPRequestHandler):
                 origin = "%s://%s" % (u.scheme, u.netloc)
         allowed = ("http://localhost:%d" % self.server.server_port,
                    "http://127.0.0.1:%d" % self.server.server_port)
-        return origin in allowed and ipaddress.ip_address(self.client_address[0]).is_loopback
+        # Referrer-Policy:no-referrer intentionally hides the page URL.
+        # Chromium sets Sec-Fetch-Site:same-origin for legitimate local GETs.
+        # Also verify loopback client AND loopback Host so LAN callers cannot
+        # impersonate a local browser merely by sending that fetch header.
+        host = self.headers.get("Host", "").lower()
+        if host not in tuple(v.replace("http://", "") for v in allowed):
+            return False
+        if not ipaddress.ip_address(self.client_address[0]).is_loopback:
+            return False
+        return origin in allowed or (not origin and self.headers.get("Sec-Fetch-Site") == "same-origin")
     def do_GET(self):
         u = urlsplit(self.path)
         if u.path == "/__pairing/info":
