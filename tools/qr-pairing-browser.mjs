@@ -34,7 +34,8 @@ try{
  const firstCode=await web.locator('#pairCode').textContent(),secondCode=await phone.locator('#appPairCode').textContent();
  if(firstCode!==secondCode||!/^\d{6}$/.test(firstCode))throw Error('Pairing PIN mismatch');
  await phone.locator('#createAnswerBtn').click();
- await phone.waitForFunction(()=>document.getElementById('answerText')?.value.startsWith('zj1:'),null,{timeout:25000});
+ try{await phone.waitForFunction(()=>document.getElementById('answerText')?.value.startsWith('zj1:'),null,{timeout:25000})}
+ catch(e){throw Error('Android answer was not created: '+(await phone.locator('#answerState').textContent())+'; LOG '+(await phone.locator('#mobileLog').textContent()).slice(-750))}
  const answer=await phone.locator('#answerText').inputValue();
  await qrDecoded(phone,'answerCanvas',answer);
  log('Android companion answer QR generated and decoded; matching PIN '+firstCode);
