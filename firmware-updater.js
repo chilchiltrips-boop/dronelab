@@ -3,9 +3,9 @@
 function confirmInLab(message){return window.AerionDialogs?.confirm(message)??Promise.resolve(confirm(message))}
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const VERSION='18.3.83',BASE='./FlightCore_Firmware',DB='zebjus-flightcore-firmware',STORE='images';
-let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null;
-const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_FLIGHTCORE","version":"18.3.83","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS FlightCore A1 \u2022 ESP32-C3","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"18.3.83","app":{"available":true,"file":"ZEBJUS_FLIGHTCORE_A1_APP.bin","sha256":"59580332d736d8611c44aba2498dd953d7719c95204555f70e91ad095277d337","size":1264752,"builtAt":"2026-10-09T05:59:14Z","buildId":"18.3.83-ZFC-A1-59580332d736"},"factory":{"available":true,"file":"ZEBJUS_FLIGHTCORE_A1_FACTORY.bin","sha256":"df3e2e20105a4e429797c5d7e83ace89ba8c2bd8a854980f917a828a30cca5d4","size":4194304,"builtAt":"2026-10-09T05:59:14Z","buildId":"18.3.83-ZFC-A1-FACTORY-df3e2e20105a"},"builtAt":"2026-10-09T05:59:14Z"},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS FlightCore A2 \u2022 ZEBJUS Aerion F1","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"18.3.83","app":{"available":true,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"6f77fd4dfdb1cc0e4912efc0549771d125b7bda416fdd954d5b4918d8010eaab","size":1355424,"builtAt":"2026-10-09T05:59:14Z","buildId":"18.3.83-ZFC-A2-6f77fd4dfdb1"},"factory":{"available":true,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"164613ee23f1170e303c10f2952b4b3dcbaa188f021b8f36b244f1685c287f23","size":4194304,"builtAt":"2026-10-09T05:59:14Z","buildId":"18.3.83-ZFC-A2-FACTORY-164613ee23f1"},"builtAt":"2026-10-09T05:59:14Z"},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-09T05:59:14Z"};
+const VERSION='1.0.1',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
+let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
+const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_I2C_SCANNER","version":"1.0.1","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS I2C Scanner A1 • ESP32-C3","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.0.1","app":{"available":false,"file":"ZEBJUS_I2C_SCANNER_A1_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_I2C_SCANNER_A1_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS I2C Scanner A2 • XIAO ESP32-C6","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.0.1","app":{"available":false,"file":"ZEBJUS_I2C_SCANNER_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_I2C_SCANNER_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":""};
 function school(){return window.zebjusSchool||null}
 function flashDiagnostic(kind,detail={}){try{window.dispatchEvent(new CustomEvent('aerion-link-event',{detail:{kind:'firmware',phase:kind,message:kind,...detail}}))}catch{}}
 function log(msg){const e=$('#fwLog');if(e)e.textContent=`${new Date().toLocaleTimeString()}  ${msg}\n${e.textContent}`.slice(0,16000);flashDiagnostic('log',{message:String(msg).slice(0,1200)})}
@@ -17,7 +17,7 @@ function formatBuildTime(v){if(!v)return'--';const d=new Date(v);return Number.i
 function stage(name,state){const e=$('#fwStage'+name);if(e)e.className=state||''}
 function resetStages(){['Prepare','Flash','Verify','Reboot','Reconnect'].forEach(x=>stage(x,''))}
 function progress(p,title){p=Math.max(0,Math.min(100,Math.round(p)));const b=$('#fwProgressBar');if(b)b.style.width=p+'%';text('#fwProgressPct',p+'%');if(title)text('#fwProgressTitle',title)}
-function setBusy(on){busy=!!on;['#fwUpgradeBtn','#fwUpgradeEraseBtn','#fwAutoLoadBtn','#fwWifiFlashBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on){busy=!!on;['#fwAutoLoadBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){try{const h=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch{return''}}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
@@ -164,13 +164,13 @@ function usbMd5Hex(bytes){
 async function connectUsb(){
  if(busy)return;if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
  try{
-  const port=await navigator.serial.requestPort();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
+  const port=await navigator.serial.requestPort();if(monitorPort)await closeSerialMonitor();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);usbLastPort=port;await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
   for(let attempt=0;attempt<rates.length;attempt++){
    try{serialPort=port;transport=new mod.Transport(port,true);loader=new mod.ESPLoader({transport,baudrate:rates[attempt],terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}});installUsbCompatibility(loader);usbSignature=await loader.main(mode);usbBoardId=mapHardwareSignature(usbSignature);const board=boardById(usbBoardId);if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');await probeUsbFlash(loader,board);if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(rates[attempt]);break}
    catch(error){await disconnectUsb(false);if(attempt+1===rates.length||/Unsupported USB chip|smaller than/.test(error.message))throw error;log('USB handshake failed at '+rates[attempt]+' baud; retrying the same port at 115200.');}
   }
   text('#fwUsbChip',boardName(usbBoardId));text('#fwUsbState','Bootloader + flash verified');const b=$('#fwSerialBadge');if(b){b.textContent='USB CONNECTED';b.className='firmware-badge online'}badge('#fwOverallBadge','USB READY','good');await targetBoardId(true);log('USB bootloader connected: '+usbSignature);
-  if(!kitStatus().online&&$('#fwImageType')){$('#fwImageType').value='factory';fw=null;renderFirmware();log('Offline USB recovery selected: complete FACTORY image. Flashing this image resets saved settings.')}
+  if($('#fwImageType')){$('#fwImageType').value='factory';fw=null;renderFirmware();log('USB scanner default: FACTORY first-flash image. Existing flash settings will be replaced.')}
   await autoLoad();
  }catch(e){await disconnectUsb(false);badge('#fwOverallBadge','USB FAILED','danger');log('USB connect failed: '+e.message);log('Close Arduino/other serial tabs. For manual recovery: hold BOOT, tap RESET, release BOOT, select Already in BOOT mode and reconnect the USB port.')}finally{setBusy(false)}
 }
@@ -186,7 +186,7 @@ async function usbFlash(){
  const bp=boardById(target);if(!bp)return log('Selected board profile is not available.');
  const address=type==='factory'?0:parseInt(bp.appAddress||'0x10000'),limit=parseInt(bp.flashSize||'4MB',10)*1048576;
  if(!Number.isFinite(address)||address<0||address+fw.bytes.length>limit)return log('Blocked: firmware exceeds the selected board flash capacity.');
- if(!await confirmInLab(`USB flash ${fw.name}\nType: ${type==='factory'?'Factory/Merged':'Application'}\nBoard: ${boardName(target)}${type==='factory'?'\nSaved Wi-Fi, PID and calibration settings will be reset.':''}\n\nContinue?`))return;
+ if(!await confirmInLab(`Flash I2C Address Scanner?\n${fw.name}\nBoard: ${boardName(target)}\nOffset: ${type==='factory'?'0x0 (factory)':'0x10000 (application)'}${type==='factory'?'\nExisting flash configuration will be replaced.':''}\n\nContinue?`))return;
  setBusy(true);resetStages();stage('Prepare','done');stage('Flash','active');progress(2,'Preparing USB flash…');badge('#fwOverallBadge','FLASHING','warn');let written=false;
  try{
   if(erase){progress(4,'Erasing flash…');await loader.eraseFlash()}
@@ -194,25 +194,69 @@ async function usbFlash(){
   // rewriting it with the generic JS driver's 80m value invalidates its appended hash.
   await loader.writeFlash({fileArray:[{data:fw.bytes,address}],flashMode:'keep',flashFreq:'keep',flashSize:'keep',eraseAll:false,compress:true,calculateMD5Hash:usbMd5Hex,reportProgress:(i,w,t)=>progress(5+(w/t)*80,`USB flash ${prettyBytes(w)} / ${prettyBytes(t)}`)});
   written=true;stage('Flash','done');stage('Verify','done');stage('Reboot','active');progress(90,'Firmware written • requesting reset…');await loader.after('hard_reset');
-  progress(94,'Reset requested • waiting for kit boot');log('USB firmware write completed.');await disconnectUsb(false);stage('Reconnect','active');
-  const s=school();if(s?.getSelectedDevice?.()){
-   s.markOffline?.('Firmware reboot');
-   for(let i=0;i<18;i++){
-    await sleep(1100);try{const d=await s.reconnectNow?.();if(d?.online){const v=await verifyPostFlashFirmware(s,expectedVersion);if(v?.matches){stage('Reboot','done');stage('Reconnect','done');progress(100,'Update complete • kit online & firmware verified');badge('#fwOverallBadge','COMPLETE','good');return}}}catch{}
-   }
-  }
-  flashReconnectPending(expectedVersion)
+  progress(94,'Reset requested • opening live USB Serial Monitor');log('USB scanner image written and transfer MD5 checked.');stage('Reboot','done');monitorPendingScan=true;await disconnectUsb(false);stage('Reconnect','active');
+  await sleep(350);
+  try{await openSerialMonitor();progress(96,'Serial opened • waiting for a real I2C scan line');badge('#fwOverallBadge','WAITING FOR SCANNER OUTPUT','warn')}
+  catch(error){monitorPendingScan=false;progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);appendSerialOutput('USB flash finished. Click Serial Monitor and select the board port to read its real output.\n')}
  }catch(e){
-  if(written){log('Firmware write completed, but reset/reconnect failed: '+e.message);await disconnectUsb(false);flashReconnectPending(expectedVersion)}
+  if(written){log('USB bytes written but reset/Serial confirmation pending: '+e.message);monitorPendingScan=false;await disconnectUsb(false);progress(96,'Written • open Serial Monitor to verify boot');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn')}
   else{stage('Flash','error');badge('#fwOverallBadge','FAILED','danger');progress(0,'USB flash failed');log('USB flash failed: '+e.message);await disconnectUsb(false);log('Reconnect USB at 115200 before retrying. Use BOOT + RESET if the kit remains in download mode.')}
  }finally{setBusy(false)}
 }
 async function disconnectUsb(update=true){try{if(transport)await transport.disconnect()}catch{}loader=null;transport=null;serialPort=null;usbSignature='';usbBoardId='';text('#fwUsbChip','--');text('#fwUsbState','Not connected');const b=$('#fwSerialBadge');if(b){b.textContent='USB NOT CONNECTED';b.className='firmware-badge offline'}if(update){log('USB disconnected.');await targetBoardId(true)}}
+// USB Serial Monitor is mutually exclusive with the flashing transport.
+function appendSerialOutput(value){
+ const out=$('#fwSerialOutput');if(!out||!value)return;
+ out.textContent=(out.textContent+value).slice(-24000);
+ out.scrollTop=out.scrollHeight;
+ if(monitorPendingScan&&out.textContent.includes('Scanning I2C bus...')){
+  monitorPendingScan=false;stage('Reconnect','done');progress(100,'Scanner boot confirmed by real Serial output');badge('#fwOverallBadge','SCANNER RUNNING','good');log('Verified real I2C scan output through USB Serial at 115200.');
+ }
+}
+function serialUi(on,msg){
+ text('#fwSerialStatus',msg|| (on?'Listening • 115200':'Not monitoring'));
+ text('#fwSerialMonitorBtn',on?'Close Serial Monitor':'Serial Monitor · 115200');
+}
+async function closeSerialMonitor(){
+ const reader=monitorReader,port=monitorPort,task=monitorTask;
+ monitorPort=null;monitorReader=null;monitorTask=null;
+ try{await reader?.cancel()}catch{}
+ try{await task}catch{}
+ try{await port?.close()}catch{}
+ serialUi(false);
+}
+async function openSerialMonitor(){
+ if(monitorStarting)return;
+ if(!globalThis.isSecureContext||!navigator.serial)throw Error('USB Serial Monitor requires desktop Chrome/Edge and HTTPS or localhost.');
+ monitorStarting=true;
+ try{
+  // Prefer the USB port that the browser already granted for flashing.
+  // requestPort() is only called directly from the button click when no port was granted.
+  const port=usbLastPort||await navigator.serial.requestPort();
+  if(monitorPort)await closeSerialMonitor();
+  if(loader)await disconnectUsb(false);
+  usbLastPort=port;await port.open({baudRate:115200});monitorPort=port;
+  serialUi(true,'Listening to board • 115200');log('Serial Monitor opened at 115200. Hardware output appears in the live console.');
+  appendSerialOutput('\n── USB Serial connected @ 115200 baud ──\n');
+  const reader=port.readable.getReader();monitorReader=reader;
+  const decoder=new TextDecoder();
+  monitorTask=(async()=>{
+   try{while(monitorPort===port){const {value,done}=await reader.read();if(done)break;if(value?.length)appendSerialOutput(decoder.decode(value,{stream:true}));}}
+   catch(e){if(monitorPort===port)appendSerialOutput('\nSerial read ended: '+e.message+'\n')}
+   finally{try{reader.releaseLock()}catch{}if(monitorPort===port){monitorPort=null;monitorReader=null;monitorTask=null;try{await port.close()}catch{}serialUi(false,'USB stream ended')}}
+  })();
+ }finally{monitorStarting=false}
+}
+async function toggleSerialMonitor(){
+ if(monitorPort){await closeSerialMonitor();return}
+ try{await openSerialMonitor()}catch(e){log('Serial Monitor: '+e.message);appendSerialOutput('\nCould not open Serial: '+e.message+'\n');serialUi(false,'Connection failed')}
+}
+async function disconnectAllUsb(){await closeSerialMonitor();await disconnectUsb();usbLastPort=null;monitorPendingScan=false}
+
 async function rebootKit(){const{s,d,online}=kitStatus();if(!online)return log('Kit is offline.');if(d.armed)return log('Reboot blocked: DISARM the kit first.');if(!s?.canControl?.())return log('Take Control before reboot.');if(!await confirmInLab('Reboot the selected flight controller now?'))return;try{badge('#fwOverallBadge','REBOOTING','warn');resetStages();stage('Reboot','active');progress(45,'Sending reboot command…');const j=await s.client.reboot();if(j?.ok===false)throw new Error(j.message||'Reboot failed');s.markOffline?.('Manual reboot');stage('Reboot','done');stage('Reconnect','active');progress(65,'Waiting for kit…');for(let i=0;i<20;i++){await sleep(1000);const d2=await s.reconnectNow?.().catch(()=>null);if(d2?.online){stage('Reconnect','done');progress(100,'Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good');return}}throw new Error('Reconnect timed out')}catch(e){badge('#fwOverallBadge','RECONNECT','warn');log(e.message)}}
 async function reconnectKit(){const s=school();if(!s)return;stage('Reconnect','active');progress(60,'Reconnecting to kit…');try{const d=await s.reconnectNow?.(true);if(d?.online){stage('Reconnect','done');progress(100,'Kit online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}else throw new Error('Kit not found yet.')}catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}}
-async function upgrade(erase=false){if(busy)return;try{if(erase){if(!loader)throw Error('Upgrade & Erase requires a connected USB controller.');$('#fwImageType').value='factory';await autoLoad();if(!fw||fw.type!=='factory')throw Error('Matching complete factory image is required.');$('#fwEraseUsb').checked=true;try{await usbFlash()}finally{$('#fwEraseUsb').checked=false}}else{if(!fw)await autoLoad();if(!fw)throw Error('Load a matching firmware image first.');if(loader)await usbFlash();else await wifiFlash()}}catch(e){log(e.message)}}
-function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Keep this APP image for AP/offline OTA.')}
-function bind(){$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);$('#fwUpgradeBtn')?.addEventListener('click',()=>upgrade(false));$('#fwUpgradeEraseBtn')?.addEventListener('click',()=>upgrade(true));const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',()=>disconnectUsb());$('#fwWifiFlashBtn')?.addEventListener('click',wifiFlash);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{transport?.disconnect()}catch{}})}
+function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
+function bind(){$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',()=>{const out=$('#fwSerialOutput');if(out)out.textContent='';});$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}await autoLoad()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();
