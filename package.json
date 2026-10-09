@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node server.cjs",
     "check": "node tools/check.mjs",
-    "test": "node --test tools/project.test.mjs"
+    "test": "node --test tools/project.test.mjs tools/firmware.test.mjs",
+    "verify:firmware": "node tools/verify-firmware.mjs"
   }
 }

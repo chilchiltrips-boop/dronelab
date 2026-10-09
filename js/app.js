@@ -10,6 +10,7 @@ import {register as assembly} from './assembly-scene.js';
 import {register as wiring} from './wiring-renderer.js';
 import {register as validation} from './wiring-validation.js';
 import {initControls,initResponsive,applyBranding} from './ui-controls.js';
+import {initFirmwarePage} from './firmware-page.js';
 
 // Explicit dependency container; feature modules never initialize unrelated DOM.
 const ctx={THREE,loadGLB,config};
@@ -31,7 +32,7 @@ ctx.renderAssemblyUI=()=>{renderAssembly();
   applyBranding(ctx);ctx.persistWireLayout();};
 const renderWiring=ctx.render2D;
 ctx.render2D=()=>{renderWiring();applyBranding(ctx);ctx.historyButtons();};
-initControls(ctx);initResponsive(ctx);
+initControls(ctx);initResponsive(ctx);initFirmwarePage();
 async function boot(){
   ctx.setBootStatus('Starting local 3D renderer…');
   let graphics=true;

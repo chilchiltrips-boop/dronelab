@@ -32,11 +32,11 @@ export function initControls(ctx){
   ctx.stopMotorTest=()=>{ctx.wireMotorRun=false;ctx.destroyMotorAudio('wire');
     $('#wireRunBtn').textContent='RUN MOTOR TEST';ctx.updateMotorTestUI();};
   ctx.setActiveTab=name=>{
-    if(!['assembly','wiring'].includes(name))return;
-    if(name==='assembly')ctx.stopMotorTest();
+    if(!['assembly','wiring','firmware'].includes(name))return;
+    if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
-    if(name==='assembly')requestAnimationFrame(ctx.resize3D);else ctx.render2D();
+    if(name==='assembly')requestAnimationFrame(ctx.resize3D);else if(name==='wiring')ctx.render2D();
     history.replaceState(null,'','#'+name);
   };
   $$('.tab').forEach(b=>b.onclick=()=>ctx.setActiveTab(b.dataset.tab));
@@ -90,13 +90,13 @@ export function initControls(ctx){
       else if(k==='r'){e.preventDefault();ctx.rotateSelectedNode();}
       else if(k==='delete'||k==='backspace'){e.preventDefault();ctx.deleteSelectedObject();}
       else if(k==='escape'){ctx.selPort=null;ctx.selectedWireId=null;ctx.selectedWireNodeId=null;ctx.render2D();}
-    }else if(k==='delete'||k==='backspace'){
+    }else if($('#tab-assembly').classList.contains('active')&&(k==='delete'||k==='backspace')){
       if(s.selectedInstalledId){e.preventDefault();ctx.deleteInstalled(s.selectedInstalledId);}
-    }else if(k==='escape'){s.selectedType=null;ctx.snapPreview&&(ctx.snapPreview.visible=false);ctx.renderShelf();}
+    }else if($('#tab-assembly').classList.contains('active')&&k==='escape'){s.selectedType=null;ctx.snapPreview&&(ctx.snapPreview.visible=false);ctx.renderShelf();}
   });
   const stop=()=>{ctx.stopMotorTest();ctx.stopTransientTones();};
   addEventListener('blur',stop);addEventListener('pagehide',stop);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
-  ctx.setActiveTab(location.hash==='#wiring'?'wiring':'assembly');applyBranding(ctx);
+  ctx.setActiveTab(['#wiring','#firmware'].includes(location.hash)?location.hash.slice(1):'assembly');applyBranding(ctx);
 }

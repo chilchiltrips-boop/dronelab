@@ -1,4 +1,4 @@
-# Verification — 2026-10-08
+# Verification — 2026-10-09
 
 The required README, FILE_GUIDE, all page-layout fragments, original index, complete stylesheet cascade, lab-workflow stylesheet and relevant app.js routines were inspected before implementing the new app. The original `reference-runtime/preview.html` was served over HTTP and opened alongside the extracted app.
 
@@ -27,4 +27,11 @@ Rendered 3D lighting, camera appearance, pointer snapping and screw animation ap
 - All project/history writes use one new storage key; resets never delete another application's data.
 - Undo cancels stale screw-completion callbacks.
 - Shortcuts ignore inputs, textareas, selects and editable text.
-- Only the two requested page trees are initialized. Branding/shop settings are local configuration.
+- The third Firmware · Settings tree is initialized with the two existing pages. Branding/shop settings remain local configuration.
+
+## Firmware page
+
+- Arduino CLI with Espressif core 3.3.10 compiled the standalone sketch for `esp32:esp32:XIAO_ESP32C6` in the repository's GitHub Actions build. The 4 MB factory image and app image were packed, chip descriptor and flash offsets checked, and SHA-256 digests recorded in `firmware/sample.json`.
+- Browser preview: firmware page layout, XIAO board metadata, app sample fetch, SHA-256 match, download link, status stages, and routing among all three pages. The factory sample is also built and included in the published tree; its local reconstruction was checked separately against the manifest.
+- Automated regression: correct ESP32-C6 app/factory headers, descriptor, partition offset, private IP/origin checks, MD5, Web Crypto SHA-256 and pure JS SHA-256 fallback. All JavaScript files parse.
+- This environment has no physical XIAO ESP32-C6 or local Wi-Fi AP. USB port handshake, flash write/readback, sample boot, OTA upload and post-reboot status require a real board pass. The UI reports an unverified boot distinctly from a verified transfer.
