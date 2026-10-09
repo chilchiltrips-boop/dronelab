@@ -16,7 +16,7 @@ function updateStatus(message){
  $('flightConnection').dataset.ready=String(isOwned());
  $('flightOwner').textContent=isOwned()?'CONTROL GRANTED':'VIEW ONLY';
 }
-function isOwned(){const s=peer?.status();return !!s?.connected&&!!s?.paired&&s.controller==='mobile'}
+function isOwned(){const s=peer?.status();return !!s?.connected&&!!s?.paired&&s.controller==='mobile'&&s.simulatorReady===true}
 function recenterView(side){
  const pad=$(side==='left'?'flightLeftZone':'flightRightZone'),ring=$(side==='left'?'flightLeftRing':'flightRightRing');
  if(!pad||!ring)return;
