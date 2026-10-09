@@ -17,7 +17,7 @@ try{
  if(!(await page.locator('#tpStop').isEnabled()))throw Error('Virtual motor run failed');
  await page.locator('body').click({position:{x:30,y:160}});
  await page.keyboard.press('w');await page.keyboard.press('w');await page.keyboard.press('w');
- if(!(await page.locator('#tpThrottleInput').textContent()).includes('1075'))throw Error('Throttle W key does not hold value');
+ await page.waitForFunction(()=>document.querySelector('#tpThrottleInput')?.textContent.includes('1075'),null,{timeout:4000});
  await page.locator('#tpMode').selectOption('acro');
  if(!((await page.locator('#tpReadoutMode').textContent())||'').includes('ACRO'))throw Error('ACRO mode not selected');
  const right=await page.locator('#tpRightPad').boundingBox();
