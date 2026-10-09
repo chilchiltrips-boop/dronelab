@@ -30,7 +30,11 @@ test('Matplotlib wheels and validation dependencies are cached without first run
 });
 test('version metadata refreshes online and retains cache offline',async()=>{
  const r=runtime();await r.install();r.store.set('https://example.test/dronelab/app-version.json',new Response('{"version":"old"}'));
- const online=await r.request('./app-version.json');assert.match(await online.text(),/1.4.5/);r.setOffline();assert.match(await (await r.request('./app-version.json')).text(),/1.4.5/);
+ const expected=JSON.parse(readFileSync(new URL('package.json',root),'utf8')).version;
+ const online=await r.request('./app-version.json'),onlineMeta=JSON.parse(await online.text());
+ assert.ok(onlineMeta.version.startsWith(expected),'Online version must reflect current package version');
+ r.setOffline();const cached=JSON.parse(await (await r.request('./app-version.json')).text());
+ assert.equal(cached.version,onlineMeta.version,'Offline cache must retain latest online version');
 });
 test('failed essential installation retains previous worker; activation preserves unrelated caches',async()=>{
  const failed=runtime();failed.setFailure('python-lab-worker.js');await assert.rejects(failed.install(),/Essential offline assets/);assert.equal(failed.skipped(),false);
