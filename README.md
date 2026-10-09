@@ -45,3 +45,11 @@ Android updates preserve `in.zebjus.dronelab.companion` and the permanent pinned
 ## Python Lab toolbar (WebApp 1.4.6)
 
 The top project bar now shows the **active .py filename**, + New, a chooser for saved Python files, project examples, the Python 3/Simulator vs USB I²C target, and Stop / Run / Rerun. Save/Undo/Redo/Delete/Export/Import remain directly below these controls. The editor header only shows usage help. Files remain browser-local and preserve existing autosave/import/export behavior; this WebApp-only release does not change the Android APK or scanner firmware.
+
+## Tripod PID Simulator (WebApp 1.5.0)
+
+Open the **TRIPOD PID SIM** navigation link or open tripod.html directly. This standalone page contains an orbitable procedural F450 quadcopter on a three-legged stand, 4 virtual motor indicators, animated propellers and downwash, dual joysticks, keyboard control, optional user-gesture Web Audio, a live PID graph and PID terms, simulator-only presets and environmental sliders. It imports local Three.js and has no pairing or hardware control. If WebGL is unavailable, it draws a 2D tripod instead.
+
+ANGLE uses outer Roll/Pitch Angle PID then inner Rate PID and centered sticks return toward calibrated level. Pure ACRO/RATE uses only Rate PID; centered sticks target zero angular rate without leveling. Yaw always uses Rate PID. Start with throttle 1000 microseconds, then W/S adjust by 25 steps; A/D control yaw, arrows Roll/Pitch, R starts/stops. Stop, blur and page hide disarm and silence audio. Motor values stay in browser memory. This is an educational model, not measured flight dynamics.
+
+The F450 scene is procedural because this standalone training geometry needs consistent pivot/axis behavior. No remote assets are fetched. Unit tests: node --test tools/tripod-physics.test.mjs; browser tests: node tools/tripod-browser.mjs with localhost and Chromium via the Tripod GitHub Actions workflow.
