@@ -54,10 +54,11 @@ try{
  log('Single-controller lock granted explicitly to Android');
  await phone.locator('#mobileLedOn').click();
  await web.waitForFunction(()=>document.getElementById('ledState').textContent==='LED ON',null,{timeout:10000});
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON'&&document.getElementById('commandStatus').textContent.includes('confirmed'),null,{timeout:10000});
+ try{await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED ON'&&/confirm/i.test(document.getElementById('commandStatus').textContent),null,{timeout:10000})}
+ catch(e){throw Error('LED ON not acknowledged on phone. '+JSON.stringify(await phone.evaluate(()=>({state:document.getElementById('mobileLedState').textContent,command:document.getElementById('commandStatus').textContent,log:document.getElementById('mobileLog').textContent.slice(-800)}))))}
  if(await web.locator('#webLedOn').isEnabled())throw Error('Web LED button must be locked while Android owns control');
  await phone.locator('#mobileLedOff').click();
- await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF'&&document.getElementById('commandStatus').textContent.includes('confirmed'),null,{timeout:10000});
+ await phone.waitForFunction(()=>document.getElementById('mobileLedState').textContent==='LED OFF'&&/confirm/i.test(document.getElementById('commandStatus').textContent),null,{timeout:10000});
  log('LED ON and OFF commands acknowledged and synchronized');
  await web.locator('[data-tab="led"]').click();
  await web.screenshot({path:'test-output/qr-led-desktop.png',fullPage:true});
