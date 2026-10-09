@@ -1,20 +1,40 @@
 plugins { id 'com.android.application' }
+
+// Production signing credentials come ONLY from encrypted GitHub Actions
+// repository secrets. Never commit the keystore or its password.
+def zebjusKeystore = System.getenv('ZEBJUS_ANDROID_RELEASE_KEYSTORE_FILE')
+def zebjusPassword = System.getenv('ZEBJUS_ANDROID_SIGNING_PASSWORD')
+
 android {
   namespace 'in.zebjus.dronelab.companion'
   compileSdk 35
   defaultConfig {
+    // NEVER change applicationId: this keeps Android's upgrade identity stable.
     applicationId 'in.zebjus.dronelab.companion'
     minSdk 26
     targetSdk 35
-    versionCode 6
-    versionName '1.4.1-code-fix'
+    // Every subsequent release MUST increment versionCode; versionName is display only.
+    versionCode 7
+    versionName '1.4.2-stable-signing'
+  }
+  signingConfigs {
+    zebjusRelease {
+      storeFile file(zebjusKeystore ?: 'ZEBJUS_RELEASE_KEY_MISSING.p12')
+      storePassword zebjusPassword ?: ''
+      keyAlias 'zebjus-dronelab-release'
+      keyPassword zebjusPassword ?: ''
+      storeType 'pkcs12'
+    }
   }
   buildTypes {
     debug {
       debuggable true
+      // Debug builds are allowed for development but NEVER distributed as an update.
     }
     release {
+      debuggable false
       minifyEnabled false
+      signingConfig signingConfigs.zebjusRelease
     }
   }
   compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
