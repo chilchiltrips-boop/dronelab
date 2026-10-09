@@ -8,6 +8,7 @@ on:
       - testing/qr-and-6digit-code-v1.4.0
       - testing/fix-code-timeout-v1.4.1
       - testing/stable-android-signing-v1.4.2
+      - testing/fast-qr-step2-signed-v1.4.3
   workflow_dispatch:
 permissions:
   contents: read
