@@ -24,7 +24,7 @@ def run():
                          if "certificate" in line.lower() or "scheme" in line.lower()]
     print("Android APK signing metadata:")
     for line in certificate_lines: print("  " + line, flush=True)
-    matches = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]+)", signatures)
+    matches = re.findall(r"(?:V2 Signer:|Signer #\d+) certificate SHA-256 digest:\s*([0-9a-fA-F]{64})", signatures)
     assert len(matches) == 1, f"Release must have exactly one signing certificate. Found {len(matches)}."
     assert matches[0].lower() == EXPECTED_CERT_SHA256, (
         "APK signed with WRONG key. Release certificate does not match ZEBJUS pinned certificate."
