@@ -75,7 +75,7 @@ bool secureLayoutReady();
 #endif
 
 // ---------------- General ----------------
-static const char* FW_VERSION="18.3.83";
+static const char* FW_VERSION="18.3.84";
 static const char* FW_BUILD_DATE=__DATE__;
 static const char* FW_BUILD_TIME=__TIME__;
 
@@ -83,7 +83,7 @@ static const char* FW_BUILD_TIME=__TIME__;
 // browser/API users see only stable ZEBJUS FlightCore profile names.
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
 static const char* BOARD_ID="ZFC-A1";
-static const char* BOARD_NAME="ZEBJUS FlightCore Bridge";
+static const char* BOARD_NAME="Aerion FC A1";
 static const int RECOVERY_BUTTON_PIN=9;
 static const int DEFAULT_PPM_RECEIVER_PIN=18;
 static const int I2C_SDA_PIN=SDA;
@@ -92,7 +92,7 @@ static const bool FLIGHT_CONTROL_ENABLED=false; // A1 stays bridge-only until it
 static const int MOTOR_PINS[4]={-1,-1,-1,-1};
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
 static const char* BOARD_ID="ZFC-A2";
-static const char* BOARD_NAME="ZEBJUS Aerion F1";
+static const char* BOARD_NAME="Aerion FC A2";
 static const int RECOVERY_BUTTON_PIN=9;
 static const int DEFAULT_PPM_RECEIVER_PIN=16; // XIAO D6; GPIO18/D10 is selectable if the kit is wired that way.
 static const int I2C_SDA_PIN=SDA;
@@ -280,7 +280,7 @@ String getDeviceId(){
   return String(b);
 }
 String shortId(){return deviceId.substring(deviceId.length()-6);}
-String jsonEscape(String s){s.replace("\\","\\\\");s.replace("\"","\\\"");s.replace("\r","");s.replace("\n","\\n");return s;}
+String jsonEscape(String s){s.replace("\\","\\\\");s.replace("\"","\\\"");s.replace("\r","");s.replace("\n","\n");return s;}
 String htmlEscape(String s){s.replace("&","&amp;");s.replace("<","&lt;");s.replace(">","&gt;");s.replace("\"","&quot;");s.replace("'","&#39;");return s;}
 String urlEncode(const String& s){const char* hex="0123456789ABCDEF";String out="";for(size_t i=0;i<s.length();i++){uint8_t c=(uint8_t)s[i];if(isalnum(c)||c=='-'||c=='_'||c=='.'||c=='~')out+=(char)c;else{out+='%';out+=hex[c>>4];out+=hex[c&15];}}return out;}
 String normalizeDisplayName(String s){
@@ -825,6 +825,48 @@ void i2cScanApi(){
   String j="{\"ok\":true,\"bus\":0,\"sda\":"+String(I2C_SDA_PIN)+",\"scl\":"+String(I2C_SCL_PIN)+",\"clockHz\":100000,\"count\":"+String(deviceCount)+",\"errorCount\":"+String(errorCount)+",\"durationMs\":"+String(elapsed)+",\"devices\":"+devices+",\"errors\":"+errors+"}";sendJson(200,j);
 }
 
+// Periodic Serial diagnostic. One address per loop keeps USB logs responsive.
+// The flight task and arming are gated only while the disarmed, idle scan runs.
+uint32_t serialScanNextAt=0,serialScanStartedAt=0;
+uint8_t serialScanAddress=1,serialScanCount=0,serialScanErrors=0;
+bool serialScanActive=false;
+void finishSerialI2cScan(bool interrupted){
+  if(!serialScanActive)return;
+  if(FLIGHT_CONTROL_ENABLED)Wire.setClock(400000);
+  else{Wire.end();if(RECOVERY_BUTTON_PIN>=0)pinMode(RECOVERY_BUTTON_PIN,INPUT_PULLUP);}
+  portENTER_CRITICAL(&stateMux);configurationBusy=false;portEXIT_CRITICAL(&stateMux);
+  serialScanActive=false;serialScanNextAt=millis()+5000;
+  if(interrupted)Serial.println("I2C scan paused (kit busy or bus timeout).");
+  else if(serialScanCount==0)Serial.println("❌ No I2C devices found.");
+  if(!interrupted){Serial.printf("✅ Total I2C devices found: %u; errors: %u; duration: %lu ms\n",(unsigned)serialScanCount,(unsigned)serialScanErrors,(unsigned long)(millis()-serialScanStartedAt));Serial.println("-----------------------------\n");}
+}
+void serviceSerialI2cScan(){
+  // Do not touch a live control session, motor test, or firmware upload.
+  bool busy=effectiveArmed()||benchMode!=BENCH_NONE||trainingActive||fcSetupActive||firmwareUploadActive||restartAt||lockActive()||(setupMode&&WiFi.softAPgetStationNum()>0);
+  if(serialScanActive){
+    if(busy||(uint32_t)(millis()-serialScanStartedAt)>2000){finishSerialI2cScan(true);return;}
+    BusGuard bus;if(!bus.held)return;
+    Wire.beginTransmission(serialScanAddress);uint8_t error=Wire.endTransmission(true);
+    if(error==0){Serial.print("✔ Found device at ");Serial.println(hexAddress(serialScanAddress));serialScanCount++;}
+    else if(error==4){Serial.print("⚠ Unknown error at ");Serial.println(hexAddress(serialScanAddress));serialScanErrors++;}
+    if(++serialScanAddress>=127)finishSerialI2cScan(false);
+    return;
+  }
+  if(busy||configurationBusy||(int32_t)(millis()-serialScanNextAt)<0)return;
+  portENTER_CRITICAL(&stateMux);
+  bool start=!armed&&!configurationBusy&&benchMode==BENCH_NONE;
+  if(start)configurationBusy=true;
+  portEXIT_CRITICAL(&stateMux);
+  if(!start)return;
+  serialScanActive=true;serialScanAddress=1;serialScanCount=0;serialScanErrors=0;serialScanStartedAt=millis();
+  if(FLIGHT_CONTROL_ENABLED)Wire.setClock(100000);else Wire.begin(I2C_SDA_PIN,I2C_SCL_PIN,100000);
+  Serial.println("\n=== I2C Address Scanner ===");
+  Serial.println("Board: "+String(BOARD_NAME)+" ["+BOARD_ID+"]");
+  Serial.println("Firmware: "+String(FW_VERSION)+" | Device ID: "+deviceId);
+  Serial.printf("SDA GPIO %d | SCL GPIO %d | 100 kHz | Serial 115200\n",I2C_SDA_PIN,I2C_SCL_PIN);
+  Serial.println("Scanning I2C bus...\n");
+}
+
 // All generic expansion bus work is kept off the armed flight loop.
 void expansionBusBegin(){if(FLIGHT_CONTROL_ENABLED)Wire.setClock(100000);else Wire.begin(I2C_SDA_PIN,I2C_SCL_PIN,100000);}
 void expansionBusEnd(){if(FLIGHT_CONTROL_ENABLED)Wire.setClock(400000);else{Wire.end();if(RECOVERY_BUTTON_PIN>=0)pinMode(RECOVERY_BUTTON_PIN,INPUT_PULLUP);}}
@@ -1276,14 +1318,14 @@ void setup(){
   if(USER_LED_PIN>=0){pinMode(USER_LED_PIN,OUTPUT);digitalWrite(USER_LED_PIN,HIGH);}
   Serial.begin(115200);delay(300);Serial.printf("Boot: reset reason %u, free heap %u bytes\n",(unsigned)esp_reset_reason(),(unsigned)ESP.getFreeHeap());WiFi.persistent(false);WiFi.setAutoReconnect(false);WiFi.onEvent([](WiFiEvent_t,WiFiEventInfo_t info){wifiDisconnectReason=info.wifi_sta_disconnected.reason;},ARDUINO_EVENT_WIFI_STA_DISCONNECTED);if(RECOVERY_BUTTON_PIN>=0)pinMode(RECOVERY_BUTTON_PIN,INPUT_PULLUP);loadExpansionSettings();if(ENABLE_PPM_RECEIVER&&ppmReceiverPin>=0){pinMode(ppmReceiverPin,ppmEdgeFalling?INPUT_PULLDOWN:INPUT_PULLUP);attachInterrupt(digitalPinToInterrupt(ppmReceiverPin),ppmIsr,ppmEdgeFalling?FALLING:RISING);}
   busMutex=xSemaphoreCreateRecursiveMutex();deviceId=getDeviceId();loadFlightSettings();loadFcSetup();loadKitName();updateApName();loadApPassword();loadSavedWiFi();loadPidSettings();startPidSaveWorker();loadCalibrationSettings();initPairing();probeImuAtBoot();setupFlightCore();flightHeartbeatUs=micros();if(FLIGHT_CONTROL_ENABLED&&xTaskCreate(flightOutputSupervisor,"fc-output-guard",3072,nullptr,21,nullptr)!=pdPASS){flightReady=false;motorsSafe();Serial.println("Output supervisor unavailable: arming disabled");}setupExpansionPeripherals();setupRoutes();startFlightTask();
-  Serial.println("\n==============================\nZEBJUS FlightCore V18.3.83 LOCAL Wi-Fi + I2C\nBoard: "+String(BOARD_NAME)+" ["+String(BOARD_ID)+"]\nID: "+deviceId+"\n==============================");
+  Serial.println("\n==============================\nZEBJUS FlightCore "+String(FW_VERSION)+" AP + I2C\nBoard: "+String(BOARD_NAME)+" ["+String(BOARD_ID)+"]\nID: "+deviceId+"\nSerial I2C scanner: every 5 s when disarmed and idle\n==============================");
   bool forceApOnce=consumeForceSetupFlag(),explicitAp=preferredApMode(),anySaved=false;for(int i=0;i<MAX_WIFI;i++)if(savedSSID[i].length())anySaved=true;wifiFallbackAp=!explicitAp&&anySaved;
   // AP-only: both the Android controller and the browser join this kit.
   // Ignore an old router preference left by earlier firmware versions.
   (void)forceApOnce;(void)explicitAp;wifiFallbackAp=false;startSetupMode();
 }
 void loop(){
-  serviceSecureOta();servicePairing();serviceUserLed();pollGps();server.handleClient();updateControlRates();serviceBattery();expireLock();if(!FLIGHT_CONTROL_ENABLED)serviceTraining();processWifiTest();checkRecoveryButton();networkHealth();
+  serviceSecureOta();servicePairing();serviceUserLed();pollGps();server.handleClient();updateControlRates();serviceBattery();expireLock();if(!FLIGHT_CONTROL_ENABLED)serviceTraining();processWifiTest();if(!serialScanActive)checkRecoveryButton();networkHealth();serviceSerialI2cScan();
   if(restartAt&&(long)(millis()-restartAt)>=0){motorsSafe();ESP.restart();}
   delay(1);
 }
