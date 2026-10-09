@@ -1,1 +1,1 @@
-c3b8a5be146f3aa82d42bcb3bf0c5c653cd732167d92a58a990fd76777cef29b  mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk
+7bd3ced5f785586c7dd048c01c37e4abe474528fbf8bc1edd49c1ad90a0e454b  mobile-apk/ZEBJUS_DroneLab_SMART_QR_V1_3_0_TEST.apk
