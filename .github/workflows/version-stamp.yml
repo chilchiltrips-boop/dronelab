@@ -30,7 +30,7 @@ jobs:
           import os,json
           f=Path('app-version.json')
           meta=json.loads(f.read_text())
-          meta['version']='1.4.3+'+os.environ['BUILD_NUMBER']
+          meta['version']='1.4.4+'+os.environ['BUILD_NUMBER']
           meta['buildCommit']=os.environ['SOURCE_SHA'][:12]
           meta['channel']='release'
           f.write_text(json.dumps(meta,indent=2)+'\n')
