@@ -1,0 +1,49 @@
+name: QR Pairing Staging Checks
+on:
+  push:
+    branches:
+      - testing/two-way-qr-pairing
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: No regression — all DroneLab unit tests
+        run: npm test
+      - name: No regression — exact scanner firmware binaries
+        run: python3 tools/verify_release.py
+      - name: No regression — assembly and wiring checks
+        run: npm run check
+      - name: JavaScript syntax checks
+        run: |
+          node --check firmware-updater.js
+          node --check python-lab-worker.js
+          node --check js/python-lab.js
+          node --check js/usb-i2c-bridge.js
+      - name: Build review-only staging snapshot (never deploy to main Pages)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile,ZIP_DEFLATED
+          root=Path('.')
+          excluded={'.git','.github','node_modules','test-output','staging-artifacts'}
+          out=Path('staging-artifacts/DroneLab_QR_Testing_Branch.zip')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          with ZipFile(out,'w',ZIP_DEFLATED,compresslevel=6) as z:
+              for p in sorted(root.rglob('*')):
+                  if not p.is_file() or any(part in excluded for part in p.parts):continue
+                  z.write(p,p.as_posix())
+          print('Testing branch snapshot:',out,'bytes:',out.stat().st_size)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dronelab-qr-staging-snapshot
+          path: staging-artifacts/DroneLab_QR_Testing_Branch.zip
+          if-no-files-found: error
