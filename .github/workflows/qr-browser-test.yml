@@ -1,8 +1,15 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'mobile-android/**'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'pairing-core.js'
       - 'pairing-code.js'
       - 'pairing-qr-ui.js'
@@ -51,7 +58,7 @@ jobs:
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
-      - name: Test two real WebRTC peers and all LED protocol checks
+      - name: Test real WebRTC pairing, applied controls and legacy regressions
         run: |
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &

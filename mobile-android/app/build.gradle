@@ -11,12 +11,14 @@ android {
   defaultConfig {
     // NEVER change applicationId: this keeps Android's upgrade identity stable.
     applicationId 'in.zebjus.dronelab.companion'
+    testInstrumentationRunner 'in.zebjus.dronelab.companion.FlightTouchInstrumentation'
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 11
-    versionName '1.6.0-virtual-flight'
+    versionCode 12
+    versionName '1.6.1-flight-training'
   }
+  testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {
     zebjusRelease {
       storeFile file(zebjusKeystore ?: 'ZEBJUS_RELEASE_KEY_MISSING.p12')

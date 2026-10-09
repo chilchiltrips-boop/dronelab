@@ -1,6 +1,6 @@
 # ZEBJUS DroneLab
 
-The existing web app has six tabs: **Assembly**, **2D Wiring**, **Python Lab**, **Virtual LED**, **Settings / Smart Mobile Pairing**, and **Firmware / USB Serial Tools**. `index.html` and `lab.html` are synchronized entry points; `companion.html` is also packaged in the Android companion.
+DroneLab retains **Assembly**, **2D Wiring**, **Python Lab**, **Settings**, and **Firmware / USB Serial Tools**, with one canonical **Flight Training** page at `tripod.html`. `index.html` and `lab.html` are synchronized entry points; `companion.html` is also packaged in the Android companion.
 
 Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the app under `/dronelab/`. Desktop Chrome/Edge on HTTPS or localhost supports Web Serial. Android WebView USB flashing is unsupported.
 
@@ -10,7 +10,7 @@ Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the ap
 2. Click Next. Enter the temporary CONNECT code (Internet/PeerJS required) or choose Two-Way QR and explicitly start the Step 2 camera. Advanced manual response entry remains available.
 3. Compare the Safety PIN, confirm pairing, then explicitly grant mobile control. CONNECT code and Safety PIN serve different purposes. Cancellation, refresh, expiry or a lost session requires a fresh QR and fresh control grant.
 
-The control DataChannel uses local ICE candidates without a TURN relay. Direct QR exchange can work on a reachable local network; campus client isolation/firewalls can prevent transport. Online code signaling cannot work without Internet. The current LED is virtual and does not operate motors or a drone transmitter.
+The control DataChannel uses local ICE candidates without a TURN relay. Direct QR exchange can work on a reachable local network; campus client isolation/firewalls can prevent transport. Online code signaling cannot work without Internet. The channel carries authenticated controls for the virtual Flight Training plant and receiver-applied telemetry. The legacy WebRTC Virtual LED demo has been removed; physical LED wiring and Python examples remain.
 
 ## Scanner firmware 1.0.1
 
@@ -33,44 +33,29 @@ Disconnect external wiring for bootloader recovery and use stable USB power. GPI
 | `js/python-lab.js`, `python-lab-worker.js`, `vendor/pyodide`, `vendor/monaco` | Editor, worker-isolated Python, Matplotlib |
 | `firmware-updater.js`, `js/firmware-image.js`, `vendor/esptool` | Active flasher, image validation and serial tools |
 | `js/firmware-page.js` | Retained legacy UI adapter; not imported by current pages |
-| `pairing-*.js`, `companion.js` | QR/code exchange, WebRTC, virtual LED acknowledgements |
+| `pairing-*.js`, `companion.js` | QR/code exchange, ownership, WebRTC controls, applied ACK and telemetry |
 | `mobile-android/` | Native permission, lifecycle and asset-loaded WebView wrapper |
 | `tools/build_scanner.py`, `tools/verify_release.py` | Pinned firmware build and image verification |
 | `sw.js` | Same-origin offline shell, models, firmware and Python plot dependencies |
 
-Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, Android installation, USB flashes and campus Wi-Fi require device verification.
+Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, handset installation, USB flashes and campus Wi-Fi require device verification.
 
-Android updates preserve `in.zebjus.dronelab.companion` and the permanent pinned certificate. Signing secrets exist only in GitHub Actions. Candidate v1.4.5 uses versionCode **10** over the published v1.4.4 code **9**. The testing branch produces a verified signed review artifact; only an approved merge to main can publish the stable APK URL. See `ANDROID_SIGNING_SETUP.md`.
+Android updates preserve `in.zebjus.dronelab.companion` and the permanent pinned certificate. Version **1.6.1-flight-training**, versionCode **12**, updates published versionCode **11** in place. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the five mandatory browser/regression workflows for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and [release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
 
 ## Python Lab toolbar (WebApp 1.4.6)
 
 The top project bar now shows the **active .py filename**, + New, a chooser for saved Python files, project examples, the Python 3/Simulator vs USB I²C target, and Stop / Run / Rerun. Save/Undo/Redo/Delete/Export/Import remain directly below these controls. The editor header only shows usage help. Files remain browser-local and preserve existing autosave/import/export behavior; this WebApp-only release does not change the Android APK or scanner firmware.
 
-## Tripod PID Simulator (WebApp 1.5.0)
+## Flight Training 1.6.1
 
-Open the **TRIPOD PID SIM** navigation link or open tripod.html directly. This standalone page contains an orbitable procedural F450 quadcopter on a three-legged stand, 4 virtual motor indicators, animated propellers and downwash, dual joysticks, keyboard control, optional user-gesture Web Audio, a live PID graph and PID terms, simulator-only presets and environmental sliders. It imports local Three.js and has no pairing or hardware control. If WebGL is unavailable, it draws a 2D tripod instead.
+Open **FLIGHT TRAINING** or `/tripod.html`. One existing F450 assembly, renderer and physics state serve both Web and Android controls. The top-right **⚙ Connection** opens the existing two-way QR / optional six-digit-code flow, PIN confirmation, grant/release/disconnect, STOP and real link statistics. Closing settings preserves a valid connection; camera capture closes. Old `#simcontrol`, `#flight` and `#led` bookmarks redirect here.
 
-ANGLE uses outer Roll/Pitch Angle PID then inner Rate PID and centered sticks return toward calibrated level. Pure ACRO/RATE uses only Rate PID; centered sticks target zero angular rate without leveling. Yaw always uses Rate PID. Start with throttle 1000 microseconds, then W/S adjust by 25 steps; A/D control yaw, arrows Roll/Pitch, R starts/stops. Stop, blur and page hide disarm and silence audio. Motor values stay in browser memory. This is an educational model, not measured flight dynamics.
+Android always opens a landscape cockpit. Both floating sticks visibly move in **INPUT PREVIEW / NO FLIGHT COMMAND** while disconnected or disarmed. Independent captured pointers begin at zero displacement. Flight transmission requires authenticated ownership, receiver readiness and explicit low-throttle ARM. Slow/Medium/Fast response presets persist. STOP, lifecycle changes, feedback loss and a 450 ms receiver watchdog disarm; reconnect never auto-arms.
 
-The F450 scene is procedural because this standalone training geometry needs consistent pivot/axis behavior. No remote assets are fetched. Unit tests: node --test tools/tripod-physics.test.mjs; browser tests: node tools/tripod-browser.mjs with localhost and Chromium via the Tripod GitHub Actions workflow.
+Applied ACKs drive control readouts, Web mirrored sticks and throttle. The single simulator sends 10 Hz measured angles/rates, requested/actual RPM, force and mount deflection back to Android. Web keys/sticks are disabled during mobile ownership; Web PID/environment tuning and STOP remain available. Reordered feedback cannot restore stale ARM/mode state.
 
-## Tripod realism and PID-audio response (WebApp v1.5.1)
-The standalone tripod.html page now includes local optional GLB F450 parts with procedural fallback, detailed visible motors/battery/FC, nose and 3D FRONT(+Z), BACK(-Z), LEFT(+X), RIGHT(-X) markings, six camera angles, brighter animated prop blur/downwash/groundwash and rotor LEDs. The sound engine is enabled by default (subject to browser user-gesture policy): click Run at 1000 us throttle, raise throttle, and hear ESC startup/4 independent motors/air wash. Sound button, volume and audio-state status remain available. Stop and page hide silence and dispose every audio node.
+The 250 Hz educational plant uses first-order motor lag, RPM-squared thrust, the existing Rate and Angle→Rate cascade PID, mixer torque and a 0–12 cm spring/damped telescopic mount. Numerical centimeters remain accurate; scene travel is magnified 2×. ACRO targets zero angular rate on release without leveling; ANGLE returns toward trim. Yaw retains the reversed stick/keyboard contract and uses Rate PID. Live Apply preserves throttle, pose and RPM; Reset Integrators is separate.
 
-PID presets and Apply now trigger a virtual Roll/Pitch/Yaw response pulse when running with throttle >=1250 us; otherwise click Test PID Response after increasing virtual throttle. The motor-lag effect is part of the *dynamics* (reconstructed from each actual motor), not just an animation. The chart, live RMS error, peak rate, motor imbalance, sound pitch and air wash report the measured trajectory. Pure ACRO zero-stick behavior and hardware isolation are unchanged.
+The assembly GLBs, seven camera views, four actual-RPM propeller effects, airflow intensity, low/adaptive graphics and 2D WebGL fallback remain available. Quiet sound defaults to 25%, requires a gesture, uses smooth motor voices and stops on disarm/teardown. Mute/profile/volume persist. These coefficients are educational estimates, not measured aircraft calibration. No AP/STA, real motor output or new firmware control is added.
 
-
-## V1.5.2 tripod — physically driven learning simulator
-
-The standalone Tripod page reconstructs the same completed F450 assembly using the Assembly Lab's GLBs, positions and rotations. Procedural 1045 propellers and guards are intentionally retained, matching Assembly Lab's deliberately procedural equivalents. The body has a single red forward arrow, no direction-text sprites, screenshot-matched blue background/soft lighting, a 20% closer camera, and seven smoothly transitioning camera modes including Follow Drone.
-
-The local simulation uses fixed 4ms steps, actual motor RPM-squared thrust, 3-axis torque, inertias and gyroscope feedback. Angle PID drives requested body rate; Rate PID drives the 4-motor mixer. ACRO never self-levels. Live Apply does not reset motors, throttle or pose. Test PID Response is separate. Compare A/B uses identical simulation seeds/conditions; I experiments deliberately include a small constant CG torque to expose steady-state correction. Live graphs show angle, angular rate, PID components and all four motor outputs. Normal audio is quieter and smoother, with Quiet/Normal/Detailed profiles; audio begins only after a user gesture.
-
-**Limitations:** inertias, thrust coefficients, sensor noise and aerodynamic drag are plausible educational estimates, not flight-test-identified constants. No simulated PID values, tuning results or actuator commands are written to actual ESCs, ESP32 firmware or WebRTC peers. Browser AudioContext tests establish operation, not subjective comfort. Real aircraft tuning requires safe separately supervised hardware verification.
-
-## Tripod yaw polarity (V1.5.3)
-The standalone Tripod simulator reverses **both left-stick horizontal yaw and keyboard A/D yaw input**. Moving the left stick right / pressing D now requests negative yaw angular rate; left / A requests positive yaw rate. Roll/Pitch, internal yaw PID and IMU/body-rate sign convention, motor mixing, graphs and simulation-only safety are unchanged. Keyboard + pointer polarity are verified by the Chromium Tripod browser test.
-
-## Android v1.6.0 — landscape WebRTC virtual flight controller
-
-The Android app has an optional full-screen landscape cockpit with simultaneous floating joystick zones and 3 Slow/Medium/Fast response presets. Existing QR/code WebRTC pairing and explicit owner grant are mandatory. Reuses authenticated WebRTC DataChannel SIM_CONTROL/SIM_ACK; no UDP, AP, STA, hotspot or physical motors. Open ANDROID FLIGHT Web App tab for the embedded virtual Tripod simulator. STOP, control loss and stale timeouts disarm. Only receiver-applied state is ACKed. Android application ID and release cert remain unchanged; versionCode increased 10→11 for in-place updates.
+Detailed assignment, audit, diagrams, exhaustive test matrix and reproducible numerical traces: [docs/flight-training](docs/flight-training/README.md). Run `node tools/export-flight-bench.mjs` for CSV/metrics; `python3 tools/plot-flight-bench.py` optionally renders plots using Matplotlib. Browser tests require an HTTP server on port 8765 and test-only Playwright. Native acceptance uses the production-signed release and instrumentation APK on Android API 35. Physical camera autofocus, real handset radio/latency/cutouts and perceptual audio require the documented human test; automated results do not establish those.

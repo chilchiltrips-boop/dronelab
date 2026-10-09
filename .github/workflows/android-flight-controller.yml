@@ -1,8 +1,17 @@
 name: Android Landscape Flight WebRTC Tests
 on:
   push:
-    branches: [feature/android-landscape-flight-controller-v1.6.0, main]
+    branches: [feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'mobile-android/**'
+      - 'pairing-code.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'flight-input.js'
       - 'companion-flight.js'
       - 'companion.html'
@@ -14,6 +23,9 @@ on:
       - 'js/ui-controls.js'
       - 'tripod.html'
       - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/flight-test-harness.mjs'
+      - 'js/training-receiver.js'
       - 'tools/flight-input.test.mjs'
       - 'tools/apk-verifier.test.mjs'
       - 'tools/python-lab.test.mjs'
@@ -50,6 +62,7 @@ jobs:
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/flight-http.log 2>&1 &
           sleep 3
+          node tools/flight-preview-browser.mjs
           node tools/flight-controller-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()

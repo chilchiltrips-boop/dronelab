@@ -45,24 +45,25 @@ function waitIce(pc,timeout=12000){
 }
 function session(role,events={}){
  const emit=(event,detail)=>{try{return events[event]?.(detail)}catch(e){console.error(e);return false}};
- let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,led=false,revision=0,deviceId=randomId(8),pending=new Map(),generation=0,lastSimSeq=0,simulatorReady=false;
+ let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,deviceId=randomId(8),generation=0,lastSimSeq=0,simulatorReady=false;
  const error=(err)=>emit('error',String(err?.message||err));
  const state=(s)=>emit('status',s);
- const rejectOutstanding=reason=>{for(const p of pending.values()){clearTimeout(p.timer);p.reject(Error(reason))}pending.clear()};
  function close(reason='Disconnected'){
   generation++;
   if(role==='host')emit('simStop',{reason});lastSimSeq=0;
   clearInterval(heartbeat);clearTimeout(dropTimer);heartbeat=null;dropTimer=null;
-  rejectOutstanding(reason);
   const oldChannel=channel,oldPeer=peer;channel=null;peer=null;
   try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
   controller=null;simulatorReady=false;sessionId=null;code=null;expires=0;lastHeartbeat=0;
-  if(role==='mobile'){led=false;revision=0;emit('led',{led,revision,origin:'reset'})}
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
  function send(m){if(channel?.readyState!=='open')return false;try{channel.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
- function broadcast(){if(role!=='host')return;send({type:'STATE',led,revision,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
+ function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
+ function sendTelemetry(applied){return role==='host'&&approved&&connected&&channel?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
+ function emergencyStop(reason='Web emergency STOP'){
+  if(role!=='host')return false;emit('simStop',{reason});return send({type:'SIM_STOP',sessionId,reason});
+ }
  function setSimulatorReady(value){if(role!=='host')return false;simulatorReady=!!value;broadcast();return true}
  function dropControl(reason){if(controller&&role==='host'){emit('simStop',{reason});lastSimSeq=0;controller=null;emit('control',{owner:null,reason});broadcast()}}
  function startHeartbeat(){
@@ -79,36 +80,38 @@ function session(role,events={}){
    ['angle','acro'].includes(m.mode)&&typeof m.armed==='boolean'&&
    Number.isInteger(m.throttle)&&m.throttle>=1000&&m.throttle<=2000&&
    m.axes&&typeof m.axes==='object'&&!Array.isArray(m.axes)&&Object.keys(m.axes).length===3&&
-   ['roll','pitch','yaw'].every(k=>typeof m.axes[k]==='number'&&Number.isFinite(m.axes[k])&&Math.abs(m.axes[k])<=1);
+   ['roll','pitch','yaw'].every(k=>typeof m.axes[k]==='number'&&Number.isFinite(m.axes[k])&&Math.abs(m.axes[k])<=1)&&
+   (!m.sticks||['left','right'].every(side=>m.sticks[side]&&['x','y'].every(k=>Number.isFinite(m.sticks[side][k])&&Math.abs(m.sticks[side][k])<=1)&&Math.hypot(m.sticks[side].x,m.sticks[side].y)<=1.001));
  }
  function sendSimulatorControl(m,critical=false){
   if(role!=='mobile'||!connected||!paired||controller!=='mobile'||channel?.readyState!=='open')return false;
   if(!validSimFrame(m))return false;
   if(channel.bufferedAmount>(critical?131072:32768))return false;
   return send({type:'SIM_CONTROL',seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
-   throttle:m.throttle,axes:m.axes});
+   throttle:m.throttle,axes:m.axes,...(m.sticks?{sticks:m.sticks}:{})});
  }
  function onData(raw){
   if(typeof raw!=='string'||raw.length>5000)return;
   let m;try{m=JSON.parse(raw)}catch{return}
-  if(m.v!==VERSION||typeof m.type!=='string')return;
+  if(!m||typeof m!=='object'||m.v!==VERSION||typeof m.type!=='string')return;
   lastHeartbeat=Date.now();emit('heartbeat',lastHeartbeat);
   if(m.type==='PING'){send({type:'PONG',at:m.at});return}
   if(m.type==='PONG')return;
-  if(m.type==='PAIR_APPROVED'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST'});return}
+  if(m.type==='PAIR_APPROVED'&&role==='mobile'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST'});return}
   if(m.type==='PAIR_REJECTED'){close('Pairing rejected');return}
   if(role==='host'){
    if(m.type==='SIM_CONTROL'){
-    const fail=reason=>send({type:'SIM_ACK',ackSeq:Number.isSafeInteger(m.seq)?m.seq:0,accepted:false,reason});
+    const fail=reason=>send({type:'SIM_ACK',sessionId,ackSeq:Number.isSafeInteger(m.seq)?m.seq:0,accepted:false,reason});
     if(!approved||!connected||controller!=='mobile')return fail('Mobile control not granted');
     if(!validSimFrame(m))return fail('Invalid session or simulator control fields');
+    if(!simulatorReady)return fail('Flight Training receiver is not ready');
     if(m.seq<=lastSimSeq)return fail('Stale or out-of-order control');
     lastSimSeq=m.seq;
     const ticket=generation;
     Promise.resolve(emit('simControl',{seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
-     throttle:m.throttle,axes:{...m.axes}})).then(result=>{
+     throttle:m.throttle,axes:{...m.axes},...(m.sticks?{sticks:m.sticks}:{})})).then(result=>{
        if(ticket!==generation||controller!=='mobile'||!approved)return;
-       if(result?.accepted&&result.applied)send({type:'SIM_ACK',ackSeq:m.seq,accepted:true,applied:result.applied});
+       if(result?.accepted&&result.applied)send({type:'SIM_ACK',sessionId,ackSeq:m.seq,accepted:true,applied:result.applied});
        else fail(result?.reason||'Virtual simulator receiver not ready');
     }).catch(()=>{if(ticket===generation)fail('Simulator feedback timeout')});
     return;
@@ -120,24 +123,14 @@ function session(role,events={}){
     emit('controlRequest',{deviceId:m.deviceId||'Android phone'});return;
    }
    if(m.type==='RELEASE_CONTROL'){if(controller==='mobile')dropControl('Released by Android');return}
-   if(m.type==='LED_SET'){
-    if(!approved||controller!=='mobile'){send({type:'ACK',id:m.id,accepted:false,reason:'Control not granted',led,revision});return}
-    if(typeof m.value!=='boolean'||typeof m.id!=='string'||m.id.length>40)return;
-    led=m.value;revision++;emit('led',{led,revision,origin:'mobile'});send({type:'ACK',id:m.id,accepted:true,led,revision});broadcast();
-    return;
-   }
   }else{
-   if(m.type==='STATE'){if(!paired||!positiveInt(m.revision))return;led=!!m.led;revision=m.revision;controller=m.controller||null;simulatorReady=m.simulatorReady===true;emit('led',{led,revision,origin:'web'});emit('control',{owner:controller});emit('simReady',{ready:simulatorReady});return}
-   if(m.type==='CONTROL_GRANTED'){controller='mobile';emit('control',{owner:'mobile'});send({type:'SYNC_REQUEST'});return}
+   if(m.type==='STATE'){if(!paired||m.sessionId!==sessionId||![null,'web','mobile'].includes(m.controller))return;controller=m.controller;simulatorReady=m.simulatorReady===true;emit('control',{owner:controller});emit('simReady',{ready:simulatorReady});return}
+   if(m.type==='CONTROL_GRANTED'){if(!paired)return;controller='mobile';emit('control',{owner:'mobile'});send({type:'SYNC_REQUEST'});return}
    if(m.type==='CONTROL_DENIED'){emit('denied',m.reason||'Control denied');return}
-   if(m.type==='SIM_ACK'){emit('simAck',m);return}
-   if(m.type==='ACK'){
-    const p=pending.get(m.id);if(!p)return;
-    clearTimeout(p.timer);pending.delete(m.id);
-    if(m.accepted){led=!!m.led;revision=m.revision;emit('led',{led,revision,origin:'ack'});p.resolve({led,revision})}
-    else p.reject(Error(m.reason||'Command rejected'));
-    return;
-   }
+   if(!paired||m.sessionId!==sessionId)return;
+   if(m.type==='SIM_ACK'&&Number.isSafeInteger(m.ackSeq)&&typeof m.accepted==='boolean'){emit('simAck',m);return}
+   if(m.type==='SIM_TELEMETRY'){emit('simTelemetry',m);return}
+   if(m.type==='SIM_STOP'){emit('simStop',{reason:typeof m.reason==='string'?m.reason.slice(0,150):'Web STOP'});return}
   }
  }
  function setup(pc,dc){
@@ -147,7 +140,7 @@ function session(role,events={}){
    if(peer!==pc)return;
    const s=pc.connectionState;
    if(s==='connected'){clearTimeout(dropTimer);connected=channel?.readyState==='open';state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
-   if(s==='disconnected'){connected=false;dropControl('Wi-Fi changed');controller=null;rejectOutstanding('Wi-Fi changed');emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(peer===pc&&pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
+   if(s==='disconnected'){connected=false;dropControl('Wi-Fi changed');controller=null;emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(peer===pc&&pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
    if(s==='failed'||s==='closed')close('Connection ended • scan fresh QR');
   };
  }
@@ -158,7 +151,7 @@ function session(role,events={}){
  }
  async function makeOffer(){
   close('New pairing session');sessionId=randomId(12);code=pin();expires=Date.now()+EXPIRY_MS;
-  const ticket=generation,pc=makePC(),dc=pc.createDataChannel('zebjus-led-v1',{ordered:true});setup(pc,dc);
+  const ticket=generation,pc=makePC(),dc=pc.createDataChannel('zebjus-flight-v1',{ordered:true});setup(pc,dc);
   const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
   const description=await pc.createOffer();check();await pc.setLocalDescription(description);check();state('Gathering local Wi-Fi connection candidates');
   await waitIce(pc);check();state('Waiting for Android QR response');
@@ -210,23 +203,10 @@ function session(role,events={}){
   if(role==='host'){dropControl('Released on Web App');return}
   send({type:'RELEASE_CONTROL'});controller=null;emit('control',{owner:null});
  }
- function toggleWebLed(value){
-  if(role!=='host'||controller!=='web')return false;
-  led=!!value;revision++;emit('led',{led,revision,origin:'web'});broadcast();return true;
- }
- async function commandLed(value){
-  if(role!=='mobile'||!paired||controller!=='mobile'||!connected)throw Error('Pair and obtain control first');
-  const id=randomId(10),request={type:'LED_SET',id,value:!!value};
-  return new Promise((resolve,reject)=>{
-   const timer=setTimeout(()=>{pending.delete(id);reject(Error('No Web App acknowledgement • check connection'))},4500);
-   pending.set(id,{resolve,reject,timer});
-   if(!send(request)){clearTimeout(timer);pending.delete(id);reject(Error('Disconnected'))}
-  });
- }
  return {
-  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,toggleWebLed,commandLed,sendSimulatorControl,setSimulatorReady,
+  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,setSimulatorReady,sendTelemetry,emergencyStop,
   requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
-  status:()=>({role,connected,paired,approved,controller,led,revision,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
+  status:()=>({role,connected,paired,approved,controller,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
   get channel(){return channel},get peer(){return peer}
  };
 }

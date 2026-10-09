@@ -11,7 +11,7 @@ try{
  await page.goto('http://127.0.0.1:8765/tripod.html');
  await until(()=>document.querySelector('#tpSceneStatus')?.textContent!=='Preparing 3D…');
  const docText=await page.locator('body').textContent();
- if(/PAIR MOBILE|CONNECT USB SERIAL|STA MODE|AP MODE/.test(docText))throw Error('Hardware controls must not exist in Tripod page');
+ if(/CONNECT USB SERIAL|STA MODE|AP MODE/.test(docText))throw Error('Hardware controls must not exist in Tripod page');
  if(await page.locator('.tp-orientation-hint,.tp-nose').count())throw Error('Remove floating direction text from scene');
  if((await page.locator('#tpCameraView option').count())<7)throw Error('Seven camera views including Follow Drone expected');
  await page.locator('#tpCameraView').selectOption('front');
@@ -42,8 +42,8 @@ try{
  await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
  await page.locator('#tpLeftPad').scrollIntoViewIfNeeded();
  const yawPad=await page.locator('#tpLeftPad').boundingBox();
- await page.mouse.move(yawPad.x+yawPad.width*.82,yawPad.y+yawPad.height*.50);
- await page.mouse.down();
+ await page.mouse.move(yawPad.x+yawPad.width*.5,yawPad.y+yawPad.height*.50);
+ await page.mouse.down();await page.mouse.move(yawPad.x+yawPad.width*.82,yawPad.y+yawPad.height*.50);
  await until(()=>parseFloat(document.querySelector('#tpLeftReadout')?.textContent.slice(4))<-.5);
  await page.mouse.up();
  await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
@@ -92,12 +92,12 @@ try{
  if(!(await page.locator('#tpRun').isEnabled()))throw Error('Stop failed');
  const motors=await page.locator('.tp-motor strong').allTextContents();
  if(motors.some(t=>t!=='0%'))throw Error('Motors did not stop');
- await page.screenshot({path:'test-output/tripod-v152-desktop.png',fullPage:true});
+ await page.screenshot({path:'test-output/flight-training-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
- await page.screenshot({path:'test-output/tripod-v152-mobile.png',fullPage:true});
+ await page.screenshot({path:'test-output/flight-training-mobile.png',fullPage:true});
  const layout=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:innerWidth}));
  if(layout.width>layout.viewport+2)throw Error('Mobile horizontal overflow '+JSON.stringify(layout));
  if(errors.length)throw Error('Page errors: '+errors.join(' | '));
  console.log('PASS V1.5.2 Tripod: Assembly GLBs, ACRO/ANGLE, live Apply, A/B, PID pulse, camera follow, audio, mobile and safe Stop');
-}catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/tripod-v152-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}
+}catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/flight-training-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}
 finally{await browser.close()}

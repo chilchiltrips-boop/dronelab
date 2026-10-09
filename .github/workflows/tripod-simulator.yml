@@ -1,8 +1,23 @@
 name: Tripod PID Simulator Tests
 on:
   push:
-    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, main]
+    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'mobile-android/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'tripod.html'
       - 'tripod.css'
       - 'js/tripod-physics.js'
@@ -13,6 +28,8 @@ on:
       - 'js/tripod-experiments.js'
       - 'tools/tripod-physics.test.mjs'
       - 'tools/tripod-browser.mjs'
+      - 'tools/tripod-quality-browser.mjs'
+      - 'tools/export-flight-bench.mjs'
       - 'sw.js'
       - '.github/workflows/tripod-simulator.yml'
   workflow_dispatch:
@@ -48,6 +65,8 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/tripod-http.log 2>&1 &
           sleep 3
           node tools/tripod-browser.mjs
+          node tools/tripod-quality-browser.mjs
+          node tools/export-flight-bench.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -93,7 +93,7 @@ export async function loadAssemblyTripod(THREE,loadGLB,{onAsset=()=>{}}={}){
  shape.lineTo(-.19,.20);shape.closePath();
  const geo=new THREE.ExtrudeGeometry(shape,{depth:.09,bevelEnabled:true,bevelSize:.027,bevelThickness:.025,bevelSegments:2});
  geo.rotateX(Math.PI/2); // local shape Y goes toward +Z in 3D after rotation
- const arrow=add(root,geo,material,0,2.65,.98);arrow.name='FRONT_ARROW_ONLY';
+ const arrow=add(root,geo,material,0,1.24,1.40);arrow.name='FRONT_ARROW_ONLY';
  // Root transform preserves Assembly Lab slot geometry while fitting tripod motor spacing.
  root.scale.setScalar(.39);root.position.y=-.75*.39;
  onAsset(status.filter(Boolean).length,status.length);

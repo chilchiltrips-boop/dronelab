@@ -1,0 +1,24 @@
+digraph FlightTraining {
+ graph [rankdir=LR, bgcolor="#071421", pad="0.35", nodesep="0.45", ranksep="0.65", fontname="DejaVu Sans", fontcolor="#dffcff", label="ZEBJUS Flight Training — authoritative simulator control flow", labelloc=t, fontsize=23];
+ node [shape=box,style="filled,rounded",fillcolor="#103247",color="#4dbab2",fontcolor="#ecfdff",fontname="DejaVu Sans",fontsize=12,margin="0.14,0.1"];
+ edge [color="#77d8d3",fontcolor="#9fc9d0",fontname="DejaVu Sans",fontsize=10,arrowsize=.65];
+ touch [label="Android Touch\nLeft: Yaw/Throttle\nRight: Roll/Pitch"];
+ preview [label="LOCAL PREVIEW\nAlways visible\nNo motor commands",fillcolor="#253249",color="#7d9fc1"];
+ gate [label="WebRTC OWNER + SESSION GATE\nQR/CODE + PIN + READY\nseq/range check"];
+ message [label="RTCDataChannel\nSIM_CONTROL 25 Hz"];
+ plant [label="ONE CANONICAL\nF450 SIMULATOR\n250-Hz physics",fillcolor="#195244",color="#7bdfbb"];
+ motor [label="Motor lag + RPM² thrust\n4-motor mixer + torques"];
+ vert [label="Constrained tripod rig\nWeight, damping, mast z"];
+ visual [label="3D drone + rotor/wash\nSound + PID graphs"];
+ applied [label="Receiver APPLIED snapshot\nSIM_ACK + RTT"];
+ mirror [label="Web + Android mirrors\nSame axes and throttle"];
+ stop [label="STOP / stale link / owner loss\nDISARM and zero motors",fillcolor="#622b3a",color="#eb7b87"];
+ touch -> preview [color="#758da8",style=dashed,label="not paired / disarmed"];
+ touch -> message [label="paired + ARMED"];
+ message -> gate -> plant;
+ plant -> motor -> vert -> visual;
+ plant -> applied -> mirror;
+ mirror -> touch [label="feedback",color="#76baeb",constraint=false];
+ gate -> stop [label="rejected/lost",color="#eaa2a5"];
+ stop -> plant [color="#eaa2a5",label="safe reset"];
+}

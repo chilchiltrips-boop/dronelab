@@ -1,17 +1,7 @@
 /* Synthetic F450 four-motor audio; user-gesture-only AudioContext, zero output when stopped. */
 export function createTripodAudio(onStatus=()=>{}){
- let ctx=null,nodes=null,enabled=true,volume=.30,profile='normal',epoch=0,lastUpdate=0;
+ let ctx=null,nodes=null,enabled=true,volume=.25,profile='quiet',epoch=0,lastUpdate=0;
  const enabledStatus=()=>onStatus(!enabled?'MUTED':ctx?.state==='running'?'AUDIO ACTIVE':'SOUND READY • RUN TO ENABLE');
- function tone(hz,delay,duration=.085){
-  if(!ctx||!nodes)return;
-  const time=ctx.currentTime+delay,o=ctx.createOscillator(),gain=ctx.createGain();
-  o.type='triangle';o.frequency.value=hz;
-  gain.gain.setValueAtTime(.0001,time);
-  gain.gain.exponentialRampToValueAtTime(.010*volume+.0001,time+.012);
-  gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
-  o.connect(gain);gain.connect(nodes.master);o.start(time);o.stop(time+duration+.012);
-  o.onended=()=>{o.disconnect();gain.disconnect()};
- }
  function initialize(){
   if(!enabled||!volume)return false;
   if(nodes&&ctx)return true;
@@ -26,7 +16,7 @@ export function createTripodAudio(onStatus=()=>{}){
    const motors=[];
    for(let i=0;i<4;i++){
     const a=ctx.createOscillator(),b=ctx.createOscillator(),filter=ctx.createBiquadFilter(),gain=ctx.createGain();
-    a.type='triangle';b.type='sine';
+    a.type='sine';b.type='sine';
     a.frequency.value=70+i*3;b.frequency.value=140+i*5;
     filter.type='lowpass';filter.frequency.value=470;filter.Q.value=.42;
     gain.gain.value=0;a.connect(filter);b.connect(filter);filter.connect(gain);gain.connect(master);a.start();b.start();
@@ -56,7 +46,6 @@ export function createTripodAudio(onStatus=()=>{}){
    if(myEpoch!==epoch||!nodes)return;
    onStatus('AUDIO ACTIVE • MOTOR PITCH FOLLOWS RPM');
   }).catch(err=>onStatus('TAP SOUND ON TO UNLOCK AUDIO'));
-  tone(260,0,.052); // a single soft ready tone
  }
  function update(motors,rpms=null){
   if(!nodes||!ctx||!enabled||ctx.state!=='running')return;
@@ -67,7 +56,7 @@ export function createTripodAudio(onStatus=()=>{}){
   nodes.motors.forEach(({a,b,filter,gain},i)=>{
    const speed=powers[i],mainHz=75+speed*245+i*1.7;
    a.frequency.setTargetAtTime(mainHz,t,.035);b.frequency.setTargetAtTime(mainHz*2.01,t,.035);
-   filter.frequency.setTargetAtTime(460+speed*1650,t,.085);
+   filter.frequency.setTargetAtTime(460+speed*1000,t,.085);
    gain.gain.setTargetAtTime(speed<.009?0:(.006+speed*.010)*volume*toneLevel,t,.11);
   });
   [1,2,.52].forEach((ratio,i)=>nodes.mixOsc[i].frequency.setTargetAtTime((52+avg*185)*ratio+imbalance*6,t,.07));
@@ -102,6 +91,7 @@ export function createTripodAudio(onStatus=()=>{}){
    if(!enabled)stop();else enabledStatus();
    return enabled
   },
+  diagnostics:()=>({enabled,volume,profile,running:!!nodes&&ctx?.state==='running',voices:nodes?4:0,contextState:ctx?.state||'closed'}),
   start,update,stop,dispose:stop
  };
 }

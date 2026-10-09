@@ -105,6 +105,14 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(Color.rgb(7, 17, 27));
         getWindow().setNavigationBarColor(Color.rgb(7, 17, 27));
+        // API35 edge-to-edge bars are transparent; paint the inset background
+        // with the cockpit color so light system icons retain contrast.
+        getWindow().getDecorView().setBackgroundColor(Color.rgb(7, 17, 27));
+        if (Build.VERSION.SDK_INT >= 30 && getWindow().getInsetsController() != null) {
+            getWindow().getInsetsController().setSystemBarsAppearance(0,
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
+                android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        }
         WebViewAssetLoader assetLoader = new WebViewAssetLoader.Builder()
             .setDomain("appassets.androidplatform.net")
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -163,6 +171,7 @@ public class MainActivity extends Activity {
         };
         if (connectivity != null) connectivity.registerDefaultNetworkCallback(networkCallback);
         FrameLayout container = new FrameLayout(this);
+        container.setBackgroundColor(Color.rgb(7, 17, 27));
         container.addView(view, new FrameLayout.LayoutParams(-1, -1));
         setContentView(container, new ViewGroup.LayoutParams(-1, -1));
         // targetSdk 35 draws edge-to-edge: keep QR, touch targets and the keyboard
