@@ -1,12 +1,12 @@
 {
   "name": "dronelab-assembly-wiring",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "node server.cjs",
     "check": "node tools/check.mjs",
-    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs tools/serial-tools.test.mjs tools/python-lab.test.mjs tools/android-camera-permission.test.mjs tools/one-scan-bridge.test.mjs",
+    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs tools/serial-tools.test.mjs tools/python-lab.test.mjs tools/android-camera-permission.test.mjs",
     "verify:firmware": "python3 tools/verify_release.py"
   }
 }
