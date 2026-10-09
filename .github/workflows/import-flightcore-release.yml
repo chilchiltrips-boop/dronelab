@@ -1,12 +1,6 @@
 name: Import verified FlightCore release
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/import-flightcore-release.yml
-      - tools/verify_release.py
-      - firmware-catalog.json
 permissions:
   contents: write
 jobs:
