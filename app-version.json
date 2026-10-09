@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0+7",
+  "version": "1.4.1",
   "channel": "release",
   "previousStable": "f205cfcf405d6e2f9536ad5f4944d9496f2fb6bb",
   "features": [
@@ -10,7 +10,8 @@
     "Red disconnected status and tactile UI feedback",
     "Adaptive QR zoom/focus and Wi-Fi reset",
     "Optional No Camera: authenticated 6-digit code over online signaling",
-    "Camera Two-Way QR pairing still available without signaling service"
+    "Camera Two-Way QR pairing still available without signaling service",
+    "Fix six-digit code handshake premature auth timeout and show ICE diagnostics"
   ],
   "publishedAt": "2026-10-09",
   "buildCommit": "c5db6a911563"
