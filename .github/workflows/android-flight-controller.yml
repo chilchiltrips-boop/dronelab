@@ -3,6 +3,8 @@ on:
   push:
     branches: [feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'flight-input.js'
       - 'companion-flight.js'
       - 'companion.html'

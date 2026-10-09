@@ -15,6 +15,7 @@ function clearTouches(){
 }
 function skipIntro(){clearTimeout(splashTimer);$('flightSplash').hidden=true}
 function stopLocally(message='STOP • DISARMED'){
+ const applied=$('flightAppliedControls');if(applied)applied.textContent='STOP • AWAITING RECEIVER / DISCONNECTED';
  armed=false;halted=true;throttle=1000;clearTouches();sent.clear();ready=false;lastApplied=null;skipIntro();
  render();updateStatus(message);
 }
@@ -105,6 +106,7 @@ function onAck(a){
 function onTelemetry(packet){
  if(packet?.sessionId!==peer?.status().sessionId||!validApplied(packet.applied))return;
  const a=packet.applied;
+ $('flightAppliedControls').textContent='APPLIED • '+a.throttle+' µs '+a.mode.toUpperCase()+' • '+(a.armed?'VIRTUAL ARMED':'DISARMED')+' • '+(a.source||'web').toUpperCase()+' #'+a.seq;
  if(a.angles&&a.motors&&a.vertical){
   const finite=v=>Number.isFinite(v)?v:0;
   $('flightAppliedTelemetry').textContent='SIM • R '+finite(a.angles.roll).toFixed(1)+'° P '+finite(a.angles.pitch).toFixed(1)+'° Y '+finite(a.angles.yaw).toFixed(1)+'° • '+Math.round((a.motors.rpm||[]).reduce((v,n)=>v+finite(n),0)/4)+' RPM • z '+(finite(a.vertical.z)*100).toFixed(1)+' cm';

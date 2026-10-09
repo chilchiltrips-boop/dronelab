@@ -3,6 +3,8 @@ on:
   push:
     branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'tripod.html'
       - 'tripod.css'
       - 'js/tripod-physics.js'

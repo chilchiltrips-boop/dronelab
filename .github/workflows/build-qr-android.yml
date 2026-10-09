@@ -3,6 +3,8 @@ on:
   push:
     branches: [testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/release-signing.test.mjs'

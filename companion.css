@@ -123,3 +123,5 @@ html.cockpit-active>body>.app-top,html.cockpit-active>body>main,html.cockpit-act
 .mobile-connection .flight-options{position:static;max-width:none;margin:12px;box-shadow:none;display:grid;grid-template-columns:1fr 1fr;gap:9px;align-items:center}
 .mobile-connection .flight-options small{grid-column:1/-1}.mobile-connection .flight-options select{color:#e5fff9;background:#0d3443;border:1px solid #407285;border-radius:9px;padding:10px;min-height:44px}
 @media(max-height:400px){.flight-topbar{padding:3px 7px;gap:4px}.flight-brand{flex:1 1 85px}.flight-brand>span{font-size:9px}.flight-state{font-size:8px;padding:4px}.flight-topbar #flightOwner{max-width:100px}.flight-center{gap:3px}.flight-readouts{gap:4px}.flight-feedback,#flightAppliedTelemetry{font-size:8px}.flight-ring{height:82px;width:82px}.flight-cockpit select{max-width:100px}}
+
+.flight-applied-controls{font:8px/1.4 ui-monospace,monospace;color:#9af1d5;text-align:center;margin:0;max-width:290px}

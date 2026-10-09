@@ -10,13 +10,9 @@
 .qr-hero small{font-size:10px;font-weight:800;letter-spacing:.11em;color:#64e6bd}
 .qr-card{min-width:0;background:#0a1b28;border:1px solid #254a5c;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
 .qr-card>h3{font-size:15px;margin:0}.qr-card p{color:#a8bfcb;font-size:11px;line-height:1.5;margin:0}
-.qr-led-grid,.qr-settings-grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:12px;align-items:stretch}
-.qr-led-widget{display:grid;place-items:center;gap:8px;background:#071622;border:1px solid #29495a;border-radius:12px;padding:20px 12px}
-.qr-led-disc{width:120px;height:120px;border-radius:50%;border:7px solid #50606b;background:radial-gradient(circle at 37% 26%,#899ba9,#445465 60%,#273a46);box-shadow:inset 0 -7px 13px #0007;transition:background .15s,box-shadow .15s}
-.qr-led-disc.on{background:radial-gradient(circle at 33% 24%,#e4ffdc,#43ff93 45%,#178b4b 84%);border-color:#6ff3ab;box-shadow:0 0 35px #3eff7990,0 0 75px #24be6550}
+.qr-settings-grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:12px;align-items:stretch}
 .qr-actions{display:flex;gap:8px;flex-wrap:wrap}
 .qr-actions button{min-width:105px}
-.qr-led-note{border-radius:9px;background:#0c2e2a;color:#b8fae2;padding:9px;font-size:11px;min-height:31px}
 .qr-qr-wrap{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
 .qr-code-box{padding:9px;border:2px solid #60d5ad;border-radius:12px;background:#fff;display:inline-grid;place-items:center;min-height:280px;width:min(100%,340px)}
 .qr-code-box canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
@@ -30,10 +26,9 @@
 .qr-device-item{display:grid;gap:5px;padding:10px;border-radius:8px;background:#112738}
 .qr-device-item b{font-size:12px}.qr-device-item small{font-size:10px;color:#a6bfca}
 .qr-status-line{color:#99e6bf;font-size:11px;min-height:20px;overflow-wrap:anywhere}
-.qr-led-eventlog{min-height:110px;max-height:220px;overflow:auto;white-space:pre-wrap;background:#06141f;color:#a8eec8;padding:12px;border:1px solid #26465b;border-radius:8px;font:11px/1.5 ui-monospace,monospace}
 .qr-settings-grid select,.qr-settings-grid input{min-height:36px;color:#d7f4ec;background:#0b2634;border-radius:8px;border:1px solid #36586a;padding:7px}
-.qr-qr-wrap[hidden],.qr-card[hidden],[hidden].qr-led-note{display:none!important}
-@media(max-width:1050px){.qr-led-grid,.qr-settings-grid{grid-template-columns:1fr}.qr-header-controls{margin:6px 0 0}.qr-header-status{max-width:160px}}
+.qr-qr-wrap[hidden],.qr-card[hidden]{display:none!important}
+@media(max-width:1050px){.qr-settings-grid{grid-template-columns:1fr}.qr-header-controls{margin:6px 0 0}.qr-header-status{max-width:160px}}
 @media(max-width:700px){.qr-header-controls{width:100%;justify-content:flex-start}.qr-hero{padding:13px}.qr-card{padding:11px}.qr-pair-code{font-size:23px}.qr-code-box{min-height:230px;width:min(100%,300px)}}
 
 
@@ -49,11 +44,11 @@
 .qr-header-switch input:disabled+.qr-switch-track{opacity:.45}
 .qr-header-switch:has(input:disabled){opacity:.65;cursor:not-allowed}
 .qr-header-switch:has(input:focus-visible){outline:2px solid #9fffe0;outline-offset:2px}
-#tab-led button,#tab-settings button,.qr-header-controls button{transition:transform .12s,filter .12s,box-shadow .12s}
-#tab-led button:active:not(:disabled),#tab-settings button:active:not(:disabled),.qr-header-controls button:active:not(:disabled){transform:scale(.952);filter:brightness(1.25);box-shadow:0 0 0 3px #6ee7b744}
-#tab-led button:focus-visible,#tab-settings button:focus-visible,.qr-header-controls button:focus-visible{outline:2px solid #7fffd2;outline-offset:2px}
+ #connectionFlow button,.qr-header-controls button{transition:transform .12s,filter .12s,box-shadow .12s}
+ #connectionFlow button:active:not(:disabled),.qr-header-controls button:active:not(:disabled){transform:scale(.952);filter:brightness(1.25);box-shadow:0 0 0 3px #6ee7b744}
+ #connectionFlow button:focus-visible,.qr-header-controls button:focus-visible{outline:2px solid #7fffd2;outline-offset:2px}
 @media(max-width:720px){.qr-header-switch{font-size:10px;padding:5px 7px}.qr-header-switch>span:first-child{max-width:94px;white-space:normal}.qr-header-controls{gap:5px}}
-@media(prefers-reduced-motion:reduce){#tab-led button,#tab-settings button,.qr-header-controls button,.qr-switch-track,.qr-switch-track::before{transition:none}}
+@media(prefers-reduced-motion:reduce){ #connectionFlow button,.qr-header-controls button,.qr-switch-track,.qr-switch-track::before{transition:none}}
 
 /* Smart two-way QR • webcam scanning and advanced fallback */
 .qr-advanced{padding:10px;border-radius:9px;border:1px solid #295366;background:#091c2b;display:grid;gap:8px;font-size:12px}
@@ -115,8 +110,8 @@
 .qr-confirm-panel.confirmed .qr-confirm-button{background:#236e57!important;color:#d1ffed!important;border-color:#47c799!important}
 #pairConnectCodeBtn.is-ready:not(:disabled){color:white!important;background:linear-gradient(110deg,#078a74,#15ad6b)!important;box-shadow:0 0 0 3px #4bffab26}
 .qr-confirm-actions{align-items:stretch}
-#tab-settings button:not(:disabled):active{transform:scale(.95);filter:brightness(1.15)}
-#tab-settings button:focus-visible{outline:3px solid #99ffd8;outline-offset:2px}
+ #connectionFlow button:not(:disabled):active{transform:scale(.95);filter:brightness(1.15)}
+ #connectionFlow button:focus-visible{outline:3px solid #99ffd8;outline-offset:2px}
 @keyframes qr-confirm-attention{0%,100%{box-shadow:0 0 0 3px #47efaa44;transform:scale(1)}50%{box-shadow:0 0 0 7px #47efaa66;transform:scale(1.025)}}
 @keyframes qr-feedback-pop{0%{transform:scale(.96)}100%{transform:scale(1)}}
 @media(max-width:680px){.qr-priority-button{width:100%}.qr-confirm-button{width:100%}.qr-step1-qr{width:min(100%,330px)}}
@@ -154,7 +149,7 @@
 .qr-pair-flow .qr-pair-code{font-size:24px}
 .qr-pair-flow .qr-device-list{min-height:0}
 .qr-pair-flow .qr-confirm-panel{padding:12px}
-#tab-settings .qr-pair-methods .btn,#tab-settings .qr-actions .btn{min-height:44px}
+ #connectionFlow .qr-pair-methods .btn, #connectionFlow .qr-actions .btn{min-height:44px}
 .qr-pair-flow summary:focus-visible{outline:2px solid #99ffd8;outline-offset:2px;border-radius:12px}
 @media(max-width:700px){.qr-pair-flow summary{padding:11px 12px;gap:8px}.qr-step-body{padding:0 12px 12px}.qr-pair-flow summary strong{font-size:13px}.qr-pair-flow summary span{max-width:85px}.qr-next-button{width:100%}.qr-hero{gap:9px;flex-wrap:wrap}.qr-code-entry{flex-wrap:wrap}.qr-code-entry>*{flex:1 1 220px;min-width:0}}
 @media(max-height:500px) and (orientation:landscape){.qr-pair-flow .qr-step-one .qr-step1-qr{width:min(100%,330px)}.qr-hero{padding:12px}.qr-hero h2{font-size:20px}.qr-step2-frame{min-height:180px;max-height:270px}}
@@ -170,7 +165,7 @@
 /* Android WebRTC joystick receiver: embeds the existing safe Tripod page. */
 #tab-simcontrol{min-height:calc(100vh - 170px);padding:12px}
 #tab-simcontrol .qr-hero{margin-bottom:10px}
-.sim-remote-bar{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px;color:#b6e8dd;font-size:11px;flex-wrap:wrap}
-.sim-remote-bar .btn{flex-shrink:0}
+.training-control-bar{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px;color:#b6e8dd;font-size:11px;flex-wrap:wrap}
+.training-control-bar .btn{flex-shrink:0}
 #simRemoteFrame{display:block;width:100%;height:clamp(480px,74vh,920px);min-height:480px;background:#091b29;border:1px solid #285569;border-radius:14px}
 @media(max-width:700px){#simRemoteFrame{height:72vh;min-height:420px}#tab-simcontrol{padding:7px}}

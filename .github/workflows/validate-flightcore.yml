@@ -3,6 +3,8 @@ on:
   push:
     branches: [testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, main]
     paths:
+      - 'app-version.json'
+      - 'docs/flight-training/**'
       - index.html
       - lab.html
       - firmware.css

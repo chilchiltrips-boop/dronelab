@@ -5,7 +5,7 @@ import {loadAssemblyTripod} from './tripod-assembly-model.js';
 import {createTrainingReceiver} from './training-receiver.js';
 import {simulateResponse} from './tripod-experiments.js';
 import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,MOTOR_GEOMETRY,PLANT,startTuningPulse,resetIntegrators} from './tripod-physics.js';
-const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map();
+const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
 let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false;
 const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
 const receiver=createTrainingReceiver(s,{onChange:()=>{syncActions();renderStickKnobs()},onTimeout:()=>{audioStop();setStatus('CONTROL TIMEOUT • MOTORS OFF');window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason:'Control timeout'}}))}});
@@ -182,7 +182,7 @@ function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
- receiver.stop(reason);pressed.clear();pointers.clear();audioStop();setStatus('MOTORS OFF');syncActions();renderStickKnobs();drawUI();
+ receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();audioStop();setStatus('MOTORS OFF');syncActions();renderStickKnobs();drawUI();
  window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
 }
 function start(){
@@ -199,7 +199,7 @@ function syncActions(){
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning&&!s.running)audioStop();if(!lastRunning&&s.running&&audioUnlocked)audioStart();lastRunning=s.running;
 }
-function releaseAll(stopMotor=false){pressed.clear();pointers.clear();if(localInput())releaseInputs(s);renderStickKnobs();if(stopMotor)stop('Page lost focus')}
+function releaseAll(stopMotor=false){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();if(localInput())releaseInputs(s);renderStickKnobs();if(stopMotor)stop('Page lost focus')}
 function deadband(x){if(Math.abs(x)<.04)return 0;const linear=(Math.abs(x)-.04)/.96,exposed=.8*linear+.2*linear**3;return Math.sign(x)*exposed}
 function renderStickKnobs(){
  const remote=!localInput(),applied=receiver.snapshot().sticks;
@@ -228,6 +228,7 @@ function inputAxes(){
 }
 function bindStick(id,which){
  const pad=$(id);let pointer=null;
+ inputCancels.push(()=>{const id=pointer?.id;pointer=null;delete pad.dataset.pointer;pointers.delete(which);if(id!=null&&pad.hasPointerCapture(id))try{pad.releasePointerCapture(id)}catch{}});
  const update=(e,first=false)=>{
   if(!pointer||pointer.id!==e.pointerId)return;
   const d=first?{x:0,y:0}:window.ZebjusFlightMath.vector(e.clientX,e.clientY,pointer.cx,pointer.cy,pointer.radius);
@@ -455,8 +456,8 @@ function frame(time){
 /* The authenticated host and renderer share this receiver and one plant. */
 window.ZebjusTraining={
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
- setOwner:value=>{if(value!==receiver.owner){pressed.clear();pointers.clear()}receiver.setOwner(value)},
- stop:reason=>{receiver.stop(reason);pressed.clear();pointers.clear();audioStop();setStatus('MOTORS OFF • '+reason);drawUI()},
+ setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
+ stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();audioStop();setStatus('MOTORS OFF • '+reason);drawUI()},
  snapshot:receiver.snapshot,tick:receiver.tick,
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
