@@ -196,7 +196,7 @@ async function usbFlash(){
   written=true;stage('Flash','done');stage('Verify','done');stage('Reboot','active');progress(90,'Firmware written • requesting reset…');await loader.after('hard_reset');
   progress(94,'Reset requested • opening live USB Serial Monitor');log('USB scanner image written and transfer MD5 checked.');stage('Reboot','done');monitorPendingScan=true;await disconnectUsb(false);stage('Reconnect','active');
   await sleep(350);
-  try{await openSerialMonitor({allowPrompt:false});progress(96,'Serial opened • waiting for firmware output');badge('#fwOverallBadge','WAITING FOR SERIAL OUTPUT','warn')}
+  try{await openSerialMonitor({allowPrompt:false});if(monitorPendingScan){progress(96,'Serial opened • waiting for firmware output');badge('#fwOverallBadge','WAITING FOR SERIAL OUTPUT','warn')}else{progress(100,'Firmware running • serial output received');badge('#fwOverallBadge','SERIAL OUTPUT RECEIVED','good')}}
   catch(error){monitorPendingScan=false;progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);log('Use Open Serial Port to select the device, or press its RESET button if it is still in bootloader mode.')}
  }catch(e){
   if(written){log('USB bytes written but reset/Serial confirmation pending: '+e.message);monitorPendingScan=false;await disconnectUsb(false);progress(96,'Written • open Serial Monitor to verify boot');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn')}
