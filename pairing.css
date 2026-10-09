@@ -54,3 +54,11 @@
 #tab-led button:focus-visible,#tab-settings button:focus-visible,.qr-header-controls button:focus-visible{outline:2px solid #7fffd2;outline-offset:2px}
 @media(max-width:720px){.qr-header-switch{font-size:10px;padding:5px 7px}.qr-header-switch>span:first-child{max-width:94px;white-space:normal}.qr-header-controls{gap:5px}}
 @media(prefers-reduced-motion:reduce){#tab-led button,#tab-settings button,.qr-header-controls button,.qr-switch-track,.qr-switch-track::before{transition:none}}
+
+/* Smart two-way QR • webcam scanning and advanced fallback */
+.qr-advanced{padding:10px;border-radius:9px;border:1px solid #295366;background:#091c2b;display:grid;gap:8px;font-size:12px}
+.qr-advanced summary{cursor:pointer;color:#8fe1ce;font-weight:800}
+.qr-advanced[open]{gap:10px}
+.qr-advanced .qr-data{margin-top:8px}
+#pairScanVideo{border:2px solid #319a7d;min-height:180px;max-height:340px;width:100%;object-fit:contain}
+#pairAnswerState{overflow-wrap:anywhere}
