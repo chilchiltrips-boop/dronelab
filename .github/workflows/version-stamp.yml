@@ -1,0 +1,46 @@
+name: Stamp DroneLab WebApp Version
+on:
+  push:
+    branches: [testing/two-way-qr-pairing]
+    paths-ignore:
+      - 'app-version.json'
+      - 'mobile-apk/**'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: qr-version-stamp
+  cancel-in-progress: false
+jobs:
+  stamp:
+    if: ${{ !contains(github.event.head_commit.message, '[version-stamp]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          ref: testing/two-way-qr-pairing
+      - name: Increase beta number for each WebApp source update
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,json
+          f=Path('app-version.json')
+          meta=json.loads(f.read_text())
+          meta['version']='1.1.0-qr-beta.'+os.environ['BUILD_NUMBER']
+          meta['buildCommit']=os.environ['SOURCE_SHA'][:12]
+          meta['channel']='testing'
+          f.write_text(json.dumps(meta,indent=2)+'\n')
+          print('WebApp version:',meta['version'],'source:',meta['buildCommit'])
+          PY
+      - name: Save version stamp only to testing branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app-version.json
+          git diff --cached --quiet || git commit -m 'Stamp testing WebApp version [version-stamp]'
+          git pull --rebase origin testing/two-way-qr-pairing
+          git push origin HEAD:testing/two-way-qr-pairing
