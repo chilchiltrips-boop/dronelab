@@ -72,7 +72,14 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          mkdir -p /tmp/zebjus-release
+          cp mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk mobile-apk/SHA256SUMS.txt /tmp/zebjus-release/
+          git fetch origin "$GITHUB_REF_NAME"
+          git checkout -B ci-apk-release "origin/$GITHUB_REF_NAME"
+          mkdir -p mobile-apk
+          cp /tmp/zebjus-release/* mobile-apk/
           git add mobile-apk/ZEBJUS_DroneLab_QR_CODE_V1_4_1_FIX.apk mobile-apk/SHA256SUMS.txt
-          git diff --cached --quiet || git commit -m 'Publish V1.4.1 robust code pairing Android APK [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin HEAD:"$GITHUB_REF_NAME"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publish V1.4.1 robust code pairing Android APK [skip ci]'
+            git push origin HEAD:"$GITHUB_REF_NAME"
+          fi
