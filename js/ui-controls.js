@@ -32,7 +32,7 @@ export function initControls(ctx){
   ctx.stopMotorTest=()=>{ctx.wireMotorRun=false;ctx.destroyMotorAudio('wire');
     $('#wireRunBtn').textContent='RUN MOTOR TEST';ctx.updateMotorTestUI();};
   ctx.setActiveTab=name=>{
-    if(!['assembly','wiring','python','firmware','led','settings'].includes(name))return;
+    if(!['assembly','wiring','python','firmware','led','settings','simcontrol'].includes(name))return;
     if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
