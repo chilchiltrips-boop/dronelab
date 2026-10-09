@@ -1,5 +1,5 @@
 import {createI2CBridge} from './usb-i2c-bridge.js';
-const $=id=>document.getElementById(id),SOURCE='/zebjus-drone-simulator-lab/',KEY='dronelab-python-project-v1';
+const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1';
 const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Change print() to your own custom message.\nwhile True:\n    i2c_scan_result = await i2c_scan()\n    print('I2C scan result =', i2c_scan_result['addresses'])\n    print('Total devices =', i2c_scan_result['total'])\n    await asyncio.sleep(0.1)\n","custom":"import asyncio\nfrom zebjus import i2c_scan\n\nwhile True:\n    result = await i2c_scan()\n    device_list = ', '.join(result['addresses']) or 'No devices'\n    print('My custom message: Found', result['total'], 'I2C devices')\n    print('Addresses ->', device_list)\n    await asyncio.sleep(0.1)\n"};
 const bridge=createI2CBridge();
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false;
