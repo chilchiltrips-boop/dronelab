@@ -2,11 +2,11 @@
   "schema": 2,
   "product": "ZEBJUS_FLIGHTCORE",
   "version": "18.3.83",
-  "defaultBoardId": "ZFC-A1",
+  "defaultBoardId": "ZFC-A2",
   "boards": [
     {
       "id": "ZFC-A1",
-      "name": "ZEBJUS FlightCore A1 \u2022 ESP32-C3",
+      "name": "Aerion FC A1 • ESP32-C3 Super Mini",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
@@ -51,7 +51,7 @@
     },
     {
       "id": "ZFC-A2",
-      "name": "ZEBJUS FlightCore A2 \u2022 ZEBJUS Aerion F1",
+      "name": "Aerion FC A2 • Seeed XIAO ESP32-C6",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
