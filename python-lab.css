@@ -1,0 +1,46 @@
+/* ZEBJUS Python Lab: adapted from the Aerion Monaco/Pyodide IDE layout. */
+.python-lab-page{max-width:1680px;margin:auto}
+.python-lab-page .py-hero{display:flex;justify-content:space-between;align-items:center;gap:15px;padding:12px 15px;background:linear-gradient(115deg,#0e2632,#0a1c29);border:1px solid var(--line);border-radius:13px;margin-bottom:10px}
+.python-lab-page .py-hero h2{font-size:21px;margin:3px 0 5px}
+.python-lab-page .py-hero p{color:var(--muted);font-size:12px;line-height:1.5;margin:0}
+.python-lab-page .py-hero-state{display:flex;gap:8px;flex-wrap:wrap}
+.python-lab-page .python-ide-layout{display:grid;grid-template-columns:minmax(190px,235px) minmax(330px,1fr) minmax(285px,.73fr);gap:10px;min-height:calc(100vh - 220px)}
+.python-lab-page .python-project-card,.python-lab-page .python-terminal-card{border:1px solid var(--line);background:linear-gradient(180deg,#0a1724,#07131e);border-radius:12px;overflow:hidden;box-shadow:none}
+.python-lab-page .python-project-card{padding:11px;display:flex;flex-direction:column;gap:9px}
+.python-lab-page .python-pane-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.python-lab-page .python-pane-head small{display:block;color:var(--green);font-weight:800;font-size:9px;letter-spacing:.1em}
+.python-lab-page .python-pane-head b{font-size:12px}
+.python-lab-page .python-file-list{display:grid;align-content:start;gap:4px;min-height:50px;max-height:210px;overflow:auto}
+.python-lab-page .python-file-entry{background:rgba(83,129,166,.06);border:1px solid transparent;border-radius:7px;color:#b4c8d7;text-align:left;padding:9px 10px;font:12px ui-monospace,monospace;cursor:pointer;overflow-wrap:anywhere}
+.python-lab-page .python-file-entry.active{background:#11332a;border-color:#2c8a69;color:#b7ffdc}
+.python-lab-page .python-project-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.python-lab-page .python-project-actions .btn{font-size:11px;padding:6px;min-width:0}
+.python-lab-page .py-samples{padding-top:10px;border-top:1px solid var(--line);display:grid;gap:7px}
+.python-lab-page .py-samples>b,.python-lab-page .py-usb-panel>b{font-size:10px;letter-spacing:.08em;color:var(--green)}
+.python-lab-page .py-sample{background:#142536;border:1px solid #294559;border-radius:8px;color:#c6e3ee;text-align:left;padding:9px;font-size:11px;cursor:pointer}
+.python-lab-page .py-sample:hover{background:#1c394c}
+.python-lab-page .py-samples p,.python-lab-page .py-usb-panel p{font-size:10px;color:var(--muted);line-height:1.5;margin:0}
+.python-lab-page .py-usb-panel{margin-top:auto;border-top:1px solid var(--line);padding-top:12px;display:grid;gap:9px}
+.python-lab-page .py-usb-panel>span{font-size:10px;color:var(--muted)}
+.python-lab-page .py-device-pill{border:1px solid #295a54;border-radius:8px;background:#0c2525;padding:8px;font:12px ui-monospace,monospace;color:#baffdd;overflow-wrap:anywhere}
+.python-lab-page .python-editor-card{display:flex;flex-direction:column;min-height:550px;box-shadow:none;border-radius:12px;overflow:hidden}
+.python-lab-page .python-editor-card>.section-toolbar,.python-lab-page .python-terminal-card>.section-toolbar{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;min-height:58px;padding:9px 12px}
+.python-lab-page .python-editor-card>.section-toolbar b,.python-lab-page .python-terminal-card>.section-toolbar b{display:block;font-size:12px}
+.python-lab-page .python-editor-card>.section-toolbar span,.python-lab-page .python-terminal-card>.section-toolbar span{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.python-lab-page .python-toolbar-actions,.python-lab-page .terminal-toolbar-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.python-lab-page .python-editor-shell{position:relative;flex:1;min-height:490px;background:#06101a;border-top:1px solid var(--line);overflow:hidden}
+.python-lab-page #pythonMonaco,.python-lab-page #pythonEditor{position:absolute;inset:0;width:100%;height:100%}
+.python-lab-page #pythonMonaco{display:none}
+.python-lab-page #pythonEditor{resize:none;padding:13px 16px;background:#06101a;color:#dcf3f3;border:0;outline:none;font:13px/1.64 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:4}
+.python-lab-page .python-editor-footer{display:flex;gap:10px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--line);color:var(--muted);font-size:10px}
+.python-lab-page .python-terminal-card{display:flex;flex-direction:column;min-height:550px}
+.python-lab-page .py-runtime-notes{display:grid;gap:3px;border-bottom:1px solid var(--line);padding:9px 12px;color:#b4cede;font-size:10px}
+.python-lab-page #pythonTerminal{flex:1;min-height:330px;max-height:650px;margin:0;padding:12px;border:0;background:#031219;color:#c3f1d4;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;user-select:text}
+.python-lab-page .py-terminal-status{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#a7bdca;padding:8px 12px;border-top:1px solid var(--line)}
+.python-lab-page .py-terminal-status b{color:var(--green)}
+.python-lab-page .py-help-card{padding:12px;display:grid;gap:8px;border-top:1px solid var(--line);background:#0a1e28}
+.python-lab-page .py-help-card b{font-size:11px;color:#aeefd3}
+.python-lab-page .py-help-card code{display:block;overflow-wrap:anywhere;border-radius:4px;color:#e6eee5;font:11px/1.4 ui-monospace,monospace}
+.python-lab-page .py-help-card p{font-size:10px;color:var(--muted);margin:0;line-height:1.5}
+@media(max-width:1250px){.python-lab-page .python-ide-layout{grid-template-columns:215px minmax(0,1fr)}.python-lab-page .python-terminal-card{grid-column:2;min-height:325px}.python-lab-page #pythonTerminal{min-height:230px;max-height:320px}.python-lab-page .python-project-card{grid-row:1 / span 2}}
+@media(max-width:760px){.python-lab-page{padding:8px}.python-lab-page .python-ide-layout{display:flex;flex-direction:column}.python-lab-page .python-project-card{min-height:auto}.python-lab-page .py-usb-panel{margin-top:4px}.python-lab-page .python-file-list{max-height:140px}.python-lab-page .python-editor-card{min-height:480px}.python-lab-page .python-editor-shell{min-height:390px}.python-lab-page .python-terminal-card{min-height:260px}.python-lab-page .py-hero{flex-direction:column;align-items:flex-start}.python-lab-page #pythonTerminal{min-height:230px;max-height:380px}}
