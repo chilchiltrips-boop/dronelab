@@ -14,6 +14,22 @@ try{
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
  if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
  if(await page.locator('#pythonEditor').isVisible())throw Error('Textarea fallback is covering Monaco');
+ await page.locator('#pythonMonaco .monaco-editor').click({position:{x:130,y:88}});
+ await page.keyboard.press('ControlOrMeta+Space');
+ await page.locator('.suggest-widget').first().waitFor({state:'visible',timeout:10000});
+ await page.keyboard.press('Escape');
+ await page.keyboard.press('ControlOrMeta+End');
+ await page.keyboard.insertText('\nprint("UNDO_REDO_TEST")');
+ const textAfterEdit=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ if(!textAfterEdit.includes('UNDO_REDO_TEST'))throw Error('Monaco typing did not reach editor');
+ await page.locator('#pythonUndoFileBtn').click();
+ const textAfterUndo=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ if(textAfterUndo===textAfterEdit)throw Error('Undo toolbar did not change Python code');
+ await page.locator('#pythonRedoFileBtn').click();
+ const textAfterRedo=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());
+ if(textAfterRedo!==textAfterEdit)throw Error('Redo toolbar did not restore Python code');
+ page.once('dialog',dialog=>dialog.accept());
+
  await page.locator('#pythonQuickHardware').selectOption('basic');
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('Finished! Total = 15'),null,{timeout:90000});
@@ -64,7 +80,7 @@ try{
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
- console.log('PASS Python Lab: Monaco smart editor, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
+ console.log('PASS Python Lab: Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
 }catch(error){
  console.error('BROWSER SMOKE FAILED:',error.stack||error);
