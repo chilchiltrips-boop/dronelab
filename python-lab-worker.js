@@ -13,7 +13,8 @@ function rpc(method,args={}){
 }
 self.zebjusI2cBridge={
  i2cScan:(timeout)=>rpc('i2c_scan',{timeout:Number(timeout)||12000}),
- latestScan:()=>rpc('latest_scan')
+ latestScan:()=>rpc('latest_scan'),
+ emitImage:(base64,title='Python Plot')=>send('image',{base64:String(base64),title:String(title)})
 };
 const BOOTSTRAP="import sys, types, json, asyncio\nfrom js import zebjusI2cBridge as _zebjus_usb\n_zebjus = types.ModuleType('zebjus')\nasync def i2c_scan(timeout=12000):\n    \"\"\"Await next complete scan received over USB Serial.\n    Return {'addresses':['0x68','0x77'], 'total':2, 'timestamp':...}.\n    \"\"\"\n    response = await _zebjus_usb.i2cScan(int(timeout))\n    return json.loads(str(response))\nasync def latest_i2c_scan():\n    \"\"\"Return last scan or None without waiting.\"\"\"\n    response = await _zebjus_usb.latestScan()\n    return json.loads(str(response))\n_zebjus.i2c_scan=i2c_scan\n_zebjus.latest_i2c_scan=latest_i2c_scan\nsys.modules['zebjus']=_zebjus\n";
 async function prepare(){
@@ -42,6 +43,11 @@ async function run(msg){
   const source=String(msg.code||'');
   send('status',{text:'Checking Python libraries…'});
   await runtime.loadPackagesFromImports(source);
+  if(/\b(?:matplotlib|plt\.show)\b/.test(source)){
+   send('status',{text:'Preparing Matplotlib plot output…'});
+   await runtime.loadPackage('matplotlib');
+   await runtime.runPythonAsync("import matplotlib\nmatplotlib.use(\"Agg\",force=True)\nimport matplotlib.pyplot as plt\nfrom io import BytesIO\nimport base64\nfrom js import zebjusI2cBridge as _zebjus_bridge\ndef _zebjus_show_plot(*args,**kwargs):\n    for number in plt.get_fignums():\n        fig=plt.figure(number)\n        output=BytesIO()\n        fig.savefig(output,format=\"png\",dpi=115,bbox_inches=\"tight\")\n        _zebjus_bridge.emitImage(base64.b64encode(output.getvalue()).decode(\"ascii\"),\"Matplotlib Python Plot\")\n        plt.close(fig)\nplt.show=_zebjus_show_plot\n",{filename:'matplotlib_browser_bridge.py'});
+  }
   send('started',{filename:msg.filename||'main.py'});
   const result=await runtime.runPythonAsync(source,{filename:msg.filename||'main.py'});
   if(result!==undefined&&result!==null)send('stdout',{text:'=> '+String(result)+'\n'});
