@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.cjs",
     "check": "node tools/check.mjs",
-    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs",
+    "test": "node --test tools/project.test.mjs tools/flightcore.test.mjs tools/serial-tools.test.mjs",
     "verify:firmware": "python3 tools/verify_release.py"
   }
 }
