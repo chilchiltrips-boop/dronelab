@@ -1,0 +1,34 @@
+name: Verify DroneLab FlightCore Firmware Center
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - lab.html
+      - firmware.css
+      - firmware-updater.js
+      - firmware-catalog.json
+      - firmware-latest.json
+      - FlightCore_Firmware/**
+      - vendor/esptool/bundle.mjs
+      - sw.js
+      - package.json
+      - tools/flightcore.test.mjs
+      - tools/verify_release.py
+      - tools/check.mjs
+      - .github/workflows/validate-flightcore.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: python3 tools/verify_release.py
+      - run: npm run check
+      - run: node --check firmware-updater.js
