@@ -26,8 +26,25 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
    if(t%15===0)samples.push({t:s.time,target,actual,integral:s.memory[bank].i,output:s.memory[bank].output,motors:[...s.motors]});
   }
   const late=samples.slice(-35),lateError=late.reduce((total,x)=>total+Math.abs(x.target-x.actual),0)/late.length;
+  // Rise time is 10→90% of initial commanded pulse, not a hand-authored visual.
+  const active=scenario==='pulse'?samples.filter(x=>Math.abs(x.target)>1):[];
+  const commandPeak=Math.max(0,...active.map(x=>Math.abs(x.target)));
+  const startTime=active.length?active[0].t:0;
+  const rise10=active.find(x=>Math.abs(x.actual)>=commandPeak*.1)?.t;
+  const rise90=active.find(x=>Math.abs(x.actual)>=commandPeak*.9)?.t;
+  const riseTime=Number.isFinite(rise10)&&Number.isFinite(rise90)?Math.max(0,rise90-rise10):null;
+  // Settling requires all remaining samples to remain within 5% of the command.
+  const after=scenario==='pulse'?samples.filter(x=>x.t>startTime+.56):[];
+  const settleTolerance=Math.max(.5,commandPeak*.05);
+  let settlingTime=null;
+  for(let i=0;i<after.length;i++){
+   if(after.slice(i).every(x=>Math.abs(x.actual-x.target)<=settleTolerance)){
+    settlingTime=after[i].t-(startTime+.56);break;
+   }
+  }
+  const overshootPct=commandPeak>1?100*Math.max(0,peakAbs-commandPeak)/commandPeak:0;
   return {value,bank,gain,scenario,mode:flightMode,axis,samples,
-   metrics:{peak:peakAbs,peakRate,rms:Math.sqrt(errorSum/steps),lateError,overshoot,
+   metrics:{peak:peakAbs,peakRate,rms:Math.sqrt(errorSum/steps),lateError,overshoot,overshootPct,riseTime,settlingTime,
     motorActivity:Math.sqrt(motorActivity/steps),reversals,saturationPct:100*saturation/steps,
     finalAngle:s[axis]??0,integral:s.memory[bank].i,finalRate:s[axis+'Rate']??0}};
  });
