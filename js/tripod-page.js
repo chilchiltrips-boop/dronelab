@@ -175,7 +175,9 @@ function inputAxes(){
  const keyYaw=(pressed.has('d')?1:0)-(pressed.has('a')?1:0);
  s.cmdRoll=clamp((right?deadband(right.x):0)+keyRoll,-1,1);
  s.cmdPitch=clamp((right?-deadband(right.y):0)+keyPitch,-1,1);
- s.cmdYaw=clamp((left?deadband(left.x):0)+keyYaw,-1,1);
+ // Reversed yaw control polarity for BOTH left-stick X and A/D keys.
+ // Leave body-axis gyro, yaw PID feedback, motor mixer, and reported attitude unchanged.
+ s.cmdYaw=clamp(-((left?deadband(left.x):0)+keyYaw),-1,1);
 }
 function bindStick(id,which){
  const pad=$(id);

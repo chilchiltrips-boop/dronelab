@@ -30,6 +30,23 @@ try{
  await until(()=>document.querySelector('#tpThrottleInput')?.textContent.includes('1075'));
  await page.locator('#tpMode').selectOption('acro');
  if(!(await text('tpReadoutMode')).includes('ACRO'))throw Error('ACRO mode not selected');
+ // Reverse yaw at user input only; both keyboard and joystick must agree.
+ await page.locator('body').click({position:{x:30,y:170}}); // blur the flight-mode select
+ await page.keyboard.down('d');
+ await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW -1.00'));
+ await page.keyboard.up('d');
+ await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
+ await page.keyboard.down('a');
+ await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 1.00'));
+ await page.keyboard.up('a');
+ await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
+ await page.locator('#tpLeftPad').scrollIntoViewIfNeeded();
+ const yawPad=await page.locator('#tpLeftPad').boundingBox();
+ await page.mouse.move(yawPad.x+yawPad.width*.82,yawPad.y+yawPad.height*.50);
+ await page.mouse.down();
+ await until(()=>parseFloat(document.querySelector('#tpLeftReadout')?.textContent.slice(4))<-.5);
+ await page.mouse.up();
+ await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW 0.00'));
  const bounds=await page.locator('#tpRightPad').boundingBox();
  await page.mouse.move(bounds.x+bounds.width*.82,bounds.y+bounds.height*.5);
  await page.mouse.down();await page.waitForTimeout(150);await page.mouse.up();
