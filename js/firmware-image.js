@@ -57,3 +57,10 @@ export function inspectUsbLayout(boot,table,board){
 export function postBootVerified({reported,expectedVersion,boardId,deviceId,selectedDeviceId}){
   return !!reported&&reported.boardId===boardId&&!!selectedDeviceId&&(!deviceId||deviceId===selectedDeviceId)&&reported.firmware===expectedVersion;
 }
+export function usbConnectionError(error){
+  const name=error?.name||'',message=String(error?.message||'');
+  if(name==='NotFoundError')return Error('No USB serial port was selected. Connect the board with a data cable and try again.');
+  if(name==='NotAllowedError'||name==='SecurityError')return Error('Web Serial permission was denied. Use desktop Chrome/Edge on HTTPS or localhost and grant this port.');
+  if(['NetworkError','InvalidStateError'].includes(name)||/busy|already open|in use|access denied/i.test(message))return Error('USB port is busy. Close Serial Monitor or another flasher, then hold BOOT, tap RESET and retry at 115200.');
+  return Error(message||'USB bootloader connection failed.');
+}

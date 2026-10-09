@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {imageType,inspectImage,inspectUsbLayout,ensureOtaReady,usbWritePlan,postBootVerified,sha256,APP_OFFSET,OTA_SLOT,FLASH_BYTES} from '../js/firmware-image.js';
+import {imageType,inspectImage,inspectUsbLayout,usbConnectionError,ensureOtaReady,usbWritePlan,postBootVerified,sha256,APP_OFFSET,OTA_SLOT,FLASH_BYTES} from '../js/firmware-image.js';
 import {KitApClient} from '../js/kit-ap.js';
 const catalog=JSON.parse(fs.readFileSync(new URL('../firmware-catalog.json',import.meta.url)));
 const [a1,a2]=catalog.boards;
@@ -13,3 +13,5 @@ test('mock post-boot readback never equates write with boot',()=>{const reported
 test('mock SHA mismatch detected against catalog digest',async()=>{const b=app(a2);assert.notEqual(await sha256(b),a2.latest.app.sha256);b[500]^=1;assert.notEqual(await sha256(b),a2.latest.app.sha256)});
 
 test('mock USB readback accepts only matching bootloader and dual OTA partitions',()=>{const f=factory(a2),boot=f.slice(0,4096),table=f.slice(0x8000,0x9000);assert(inspectUsbLayout(boot,table,a2));assert.throws(()=>inspectUsbLayout(boot,table,a1),/bootloader/);table[0]=0;assert.throws(()=>inspectUsbLayout(boot,table,a2),/partition table/)});
+
+test('mock USB permission and port conflict messages',()=>{assert.match(usbConnectionError({name:'NotFoundError'}).message,/No USB serial port/);assert.match(usbConnectionError({name:'SecurityError'}).message,/permission/);assert.match(usbConnectionError({name:'NetworkError'}).message,/Serial Monitor/)});

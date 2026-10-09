@@ -1,4 +1,4 @@
-import {inspectImage,imageType,inspectUsbLayout,ensureOtaReady,usbWritePlan,postBootVerified,sha256,md5Hex,FLASH_BYTES} from './firmware-image.js';
+import {inspectImage,imageType,inspectUsbLayout,ensureOtaReady,usbWritePlan,usbConnectionError,postBootVerified,sha256,md5Hex,FLASH_BYTES} from './firmware-image.js';
 import {KitApClient} from './kit-ap.js';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const formatBytes=n=>`${Number(n||0).toLocaleString()} bytes`;
@@ -50,7 +50,7 @@ export function initFirmwarePage(){
   async function disconnectUsb(){try{await transport?.disconnect()}catch{}usb=null;transport=null;usbBoard=null;usbFlashBytes=0;usbPortLabel='';usbLayoutReady=false;render()}
   async function connectUsb(){let needImage=false;await run(async()=>{
     if(!globalThis.isSecureContext||!navigator.serial)throw Error('Web Serial requires desktop Chrome/Edge on HTTPS or localhost. Android WebView USB is unsupported.');
-    const port=await navigator.serial.requestPort();await disconnectUsb();await loadCatalog();const portInfo=port.getInfo?.()||{},hex=n=>Number(n).toString(16).padStart(4,'0');usbPortLabel=portInfo.usbVendorId?`USB ${hex(portInfo.usbVendorId)}:${hex(portInfo.usbProductId||0)}`:'Serial port granted';const module=await import('../vendor/esptool/bundle.mjs'),chosen=Number($('fwBaud').value),rates=chosen===115200?[115200]:[chosen,115200];let last;
+    let port;try{port=await navigator.serial.requestPort()}catch(e){throw usbConnectionError(e)}await disconnectUsb();await loadCatalog();const portInfo=port.getInfo?.()||{},hex=n=>Number(n).toString(16).padStart(4,'0');usbPortLabel=portInfo.usbVendorId?`USB ${hex(portInfo.usbVendorId)}:${hex(portInfo.usbProductId||0)}`:'Serial port granted';const module=await import('../vendor/esptool/bundle.mjs'),chosen=Number($('fwBaud').value),rates=chosen===115200?[115200]:[chosen,115200];let last;
     for(const rate of rates){try{transport=new module.Transport(port,true);usb=new module.ESPLoader({transport,baudrate:rate,terminal:{clean(){},writeLine(x){if(x?.trim())log('[BOOT] '+x.trim())},write(x){if(x?.trim())log('[BOOT] '+x.trim())}}});compatibility(usb);const signature=await usb.main('default_reset');
       const chip=usb.chip?.IMAGE_CHIP_ID,b=catalog?.boards.find(b=>b.imageChipIds.includes(chip));if(!b)throw Error(`Unknown USB chip ${chip} (${signature}); no erase or write started.`);
       if(chip===13)usb.chip.SPI_REG_BASE=0x60003000;
@@ -63,7 +63,7 @@ export function initFirmwarePage(){
       if(!image){$('fwKind').value=usbLayoutReady?'app':'factory';needImage=true}
       $('fwBaud').value=String(rate);badge('USB READY','good');progress(0,'Bootloader and flash capacity verified','Prepare');log(`USB ${signature} · chip ID ${chip} · flash ID 0x${id.toString(16)} · ${formatBytes(capacity)}`);render();return;
     }catch(e){last=e;await disconnectUsb();if(rate!==115200)log(`USB handshake/probe at ${rate} failed; retrying 115200.`)}}
-    throw Error((last?.message||'USB connect failed')+' Close Serial Monitor, then hold BOOT, tap RESET, release BOOT and reconnect.');
+    throw usbConnectionError(last);
   });if(needImage)await autoLoad()}
   function confirmTarget(kind,erase=false){const line=`${image.name}\n${image.board.name} [${image.boardId}]\n${formatBytes(image.bytes.length)} · SHA-256 ${image.hash}\nTarget: ${kind}\nDevice ID: ${kit.deviceId||'USB bootloader (AP not connected)'}`;
     const warning=erase?'ERASE ALL FLASH. Saved settings and calibration may be cleared.':image.kind==='factory'?'Complete Factory/Merged image replaces bootloader, partitions and app; saved settings and calibration may be cleared.':'Remove propellers and use stable power.';return confirm(`Confirm firmware target and image:\n\n${line}\n\n${warning}\n\nContinue?`)}
