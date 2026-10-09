@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-const root=new URL('../',import.meta.url);
-const catalog=JSON.parse(readFileSync(new URL('../firmware-catalog.json',root),'utf8'));
-const updater=readFileSync(new URL('../firmware-updater.js',root),'utf8');
-const sketch=readFileSync(new URL('../FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino',root),'utf8');
-const page=readFileSync(new URL('../index.html',root),'utf8');
-const css=readFileSync(new URL('../firmware.css',root),'utf8');
+const root=new URL('./',import.meta.url);
+const catalog=JSON.parse(readFileSync(new URL('./firmware-catalog.json',root),'utf8'));
+const updater=readFileSync(new URL('./firmware-updater.js',root),'utf8');
+const sketch=readFileSync(new URL('./FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino',root),'utf8');
+const page=readFileSync(new URL('./index.html',root),'utf8');
+const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 test('Only minimal I2C Scanner source is present in active release',()=>{
  assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.equal(catalog.version,'1.0.1');
@@ -30,7 +30,7 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
   assert.equal(a.size,0);assert.equal(f.size,0);
   return;
  }
- const ap=new URL('../FlightCore_Firmware/'+a.file,root),fa=new URL('../FlightCore_Firmware/'+f.file,root);
+ const ap=new URL('./FlightCore_Firmware/'+a.file,root),fa=new URL('./FlightCore_Firmware/'+f.file,root);
  assert.ok(existsSync(ap)&&existsSync(fa));
  const app=readFileSync(ap),factory=readFileSync(fa);
  assert.equal(app[0],0xe9);assert.equal(factory[0],0xe9);
