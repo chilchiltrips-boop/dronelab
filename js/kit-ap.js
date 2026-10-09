@@ -13,7 +13,7 @@ export async function rawKit(path,data=null,timeout=4000,method=data?'POST':'GET
     const body=await response.json().catch(()=>({}));
     if(!response.ok)throw Object.assign(Error(body.message||body.error||`Kit HTTP ${response.status}`),{status:response.status});
     return body;
-  }catch(e){if(e.name==='AbortError')throw Error('Kit AP request timed out. Check Wi-Fi and power.');throw e}
+  }catch(e){if(e.name==='AbortError')throw Error('Kit AP request timed out. Check Wi-Fi and power.');if(e instanceof TypeError)throw Error('Kit AP at 192.168.4.1 is unreachable. Join its Wi-Fi, allow Local Network Access in Chrome/Edge, or open this project on localhost while connected to the AP.');throw e}
   finally{clearTimeout(timer)}
 }
 export class KitApClient{
