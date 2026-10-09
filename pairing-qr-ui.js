@@ -13,7 +13,12 @@ function draw(canvas,text){
  for(let r=0;r<count;r++)for(let c=0;c<count;c++)if(code.isDark(r,c))ctx.fillRect((c+quiet)*modulePx,(r+quiet)*modulePx,modulePx,modulePx);
  return count;
 }
-let currentScanner=null,scannerEpoch=0;
+let currentScanner=null,scannerEpoch=0,activeTrack=null,torchEnabled=false;
+async function torch(enabled){
+ const track=activeTrack;if(!track||track.readyState!=='live'||!track.getCapabilities?.().torch)return false;
+ try{await track.applyConstraints({advanced:[{torch:!!enabled}]});torchEnabled=!!enabled;return true}catch{return false}
+}
+function canTorch(){return !!(activeTrack&&activeTrack.readyState==='live'&&activeTrack.getCapabilities?.().torch)}
 async function scan({video,canvas,onData,onError,onStatus}){
  // Cancels pending camera permission dialogs as well as active streams.
  stop();
@@ -24,8 +29,10 @@ async function scan({video,canvas,onData,onError,onStatus}){
  });
  // A camera permission prompt may resolve after Step 2 was cancelled.
  if(epoch!==scannerEpoch){stream.getTracks().forEach(t=>t.stop());throw Error('Camera start cancelled')}
- let running=true,raf=0,lastDecode=0,frame=0,zoomBusy=false,lastZoom=0,zoomIndex=0,reported='';
+ let running=true,raf=0,lastDecode=0,frame=0,zoomBusy=false,lastZoom=0,zoomIndex=0,reported='',nativeBusy=false,lastNative=0;
+ const nativeDetector=typeof root.BarcodeDetector==='function'?(()=>{try{return new root.BarcodeDetector({formats:['qr_code']})}catch{return null}})():null;
  const track=stream.getVideoTracks()[0],caps=track?.getCapabilities?.()||{},zoom=caps.zoom;
+ activeTrack=track;torchEnabled=false;
  const zoomSupported=zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min;
  const zoomValues=zoomSupported?[zoom.min,Math.min(zoom.max,Math.max(zoom.min,1.35)),Math.min(zoom.max,Math.max(zoom.min,1.75)),zoom.min]:[];
  const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -35,6 +42,7 @@ async function scan({video,canvas,onData,onError,onStatus}){
   running=false;cancelAnimationFrame(raf);
   try{video.pause()}catch{}
   stream.getTracks().forEach(t=>t.stop());
+  if(activeTrack===track){activeTrack=null;torchEnabled=false}
   if(video.srcObject===stream)video.srcObject=null;
   video.hidden=true;
   if(currentScanner?.stop===stopThis)currentScanner=null;
@@ -44,8 +52,10 @@ async function scan({video,canvas,onData,onError,onStatus}){
   video.srcObject=stream;video.hidden=false;
   await video.play();
   if(!running||epoch!==scannerEpoch){stopThis();throw Error('Camera start cancelled')}
-  if(caps.focusMode?.includes('continuous'))
-   track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+  // Focus/exposure/white balance use hardware-managed continuous modes where supported.
+  for(const [key,val] of [['focusMode','continuous'],['exposureMode','continuous'],['whiteBalanceMode','continuous']]){
+   if(caps[key]?.includes(val))track.applyConstraints({advanced:[{[key]:val}]}).catch(()=>{});
+  }
   const scanningStart=performance.now();
   async function adjustZoom(now){
    // A camera continuously changing magnification makes dense phone QR codes
@@ -62,7 +72,15 @@ async function scan({video,canvas,onData,onError,onStatus}){
    if(!running)return;
    raf=requestAnimationFrame(decode);
    // jsQR is CPU heavy. Limit work to ~10 frames/second to preserve preview FPS.
-   if(now-lastDecode<95||video.readyState<2||!video.videoWidth||!root.jsQR)return;
+   if(now-lastDecode<75||video.readyState<2||!video.videoWidth||!root.jsQR)return;
+   if(nativeDetector&&!nativeBusy&&now-lastNative>190){
+    nativeBusy=true;lastNative=now;
+    nativeDetector.detect(video).then(items=>{
+     if(!running||!items?.length)return;
+     const data=items.find(x=>typeof x.rawValue==='string'&&x.rawValue.startsWith('zj1:'))?.rawValue;
+     if(data){stopThis();onStatus?.('QR DETECTED ✓');onData?.(data)}
+    }).catch(()=>{}).finally(()=>{nativeBusy=false});
+   }
    lastDecode=now;frame++;
    try{
     const vw=video.videoWidth,vh=video.videoHeight;
@@ -82,10 +100,16 @@ async function scan({video,canvas,onData,onError,onStatus}){
     if(canvas.height!==h)canvas.height=h;
     ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);
     const image=ctx.getImageData(0,0,w,h);
-    const result=root.jsQR(image.data,w,h,{inversionAttempts:frame%9===0?'attemptBoth':'dontInvert'});
+    let result=root.jsQR(image.data,w,h,{inversionAttempts:frame%7===0?'attemptBoth':'dontInvert'});
+    if(!result&&frame%5===0){
+     // Optional low-light enhancement: adjust scanned image only, not the preview.
+     ctx.filter='brightness(1.35) contrast(1.2)';ctx.drawImage(video,sx,sy,sw,sh,0,0,w,h);ctx.filter='none';
+     const improved=ctx.getImageData(0,0,w,h);
+     result=root.jsQR(improved.data,w,h,{inversionAttempts:'dontInvert'});
+    }
     if(result?.data){
      stopThis(); // prevents duplicate frames and releases camera on success
-     onData?.(result.data);
+     onStatus?.('QR DETECTED ✓');onData?.(result.data);
      return;
     }
     void adjustZoom(now);
@@ -98,5 +122,5 @@ async function scan({video,canvas,onData,onError,onStatus}){
 }
 function stop(){scannerEpoch++;currentScanner?.stop();currentScanner=null}
 function copy(text){return navigator.clipboard?.writeText?.(text)||Promise.reject(Error('Clipboard unavailable. Select and copy manually.'))}
-root.ZebjusQR={draw,scan,stop,copy};
+root.ZebjusQR={draw,scan,stop,copy,torch,canTorch};
 })(typeof window!=='undefined'?window:globalThis);
