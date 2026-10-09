@@ -1,7 +1,7 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, main]
     paths:
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
@@ -10,6 +10,9 @@ on:
       - 'companion.html'
       - 'companion.css'
       - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'js/tripod-page.js'
       - 'pairing-core.js'
       - 'pairing-code.js'
       - 'pairing-qr-ui.js'
@@ -46,10 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor
-          cp companion.html companion.css companion.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
           cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
+          test -s mobile-android/app/src/main/assets/companion-flight.js
+          test -s mobile-android/app/src/main/assets/flight-input.js
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
 
       - name: Check Android camera, code pairing and permanent release-signing rules
@@ -103,7 +108,7 @@ jobs:
           cp mobile-android/app/build/outputs/apk/release/app-release.apk mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.4.5\nVersionCode: 10\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.6.0\nVersionCode: 11\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
 
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5'
