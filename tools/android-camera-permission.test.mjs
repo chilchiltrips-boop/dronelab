@@ -39,3 +39,15 @@ test('APK increments version code to allow upgrade and companion UI explains per
  assert.ok(js.includes("err?.name==='NotAllowedError'"));
  assert.ok(js.includes("message('QR scanner: '+help)"));
 });
+
+
+test('native safe-area padding is applied once and forwards zero handled insets',()=>{
+ const java=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
+ assert.ok(java.includes('container.setOnApplyWindowInsetsListener'));
+ assert.ok(java.includes('container.addView(view'));
+ assert.ok(java.includes('android.graphics.Insets.NONE'));
+ assert.ok(java.includes('WindowInsets.Type.ime()'));
+ assert.ok(!java.includes('WindowInsets.CONSUMED'));
+ assert.ok(java.includes('view.onPause()')&&java.includes('view.onResume()'));
+ assert.ok(java.includes('pendingVideoRequest == null'));
+});

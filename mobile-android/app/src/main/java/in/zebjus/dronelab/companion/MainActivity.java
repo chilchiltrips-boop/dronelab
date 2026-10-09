@@ -14,6 +14,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Build;
 import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -161,10 +162,12 @@ public class MainActivity extends Activity {
             }
         };
         if (connectivity != null) connectivity.registerDefaultNetworkCallback(networkCallback);
-        setContentView(view, new ViewGroup.LayoutParams(-1, -1));
+        FrameLayout container = new FrameLayout(this);
+        container.addView(view, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(container, new ViewGroup.LayoutParams(-1, -1));
         // targetSdk 35 draws edge-to-edge: keep QR, touch targets and the keyboard
         // clear of system bars and camera cutouts in either orientation.
-        view.setOnApplyWindowInsetsListener((v, insets) -> {
+        container.setOnApplyWindowInsetsListener((v, insets) -> {
             int left, top, right, bottom;
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() |
@@ -181,9 +184,16 @@ public class MainActivity extends Activity {
                 }
             }
             v.setPadding(left, top, right, bottom);
-            return insets;
+            // The container has already reduced the child bounds. Forward zero
+            // handled dimensions so modern WebView does not apply them twice,
+            // while preserving visibility/other inset notifications.
+            if (Build.VERSION.SDK_INT >= 30) return new WindowInsets.Builder(insets)
+                .setInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() |
+                    WindowInsets.Type.ime(), android.graphics.Insets.NONE)
+                .setDisplayCutout(null).build();
+            return insets.replaceSystemWindowInsets(0, 0, 0, 0);
         });
-        view.requestApplyInsets();
+        container.requestApplyInsets();
         view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
     }
     @Override protected void onPause() {
