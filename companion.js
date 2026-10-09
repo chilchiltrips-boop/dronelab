@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const $=id=>document.getElementById(id);
-let peer=null,offer='',response='',scannerStop=null,expiryTimer=null,processing=false,pending=false,epoch=0;
+let peer=null,offer='',response='',scannerStop=null,expiryTimer=null,processing=false,pending=false,epoch=0,codeSession=null,codeGeneration=0;
 function message(text){const e=$('mobileLog');e.textContent=(e.textContent+'\n'+new Date().toLocaleTimeString()+'  '+text).slice(-8500);e.scrollTop=e.scrollHeight}
 function status(s){
  $('connectionDetail').textContent=s;$('appConnection').textContent=s.toUpperCase();
@@ -27,7 +27,7 @@ function initPeer(){
  peer=ZebjusP2P.session('mobile',{
   status:s=>status(s),
   connected:()=>{status('Connected • awaiting Web approval');message('WebRTC connected. Confirm code on laptop.')},
-  paired:()=>{status('Connected • Paired');message('Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
+  paired:()=>{stopPhoneCode();$('phoneShortCodeStatus').textContent='Paired successfully; code expired.';status('Connected • Paired');message('Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
   led:d=>{sync();if(peer.status().paired){$('commandStatus').textContent='Confirmed by Web App • revision '+d.revision;message('LED '+(d.led?'ON':'OFF')+' ACK / revision '+d.revision)}},
   control:d=>{sync();if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
@@ -38,10 +38,42 @@ function initPeer(){
  });sync();
 }
 function stopScanner(){ZebjusQR.stop();scannerStop=null}
+function stopPhoneCode(){
+ ++codeGeneration;
+ try{codeSession?.stop()}catch{}
+ codeSession=null;
+ $('phoneShortCode').textContent='------';
+ $('phoneRetryCode').disabled=!response;
+}
+async function createPhoneCode(){
+ stopPhoneCode();
+ if(!offer||!response||!peer?.status().expires)return;
+ const key=codeGeneration;
+ $('phoneShortCodeStatus').textContent='Contacting online pairing service…';
+ $('phoneRetryCode').disabled=true;
+ try{
+  const expires=peer.status().expires;
+  const c=ZebjusCodePair.beginPhone({
+   offer,answer:response,expires,
+   onStatus:message=>{if(key===codeGeneration){$('phoneShortCodeStatus').textContent=message}},
+   onCode:value=>{if(key===codeGeneration){$('phoneShortCode').textContent=value||'------';$('phoneRetryCode').disabled=false}}
+  });
+  codeSession=c;
+  await c.start();
+  if(key!==codeGeneration)c.stop();
+ }catch(error){
+  if(key===codeGeneration){
+   $('phoneShortCodeStatus').textContent='Code unavailable: '+error.message+' • The Two-Way QR still works.';
+   $('phoneRetryCode').disabled=false;
+   message('Online code pairing unavailable: '+error.message);
+  }
+ }
+}
+
 async function prepareResponse(raw){
  const text=String(raw||'').trim();if(!text)return;
  const generation=++epoch;
- stopScanner();processing=true;response='';
+ stopScanner();stopPhoneCode();processing=true;response='';
  $('answerCanvas').hidden=true;$('answerPlaceholder').hidden=false;
  $('answerText').value='';$('showAnswerBtn').disabled=true;$('retryAnswerBtn').disabled=true;
  $('answerState').textContent='Reading Web QR and creating your response QR…';
@@ -58,8 +90,9 @@ async function prepareResponse(raw){
   ZebjusQR.draw($('answerCanvas'),reply.qr);
   $('answerCanvas').hidden=false;$('answerPlaceholder').hidden=true;
   $('answerText').value=response;$('showAnswerBtn').disabled=false;$('retryAnswerBtn').disabled=false;
-  $('answerState').textContent='Response QR ready! Show it to laptop webcam.';
+  $('answerState').textContent='Response QR ready! Scan on laptop OR use short code.';
   $('offerState').textContent='Web QR scanned ✓';
+  void createPhoneCode();
   message('Response QR automatically generated. No manual Accept button needed.');
  }catch(err){
   if(generation!==epoch)return;
@@ -98,13 +131,14 @@ async function ledCommand(value){
  finally{pending=false;sync()}
 }
 function reset(reason='Disconnected • scan a new Web QR'){
- ++epoch;processing=false;pending=false;stopScanner();peer?.close(reason);
+ ++epoch;processing=false;pending=false;stopScanner();stopPhoneCode();peer?.close(reason);
  offer='';response='';
  $('offerInput').value='';$('answerText').value='';$('appPairCode').textContent='------';
  $('answerCanvas').hidden=true;$('answerPlaceholder').hidden=false;
  $('answerState').textContent=reason;$('offerState').textContent='Waiting for Web QR';
  $('offerExpiry').textContent='QR expires after 3 minutes.';
  $('showAnswerBtn').disabled=true;$('retryAnswerBtn').disabled=true;
+ $('phoneShortCodeStatus').textContent='Scan Web QR to generate a temporary 6-digit pairing code.';
  $('answerQrFrame').classList.remove('qr-large');$('showAnswerBtn').textContent='Expand Response QR';
  $('commandStatus').textContent=reason;$('heartbeatDetail').textContent='—';
  initPeer();status('Disconnected');
@@ -120,6 +154,7 @@ function bind(){
  $('useOfferBtn').onclick=()=>{if($('offerInput').value.trim())void prepareResponse($('offerInput').value)};
  $('showAnswerBtn').onclick=expandQR;
  $('retryAnswerBtn').onclick=()=>{if(offer)void prepareResponse(offer)};
+ $('phoneRetryCode').onclick=()=>void createPhoneCode();
  $('copyAnswerBtn').onclick=async()=>{try{await ZebjusQR.copy(response);message('Response copied for Advanced manual entry on laptop')}catch(e){message('Copy unavailable: '+e.message)}};
  $('resetPairBtn').onclick=()=>reset('Cancelled • scan a fresh Web QR');
  $('disconnectBtn').onclick=()=>reset('Disconnected • scan a fresh Web QR');
@@ -132,7 +167,7 @@ function bind(){
   if(s.lastHeartbeat&&Date.now()-s.lastHeartbeat>9500)$('heartbeatDetail').textContent='Heartbeat delayed';
  },1200);
  window.addEventListener('offline',()=>reset('Network offline • new QR required'));
- window.addEventListener('pagehide',()=>{++epoch;stopScanner();peer?.close('App closed / re-pair required');clearInterval(expiryTimer)});
+ window.addEventListener('pagehide',()=>{++epoch;stopScanner();stopPhoneCode();peer?.close('App closed / re-pair required');clearInterval(expiryTimer)});
 }
 function init(){initPeer();bind();status('Disconnected')}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
