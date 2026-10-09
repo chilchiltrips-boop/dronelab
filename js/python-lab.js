@@ -34,10 +34,16 @@ function syncEditor(){
   if(!model){model=monaco.editor.createModel(files[active]||'','python',monaco.Uri.parse('inmemory://zebjus/'+active));models.set(active,model)}
   editor.setModel(model);editor.layout();
  }else if($('pythonEditor'))$('pythonEditor').value=files[active]||'';
- $('pythonEditorTitle').textContent=active;
+ $('pythonActiveFileLabel').textContent=active;
  loading=false;editorPosition();updateButtons();
 }
-function renderFiles(){const root=$('pythonFileList');root.replaceChildren();for(const name of Object.keys(files)){const b=document.createElement('button');b.type='button';b.className='python-file-entry'+(name===active?' active':'');b.textContent=name;b.setAttribute('role','tab');b.setAttribute('aria-selected',String(name===active));b.onclick=()=>switchFile(name);root.append(b)}updateButtons()}
+function renderFiles(){
+ const root=$('pythonFileList');root.replaceChildren();
+ for(const name of Object.keys(files)){const option=document.createElement('option');option.value=name;option.textContent=name;root.append(option)}
+ root.value=active;
+ const label=$('pythonActiveFileLabel');label.textContent=active;label.title='Active Python file: '+active;
+ updateButtons();
+}
 function switchFile(name){if(!Object.hasOwn(files,name))return;files[active]=currentCode();active=name;syncEditor();renderFiles();autosave()}
 function setCode(code){
  if(editor){editor.executeEdits('python-lab',[{range:editor.getModel().getFullModelRange(),text:code,forceMoveMarkers:true}]);editor.focus()}
@@ -327,7 +333,7 @@ async function copyTerminal(){
  catch(e){status('Select terminal text and use Ctrl/⌘+C','warn')}
 }
 function bind(){
- $('pythonNewFileBtn').onclick=newFile;$('pythonSaveFileBtn').onclick=()=>{save();status('Project saved','good')};
+ $('pythonNewFileBtn').onclick=newFile;$('pythonFileList').onchange=e=>switchFile(e.target.value);$('pythonSaveFileBtn').onclick=()=>{save();status('Project saved','good')};
  $('pythonUndoFileBtn').onclick=()=>undoRedo(false);$('pythonRedoFileBtn').onclick=()=>undoRedo(true);
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
