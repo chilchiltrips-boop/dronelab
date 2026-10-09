@@ -17,7 +17,7 @@ permissions:
   contents: write
 concurrency:
   group: qr-android-apk-testing
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   android:
     runs-on: ubuntu-latest
