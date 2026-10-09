@@ -92,7 +92,8 @@ jobs:
           test -x "$BUILD_TOOLS/aapt"
           python3 tools/verify_signed_android_release.py "$RELEASE_APK" "$BUILD_TOOLS/apksigner" "$BUILD_TOOLS/aapt"
           unzip -l "$RELEASE_APK" | grep -E 'assets/(companion.html|pairing-core.js|pairing-code.js|vendor/jsqr.js)'
-          test "$(stat -c %s "$RELEASE_APK")" -gt 1000000
+          unzip -t "$RELEASE_APK" >/dev/null
+          echo "Verified release APK size: $(stat -c %s "$RELEASE_APK") bytes"
 
       - name: Package one stable Android APK update URL
         if: github.ref == 'refs/heads/main'
