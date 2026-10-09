@@ -8,6 +8,7 @@ run_case() {
   shift
   adb shell am instrument -w -r "$@" "$runner" | tee "test-output/native/$case_name.log"
   if ! grep -q 'PASS ' "test-output/native/$case_name.log" || grep -Eq 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
+    adb exec-out screencap -p > "test-output/native/failure-${case_name}.png"
     echo "Native acceptance failed: $case_name"
     exit 1
   fi

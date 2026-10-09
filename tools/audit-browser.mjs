@@ -62,6 +62,13 @@ try{
  await page.locator('[data-tab=firmware]').click();check(await page.locator('#fwUsbFlashBtn').isDisabled(),'Flash enabled before USB connection');check(await page.locator('#fwReconnectBtn').isDisabled(),'Unavailable kit reconnect enabled');
  await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
  await page.evaluate(()=>{location.hash='wiring'});await page.locator('#tab-wiring.active').waitFor();
+ for(const hash of ['simcontrol','flight','led']){
+  await page.goto(base+'#'+hash);await page.waitForURL('**/tripod.html*');await page.waitForFunction(()=>window.ZebjusTraining);
+  check(await page.locator('iframe').count()===0,'Legacy bookmark created duplicate simulator');
+  check(!await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Navigation retained ARM');
+  await page.locator('.tp-nav a[href="./index.html#assembly"]').click();await page.waitForFunction(()=>document.getElementById('app')?.dataset.ready==='true');
+  check(await page.evaluate(()=>!window.ZebjusTraining),'Main tab retained hidden Flight Training plant');
+ }
  await page.goto(base+'companion.html');await page.locator('#flightSettings').click();check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
  check(await page.locator('#copyAnswerBtn').isDisabled(),'Copy response enabled without response');
  for(const [width,height] of [[390,844],[844,390],[915,412]]){

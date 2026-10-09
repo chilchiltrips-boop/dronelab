@@ -144,7 +144,7 @@ html.cockpit-active>body>.app-top,html.cockpit-active>body>main,html.cockpit-act
  .flight-feedback,#flightAppliedTelemetry,.flight-applied-controls{font-size:7px;line-height:1.1;max-height:19px;overflow:auto}
  .flight-warning{font-size:7px;line-height:1.1;margin:0;max-height:17px;overflow:auto}
  .flight-zone-title{top:3%;font-size:7px}.flight-zone-title b{font-size:8px;margin-top:1px}
- .flight-axis-label{font-size:6px}.flight-axis-label.up{top:24%}.flight-axis-label.down{bottom:10%}
- .flight-touch-readout{font-size:7px;bottom:1%}.flight-ring{height:65px;width:65px}.flight-knob{width:23px;height:23px}
+ .flight-axis-label{font-size:6px}.flight-axis-label.up{top:24%}.flight-axis-label.down{display:none}
+ .flight-touch-readout{font-size:7px;line-height:1.15;bottom:1%;z-index:2;background:#061624cc;border-radius:3px;padding:2px 0}.flight-ring{height:65px;width:65px}.flight-knob{width:23px;height:23px}
  .flight-footer{padding:2px;font-size:6px}
 }

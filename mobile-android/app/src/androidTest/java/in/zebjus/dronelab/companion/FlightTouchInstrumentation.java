@@ -26,6 +26,8 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private Activity activity;
     private long down;
     private int checks;
+    private int touchCalls;
+    private String lastTouch="";
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
     private WebView findWeb(View view) {
         if(view instanceof WebView)return (WebView)view;
@@ -50,11 +52,16 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         return new float[]{origin[0]+(float)p.getDouble(0)*(float)p.getDouble(2),origin[1]+(float)p.getDouble(1)*(float)p.getDouble(2)};
     }
     private void touch(int action,int[] ids,float[]... xy) {
+        touchCalls++;lastTouch="action="+action+" pointers="+ids.length+" first="+xy[0][0]+","+xy[0][1];
         if(action==MotionEvent.ACTION_DOWN)down=SystemClock.uptimeMillis();
         MotionEvent.PointerProperties[] props=new MotionEvent.PointerProperties[ids.length];MotionEvent.PointerCoords[] coords=new MotionEvent.PointerCoords[ids.length];
         for(int i=0;i<ids.length;i++){props[i]=new MotionEvent.PointerProperties();props[i].id=ids[i];props[i].toolType=MotionEvent.TOOL_TYPE_FINGER;coords[i]=new MotionEvent.PointerCoords();coords[i].x=xy[i][0];coords[i].y=xy[i][1];coords[i].pressure=1;coords[i].size=.1f;}
         MotionEvent e=MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,ids.length,props,coords,0,0,1,1,0,0,InputDevice.SOURCE_TOUCHSCREEN,0);
-        sendPointerSync(e);e.recycle();SystemClock.sleep(100);
+        // UiAutomation performs real system touchscreen injection without
+        // Instrumentation.sendPointerSync's API-35 target-window UID restriction.
+        // Each resulting WebView response is still asserted; no JS event is used.
+        if(!getUiAutomation().injectInputEvent(e,true))throw new AssertionError("OS rejected touchscreen event");
+        e.recycle();SystemClock.sleep(100);
     }
     private void multitouch() throws Exception {
         check("window.ZebjusFlightApp && !document.getElementById('flightCockpit').hidden");
@@ -110,6 +117,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             runOnMainSync(()->web=findWeb(activity.getWindow().getDecorView()));
             if(web==null)throw new AssertionError("Native WebView missing");
             waitJs("document.readyState==='complete' && window.ZebjusFlightApp");
+            waitForIdleSync();SystemClock.sleep(300);
             if(args!=null&&"true".equals(args.getString("baselineOnly"))){
                 js("localStorage.setItem('zebjus.flight.preset.v1','Fast');true");check("localStorage.getItem('zebjus.flight.preset.v1')==='Fast'");
                 if(!getTargetContext().getSharedPreferences("native-upgrade-fixture",0).edit().putString("retained","version-11").commit())throw new AssertionError("Native preference fixture write failed");
@@ -127,7 +135,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
             String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent})");}catch(Exception ignored){}
-            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
+            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nAssertions="+checks+" touchCalls="+touchCalls+" lastTouch="+lastTouch+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
         }
     }
 }
