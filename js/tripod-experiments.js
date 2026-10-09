@@ -13,10 +13,11 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
   setFlightMode(s,flightMode);setPID(s,bank,{...s.pid[bank],[gain]:value});
   startSimulator(s);s.throttle=1500;
   const samples=[],steps=Math.round(duration/.004);
-  let peakAbs=0,peakRate=0,errorSum=0,motorActivity=0,cmdPrev=[0,0,0,0],reversals=0,lastSign=0,overshoot=0,saturation=0;
+  let peakAbs=0,peakRate=0,errorSum=0,motorActivity=0,cmdPrev=[0,0,0,0],reversals=0,lastSign=0,overshoot=0,saturation=0,limitContact=false;
   for(let t=0;t<steps;t++){
    if(scenario!=='bias'&&t===75)startTuningPulse(s,axis,12);
    stepSimulator(s);
+   if(axis!=='yaw'&&Math.abs(s[axis])>=45)limitContact=true;
    const axisC=axis[0].toUpperCase()+axis.slice(1),target=axis==='yaw'?s.targetYawRate:(flightMode==='acro'?s['target'+axisC+'Rate']:s['target'+axisC]);
    const actual=axis==='yaw'?s.yawRate:(flightMode==='acro'?s[axis+'Rate']:s[axis]),err=target-actual;
    errorSum+=err*err;peakAbs=Math.max(peakAbs,Math.abs(actual));peakRate=Math.max(peakRate,Math.abs(s[axis+'Rate']));
@@ -44,10 +45,13 @@ export function simulateResponse({basePID=DEFAULT_PID,bank='rateRoll',gain='p',v
    }
   }
   const overshootPct=commandPeak>1?100*Math.max(0,peakAbs-commandPeak)/commandPeak:null;
+  // Mechanical contact can force measured rate to zero. It is not evidence
+  // that a controller has settled or recovered from bias.
+  if(limitContact)settlingTime=null;
   return {value,bank,gain,scenario,mode:flightMode,axis,samples,
    metrics:{peak:peakAbs,peakRate,rms:Math.sqrt(errorSum/steps),lateError,overshoot,overshootPct,riseTime,settlingTime,
     motorActivity:Math.sqrt(motorActivity/(steps*4)),reversals,saturationPct:100*saturation/steps,saturationSeconds:saturation*.004,verticalPeak:Math.max(...samples.map(x=>x.vertical.z)),verticalFinal:s.vertical.z,
-    finalAngle:s[axis]??0,integral:s.memory[bank].i,finalRate:s[axis+'Rate']??0}};
+    limitContact,finalAngle:s[axis]??0,integral:s.memory[bank].i,finalRate:s[axis+'Rate']??0}};
  });
  return {bank,gain,scenario,axis,mode:flightMode,results};
 }

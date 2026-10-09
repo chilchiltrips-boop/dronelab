@@ -1,7 +1,7 @@
 /* Landscape input preview + authenticated virtual-flight transmitter. */
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
-let peer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null;
+let peer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null;
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
@@ -76,17 +76,18 @@ function send(critical=false){
  if(!isOwned())return false;
  const m=halted?{...F.neutral(),mode}:current();
  const payload={seq:++seq,sessionId:peer.status().sessionId,mode:m.mode,armed:m.armed,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},sticks:halted?{left:{x:0,y:0},right:{x:0,y:0}}:{left:{...left||{x:0,y:0}},right:{...right||{x:0,y:0}}}};
+ if(critical)criticalRequestSeq=seq;
  if(!peer.sendSimulatorControl(payload,critical))return false;
  sent.set(seq,performance.now());return true;
 }
 function connect(p){
- peer=p;authority=false;sessionId='';seq=lastAckSeq=0;lastAckAt=0;sent.clear();
+ peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;sent.clear();
  clearInterval(sender);sender=setInterval(()=>{if(isOwned())send()},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
 function onStatus(s){
- if(s?.sessionId!==sessionId){if(authority||armed)stopLocally('NEW SESSION • DISARMED');sessionId=s?.sessionId||'';seq=lastAckSeq=0;lastAckAt=0;sent.clear();ready=false;lastApplied=null}
+ if(s?.sessionId!==sessionId){if(authority||armed)stopLocally('NEW SESSION • DISARMED');sessionId=s?.sessionId||'';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;sent.clear();ready=false;lastApplied=null}
  const owns=isOwned();if(authority&&!owns)stopLocally('CONTROL LOST • SAFE STOP');
  if(!authority&&owns){stopLocally('CONNECTED • RECEIVER DISARM CHECK');send(true)}authority=owns;
  if(!owns)updateStatus('INPUT PREVIEW • NO FLIGHT COMMAND');else if(!armed)updateStatus(ready?'CONNECTED • THROTTLE LOW • READY TO ARM':'CONNECTED • WAITING FOR RECEIVER');render();
@@ -109,7 +110,8 @@ function onTelemetry(packet){
  const a=packet.applied;
  // Telemetry may already be queued before ARM or a newer ACK. It must never
  // overwrite that command or interpret an old DISARM as a fresh receiver STOP.
- if(isOwned()&&(!Number.isSafeInteger(a.seq)||a.seq<Math.max(lastAckSeq,armed?armRequestSeq:0)))return;
+ if(isOwned()&&(!Number.isSafeInteger(a.seq)||a.seq<Math.max(lastAckSeq,criticalRequestSeq)))return;
+ if(!isOwned()&&a.source==='mobile')return;
  $('flightAppliedControls').textContent='APPLIED • '+a.throttle+' µs '+a.mode.toUpperCase()+' • '+(a.armed?'VIRTUAL ARMED':'DISARMED')+' • '+(a.source||'web').toUpperCase()+' #'+a.seq;
  if(a.angles&&a.motors&&a.vertical){
   const finite=v=>Number.isFinite(v)?v:0;
@@ -127,7 +129,7 @@ function bind(){
  $('flightArm').onclick=()=>{
   if(armed){doStop();return}if(!isOwned()||!ready){updateStatus('PAIR, GRANT CONTROL AND WAIT FOR RECEIVER');return}
   if(throttle>1050){updateStatus('THROTTLE MUST BE ≤1050');return}
-  clearTouches();armed=true;halted=false;lastAckAt=performance.now();sent.clear();armRequestSeq=seq+1;
+  clearTouches();armed=true;halted=false;lastAckAt=performance.now();sent.clear();
   if(!send(true)){doStop();return}updateStatus('VIRTUAL ARM REQUESTED');render();
  };
  $('flightStop').onclick=doStop;$('mobileSettingsStop').onclick=doStop;

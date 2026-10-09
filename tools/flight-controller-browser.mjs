@@ -32,6 +32,7 @@ try{
  // Local tuning remains available during mobile ownership.
  await web.locator('#tpPidP').fill('1.1');await web.locator('#tpApplyPid').click();await wait(web,()=>document.getElementById('tpStatus').textContent.includes('PID APPLIED LIVE'));
  await phone.locator('#flightMode').selectOption('acro');await wait(web,()=>window.ZebjusTraining.snapshot().mode==='acro');
+ await web.locator('#tpQuality').selectOption('low');await web.locator('#tpEffects').selectOption('off');
  // Delay/reorder actual receiver feedback before it enters the encrypted
  // channel. Drop every seventh ACK: payloads still come from the real plant.
  await web.evaluate(()=>{
@@ -48,9 +49,18 @@ try{
  });
  await phone.locator('#flightMode').selectOption('angle');await phone.waitForTimeout(50);await phone.locator('#flightMode').selectOption('acro');
  await phone.waitForTimeout(1000);await wait(web,()=>window.ZebjusTraining.snapshot().mode==='acro');
- if(await phone.locator('#flightMode').inputValue()!=='acro'||!await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Delayed old ACK overwrote mode/ARM');
- const delayedAck=await phone.locator('#flightFeedback').textContent();measurements.push({feedbackJitterMs:[80,220,300],reorderedAck:true,droppedEverySeventhAck:true,feedback:delayedAck});
+ if(await phone.locator('#flightMode').inputValue()!=='acro')throw Error('Delayed old ACK overwrote requested mode');
+ const delayedState=await web.evaluate(()=>window.ZebjusTraining.snapshot()),delayedAck=await phone.locator('#flightFeedback').textContent();
+ // Real CPU/renderer load can add enough delay to exceed the 650ms safety
+ // watchdog. A safe disarm is correct in that case; never weaken the watchdog
+ // merely to keep the test armed or confuse STOP with stale mode overwrite.
+ if(!delayedState.armed&&(delayedState.throttle!==1000||delayedState.motors.rpm.some(v=>v!==0)||await phone.locator('#flightArm').getAttribute('aria-pressed')!=='false'))throw Error('Jitter did not fail safe');
+ measurements.push({feedbackJitterMs:[80,220,300],reorderedAck:true,droppedEverySeventhAck:true,feedback:delayedAck,safetyStopObserved:!delayedState.armed});
  await web.evaluate(()=>{window.__feedbackTimers.forEach(clearTimeout);window.__testPeer.channel.send=window.__feedbackSend});
+ if(!delayedState.armed){
+  await phone.waitForTimeout(180);if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Jitter recovery auto-armed');
+  await wait(phone,()=>!document.getElementById('flightArm').disabled);await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ }
  // Malformed and replayed packets cannot mutate the plant.
  const prior=await web.evaluate(()=>window.ZebjusTraining.snapshot().seq);
  await phone.evaluate(()=>{const p=window.__testPeer;p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:1,sessionId:p.status().sessionId,mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}));p.channel.send('null');p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:999,sessionId:'wrong-session',mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}))});

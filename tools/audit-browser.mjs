@@ -66,6 +66,7 @@ try{
   await page.goto(base+'#'+hash);await page.waitForURL('**/tripod.html*');await page.waitForFunction(()=>window.ZebjusTraining);
   check(await page.locator('iframe').count()===0,'Legacy bookmark created duplicate simulator');
   check(!await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Navigation retained ARM');
+  if(await page.locator('#connectionDialog').evaluate(d=>d.open))await page.locator('#connectionClose').click();
   await page.locator('.tp-nav a[href="./index.html#assembly"]').click();await page.waitForFunction(()=>document.getElementById('app')?.dataset.ready==='true');
   check(await page.evaluate(()=>!window.ZebjusTraining),'Main tab retained hidden Flight Training plant');
  }

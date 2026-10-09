@@ -25,6 +25,12 @@ try{
   await event('touchStart',[left]);await event('touchStart',[left,{id:3,x:left.x+20,y:left.y+20}]);
   if(await p.locator('#flightLeftRing').evaluate(e=>parseFloat(e.style.left))!==anchor.x)throw Error('Second pointer stole anchor');
   await event('touchCancel',[]);
+  const edge={id:6,x:l.x+2,y:l.y+l.height*.5};await event('touchStart',[edge]);
+  const edgeAnchor=await p.locator('#flightLeftRing').evaluate(e=>parseFloat(e.style.left));
+  if(Math.abs(edgeAnchor-2)>1)throw Error('Edge touch anchor was clamped/jumped');
+  await event('touchMove',[{...edge,x:edge.x+80}]);
+  if(await p.locator('#flightLeftRing').evaluate(e=>parseFloat(e.style.left))!==edgeAnchor)throw Error('Edge motion moved base');
+  await event('touchCancel',[]);
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');

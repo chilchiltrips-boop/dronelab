@@ -112,6 +112,7 @@ jobs:
           sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
           printf 'App: in.zebjus.dronelab.companion\nVersion: 1.6.1\nVersionCode: 12\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+          printf 'Source commit: %s\n' "$GITHUB_SHA" >> mobile-apk/ANDROID_RELEASE_META.txt
 
       - uses: actions/upload-artifact@v4
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1'

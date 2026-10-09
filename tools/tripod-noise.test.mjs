@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createSimulator,setPID,startSimulator,stepSimulator,DEFAULT_PID} from '../js/tripod-physics.js';
+import {simulateResponse} from '../js/tripod-experiments.js';
 function noiseBench(d,noise){
  const s=createSimulator();s.mode='acro';s.environment.gyroNoise=noise;setPID(s,'rateRoll',{...DEFAULT_PID.rateRoll,d});startSimulator(s);s.throttle=1500;
  let previous=[0,0,0,0],sum=0,term=0,count=0;
@@ -11,4 +12,8 @@ test('filtered high D amplifies measured seeded gyro-noise motor jitter, without
  assert.equal(quiet.jitter,0);assert.equal(quiet.dRms,0);assert.equal(low.dRms,0);
  assert.ok(high.dRms>.1);assert.ok(high.jitter>low.jitter*2,JSON.stringify({low,high}));
  assert.deepEqual(noiseBench(.16,.07),high);
+});
+test('mechanical roll stop is reported and cannot manufacture a PID settling metric',()=>{
+ const r=simulateResponse({gain:'i',values:[0,0],bank:'rateRoll',mode:'acro',scenario:'combined',duration:8}).results[0];
+ assert.equal(r.metrics.limitContact,true);assert.equal(r.metrics.settlingTime,null);assert.equal(Math.abs(r.metrics.finalAngle),45);
 });

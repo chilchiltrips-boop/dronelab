@@ -28,11 +28,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import os,json
+          from datetime import datetime,timezone
           f=Path('app-version.json')
           meta=json.loads(f.read_text())
           meta['version']=json.loads(Path('package.json').read_text())['version']+'+'+os.environ['BUILD_NUMBER']
           meta['buildCommit']=os.environ['SOURCE_SHA'][:12]
           meta['channel']='release'
+          meta['publishedAt']=datetime.now(timezone.utc).isoformat()
           f.write_text(json.dumps(meta,indent=2)+'\n')
           print('WebApp version:',meta['version'],'source:',meta['buildCommit'])
           PY
