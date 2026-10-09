@@ -31,6 +31,7 @@ try{
  await page.locator('#tpMode').selectOption('acro');
  if(!(await text('tpReadoutMode')).includes('ACRO'))throw Error('ACRO mode not selected');
  // Reverse yaw at user input only; both keyboard and joystick must agree.
+ await page.locator('body').click({position:{x:30,y:170}}); // blur the flight-mode select
  await page.keyboard.down('d');
  await until(()=>document.querySelector('#tpLeftReadout')?.textContent.includes('YAW -1.00'));
  await page.keyboard.up('d');
