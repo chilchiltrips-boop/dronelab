@@ -103,7 +103,7 @@ function session(role,events={}){
   }
  }
  function setup(pc,dc){
-  if(dc){channel=dc;dc.onmessage=e=>onData(e.data);dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;close('DataChannel closed • scan fresh QR')}}
+  if(dc){channel=dc;dc.onmessage=e=>{if(peer===pc&&dc===channel)onData(e.data)};dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;close('DataChannel closed • scan fresh QR')}}
   pc.ondatachannel=e=>{if(peer===pc)setup(pc,e.channel)};
   pc.onconnectionstatechange=()=>{
    if(peer!==pc)return;
