@@ -93,6 +93,11 @@ async function pollAnswer(){
 }
 async function createOffer(){
  $('pairCreateBtn').disabled=true;
+ // Never leave an expired QR visible while a replacement offer is generating.
+ // Wi-Fi re-pairing must not accidentally scan the previous session.
+ offer='';$('pairOfferText').value='';$('pairCode').textContent='------';
+ $('pairOfferCanvas').hidden=true;$('pairOfferBox').querySelector('p')?.removeAttribute('hidden');
+ $('pairAnswerState').textContent='Preparing new pairing QR and invalidating old session…';
  try{
   const info=await bridgeInfo();
   await clearBridge();
