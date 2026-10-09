@@ -40,9 +40,10 @@ try{
   // User-level switch click — emulate ordinary browser click on its label.
   input.closest('label').click();
  });
- await wait(phone,()=>document.getElementById('flightOwner').textContent==='CONTROL GRANTED');
+ await wait(phone,()=>document.getElementById('controllerDetail').textContent.toLowerCase()==='mobile');
  await web.locator('.tab[data-tab="simcontrol"]').click();
- await wait(web,()=>document.getElementById('simReceiverState').textContent.includes('READY'),22000);
+ await wait(web,()=>document.getElementById('simReceiverState').textContent.startsWith('SIMULATOR READY'),22000);
+ await wait(phone,()=>document.getElementById('flightOwner').textContent==='CONTROL GRANTED');
  await phone.evaluate(()=>window.ZebjusFlightApp.show(true));
  await wait(phone,()=>!document.getElementById('flightArm').disabled);
  // Three response presets persist and remain bound to one controller.
