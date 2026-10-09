@@ -18,7 +18,7 @@ export function initFirmwarePage(){
     $('fwEraseFactory').disabled=busy||!usb||!image||image.kind!=='factory'||image.boardId!==usbBoard?.id;
     $('fwAuto').disabled=busy;$('fwDownload').disabled=!image||busy;$('fwForget').disabled=busy;
     $('fwBoard').disabled=busy;$('fwKind').disabled=busy;$('fwFile').disabled=busy;$('fwBaud').disabled=busy;
-    $('fwImageName').textContent=image?`${image.name} · ${image.kind==='app'?'Application / OTA':'Factory / Merged'}`:'No image loaded';
+    $('fwImageName').textContent=image?`${image.name} · ${image.kind==='app'?'Application / USB':'Factory / Merged'}`:'No image loaded';
     $('fwOrigin').textContent=image?.origin||'—';$('fwImageBoard').textContent=image?`${image.board.name} [${image.boardId}]`:'—';$('fwMatch').textContent=match();$('fwMatch').className=match()==='MATCH'?'fw-good':'fw-warning';
     $('fwVersion').textContent=image?.version||'—';$('fwBuildId').textContent=image?.buildId||'—';$('fwBuilt').textContent=image?.builtAt?new Date(image.builtAt).toLocaleString():'—';$('fwBytes').textContent=image?formatBytes(image.bytes.length):'—';$('fwHash').textContent=image?.hash||'—';
     $('fwUsbBoard').textContent=usbBoard?`${usbBoard.name} [${usbBoard.id}]`:'Not connected';$('fwUsbFlash').textContent=usb?`${usbFlashBytes/1048576} MB · ${usbPortLabel}`:'—';$('fwUsbLayout').textContent=usb?usbLayoutReady?'ZFC_DUAL_1E0000 · APP allowed':'Unknown / legacy · use Factory':'Not probed';
