@@ -31,7 +31,7 @@ test('Android permission denial offers user direct app-settings recovery',()=>{
 
 test('APK increments version code to allow upgrade and companion UI explains permissions',()=>{
  const build=read('mobile-android/app/build.gradle');
- assert.match(build,/versionCode\s+2\b/);
+ assert.match(build,/versionCode\\s+3\\b/);
  assert.match(build,/versionName\s+'1\.1\.1-camera-fix'/);
  const html=read('companion.html'),js=read('companion.js');
  assert.ok(html.includes('id="cameraPermissionHelp"'));
