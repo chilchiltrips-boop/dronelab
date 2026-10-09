@@ -7,7 +7,7 @@ run_case() {
   local case_name="$1"
   shift
   adb shell am instrument -w -r "$@" "$runner" | tee "test-output/native/$case_name.log"
-  if ! rg -q 'PASS ' "test-output/native/$case_name.log" || rg -q 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
+  if ! grep -q 'PASS ' "test-output/native/$case_name.log" || grep -Eq 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
     echo "Native acceptance failed: $case_name"
     exit 1
   fi
@@ -17,8 +17,8 @@ adb install "$RUNNER_TEMP/zebjus-previous.apk"
 adb install "$test_apk"
 run_case baseline-preference -e baselineOnly true
 adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee test-output/native/in-place-upgrade.log
-adb shell dumpsys package in.zebjus.dronelab.companion | rg 'versionCode|versionName|signatures' > test-output/native/installed-identity.txt
-rg -q 'versionCode=12' test-output/native/installed-identity.txt
+adb shell dumpsys package in.zebjus.dronelab.companion | grep -E 'versionCode|versionName|signatures' > test-output/native/installed-identity.txt
+grep -q 'versionCode=12' test-output/native/installed-identity.txt
 adb shell svc wifi disable
 adb shell svc data disable
 # Native display metrics in portrait coordinates; activity remains landscape.

@@ -13,7 +13,7 @@ export const DEFAULT_PID={
  angleRateRoll:{p:.9,i:15,d:.03},angleRatePitch:{p:.9,i:15,d:.03},angleRateYaw:{p:3,i:15,d:0},
  angleRoll:{p:3,i:0,d:0},anglePitch:{p:3,i:0,d:0}
 };
-export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:.12};
+export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:.12,gyroNoise:.07,noiseSeed:7919};
 // SI-unit educational estimates, not measured aircraft calibration.
 export const PLANT=Object.freeze({mass:1.12,g:9.81,maxRPM:8500,kT:11/(8500*Math.PI/30)**2,kQ:.020*11/(8500*Math.PI/30)**2,idle:.08,spring:100,damper:14,travel:.12});
 export const MOTOR_GEOMETRY=[
@@ -127,7 +127,7 @@ export function stepSimulator(s){
  s.gyroRoll+=(s.rollRate-s.gyroRoll)*gyroAlpha;
  s.gyroPitch+=(s.pitchRate-s.gyroPitch)*gyroAlpha;
  s.gyroYaw+=(s.yawRate-s.gyroYaw)*gyroAlpha;
- const noise=.07+e.wind*.001,clock=s.time*89.17;
+ const noise=clamp(e.gyroNoise??.07,0,2)+e.wind*.001,clock=s.time*89.17+(e.noiseSeed??7919)*.001;
  const uR=computePID(s,bankR,s.targetRollRate,s.gyroRoll+noise*Math.sin(clock));
  const uP=computePID(s,bankP,s.targetPitchRate,s.gyroPitch+noise*Math.cos(clock*.87));
  const uY=computePID(s,bankY,s.targetYawRate,s.gyroYaw+noise*.45*Math.sin(clock*1.13));

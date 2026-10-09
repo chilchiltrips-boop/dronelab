@@ -328,7 +328,7 @@ function updateControls(){
   setPID(s,bank,values);updatePidEditor();coach();e.target.value='';
   setStatus('PRESET APPLIED LIVE • '+bank+' • SELECT TEST RESPONSE');
  };
- const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s']];
+ const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s'],['Noise','gyroNoise',v=>readable(v,2)+' °/s']];
  for(const [id,key,format] of envPairs)$( 'tp'+id).oninput=e=>{s.environment[key]=Number(e.target.value);$('tp'+id+'Out').textContent=format(e.target.value)};
  $('tpChartAxis').onchange=()=>{history.length=0;drawUI()};
  $('tpPauseGraph').onclick=e=>{graphPaused=!graphPaused;e.target.textContent=graphPaused?'Resume Graph':'Pause Graph'};
@@ -351,7 +351,7 @@ function updateControls(){
      ' • Settle '+(A.metrics.settlingTime==null?'N/A':readable(A.metrics.settlingTime,2)+'s')+' / '+(B.metrics.settlingTime==null?'N/A':readable(B.metrics.settlingTime,2)+'s')+
      ' • Overshoot '+readable(A.metrics.overshootPct,0)+'% / '+readable(B.metrics.overshootPct,0)+'%'+
      ' • Motor activity '+readable(A.metrics.motorActivity,2)+' / '+readable(B.metrics.motorActivity,2)+
-     ' • Same throttle/initial state/disturbance; no change to live gains.';
+     ' • Bias '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+' • Saturation '+readable(A.metrics.saturationSeconds,2)+' / '+readable(B.metrics.saturationSeconds,2)+'s • Peak z '+readable(A.metrics.verticalPeak*100,1)+' / '+readable(B.metrics.verticalPeak*100,1)+'cm • Same throttle/initial state/disturbance; no change to live gains.';
   }catch(error){$('tpCompareResult').textContent='Comparison error: '+error.message}
  };
  $('tpAbGain').onchange();
@@ -370,7 +370,7 @@ function sampleChart(){
   r[name]={target:s['target'+c],actual:s[name]};
   r[name+'Rate']={target:s['target'+c+'Rate'],actual:s[name+'Rate']};
  }
- r.terms=[m.p,m.i,m.d];r.motors=[...s.motors];r.rpm=[...s.motorRPM];r.vertical=s.vertical.z*100;r.error=[m.error];history.push(r);
+ r.terms=[m.p,m.i,m.d];r.motors=[...s.motorCommands];r.rpm=[...s.motorRPM];r.vertical=s.vertical.z*100;r.error=[m.error];history.push(r);
  if(history.length>180)history.shift();
 }
 function drawMultiLine(canvas,series){
@@ -414,7 +414,7 @@ function drawUI(){
  $('tpLiftDisplay').textContent='THRUST / WEIGHT '+readable(v.lift,2)+' • z '+readable(v.vertical.z*100,1)+' cm';
  for(const [id,key,scale,unit] of [['tpVerticalThrust','thrust',1,' N'],['tpVerticalWeight','weight',1,' N'],['tpVerticalRatio','ratio',1,'×'],['tpVerticalZ','z',100,' cm'],['tpVerticalVelocity','velocity',100,' cm/s'],['tpVerticalAccel','acceleration',1,' m/s²']])$(id).textContent=readable(v.vertical[key]*scale,2)+unit;
  $('tpVerticalStop').textContent=v.vertical.stop.toUpperCase();$('tpTravelMeter').value=v.vertical.z*100;
- for(let i=0;i<4;i++){const el=$('tpMotor'+(i+1));el.querySelector('strong').textContent=readable(v.motors[i],0)+'%';el.querySelector('i').style.width=readable(v.motors[i],0)+'%'}
+ for(let i=0;i<4;i++){const el=$('tpMotor'+(i+1));el.querySelector('strong').textContent=readable(v.motorCommands[i],0)+'%';el.querySelector('i').style.width=readable(v.motorCommands[i],0)+'%'}
  const isRate=angular||axis==='yaw'||axis.endsWith('Rate');
  const baseAxis=axis.replace('Rate',''),c=baseAxis[0].toUpperCase()+baseAxis.slice(1);
  const target=(axis==='yaw'||isRate)?v['target'+c+'Rate']:v['target'+c];
@@ -429,7 +429,7 @@ function drawUI(){
  $('tpRingingCount').textContent=String(v.metrics.ringing);
  for(let i=1;i<=4;i++){
   const el=$('tpMotor'+i);el.classList.toggle('active-motor',v.motors[i-1]>8);
-  el.querySelector('.tp-motor-detail').textContent=readable(v.motorRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
+  el.querySelector('.tp-motor-detail').textContent=readable(v.motorRPM[i-1],0)+' / '+readable(v.motorRequestedRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
  }
  const axisForPID=$('tpPidAxis').value,cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
  const outer=s.memory['angle'+cAxis],inner=s.memory[(s.mode==='angle'?'angleRate':'rate')+cAxis];

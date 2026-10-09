@@ -11,7 +11,7 @@ function runtime(){
  class PC{
   iceGatheringState='complete';signalingState='stable';connectionState='new';listeners=new Map();
   constructor(){pcs.push(this)}
-  createDataChannel(){return this.dc={readyState:'connecting',sent:[],send(value){this.sent.push(JSON.parse(value))},close(){this.readyState='closed';this.onclose?.()}}}
+  createDataChannel(){return this.dc={readyState:'connecting',bufferedAmount:0,sent:[],send(value){this.sent.push(JSON.parse(value))},close(){this.readyState='closed';this.onclose?.()}}}
   async createOffer(){return {type:'offer',sdp:'v=0\r\na=candidate:test'}}
   async createAnswer(){return {type:'answer',sdp:'v=0\r\na=candidate:test'}}
   async setLocalDescription(d){this.localDescription=d;this.signalingState='have-local-offer'}
@@ -65,4 +65,31 @@ test('fresh pairing discards old grant and rejects wrong response session',async
 test('compressed untrusted QR is bounded while reading, before JSON allocation',async()=>{
  const r=runtime(),payload='zj1:1:'+gzipSync('x'.repeat(2_000_000)).toString('base64url');
  await assert.rejects(r.api.unpack(payload),/too large/);
+});
+
+test('authenticated simulator ACK follows application; host refuses role escalation, replay, wrong session and duplicate ownership',async()=>{
+ const r=runtime(),calls=[],host=r.api.session('host',{simControl:m=>{calls.push(m);return {accepted:true,applied:{mode:m.mode,armed:m.armed,throttle:m.throttle,axes:m.axes}}}});
+ await host.makeOffer();const pc=host.peer,dc=pc.dc;dc.readyState='open';dc.onopen();host.setSimulatorReady(true);
+ const input=(seq,changes={})=>({v:1,type:'SIM_CONTROL',seq,sessionId:host.status().sessionId,mode:'angle',armed:false,throttle:1000,axes:{roll:0,pitch:0,yaw:0},...changes});
+ const deliver=m=>dc.onmessage({data:JSON.stringify(m)});
+ deliver({v:1,type:'PAIR_APPROVED'});assert.equal(host.status().approved,false);
+ deliver(input(1));assert.equal(calls.length,0);assert.equal(dc.sent.at(-1).accepted,false);
+ host.approvePairing();host.grantMobileControl();assert.equal(host.takeWebControl(),false);
+ deliver(input(1));await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.length,1);assert.equal(dc.sent.at(-1).accepted,true);assert.equal(dc.sent.at(-1).applied.throttle,1000);
+ for(const m of [input(1),input(2,{sessionId:'wrong'}),input(2,{axes:{roll:5,pitch:0,yaw:0}}),input(2,{sticks:{left:{x:1,y:1},right:{x:0,y:0}}})])deliver(m);
+ deliver(null);assert.equal(calls.length,1);
+ host.setSimulatorReady(false);deliver(input(2));assert.equal(calls.length,1);assert.equal(dc.sent.at(-1).accepted,false);
+ host.close();
+});
+test('late asynchronous receiver application cannot ACK a replacement session',async()=>{
+ const r=runtime();let resolve;const host=r.api.session('host',{simControl:()=>new Promise(r=>resolve=r)});
+ await host.makeOffer();const old=host.peer.dc;old.readyState='open';old.onopen();host.approvePairing();host.setSimulatorReady(true);host.grantMobileControl();
+ old.onmessage({data:JSON.stringify({v:1,type:'SIM_CONTROL',seq:1,sessionId:host.status().sessionId,mode:'angle',armed:false,throttle:1000,axes:{roll:0,pitch:0,yaw:0}})});
+ await host.makeOffer();const dc=host.peer.dc;dc.readyState='open';dc.onopen();host.approvePairing();host.grantMobileControl();
+ resolve({accepted:true,applied:{throttle:1900}});await new Promise(r=>setImmediate(r));assert.ok(!dc.sent.some(m=>m.type==='SIM_ACK'));host.close();
+});
+test('paired telemetry and control queues are bounded; critical STOP uses existing encrypted channel',async()=>{
+ const r=runtime(),host=r.api.session('host');await host.makeOffer();const dc=host.peer.dc;dc.readyState='open';dc.onopen();assert.equal(host.sendTelemetry({throttle:1000}),false);
+ host.approvePairing();assert.equal(host.sendTelemetry({throttle:1000}),true);assert.equal(dc.sent.at(-1).type,'SIM_TELEMETRY');assert.equal(dc.sent.at(-1).sessionId,host.status().sessionId);
+ dc.bufferedAmount=32769;assert.equal(host.sendTelemetry({throttle:1000}),false);dc.bufferedAmount=0;host.emergencyStop('Test STOP');assert.equal(dc.sent.at(-1).type,'SIM_STOP');host.close();
 });
