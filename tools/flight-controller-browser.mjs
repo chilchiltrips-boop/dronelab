@@ -52,7 +52,7 @@ try{
  await phone.locator('#flightOptions').evaluate(el=>{if(el.hidden)throw Error('Settings panel unexpectedly closed')});
  await phone.locator('#flightSettings').click();
  await phone.locator('#flightArm').click();
- await wait(phone,()=>document.getElementById('flightFeedback').textContent.includes('ACK'),15000);
+ await wait(phone,()=>/^ACK #\d+/.test(document.getElementById('flightFeedback').textContent),15000);
  const sim=web.frameLocator('#simRemoteFrame');
  await wait(web,()=>document.getElementById('simControlInfo').textContent.includes('Mobile control'));
  // Hold left stick upward long enough to increase throttle at full rate, then release.
