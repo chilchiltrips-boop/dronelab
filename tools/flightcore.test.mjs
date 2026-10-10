@@ -18,7 +18,7 @@ test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
 test('Board-specific gyro never replaces the I2C scanner or LED protocol',()=>{
- for(const token of ['Wire.setClock(400000)','BUS_SDA=4,BUS_SCL=5','BUS_SDA=22,BUS_SCL=23','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=50','GYRO_PERIOD_MS=20'])assert.ok(sketch.includes(token),token);
+ for(const token of ['Wire.setClock(400000)','BUS_SDA=SDA,BUS_SCL=SCL','ALT_BUS_SDA=4,ALT_BUS_SCL=5','BUS_SDA=22,BUS_SCL=23','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=50','GYRO_PERIOD_MS=20'])assert.ok(sketch.includes(token),token);
  assert.ok(!sketch.includes('delay(50)'),'Do not block USB scanner or LED for 50ms');
  assert.ok(!sketch.includes('delay(20)'),'Do not block USB scanner or LED for 20ms');
 });
@@ -51,5 +51,10 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
 });
 
 test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
- for(const token of ['FW_VERSION="1.2.1"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+ for(const token of ['FW_VERSION="1.2.2"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+});
+
+test('A1 checks proven Arduino defaults before alternate bus, never drives LED on shared SDA',()=>{
+ for(const token of ['Wire.begin();','Wire.end();','detectedImuOnBus()','ALT_BUS_SDA,ALT_BUS_SCL','ledAvailable=activeSda!=LED_PIN','if(ledAvailable){','PIN_CONFLICT','UNAVAILABLE,SDA_CONFLICT','ZJI2C,MODE,','ARDUINO_DEFAULT','ALTERNATE_4_5','if(ledAvailable)ledcWrite'])assert.ok(sketch.includes(token),token);
+ assert.ok(sketch.indexOf('Wire.begin();Wire.setClock(400000);')<sketch.indexOf('Wire.begin(ALT_BUS_SDA,ALT_BUS_SCL)'), 'A1 default must be probed first');
 });

@@ -114,12 +114,12 @@ test('running firmware identity and native ROM download are distinct serial stat
  const logs=[],ctx={usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,busy:false,monitorPort:null,monitorPendingScan:false,log:x=>logs.push(x),kitStatus(){},badge(){},syncUsbBoardSelection(){}};
  vm.runInNewContext(source.slice(start,end)+';globalThis.read=readUsbTelemetry;',ctx);
  ctx.read('waiting for download');assert.equal(ctx.usbRomDownload,true);assert.equal(ctx.usbRuntimeInfo,null);
- ctx.read('ZJINFO,FW,ZFC-A1,1.2.1,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
- assert.equal(ctx.usbRomDownload,false);assert.equal(ctx.usbRuntimeInfo.boardId,'ZFC-A1');assert.equal(ctx.usbRuntimeInfo.version,'1.2.1');
+ ctx.read('ZJINFO,FW,ZFC-A1,1.2.2,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
+ assert.equal(ctx.usbRomDownload,false);assert.equal(ctx.usbRuntimeInfo.boardId,'ZFC-A1');assert.equal(ctx.usbRuntimeInfo.version,'1.2.2');
  ctx.read('ZJI2C,PINS,ZFC-A1,4,5,0x6B');assert.ok(ctx.usbBusPins.includes('GPIO4')&&ctx.usbBusPins.includes('GPIO5'));
  ctx.read('ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND');assert.ok(ctx.usbSensorState.includes('NOT_FOUND'));
  ctx.read('ZJLED,ACK,900,OK');assert.ok(ctx.usbLedState.includes('acknowledged'));
- ctx.read('ZJINFO,FW,ZFC-A2,1.2.1,Oct 10 2026,14:41:00,ZEBJUS FlightCore A2 C6');
+ ctx.read('ZJINFO,FW,ZFC-A2,1.2.2,Oct 10 2026,14:41:00,ZEBJUS FlightCore A2 C6');
  assert.equal(ctx.usbRuntimeInfo.boardId,'ZFC-A2');
  assert.ok(logs.some(x=>x.includes('ESP ROM DOWNLOAD')));
 });
@@ -146,8 +146,8 @@ test('Step 3 reflects physical USB chip separately from firmware identity and Wi
  assert.equal(ui.get('#fwConnectionType').textContent,'USB • ROM bootloader');
  ctx.loader=null;ctx.usbBoardId='';ctx.monitorPort={};ctx.runStatus();
  assert.equal(ui.get('#fwKitState').textContent,'USB SERIAL • IDENTIFYING');
- ctx.usbRuntimeInfo={boardId:'ZFC-A2',boardName:'ZEBJUS FlightCore A2 C6',version:'1.2.1',buildStamp:'Oct 10 2026 15:00'};
- ctx.runStatus();assert.equal(ui.get('#fwCurrentVersion').textContent,'1.2.1');
+ ctx.usbRuntimeInfo={boardId:'ZFC-A2',boardName:'ZEBJUS FlightCore A2 C6',version:'1.2.2',buildStamp:'Oct 10 2026 15:00'};
+ ctx.runStatus();assert.equal(ui.get('#fwCurrentVersion').textContent,'1.2.2');
  assert.equal(ui.get('#fwLiveBoard').textContent,'ZEBJUS FlightCore A2 C6');
  assert.equal(ui.get('#fwFirmwareEvidence').textContent,'Verified from live ZJINFO');
  ctx.usbRomDownload=true;ctx.usbRuntimeInfo=null;ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'ROM DOWNLOAD • APP NOT RUNNING');
@@ -164,4 +164,10 @@ test('Downloaded firmware is not counted as flashed and both pages expose USB ch
   const html=readFileSync(new URL('../'+p,import.meta.url),'utf8');
   for(const id of ['fwConnectionType','fwFirmwareEvidence','fwCurrentVersion','fwCurrentBuildTime','fwLiveBoard','fwMonitorHelp'])assert.ok(html.includes('id="'+id+'"'),id);
  }
+});
+
+test('Serial monitor shows A1 I2C bus and shared LED restriction',()=>{
+ const updater=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ for(const token of ['ZJI2C,MODE,','Arduino default wiring','Alternate GPIO4/5 wiring','fwUsbMode'])assert.ok(updater.includes(token),token);
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('GPIO8 is used for SDA'));}
 });

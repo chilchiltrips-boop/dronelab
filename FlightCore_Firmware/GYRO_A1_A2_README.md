@@ -64,3 +64,9 @@ ESP32-C3 SuperMini requires LSM6DS3 SDA GPIO4, SCL GPIO5, VCC 3.3V, GND, sensor 
 Test LED with the Firmware page's **Test onboard LED** control, or send `ZJLED,900,BLINK,250,250,100` followed by a newline at 115200 baud. The controller must respond `ZJLED,ACK,900,OK`. The LED pattern automatically stops after a four-second safety lease without renewed commands.
 
 The built-in Python Lab executes `from zebjus_simple import Drone` in the browser's Pyodide worker and needs the **USB Serial connection** to the *running* controller. Normal desktop PyCharm Python instead requires the separate PC `pyserial` example; the browser's `zebjus_simple` module is not an installed system package.
+
+## FlightCore v1.2.2 — Arduino-default I²C compatibility
+
+**A1 SuperMini:** Check `Wire.begin()` on ESP32-C3 Dev Module default SDA GPIO8 / SCL GPIO9 first (user-confirmed scanner finds LSM6DS3 `0x6B`). If absent, probe optional GPIO4 / GPIO5. If neither responds, revert to default and keep retrying. Report the selected bus using `ZJI2C,PINS` and `ZJI2C,MODE` serial messages. **A2 C6** MPU6050 `0x68` on GPIO22/23 remains unchanged.
+
+**LED versus SDA conflict:** GPIO8 is also A1's active-low onboard LED. When GPIO8 is SDA, disable PWM LED control to preserve I²C integrity. Report `ZJLED,INFO,ZFC-A1,GPIO8,UNAVAILABLE,SDA_CONFLICT`; a LED command receives `ZJLED,ACK,<id>,PIN_CONFLICT`. To use the onboard LED and I²C at the same time, move the sensor's SDA/SCL wiring to GPIO4/5 and reboot. GPIO9 is a boot strap, so pull-up/wiring influences boot behavior and BOOT must be released on reset.

@@ -3,9 +3,9 @@
 function confirmInLab(message){return window.AerionDialogs?.confirm(message)??Promise.resolve(confirm(message))}
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const VERSION='1.2.1',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
+const VERSION='1.2.2',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
-let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false;
+let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
 let usbFlashPhase='idle',usbFlashBoardId='',usbVerifiedPortInfo=null; // package loading is not flashing
 function expectedUsbBoard(){return (monitorPort&&usbRuntimeInfo?.boardId)||usbBoardId||''}
 function verifiedUsbConnection(){return !!loader&&!!usbBoardId}
@@ -25,7 +25,7 @@ function markPackagePrepared(label='Firmware package verified'){
  }
 }
 // Fallback has profiles only. Never advertise unsigned or stale embedded firmware checksums.
-const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_I2C_SCANNER","version":"1.2.1","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS FlightCore A1 SuperMini","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.2.0","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3:CDCOnBoot=cdc"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS FlightCore A2 C6","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.2.0","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-10T14:13:06Z"};
+const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_I2C_SCANNER","version":"1.2.1","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS FlightCore A1 SuperMini","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.2.2","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3:CDCOnBoot=cdc"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS FlightCore A2 C6","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.2.2","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":""},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-10T14:13:06Z"};
 function school(){return window.zebjusSchool||null}
 function flashDiagnostic(kind,detail={}){try{window.dispatchEvent(new CustomEvent('aerion-link-event',{detail:{kind:'firmware',phase:kind,message:kind,...detail}}))}catch{}}
 function log(msg){const e=$('#fwLog');if(e)e.textContent=`${new Date().toLocaleTimeString()}  ${msg}\n${e.textContent}`.slice(0,16000);flashDiagnostic('log',{message:String(msg).slice(0,1200)})}
@@ -138,7 +138,7 @@ function kitStatus(){
  text('#fwFirmwareEvidence',running?'Verified from live ZJINFO':bootloader?'Not available from bootloader':serial?'Waiting for running firmware data':wifiOnline?'Reported by online kit':'Not connected');
  const kb=$('#fwKitBadge');
  if(kb){kb.textContent=running?'USB FIRMWARE ACTIVE':bootloader?'USB BOOTLOADER READY':serial?(usbRomDownload?'ROM DOWNLOAD':'USB SERIAL OPEN'):wifiOnline?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(running||bootloader||wifiOnline?'online':'offline')}
- text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');
+ text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');text('#fwUsbMode',serial?usbBusMode:'--');
  return {s:schoolApi,d,online:wifiOnline,usbConnected,board,state,version};
 }
 async function refreshKit(){const{s}=kitStatus();try{await s?.refreshNow?.();const info=await onlineBoardInfo();if(info?.boardId){text('#fwLiveBoard',info.boardName||boardName(info.boardId));text('#fwCurrentVersion',info.firmware||info.version||'--');textTitle('#fwCurrentBuildTime',formatBuildTime(info.firmwareBuiltAt||info.buildDateTime||info.buildTime||''));if(!usbBoardId)await targetBoardId(true)}kitStatus();log('Kit status refreshed.')}catch(e){log('Kit check: '+e.message)}}
@@ -254,6 +254,7 @@ function usbConnectFailureGuidance(port,error){
 async function connectUsb(){
  if(busy)return;
  if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}
+ usbFlashPhase='idle';usbFlashBoardId='';resetStages();progress(0,'Connecting USB • no flash started');
  setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
  let port=null;
  try{
@@ -408,6 +409,8 @@ function readUsbTelemetry(line){
   }
  }else if(value.startsWith('ZJI2C,PINS,')){
   const parts=value.split(',');if(parts.length>=6)usbBusPins='SDA GPIO'+parts[3]+' • SCL GPIO'+parts[4]+' • expected '+parts[5];
+ }else if(value.startsWith('ZJI2C,MODE,')){
+  const parts=value.split(',');usbBusMode=parts[3]==='ARDUINO_DEFAULT'?'Arduino default wiring':parts[3]==='ALTERNATE_4_5'?'Alternate GPIO4/5 wiring':parts.slice(3).join(' • ');
  }else if(value.startsWith('ZJGYRO,STATUS,')){
   const parts=value.split(',');if(parts.length>=6)usbSensorState=parts[3]+' '+parts[4]+' • '+parts[5];
  }else if(value.startsWith('ZJLED,INFO,')){
@@ -451,7 +454,7 @@ async function closeSerialMonitor(keepWanted=false){
  if(!keepWanted)monitorWanted=false;
  clearMonitorTimer();
  const reader=monitorReader,port=monitorPort,task=monitorTask;
- usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';kitStatus();
+ usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
  monitorPort=null;monitorReader=null;monitorTask=null;usbRuntimeInfo=null;usbRomDownload=false;
  kitStatus();
  try{await reader?.cancel()}catch{}
@@ -536,7 +539,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
     }else{usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
    }
   monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
-  usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';kitStatus();
+  usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
   // Native CDC firmware often waits for DTR before delivering Serial.println() messages.
   try{await port.setSignals({dataTerminalReady:true,requestToSend:false})}catch{}
   serialUi(true,'Listening • '+baud+' baud');

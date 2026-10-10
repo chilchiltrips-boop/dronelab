@@ -19,7 +19,7 @@ function runtime(){
 }
 test('first offline visit can load the exact active flasher catalog and binary URLs',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./FlightCore_Firmware/catalog.json?v=1.2.1','./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin?v=1.2.1','./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin?v=1.2.1']){
+ for(const path of ['./FlightCore_Firmware/catalog.json?v=1.2.2','./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin?v=1.2.2','./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin?v=1.2.2']){
   const response=await r.request(path);assert.equal(response.ok,true,path);assert.ok((await response.arrayBuffer()).byteLength>100);
  }
 });

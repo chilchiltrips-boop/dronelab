@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "product": "ZEBJUS_I2C_SCANNER",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "defaultBoardId": "ZFC-A1",
   "boards": [
     {
@@ -12,7 +12,7 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.2.1",
+        "version": "1.2.2",
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
@@ -57,7 +57,7 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.2.1",
+        "version": "1.2.2",
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
