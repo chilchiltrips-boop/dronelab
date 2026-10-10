@@ -181,3 +181,146 @@
 #tab-python .py-explorer-feedback{padding:7px 8px;min-height:27px;max-height:58px;overflow:auto;
  border-top:1px solid #284d60;color:#8fbcba;font-size:9px;line-height:1.35}
 #tab-python .py-tree-entry[aria-expanded="false"] .py-ide-icon{opacity:.7}
+
+
+/* 2026-10-11 layout correction: neutralize legacy fixed-height IDE styles.
+   A single JS viewport calculation owns editor + Run dock heights. */
+#tab-python{--py-project-w:clamp(155px,14vw,208px)}
+#tab-python .python-workspace{display:block;min-width:0;max-width:100%;overflow:visible}
+#tab-python .python-project-bar,
+#tab-python .python-project-bar.is-stuck{
+  box-sizing:border-box!important;
+  display:flex!important;align-items:center!important;align-content:center!important;
+  flex-flow:row nowrap!important;justify-content:flex-start!important;
+  height:48px!important;min-height:48px!important;max-height:48px!important;
+  margin:0 0 6px!important;padding:5px 9px!important;
+  gap:5px!important;overflow:visible!important;border-radius:10px!important
+}
+#tab-python .python-project-bar .python-project-heading{max-width:112px!important;min-width:0!important;gap:4px!important}
+#tab-python .python-project-bar .python-project-heading small{display:none}
+#tab-python .python-project-bar .python-project-heading strong{max-width:95px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+#tab-python .python-project-bar .python-toolbar-actions,
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions{
+  flex:1 1 auto!important;width:auto!important;min-width:0!important;
+  justify-content:flex-end!important;flex-flow:row nowrap!important;
+  margin:0!important;padding:0!important;gap:5px!important
+}
+#tab-python .python-project-bar .python-toolbar-actions select{
+  height:32px!important;min-height:32px!important;padding:5px 8px!important;
+  font-size:11px!important;min-width:0!important
+}
+#tab-python .python-project-bar #pythonQuickHardware{flex:0 1 180px!important;max-width:180px!important}
+#tab-python .python-project-bar #pythonTarget{flex:0 1 144px!important;max-width:144px!important}
+#tab-python .python-project-bar .python-toolbar-actions .btn{
+  flex:0 0 auto!important;min-height:32px!important;height:32px!important;
+  min-width:55px!important;padding:5px 8px!important;font-size:11px!important
+}
+#tab-python .py-ide-menu-content{min-width:225px;max-height:min(65dvh,510px);overflow-y:auto}
+#tab-python .py-file-menu-label{font-size:9px;font-weight:800;letter-spacing:.12em;color:#8ce1c3;padding:6px 8px 1px}
+#tab-python .py-ide-menu-content .python-project-picker,
+#tab-python .python-project-bar.is-stuck .py-ide-menu-content .python-project-picker{
+  display:block!important;width:100%!important;max-width:none!important;
+  min-width:0!important;flex:none!important;padding:0 4px 6px
+}
+#tab-python .py-ide-menu-content .python-project-picker select{
+  display:block!important;width:100%!important;min-width:0!important;max-width:none!important
+}
+#tab-python .python-ide-layout,
+#tab-python.py-right-closed .python-ide-layout{
+  box-sizing:border-box!important;width:100%!important;
+  height:var(--py-work-height)!important;min-height:175px!important;
+  max-height:none!important;margin:0!important;gap:6px!important;
+  align-items:stretch!important;overflow:hidden!important
+}
+#tab-python .python-ide-layout .python-editor-card,
+#tab-python .python-editor-card{
+  grid-row:1!important;min-height:0!important;max-height:100%!important;
+  height:100%!important;margin:0!important;padding:0!important;
+  display:flex!important;flex-direction:column!important;overflow:hidden!important
+}
+#tab-python .python-editor-card .python-editor-top{
+  box-sizing:border-box!important;display:flex!important;flex-direction:row!important;
+  align-items:center!important;justify-content:flex-start!important;
+  flex:0 0 30px!important;height:30px!important;min-height:30px!important;
+  padding:0 8px!important;gap:0!important;margin:0!important
+}
+#tab-python .python-editor-card .python-editor-shell,
+#tab-python .python-editor-shell{
+  position:relative!important;display:block!important;
+  flex:1 1 0!important;min-height:0!important;height:0!important;
+  width:100%!important;margin:0!important;padding:0!important;
+  border-top:0!important;overflow:hidden!important
+}
+#tab-python .python-editor-card #pythonMonaco,
+#tab-python .python-editor-card #pythonEditor{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+  min-height:0!important;margin:0!important
+}
+#tab-python .python-editor-card .python-editor-footer{
+  box-sizing:border-box!important;display:flex!important;
+  align-items:center!important;justify-content:space-between!important;
+  flex:0 0 27px!important;height:27px!important;min-height:27px!important;
+  white-space:nowrap!important;flex-wrap:nowrap!important;gap:12px!important;
+  margin:0!important;padding:3px 10px!important;overflow:hidden!important
+}
+#tab-python .python-editor-footer span{min-width:0;text-overflow:ellipsis;overflow:hidden}
+#tab-python .python-editor-footer span:not(:last-child){color:#829eab}
+#tab-python .python-ide-layout .python-side-stack{min-height:0!important;max-height:100%!important;height:100%!important}
+#tab-python .py-bottom-dock,
+#tab-python.py-bottom-max .py-bottom-dock{
+  box-sizing:border-box!important;margin:5px 0 0!important;padding:0!important;
+  height:var(--py-terminal-h)!important;min-height:35px!important;
+  max-height:none!important;overflow:hidden!important
+}
+#tab-python.py-bottom-closed .py-bottom-dock{height:35px!important}
+#tab-python .py-bottom-dock .python-terminal-card,
+#tab-python .py-bottom-dock .python-ide-layout .python-terminal-card{
+  display:flex!important;flex-direction:column!important;
+  height:0!important;flex:1 1 0!important;min-height:0!important;max-height:none!important;
+  margin:0!important;padding:0!important;overflow:hidden!important
+}
+#tab-python .py-bottom-dock .python-terminal-card #pythonTerminal{
+  min-height:0!important;max-height:none!important;height:0!important;
+  flex:1 1 0!important;margin:0!important;overflow:auto!important
+}
+#tab-python .py-bottom-dock .python-terminal-heading{
+  flex:0 0 auto!important;min-height:34px!important;padding:5px 10px!important
+}
+#tab-python .python-status-footer{
+  box-sizing:border-box!important;height:20px!important;min-height:20px!important;
+  margin:4px 0 0!important;padding:0 3px!important;align-items:center!important;
+  gap:8px!important;flex-wrap:nowrap!important;white-space:nowrap!important;
+  overflow:hidden!important;font-size:9px!important
+}
+#tab-python .python-status-footer span{overflow:hidden;text-overflow:ellipsis}
+#tab-python .py-project-explorer,.python-side-stack,#tab-python .py-tool-rail{
+  min-height:0!important;max-height:100%!important
+}
+@media(max-width:1100px){
+ #tab-python .python-project-bar,
+ #tab-python .python-project-bar.is-stuck{
+  flex-wrap:wrap!important;height:auto!important;min-height:48px!important;max-height:none!important;
+  row-gap:5px!important;overflow:visible!important
+ }
+ #tab-python .python-project-bar .python-toolbar-actions,
+ #tab-python .python-project-bar.is-stuck .python-toolbar-actions{
+  flex:1 1 100%!important;justify-content:flex-start!important;flex-wrap:wrap!important
+ }
+ #tab-python .python-project-bar #pythonQuickHardware{max-width:190px!important}
+ #tab-python .python-project-bar #pythonTarget{max-width:150px!important}
+}
+@media(max-width:900px){
+ #tab-python .python-project-bar,
+ #tab-python .python-project-bar.is-stuck{overflow:visible!important}
+ #tab-python .python-editor-card .python-editor-footer span:nth-child(2),
+ #tab-python .python-editor-card .python-editor-footer span:nth-child(3){display:none!important}
+ #tab-python .py-bottom-dock .python-terminal-heading{flex-wrap:nowrap!important}
+}
+@media(max-width:560px){
+ #tab-python .python-project-bar #pythonQuickHardware{flex:1 1 130px!important;max-width:none!important}
+ #tab-python .python-project-bar #pythonTarget{flex:1 1 115px!important;max-width:none!important}
+ #tab-python .python-project-bar .python-toolbar-actions{justify-content:flex-start!important}
+ #tab-python .python-project-bar .python-toolbar-actions .btn{min-width:49px!important}
+ #tab-python .python-editor-card .python-editor-footer span:not(:last-child){display:none!important}
+ #tab-python .python-status-footer span:nth-child(2){display:none!important}
+}
