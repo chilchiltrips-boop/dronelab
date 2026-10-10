@@ -1,7 +1,7 @@
 name: Verify DroneLab FlightCore Firmware Center
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, fix/flightcore-v1-2-1-serial-hardware, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, fix/firmware-usb-live-step3-status, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
