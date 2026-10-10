@@ -94,7 +94,7 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 .tp-main-grid.tp-layout-full-pid{display:grid;grid-template-columns:minmax(0,3fr) minmax(390px,2fr);grid-template-areas:"sim controls" "pid pid" "lower lower";gap:16px;align-items:start}
 .tp-layout-full-pid>.tp-top-simulator{grid-area:sim;min-width:0}
 .tp-layout-full-pid>.tp-top-controls{grid-area:controls;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start;min-width:0}
-.tp-layout-full-pid>.tp-pid-panel{grid-area:pid;min-width:0;grid-column:auto}
+.tp-layout-full-pid>.tp-pid-panel{grid-area:pid;min-width:0}
 .tp-layout-full-pid>.tp-lower-grid{grid-area:lower;display:grid;grid-template-columns:minmax(0,3fr) minmax(390px,2fr);gap:16px;align-items:start;min-width:0}
 .tp-lower-left,.tp-lower-right{display:grid;gap:16px;align-content:start;min-width:0}
 .tp-layout-full-pid .tp-sticks,.tp-layout-full-pid .tp-env-panel{grid-column:auto;min-width:0}
