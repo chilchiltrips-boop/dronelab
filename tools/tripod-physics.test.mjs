@@ -79,3 +79,24 @@ test('ANGLE training pulse level-holds; ACRO pulse ends in zero rate without ang
  assert.ok(Math.abs(b.roll-settledTilt)<1.0,'Centered ACRO drifted after angular rate settled: '+b.roll);
  assert.ok(Math.abs(b.rollRate)<.35,'ACRO failed to settle angular rate at zero stick');
 });
+
+test('ACRO and ANGLE share rate Roll/Pitch/Yaw gains and have no Yaw angle PID',()=>{
+ const s=createSimulator();
+ assert.deepEqual(Object.keys(s.pid).sort(),['anglePitch','angleRoll','ratePitch','rateRoll','rateYaw'].sort());
+ assert.equal(s.pid.angleYaw,undefined);
+ assert.equal(setPID(s,'rateRoll',{p:1.2,i:18,d:.04}),true);
+ assert.equal(setPID(s,'rateYaw',{p:4.2,i:13,d:.02}),true);
+ startSimulator(s);s.throttle=1550;stepSimulator(s);assert.equal(s.memory.rateRoll.ready,true);
+ setFlightMode(s,'acro');stepSimulator(s);assert.equal(s.pid.rateRoll.p,1.2);assert.equal(s.pid.rateYaw.p,4.2);
+ setFlightMode(s,'angle');stepSimulator(s);assert.equal(s.pid.rateRoll.p,1.2);assert.equal(s.pid.rateYaw.p,4.2);
+ assert.equal(s.memory.angleYaw,undefined);
+});
+test('STOP reset home restores pose/height/motors without removing tuned PID values',()=>{
+ const s=createSimulator();setPID(s,'rateYaw',{p:4,i:18,d:.02});
+ startSimulator(s);s.throttle=1650;for(let i=0;i<150;i++)stepSimulator(s);
+ s.roll=21;s.pitch=-13;s.yaw=42;s.vertical.z=.08;s.vertical.velocity=.21;
+ resetSimulator(s);
+ assert.equal(s.running,false);assert.equal(s.throttle,1000);
+ assert.deepEqual([s.roll,s.pitch,s.yaw,s.vertical.z,s.vertical.velocity],[0,0,0,0,0]);
+ assert.deepEqual(s.motorRPM,[0,0,0,0]);assert.equal(s.pid.rateYaw.p,4);
+});
