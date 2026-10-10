@@ -145,7 +145,7 @@ test('gyro reader and generic I2C scanner coexist on the same Web Serial stream'
 });
 test('browser Python example and worker include fresh read_gyro and RateRoll RatePitch RateYaw',()=>{
  const page=file('js/python-lab.js'),worker=file('python-lab-worker.js');
- for(const token of ['createGyroBridge','gyroBridge.readGyro','read_gyro','RateRoll','RatePitch','RateYaw','await drone.read_gyro','gyro["address"]'])assert.ok(page.includes(token),token);
+ for(const token of ['createGyroBridge','gyroBridge.readGyro','read_gyro','RateRoll','RatePitch','RateYaw','await drone.read_gyro','I2C address:'])assert.ok(page.includes(token),token);
  for(const token of ['async def read_gyro','_zj_bridge.gyroRead','read_gyro',"'read_gyro'"])assert.ok(worker.includes(token)||page.includes(token),token);
  for(const html of ['index.html','lab.html'])assert.ok(file(html).includes('<option value="gyro">'));
 });
