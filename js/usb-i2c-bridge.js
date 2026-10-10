@@ -1,9 +1,16 @@
-// Convert the existing serial I2C scanner output to structured results.
-// No changes to the exact Arduino sketch or firmware are necessary.
+// Accept old verbose scanner text and compact FlightCore ZJSCAN frames.
 export function createI2CParser(onScan=()=>{}){
  let collecting=false,addresses=[],last=null;
  function acceptLine(raw){
   const line=String(raw??'').trim();
+  // v1.3.2+: ZJSCAN,A1,millis,count,0x6B[,0x68...].
+  // Older firmware uses human-readable scan lines and a trailing count-only ZJSCAN.
+  const f=line.split(',');
+  if(f[0]==='ZJSCAN'&&/^A[12]$/.test(f[1]||'')&&/^\d+$/.test(f[3]||'')){
+   const reported=Number(f[3]),found=f.slice(4).map(x=>x.trim().toUpperCase()).filter(x=>/^0X[0-9A-F]{2}$/.test(x)).map(x=>'0x'+x.slice(2));
+   if(!found.length&&!collecting&&last?.reported_count===reported&&Date.now()-Date.parse(last.timestamp)<1000)return null;
+   return complete([...new Set(found)],reported);
+  }
   if(/Scanning I2C bus/i.test(line)){collecting=true;addresses=[];return null}
   if(!collecting)return null;
   const device=line.match(/Found device at 0x([0-9a-f]{1,2})\b/i);
