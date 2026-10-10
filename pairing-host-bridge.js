@@ -3,7 +3,7 @@
  * physical simulation state in the embedded tripod.html document. */
 (function(root){'use strict';
  const frame=document.getElementById('pidFrame');if(!frame)return;
- let owner='web',ready=false,loading=false;
+ let owner='web',ready=false,loading=false,contentResize=null;
  function target(){
   try{return frame.contentWindow?.ZebjusTraining||null}catch{return null}
  }
