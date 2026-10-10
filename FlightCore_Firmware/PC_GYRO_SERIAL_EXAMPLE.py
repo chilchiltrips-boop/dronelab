@@ -14,9 +14,28 @@ firmware's I2C scanner. Only the board's assigned gyro is decoded here.
 """
 import argparse
 import time
+from contextlib import contextmanager
 import serial
 
 GYROS = {"A1": ("LSM6DS3", "0x6B"), "A2": ("MPU6050", "0x68")}
+
+
+@contextmanager
+def safe_serial(path):
+    # Set USB Serial/JTAG control lines before opening: avoid keeping C3 in
+    # ROM DOWNLOAD mode due to DTR/RTS auto-reset behavior.
+    port = serial.Serial()
+    port.port = path
+    port.baudrate = 115200
+    port.timeout = 1
+    port.dtr = False
+    port.rts = False
+    port.open()
+    try:
+        yield port
+    finally:
+        port.close()
+
 
 
 def decode_gyro(line):
@@ -51,7 +70,7 @@ def main():
     parser.add_argument("--rate", type=int, choices=[10, 20, 50], default=20)
     args = parser.parse_args()
 
-    with serial.Serial(args.port, 115200, timeout=1) as port:
+    with safe_serial(args.port) as port:
         port.write(b"ZJINFO,GET\n")
         port.write(f"ZJTEL,RATE,{args.rate}\n".encode("ascii"))
         last_print = 0
