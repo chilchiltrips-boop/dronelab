@@ -86,3 +86,59 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 .tp-pid-bank .action{padding:6px 8px;min-width:0;font-size:10px;min-height:40px}
 .tp-pid-detail-title{padding:7px 14px;margin:0 14px 10px;border-top:1px solid #31596a;color:#98e9d2;font-size:10px;font-weight:900;letter-spacing:.045em}
 @media(max-width:470px){.tp-pid-bank{grid-template-columns:minmax(43px,.9fr) repeat(3,minmax(0,1fr)) 53px;gap:3px;padding:4px}.tp-pid-bank input{font-size:11px;padding:4px}.tp-pid-bank>strong{font-size:10px}.tp-pid-bank .action{font-size:9px;padding:4px}}
+
+
+/* PID full-width workbench: top F450 and joysticks, middle full-width PID,
+   bottom attitude/target left and environment/A-B right. Layout only. */
+.tp-shell{max-width:2120px}
+.tp-main-grid.tp-layout-full-pid{display:grid;grid-template-columns:minmax(0,3fr) minmax(390px,2fr);grid-template-areas:"sim controls" "pid pid" "lower lower";gap:16px;align-items:start}
+.tp-layout-full-pid>.tp-top-simulator{grid-area:sim;min-width:0}
+.tp-layout-full-pid>.tp-top-controls{grid-area:controls;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start;min-width:0}
+.tp-layout-full-pid>.tp-pid-panel{grid-area:pid;min-width:0}
+.tp-layout-full-pid>.tp-lower-grid{grid-area:lower;display:grid;grid-template-columns:minmax(0,3fr) minmax(390px,2fr);gap:16px;align-items:start;min-width:0}
+.tp-lower-left,.tp-lower-right{display:grid;gap:16px;align-content:start;min-width:0}
+.tp-layout-full-pid .tp-sticks,.tp-layout-full-pid .tp-env-panel{grid-column:auto;min-width:0}
+.tp-layout-full-pid .tp-pid-matrix{grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
+.tp-layout-full-pid .tp-pid-matrix:has(#tpAnglePidSection[hidden]) #tpRatePidSection{grid-column:1/-1}
+.tp-layout-full-pid .tp-pid-bank-section{align-self:start}
+.tp-layout-full-pid .tp-pid-bank{min-width:0}
+.tp-layout-full-pid .tp-ab-compare{margin:0;padding:4px 1px 14px;background:linear-gradient(165deg,#0b1d2b,#071724);border:1px solid #29485c;border-radius:16px;min-width:0}
+.tp-layout-full-pid .tp-telemetry .tp-chart-wrap{height:240px}
+.tp-layout-full-pid .tp-lower-right .tp-env-sliders{gap:14px 12px}
+@media(max-width:1050px){
+ .tp-main-grid.tp-layout-full-pid{grid-template-columns:minmax(0,1fr);grid-template-areas:"sim" "controls" "pid" "lower"}
+ .tp-layout-full-pid>.tp-top-controls,.tp-layout-full-pid>.tp-lower-grid{grid-template-columns:minmax(0,1fr)}
+ .tp-layout-full-pid .tp-joysticks{max-width:680px;margin:0 auto;width:100%}
+}
+@media(max-width:850px){
+ .tp-layout-full-pid .tp-pid-matrix{grid-template-columns:minmax(0,1fr)}
+ .tp-layout-full-pid .tp-pid-matrix #tpRatePidSection{grid-column:auto}
+ .tp-layout-full-pid .tp-telemetry .tp-chart-wrap{height:190px}
+}
+@media(max-width:540px){
+ .tp-main-grid.tp-layout-full-pid{gap:12px}
+ .tp-layout-full-pid .tp-top-controls,.tp-layout-full-pid>.tp-lower-grid,.tp-lower-left,.tp-lower-right{gap:12px}
+ .tp-layout-full-pid .tp-pid-matrix{gap:8px}
+ .tp-layout-full-pid .tp-telemetry .tp-chart-wrap{height:170px}
+}
+
+/* Tiny phones: allow the connection header and command toolbar to wrap rather
+   than widening the entire document (especially at 320px). */
+@media(max-width:380px){
+ .tp-header{flex-wrap:wrap;gap:8px}
+ .tp-header-state{width:100%;min-width:0;justify-content:flex-start;gap:6px}
+ .tp-brand{min-width:0}
+ .tp-heading h1{overflow-wrap:anywhere}
+ .tp-command,.tp-command-group{min-width:0}
+ .tp-command-buttons{max-width:100%;gap:7px}
+ .tp-command-buttons button{min-width:88px;white-space:normal}
+}
+
+/* Camera toolbar must wrap inside the 3D card at 320px; never push scene
+   status outside the card. All camera/effects/quality controls stay visible. */
+@media(max-width:540px){
+ .tp-view-panel>.panel-title{flex-wrap:wrap;align-items:flex-start}
+ .tp-view-panel>.panel-title>div:first-child{min-width:0;width:100%}
+ .tp-view-panel .tp-view-actions{width:100%;max-width:100%;min-width:0;flex:1 1 100%;justify-content:flex-start}
+ .tp-view-panel .tp-view-actions .smallstate{white-space:normal;max-width:100%;min-width:0;margin-left:0;overflow-wrap:anywhere}
+}
