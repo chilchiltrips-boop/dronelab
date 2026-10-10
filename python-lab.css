@@ -186,7 +186,7 @@
 }
 /* Monaco supplies the actual internal X/Y scrollbars. The editor shell must
  * stay a bounded viewport, rather than expanding with source file length. */
-#tab-python .python-editor-shell{min-width:0;min-height:0;overflow:hidden}
+#tab-python .python-editor-shell{min-width:0;min-height:0;max-height:100%;overflow:hidden;contain:layout size}
 #tab-python #pythonMonaco{overflow:hidden;min-width:0;min-height:0}
 #tab-python #pythonEditor{
  white-space:pre;overflow-x:auto;overflow-y:auto;
@@ -203,3 +203,6 @@
   flex:1 1 0;min-width:0;padding:7px 6px;font-size:11px;
  }
 }
+
+.fw-serial-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+#tab-python #pythonMonaco .monaco-scrollable-element>.scrollbar.vertical{display:block!important;opacity:1!important}
