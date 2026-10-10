@@ -17,7 +17,9 @@ try{
  page.once('dialog',d=>d.accept());await page.locator('#pythonQuickHardware').selectOption('plot');await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.screenshot({path:'test-output/offline-python-plot.png',fullPage:true});
- await page.goto(base+'tripod.html');
+ await page.goto(base+'#pid');
+ await page.waitForFunction(()=>window.ZebjusTraining?.isReady?.()&&document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpSceneStatus')?.textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
+ await page.goto(base+'tripod.html?standalone=1');
  await page.waitForFunction(()=>window.ZebjusTraining&&document.getElementById('tpSceneStatus').textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
  await page.locator('#tpRun').click();await page.locator('body').click({position:{x:20,y:180}});for(let n=0;n<24;n++)await page.keyboard.press('w');
  await page.waitForFunction(()=>window.ZebjusTraining.snapshot().throttle===1600&&window.ZebjusTraining.snapshot().motors.rpm.every(v=>v>1000));
