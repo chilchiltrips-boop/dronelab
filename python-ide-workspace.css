@@ -161,11 +161,14 @@
  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tab-python .py-open-file-tab .py-ide-icon{width:14px;height:14px;color:#85deb8}
 #tab-python.py-tool-floating .python-side-stack{position:fixed!important;z-index:160!important;
- top:clamp(90px,15vh,170px)!important;right:clamp(20px,4vw,65px)!important;
- bottom:auto!important;left:auto!important;width:min(540px,85vw)!important;height:min(580px,70dvh)!important;
+ top:var(--py-float-top,clamp(90px,15vh,170px))!important;right:auto!important;
+ bottom:auto!important;left:var(--py-float-left,clamp(20px,4vw,65px))!important;width:min(540px,85vw)!important;height:min(580px,70dvh)!important;
  box-shadow:0 22px 65px #000b;border-color:#66b19c;resize:both;overflow:hidden}
 #tab-python.py-tool-floating .python-col-resizer{opacity:0;pointer-events:none}
 #tab-python .py-tool-window-content::-webkit-scrollbar,#tab-python .py-explorer-tree::-webkit-scrollbar,
 #tab-python #pythonTerminal::-webkit-scrollbar{width:11px;height:11px}
 #tab-python .py-tool-window-content::-webkit-scrollbar-thumb,#tab-python .py-explorer-tree::-webkit-scrollbar-thumb,
 #tab-python #pythonTerminal::-webkit-scrollbar-thumb{background:#466d7d;border:2px solid #0b202f;border-radius:10px}
+
+#tab-python .py-tool-window-head{cursor:grab}#tab-python.py-tool-floating .py-tool-window-head:active{cursor:grabbing}
+#tab-python .py-tree-entry[aria-expanded="false"]>.py-ide-icon{opacity:.68}
