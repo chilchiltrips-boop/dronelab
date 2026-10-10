@@ -8,6 +8,7 @@ on:
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/release-signing.test.mjs'
       - 'tools/verify_signed_android_release.py'
+      - 'tools/wait-release-checks.mjs'
       - 'companion.html'
       - 'companion.css'
       - 'companion.js'

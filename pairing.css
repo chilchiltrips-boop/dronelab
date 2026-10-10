@@ -169,3 +169,23 @@
 .training-control-bar .btn{flex-shrink:0}
 #simRemoteFrame{display:block;width:100%;height:clamp(480px,74vh,920px);min-height:480px;background:#091b29;border:1px solid #285569;border-radius:14px}
 @media(max-width:700px){#simRemoteFrame{height:72vh;min-height:420px}#tab-simcontrol{padding:7px}}
+
+/* Inline Settings: compact, horizontal pairing cards. Buttons stay touch friendly. */
+.settings-workspace .tp-connection-dialog{position:static;display:block;width:100%;max-width:none;max-height:none;overflow:visible;margin:0;border-radius:14px;background:#0a1c2c;box-shadow:none;padding:0;border:1px solid #31546b;color:#e6f5fd}
+.settings-workspace .tp-dialog-header{padding:10px 14px;border-radius:14px 14px 0 0;background:#102638}
+.settings-workspace .tp-dialog-header h2{font-size:15px}.settings-workspace .tp-dialog-header p{font-size:11px;margin-top:2px}
+.settings-workspace #connectionFlow{padding:10px 12px}
+.settings-workspace #connectionFlow .qr-hero{padding:9px 12px;gap:12px;margin-bottom:8px;background:#0d2539;border-color:#284b65}.settings-workspace .qr-hero h2{font-size:16px;margin:3px 0}.settings-workspace .qr-hero p{font-size:11px;margin:3px 0}.settings-workspace .qr-pair-methods{margin:8px 0;gap:7px}
+.settings-workspace #connectionFlow .btn{background:#183650;border:1px solid #487499;color:#ddf0ff;padding:7px 11px;min-height:35px!important;font-size:11px;border-radius:8px;box-shadow:none}
+.settings-workspace #connectionFlow .btn.primary{background:#20547e!important;border-color:#518fcb!important;color:#e3f5ff}
+.settings-workspace #connectionFlow .btn.danger{background:#633247!important;border-color:#bb6b84!important}
+.settings-workspace #connectionFlow .qr-confirm-button.ready:not(:disabled){background:#275f8c!important;box-shadow:0 0 0 2px #4caeea46;animation:none}
+.settings-workspace #connectionFlow .qr-settings-grid{max-width:none;gap:9px}
+.settings-workspace #connectionFlow .qr-card{margin:0;padding:0;border-radius:10px}
+.settings-workspace #connectionFlow .qr-pair-flow summary{min-height:38px;padding:8px 10px}.settings-workspace #connectionFlow .qr-pair-flow summary strong{font-size:11px}.settings-workspace #connectionFlow .qr-step-body{padding:6px 10px 10px;gap:7px}
+.settings-workspace #connectionFlow .qr-step-one .qr-step1-qr{width:100%;min-height:180px}.settings-workspace #connectionFlow .qr-step-one .qr-step1-layout{display:flex;flex-direction:column;gap:8px}.settings-workspace #connectionFlow .qr-step-one .qr-code-box{max-width:270px;width:100%;min-height:155px}.settings-workspace #connectionFlow .qr-data-card{width:100%;max-width:none}.settings-workspace #connectionFlow .qr-pair-code{font-size:19px}
+.settings-workspace #connectionFlow .qr-code-entry{gap:6px}.settings-workspace #connectionFlow .qr-code-entry input{min-height:38px;min-width:100px}
+.settings-workspace #connectionFlow .qr-actions{gap:6px}.settings-workspace .qr-header-switch{display:none}
+@media(min-width:1060px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:1.1fr 1fr 1fr;align-items:start}.settings-workspace #connectionFlow .qr-settings-grid>.qr-step-one{grid-column:auto;align-items:stretch}.settings-workspace #connectionFlow .qr-pair-flow details.qr-card{min-width:0}.settings-workspace #connectionFlow .qr-settings-grid>.qr-pair-help{grid-column:1/2}.settings-workspace #connectionFlow .qr-settings-grid>.qr-card:last-child{grid-column:2/4}}
+@media(min-width:740px) and (max-width:1059px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-workspace #connectionFlow .qr-settings-grid>.qr-step-one{grid-column:auto}}
+@media(max-width:739px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:1fr}.settings-workspace .tp-dialog-header{flex-wrap:wrap}.settings-workspace #connectionFlow .qr-step-one .qr-code-box{max-width:400px}}

@@ -65,3 +65,9 @@
 .tp-stick-pad[data-pointer]::after{content:'';pointer-events:none;position:absolute;left:var(--anchor-x);top:var(--anchor-y);width:72%;height:72%;transform:translate(-50%,-50%);border-radius:50%;border:1px solid #6de9ce77;background:#1fd1b20d}
 .tp-stick-pad[data-remote=true]{border-color:#55c9dc;cursor:default}.tp-stick-knob{z-index:1}
 @media(max-width:540px){.tp-brand small{display:none}.tp-brand strong{font-size:12px}.tp-header-state{gap:5px}.tp-header-state #mobileHeaderStatus{font-size:9px}.tp-header-state .qr-build-version{display:none}.tp-vertical-grid{grid-template-columns:repeat(2,1fr)}.tp-connection-dialog{width:98vw;max-height:96svh}#connectionFlow{padding:10px}.tp-dialog-header{padding:12px}.tp-dialog-header h2{font-size:15px}}
+
+/* Embedded PID workspace has no duplicate page header/navigation; parent shell stays mounted. */
+html.pid-embedded .tp-header,html.pid-embedded .tp-nav{display:none!important}
+html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
+.tp-nav a,.tp-nav a.active,.tp-heading a{text-decoration:none!important;border-bottom:0!important;box-shadow:none!important}
+.tp-nav a.active{border-radius:12px;background:#133b45;color:#b5f6dd}
