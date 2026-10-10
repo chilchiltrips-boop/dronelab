@@ -66,14 +66,14 @@ test('USB Flash button explains disabled state and validates loaded board/type b
  const ctx={
   navigator:{serial:{}},isSecureContext:true,
   busy:false,loader:null,monitorPort:null,fw:null,usbBoardId:'',
-  catalog:{defaultBoardId:'ZFC-A1'},school:()=>null,
+  catalog:{defaultBoardId:'ZFC-A1'},school:()=>null,boardById:id=>id==='ZFC-A1'?{imageChipIds:[5]}:id==='ZFC-A2'?{imageChipIds:[13]}:null,
   $:selector=>els.get(selector)||null,boardName:id=>id
  };
  vm.runInNewContext(source.slice(start,end)+';globalThis.check=usbFlashReadiness;globalThis.refresh=syncFirmwareControls;',ctx);
  const check=()=>({ready:ctx.check().ready,message:ctx.check().message});
  let result=check();assert.equal(result.ready,false);assert.ok(result.message.includes('Connect USB'));
  ctx.monitorPort={};assert.ok(check().message.includes('Serial Monitor'));
- ctx.monitorPort=null;ctx.loader={};ctx.usbBoardId='ZFC-A1';
+ ctx.monitorPort=null;ctx.loader={chip:{IMAGE_CHIP_ID:5}};ctx.usbBoardId='ZFC-A1';
  result=check();assert.equal(result.ready,false);assert.ok(result.message.includes('Auto Load Latest'));
  ctx.fw={boardId:'ZFC-A2',type:'factory'};
  assert.ok(check().message.includes('belongs to'));
@@ -82,6 +82,8 @@ test('USB Flash button explains disabled state and validates loaded board/type b
  ctx.fw={boardId:'ZFC-A1',type:'factory'};
  assert.equal(check().ready,true);
  ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,false);
+ ctx.loader.chip.IMAGE_CHIP_ID=13;assert.equal(check().ready,false);assert.ok(check().message.includes('Cannot verify connected ROM chip'));
+ ctx.loader.chip.IMAGE_CHIP_ID=5;
  assert.ok(els.get('#fwUsbFlashHelp').textContent.includes('Factory image verified'));
  els.get('#fwBoardProfile').value='ZFC-A2';
  assert.equal(check().ready,false);ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,true);
