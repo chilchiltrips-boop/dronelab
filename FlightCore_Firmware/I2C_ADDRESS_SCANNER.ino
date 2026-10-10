@@ -3,9 +3,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-// FlightCore USB diagnostics v1.3.1; version is emitted by the RUNNING app,
+// FlightCore USB diagnostics v1.3.2; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.3.1";
+constexpr const char* FW_VERSION="1.3.2";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
@@ -14,14 +14,14 @@ constexpr uint8_t BUS_SDA=4,BUS_SCL=5; // A1: dedicated I2C pins; GPIO8 stays on
 constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS FlightCore A1 SuperMini";
 #endif
 
-// Scanner output is intentionally backward-compatible with Python Lab's I2C parser.
+// Compact scan output contains addresses for Python Lab without verbose banners.
 // Internal USER LEDs on both supported controllers use inverted (active-low) PWM.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t LED_PIN=15;   // Seeed XIAO ESP32-C6
 #else
 constexpr uint8_t LED_PIN=8;    // ESP32-C3 Super Mini
 #endif
-constexpr unsigned long SCAN_PERIOD_MS=5000,LED_LEASE_MS=4000;
+constexpr unsigned long LED_LEASE_MS=4000;
 struct LedStep {uint8_t brightness;uint16_t duration;};
 enum LedMode:uint8_t {LED_OFF,LED_MANUAL,LED_BLINK,LED_FADE,LED_SAFE,LED_WARNING,LED_SOS,LED_PATTERN};
 LedMode ledMode=LED_OFF;
@@ -261,19 +261,18 @@ void updateGyro(unsigned long now){
   gyroReady=false;lastGyroProbe=now;gyroStatus("READ_ERROR");return;
  }
  // Gyro sampling is independent of USB transmission timing.
- // Maintain a separate low-rate ZJGYRO frame for legacy Python/plot clients.
+ // ZJTEL is the sole high-frequency gyro stream.
 }
 
 // Non-blocking I2C scan: up to 3 addresses per pass; once per 5 seconds or on request.
-// Legacy Arduino scanner text remains available for existing Python USB scan examples.
-uint8_t scanAddress=1,scanCount=0;
+// Scan once on boot or after ZJI2C,SCAN; no periodic bus probing during telemetry.
+uint8_t scanAddress=1,scanCount=0,scanAddresses[126]={0};
 bool scanActive=false,scanRequested=true;
-unsigned long lastScanStart=0;
 void requestScan(){scanRequested=true;}
 void scanI2C(unsigned long now){
  if(!scanActive){
-  if(!scanRequested&&now-lastScanStart<SCAN_PERIOD_MS)return;
-  scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;lastScanStart=now;
+  if(!scanRequested)return;
+  scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;
 
   // Structured scan only.
  }
@@ -282,7 +281,7 @@ void scanI2C(unsigned long now){
   const byte error=Wire.endTransmission();
   if(error==0){
 
-   scanCount++;
+   scanAddresses[scanCount++]=scanAddress;
   }else if(error==4){
 
    // Suppress noisy I2C diagnostic output.
@@ -292,7 +291,11 @@ void scanI2C(unsigned long now){
 
   // ZJSCAN summary follows.
   Serial.print("ZJSCAN,");Serial.print(GYRO_BOARD);Serial.print(',');
-  Serial.print(now);Serial.print(',');Serial.println(scanCount);
+  Serial.print(now);Serial.print(',');Serial.print(scanCount);
+  for(uint8_t i=0;i<scanCount;i++){
+   Serial.print(",0x");if(scanAddresses[i]<16)Serial.print('0');Serial.print(scanAddresses[i],HEX);
+  }
+  Serial.println();
   scanActive=false;
  }
 }
@@ -353,5 +356,5 @@ void loop(){
  updateGyro(now);
  scanI2C(now);
  emitTelemetry(now);
- emitLegacyGyro(now);
+ // Legacy ZJGYRO duplicates are disabled.
 }
