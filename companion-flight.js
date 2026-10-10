@@ -133,7 +133,14 @@ function onTelemetry(packet){
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
 function doStop(){stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
 function openConnection(){clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')}
-function closeConnection(){window.ZebjusPairingStopCamera?.();$('mobileConnection').close();$('flightSettings').setAttribute('aria-expanded','false');$('flightSettings').focus()}
+function closeConnection(){
+  window.ZebjusPairingStopCamera?.();
+  const dialog=$('mobileConnection');if(dialog?.open)dialog.close();
+  $('flightSettings').setAttribute('aria-expanded','false');
+  $('flightSettings').focus({preventScroll:true});
+  // Android WebView can retain a text-selection range after a long press.
+  const selection=window.getSelection?.();if(selection?.rangeCount)selection.removeAllRanges();
+}
 function bind(){
  setupStick('left');setupStick('right');
  $('flightArm').onclick=()=>{
@@ -155,6 +162,11 @@ function bind(){
  $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
  document.addEventListener('contextmenu',event=>{if(event.target.closest('button,select,.flight-touch-zone'))event.preventDefault()});
  $('flightPair').onclick=openConnection;$('flightBack').onclick=closeConnection;$('flightSettings').onclick=openConnection;
+  $('flightBack').addEventListener('pointerdown',e=>{
+    // Native Android long press may swallow the synthetic click after pointerdown.
+    // Close on the original touch so the controller is never trapped by the modal.
+    if(e.pointerType==='touch'||e.pointerType==='pen'){e.preventDefault();closeConnection()}
+  });
  $('flightConnect').onclick=openConnection;
  $('flightQuickScan').onclick=()=>{openConnection();$('scanOfferBtn').click()};
  $('flightResponse').onclick=()=>{const names=Object.keys(F.PRESETS);$('flightPreset').value=names[(names.indexOf(preset)+1)%names.length];$('flightPreset').dispatchEvent(new Event('change',{bubbles:true}))};
