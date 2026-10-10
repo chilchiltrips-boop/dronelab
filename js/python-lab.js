@@ -279,7 +279,7 @@ async function enableMonaco(){
   // Own all models explicitly: Monaco auto-disposes an editor-created default
   // model after a switch, which breaks reopening previously selected .py files.
   const initialModel=M.editor.createModel(files[active]||'','python',M.Uri.parse('inmemory://zebjus/'+active));
-  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
+  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,stickyScroll:{enabled:false},minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
   models.set(active,initialModel);
   editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
   editor.onDidChangeCursorPosition(editorPosition);
