@@ -406,7 +406,16 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   if(loader){try{await loader.after('hard_reset')}catch(e){log('Bootloader reset: '+e.message)}await disconnectUsb(false);await sleep(500)}
   usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;
   const baud=serialBaud();
-  try{await port.open({baudRate:baud})}catch(e){usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
+  try{await port.open({baudRate:baud})}catch(e){
+    // Native USB CDC on ESP32-C3 may re-enumerate after the Factory flash/reset.
+    // Recover automatically from another already-authorized matching Web Serial port.
+    let alternate=null;
+    try{const permitted=await navigator.serial.getPorts();alternate=permitted.find(candidate=>candidate!==port&&matchingUsbPort(candidate))||null}catch{}
+    if(alternate){
+      try{await alternate.open({baudRate:baud});port=alternate;usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;log('USB serial reopened on a re-enumerated authorized port.')}
+      catch(error){usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open original or re-enumerated USB Serial port: '+String(error?.message||error))}
+    }else{usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
+   }
   monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
   // Native CDC firmware often waits for DTR before delivering Serial.println() messages.
   try{await port.setSignals({dataTerminalReady:true,requestToSend:false})}catch{}
