@@ -5,7 +5,7 @@ const bridge=createI2CBridge();
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
 let ledSession=false,ledHeartbeat=null,ledLastError=0;
-let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false;
+let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null;
 const fallbacks=new Map();
 function editHistory(){if(!fallbacks.has(active))fallbacks.set(active,{undo:[],redo:[]});return fallbacks.get(active)}
 function status(msg,kind=''){const p=$('pyStatus'),r=$('pyRuntimeState');if(p)p.textContent=msg;if(r){r.textContent=String(msg).length>34?String(msg).slice(0,34).toUpperCase()+'…':String(msg).toUpperCase();r.className='status '+kind}}
@@ -126,6 +126,45 @@ function startLedSession(packet){
  }
  sendLedPacket(packet);
 }
+const ERROR_DESCRIPTIONS={
+ SyntaxError:'Check quotes, colons, brackets and punctuation.',
+ IndentationError:'Align block indentation using four spaces.',
+ TabError:'Use spaces instead of mixing tabs and spaces.',
+ NameError:'Check spelling and define the variable before use.',
+ TypeError:'Check function arguments and expected types.',
+ ValueError:'The supplied value is invalid.',
+ AttributeError:'Check the object method or variable type.',
+ IndexError:'The list index is out of range.',
+ KeyError:'The dictionary does not contain this key.',
+ ModuleNotFoundError:'This Python module is unavailable in the browser.',
+ ImportError:'Check the requested Python import.',
+ PinConflictError:'A1 GPIO8 conflicts with the old sensor SDA wiring. Use SDA GPIO4 and SCL GPIO5, then flash the compatible firmware.',
+ USBDisconnectedError:'USB Serial disconnected. Reconnect the controller before running hardware code.',
+ SensorNotFoundError:'Check sensor power, I2C address, SDA and SCL connections.'
+};
+function markPythonError(err,origin='runtime'){
+ const line=Number(err.line)||0,type=String(err.errorType||'RuntimeError'),filename=String(err.filename||active);
+ const explanation=String(err.explanation||ERROR_DESCRIPTIONS[type]||'Read the traceback and check the highlighted statement.');
+ const full=String(err.error||type);
+ terminal('\\n['+type+' • '+origin+(line?' • line '+line:'')+'] '+explanation+'\\n'+full+'\\n','error');
+ if(monaco&&editor&&line>0){
+  const model=models.get(filename)||editor.getModel();
+  if(model&&line<=model.getLineCount()){
+   monaco.editor.setModelMarkers(model,'zebjus-diagnostics',[{startLineNumber:line,startColumn:1,endLineNumber:line,endColumn:model.getLineMaxColumn(line),message:type+': '+explanation,severity:monaco.MarkerSeverity.Error,source:'Python'}]);
+   if(filename===active){editor.revealLineInCenter(line);editor.setPosition({lineNumber:line,column:1})}
+  }
+ }
+ status(type+' • '+(line?'line '+line:'check terminal'),'warn');
+ $('pyLastRun').textContent='ERROR';
+}
+function clearPythonMarkers(){
+ if(monaco)for(const model of models.values())monaco.editor.setModelMarkers(model,'zebjus-diagnostics',[]);
+}
+function abortPythonWithHardwareError(type,message){
+ if(!running&&!ledSession)return;
+ stopPython(false);
+ markPythonError({errorType:type,error:message,explanation:ERROR_DESCRIPTIONS[type]||message,filename:active},'hardware');
+}
 function stopPython(notify=true){
  stopLedSession();
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
@@ -145,21 +184,34 @@ async function onRpc(w,m){
 function makeWorker(){
  const w=new Worker('./python-lab-worker.js');
  w.onmessage=e=>{
-  if(worker!==w)return;const m=e.data||{};
+  if(worker!==w&&syntaxWorker!==w)return;const m=e.data||{};
   if(m.type==='rpc')return void onRpc(w,m);
+  if(w===syntaxWorker&&m.type!=='syntax-error'&&m.type!=='syntax-ok')return;
   if(m.type==='led-write'){if(/,STOP\n$/.test(m.packet)){stopLedSession();return}startLedSession(m.packet);return}
   if(m.type==='image')return showPythonPlot(m);
   if(m.type==='stdout'||m.type==='stderr')return terminal(m.text,m.type==='stderr'?'error':'out');
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
+  if(m.type==='syntax-error'){markPythonError(m,'syntax');if(w===syntaxWorker){w.terminate();syntaxWorker=null}return}
+  if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\\n');w.terminate();syntaxWorker=null}return}
   if(m.type==='done'||m.type==='error'){
-   if(m.type==='error'){stopLedSession();terminal('\n[Python error]\n'+m.error+'\n','error');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
-   else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE'}
-   running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
+   if(m.type==='error'){
+    stopLedSession();markPythonError(m,'runtime');
+    w.terminate();worker=null;running=false;
+   }else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE';running=false;}
+   $('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
   }
  };
  w.onerror=e=>{if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
  return w;
+}
+function checkPythonSyntax(){
+ if(running){status('Stop Python before checking syntax','warn');return}
+ if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
+ clearPythonMarkers();
+ const w=makeWorker();syntaxWorker=w;
+ status('Checking Python syntax…');
+ w.postMessage({type:'check-syntax',filename:active,code:currentCode()});
 }
 function runPython(){
  if(running)return;
@@ -169,6 +221,8 @@ function runPython(){
  files[active]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
  clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
+ clearPythonMarkers();
+ worker.postMessage({type:'hardware-info',info:window.DroneLabSerial?.firmwareInfo?.()||null});
  worker.postMessage({type:'i2c-data',scan:bridge.getLatest()});
  worker.postMessage({type:'run',filename:active,code,files});
 }
@@ -209,6 +263,8 @@ function addCompletions(M){
  ['plt.show','plt.show()',K.Method,'Show Matplotlib plot output'],
  ['json','import json',K.Module,'Python JSON module'],
  ['Drone','Drone()',K.Class,'ZEBJUS board control object'],
+ ['led_stop','drone.led_stop()',K.Method,'Stop the onboard LED when stopping Python'],
+ ['check syntax','',K.Text,'Press Check Syntax to run Python AST validation without executing code'],
  ['zebjus_simple','from zebjus_simple import Drone',K.Module,'Import easy Drone hardware API'],
  ['time.sleep','time.sleep(1)',K.Method,'Sleep without await'],
  ['time','import time',K.Module,'Python standard time library'],
@@ -281,7 +337,7 @@ async function enableMonaco(){
   const initialModel=M.editor.createModel(files[active]||'','python',M.Uri.parse('inmemory://zebjus/'+active));
   editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,stickyScroll:{enabled:false},minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
   models.set(active,initialModel);
-  editor.onDidChangeModelContent(()=>{if(loading)return;files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
+  editor.onDidChangeModelContent(()=>{if(loading)return;clearPythonMarkers();files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
   editor.onDidChangeCursorPosition(editorPosition);
   editor.addCommand(M.KeyMod.CtrlCmd|M.KeyCode.Enter,runPython);
   $('pythonEditor').style.display='none';$('pythonMonaco').style.display='block';
@@ -409,6 +465,7 @@ function bind(){
  $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['scanner','custom','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'usb':'python';e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
+ $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
  $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();
  $('pythonEditor').oninput=e=>{recordText(e.target.value);editorPosition()};$('pythonEditor').onkeyup=editorPosition;$('pythonEditor').onclick=editorPosition;
  $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editor){e.preventDefault();undoRedo(e.shiftKey)}};
@@ -420,10 +477,17 @@ function bind(){
   if(/^ZJLED,ACK,/.test(line)){
    const parts=line.split(',');
    if(parts[2]!=='0')terminal('[LED] '+(parts[3]==='OK'?'Controller acknowledged command '+parts[2]:'Controller rejected command '+parts[2]+': '+parts[3])+'\n',parts[3]==='OK'?'out':'error');
+   if(parts[2]!=='0'&&parts[3]!=='OK'){
+    if(parts[3]==='PIN_CONFLICT')abortPythonWithHardwareError('PinConflictError','Controller rejected LED command '+parts[2]+': PIN_CONFLICT (GPIO8 SDA). Rewire A1 LSM6DS3 to SDA GPIO4/SCL GPIO5.');
+    else if(parts[3]==='BAD_ARGS'||parts[3]==='UNKNOWN')abortPythonWithHardwareError('ValueError','Controller rejected LED command '+parts[2]+': '+parts[3]);
+   }
   }else if(/^ZJGYRO,STATUS,/.test(line)){
    const parts=line.split(',');
    if(parts[5]==='NOT_FOUND')$('pyScanStatus').textContent=parts[3]+' '+parts[4]+' not found. Check 3.3V/GND and SDA/SCL wiring.';
   }
+ });
+ window.addEventListener('dronelab:usb-state',e=>{
+  if(e.detail?.connected===false&&running&&$('pythonTarget')?.value==='usb')abortPythonWithHardwareError('USBDisconnectedError','USB Serial disconnected while the Python hardware program was running.');
  });
  window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close()});
  bridge.subscribe(data=>{

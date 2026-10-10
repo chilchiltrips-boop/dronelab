@@ -146,3 +146,6 @@
 @media(max-width:920px){#tab-python .python-toolbar-actions{flex:1 1 100%}#tab-python .python-project-actions{justify-content:flex-start}}
 @media(max-width:760px){#tab-python .python-project-bar{gap:8px;padding:9px}#tab-python .python-project-heading{flex:1 1 100%;width:100%;justify-content:flex-start}#tab-python .python-project-heading strong{max-width:calc(100% - 160px)}#tab-python .python-project-picker{flex:1 1 100%}#tab-python .python-toolbar-actions{width:100%;flex:1 1 100%;gap:6px}#tab-python .python-toolbar-actions select{min-width:0;flex:1 1 calc(50% - 4px)}#tab-python .python-toolbar-actions .btn{flex:1 1 calc(33.333% - 5px);min-width:0}#tab-python .python-project-actions{width:100%;margin:0;gap:6px;justify-content:flex-start}#tab-python .python-project-actions .btn{flex:1 1 calc(33.333% - 5px)}#tab-python .python-editor-top{padding:9px 12px}}
 @media(max-width:410px){#tab-python .python-toolbar-actions select{flex:1 1 100%}}
+
+/* Python diagnostic action is compact even on horizontal tablet layouts. */
+#pythonCheckSyntaxBtn{min-width:94px}
