@@ -187,8 +187,9 @@
 </div>
 <div class="form-card firmware-target-card">
 <div class="panel-head"><div><small>STEP 2 • TARGET</small><h2>Connect controller</h2></div></div>
-<div class="firmware-target-option usb"><div class="firmware-target-icon">USB</div><div><b>USB Web Serial</b><span>Detect FlightCore A1 SuperMini / A2 C6 and flash the correct firmware. Desktop Chrome or Edge on HTTPS / localhost.</span></div><button class="btn primary small" id="fwConnectUsbBtn">Connect USB</button></div>
+<div class="firmware-target-option usb"><div class="firmware-target-icon">USB</div><div><b>USB Web Serial</b><span>Detect FlightCore A1 SuperMini / A2 C6 and flash the correct firmware. Desktop Chrome or Edge on HTTPS / localhost.</span></div><div class="firmware-connect-buttons"><button class="btn primary small" id="fwConnectUsbBtn">Connect USB / Flash Mode</button><button class="btn ghost small" id="fwReadRunningBtn" type="button" title="Open USB Serial to read running firmware ZJINFO">Read Running Firmware</button></div></div>
 <div class="firmware-usb-info"><div><span>Detected board</span><b id="fwUsbChip">--</b></div><div><span>USB status</span><b id="fwUsbState">Not connected</b></div><div><span>Baud</span><select id="fwUsbBaud"><option selected="" value="115200">115200</option><option value="460800">460800</option><option value="921600">921600</option></select></div></div>
+<div class="firmware-usb-info firmware-id-info"><div><span>Latest published package</span><b id="fwPublishedVersion">--</b></div><div><span>Last verified firmware (same session)</span><b id="fwPreviouslyVerified">None</b></div></div>
 <div class="firmware-usb-info"><div><span>USB sensor</span><b id="fwUsbSensor">--</b></div><div><span>I²C wiring mode</span><b id="fwUsbMode">--</b></div><div><span>Sensor pins</span><b id="fwUsbPins">--</b></div><div><span>Onboard LED</span><b id="fwUsbLed">--</b></div></div>
 <div class="firmware-target-actions"><button class="btn ghost small" type="button" id="fwI2cScanBtn">Scan sensors</button><button class="btn ghost small" type="button" id="fwLedTestBtn">Test onboard LED</button></div>
 <p class="micro-note">A1 SuperMini: connect LSM6DS3 SDA GPIO4, SCL GPIO5, 3V3 and GND. GPIO8 is reserved for the onboard LED, GPIO9 for BOOT. A2 C6: MPU6050 SDA GPIO22, SCL GPIO23. Gyro samples at 50 Hz, telemetry defaults to 20 Hz (10/20/50 selectable), and the full I²C scan runs every 5 seconds or on request.</p>
@@ -212,7 +213,10 @@
 <button class="btn ghost small" id="fwSerialReconnectBtn" type="button">Reconnect</button><button class="btn ghost small" id="fwSerialResetBtn" type="button">Reset Board</button>
 </div>
 <div id="fwSerialMonitorPane">
-<pre class="terminal fw-serial-console" id="fwSerialOutput" role="log" aria-live="off"></pre>
+<div class="fw-diagnostic-toolbar"><label>View <select id="fwSerialViewMode" aria-label="USB serial output mode"><option value="live" selected>Live Single Line</option><option value="raw">Raw Serial Log</option></select></label><span id="fwDiagnosticState" role="status">Waiting for sensor data</span></div>
+<pre id="fwLiveDiagnosticLine" class="terminal fw-serial-console fw-single-line" role="status" aria-live="off">ZJDIAG|v=1|state=WAITING|err=NO_DATA</pre>
+<pre class="terminal fw-serial-console" id="fwSerialOutput" role="log" aria-live="off" hidden></pre>
+<p class="fw-diagnostic-note">Live line refreshes at 10/20/50 Hz. NEW = next reading, HOLD = last reading, STALE = no new frame; Raw Log preserves boot, I²C, and error events. In Flash Mode, the ESP ROM cannot report an installed firmware version.</p>
 <div class="fw-serial-send"><input id="fwSerialInput" placeholder="Message to send to board…" aria-label="Serial message"/><select id="fwSerialLineEnding" aria-label="Line ending"><option value="">No line ending</option><option value="nl" selected>Newline</option><option value="cr">Carriage return</option><option value="crlf">Both NL &amp; CR</option></select><button class="btn primary small" id="fwSerialSendBtn" type="button">Send</button></div>
 <label class="fw-serial-autoscroll"><input type="checkbox" id="fwSerialAutoScroll" checked/> Auto-scroll</label>
 </div>
