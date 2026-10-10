@@ -16,6 +16,12 @@
  function notify(){
   const sim=target();if(!sim)return;
   sim.setOwner(owner);
+  if(contentResize)contentResize.disconnect();
+  const content=frame.contentWindow?.document?.querySelector('main.tp-shell');
+  if(content&&typeof ResizeObserver==='function'){
+   const resize=()=>{const h=Math.ceil(content.getBoundingClientRect().height+22);if(h>550&&h<8000)frame.style.height=h+'px'};
+   contentResize=new ResizeObserver(resize);contentResize.observe(content);resize();
+  }
   ready=true;loading=false;
   root.dispatchEvent(new Event('zebjus:training-ready'));
  }
