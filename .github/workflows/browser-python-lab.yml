@@ -1,7 +1,7 @@
 name: Browser Test Python Lab
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/python-led-i2c-tripod-front-v1, main]
+    branches: [release/flightcore-v1-2-usb-ui, testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/python-led-i2c-tripod-front-v1, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
@@ -28,6 +28,7 @@ on:
       - 'python-lab-worker.js'
       - 'js/python-lab.js'
       - 'js/usb-i2c-bridge.js'
+      - 'firmware-updater.js'
       - 'index.html'
       - 'lab.html'
   workflow_dispatch:
