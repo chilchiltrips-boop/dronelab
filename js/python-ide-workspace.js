@@ -24,10 +24,10 @@ export function createPythonIDEShell(api){
  const root=$('tab-python'),toolbar=root.querySelector('.python-project-bar'),layout=$('pythonIdeLayout'),editorCard=root.querySelector('.python-editor-card'),side=$('pythonSideStack');
  if(!root||!toolbar||!layout||!editorCard||!side)return null;
  const folders=new Set(readJson(FOLDERS,[]).filter(p=>folderPattern.test(p))),assets=new Map();
- let currentFolder='',selected='',right='closed',bottom='closed',rightWidth=360,bottomHeight=230,projectOpen=true,previewUrl='';
+ let currentFolder='',selected='',right='closed',bottom='closed',rightWidth=360,bottomHeight=200,projectOpen=true,previewUrl='';
  const collapsedFolders=new Set(readJson('zebjus-python-ide-collapsed-v1',[]));
  const stored=readJson(UI,{});
- if(stored&&typeof stored==='object'){rightWidth=Math.max(270,Math.min(700,Number(stored.rightWidth)||360));bottomHeight=Math.max(130,Math.min(520,Number(stored.bottomHeight)||230));projectOpen=stored.projectOpen!==false}
+ if(stored&&typeof stored==='object'){rightWidth=Math.max(270,Math.min(700,Number(stored.rightWidth)||360));bottomHeight=Math.max(130,Math.min(520,Number(stored.bottomHeight)||200));projectOpen=stored.projectOpen!==false}
  const savePanels=()=>{try{localStorage.setItem(UI,JSON.stringify({rightWidth,bottomHeight,projectOpen}))}catch{}};
  const saveFolders=()=>{try{localStorage.setItem(FOLDERS,JSON.stringify([...folders]))}catch{}};
  function addFolders(path){for(const f of folderChain(path))if(folderPattern.test(f))folders.add(f);saveFolders()}
@@ -263,12 +263,19 @@ export function createPythonIDEShell(api){
  let raf=0;
  function fit(){
   if(raf)return;
-  raf=requestAnimationFrame(()=>{raf=0;if(!root.classList.contains('active'))return;
-   const top=Math.max(layout.getBoundingClientRect().top,toolbar.getBoundingClientRect().bottom+7);
-   const available=Math.max(310,window.innerHeight-top-40);
-   const b=bottom==='closed'?36:Math.min(bottomHeight,Math.max(130,available-280));
+  raf=requestAnimationFrame(()=>{
+   raf=0;if(!root.classList.contains('active'))return;
+   // Use real viewport space, not legacy 700px editor and fixed terminal minima.
+   const viewport=window.visualViewport?.height||window.innerHeight;
+   const top=Math.max(layout.getBoundingClientRect().top,toolbar.getBoundingClientRect().bottom+5);
+   const footer=root.querySelector('.python-status-footer');
+   const footerH=Math.max(24,footer?.getBoundingClientRect().height||24);
+   const available=Math.max(220,Math.floor(viewport-top-footerH-14));
+   const wanted=root.classList.contains('py-bottom-max')?Math.min(520,Math.round(available*.58)):bottomHeight;
+   const b=bottom==='closed'?35:Math.max(115,Math.min(wanted,Math.floor(available*.42)));
+   const h=Math.max(175,available-b-6);
    root.style.setProperty('--py-terminal-h',b+'px');
-   root.style.setProperty('--py-work-height',Math.max(280,available-b)+'px');
+   root.style.setProperty('--py-work-height',h+'px');
    api.layoutEditor();
   })
  }
@@ -286,7 +293,14 @@ export function createPythonIDEShell(api){
  window.addEventListener('scroll',fit,{passive:true});
  window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')fit()});
  const obs=typeof ResizeObserver!=='undefined'?new ResizeObserver(fit):null;
- if(obs){const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');if(header)obs.observe(header);if(nav)obs.observe(nav)}
+ if(obs){
+  const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');
+  for(const node of [header,nav,toolbar,root.querySelector('.python-status-footer')])if(node)obs.observe(node);
+ }
+ const visibility=new MutationObserver(()=>{if(root.classList.contains('active'))requestAnimationFrame(fit)});
+ visibility.observe(root,{attributes:true,attributeFilter:['class']});
+ window.visualViewport?.addEventListener('resize',fit,{passive:true});
+ document.querySelector('[data-tab="python"]')?.addEventListener('click',()=>requestAnimationFrame(fit));
  applyPanels();refreshExplorer();void loadAssets();return {
   refreshExplorer,openRight,openBottom,fit,getFolder:()=>currentFolder,
   assetPayload:async()=>{
