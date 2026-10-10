@@ -49,6 +49,7 @@ try{
   }
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.screenshot({path:`test-output/android-landscape-settings-${width}x${height}.png`});
+  if(await p.locator('#mobileSettingsStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Safety STOP hit area must remain at least 44px');
   if(width>=740){const bar=await p.locator('#flightOptions').boundingBox();if(bar.height>65)throw Error('Landscape settings toolbar is too tall: '+bar.height)}
   const modal=await p.evaluate(()=>{const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth}});
   if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||(width>=740&&modal.cols<3))throw Error('Landscape settings layout clipped or missing columns '+JSON.stringify(modal));

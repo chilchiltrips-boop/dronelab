@@ -213,3 +213,7 @@ button{min-height:44px}
  .mobile-connection .flight-options #flightTakeControl,
  .mobile-connection .flight-options #flightReleaseControl{display:none}
 }
+
+/* Mandatory 44px emergency STOP and return action inside the compact sheet.
+   Other noncritical pairing controls stay compact. */
+.mobile-connection .mobile-dialog-actions button{min-height:44px}
