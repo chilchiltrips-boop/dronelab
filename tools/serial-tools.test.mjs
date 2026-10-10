@@ -97,3 +97,12 @@ test('both public firmware pages brand FlightCore and show generic Flash over US
  assert.equal(cat.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  assert.ok(cat.boards.every(b=>b.latest.app.file.startsWith('ZEBJUS_FLIGHTCORE_')));
 });
+
+test('ESP32 ROM download cannot be confused with running USB firmware',()=>{
+ const s=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ for(const token of ['USB FIRMWARE RUNNING','ROM DOWNLOAD • APP NOT RUNNING','ZJINFO,FW,','ZJGYRO,STATUS,','ZJI2C,PINS,','ZJLED,ACK,','nativeUsbRunFlash','requestToSend:false','fwUsbSensor','fwUsbPins','fwUsbLed','fwLedTestBtn','fwI2cScanBtn'])assert.ok(s.includes(token),token);
+ for(const path of ['index.html','lab.html']){
+  const h=readFileSync(new URL('../'+path,import.meta.url),'utf8');
+  for(const id of ['fwUsbSensor','fwUsbPins','fwUsbLed','fwLedTestBtn','fwI2cScanBtn'])assert.ok(h.includes('id="'+id+'"'),id);
+ }
+});

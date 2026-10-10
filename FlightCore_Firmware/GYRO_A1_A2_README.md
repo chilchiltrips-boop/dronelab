@@ -54,3 +54,13 @@ No `delay(20)` or `delay(50)` blocks the loop. Existing I²C Scanner messages, L
 ## Native USB Serial
 
 FlightCore A1 builds with `esp32:esp32:esp32c3:CDCOnBoot=cdc` so `Serial` uses native USB Serial/JTAG (VID 303A, PID 1001). After Factory flashing, press RESET if the port does not reopen. FlightCore A2 retains its Seeed XIAO ESP32-C6 build profile.
+
+## Firmware v1.2.1 diagnostics
+
+After USB Factory flash, exit ROM DOWNLOAD mode: release BOOT and press RESET. Web Serial status distinguishes `ROM DOWNLOAD • APP NOT RUNNING` from `USB FIRMWARE RUNNING` only after receiving the live `ZJINFO,FW` banner. The USB Serial Monitor can send `ZJINFO,GET` to request firmware identity, and `ZJI2C,SCAN` to trigger an immediate sensor scan.
+
+ESP32-C3 SuperMini requires LSM6DS3 SDA GPIO4, SCL GPIO5, VCC 3.3V, GND, sensor I2C address 0x6B. GPIO8 is the onboard active-low LED and GPIO9 is the BOOT strap: do not connect a sensor to them. If `ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND` occurs after firmware boot, physical sensor/wire/power/CS/SA0 wiring needs verification; no software retry can recover disconnected wires.
+
+Test LED with the Firmware page's **Test onboard LED** control, or send `ZJLED,900,BLINK,250,250,100` followed by a newline at 115200 baud. The controller must respond `ZJLED,ACK,900,OK`. The LED pattern automatically stops after a four-second safety lease without renewed commands.
+
+The built-in Python Lab executes `from zebjus_simple import Drone` in the browser's Pyodide worker and needs the **USB Serial connection** to the *running* controller. Normal desktop PyCharm Python instead requires the separate PC `pyserial` example; the browser's `zebjus_simple` module is not an installed system package.

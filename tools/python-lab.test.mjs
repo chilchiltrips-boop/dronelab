@@ -51,3 +51,8 @@ test('Python Lab has real Pyodide USB bridge, infinite-loop Stop, suggestions an
  assert.ok(updater.includes('dronelab:serial-line'));
  assert.ok(updater.includes('window.DroneLabSerial'));
 });
+
+test('Python USB LED acknowledgements and missing sensor warning remain visible',()=>{
+ const js=file('js/python-lab.js');
+ for(const token of ["Controller acknowledged command","ESP ROM DOWNLOAD MODE","3.3V/GND and SDA/SCL wiring","firmwareInfo?.()"])assert.ok(js.includes(token),token);
+});

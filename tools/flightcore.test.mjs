@@ -13,12 +13,12 @@ test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.match(catalog.version,/^1\.[012]\.\d+$/);
  assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
- for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin();','Scanning I2C bus...','address<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
+ for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','Scanning I2C bus...','address<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
  for(const token of ['WiFi.h','Update.h','AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
 test('Board-specific gyro never replaces the I2C scanner or LED protocol',()=>{
- for(const token of ['Wire.setClock(400000)','Wire.begin(4,5)','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=50','GYRO_PERIOD_MS=20'])assert.ok(sketch.includes(token),token);
+ for(const token of ['Wire.setClock(400000)','BUS_SDA=4,BUS_SCL=5','BUS_SDA=22,BUS_SCL=23','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=50','GYRO_PERIOD_MS=20'])assert.ok(sketch.includes(token),token);
  assert.ok(!sketch.includes('delay(50)'),'Do not block USB scanner or LED for 50ms');
  assert.ok(!sketch.includes('delay(20)'),'Do not block USB scanner or LED for 20ms');
 });
@@ -48,4 +48,8 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
  assert.equal(factory.length,4*1024*1024);
  assert.deepEqual(factory.subarray(0x10000,0x10000+app.length),app);
  assert.ok(app.includes(Buffer.from('Scanning I2C bus...')),'scanner banner must be in compiled image');
+});
+
+test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
+ for(const token of ['FW_VERSION="1.2.1"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
 });
