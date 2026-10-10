@@ -53,6 +53,10 @@ export function createPythonIDEShell(api){
  folderInput.setAttribute('webkitdirectory','');folderInput.setAttribute('directory','');
  fileInput.hidden=folderInput.hidden=true;toolbar.append(fileInput,folderInput);
  const picker=root.querySelector('.python-project-picker'),actions=root.querySelector('.python-toolbar-actions'),oldActions=root.querySelector('.python-project-actions');
+ // Run, Stop and Rerun must stay together when the toolbar wraps on narrow displays.
+ const runGroup=node('div','py-run-group');
+ for(const id of ['runPythonBtn','stopPythonBtn','rerunPythonBtn']){const control=$(id);if(control)runGroup.append(control)}
+ if(actions)actions.append(runGroup);
  toolbar.insertBefore(fileMenu,picker);toolbar.insertBefore(editMenu,picker);
  // The file chooser belongs inside File, not as another wide toolbar item.
  const chooseLabel=node('div','py-file-menu-label','OPEN FILE');
