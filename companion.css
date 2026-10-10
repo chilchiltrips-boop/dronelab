@@ -123,3 +123,78 @@ button{min-height:44px}
 @media(max-height:300px) and (orientation:landscape){.flight-status-line{flex-basis:13px;padding-block:0}.flight-center{gap:3px;padding-bottom:4px}.flight-attitude{min-height:16px;max-height:46px;margin-bottom:0;width:75px}.flight-attitude-ladder{gap:8px;margin-top:-23px}.flight-attitude svg{width:46px;height:17px}#flightAttitudeLabel{display:none}.flight-warning{min-height:12px;max-height:16px;font-size:5px}.flight-center-actions{gap:3px}.flight-cockpit button.flight-connect{min-height:44px}.flight-footer{min-height:33px;padding:2px 10px;gap:1px}.flight-readouts b{font-size:8px}.flight-readouts small{font-size:5px}.flight-center-state{display:none;font-size:5px;gap:6px}.flight-applied-controls,#flightAppliedTelemetry{font-size:5px}.flight-ring{border-width:2px}.flight-knob{border-width:4px}.flight-touch-readout{font-size:5px;max-height:9px;bottom:0}.flight-utilities{top:0;gap:5px}.flight-cockpit .flight-response{height:56px;gap:2px}.flight-response span{font-size:12px}.flight-response small{font-size:5px}.flight-response b{font-size:7px}.flight-zone-title{display:none}}
 @media(orientation:portrait){.flight-topbar{grid-template-columns:auto 1fr auto;gap:5px;padding:4px 8px}.flight-session{grid-column:2;grid-row:2}.flight-link{grid-column:1;grid-row:2;justify-self:start}.flight-topbar #flightStop{grid-column:3;grid-row:1/3}.flight-field{grid-template-columns:1fr 150px 1fr;padding:0}.flight-touch-zone{opacity:.35;pointer-events:none}.flight-center::before{content:'Rotate phone to landscape';font-size:11px;color:#d9c9dc;white-space:nowrap}.flight-utilities{display:none}}
 @media(prefers-reduced-motion:reduce){.flight-splash,.splash-grid,.splash-icon,.splash-icon i,.splash-progress i{animation:none!important}.flight-ring,.flight-attitude-ladder{transition:none}}
+
+/* v1.6.3: lower outside-thumb joystick bases, while first-touch centers still float. */
+.flight-field{padding-inline:1.25%}
+.flight-ring{top:auto;bottom:3%;max-height:78%;max-width:86%}
+#flightLeftRing{left:37%}
+#flightRightRing{left:63%}
+.flight-ring.dragging{bottom:auto}
+.flight-zone-title{top:3%}
+.flight-touch-zone{padding-bottom:0}
+
+/* Response presets must be unmistakable visually AND alter applied axis limits. */
+.flight-cockpit[data-response="Slow"] .flight-response,
+.mobile-connection[data-response="Slow"] #flightPreset{background:#164768;border-color:#56bbff;color:#d6f3ff;box-shadow:0 0 0 2px #1a719c66}
+.flight-cockpit[data-response="Medium"] .flight-response,
+.mobile-connection[data-response="Medium"] #flightPreset{background:#655020;border-color:#e8bb49;color:#fff1bd;box-shadow:0 0 0 2px #9c7c2866}
+.flight-cockpit[data-response="Fast"] .flight-response,
+.mobile-connection[data-response="Fast"] #flightPreset{background:#67314d;border-color:#ff82a9;color:#fff0f5;box-shadow:0 0 0 2px #a84b7466}
+.flight-response b{font-weight:950;font-size:11px}
+.flight-response::after{content:"";display:block;height:5px;width:23px;border-radius:99px;background:currentColor;box-shadow:0 0 9px currentColor}
+
+/* Three-column landscape pairing: Scan Offer | CONNECT code | Mobile Control.
+   All controls remain present, keyboard/camera can scroll inside the sheet. */
+@media(orientation:landscape){
+ .mobile-connection{width:98vw;max-width:none;max-height:96dvh;height:94dvh;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;border-radius:11px}
+ .mobile-dialog-actions{padding:4px 9px;gap:8px}
+ .mobile-dialog-actions button{min-height:38px;padding:5px 11px;font-size:10px}
+ .mobile-connection .flight-options{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:5px 8px;margin:5px 7px;border-radius:8px}
+ .mobile-connection .flight-options label{font-size:9px}
+ .mobile-connection .flight-options select{min-height:36px;padding:3px 9px;font-size:11px}
+ .mobile-connection .flight-options small{font-size:9px}
+ .mobile-connection .flight-options button{min-height:36px;padding:5px 9px;font-size:10px}
+ .mobile-connection .app-top{position:static;min-height:29px;padding:3px 8px}
+ .mobile-connection .brand-mark{width:25px;height:25px;font-size:13px}
+ .mobile-connection .brand-text b{font-size:11px}
+ .mobile-connection .brand-text span{font-size:8px}
+ .mobile-connection main{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:7px;width:100%;max-width:none;padding:6px 7px}
+ .mobile-connection main > .hero{grid-column:1/-1;display:flex;gap:9px;align-items:center;min-width:0;margin:0;padding:5px 9px}
+ .mobile-connection .hero h1{font-size:13px;white-space:nowrap;margin:0}
+ .mobile-connection .hero small{font-size:7px;max-width:170px}
+ .mobile-connection .hero p{font-size:9px;line-height:1.25;margin:0}
+ .mobile-connection main > .card{min-width:0;margin:0;padding:7px;gap:5px}
+ .mobile-connection main > .card:last-of-type{grid-column:1/-1}
+ .mobile-connection .section-title strong{font-size:11px}
+ .mobile-connection .section-title span{font-size:8px}
+ .mobile-connection .hint{font-size:9px;line-height:1.35;margin:2px 0}
+ .mobile-connection .actions{gap:4px}
+ .mobile-connection .actions button,.mobile-connection .card > button{min-height:38px;padding:5px 7px;font-size:10px;flex-basis:76px}
+ .mobile-connection .pin-box{padding:6px;gap:5px}
+ .mobile-connection .pin-box strong{font-size:20px;letter-spacing:.07em}
+ .mobile-connection .phone-code-panel{padding:6px;gap:5px}
+ .mobile-connection .phone-code-panel .pin-box{padding:6px}
+ .mobile-connection .phone-code-panel #phoneShortCode{font-size:clamp(17px,2.3vw,29px);letter-spacing:.07em}
+ .mobile-connection .phone-scan-frame{min-height:115px}
+ .mobile-connection .phone-scan-frame #scanVideo{max-height:160px}
+ .mobile-connection .phone-scan-guide{max-width:135px}
+ .mobile-connection textarea{min-height:42px;max-height:66px;font-size:9px;padding:5px}
+ .mobile-connection .qr-frame{min-height:115px;width:min(100%,190px);padding:5px}
+ .mobile-connection .status-grid{gap:3px}
+ .mobile-connection .status-grid div{padding:5px}
+ .mobile-connection .status-grid small{font-size:7px}
+ .mobile-connection .status-grid b{font-size:9px}
+ .mobile-connection #mobileLog{min-height:38px;max-height:60px;font-size:8px;padding:5px}
+ .mobile-connection footer{grid-column:1/-1;padding:4px}
+}
+@media(orientation:landscape) and (max-width:819px){
+ .mobile-connection main{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mobile-connection .hero small{display:none}
+}
+@media(orientation:landscape) and (max-width:600px){
+ .mobile-connection main{grid-template-columns:1fr}
+ .mobile-connection .hero p{display:none}
+ .mobile-connection .flight-options small{display:none}
+ .mobile-connection .flight-options{gap:4px}
+ .mobile-connection .flight-options button{font-size:9px}
+}

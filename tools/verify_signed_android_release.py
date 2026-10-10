@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 APP_ID = "in.zebjus.dronelab.companion"
-EXPECTED_VERSION_CODE = 13
+EXPECTED_VERSION_CODE = 14
 EXPECTED_CERT_SHA256 = "f1b86575b3590734654f638e4e0d68056d37b2e8884ac7d6c24636fe9b516894"
 
 def output(cmd):
@@ -38,7 +38,7 @@ def run():
     app_id, version_code, version_name = package.groups()
     assert app_id == APP_ID, f"Unexpected app ID: {app_id}"
     assert int(version_code) == EXPECTED_VERSION_CODE, f"Release versionCode must be {EXPECTED_VERSION_CODE}, got {version_code}"
-    assert version_name.startswith("1.6.2"), "Unexpected Android release versionName"
+    assert version_name.startswith("1.6.3"), "Unexpected Android release versionName"
     assert "application-debuggable" not in manifest, "Release must not be debuggable"
     if len(sys.argv) == 5:
         previous = sys.argv[4]

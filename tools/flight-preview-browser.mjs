@@ -38,8 +38,13 @@ try{
   await p.locator('#flightConnect').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('CONNECT did not open pairing');
   const back=await p.locator('#flightBack').boundingBox();await event('touchStart',[{id:8,x:back.x+back.width/2,y:back.y+back.height/2}]);await p.waitForTimeout(700);await event('touchEnd',[]);
   await p.waitForFunction(()=>!document.getElementById('mobileConnection').open&&!window.getSelection().toString());
-  for(const expected of ['Fast','Slow','Medium']){await p.locator('#flightResponse').click();if(await p.locator('#flightPreset').inputValue()!==expected)throw Error('Response button did not cycle '+expected)}
+  for(const expected of ['Fast','Slow','Medium']){await p.locator('#flightResponse').click();if(await p.locator('#flightPreset').inputValue()!==expected)throw Error('Response button did not cycle '+expected);
+   if(await p.locator('#flightCockpit').getAttribute('data-response')!==expected)throw Error('Response color state missing: '+expected);
+   const title=await p.locator('#flightResponse').getAttribute('title');if(!title?.includes('Roll/Pitch/Yaw'))throw Error('Response speed meaning missing');
+  }
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
+  const modal=await p.evaluate(()=>{const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth}});
+  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||(width>=820&&modal.cols<3))throw Error('Landscape settings layout clipped or missing columns '+JSON.stringify(modal));
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');
   const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,footerTop:document.querySelector('.flight-footer').getBoundingClientRect().top,touchReadoutBottoms:['flightLeftTouch','flightRightTouch'].map(id=>document.getElementById(id).getBoundingClientRect().bottom),stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));

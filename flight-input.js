@@ -1,9 +1,9 @@
 // Browser + Node compatible pure joystick mathematics. No WebRTC or hardware API.
 (function(root){'use strict';
  const PRESETS=Object.freeze({
-  Slow:Object.freeze({deadband:.05,expo:.4,throttleRate:200}),
-  Medium:Object.freeze({deadband:.04,expo:.2,throttleRate:400}),
-  Fast:Object.freeze({deadband:.03,expo:.05,throttleRate:600})
+  Slow:Object.freeze({deadband:.05,expo:.4,throttleRate:200,axisScale:.45}),
+  Medium:Object.freeze({deadband:.04,expo:.2,throttleRate:400,axisScale:.72}),
+  Fast:Object.freeze({deadband:.03,expo:.05,throttleRate:600,axisScale:1})
  });
  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
  function shape(value,preset='Medium'){
@@ -17,9 +17,10 @@
  }
  function neutral(){return {roll:0,pitch:0,yaw:0,throttle:1000,mode:'angle',armed:false}}
  function mapState({left={x:0,y:0},right={x:0,y:0},throttle=1000,mode='angle',armed=false,preset='Medium'}={}){
-  return {roll:shape(right.x,preset),pitch:-shape(right.y,preset),
+  const sensitivity=PRESETS[preset]?.axisScale??PRESETS.Medium.axisScale;
+  return {roll:sensitivity*shape(right.x,preset),pitch:-sensitivity*shape(right.y,preset),
    // Follow the V1.5.3 reversed-yaw Tripod convention.
-   yaw:-shape(left.x,preset),throttle:Math.round(clamp(throttle,1000,2000)),
+   yaw:-sensitivity*shape(left.x,preset),throttle:Math.round(clamp(throttle,1000,2000)),
    mode:mode==='acro'?'acro':'angle',armed:!!armed};
  }
  function integrateThrottle(value,vertical,dt,preset='Medium'){

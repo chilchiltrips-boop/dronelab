@@ -52,3 +52,12 @@ test('flight-control sources are isolated from AP/STA and physical motor transpo
  const manifest=readFileSync(new URL('../mobile-android/app/src/main/AndroidManifest.xml',import.meta.url),'utf8');
  assert.match(manifest,/screenOrientation="sensorLandscape"/);
 });
+
+test('response modes change actual applied Roll/Pitch/Yaw authority, not only labels',()=>{
+ const states=Object.keys(F.PRESETS).map(preset=>F.mapState({right:{x:1,y:-1},left:{x:1,y:0},preset}));
+ assert.ok(states[0].roll<states[1].roll&&states[1].roll<states[2].roll);
+ assert.ok(states[0].pitch<states[1].pitch&&states[1].pitch<states[2].pitch);
+ assert.ok(Math.abs(states[0].yaw)<Math.abs(states[1].yaw)&&Math.abs(states[1].yaw)<Math.abs(states[2].yaw));
+ assert.ok(Math.abs(states[0].roll-.45)<1e-8&&Math.abs(states[1].roll-.72)<1e-8&&Math.abs(states[2].roll-1)<1e-8);
+ assert.deepEqual(Object.keys(F.PRESETS),['Slow','Medium','Fast']);
+});
