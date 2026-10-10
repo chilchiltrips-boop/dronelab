@@ -122,7 +122,7 @@ void updateLedEffect(unsigned long now){
  }
 }
 
-// Board-specific USB gyroscope telemetry. No flight control, motors or PID logic.
+// Board-specific USB gyroscope telemetry. Sensor reads only; no actuation or PID logic.
 // A1: LSM6DS3 @ 0x6B; A2: MPU6050 @ 0x68.
 // The serial frame is ZJGYRO,DATA,A1|A2,SENSOR,0xADDR,X,Y,Z (degrees/second).
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
