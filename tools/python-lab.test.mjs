@@ -77,7 +77,7 @@ test('Python worker classifies traceback and blocks known shared GPIO8 hardware 
 });
 test('Python Lab checks AST before execution and surfaces runtime errors with editor markers',()=>{
  const page=file('js/python-lab.js'),worker=file('python-lab-worker.js');
- for(const token of ['ast.parse(_zj_source','type:\\'hardware-info\\'','type:\\'check-syntax\\'','syntax-error','syntax-ok'])assert.ok(worker.includes(token)||page.includes(token),token);
+ for(const token of ['ast.parse(_zj_source',"type:'hardware-info'","type:'check-syntax'",'syntax-error','syntax-ok'])assert.ok(worker.includes(token)||page.includes(token),token);
  for(const token of ['abortPythonWithHardwareError','PinConflictError','USBDisconnectedError','setModelMarkers','revealLineInCenter','pythonCheckSyntaxBtn','dronelab:usb-state'])assert.ok(page.includes(token),token);
  for(const p of ['index.html','lab.html'])assert.ok(file(p).includes('id="pythonCheckSyntaxBtn"'));
 });
