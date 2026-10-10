@@ -111,7 +111,7 @@ test('running firmware identity and native ROM download are distinct serial stat
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  const start=source.indexOf('function readUsbTelemetry('),end=source.indexOf('function pushSerialLines(',start);
  assert.ok(start>0&&end>start);
- const logs=[],ctx={usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,log:x=>logs.push(x),kitStatus(){}};
+ const logs=[],ctx={usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,busy:false,monitorPort:null,monitorPendingScan:false,log:x=>logs.push(x),kitStatus(){},badge(){},syncUsbBoardSelection(){}};
  vm.runInNewContext(source.slice(start,end)+';globalThis.read=readUsbTelemetry;',ctx);
  ctx.read('waiting for download');assert.equal(ctx.usbRomDownload,true);assert.equal(ctx.usbRuntimeInfo,null);
  ctx.read('ZJINFO,FW,ZFC-A1,1.2.1,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
