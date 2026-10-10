@@ -54,6 +54,9 @@ export function createPythonIDEShell(api){
  fileInput.hidden=folderInput.hidden=true;toolbar.append(fileInput,folderInput);
  const picker=root.querySelector('.python-project-picker'),actions=root.querySelector('.python-toolbar-actions'),oldActions=root.querySelector('.python-project-actions');
  toolbar.insertBefore(fileMenu,picker);toolbar.insertBefore(editMenu,picker);
+ // The file chooser belongs inside File, not as another wide toolbar item.
+ const chooseLabel=node('div','py-file-menu-label','OPEN FILE');
+ fileBody.prepend(chooseLabel);if(picker)fileBody.insertBefore(picker,chooseLabel.nextSibling);
  if(oldActions)oldActions.hidden=true;
  const projectToggle=button('Project','panels',()=>{projectOpen=!projectOpen;applyPanels()});
  projectToggle.classList.add('py-project-toggle');toolbar.insertBefore(projectToggle,fileMenu);
