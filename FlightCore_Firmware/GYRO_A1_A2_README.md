@@ -1,4 +1,4 @@
-# FlightCore v1.2.0 — Board-specific I²C gyroscopes
+# FlightCore v1.2.2 — Board-specific I²C gyroscopes
 
 This firmware **adds** gyro reads to existing I²C Scanner (every 5 seconds) and onboard LED control. Only sensor readouts are implemented; no motor commands, PID updates, arm/disarm actions, fusion or gyro-based flight stabilization.
 
@@ -7,11 +7,11 @@ This firmware **adds** gyro reads to existing I²C Scanner (every 5 seconds) and
 | Profile | Microcontroller | Gyro | I²C address | SDA/SCL | Gyro sensitivity | Display interval |
 | --- | --- | --- | --- | --- | --- | --- |
 | A2 | ZEBJUS FlightCore A2 C6 (XIAO ESP32-C6) | MPU6050 | `0x68` | D4/GPIO22, D5/GPIO23 | ±500 dps, 65.5 LSB/(dps) | 50 ms |
-| A1 | ZEBJUS FlightCore A1 SuperMini (ESP32-C3) | GY-LSM6DS3 | **`0x6B`** | **GPIO4, GPIO5** | ±2000 dps, 70 mdps/LSB | 20 ms |
+| A1 | ZEBJUS FlightCore A1 SuperMini (ESP32-C3) | GY-LSM6DS3 | **`0x6B`** | **Default GPIO8/9; fallback GPIO4/5** | ±2000 dps, 70 mdps/LSB | 20 ms |
 
-**Important wiring change on A1:** Generic Arduino ESP32-C3 defaults to GPIO8 SDA / GPIO9 SCL, but GPIO8 is the onboard LED pin. Sharing GPIO8 between the I²C bus and LED PWM is not safe or functional. This firmware explicitly uses GPIO4 (SDA) and GPIO5 (SCL) on A1. Move the LSM6DS3 module's SDA wire to GPIO4 and SCL to GPIO5. This change is mandatory if the previous module was wired to GPIO8/9. Connect 3.3V and GND, and keep I²C lines at 3.3V logic; do not use GPIO22/23 on C3. GPIO4/5 overlap JTAG-capable pins; don't connect external JTAG to these lines while using I²C.
+**A1 wiring compatibility:** The verified Arduino IDE `Wire.begin()` scanner uses SDA GPIO8 and SCL GPIO9. FlightCore v1.2.2 detects the sensor on those pins first; optional GPIO4/5 wiring is also supported. If GPIO8 is SDA, PWM control of the onboard LED is deliberately disabled to protect I²C communication. Move the sensor to SDA GPIO4 / SCL GPIO5 only if simultaneous sensor scanning and onboard LED effects are needed. Keep I²C logic at 3.3V; GPIO9 is a BOOT strapping pin and must not be held low during normal reset.
 
-The A2 board retains `Wire.begin()` for the XIAO defaults and uses 400kHz I²C, per the user's MPU6050 example. A1 also uses 400kHz after `Wire.begin(4,5)`.
+Both boards use 400kHz I²C. A2 XIAO C6 remains on GPIO22/23, while A1 selects Arduino-default GPIO8/9 or optional GPIO4/5.
 
 ## Register configuration (once at sensor initialization)
 
@@ -59,9 +59,9 @@ FlightCore A1 builds with `esp32:esp32:esp32c3:CDCOnBoot=cdc` so `Serial` uses n
 
 After USB Factory flash, exit ROM DOWNLOAD mode: release BOOT and press RESET. Web Serial status distinguishes `ROM DOWNLOAD • APP NOT RUNNING` from `USB FIRMWARE RUNNING` only after receiving the live `ZJINFO,FW` banner. The USB Serial Monitor can send `ZJINFO,GET` to request firmware identity, and `ZJI2C,SCAN` to trigger an immediate sensor scan.
 
-ESP32-C3 SuperMini requires LSM6DS3 SDA GPIO4, SCL GPIO5, VCC 3.3V, GND, sensor I2C address 0x6B. GPIO8 is the onboard active-low LED and GPIO9 is the BOOT strap: do not connect a sensor to them. If `ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND` occurs after firmware boot, physical sensor/wire/power/CS/SA0 wiring needs verification; no software retry can recover disconnected wires.
+ESP32-C3 SuperMini accepts the user's Arduino-default LSM6DS3 SDA GPIO8 and SCL GPIO9, or the alternate GPIO4/5 bus, with VCC 3.3V and GND. GPIO8 shares the onboard LED and therefore LED effects are disabled on the default bus. If `ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND` occurs after firmware boot, physical sensor/wire/power/CS/SA0 wiring needs verification; no software retry can recover disconnected wires.
 
-Test LED with the Firmware page's **Test onboard LED** control, or send `ZJLED,900,BLINK,250,250,100` followed by a newline at 115200 baud. The controller must respond `ZJLED,ACK,900,OK`. The LED pattern automatically stops after a four-second safety lease without renewed commands.
+Test LED with the Firmware page's **Test onboard LED** control, or send `ZJLED,900,BLINK,250,250,100` followed by a newline at 115200 baud. With alternate A1 GPIO4/5 wiring or on A2, the controller should respond `ZJLED,ACK,900,OK`. On A1 default GPIO8/9 bus, the response is `ZJLED,ACK,900,PIN_CONFLICT` instead. The LED pattern automatically stops after a four-second safety lease without renewed commands.
 
 The built-in Python Lab executes `from zebjus_simple import Drone` in the browser's Pyodide worker and needs the **USB Serial connection** to the *running* controller. Normal desktop PyCharm Python instead requires the separate PC `pyserial` example; the browser's `zebjus_simple` module is not an installed system package.
 
