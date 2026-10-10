@@ -167,18 +167,88 @@ function usbMd5Hex(bytes){
  for(let block=0;block<data.length;block+=64){let [a,b,c,d]=state;for(let i=0;i<64;i++){let f,g;if(i<16){f=(b&c)|(~b&d);g=i}else if(i<32){f=(d&b)|(~d&c);g=(5*i+1)%16}else if(i<48){f=b^c^d;g=(3*i+5)%16}else{f=c^(b|~d);g=(7*i)%16}const shift=shifts[(i>>>4)*4+(i%4)],sum=(a+f+Math.floor(Math.abs(Math.sin(i+1))*4294967296)+view.getUint32(block+g*4,true))|0,next=(b+((sum<<shift)|(sum>>>(32-shift))))|0;a=d;d=c;c=b;b=next}state[0]=(state[0]+a)|0;state[1]=(state[1]+b)|0;state[2]=(state[2]+c)|0;state[3]=(state[3]+d)|0}
  return state.map(word=>[0,8,16,24].map(shift=>((word>>>shift)&255).toString(16).padStart(2,'0')).join('')).join('');
 }
+// USB serial/JTAG (VID 0x303A PID 0x1001) is a native ROM-capable interface,
+// not a CH340/CP210x UART bridge. A visible port alone is not proof of ROM sync.
+function isEspNativeUsbPort(port){
+ const info=usbPortInfo(port);
+ return info?.usbVendorId===0x303A&&info?.usbProductId===0x1001;
+}
+function usbBootPlans(port,baud,manual){
+ const rates=baud===115200?[115200]:[baud,115200];
+ const primary=manual?'no_reset':'default_reset';
+ const plans=rates.map(rate=>({baud:rate,mode:primary}));
+ // Only native USB-JTAG receives a secondary non-reset sync attempt. It may
+ // succeed when the user has already placed the chip in download mode.
+ if(!manual&&isEspNativeUsbPort(port))plans.push({baud:115200,mode:'no_reset'});
+ return plans;
+}
+function usbConnectFailureGuidance(port,error){
+ const message=String(error?.message||error||'Unknown USB failure');
+ if(!isEspNativeUsbPort(port))return 'USB bootloader handshake failed: '+message+'. Close all Arduino Serial Monitors and other browser tabs, select the correct port, then retry at 115200 baud.';
+ return 'Native ESP USB/JTAG port detected (303A:1001); Web Serial permission succeeded, but ROM bootloader sync failed: '+message+'. Close Arduino IDE Serial Monitor, disconnect attached GPIO8/GPIO9 wiring, hold BOOT (GPIO9), tap RESET, release BOOT, select Already in BOOT mode, then reconnect at 115200. If RESET is unavailable, hold BOOT while reconnecting USB. Do not flash until the chip and flash are verified.';
+}
 async function connectUsb(){
- if(busy)return;if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
+ if(busy)return;
+ if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}
+ setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
+ let port=null;
  try{
-  const port=await navigator.serial.requestPort();if(monitorPort)await closeSerialMonitor();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
-  for(let attempt=0;attempt<rates.length;attempt++){
-   try{serialPort=port;transport=new mod.Transport(port,true);loader=new mod.ESPLoader({transport,baudrate:rates[attempt],terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}});installUsbCompatibility(loader);usbSignature=await loader.main(mode);usbBoardId=mapHardwareSignature(usbSignature);const board=boardById(usbBoardId);if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');await probeUsbFlash(loader,board);if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(rates[attempt]);break}
-   catch(error){await disconnectUsb(false);if(attempt+1===rates.length||/Unsupported USB chip|smaller than/.test(error.message))throw error;log('USB handshake failed at '+rates[attempt]+' baud; retrying the same port at 115200.');}
+  port=await navigator.serial.requestPort();
+  if(monitorPort)await closeSerialMonitor();
+  log('USB port access granted • checking bootloader and flash chip.');
+  await disconnectUsb(false);
+  usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;
+  await loadCatalog();
+  const mod=await loadUsbFlasher();
+  const requested=+($('#fwUsbBaud')?.value||115200);
+  const manual=!!$('#fwUsbManualBoot')?.checked;
+  const native=isEspNativeUsbPort(port);
+  const plans=usbBootPlans(port,requested,manual);
+  const portInfo=usbPortInfo(port);
+  if(native)log('USB interface: Espressif native USB-Serial/JTAG (VID 303A, PID 1001). This is not a missing board library.');
+  else log('USB interface: '+(portInfo?.usbVendorId?.toString(16)||'unknown')+':'+(portInfo?.usbProductId?.toString(16)||'unknown')+'.');
+  let connectionError=null,connected=false;
+  for(let attempt=0;attempt<plans.length;attempt++){
+   const plan=plans[attempt];
+   log('USB ROM sync attempt '+(attempt+1)+'/'+plans.length+' • '+plan.baud+' baud • '+plan.mode);
+   try{
+    serialPort=port;transport=new mod.Transport(port,true);
+    loader=new mod.ESPLoader({
+     transport,baudrate:plan.baud,debugLogging:native,
+     terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}
+    });
+    installUsbCompatibility(loader);
+    usbSignature=await loader.main(plan.mode);
+    usbBoardId=mapHardwareSignature(usbSignature);
+    const board=boardById(usbBoardId);
+    if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');
+    log('ROM chip identified • '+usbSignature+'; verifying flash before enabling USB flashing.');
+    await probeUsbFlash(loader,board);
+    if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(plan.baud);
+    connected=true;break;
+   }catch(error){
+    connectionError=error;
+    log('USB ROM sync '+(attempt+1)+' failed ('+plan.mode+'): '+String(error?.message||error));
+    await disconnectUsb(false);
+    if(/Unsupported USB chip|smaller than|Flash chip did not respond/.test(String(error?.message||error)))throw error;
+    if(attempt+1<plans.length)log('Releasing the same USB port before retry • no firmware bytes have been written.');
+   }
   }
-  text('#fwUsbChip',boardName(usbBoardId));text('#fwUsbState','Bootloader + flash verified');const b=$('#fwSerialBadge');if(b){b.textContent='USB CONNECTED';b.className='firmware-badge online'}badge('#fwOverallBadge','USB READY','good');await targetBoardId(true);log('USB bootloader connected: '+usbSignature);
+  if(!connected)throw connectionError||new Error('No ESP32 ROM bootloader synchronization response');
+  text('#fwUsbChip',boardName(usbBoardId));
+  text('#fwUsbState','Bootloader + flash verified');
+  const b=$('#fwSerialBadge');if(b){b.textContent='USB CONNECTED';b.className='firmware-badge online'}
+  badge('#fwOverallBadge','USB READY','good');
+  await targetBoardId(true);log('USB bootloader connected: '+usbSignature);
   if($('#fwImageType')){$('#fwImageType').value='factory';fw=null;renderFirmware();log('USB scanner default: FACTORY first-flash image. Existing flash settings will be replaced.')}
   await autoLoad();
- }catch(e){await disconnectUsb(false);badge('#fwOverallBadge','USB FAILED','danger');log('USB connect failed: '+e.message);log('Close Arduino/other serial tabs. For manual recovery: hold BOOT, tap RESET, release BOOT, select Already in BOOT mode and reconnect the USB port.')}finally{setBusy(false)}
+ }catch(e){
+  await disconnectUsb(false);
+  badge('#fwOverallBadge','USB FAILED','danger');
+  log('USB connect failed: '+String(e?.message||e));
+  if(port)log(usbConnectFailureGuidance(port,e));
+  else log('No USB port was selected. Allow port access in Chrome/Edge and retry.');
+ }finally{setBusy(false)}
 }
 function flashReconnectPending(expectedVersion){
  stage('Reboot','active');stage('Reconnect','active');progress(99,'Firmware written • boot/reconnect not confirmed');badge('#fwOverallBadge','FLASHED • BOOT / RECONNECT PENDING','warn');
