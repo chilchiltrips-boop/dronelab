@@ -64,7 +64,7 @@ try{
  await page.waitForFunction(()=>window.__ledTestWrites.some(x=>x.includes('STOP')),null,{timeout:10000});
  await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
  // Verify real Pyodide AST validation without running user code.
- const syntaxBad='def broken(:\\n    pass\\n';
+ const syntaxBad='def broken(:\n    pass\n';
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),syntaxBad);
  await page.locator('#pythonCheckSyntaxBtn').click();
  await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='ERROR'&&document.getElementById('pythonTerminal').textContent.includes('SyntaxError'),null,{timeout:90000});
@@ -73,7 +73,7 @@ try{
  // Hardware ACK failure must terminate an active while True program.
  await page.evaluate(()=>{window.DroneLabSerial={...window.__previousDroneSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>(window.__ledTestWrites.push(line),true),firmwareInfo:()=>({boardId:'ZFC-A1',led:'GPIO8 • ACTIVE_LOW'})}});
  await page.locator('#pythonTarget').selectOption('usb');
- const loopingLED='from zebjus_simple import Drone\\nimport time\\ndrone=Drone()\\nwhile True:\\n    drone.led(1)\\n    time.sleep(0.2)\\n';
+ const loopingLED='from zebjus_simple import Drone\nimport time\ndrone=Drone()\nwhile True:\n    drone.led(1)\n    time.sleep(0.2)\n';
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),loopingLED);
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>window.__ledTestWrites.some(x=>x.includes('SET,100')),null,{timeout:90000});
