@@ -20,6 +20,20 @@ try{
  if(!toolbarOk)throw Error('Python file/target/examples/execution controls are not all in the top toolbar');
  if(await page.locator('.python-editor-top #runPythonBtn, .python-editor-top #pythonTarget').count())throw Error('Old duplicate editor controls remain');
  if((await page.locator('#pythonActiveFileLabel').textContent())!=='main.py')throw Error('Active filename not shown in top project heading');
+  // IDE shell must provide project, camera/plotter/USB and Run tool windows.
+  for(const id of ['pythonProjectExplorer','pythonExplorerTree','pythonBottomDock']){
+   if(await page.locator('#'+id).count()!==1)throw Error('Python IDE missing '+id);
+  }
+  if(await page.locator('.py-tool-rail [data-py-rail]').count()!==4)throw Error('Python IDE right tool buttons missing');
+  await page.locator('.py-tool-rail [data-py-rail="camera"]').click();
+  if(!await page.locator('#pythonSideStack').isVisible())throw Error('Camera tool window did not open');
+  await page.locator('.py-tool-rail [data-py-rail="camera"]').click();
+  if(await page.locator('#pythonSideStack').isVisible())throw Error('Camera tool window did not minimize');
+  await page.locator('.py-bottom-head .py-ide-button').first().click();
+  if(!await page.locator('#pythonTerminal').isVisible())throw Error('Run tool window did not open');
+  await page.locator('.py-bottom-head .py-ide-button').first().click();
+  if(await page.locator('#pythonTerminal').isVisible())throw Error('Run tool window did not minimize');
+
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
  if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
  if(await page.locator('#pythonEditor').isVisible())throw Error('Textarea fallback is covering Monaco');
@@ -83,9 +97,11 @@ try{
  await page.keyboard.insertText('\nprint("UNDO_REDO_TEST")');
  const textAfterEdit=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(!textAfterEdit.includes('UNDO_REDO_TEST'))throw Error('Monaco typing did not reach editor');
+ await page.locator('.py-ide-menu:has(#pythonUndoFileBtn) > summary').click();
  await page.locator('#pythonUndoFileBtn').click();
  const textAfterUndo=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(textAfterUndo===textAfterEdit)throw Error('Undo toolbar did not change Python code');
+ await page.locator('.py-ide-menu:has(#pythonRedoFileBtn) > summary').click();
  await page.locator('#pythonRedoFileBtn').click();
  const textAfterRedo=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(textAfterRedo!==textAfterEdit)throw Error('Redo toolbar did not restore Python code');
