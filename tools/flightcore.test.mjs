@@ -10,7 +10,7 @@ const page=readFileSync(new URL('./index.html',root),'utf8');
 const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
- assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.match(catalog.version,/^1\.[012]\.\d+$/);
+ assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.[0-3]\.\d+$/);
  assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','Scanning I2C bus...','address<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
@@ -18,7 +18,7 @@ test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
 test('Board-specific gyro never replaces the I2C scanner or LED protocol',()=>{
- for(const token of ['Wire.setClock(400000)','BUS_SDA=SDA,BUS_SCL=SCL','ALT_BUS_SDA=4,ALT_BUS_SCL=5','BUS_SDA=22,BUS_SCL=23','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=50','GYRO_PERIOD_MS=20'])assert.ok(sketch.includes(token),token);
+ for(const token of ['Wire.setClock(400000)','BUS_SDA=4,BUS_SCL=5','BUS_SDA=22,BUS_SCL=23','GYRO_ADDR=0x68','GYRO_ADDR=0x6B','gyroRead(0x75','gyroRead(0x0F','gyroWrite(0x1A,0x05)','gyroWrite(0x1B,0x08)','gyroWrite(0x11,0x4C)','gyroWrite(0x12,0x44)','gyroRead(0x43,d,6)','gyroRead(0x22,d,6)','float(x)/65.5f','float(x)*0.070f','ZJGYRO,DATA','updateGyro(now)','lastGyro<GYRO_PERIOD_MS','GYRO_PERIOD_MS=20','LEGACY_PERIOD_MS=200'])assert.ok(sketch.includes(token),token);
  assert.ok(!sketch.includes('delay(50)'),'Do not block USB scanner or LED for 50ms');
  assert.ok(!sketch.includes('delay(20)'),'Do not block USB scanner or LED for 20ms');
 });
@@ -51,10 +51,15 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
 });
 
 test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
- for(const token of ['FW_VERSION="1.2.2"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+ for(const token of ['FW_VERSION="1.3.0"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
 });
 
-test('A1 checks proven Arduino defaults before alternate bus, never drives LED on shared SDA',()=>{
- for(const token of ['Wire.begin();','Wire.end();','detectedImuOnBus()','ALT_BUS_SDA,ALT_BUS_SCL','ledAvailable=activeSda!=LED_PIN','if(ledAvailable){','PIN_CONFLICT','UNAVAILABLE,SDA_CONFLICT','ZJI2C,MODE,','ARDUINO_DEFAULT','ALTERNATE_4_5','if(ledAvailable)ledcWrite'])assert.ok(sketch.includes(token),token);
- assert.ok(sketch.indexOf('Wire.begin();Wire.setClock(400000);')<sketch.indexOf('Wire.begin(ALT_BUS_SDA,ALT_BUS_SCL)'), 'A1 default must be probed first');
+test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{
+ for(const token of ['BUS_SDA=4,BUS_SCL=5','Wire.begin(BUS_SDA,BUS_SCL)','ledcAttach(LED_PIN,5000,8)','ZJI2C,MODE,','DEDICATED_4_5','ZJLED,ACK,'])assert.ok(sketch.includes(token),token);
+ assert.ok(!sketch.includes('Wire.begin();'),'A1 must not silently fall back to GPIO8/9');
+});
+
+test('unified FlightCore telemetry has bounded nonblocking sampling, adjustable Hz and incremental I2C scanning',()=>{
+ for(const t of ['ZJTEL,1,','ZJTEL,RATE,','ZJTEL,ACK,RATE,','SCAN_PERIOD_MS=5000','scanI2C(now);','GYRO_PERIOD_MS=20','emitTelemetry(now);','emitLegacyGyro(now);','Serial.availableForWrite()<108','budget<3&&scanAddress<127','1000UL/telRateHz'])assert.ok(sketch.includes(t),t);
+ assert.ok(!sketch.includes('delay(50)')&&!sketch.includes('delay(20)'),'No blocking telemetry delay');
 });

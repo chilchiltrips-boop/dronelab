@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[1]
 CAT=json.loads((ROOT/'firmware-catalog.json').read_text())
 LATEST=json.loads((ROOT/'firmware-latest.json').read_text())
 OUT=ROOT/'FlightCore_Firmware'
-assert CAT['schema']==2 and CAT['product']=='ZEBJUS_I2C_SCANNER'
+assert CAT['schema']==2 and CAT['product']=='ZEBJUS_FLIGHTCORE'
 assert LATEST['version']==CAT['version']
 assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2

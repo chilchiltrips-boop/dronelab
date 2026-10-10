@@ -1,7 +1,7 @@
-name: Build FlightCore A1/A2 USB Firmware 1.2.x
+name: Build FlightCore A1/A2 USB Firmware 1.3
 on:
   push:
-    branches: [main, fix/firmware-usb-live-step3-status]
+    branches: [main, release/flightcore-v1-3-unified-telemetry-python-guard]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/catalog.json'
@@ -41,7 +41,7 @@ jobs:
       - name: Upload A1/A2 APP and Factory firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zebjus-flightcore-a1-a2-usb-v1-2-2
+          name: zebjus-flightcore-a1-a2-usb-v1-3
           path: |
             FlightCore_Firmware/*_APP.bin
             FlightCore_Firmware/*_FACTORY.bin
@@ -52,6 +52,6 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add FlightCore_Firmware firmware-catalog.json firmware-latest.json
-          git diff --cached --quiet || git commit -m 'Release FlightCore A1/A2 USB firmware 1.2.2'
+          git diff --cached --quiet || git commit -m 'Release FlightCore A1/A2 USB firmware 1.3.0'
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"

@@ -146,7 +146,7 @@ function markPythonError(err,origin='runtime'){
  const line=Number(err.line)||0,type=String(err.errorType||'RuntimeError'),filename=String(err.filename||active);
  const explanation=String(err.explanation||ERROR_DESCRIPTIONS[type]||'Read the traceback and check the highlighted statement.');
  const full=String(err.error||type);
- terminal('\\n['+type+' • '+origin+(line?' • line '+line:'')+'] '+explanation+'\\n'+full+'\\n','error');
+ terminal('\n['+type+' • '+origin+(line?' • line '+line:'')+'] '+explanation+'\n'+full+'\n','error');
  if(monaco&&editor&&line>0){
   const model=models.get(filename)||editor.getModel();
   if(model&&line<=model.getLineCount()){
@@ -193,7 +193,7 @@ function makeWorker(){
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
   if(m.type==='syntax-error'){markPythonError(m,'syntax');if(w===syntaxWorker){w.terminate();syntaxWorker=null}return}
-  if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\\n');w.terminate();syntaxWorker=null}return}
+  if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\n');w.terminate();syntaxWorker=null}return}
   if(m.type==='done'||m.type==='error'){
    if(m.type==='error'){
     stopLedSession();markPythonError(m,'runtime');
@@ -202,7 +202,7 @@ function makeWorker(){
    $('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
   }
  };
- w.onerror=e=>{if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
+ w.onerror=e=>{if(w===syntaxWorker){syntaxWorker.terminate();syntaxWorker=null;status('Syntax checker unavailable','warn');return}if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
  return w;
 }
 function checkPythonSyntax(){
@@ -215,6 +215,7 @@ function checkPythonSyntax(){
 }
 function runPython(){
  if(running)return;
+ if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
  const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
  if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this I2C script.\n','error');status('USB connection required','warn');return}

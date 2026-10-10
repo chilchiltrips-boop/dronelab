@@ -1,7 +1,7 @@
 name: Browser Test Python Lab
 on:
   push:
-    branches: [fix/firmware-usb-live-step3-status, fix/flightcore-v1-2-1-serial-hardware, release/flightcore-v1-2-usb-ui, testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/python-led-i2c-tripod-front-v1, main]
+    branches: [release/flightcore-v1-3-unified-telemetry-python-guard, fix/flightcore-v1-2-1-serial-hardware, release/flightcore-v1-2-usb-ui, testing/audit-compact-pairing-v1.4.5, testing/python-toolbar-v1.4.6, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/python-led-i2c-tripod-front-v1, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
