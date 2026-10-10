@@ -7,7 +7,7 @@ const browser=await chromium.launch(browserOptions),context=await browser.newCon
 await configureContext(context);const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
 const wait=fn=>page.waitForFunction(fn),diagnostics=()=>page.evaluate(()=>window.ZebjusTraining.diagnostics());
 try{
- await page.goto('http://127.0.0.1:8765/tripod.html');
+ await page.goto('http://127.0.0.1:8765/tripod.html?standalone=1');
  await page.waitForFunction(()=>document.getElementById('tpSceneStatus').textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
  const quiet=await diagnostics();if(quiet.audio.profile!=='quiet'||quiet.audio.volume!==.25||quiet.audio.voices!==0)throw Error('Quiet default / gesture-only audio failed');
  await page.locator('#tpRun').click();await page.locator('body').click({position:{x:20,y:180}});for(let n=0;n<24;n++)await page.keyboard.press('w');
@@ -35,7 +35,7 @@ try{
  if(disposed.audio.voices!==0||disposed.physics.running||await page.locator('#tpStage canvas:not(#tpFallback)').count())throw Error('Page teardown left resources/motors active');
  const fallback=await context.newPage();fallback.on('pageerror',e=>errors.push(e.message));
  await fallback.addInitScript(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return /webgl/i.test(type)?null:get.call(this,type,...args)}});
- await fallback.goto('http://127.0.0.1:8765/tripod.html');await fallback.waitForFunction(()=>document.getElementById('tpSceneStatus').textContent==='2D FALLBACK');
+ await fallback.goto('http://127.0.0.1:8765/tripod.html?standalone=1');await fallback.waitForFunction(()=>document.getElementById('tpSceneStatus').textContent==='2D FALLBACK');
  await fallback.locator('#tpRun').click();await fallback.locator('body').click({position:{x:20,y:180}});await fallback.keyboard.press('w');
  await fallback.waitForFunction(()=>window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().throttle===1025);
  await fallback.locator('#tpStop').click();await fallback.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed);
