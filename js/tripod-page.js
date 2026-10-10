@@ -182,7 +182,7 @@ function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
- receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();syncActions();setStatus('STOP • MOTORS OFF • HOME RESET');renderStickKnobs();drawUI();visual?.draw(getSnapshot(s),0);
+ receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();syncActions();setStatus('STOP • MOTORS OFF • HOME RESET');renderStickKnobs();drawUI();
  window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
 }
 function start(){
@@ -492,7 +492,7 @@ function frame(time){
 window.ZebjusTraining={
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
  setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
- stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI();visual?.draw(getSnapshot(s),0)},
+ stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI()},
  snapshot:receiver.snapshot,tick:receiver.tick,
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
