@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "product": "ZEBJUS_I2C_SCANNER",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "defaultBoardId": "ZFC-A1",
   "boards": [
     {
@@ -12,24 +12,24 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.0.1",
+        "version": "1.1.0",
         "app": {
           "available": true,
           "file": "ZEBJUS_I2C_SCANNER_A1_APP.bin",
-          "sha256": "8ecf8e38917db3df336815f18f76aad1dd82db73d51738da4e7bf9b9666be49e",
-          "size": 308288,
-          "builtAt": "2026-10-09T08:07:41Z",
-          "buildId": "1.0.1-ZFC-A1-8ecf8e38917d"
+          "sha256": "138b5fe4ff8548ffd22326d91a647f6320e41e77a5c5aa91238e17949fd8935a",
+          "size": 337776,
+          "builtAt": "2026-10-10T12:23:44Z",
+          "buildId": "1.1.0-ZFC-A1-138b5fe4ff85"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_I2C_SCANNER_A1_FACTORY.bin",
-          "sha256": "bd1f6cbf925e662c88398a516cac8efe71398ffad6f3d329f4d44bb2327732e4",
+          "sha256": "899ed6256fcf7f9a979645ff684d9ec1bb3473038d7492a56cf5ec9e245bc20a",
           "size": 4194304,
-          "builtAt": "2026-10-09T08:07:41Z",
-          "buildId": "1.0.1-ZFC-A1-FACTORY-bd1f6cbf925e"
+          "builtAt": "2026-10-10T12:23:44Z",
+          "buildId": "1.1.0-ZFC-A1-FACTORY-899ed6256fcf"
         },
-        "builtAt": "2026-10-09T08:07:41Z"
+        "builtAt": "2026-10-10T12:23:44Z"
       },
       "usbMatch": [
         "ESP32-C3",
@@ -57,24 +57,24 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.0.1",
+        "version": "1.1.0",
         "app": {
           "available": true,
           "file": "ZEBJUS_I2C_SCANNER_A2_APP.bin",
-          "sha256": "4e54875a99d95c7631c7c173e912295e77b87717b9a11dec68398bbedf615b67",
-          "size": 283168,
-          "builtAt": "2026-10-09T08:07:41Z",
-          "buildId": "1.0.1-ZFC-A2-4e54875a99d9"
+          "sha256": "7bc9e84b52f8a41a4807b5271a5c69c972e43e7d00506ba9182d0a7035d9cd1f",
+          "size": 291760,
+          "builtAt": "2026-10-10T12:23:44Z",
+          "buildId": "1.1.0-ZFC-A2-7bc9e84b52f8"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_I2C_SCANNER_A2_FACTORY.bin",
-          "sha256": "32e6842983fd8fef14eae9765ee62b8b7f044a98b22f8fb8a1619dd8401a83f2",
+          "sha256": "ac18d1c9e80593b9ec1494d311a7b17df5459cbf41edd2ebd431522b089c2d16",
           "size": 4194304,
-          "builtAt": "2026-10-09T08:07:41Z",
-          "buildId": "1.0.1-ZFC-A2-FACTORY-32e6842983fd"
+          "builtAt": "2026-10-10T12:23:44Z",
+          "buildId": "1.1.0-ZFC-A2-FACTORY-ac18d1c9e805"
         },
-        "builtAt": "2026-10-09T08:07:41Z"
+        "builtAt": "2026-10-10T12:23:44Z"
       },
       "usbMatch": [
         "ZEBJUS Aerion F1",
@@ -95,5 +95,5 @@
       "recommendedSensor": "MPU6050"
     }
   ],
-  "builtAt": "2026-10-09T08:07:41Z"
+  "builtAt": "2026-10-10T12:23:44Z"
 }
