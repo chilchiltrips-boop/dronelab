@@ -1,7 +1,7 @@
 name: Tripod PID Simulator Tests
 on:
   push:
-    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, main]
+    branches: [feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, feature/unified-pid-settings-shell-v1.6.3, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
