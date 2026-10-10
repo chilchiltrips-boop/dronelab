@@ -80,6 +80,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
    const seq=Number(f[3]),ms=Number(f[4]),drops=Number(f[11]);
    if(!spec||addr!==spec.address||![seq,ms,drops].every(x=>Number.isSafeInteger(x)&&x>=0))return null;
    unifiedSeen=true;
+   if(f[6]==='STARTING')return null;
    if(f[6]!=='READY'){fail(spec.sensor+' '+addr+' on '+board+' is '+f[6]+'. Check sensor power and I2C wiring.');return null}
    return makeReading(board,addr,f[7],f[8],f[9],'ZJTEL',seq,ms,drops);
   }
@@ -102,7 +103,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
 }
 export function createGyroBridge({host=window}={}){
  const waiting=new Set();
- let latestError='';
+ let latestError='',disconnected=false;
  const parser=createGyroParser(
   reading=>{
    for(const p of [...waiting]){clearTimeout(p.timer);waiting.delete(p);p.resolve(reading)}
@@ -113,18 +114,19 @@ export function createGyroBridge({host=window}={}){
   }
  );
  const serial=e=>parser.acceptLine(e?.detail?.line);
- const disconnected=e=>{
+ const usbState=e=>{
+  if(e?.detail?.connected===true){disconnected=false;latestError='';parser.reset();return}
   if(e?.detail?.connected===false){
-   parser.reset();
+   disconnected=true;parser.reset();
    latestError='USB Serial disconnected. Reconnect the running FlightCore firmware at 115200 baud.';
    for(const p of [...waiting]){clearTimeout(p.timer);waiting.delete(p);p.reject(new Error(latestError))}
   }
  };
  host.addEventListener('dronelab:serial-line',serial);
- host.addEventListener('dronelab:usb-state',disconnected);
+ host.addEventListener('dronelab:usb-state',usbState);
  function readGyro(timeoutMs=3000){
   const timeout=Math.max(200,Math.min(10000,Number(timeoutMs)||3000));
-  if(latestError)return Promise.reject(new Error(latestError));
+  if(disconnected)return Promise.reject(new Error('USBDisconnectedError: '+latestError));
   return new Promise((resolve,reject)=>{
    const entry={resolve,reject,timer:null};
    entry.timer=setTimeout(()=>{
@@ -136,7 +138,7 @@ export function createGyroBridge({host=window}={}){
  }
  function close(){
   host.removeEventListener('dronelab:serial-line',serial);
-  host.removeEventListener('dronelab:usb-state',disconnected);
+  host.removeEventListener('dronelab:usb-state',usbState);
   for(const p of waiting){clearTimeout(p.timer);p.reject(new Error('USB gyro bridge closed'))}
   waiting.clear();parser.reset();
  }
