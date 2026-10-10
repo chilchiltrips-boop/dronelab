@@ -11,7 +11,7 @@ assert LATEST['version']==CAT['version']
 assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2
 sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
-assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch
+assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch and 'updateGyro(now);' in sketch
 def sha(b):return hashlib.sha256(b).hexdigest()
 def chip(b,at=0):
  assert b[at]==0xe9 and 1<=b[at+1]<=16
@@ -42,4 +42,4 @@ for board in CAT['boards']:
  assert slots(factory)==[(0x10000,0x1e0000),(0x1f0000,0x1e0000)]
  assert factory[0x10000:0x10000+len(app)]==app
  print('PASS',board['id'],'I2C SCANNER',len(app),'APP',len(factory),'FACTORY',sha(app)[:12])
-print('Scanner release metadata verified. Physical USB board not tested.')
+print('Scanner + LED + board-specific IMU release metadata verified. Physical USB board not tested.')
