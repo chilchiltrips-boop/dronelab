@@ -9,11 +9,12 @@ const sketch=readFileSync(new URL('./FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino
 const page=readFileSync(new URL('./index.html',root),'utf8');
 const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
-test('Only minimal I2C Scanner source is present in active release',()=>{
- assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.equal(catalog.version,'1.0.1');
+test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
+ assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.match(catalog.version,/^1\.(?:0|1)\.\d+$/);
  assert.equal(catalog.boards.length,2);
- for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin();','Scanning I2C bus...','address = 1; address < 127','Wire.endTransmission()','delay(5000)','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
- for(const token of ['WiFi.h','Update.h','AsyncWebServer','ESPAsyncWebServer','ledcWrite','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
+ for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin();','Scanning I2C bus...','address<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
+ for(const token of ['WiFi.h','Update.h','AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
+ for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
 test('USB auto-detect and compact serial monitor page contract',()=>{
  assert.deepEqual(catalog.boards.map(b=>[b.id,b.imageChipIds[0]]),[['ZFC-A1',5],['ZFC-A2',13]]);
