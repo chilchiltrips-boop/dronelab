@@ -198,3 +198,8 @@ button{min-height:44px}
  .mobile-connection .flight-options{gap:4px}
  .mobile-connection .flight-options button{font-size:9px}
 }
+
+/* The resting rings are bottom-aligned; do not apply the floating-touch
+   Y-centering transform until an actual pointer captures that ring. */
+.flight-ring:not(.dragging){transform:translateX(-50%)}
+.flight-ring.dragging{transform:translate(-50%,-50%)}
