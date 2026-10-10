@@ -396,8 +396,17 @@ function updatePythonStickyToolbar(){
  const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');
  const stickyTop=Math.ceil(Math.max(0,header?.getBoundingClientRect().bottom||0,nav?.getBoundingClientRect().bottom||0));
  tab.style.setProperty('--py-sticky-top',stickyTop+'px');
- if(!tab.classList.contains('active')){bar.classList.remove('is-stuck');return}
+ if(!tab.classList.contains('active')){bar.classList.remove('is-stuck');sentinel.style.height='1px';return}
  const stuck=sentinel.getBoundingClientRect().top<stickyTop-5;
+ if(stuck){
+  // Fixed positioning avoids sticky being clipped by the workspace bottom.
+  const workspace=tab.querySelector('.python-workspace'),rect=workspace?.getBoundingClientRect();
+  if(rect){
+   tab.style.setProperty('--py-fixed-left',Math.max(0,rect.left)+'px');
+   tab.style.setProperty('--py-fixed-width',Math.max(0,rect.width)+'px');
+  }
+  sentinel.style.height=Math.ceil(bar.offsetHeight)+'px';
+ }else sentinel.style.height='1px';
  bar.classList.toggle('is-stuck',stuck);
 }
 function schedulePythonStickyToolbar(){
