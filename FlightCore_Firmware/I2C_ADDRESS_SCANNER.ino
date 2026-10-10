@@ -3,6 +3,17 @@
 #include <string.h>
 #include <stdlib.h>
 
+// FlightCore USB diagnostics v1.2.1; version is emitted by the RUNNING app,
+// not inferred from a downloaded image or an ESP-ROM bootloader message.
+constexpr const char* FW_VERSION="1.2.1";
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+constexpr uint8_t BUS_SDA=22,BUS_SCL=23;
+constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
+#else
+constexpr uint8_t BUS_SDA=4,BUS_SCL=5;
+constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS FlightCore A1 SuperMini";
+#endif
+
 // Scanner output is intentionally backward-compatible with Python Lab's I2C parser.
 // Internal USER LEDs on both supported controllers use inverted (active-low) PWM.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -21,6 +32,20 @@ char serialLine[192];size_t serialUsed=0;
 
 void ledLevel(uint8_t pct){ledcWrite(LED_PIN,255-(uint32_t(constrain(pct,0,100))*255/100));}
 void ledOff(){ledMode=LED_OFF;manualBrightness=0;patternCount=0;ledLevel(0);}
+void printFirmwareInfo(){
+ Serial.print("ZJINFO,FW,");Serial.print(FC_BOARD);Serial.print(',');
+ Serial.print(FW_VERSION);Serial.print(',');Serial.print(__DATE__);Serial.print(',');
+ Serial.print(__TIME__);Serial.print(',');Serial.println(FC_LABEL);
+ Serial.print("ZJI2C,PINS,");Serial.print(FC_BOARD);Serial.print(',');
+ Serial.print(BUS_SDA);Serial.print(',');Serial.print(BUS_SCL);Serial.print(",0x");
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ Serial.println("68");
+#else
+ Serial.println("6B");
+#endif
+ Serial.print("ZJLED,INFO,");Serial.print(FC_BOARD);Serial.print(",GPIO");
+ Serial.print(LED_PIN);Serial.println(",ACTIVE_LOW");
+}
 void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
  if(!text||!*text)return false;
@@ -69,12 +94,17 @@ void ledCommand(char* line){
  }else{ledAck(id,"UNKNOWN");return;}
  ledMode=next;effectStart=leaseStart=millis();ledAck(id,"OK");
 }
+void serialCommand(char* line){
+ if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
+ if(!strcmp(line,"ZJI2C,SCAN")){lastScan=millis()-SCAN_PERIOD_MS;return;}
+ ledCommand(line);
+}
 void readLedCommands(){
  // Keep parsing bounded so continuous serial data cannot starve the scanner.
  for(uint8_t n=0;n<96&&Serial.available();++n){
   const char c=char(Serial.read());
   if(c=='\n'||c=='\r'){
-   if(serialUsed){serialLine[serialUsed]='\0';ledCommand(serialLine);serialUsed=0;}
+   if(serialUsed){serialLine[serialUsed]='\0';serialCommand(serialLine);serialUsed=0;}
   }else if(serialUsed<sizeof(serialLine)-1)serialLine[serialUsed++]=c;
   else serialUsed=0;
  }
@@ -231,19 +261,15 @@ void scanI2C(){
 }
 void setup(){
  Serial.begin(115200);
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- Wire.begin(); // XIAO D4 GPIO22 SDA / D5 GPIO23 SCL
-#else
- // Arduino esp32c3 default SDA GPIO8 conflicts with the onboard LED GPIO8.
- // FlightCore A1 therefore uses GPIO4 SDA / GPIO5 SCL; rewire the IMU accordingly.
- Wire.begin(4,5);
-#endif
+// Do not route I2C through GPIO8 (active-low LED) or GPIO9 (BOOT strap) on A1.
+ Wire.begin(BUS_SDA,BUS_SCL);
  Wire.setClock(400000);
  digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
  ledcAttach(LED_PIN,5000,8);
  ledOff();
  Serial.println("\n=== I2C Address Scanner ===");
+ printFirmwareInfo();
  delay(1000);
  lastScan=millis()-SCAN_PERIOD_MS;
 }
