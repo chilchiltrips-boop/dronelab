@@ -402,6 +402,7 @@ function selectSerialView(view){
  }
  if(plot){serialPlotterPromise?.then(()=>requestAnimationFrame(()=>serialPlotter?.draw()));serialPlotter?.draw()}
 }
+let lastTelemetryLine='';
 function readUnifiedTelemetry(line){
  const p=String(line||'').trim().split(',');
  if(p[0]==='ZJTEL'&&p[1]==='ACK'&&p[2]==='RATE'){
@@ -416,7 +417,7 @@ function readUnifiedTelemetry(line){
  if(telRxSeq!==null&&sample.sequence>telRxSeq+1)telMissed+=sample.sequence-telRxSeq-1;
  if(telRxSeq!==null&&sample.sequence<=telRxSeq)telMissed=0;
  telRxSeq=sample.sequence;telLastAt=Date.now();telDeviceDrops=sample.deviceDrops;
- diagnosticSample=sample;diagnosticAt=telLastAt;diagnosticError='';
+ diagnosticSample=sample;lastTelemetryLine=line;diagnosticAt=telLastAt;diagnosticError='';
  usbSensorState=sample.sensor+' '+sample.address+' • '+sample.sensorStatus;
  usbLedState=sample.led;
  text('#fwTelStatus','Live • '+(telRateActual||($('#fwTelRate')?.value||20))+' Hz • dropped '+(telMissed+telDeviceDrops));
@@ -431,7 +432,7 @@ function renderLiveDiagnosticLine(now=Date.now()){
   missed:telMissed,error:diagnosticError,staleAfter:Math.max(250,3000/rate),
   lastRenderedSeq:diagnosticRenderedSeq
  });
- e.textContent=value.text;e.dataset.state=value.state;
+ e.textContent=diagnosticSample&&monitorPort&&!usbRomDownload?lastTelemetryLine:value.text;e.dataset.state=value.state;
  text('#fwDiagnosticState',value.state+' • '+(diagnosticAt?Math.max(0,now-diagnosticAt)+' ms since sample':'no gyro sample'));
  diagnosticRenderedSeq=diagnosticSample?.sequence??null;
 }
@@ -506,11 +507,22 @@ function appendSerialOutput(value){
  pushSerialLines(value);
  // Random boot bytes are not scanner confirmation. This build has no board/version banner.
  if(monitorPendingScan)monitorBootText=(monitorBootText+value).slice(-8192);
- if(monitorPendingScan&&usbRuntimeInfo&&!usbRomDownload&&monitorBootText.includes('Scanning I2C bus...')&&(!usbFlashBoardId||usbRuntimeInfo.boardId===usbFlashBoardId)){
+ if(monitorPendingScan&&usbRuntimeInfo&&!usbRomDownload&&(/ZJSCAN,|Scanning I2C bus\.\.\./.test(monitorBootText))&&(!usbFlashBoardId||usbRuntimeInfo.boardId===usbFlashBoardId)){
   monitorPendingScan=false;usbFlashPhase='verified';stage('Reconnect','done');progress(100,'Firmware '+usbRuntimeInfo.version+' verified from live USB telemetry');
   badge('#fwOverallBadge','FIRMWARE RUNNING • VERIFIED','good');
   log('Live USB firmware identity verified: '+usbRuntimeInfo.boardId+' v'+usbRuntimeInfo.version+'.');
  }
+}
+function setupSerialConveniences(){
+ const auto=$('#fwSerialAutoScroll'),toggle=$('#fwSerialPauseScrollBtn'),copy=$('#fwSerialCopyBtn');
+ const sync=()=>{if(toggle){toggle.textContent=auto?.checked?'Pause Scroll':'Resume Scroll';toggle.setAttribute('aria-pressed',String(auto?.checked===false))}};
+ toggle?.addEventListener('click',()=>{if(auto)auto.checked=!auto.checked;sync()});auto?.addEventListener('change',sync);sync();
+ copy?.addEventListener('click',async()=>{
+  const raw=$('#fwSerialOutput')?.textContent||'',bounded=raw.trimEnd().split(/\r?\n/).slice(-100).join('\n').slice(-12000);
+  if(!bounded)return;
+  try{await navigator.clipboard.writeText(bounded);copy.textContent='Copied ✓';setTimeout(()=>copy.textContent='Copy Last 100 Lines',1300)}
+  catch{log('Clipboard denied. Select text and use Ctrl/Cmd+C.')}
+ });
 }
 function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
 function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
@@ -732,7 +744,7 @@ function initSerialTools(){
 async function rebootKit(){const{s,d,online}=kitStatus();if(!online)return log('Kit is offline.');if(d.armed)return log('Reboot blocked: DISARM the kit first.');if(!s?.canControl?.())return log('Take Control before reboot.');if(!await confirmInLab('Reboot the selected flight controller now?'))return;try{badge('#fwOverallBadge','REBOOTING','warn');resetStages();stage('Reboot','active');progress(45,'Sending reboot command…');const j=await s.client.reboot();if(j?.ok===false)throw new Error(j.message||'Reboot failed');s.markOffline?.('Manual reboot');stage('Reboot','done');stage('Reconnect','active');progress(65,'Waiting for kit…');for(let i=0;i<20;i++){await sleep(1000);const d2=await s.reconnectNow?.().catch(()=>null);if(d2?.online){stage('Reconnect','done');progress(100,'Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good');return}}throw new Error('Reconnect timed out')}catch(e){badge('#fwOverallBadge','RECONNECT','warn');log(e.message)}}
 async function reconnectKit(){const s=school();if(!s)return;stage('Reconnect','active');progress(60,'Reconnecting to kit…');try{const d=await s.reconnectNow?.(true);if(d?.online){stage('Reconnect','done');progress(100,'Kit online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}else throw new Error('Kit not found yet.')}catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}}
 function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
-function bind(){initSerialTools();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+function bind(){initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}await autoLoad()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();
