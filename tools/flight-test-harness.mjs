@@ -6,7 +6,7 @@ export async function pairBench(){
  await ctx.addInitScript(()=>{
   let api;Object.defineProperty(window,'ZebjusP2P',{configurable:true,get:()=>api,set(value){api=value;const original=value.session;value.session=(...args)=>window.__testPeer=original(...args)}});
  });
- const web=await ctx.newPage(),phone=await ctx.newPage(),errors=[];for(const page of [web,phone])page.on('pageerror',e=>errors.push(e.message));
+ const web=await ctx.newPage(),phone=await ctx.newPage(),errors=[];for(const page of [web,phone])page.on('pageerror',e=>errors.push(e.stack||e.message));
  await Promise.all([web.goto(base+'tripod.html?standalone=1'),phone.goto(base+'companion.html')]);
  await web.locator('#topPairMobileBtn').click();await phone.locator('#flightSettings').click();
  return {browser,ctx,web,phone,errors};
