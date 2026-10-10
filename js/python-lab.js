@@ -1,7 +1,7 @@
-import {createI2CBridge} from './usb-i2c-bridge.js';
+import {createI2CBridge,createGyroBridge} from './usb-i2c-bridge.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
-const EXAMPLES={"scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n"};
-const bridge=createI2CBridge();
+const EXAMPLES={"scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope USB reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
+const bridge=createI2CBridge(),gyroBridge=createGyroBridge();
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
 let ledSession=false,ledHeartbeat=null,ledLastError=0;
@@ -176,7 +176,10 @@ async function onRpc(w,m){
   if(m.method==='i2c_scan'){
    if(!window.DroneLabSerial?.isOpen?.())throw Error('USB disconnected. Click Connect USB Serial, select the board, and use 115200 baud.');
    result=await bridge.waitForScan(m.args?.timeout||12000);
-  }else if(m.method==='latest_scan')result=bridge.getLatest();
+  }else if(m.method==='read_gyro'){
+    if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
+    result=await gyroBridge.readGyro(m.args?.timeout||3000);
+   }else if(m.method==='latest_scan')result=bridge.getLatest();
   else throw Error('Unsupported Python hardware command: '+m.method);
   if(worker===w)w.postMessage({type:'rpc-result',id:m.id,ok:true,value:JSON.stringify(result)});
  }catch(e){if(worker===w)w.postMessage({type:'rpc-result',id:m.id,ok:false,error:String(e.message||e)})}
@@ -218,7 +221,7 @@ function runPython(){
  if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
  const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
- if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this I2C script.\n','error');status('USB connection required','warn');return}
+ if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
  files[active]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
  clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
@@ -264,6 +267,10 @@ function addCompletions(M){
  ['plt.show','plt.show()',K.Method,'Show Matplotlib plot output'],
  ['json','import json',K.Module,'Python JSON module'],
  ['Drone','Drone()',K.Class,'ZEBJUS board control object'],
+ ['read_gyro','await drone.read_gyro(timeout=3000)',K.Method,'Fresh A1 LSM6DS3 / A2 MPU6050 gyro reading, RateRoll/Pitch/Yaw in deg/s'],
+ ['RateRoll','RateRoll = gyro["RateRoll"]',K.Snippet,'Gyro X angular rate, degrees/second'],
+ ['RatePitch','RatePitch = gyro["RatePitch"]',K.Snippet,'Gyro Y angular rate, degrees/second'],
+ ['RateYaw','RateYaw = gyro["RateYaw"]',K.Snippet,'Gyro Z angular rate, degrees/second'],
  ['led_stop','drone.led_stop()',K.Method,'Stop the onboard LED when stopping Python'],
  ['check syntax','',K.Text,'Press Check Syntax to run Python AST validation without executing code'],
  ['zebjus_simple','from zebjus_simple import Drone',K.Module,'Import easy Drone hardware API'],
@@ -298,6 +305,7 @@ function addCompletions(M){
      led_sos:['led_sos()','SOS Morse pattern'],
      led_pattern:['led_pattern([(100,150),(0,900)])','Custom brightness/duration sequence'],
      led_stop:['led_stop()','Switch LED off and end effect'],
+     read_gyro:['read_gyro(timeout=3000)','Await fresh A1/A2 gyro sample with address and angular rates'],
      i2c_scan:['i2c_scan()','Last complete I2C scan (or None)'],
      latest_i2c_scan:['latest_i2c_scan()','Latest I2C scan snapshot']
     };
@@ -463,7 +471,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['scanner','custom','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'usb':'python';e.target.value=''};
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'usb':'python';e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
@@ -490,7 +498,7 @@ function bind(){
  window.addEventListener('dronelab:usb-state',e=>{
   if(e.detail?.connected===false&&running&&$('pythonTarget')?.value==='usb')abortPythonWithHardwareError('USBDisconnectedError','USB Serial disconnected while the Python hardware program was running.');
  });
- window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close()});
+ window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close();gyroBridge.close()});
  bridge.subscribe(data=>{
   if(worker)worker.postMessage({type:'i2c-data',scan:data});
   $('pyDeviceAddresses').textContent=data.addresses.join('  ')||'No devices';
