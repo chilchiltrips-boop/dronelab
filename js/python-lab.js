@@ -119,7 +119,7 @@ function stopLedSession(){
 function startLedSession(packet){
  if(!ledSession){
   ledSession=true;
-  ledHeartbeat=setInterval(()=>{if(running&&ledSession)sendLedPacket('ZJLED,0,KEEP\n')},1000);
+  ledHeartbeat=setInterval(()=>{if(ledSession)sendLedPacket('ZJLED,0,KEEP\n')},1000);
  }
  sendLedPacket(packet);
 }
@@ -144,16 +144,15 @@ function makeWorker(){
  w.onmessage=e=>{
   if(worker!==w)return;const m=e.data||{};
   if(m.type==='rpc')return void onRpc(w,m);
-  if(m.type==='led-write'){startLedSession(m.packet);return}
+  if(m.type==='led-write'){if(/,STOP\n$/.test(m.packet)){stopLedSession();return}startLedSession(m.packet);return}
   if(m.type==='image')return showPythonPlot(m);
   if(m.type==='stdout'||m.type==='stderr')return terminal(m.text,m.type==='stderr'?'error':'out');
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
   if(m.type==='done'||m.type==='error'){
-   stopLedSession();
-   if(m.type==='error'){terminal('\n[Python error]\n'+m.error+'\n','error');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
+   if(m.type==='error'){stopLedSession();terminal('\n[Python error]\n'+m.error+'\n','error');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
    else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE'}
-   running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;updateButtons();
+   running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
   }
  };
  w.onerror=e=>{if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
@@ -178,7 +177,7 @@ function updateButtons(){
  if(r){r.disabled=!!running||(!editor&&!h?.redo?.length);r.title='Redo (Ctrl/⌘+Shift+Z)'}
  $('rerunPythonBtn').disabled=running||!hasRun;
  $('runPythonBtn').disabled=running;
- $('stopPythonBtn').disabled=!running;
+ $('stopPythonBtn').disabled=!running&&!ledSession;
 }
 function editorPosition(){
  const pos=editor?.getPosition?.(),box=$('pythonEditor'),line=box?box.value.slice(0,box.selectionStart).split('\n'):[''];
