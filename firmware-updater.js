@@ -54,14 +54,14 @@ function usbFlashReadiness(){
 function syncFirmwareControls(){
  const serialSupported=!!navigator.serial&&globalThis.isSecureContext;
  const flash=usbFlashReadiness();
- for(const [id,ready] of [['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
+ for(const [id,ready] of [['#fwReadRunningBtn',serialSupported],['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
  const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');
  if(flashButton)flashButton.title=flash.message;
  if(flashHelp){flashHelp.textContent=flash.message;flashHelp.classList.toggle('ready',flash.ready)}
  for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=busy||!school();e.title=school()?'':'Unavailable: this scanner firmware has no Wi-Fi/AP service.'}}
  const erase=$('#fwEraseUsb');if(erase){erase.disabled=busy||($('#fwImageType')?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}
 }
-function setBusy(on){busy=!!on;['#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){try{const h=await crypto.subtle.digest('SHA-256',bytes);return[...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch{return''}}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
