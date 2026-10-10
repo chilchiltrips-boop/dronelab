@@ -1215,3 +1215,60 @@ button:disabled,.btn:disabled{transform:none!important;box-shadow:none!important
  #app .topbar-main .top-grant-control{min-width:auto}
  #app .topbar-main .top-grant-control span:first-child{max-width:110px}
 }
+
+
+/* Grant Mobile Control: reserve separate columns so two-line text can never
+ * paint on top of the 40px switch. Older flex/max-content rules caused
+ * collisions in the responsive header at 1294px and narrower viewports. */
+#app .topbar-main .top-grant-control{
+ display:inline-grid!important;
+ grid-template-columns:minmax(0,1fr) 40px;
+ align-items:center;
+ column-gap:9px;
+ width:179px;
+ min-width:179px!important;
+ max-width:179px;
+ flex:none;
+ white-space:normal;
+ padding:6px 9px;
+ line-height:1.25;
+ box-sizing:border-box;
+}
+#app .topbar-main .top-grant-control>.grant-control-text{
+ display:block;
+ grid-column:1;
+ grid-row:1;
+ width:100%;
+ min-width:0;
+ max-width:none!important;
+ overflow-wrap:normal;
+ white-space:normal;
+ line-height:1.28;
+ text-align:left;
+}
+#app .topbar-main .top-grant-control>.qr-switch-track{
+ display:block;
+ grid-column:2;
+ grid-row:1;
+ width:40px;
+ min-width:40px;
+ max-width:40px;
+ height:22px;
+ margin:0;
+ justify-self:end;
+ align-self:center;
+ box-sizing:border-box;
+}
+#app .topbar-main .top-grant-control>input[type="checkbox"]{
+ position:absolute;
+ width:1px;
+ height:1px;
+ opacity:0;
+}
+@media(max-width:1100px){
+ #app .topbar-main>.qr-header-controls{flex-wrap:wrap!important;row-gap:7px}
+}
+@media(max-width:670px){
+ #app .topbar-main .top-grant-control{width:179px;min-width:179px!important;max-width:179px}
+ #app .topbar-main>.qr-header-controls{justify-content:flex-start;gap:7px}
+}
