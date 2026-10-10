@@ -72,7 +72,7 @@
 </div>
 <div class="optional-io-panel">
 <div class="panel-head compact"><div><small>OPTIONAL I/O</small><h2>Add external device</h2></div></div>
-<div class="inline-form"><select id="optionalWireDevice"><option value="ppm">PPM Receiver</option><option value="servo">Servo</option><option value="matrix">LED Matrix</option><option value="sensor">I²C Sensor</option><option value="gps">GPS + stand</option><option value="led">LED / Output</option></select><button class="btn ghost small" id="addOptionalWireDevice">Add</button></div>
+<div class="inline-form"><select id="optionalWireDevice"><option value="ppm">PPM Receiver</option><option value="servo">Servo</option><option value="matrix">LED Matrix</option><option value="sensor">SDA/SCL Sensor</option><option value="gps">GPS + stand</option><option value="led">LED / Output</option></select><button class="btn ghost small" id="addOptionalWireDevice">Add</button></div>
 <label class="wire-gps-select">GPS wiring mode<select id="wireGpsProtocol"><option value="NMEA_9600">NMEA 9600 • GPS TX → FC RX</option><option value="UBX_10HZ">DroneGPS UBX 10 Hz • GPS TX/RX ↔ FC RX/TX</option></select></label>
 <div class="wire-pin-plan" id="wirePinPlan">Add a servo or GPS, then press Reference wiring + modules.</div>
 <p class="micro-note">Adding an optional device here also attaches it in 3D. Deleting it from 2D or 3D removes it from both views. Shortcuts: W = wire mode, F = flip, R = rotate, Delete = remove selected object or wire.</p>
@@ -170,7 +170,7 @@
 </div>
 </section><section class="panel tab-panel firmware-page" id="tab-firmware">
 <div class="firmware-hero">
-<div><span class="connect-kicker">USB FLASH • SENSOR TELEMETRY • SERIAL MONITOR</span><h2>ZEBJUS FlightCore Firmware Center</h2><p>Flash board-matched ZEBJUS FlightCore A1 SuperMini or A2 C6 firmware over USB. Includes I²C sensor discovery, onboard LED control, and gyro telemetry at 115200 baud.</p></div>
+<div><span class="connect-kicker">USB FLASH • SENSOR TELEMETRY • SERIAL MONITOR</span><h2>ZEBJUS FlightCore Firmware Center</h2><p>Flash board-matched ZEBJUS FlightCore A1 SuperMini or A2 C6 firmware over USB. Includes sensor discovery, onboard LED control, and gyro telemetry at 115200 baud.</p></div>
 <div class="firmware-hero-badges"><span class="firmware-badge offline" id="fwKitBadge">KIT OFFLINE</span><span class="firmware-badge offline" id="fwSerialBadge">USB NOT CONNECTED</span></div>
 </div>
 <div class="firmware-grid">
