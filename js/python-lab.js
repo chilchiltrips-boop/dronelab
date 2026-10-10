@@ -1,6 +1,6 @@
 import {createI2CBridge} from './usb-i2c-bridge.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
-const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Change print() to your own custom message.\nwhile True:\n    i2c_scan_result = await i2c_scan()\n    print('I2C scan result =', i2c_scan_result['addresses'])\n    print('Total devices =', i2c_scan_result['total'])\n    await asyncio.sleep(0.1)\n","custom":"import asyncio\nfrom zebjus import i2c_scan\n\nwhile True:\n    result = await i2c_scan()\n    device_list = ', '.join(result['addresses']) or 'No devices'\n    print('My custom message: Found', result['total'], 'I2C devices')\n    print('Addresses ->', device_list)\n    await asyncio.sleep(0.1)\n","basic":"import asyncio\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\n# A real Python graph appears in the Python Plot Window.\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n"};
+const EXAMPLES={"scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n"};
 const bridge=createI2CBridge();
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
@@ -190,8 +190,8 @@ function addCompletions(M){
  ['print','print("Hello from ZEBJUS Python Lab")',K.Snippet,'Write to Python terminal'],
  ['if','if condition:\n    pass',K.Snippet,'Python conditional'],
  ['for','for item in range(5):\n    print(item)',K.Snippet,'Python for loop'],
- ['while','while True:\n    result = await i2c_scan()\n    print(result["addresses"])\n    await asyncio.sleep(0.1)',K.Snippet,'USB I2C read loop'],
- ['while True','while True:\n    print("running")\n    await asyncio.sleep(0.5)',K.Snippet,'Asynchronous loop, click Stop to finish'],
+ ['while','while True:\n    result = drone.i2c_scan()\n    print(result)\n    time.sleep(1)',K.Snippet,'USB scanner without await'],
+ ['while True','while True:\n    print("running")\n    time.sleep(0.5)',K.Snippet,'Easy continuous loop, no await required'],
  ['def','def function_name():\n    pass',K.Snippet,'Python function'],
  ['async def','async def function_name():\n    pass',K.Snippet,'Asynchronous Python function'],
  ['class','class ClassName:\n    def __init__(self):\n        pass',K.Snippet,'Python class'],
@@ -205,7 +205,13 @@ function addCompletions(M){
  ['asyncio.sleep','await asyncio.sleep(0.1)',K.Snippet,'Non-blocking loop delay'],
  ['matplotlib.pyplot','import matplotlib.pyplot as plt',K.Module,'Create Python plots'],
  ['plt.show','plt.show()',K.Method,'Show Matplotlib plot output'],
- ['json','import json',K.Module,'Python JSON module']
+ ['json','import json',K.Module,'Python JSON module'],
+ ['Drone','Drone()',K.Class,'ZEBJUS board control object'],
+ ['zebjus_simple','from zebjus_simple import Drone',K.Module,'Import easy Drone hardware API'],
+ ['time.sleep','time.sleep(1)',K.Method,'Sleep without await'],
+ ['time','import time',K.Module,'Python standard time library'],
+ ['cv2','import cv2',K.Module,'OpenCV Python for browser'],
+ ['numpy','import numpy as np',K.Module,'Computer vision arrays']
  ];
  M.languages.registerCompletionItemProvider('python',{
   triggerCharacters:['.','_'],
@@ -369,7 +375,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);if(e.target.value==='scanner'||e.target.value==='custom')$('pythonTarget').value='usb';else $('pythonTarget').value='python';e.target.value=''};
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['scanner','custom','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'usb':'python';e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();
