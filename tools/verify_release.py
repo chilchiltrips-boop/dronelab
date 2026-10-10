@@ -13,7 +13,7 @@ assert len(CAT['boards'])==2
 assert [b['name'] for b in CAT['boards']]==['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']
 assert CAT['boards'][0]['build']['fqbn']=='esp32:esp32:esp32c3:CDCOnBoot=cdc'
 sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
-assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch and 'updateGyro(now);' in sketch
+assert '#include <Wire.h>' in sketch and 'Wire.begin(BUS_SDA,BUS_SCL);' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch and 'updateGyro(now);' in sketch
 def sha(b):return hashlib.sha256(b).hexdigest()
 def chip(b,at=0):
  assert b[at]==0xe9 and 1<=b[at+1]<=16
