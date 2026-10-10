@@ -4,6 +4,18 @@ DroneLab retains **Assembly**, **2D Wiring**, **Python Lab**, **Settings**, and 
 
 Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the app under `/dronelab/`. Desktop Chrome/Edge on HTTPS or localhost supports Web Serial. Android WebView USB flashing is unsupported.
 
+## PyCharm-style Python IDE
+
+The Python Lab toolbar stays in one compact sticky row with **File** and **Edit** dropdowns. The left Project Explorer holds Python scripts, nested folders and imported images/data files. The central Monaco editor uses viewport-based height and independent X/Y scrolling. The bottom **Run / Terminal** output console expands automatically on Run and can be minimized; the right-side Camera, Plotter, USB and Assets tool windows open on demand and can be collapsed, resized or floated. Camera access still requires a user click and browser permission.
+
+- **File → New** creates a `.py` script in the selected virtual folder. **New Folder**, **Import Files / Images**, **Import Folder**, **Rename Selected**, **Copy Project Path**, **Save**, **Open Project (.json)** and **Export Project (.json)** are available in the File menu, with key actions in the Project Explorer.
+- Images, CSV files, SVGs and other imported binary resources are stored in the browser's IndexedDB. Python sources are autosaved in localStorage. **Ctrl+S / ⌘S** saves the project without invoking the browser's Save Page dialog. User content is local to this browser profile, not saved onto the computer's ordinary disk folders unless the user exports it.
+- Click a file or folder in Project Explorer to work with it; folders can be collapsed. Right-click an entry to rename it, or select and use **Copy Path** for paths such as `/home/project/images/photo.jpg`. **Import Folder** retains the selected directory hierarchy. Imported names containing spaces or starting with digits are made Python-path-safe.
+- Imported asset bytes are mounted in the Pyodide Worker under `/home/project` every time a script runs, so `open("images/photo.jpg", "rb")` and supported Python image-loading code can access them. Python files in subfolders can import sibling modules. Projects can be exported as a JSON bundle (up to 24 MB total asset payload in the current exporter) and reopened later.
+- The **Plotter** tool window renders valid incoming FlightCore `ZJTEL` gyro data if USB Serial is connected, and shows Matplotlib figures produced by Python. The **Run / Terminal** panel is a Python output console, not a general operating-system command shell.
+
+Browser storage can be lost after clearing site data, using private browsing or changing browser profiles. Export the project JSON regularly for backup. The Camera/Plotter tools do not directly control physical motors.
+
 ## Smart Mobile Pairing
 
 1. Create Web QR; Android scans it and generates its response. The laptop camera stays off.
