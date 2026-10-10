@@ -6,6 +6,7 @@ on:
       - 'docs/flight-training/**'
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
       - 'tools/release-signing.test.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
