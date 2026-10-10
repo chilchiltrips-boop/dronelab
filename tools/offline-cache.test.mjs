@@ -19,11 +19,11 @@ function runtime(){
 }
 test('first offline visit can load the exact active flasher catalog and binary URLs',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./FlightCore_Firmware/catalog.json?v=1.0.1','./FlightCore_Firmware/ZEBJUS_I2C_SCANNER_A1_APP.bin?v=1.0.1','./FlightCore_Firmware/ZEBJUS_I2C_SCANNER_A2_FACTORY.bin?v=1.0.1']){
+ for(const path of ['./FlightCore_Firmware/catalog.json?v=1.1.0','./FlightCore_Firmware/ZEBJUS_I2C_SCANNER_A1_APP.bin?v=1.1.0','./FlightCore_Firmware/ZEBJUS_I2C_SCANNER_A2_FACTORY.bin?v=1.1.0']){
   const response=await r.request(path);assert.equal(response.ok,true,path);assert.ok((await response.arrayBuffer()).byteLength>100);
  }
 });
-test('Matplotlib wheels and validation dependencies are cached without first running a plot',async()=>{
+test('Matplotlib and OpenCV wheels and validation dependencies are cached without first running a plot',async()=>{
  const r=runtime();await r.install();r.setOffline();
  for(const path of ['./vendor/pyodide/matplotlib-3.8.4-cp312-cp312-pyodide_2024_0_wasm32.whl','./js/firmware-image.js','./js/firmware-hashes.js','./vendor/crypto/zfc-crypto.js'])assert.equal((await r.request(path)).ok,true,path);
  for(const wheel of readdirSync(new URL('vendor/pyodide/',root)).filter(x=>x.endsWith('.whl')))assert.equal((await r.request('./vendor/pyodide/'+wheel)).ok,true,wheel);
