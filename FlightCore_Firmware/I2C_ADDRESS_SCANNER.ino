@@ -49,7 +49,12 @@ void printFirmwareInfo(){
  Serial.print("ZJLED,INFO,");Serial.print(FC_BOARD);Serial.print(",GPIO");
  Serial.print(LED_PIN);
  Serial.println(",ACTIVE_LOW");
- Serial.print("ZJI2C,MODE,");Serial.print(FC_BOARD);Serial.println(",DEDICATED_4_5");
+ Serial.print("ZJI2C,MODE,");Serial.print(FC_BOARD);
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ Serial.println(",XIAO_D4_D5");
+#else
+ Serial.println(",DEDICATED_4_5");
+#endif
 }
 void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
