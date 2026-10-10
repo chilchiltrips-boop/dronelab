@@ -330,16 +330,33 @@ function updateControls(){
  $('tpSoundPreset').onchange=e=>{audioEngine.setProfile(e.target.value);saveAudio()};
  audioEngine.setProfile($('tpSoundPreset').value);
  $('tpPidAxis').onchange=()=>{updatePidEditor();coach()};$('tpPidLoop').onchange=()=>{updatePidEditor();coach()};
+ for(const row of $('tpPidMatrix').querySelectorAll('[data-pid-bank]')){
+  row.querySelector('button').onclick=()=>{
+   const bank=row.dataset.pidBank,values={};
+   for(const gain of ['p','i','d']){
+    const input=row.querySelector('[data-gain="'+gain+'"]'),value=Number(input.value);
+    if(!input.value.trim()||!Number.isFinite(value)||value<0||value>100){
+     setStatus('INVALID '+bank+' '+gain.toUpperCase()+' • ENTER 0–100');input.focus();return;
+    }
+    values[gain]=value;
+   }
+   if(!setPID(s,bank,values)){setStatus('INVALID PID • '+bank);return}
+   $('tpPidAxis').value=bank.endsWith('Roll')?'roll':bank.endsWith('Pitch')?'pitch':'yaw';
+   $('tpPidLoop').value=bank.startsWith('angle')?'angle':'rate';
+   for(const gain of ['p','i','d'])$('tpPid'+gain.toUpperCase()).value=values[gain];
+   syncPIDMatrix(bank,values);coach();setStatus('PID APPLIED LIVE • '+bank+' • '+(s.mode==='angle'?'CASCADE':'RATE')+' MODE');
+  };
+ }
  $('tpApplyPid').onclick=()=>{const values={p:Number($('tpPidP').value),i:Number($('tpPidI').value),d:Number($('tpPidD').value)};
   const valid=['p','i','d'].every(k=>$('tpPid'+k.toUpperCase()).value.trim()!==''&&Number.isFinite(values[k]));
   if(!valid||!setPID(s,pidBank(),values)){setStatus('INVALID PID VALUES • 0–100');return}
-  coach();setStatus('PID APPLIED LIVE • '+pidBank()+' • TEST RESPONSE WHEN READY');};
+  syncPIDMatrix(pidBank(),values);coach();setStatus('PID APPLIED LIVE • '+pidBank()+' • TEST RESPONSE WHEN READY');};
  $('tpPreset').onchange=e=>{const mode=e.target.value;if(!mode)return;const bank=pidBank(),base={...DEFAULT_PID[bank]},values={...base};
   if(mode==='custom')return;
   if(mode==='lowP')values.p=base.p*.35;if(mode==='highP')values.p=base.p*2.8;
   if(mode==='lowI')values.i=base.i*.2;if(mode==='highI')values.i=base.i*2.4;
   if(mode==='lowD')values.d=0;if(mode==='highD')values.d=base.d?base.d*3.5:.11;
-  setPID(s,bank,values);updatePidEditor();coach();e.target.value='';
+  setPID(s,bank,values);updatePidEditor();syncPIDMatrix(bank,values);coach();e.target.value='';
   setStatus('PRESET APPLIED LIVE • '+bank+' • SELECT TEST RESPONSE');
  };
  const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s'],['Noise','gyroNoise',v=>readable(v,2)+' °/s']];
