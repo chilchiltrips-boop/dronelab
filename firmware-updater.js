@@ -404,6 +404,8 @@ async function closeSerialMonitor(keepWanted=false){
  monitorPort=null;monitorReader=null;monitorTask=null;
  try{await reader?.cancel()}catch{}
  try{await task}catch{}
+ // Clear USB-JTAG reset controls before closing to avoid leaving a download flag.
+ if(port&&isEspNativeUsbPort(port))try{await port.setSignals({dataTerminalReady:false,requestToSend:false})}catch{}
  try{await port?.close()}catch{}
  serialUi(false,keepWanted?'Reconnecting…':'Disconnected');
 }
@@ -454,8 +456,10 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   const selection=givenPort||usbLastPort||((allowPrompt)?navigator.serial.requestPort():null);
   let port=await selection;
   if(!port){
-   const ports=await navigator.serial.getPorts();
-   port=ports.find(matchingUsbPort)||ports[0]||null;
+   const ports=await navigator.serial.getPorts(),matches=ports.filter(matchingUsbPort);
+   // C3 and C6 can share native USB VID/PID 303A:1001. Never guess between them.
+   if(matches.length>1)throw Error('Multiple matching ESP controllers are connected. Click Open Serial Port and explicitly select A1 or A2.');
+   port=matches[0]||(ports.length===1?ports[0]:null);
   }
   if(!port){serialUi(false,'Board not detected • reconnect USB');throw Error('No authorized USB serial port is available. Reconnect the board and press Open Serial Port.')}
   if(loader){
@@ -469,7 +473,11 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
     // Native USB CDC on ESP32-C3 may re-enumerate after the Factory flash/reset.
     // Recover automatically from another already-authorized matching Web Serial port.
     let alternate=null;
-    try{const permitted=await navigator.serial.getPorts();alternate=permitted.find(candidate=>candidate!==port&&matchingUsbPort(candidate))||null}catch{}
+    try{
+     const permitted=await navigator.serial.getPorts(),matches=permitted.filter(candidate=>candidate!==port&&matchingUsbPort(candidate));
+     if(matches.length>1)throw Error('Multiple Espressif USB ports found; select the correct board again instead of guessing.');
+     alternate=matches[0]||null;
+    }catch(err){if(/Multiple Espressif USB ports/.test(String(err.message||err)))throw err}
     if(alternate){
       try{await alternate.open({baudRate:baud});port=alternate;usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;log('USB serial reopened on a re-enumerated authorized port.')}
       catch(error){usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open original or re-enumerated USB Serial port: '+String(error?.message||error))}
@@ -583,6 +591,12 @@ function initSerialTools(){
   navigator.serial.addEventListener('connect',e=>{
    const port=e.port||e.target;
    if(!monitorWanted||monitorPort||monitorStarting||busy||!matchingUsbPort(port))return;
+   // Automatic re-selection by VID/PID can send commands to a different A1/A2.
+   if(isEspNativeUsbPort(port)){
+    log('Native USB device detected. Select its port explicitly to avoid confusing A1 SuperMini with A2 C6.');
+    serialUi(false,'USB detected • click Open Serial Port to select board');
+    return;
+   }
    usbLastPort=port;
    void openSerialMonitor({port,allowPrompt:false}).catch(error=>log('USB auto reconnect: '+error.message));
   });
