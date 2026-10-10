@@ -324,3 +324,22 @@
  #tab-python .python-editor-card .python-editor-footer span:not(:last-child){display:none!important}
  #tab-python .python-status-footer span:nth-child(2){display:none!important}
 }
+
+
+/* Chromium grid fix: legacy implicit rows must not steal height from the editor.
+   Explicitly place every IDE workspace child in the ONLY flexible grid row. */
+#tab-python .python-ide-layout,
+#tab-python.py-right-closed .python-ide-layout{
+  grid-template-rows:minmax(0,1fr)!important;
+  grid-auto-rows:0px!important;
+  align-content:stretch!important;
+}
+#tab-python .python-ide-layout>.py-project-explorer{grid-column:1!important;grid-row:1!important}
+#tab-python .python-ide-layout>.python-editor-card{grid-column:2!important;grid-row:1!important}
+#tab-python .python-ide-layout>.python-col-resizer{grid-column:3!important;grid-row:1!important}
+#tab-python .python-ide-layout>.python-side-stack{grid-column:4!important;grid-row:1!important}
+#tab-python .python-ide-layout>.py-tool-rail{grid-column:5!important;grid-row:1!important}
+@media(max-width:900px){
+ #tab-python .python-ide-layout>.python-editor-card{grid-column:1!important}
+ #tab-python .python-ide-layout>.py-tool-rail{grid-column:2!important}
+}
