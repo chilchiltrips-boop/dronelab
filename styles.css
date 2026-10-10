@@ -1191,3 +1191,27 @@ button:disabled,.btn:disabled{transform:none!important;box-shadow:none!important
  #app .topbar-main>.topbar-edit{justify-self:end}
  .settings-workspace{padding:7px!important}
 }
+
+
+/* Shared-shell PID Tuning navigation and header — never a text-underlined link. */
+#app .tabs .tab,
+#app .tabs .tab:link,
+#app .tabs .tab:visited,
+#app .tabs .tab:hover,
+#app .tabs .tab:focus,
+#app .tabs .tab.active{text-decoration:none!important;text-underline-offset:0;border-bottom:1px solid transparent}
+#app .tabs .tab[data-tab="pid"].active{border:1px solid #477eab;background:#15304a;color:#deefff;box-shadow:inset 0 0 0 1px #31577a}
+#app .topbar-main .top-grant-control{display:flex!important;visibility:visible;opacity:1;min-width:max-content}
+#app .topbar-main .qr-header-controls{display:flex!important;align-items:center}
+#app .topbar-main .top-grant-control:has(input:checked){background:#143d53;border-color:#3f91c5;color:#ecf8ff}
+#app .topbar-main .top-grant-control:has(input:disabled){opacity:.85}
+#app .topbar-main .top-grant-control input:disabled+.qr-switch-track{opacity:.65}
+#app .settings-heading{padding:9px 13px;margin-bottom:8px;border-radius:10px}
+#app .settings-heading h2{font-size:16px}
+#app .settings-heading p{font-size:11px;line-height:1.4}
+#app .settings-local-note{padding:8px;font-size:10px}
+@media(max-width:670px){
+ #app .topbar-main #mobileHeaderStatus{display:inline-flex;max-width:125px;font-size:9px}
+ #app .topbar-main .top-grant-control{min-width:auto}
+ #app .topbar-main .top-grant-control span:first-child{max-width:110px}
+}

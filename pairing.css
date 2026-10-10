@@ -189,3 +189,30 @@
 @media(min-width:1060px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:1.1fr 1fr 1fr;align-items:start}.settings-workspace #connectionFlow .qr-settings-grid>.qr-step-one{grid-column:auto;align-items:stretch}.settings-workspace #connectionFlow .qr-pair-flow details.qr-card{min-width:0}.settings-workspace #connectionFlow .qr-settings-grid>.qr-pair-help{grid-column:1/2}.settings-workspace #connectionFlow .qr-settings-grid>.qr-card:last-child{grid-column:2/4}}
 @media(min-width:740px) and (max-width:1059px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-workspace #connectionFlow .qr-settings-grid>.qr-step-one{grid-column:auto}}
 @media(max-width:739px){.settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:1fr}.settings-workspace .tp-dialog-header{flex-wrap:wrap}.settings-workspace #connectionFlow .qr-step-one .qr-code-box{max-width:400px}}
+
+
+/* Compact inline mobile pairing: three card stages side by side on wide screens.
+   No iframe, route change or WebRTC session recreation when opening Settings. */
+.settings-workspace #connectionFlow .qr-step-one .qr-step1-layout{display:grid;grid-template-columns:minmax(128px,200px) minmax(0,1fr);gap:8px;align-items:center}
+.settings-workspace #connectionFlow .qr-step-one .qr-step1-qr{grid-row:1 / span 2;grid-column:1;justify-self:stretch;min-height:160px}
+.settings-workspace #connectionFlow .qr-step-one .qr-scanned-note{grid-column:2;grid-row:1;min-width:0}
+.settings-workspace #connectionFlow .qr-step-one .qr-data-card{grid-column:2;grid-row:2;min-width:0}
+.settings-workspace #connectionFlow .qr-step-one .qr-qr-wrap{min-width:0}
+.settings-workspace #connectionFlow .qr-card{border-color:#355874}
+.settings-workspace #connectionFlow .qr-pair-flow summary{background:#11293c;color:#d5eafb}
+.settings-workspace #connectionFlow .qr-qr-wrap .qr-pair-code{color:#c3dcfc}
+.settings-workspace #connectionFlow .qr-actions{display:flex;flex-wrap:wrap;align-items:center}
+.settings-workspace #connectionFlow .btn{touch-action:manipulation}
+.settings-workspace #connectionFlow .btn:not(.danger):not(.primary){background:#1b354d;border-color:#446d91;color:#e7f3ff}
+.settings-workspace #connectionFlow .btn:focus-visible{outline:2px solid #87c6ff;outline-offset:2px}
+.settings-workspace #connectionFlow .qr-header-switch{display:none!important}
+@media(min-width:1060px){
+ .settings-workspace #connectionFlow .qr-settings-grid.qr-pair-flow{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(0,1fr);gap:8px}
+}
+@media(max-width:1059px){
+ .settings-workspace #connectionFlow .qr-step-one .qr-step1-layout{grid-template-columns:minmax(120px,195px) minmax(0,1fr)}
+}
+@media(max-width:480px){
+ .settings-workspace #connectionFlow .qr-step-one .qr-step1-layout{display:flex;flex-direction:column;align-items:stretch}
+ .settings-workspace #connectionFlow .qr-step-one .qr-step1-qr{width:100%;max-width:290px;margin:0 auto}
+}
