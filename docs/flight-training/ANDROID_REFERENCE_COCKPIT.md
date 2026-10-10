@@ -43,3 +43,5 @@ Physical LCD width/height/density are written to each disposable AVD before boot
 Android immersive API guidance: https://developer.android.com/develop/ui/views/layout/immersive
 
 The integration preserves main's WebApp 1.6.3 shared PID shell and persistent connection settings. APK 1.6.2/versionCode 13 is an independent Android version. Publication now also requires the shared PID shell WebRTC workflow for the exact source SHA, in addition to the original five browser/regression workflows and native signed-APK acceptance.
+
+The integrated source also retains main's corrected inline-settings QR audit and embedded-PID offline-cache tests. Disposable API35 Google AVDs use 3 GiB RAM for the launcher/WebView/instrumentation workload; failure logcat is collected before stopping, including process crashes that bypass the Java assertion handler. These infrastructure settings do not alter the APK or reduce acceptance requirements.
