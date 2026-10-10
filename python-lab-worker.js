@@ -22,8 +22,8 @@ const ERROR_HELP={
 };
 function explainWorkerError(error,filename='main.py'){
  const raw=String(error?.stack||error?.message||error);
- const type=([...raw.matchAll(/\\b([A-Z][A-Za-z]+Error):/g)].at(-1)||[])[1]||'RuntimeError';
- const locations=[...raw.matchAll(/File ["']([^"']+)["'], line (\\d+)/g)];
+ const type=([...raw.matchAll(/\b([A-Z][A-Za-z]+Error):/g)].at(-1)||[])[1]||'RuntimeError';
+ const locations=[...raw.matchAll(/File ["']([^"']+)["'], line (\d+)/g)];
  const userLocation=locations.reverse().find(m=>m[1].endsWith(filename))||locations[0];
  const line=Number(userLocation?.[2])||0;
  return {error:raw,errorType:type,line,column:0,explanation:ERROR_HELP[type]||'Read the traceback and inspect the reported line and arguments.',filename};
@@ -77,7 +77,7 @@ async function run(msg){
   // Compile-check before importing packages or starting hardware commands.
   runtime.globals.set('_zj_source',source);
   runtime.globals.set('_zj_filename',msg.filename||'main.py');
-  await runtime.runPythonAsync("import ast\\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
+  await runtime.runPythonAsync("import ast\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
   send('status',{text:'Checking Python libraries…'});
   await runtime.loadPackagesFromImports(source);
   if(/\b(?:import\s+cv2|from\s+cv2\s+import)\b/.test(source)){send('status',{text:'Loading browser-compatible OpenCV Python…'});await runtime.loadPackage('opencv-python')}
@@ -122,7 +122,7 @@ self.onmessage=e=>{
   void (async()=>{
    try{
     const runtime=await prepare();runtime.globals.set('_zj_source',String(m.code||''));runtime.globals.set('_zj_filename',m.filename||'main.py');
-    await runtime.runPythonAsync("import ast\\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
+    await runtime.runPythonAsync("import ast\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
     send('syntax-ok',{filename:m.filename||'main.py'});
    }catch(error){send('syntax-error',explainWorkerError(error,m.filename||'main.py'))}
   })();
