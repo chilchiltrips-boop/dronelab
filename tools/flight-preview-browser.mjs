@@ -1,9 +1,10 @@
 import {chromium} from 'playwright';import {browserOptions,configureContext} from './browser-harness.mjs';import {mkdirSync,writeFileSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});const b=await chromium.launch(browserOptions),records=[];
 try{
- for(const [width,height] of [[488,227],[595,227],[640,360],[800,450],[844,390],[1080,480]]){
+ for(const [width,height] of [[488,227],[595,227],[488,275],[595,275],[640,360],[800,450],[780,360],[844,390],[900,405],[1080,480]]){
   const c=await b.newContext({viewport:{width,height},hasTouch:true,isMobile:true,serviceWorkers:'block',reducedMotion:'reduce'});await configureContext(c);const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto('http://127.0.0.1:8765/companion.html');await p.waitForFunction(()=>window.ZebjusFlightApp&&!document.getElementById('flightCockpit').hidden);
+  await p.screenshot({path:`test-output/android-cockpit-${width}x${height}.png`});
   const l=await p.locator('#flightLeftZone').boundingBox(),r=await p.locator('#flightRightZone').boundingBox();const session=await c.newCDPSession(p);
   const left={id:1,x:l.x+l.width*.48,y:l.y+l.height*.67},right={id:2,x:r.x+r.width*.52,y:r.y+r.height*.66};
   const event=(type,touchPoints)=>session.send('Input.dispatchTouchEvent',{type,touchPoints});
@@ -31,6 +32,13 @@ try{
   await event('touchMove',[{...edge,x:edge.x+80}]);
   if(await p.locator('#flightLeftRing').evaluate(e=>parseFloat(e.style.left))!==edgeAnchor)throw Error('Edge motion moved base');
   await event('touchCancel',[]);
+  // The reference cockpit keeps circular thumb pads and usable central actions.
+  const cockpit=await p.evaluate(()=>({rings:['flightLeftRing','flightRightRing'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {width:r.width,height:r.height}}),connect:document.getElementById('flightConnect').getBoundingClientRect().toJSON(),header:document.querySelector('.flight-topbar').getBoundingClientRect().height,timer:document.getElementById('flightTimer').textContent}));
+  if(cockpit.rings.some(r=>Math.abs(r.width-r.height)>1||r.width<65)||cockpit.header>56||cockpit.connect.height<44||cockpit.connect.bottom>height||cockpit.timer!=='00:00')throw Error('Reference cockpit geometry/timer incorrect '+JSON.stringify(cockpit));
+  await p.locator('#flightConnect').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('CONNECT did not open pairing');
+  const back=await p.locator('#flightBack').boundingBox();await event('touchStart',[{id:8,x:back.x+back.width/2,y:back.y+back.height/2}]);await p.waitForTimeout(700);await event('touchEnd',[]);
+  await p.waitForFunction(()=>!document.getElementById('mobileConnection').open&&!window.getSelection().toString());
+  for(const expected of ['Fast','Slow','Medium']){await p.locator('#flightResponse').click();if(await p.locator('#flightPreset').inputValue()!==expected)throw Error('Response button did not cycle '+expected)}
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');
@@ -39,5 +47,5 @@ try{
   if(layout.touchReadoutBottoms.some(v=>v>layout.footerTop+1))throw Error('Thumb readout clipped by footer '+JSON.stringify(layout));
   if(errors.length)throw Error(errors.join(' | '));records.push({width,height,anchor,layout,errors});await c.close();
  }
- writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log('PASS Chromium touchscreen preview: 6 landscape sizes including native density, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands');
+ writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log(`PASS Chromium touchscreen preview: ${records.length} landscape sizes including 16:9, 19.5:9 and 20:9, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands`);
 }finally{await b.close()}

@@ -9,14 +9,27 @@ try{
  await web.locator('#tpQuality').selectOption('low');
  if(await web.locator('iframe').count())throw Error('Flight Training must not contain an iframe');
  if(!await web.locator('#tpRun').isDisabled()||!await web.locator('#tpMode').isDisabled())throw Error('Local controls can fight mobile ownership');
- await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
  const left=await phone.locator('#flightLeftZone').boundingBox(),right=await phone.locator('#flightRightZone').boundingBox();
  const touch=await ctx.newCDPSession(phone),l={id:1,x:left.x+left.width*.45,y:left.y+left.height*.67},r={id:2,x:right.x+right.width*.53,y:right.y+right.height*.65};
  const event=(type,touchPoints)=>touch.send('Input.dispatchTouchEvent',{type,touchPoints});
+ // Pre-arm Android sticks must mirror without commanding virtual motors.
+ await event('touchStart',[l]);await event('touchMove',[{...l,x:l.x+25,y:l.y-20}]);
+ await wait(web,()=>{const a=window.ZebjusTraining.snapshot();return a.source==='mobile'&&!a.armed&&a.throttle===1000&&a.sticks.left.x>.1&&a.previewAxes.yaw<0&&a.axes.yaw===0});
+ await wait(web,()=>document.getElementById('tpLeftReadout').textContent.includes('PREVIEW YAW'));
+ if(!await web.locator('#tpPidP').isEnabled()||!await web.locator('#tpApplyPid').isEnabled()||!await web.locator('#tpStop').isEnabled())throw Error('Web PID and emergency STOP must remain editable during mobile preview');
+ await event('touchEnd',[]);await wait(web,()=>window.ZebjusTraining.snapshot().sticks.left.x===0);
+ if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Preview unexpectedly armed simulator');
+ await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ await wait(phone,()=>document.getElementById('flightAppliedTelemetry').textContent.includes('RPM')&&document.getElementById('flightAppliedControls').textContent.includes('VIRTUAL ARMED')&&document.getElementById('flightAttitude').dataset.source==='applied');
  await event('touchStart',[l]);await event('touchMove',[{...l,y:l.y-65}]);await phone.waitForTimeout(760);await event('touchEnd',[]);
- await wait(phone,()=>parseInt(document.getElementById('flightThrottle').textContent)>=1200);await phone.waitForTimeout(140);
- const held=await phone.locator('#flightThrottle').textContent();if(await web.locator('#tpThrottleReadout').textContent()!==held)throw Error('Authoritative throttle mirror differs');
- await phone.waitForTimeout(200);if(await phone.locator('#flightThrottle').textContent()!==held)throw Error('Throttle did not hold on release');
+ // Release must reach the actual receiver before sampling its independently
+ // scheduled 10-Hz Web readout and ACK-driven phone UI. Keep ARM required.
+ await wait(web,()=>{const a=window.ZebjusTraining.snapshot();return a.armed&&a.sticks.left.y===0&&a.throttle>=1200});
+ const heldState=await web.evaluate(()=>window.ZebjusTraining.snapshot()),held=heldState.throttle+' µs';
+ await Promise.all([web.waitForFunction(value=>document.getElementById('tpThrottleReadout').textContent===value,held,{timeout:2500}),phone.waitForFunction(value=>document.getElementById('flightThrottle').textContent===value,held,{timeout:2500})]);
+ await phone.waitForTimeout(200);const holdAfter=await web.evaluate(()=>window.ZebjusTraining.snapshot());
+ if(!holdAfter.armed||holdAfter.throttle!==heldState.throttle||await phone.locator('#flightThrottle').textContent()!==held)throw Error('Applied throttle did not stay held/armed after release: '+JSON.stringify({before:heldState.throttle,after:holdAfter.throttle,armed:holdAfter.armed}));
+ await wait(phone,()=>document.getElementById('flightTimer').textContent!=='00:00');
  await event('touchStart',[l]);await event('touchStart',[l,r]);
  await event('touchMove',[{...l,x:l.x+28},{...r,x:r.x+25,y:r.y-20}]);
  await wait(phone,()=>parseInt(document.getElementById('flightYaw').textContent)<-5&&parseInt(document.getElementById('flightRoll').textContent)>5);

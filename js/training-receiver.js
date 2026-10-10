@@ -10,9 +10,9 @@ export function validTrainingFrame(m){
  (!m.sticks||(vector(m.sticks.left)&&vector(m.sticks.right)));
 }
 export function createTrainingReceiver(s,{now=()=>performance.now(),onChange=()=>{},onTimeout=()=>{}}={}){
- let owner='web',session='',seq=0,appliedAt=0,needsDisarm=true,sticks={left:{x:0,y:0},right:{x:0,y:0}};
+ let owner='web',session='',seq=0,appliedAt=0,needsDisarm=true,sticks={left:{x:0,y:0},right:{x:0,y:0}},previewAxes={roll:0,pitch:0,yaw:0};
  function stop(reason='Stopped'){
-  stopSimulator(s);releaseInputs(s);sticks={left:{x:0,y:0},right:{x:0,y:0}};needsDisarm=true;appliedAt=0;onChange({reason});
+  stopSimulator(s);releaseInputs(s);sticks={left:{x:0,y:0},right:{x:0,y:0}};previewAxes={roll:0,pitch:0,yaw:0};needsDisarm=true;appliedAt=0;onChange({reason});
  }
  function setOwner(value){
   const next=value==='mobile'?'mobile':'web';
@@ -21,7 +21,7 @@ export function createTrainingReceiver(s,{now=()=>performance.now(),onChange=()=
  function snapshot(){
   const v=getSnapshot(s);
   return {source:owner,seq,appliedAt,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
-   axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},sticks:{left:{...sticks.left},right:{...sticks.right}},
+   axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:{...previewAxes},sticks:{left:{...sticks.left},right:{...sticks.right}},
    angles:{roll:v.roll,pitch:v.pitch,yaw:v.yaw},rates:{roll:v.rollRate,pitch:v.pitchRate,yaw:v.yawRate},
    motors:{rpm:v.motorRPM,requestedRPM:v.motorRequestedRPM,thrust:v.motorThrust,output:v.motorCommands},vertical:v.vertical};
  }
@@ -34,16 +34,30 @@ export function createTrainingReceiver(s,{now=()=>performance.now(),onChange=()=
   if(m.armed&&needsDisarm)return fail('Send DISARM before a fresh explicit ARM');
   if(m.armed&&!s.running&&m.throttle>1050)return fail('Arm requires throttle ≤1050 µs');
   if(!session)session=m.sessionId;seq=m.seq;
-  if(!m.armed){stopSimulator(s);needsDisarm=false;sticks={left:{x:0,y:0},right:{x:0,y:0}};}
+  if(!m.armed){
+   // Disarmed mobile sticks are visual-only: expose previews but never touch
+   // simulator axes, throttle, motors, or the arming interlock.
+   stopSimulator(s);needsDisarm=false;
+   sticks=m.sticks?{left:{...m.sticks.left},right:{...m.sticks.right}}:{left:{x:0,y:0},right:{x:0,y:0}};
+   previewAxes={...m.axes};
+  }
   else{
    if(!s.running){s.throttle=1000;if(!startSimulator(s))return fail('Virtual arming refused');}
+    previewAxes={roll:0,pitch:0,yaw:0};
    s.throttle=m.throttle;s.cmdRoll=m.axes.roll;s.cmdPitch=m.axes.pitch;s.cmdYaw=m.axes.yaw;
    // Display-only raw sticks cannot drive physics; authoritative axes above do.
    sticks=m.sticks?{left:{...m.sticks.left},right:{...m.sticks.right}}:{left:{x:-m.axes.yaw,y:0},right:{x:m.axes.roll,y:-m.axes.pitch}};
   }
   setFlightMode(s,m.mode);appliedAt=now();onChange({seq,owner});return {accepted:true,applied:snapshot()};
  }
- function tick(){if(owner==='mobile'&&s.running&&now()-appliedAt>450){stop('Control timeout • virtual motors off');onTimeout();}}
+ function tick(){
+   if(owner!=='mobile'||!appliedAt||now()-appliedAt<=450)return;
+   if(s.running){stop('Control timeout • virtual motors off');onTimeout();return;}
+   // Keep a stopped sender from leaving a stuck Android preview on the Web UI.
+   const moving=Object.values(previewAxes).some(v=>v!==0)||Object.values(sticks).some(v=>v.x!==0||v.y!==0);
+   if(moving){sticks={left:{x:0,y:0},right:{x:0,y:0}};previewAxes={roll:0,pitch:0,yaw:0};onChange({reason:'Preview input timed out'});}
+   appliedAt=0;
+  }
  function webSticks(left,right){if(owner==='web')sticks={left:{x:clamp(left.x,-1,1),y:clamp(left.y,-1,1)},right:{x:clamp(right.x,-1,1),y:clamp(right.y,-1,1)}};}
  return {apply,stop,setOwner,tick,snapshot,webSticks,get owner(){return owner},get needsDisarm(){return needsDisarm}};
 }

@@ -195,7 +195,7 @@ function syncActions(){
  const remote=!localInput();$('tpRun').disabled=remote||s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=remote;
  $('tpReset').disabled=remote;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
- $('tpControlSource').textContent=remote?'ANDROID APPLIED • #'+receiver.snapshot().seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
+ $('tpControlSource').textContent=remote?(s.running?'ANDROID APPLIED • #':'ANDROID PREVIEW • #')+receiver.snapshot().seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning!==s.running){
   setStatus(s.running?(remote?'ANDROID • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • DISARMED');
@@ -415,7 +415,10 @@ function drawUI(){
  const v=getSnapshot(s),angular=s.mode==='acro',axis=$('tpChartAxis').value,axisC=axis[0].toUpperCase()+axis.slice(1);
  for(const a of ['roll','pitch','yaw']){$('tp'+a[0].toUpperCase()+a.slice(1)).textContent=readable(v[a])+'°';$('tp'+a[0].toUpperCase()+a.slice(1)+'Rate').textContent=readable(v[a+'Rate'])+'°/s'}
  $('tpThrottleReadout').textContent=Math.round(s.throttle)+' µs';$('tpThrottlePct').textContent=readable((s.throttle-1000)/10,0)+'%';
- $('tpThrottleInput').textContent=Math.round(s.throttle)+' µs';$('tpLeftReadout').textContent='YAW '+readable(s.cmdYaw,2);$('tpRightReadout').textContent='R '+readable(s.cmdRoll,2)+' / P '+readable(s.cmdPitch,2);
+ const preview=!localInput()&&!s.running?receiver.snapshot().previewAxes:null;
+  $('tpThrottleInput').textContent=Math.round(s.throttle)+' µs';
+  $('tpLeftReadout').textContent=(preview?'PREVIEW ':'')+'YAW '+readable(preview?.yaw??s.cmdYaw,2);
+  $('tpRightReadout').textContent=(preview?'PREVIEW ':'')+'R '+readable(preview?.roll??s.cmdRoll,2)+' / P '+readable(preview?.pitch??s.cmdPitch,2);
  $('tpLiftDisplay').textContent='THRUST / WEIGHT '+readable(v.lift,2)+' • z '+readable(v.vertical.z*100,1)+' cm';
  for(const [id,key,scale,unit] of [['tpVerticalThrust','thrust',1,' N'],['tpVerticalWeight','weight',1,' N'],['tpVerticalRatio','ratio',1,'×'],['tpVerticalZ','z',100,' cm'],['tpVerticalVelocity','velocity',100,' cm/s'],['tpVerticalAccel','acceleration',1,' m/s²']])$(id).textContent=readable(v.vertical[key]*scale,2)+unit;
  $('tpVerticalStop').textContent=v.vertical.stop.toUpperCase();$('tpTravelMeter').value=v.vertical.z*100;

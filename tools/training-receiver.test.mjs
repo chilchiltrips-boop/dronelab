@@ -41,3 +41,24 @@ test('normal stick release holds authoritative throttle; DISARM clears axes and 
  const a=r.apply(frame(4,{armed:true,throttle:1300})).applied;assert.equal(a.throttle,1300);assert.deepEqual(a.axes,{roll:0,pitch:0,yaw:0});
  const d=r.apply(frame(5,{throttle:1700,axes:{roll:1,pitch:0,yaw:0}})).applied;assert.equal(d.throttle,1000);assert.equal(s.cmdRoll,0);assert.deepEqual(d.sticks.left,{x:0,y:0});
 });
+
+
+test('mobile pre-arm joystick mirror is visible but cannot arm, move motors or enable web input',()=>{
+ const b=bench(),{s,r}=b;r.setOwner('mobile');
+ const sticks={left:{x:.4,y:-.35},right:{x:.3,y:-.2}};
+ const axes={roll:.28,pitch:.19,yaw:-.38};
+ const a=r.apply(frame(1,{sticks,axes,armed:false,throttle:1000}));
+ assert.equal(a.accepted,true);
+ assert.deepEqual(a.applied.sticks,sticks);assert.deepEqual(a.applied.previewAxes,axes);
+ assert.deepEqual(a.applied.axes,{roll:0,pitch:0,yaw:0});
+ assert.equal(a.applied.throttle,1000);assert.equal(a.applied.armed,false);
+ assert.deepEqual(s.motorRPM,[0,0,0,0]);
+ r.webSticks({x:1,y:1},{x:1,y:1});assert.deepEqual(r.snapshot().sticks,sticks);
+ b.advance(451);r.tick();
+ assert.deepEqual(r.snapshot().sticks,{left:{x:0,y:0},right:{x:0,y:0}});
+ assert.deepEqual(r.snapshot().previewAxes,{roll:0,pitch:0,yaw:0});
+ assert.equal(r.snapshot().armed,false);assert.equal(b.timeouts,0);
+ r.apply(frame(2,{sticks,axes}));r.stop('Emergency STOP');
+ assert.deepEqual(r.snapshot().sticks.left,{x:0,y:0});
+ assert.deepEqual(r.snapshot().previewAxes,{roll:0,pitch:0,yaw:0});
+});

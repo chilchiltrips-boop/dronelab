@@ -1,8 +1,18 @@
 name: Unified PID Tuning Shell & Persistent WebRTC
 on:
   push:
-    branches: [feature/unified-pid-settings-shell-v1.6.3, main]
+    branches: [feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main]
     paths:
+      - 'mobile-android/**'
+      - 'docs/flight-training/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'tools/verify_signed_android_release.py'
+      - 'tools/wait-release-checks.mjs'
+      - '.github/workflows/build-qr-android.yml'
       - 'index.html'
       - 'tripod.html'
       - 'pairing-host-bridge.js'
