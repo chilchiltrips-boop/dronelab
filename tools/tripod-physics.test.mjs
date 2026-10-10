@@ -100,3 +100,11 @@ test('STOP reset home restores pose/height/motors without removing tuned PID val
  assert.deepEqual([s.roll,s.pitch,s.yaw,s.vertical.z,s.vertical.velocity],[0,0,0,0,0]);
  assert.deepEqual(s.motorRPM,[0,0,0,0]);assert.equal(s.pid.rateYaw.p,4);
 });
+
+test('PID changes accepted just before STOP survive a complete home reset',()=>{
+ const s=createSimulator();startSimulator(s);s.throttle=1550;
+ assert.equal(setPID(s,'rateYaw',{p:4.6,i:14,d:.015}),true);
+ resetSimulator(s);
+ assert.deepEqual(s.pid.rateYaw,{p:4.6,i:14,d:.015});
+ assert.equal(s.running,false);assert.equal(s.throttle,1000);assert.equal(s.roll,0);
+});
