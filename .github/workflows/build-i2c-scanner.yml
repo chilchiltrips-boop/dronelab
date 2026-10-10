@@ -9,6 +9,7 @@ on:
       - 'FlightCore_Firmware/partitions.csv'
       - 'tools/build_scanner.py'
       - 'tools/flightcore.test.mjs'
+      - 'tools/firmware-guards.test.mjs'
       - 'tools/offline-cache.test.mjs'
       - 'sw.js'
       - '.github/workflows/build-i2c-scanner.yml'
