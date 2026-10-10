@@ -63,3 +63,15 @@ test('unified FlightCore telemetry has bounded nonblocking sampling, adjustable 
  for(const t of ['ZJTEL,1,','ZJTEL,RATE,','ZJTEL,ACK,RATE,','SCAN_PERIOD_MS=5000','scanI2C(now);','GYRO_PERIOD_MS=20','emitTelemetry(now);','emitLegacyGyro(now);','Serial.availableForWrite()<108','budget<3&&scanAddress<127','1000UL/telRateHz'])assert.ok(sketch.includes(t),t);
  assert.ok(!sketch.includes('delay(50)')&&!sketch.includes('delay(20)'),'No blocking telemetry delay');
 });
+
+
+test('firmware telemetry counter is rollover-safe across rate command after loop captured time',()=>{
+ assert.ok(sketch.includes('const int32_t elapsed=int32_t(uint32_t(now-telLast))'));
+ assert.ok(sketch.includes('if(elapsed<0||uint32_t(elapsed)<period)return'));
+ assert.ok(sketch.includes('telemetryDropped=0;telemetrySeq=0;telLast=millis();'));
+ assert.ok(sketch.includes('FW_VERSION="1.3.1"'));
+ const whenMillisBeforeRateCommand=500,whenRateCommandUpdates=501;
+ const difference=(whenMillisBeforeRateCommand-whenRateCommandUpdates)>>>0;
+ assert.ok(difference>4000000000,'legacy unsigned elapsed would wrap and falsely report huge loss');
+ assert.equal((difference|0),-1,'new signed elapsed correctly rejects a future timestamp');
+});

@@ -13,7 +13,8 @@ export function parseTelemetry(line){
 export function formatDiagnostic({sample=null,now=Date.now(),lastAt=0,connected=false,bootloader=false,firmware='?',missed=0,error='',staleAfter=250,lastRenderedSeq=null}={}){
  const age=lastAt?Math.max(0,Math.round(now-lastAt)):null;
  let state=sample?(!connected?'DISCONNECTED':age>staleAfter?'STALE':sample.sequence===lastRenderedSeq?'HOLD':'LIVE'):connected?'WAITING':bootloader?'BOOTLOADER':'DISCONNECTED';
- const err=error||(sample?.sensorStatus==='NOT_FOUND'?'GYRO_NOT_FOUND':sample?.sensorStatus==='READ_ERROR'?'GYRO_READ_ERROR':sample&&age>staleAfter?'TELEM_STALE':sample&&missed?'TELEM_GAP':!sample?(bootloader?'ROM_NO_APP':'NO_DATA'):'NONE');
+ const implausibleDrops=!!sample&&sample.deviceDrops>Math.floor(sample.uptime/20)+100;
+ const err=error||(implausibleDrops?'DROP_COUNTER_OVERFLOW':sample?.sensorStatus==='NOT_FOUND'?'GYRO_NOT_FOUND':sample?.sensorStatus==='READ_ERROR'?'GYRO_READ_ERROR':sample&&age>staleAfter?'TELEM_STALE':sample&&missed?'TELEM_GAP':!sample?(bootloader?'ROM_NO_APP':'NO_DATA'):'NONE');
  if(err!=='NONE'&&!['NO_DATA','ROM_NO_APP'].includes(err)&&state!=='DISCONNECTED')state='ERROR';
  const f=x=>Number.isFinite(x)?x.toFixed(2):'--',clean=x=>String(x??'--').replace(/[^A-Za-z0-9_.+-]/g,'_');
  const out=[

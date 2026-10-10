@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {parseSerialPlotLine} from '../js/serial-plotter.js';
+import {parseTelemetry,formatDiagnostic} from '../js/usb-live-diagnostic.js';
 
 test('generic plotter parses Arduino numeric and CSV/TSV streams',()=>{
  assert.deepEqual(parseSerialPlotLine('25.2'),{Value:25.2});
@@ -190,4 +191,37 @@ test('50Hz telemetry compatibility simulated for 30 minutes, old gyro text still
  }
  assert.equal(processed,90000);
  assert.deepEqual(parseSerialPlotLine('ZJGYRO,DATA,A1,LSM6DS3,0x6B,0.21,-0.14,0.07'),{GyroX:0.21,GyroY:-0.14,GyroZ:0.07});
+});
+
+
+test('A1 reported 214761876 dropped frames in 409532ms is flagged as firmware counter overflow, without hiding gyro',()=>{
+ const sample=parseTelemetry('ZJTEL,1,A1,6172,409532,0x6B,READY,1.96,-5.95,-1.89,LED_READY,214761876');
+ assert.ok(sample);assert.equal(sample.sensor,'LSM6DS3');assert.equal(sample.RateRoll,1.96);
+ const d=formatDiagnostic({sample,now:50000,lastAt:50000,connected:true,firmware:'1.3.0'});
+ assert.equal(d.error,'DROP_COUNTER_OVERFLOW');assert.equal(d.state,'ERROR');
+ assert.ok(d.text.includes('roll_dps=1.96'));assert.ok(d.text.includes('drop_device=214761876'));
+ assert.ok(d.text.includes('err=DROP_COUNTER_OVERFLOW'));assert.equal(d.text.split('\n').length,1);
+});
+test('A1/A2 single-line diagnostic preserves held values until fresh sample and distinguishes age/stale/ROM',()=>{
+ const a=parseTelemetry('ZJTEL,1,A1,17,900,0x6B,READY,0.12,-0.22,0.37,LED_READY,0');
+ const b=parseTelemetry('ZJTEL,1,A2,18,950,0x68,READY,-1.22,1.45,3.11,LED_READY,0');
+ assert.equal(b.sensor,'MPU6050');assert.equal(b.address,'0x68');
+ const current=formatDiagnostic({sample:a,now:1000,lastAt:999,connected:true,firmware:'1.3.1',staleAfter:250,lastRenderedSeq:16});
+ assert.equal(current.state,'LIVE');assert.ok(current.text.includes('state=LIVE'));assert.ok(current.text.includes('seq=17'));
+ const hold=formatDiagnostic({sample:a,now:1100,lastAt:999,connected:true,firmware:'1.3.1',staleAfter:250,lastRenderedSeq:17});
+ assert.equal(hold.state,'HOLD');assert.ok(hold.text.includes('roll_dps=0.12'));assert.ok(hold.text.includes('age_ms=101'));
+ const stale=formatDiagnostic({sample:a,now:1600,lastAt:999,connected:true,firmware:'1.3.1',staleAfter:250,lastRenderedSeq:17});
+ assert.equal(stale.state,'ERROR');assert.equal(stale.error,'TELEM_STALE');assert.ok(stale.text.includes('roll_dps=0.12'));
+ const rom=formatDiagnostic({connected:false,bootloader:true});assert.equal(rom.state,'BOOTLOADER');assert.equal(rom.error,'ROM_NO_APP');
+ const disconnected=formatDiagnostic({connected:false,bootloader:false});assert.equal(disconnected.state,'DISCONNECTED');
+ assert.equal(parseTelemetry('ZJTEL,1,A1,19,999,0x77,READY,1,2,3,LED_READY,0'),null);
+});
+test('both Firmware pages include ROM flash vs running-app identification and diagnostics selectors',()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ for(const p of ['index.html','lab.html']){
+  const h=readFileSync(new URL('../'+p,import.meta.url),'utf8');
+  for(const id of ['fwReadRunningBtn','fwPublishedVersion','fwPreviouslyVerified','fwLiveDiagnosticLine','fwDiagnosticState','fwSerialViewMode'])assert.ok(h.includes('id="'+id+'"'),p+' '+id);
+  assert.ok(h.includes('Connect USB / Flash Mode'));assert.ok(h.includes('Raw Serial Log'));
+ }
+ for(const x of ['lastVerifiedRuntime','readUnifiedTelemetry','renderLiveDiagnosticLine','configureDiagnosticTick','serialMonitorDisplayMode','usb-live-diagnostic.js'])assert.ok(source.includes(x),x);
 });
