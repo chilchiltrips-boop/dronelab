@@ -52,7 +52,7 @@ try{
  await page.mouse.down();await page.waitForTimeout(150);await page.mouse.up();
  await until(()=>document.querySelector('#tpRightReadout')?.textContent.includes('R 0.00'));
  if(await page.locator('#tpPidMatrix .tp-pid-bank').count()!==5)throw Error('Expected exactly five PID banks');
- if(await page.locator('#tpAnglePidSection').isHidden())throw Error('ANGLE mode must show Roll/Pitch outer PIDs');
+ if(!(await page.locator('#tpAnglePidSection').isHidden()))throw Error('ACRO must hide Roll/Pitch outer PIDs');
  if(await page.locator('[data-pid-bank="angleYaw"]').count())throw Error('No Yaw angle PID is allowed');
  await page.locator('[data-pid-bank="rateYaw"] [data-gain="p"]').fill('3.75');
  await page.locator('[data-pid-bank="rateYaw"] button').click();
