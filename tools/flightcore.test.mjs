@@ -13,7 +13,7 @@ test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.[0-3]\.\d+$/);
  assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
- for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','Scanning I2C bus...','scanAddress<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
+ for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','ZJSCAN,','scanAddress<127','Wire.endTransmission()','if(!scanRequested)return;','scanAddresses[scanCount++]'])assert.ok(sketch.includes(token),token);
  for(const token of ['WiFi.h','Update.h','AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
@@ -47,11 +47,12 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
  assert.equal(sha(app),a.sha256);assert.equal(sha(factory),f.sha256);
  assert.equal(factory.length,4*1024*1024);
  assert.deepEqual(factory.subarray(0x10000,0x10000+app.length),app);
- assert.ok(app.includes(Buffer.from('Scanning I2C bus...')),'scanner banner must be in compiled image');
+ if(catalog.version==='1.3.1')assert.ok(app.includes(Buffer.from('Scanning I2C bus...')),'legacy 1.3.1 image');
+ else{assert.ok(!app.includes(Buffer.from('Scanning I2C bus...')),'new image must exclude verbose banner');assert.ok(app.includes(Buffer.from('ZJSCAN,')),'structured scan compiled');}
 });
 
 test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
- for(const token of ['FW_VERSION="1.3.1"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+ for(const token of ['FW_VERSION="1.3.2"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
 });
 
 test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{
@@ -60,7 +61,7 @@ test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{
 });
 
 test('unified FlightCore telemetry has bounded nonblocking sampling, adjustable Hz and incremental I2C scanning',()=>{
- for(const t of ['ZJTEL,1,','ZJTEL,RATE,','ZJTEL,ACK,RATE,','SCAN_PERIOD_MS=5000','scanI2C(now);','GYRO_PERIOD_MS=20','emitTelemetry(now);','emitLegacyGyro(now);','Serial.availableForWrite()<108','budget<3&&scanAddress<127','1000UL/telRateHz'])assert.ok(sketch.includes(t),t);
+ for(const t of ['ZJTEL,1,','ZJTEL,RATE,','ZJTEL,ACK,RATE,','if(!scanRequested)return;','scanI2C(now);','GYRO_PERIOD_MS=20','emitTelemetry(now);','// Legacy ZJGYRO duplicates are disabled.','Serial.availableForWrite()<108','budget<3&&scanAddress<127','1000UL/telRateHz'])assert.ok(sketch.includes(t),t);
  assert.ok(!sketch.includes('delay(50)')&&!sketch.includes('delay(20)'),'No blocking telemetry delay');
 });
 
@@ -69,7 +70,7 @@ test('firmware telemetry counter is rollover-safe across rate command after loop
  assert.ok(sketch.includes('const int32_t elapsed=int32_t(uint32_t(now-telLast))'));
  assert.ok(sketch.includes('if(elapsed<0||uint32_t(elapsed)<period)return'));
  assert.ok(sketch.includes('telemetryDropped=0;telemetrySeq=0;telLast=millis();'));
- assert.ok(sketch.includes('FW_VERSION="1.3.1"'));
+ assert.ok(sketch.includes('FW_VERSION="1.3.2"'));
  const whenMillisBeforeRateCommand=500,whenRateCommandUpdates=501;
  const difference=(whenMillisBeforeRateCommand-whenRateCommandUpdates)>>>0;
  assert.ok(difference>4000000000,'legacy unsigned elapsed would wrap and falsely report huge loss');
