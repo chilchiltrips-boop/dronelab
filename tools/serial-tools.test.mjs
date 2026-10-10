@@ -216,12 +216,14 @@ test('A1/A2 single-line diagnostic preserves held values until fresh sample and 
  const disconnected=formatDiagnostic({connected:false,bootloader:false});assert.equal(disconnected.state,'DISCONNECTED');
  assert.equal(parseTelemetry('ZJTEL,1,A1,19,999,0x77,READY,1,2,3,LED_READY,0'),null);
 });
-test('both Firmware pages include ROM flash vs running-app identification and diagnostics selectors',()=>{
+test('both Firmware pages have structured raw serial and no obsolete View selector',()=>{
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  for(const p of ['index.html','lab.html']){
   const h=readFileSync(new URL('../'+p,import.meta.url),'utf8');
-  for(const id of ['fwReadRunningBtn','fwPublishedVersion','fwPreviouslyVerified','fwLiveDiagnosticLine','fwDiagnosticState','fwSerialViewMode'])assert.ok(h.includes('id="'+id+'"'),p+' '+id);
-  assert.ok(h.includes('Connect USB / Flash Mode'));assert.ok(h.includes('Raw Serial Log'));
+  for(const id of ['fwReadRunningBtn','fwPublishedVersion','fwPreviouslyVerified','fwDiagnosticState','fwSerialOutput','fwSerialPauseScrollBtn','fwSerialCopyBtn'])assert.ok(h.includes('id="'+id+'"'),p+' '+id);
+  assert.ok(!h.includes('id="fwSerialViewMode"'),p+' obsolete View selector');
+  assert.ok(!h.includes('id="fwLiveDiagnosticLine"'),p+' obsolete live-line mode');
+  assert.ok(h.includes('Connect USB / Flash Mode'));
  }
- for(const x of ['lastVerifiedRuntime','readUnifiedTelemetry','renderLiveDiagnosticLine','configureDiagnosticTick','serialMonitorDisplayMode','usb-live-diagnostic.js'])assert.ok(source.includes(x),x);
+ for(const x of ['lastVerifiedRuntime','readUnifiedTelemetry','renderLiveDiagnosticLine','configureDiagnosticTick','serialVisibleLine','usb-live-diagnostic.js'])assert.ok(source.includes(x),x);
 });
