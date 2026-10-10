@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07111b">
-<title>ZEBJUS PID Tuning | F450 Tripod Simulator</title><link rel="icon" href="aerion-drone-mark.png"><link rel="stylesheet" href="./tripod.css"><link rel="stylesheet" href="./pairing.css"></head>
+<title>ZEBJUS PID Tuning | F450 Tripod Simulator</title><script>
+/* Canonical persistent DroneLab shell. ?standalone=1 is retained for
+   isolated renderer and offline/hardware regression tests only. */
+(function(){const q=new URLSearchParams(location.search);
+ if(window.top===window&&!q.has('standalone')&&!q.has('embedded')){
+  location.replace('./index.html#'+(q.has('connection')?'settings':'pid'));
+ }
+})();
+</script><link rel="icon" href="aerion-drone-mark.png"><link rel="stylesheet" href="./tripod.css"><link rel="stylesheet" href="./pairing.css"></head>
 <body>
 <script>if(new URLSearchParams(location.search).has('embedded'))document.documentElement.classList.add('pid-embedded')</script>
 <header class="tp-header"><div class="tp-brand"><span class="tp-mark">Z</span><div><strong>ZEBJUS <span>DroneLab</span></strong><small>Tripod Flight Control Training</small></div></div><div class="tp-header-state"><span class="tp-dot"></span><span>100% VIRTUAL • NO HARDWARE</span><span id="tpStatus" role="status">READY</span><span id="webappVersion" class="qr-build-version">v1.6.1</span><span id="mobileHeaderStatus" class="qr-header-status disconnected">Mobile: Disconnected</span><label class="qr-header-switch"><span>Grant Mobile Control</span><input id="topGrantMobileSwitch" type="checkbox" role="switch" disabled><span class="qr-switch-track" aria-hidden="true"></span></label><button id="topPairMobileBtn" class="action" aria-label="Open WebRTC connection settings" aria-haspopup="dialog">⚙ Connection</button></div></header>
