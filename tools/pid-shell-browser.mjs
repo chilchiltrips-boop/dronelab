@@ -15,6 +15,10 @@ try{
  await Promise.all([page.goto('http://127.0.0.1:8765/index.html#settings',{waitUntil:'domcontentloaded'}),
                     phone.goto('http://127.0.0.1:8765/companion.html',{waitUntil:'domcontentloaded'})]);
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining&&window.__testPeer,30000);
+ const legacy=await context.newPage();
+ await legacy.goto('http://127.0.0.1:8765/tripod.html');
+ await until(legacy,()=>location.hash==='#pid'&&location.pathname.endsWith('index.html'));
+ await legacy.close();
  const navBefore=await page.locator('.topbar').evaluate(el=>el.outerHTML);
  if(!(await page.locator('#tab-settings').isVisible()))throw Error('Settings must be a real panel, not a redirect');
  if(!(await page.locator('#connectionFlow').isVisible()))throw Error('Inline QR/code form missing from Settings');
