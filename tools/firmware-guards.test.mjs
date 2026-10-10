@@ -76,3 +76,15 @@ test('image write plan refuses invalid size representations and too-small physic
  assert.throws(()=>imageTools.usbWritePlan({...base,chipId:13}),/do not match/);
  assert.throws(()=>imageTools.usbWritePlan({...base,flashBytes:2*1024*1024}),/Flash capacity/);
 });
+
+
+test('preflash rejection never reaches eraseFlash or writeFlash',async()=>{
+ for(const kind of ['factory','app']){
+  const r=flashRuntime(kind);
+  r.ctx.verifiedUsbWritePlan=async()=>{throw Error('BLOCKED WRONG BOARD: simulated ROM chip mismatch')};
+  await r.run();
+  assert.deepEqual(r.writes,[]);
+  assert.ok(r.logs.some(x=>x.includes('BLOCKED before erase/write')));
+  assert.equal(r.ctx.busy,false);
+ }
+});
