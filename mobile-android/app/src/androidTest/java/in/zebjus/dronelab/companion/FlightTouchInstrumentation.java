@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.SystemClock;
@@ -13,6 +14,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.webkit.WebView;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,6 +52,16 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         throw new AssertionError("Native acceptance timeout: "+condition);
     }
     private void check(String condition) throws Exception { waitJs(condition);checks++; }
+    private void observeNativeInput() throws Exception {
+        // Observe the real OS-delivered events; never manufacture JS input.
+        js("(()=>{window.__nativeInputTrace=[];const record=e=>{const t=window.__nativeInputTrace;t.push({type:e.type,id:e.pointerId,target:e.target?.id||e.target?.nodeName,x:e.clientX,y:e.clientY,width:innerWidth,height:innerHeight,hidden:document.hidden});if(t.length>30)t.shift()};['pointerdown','pointerup','pointercancel','gotpointercapture','lostpointercapture','resize','blur','focus','visibilitychange'].forEach(type=>window.addEventListener(type,record,true));return true})()");
+    }
+    private void screenshot(String name) {
+        Bitmap image=getUiAutomation().takeScreenshot();
+        if(image==null)return;
+        try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getExternalFilesDir(null),name))){image.compress(Bitmap.CompressFormat.PNG,100,out);}
+        catch(Exception ignored){}finally{image.recycle();}
+    }
     private float[] point(String id,float rx,float ry) throws Exception {
         String result=js("(()=>{const r=document.getElementById('"+id+"').getBoundingClientRect();return [r.x+r.width*"+rx+",r.y+r.height*"+ry+",devicePixelRatio]})()");
         JSONArray p=new JSONArray(result);int[] origin=new int[2];runOnMainSync(()->web.getLocationOnScreen(origin));
@@ -76,6 +90,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
         check("['flightLeftTouch','flightRightTouch'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=document.querySelector('.flight-footer').getBoundingClientRect().top+1)");
+        screenshot("native-ready.png");
         float[] l=point("flightLeftZone",.50f,.65f),r=point("flightRightZone",.50f,.65f);
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightLeftRing').classList.contains('dragging')");
@@ -148,12 +163,17 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 if(!"version-11".equals(getTargetContext().getSharedPreferences("native-upgrade-fixture",0).getString("retained","")))throw new AssertionError("In-place upgrade lost native app data");
                 check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
             }
+            observeNativeInput();
             multitouch();
             result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout.\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
-            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent})");}catch(Exception ignored){}
-            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nAssertions="+checks+" touchCalls="+touchCalls+" lastTouch="+lastTouch+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
+            screenshot("native-failure.png");
+            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent,trace:window.__nativeInputTrace,zones:['flightLeftZone','flightRightZone'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,rect:r.toJSON(),hit:document.elementFromPoint(r.x+r.width*.5,r.y+r.height*.65)?.id}})})");}catch(Exception ignored){}
+            AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+            String activePackage=root==null?"none":String.valueOf(root.getPackageName());
+            if(root!=null)root.recycle();
+            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nAssertions="+checks+" touchCalls="+touchCalls+" lastTouch="+lastTouch+"\nWindow focus="+(activity!=null&&activity.hasWindowFocus())+" activePackage="+activePackage+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
         }
     }
 }

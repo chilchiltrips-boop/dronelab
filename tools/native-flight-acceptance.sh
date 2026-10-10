@@ -8,7 +8,11 @@ run_case() {
   shift
   adb shell am instrument -w -r "$@" "$runner" | tee "test-output/native/$case_name.log"
   if ! grep -q 'PASS ' "test-output/native/$case_name.log" || grep -Eq 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
-    adb exec-out screencap -p > "test-output/native/failure-${case_name}.png"
+    # The instrumentation captures the foreground BEFORE finish() closes it.
+    adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-ready.png "test-output/native/ready-${case_name}.png" || true
+    if ! adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-failure.png "test-output/native/failure-${case_name}.png"; then
+      adb exec-out screencap -p > "test-output/native/failure-${case_name}.png"
+    fi
     echo "Native acceptance failed: $case_name"
     exit 1
   fi
