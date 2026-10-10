@@ -98,10 +98,13 @@ function applyExample(key){
  if(!Object.values(EXAMPLES).includes(currentCode())&&!confirm('Replace the selected file with the example?'))return;
  setCode(code);save();
 }
-function exportProject(){
+async function exportProject(){
  files[active]=currentCode();save();
- const blob=new Blob([JSON.stringify({version:1,files,active},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
- a.href=url;a.download='ZEBJUS_Python_Project.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ try{
+  const extras=workspace?await workspace.bundle():{folders:[],assets:[]};
+  const blob=new Blob([JSON.stringify({version:2,files,active,...extras},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),x=document.createElement('a');
+  x.href=url;x.download='ZEBJUS_Python_Project.json';x.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }catch(e){status('Export: '+e.message,'warn')}
 }
 async function importProject(file){
  if(!file)return;
@@ -109,7 +112,7 @@ async function importProject(file){
   const data=JSON.parse(await file.text()),f=Object.fromEntries(Object.entries(data.files||{}).filter(([name,v])=>PY_FILE_PATH.test(name)&&typeof v==='string').slice(0,100));
   if(!Object.keys(f).length)throw Error('No valid .py files found');
   if(!confirm('Replace current project with imported files?'))return;
-  for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();renderFiles();save();status('Imported project','good');
+  if(editor)editor.setModel(null);for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();if(workspace)await workspace.restore(data);renderFiles();save();status('Imported project','good');
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
 function usbStatus(){
@@ -243,8 +246,9 @@ function checkPythonSyntax(){
  status('Checking Python syntax…');
  w.postMessage({type:'check-syntax',filename:active,code:currentCode()});
 }
-function runPython(){
+async function runPython(){
  if(running)return;
+ workspace?.openBottom('run');
  if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
  const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
@@ -255,7 +259,11 @@ function runPython(){
  clearPythonMarkers();
  worker.postMessage({type:'hardware-info',info:window.DroneLabSerial?.firmwareInfo?.()||null});
  worker.postMessage({type:'i2c-data',scan:bridge.getLatest()});
- worker.postMessage({type:'run',filename:active,code,files});
+ const runWorker=worker;
+ try{const assets=workspace?await workspace.assetPayload():[];
+  if(worker===runWorker)runWorker.postMessage({type:'run',filename:active,code,files,assets});
+ }catch(e){if(worker===runWorker){status('Assets: '+e.message,'warn');runWorker.postMessage({type:'run',filename:active,code,files,assets:[]})}}
+
 }
 
 function updateButtons(){
@@ -527,7 +535,7 @@ function bind(){
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
- $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();initPythonStickyToolbar();
+ $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonStickyToolbar();
  $('pythonEditor').oninput=e=>{recordText(e.target.value);editorPosition()};$('pythonEditor').onkeyup=editorPosition;$('pythonEditor').onclick=editorPosition;
  $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editor){e.preventDefault();undoRedo(e.shiftKey)}};
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
@@ -559,5 +567,11 @@ function bind(){
  });
  setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;$('pythonCameraStop').disabled=true;updateButtons();
 }
-function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bind();usbStatus();void enableMonaco()}
+function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bind();
+ workspace=createPythonIDEShell({
+  listFiles:()=>Object.keys(files),currentFile:()=>active,selectFile:switchFile,
+  addFile:addProjectFile,renameFile:renameProjectFile,removeFile:removeProjectFile,
+  layoutEditor:()=>editor?.layout()
+ });
+ renderFiles();usbStatus();void enableMonaco()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
