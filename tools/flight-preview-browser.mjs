@@ -1,7 +1,7 @@
 import {chromium} from 'playwright';import {browserOptions,configureContext} from './browser-harness.mjs';import {mkdirSync,writeFileSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});const b=await chromium.launch(browserOptions),records=[];
 try{
- for(const [width,height] of [[488,227],[595,227],[488,275],[595,275],[640,360],[800,450],[844,390],[1080,480]]){
+ for(const [width,height] of [[488,227],[595,227],[488,275],[595,275],[640,360],[800,450],[780,360],[844,390],[900,405],[1080,480]]){
   const c=await b.newContext({viewport:{width,height},hasTouch:true,isMobile:true,serviceWorkers:'block',reducedMotion:'reduce'});await configureContext(c);const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto('http://127.0.0.1:8765/companion.html');await p.waitForFunction(()=>window.ZebjusFlightApp&&!document.getElementById('flightCockpit').hidden);
   await p.screenshot({path:`test-output/android-cockpit-${width}x${height}.png`});
@@ -47,5 +47,5 @@ try{
   if(layout.touchReadoutBottoms.some(v=>v>layout.footerTop+1))throw Error('Thumb readout clipped by footer '+JSON.stringify(layout));
   if(errors.length)throw Error(errors.join(' | '));records.push({width,height,anchor,layout,errors});await c.close();
  }
- writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log(`PASS Chromium touchscreen preview: ${records.length} landscape sizes including native density, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands`);
+ writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log(`PASS Chromium touchscreen preview: ${records.length} landscape sizes including 16:9, 19.5:9 and 20:9, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands`);
 }finally{await b.close()}
