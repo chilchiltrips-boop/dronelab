@@ -1,0 +1,52 @@
+# FlightCore v1.2.0 — Board-specific I²C gyroscopes
+
+This firmware **adds** gyro reads to existing I²C Scanner (every 5 seconds) and onboard LED control. Only sensor readouts are implemented; no motor commands, PID updates, arm/disarm actions, fusion or gyro-based flight stabilization.
+
+## Hardware
+
+| Profile | Microcontroller | Gyro | I²C address | SDA/SCL | Gyro sensitivity | Display interval |
+| --- | --- | --- | --- | --- | --- | --- |
+| A2 | Seeed XIAO ESP32-C6 | MPU6050 | `0x68` | D4/GPIO22, D5/GPIO23 | ±500 dps, 65.5 LSB/(dps) | 50 ms |
+| A1 | ESP32-C3 Super Mini | GY-LSM6DS3 | **`0x6B`** | **GPIO4, GPIO5** | ±2000 dps, 70 mdps/LSB | 20 ms |
+
+**Important wiring change on A1:** Generic Arduino ESP32-C3 defaults to GPIO8 SDA / GPIO9 SCL, but GPIO8 is the onboard LED pin. Sharing GPIO8 between the I²C bus and LED PWM is not safe or functional. This firmware explicitly uses GPIO4 (SDA) and GPIO5 (SCL) on A1. Move the LSM6DS3 module's SDA wire to GPIO4 and SCL to GPIO5. This change is mandatory if the previous module was wired to GPIO8/9. Connect 3.3V and GND, and keep I²C lines at 3.3V logic; do not use GPIO22/23 on C3. GPIO4/5 overlap JTAG-capable pins; don't connect external JTAG to these lines while using I²C.
+
+The A2 board retains `Wire.begin()` for the XIAO defaults and uses 400kHz I²C, per the user's MPU6050 example. A1 also uses 400kHz after `Wire.begin(4,5)`.
+
+## Register configuration (once at sensor initialization)
+
+**A2 MPU6050**
+- `0x75` WHO_AM_I, expected `0x68`.
+- `0x6B <- 0x00`: leave sleep mode.
+- `0x1A <- 0x05`: DLPF_CFG=5.
+- `0x1B <- 0x08`: ±500 dps gyro, divide raw values by 65.5.
+- Burst read 6 bytes from `0x43`: X/Y/Z, MSB-first.
+
+**A1 LSM6DS3**
+- I²C **slave** address `0x6B` was detected by the user's scanner. It is not the `0x6A` fallback used in some examples.
+- `0x0F` WHO_AM_I, expected `0x69` (also supports compatible `0x6C` LSM6DS-family ID).
+- `0x12 <- 0x44`: block data update, enable auto-increment.
+- `0x11 <- 0x4C`: 104Hz ODR, ±2000 dps, multiply raw values by 0.070.
+- Burst read 6 bytes from `0x22`: X/Y/Z, LSB-first.
+
+Initialization retries every 2.5 seconds if the device is absent or stops responding. The scanner runs independently and continues to list other attached I²C devices.
+
+## Serial output (115200 baud)
+
+The firmware emits independent CSV-format gyro data suitable for parsing:
+
+```text
+ZJGYRO,STATUS,A2,MPU6050,0x68,READY
+ZJGYRO,DATA,A2,MPU6050,0x68,-0.31,0.12,1.43
+
+ZJGYRO,STATUS,A1,LSM6DS3,0x6B,READY
+ZJGYRO,DATA,A1,LSM6DS3,0x6B,-0.28,0.14,1.39
+```
+
+The signed X/Y/Z values are sensor-native angular rates in degrees/second; **not** absolute pitch/roll/yaw angles, and **not** guaranteed body-frame mapping without mounting orientation alignment. No gyro bias calibration is applied, so stationary values may be small nonzero values. Sensor ODR (104Hz for LSM6DS3) is distinct from serial reporting (50Hz).
+
+No `delay(20)` or `delay(50)` blocks the loop. Existing I²C Scanner messages, LED control commands and watchdog remain unchanged. New `ZJGYRO` lines can be inspected in **Firmware & Connect → Serial Monitor**, while **Python Lab** continues to support the existing I²C and LED functions. A typed Python gyroscope API is not part of this firmware-only change.
+
+## Validation and safety
+
+`tools/build_scanner.py` compiles **both** the A1 and A2 images from the same board-conditional source. APP and FACTORY binaries are verified for the corresponding chip and SHA256. Physical module detection, voltage, sample values, axis directions and wiring must still be checked on the user's hardware. Always bench-test with motors disconnected before integrating gyro feedback into a flight controller.
