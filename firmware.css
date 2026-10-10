@@ -91,3 +91,18 @@
 
 /* Unified FlightCore telemetry options: keep readable on desktop and mobile. */
 .fw-tel-state{font-size:11px;white-space:normal;line-height:1.4;max-width:170px;overflow-wrap:anywhere;color:var(--muted,#94a3b8)}
+
+/* ROM identification versus live running firmware; one-line error-coded serial output. */
+.firmware-page .firmware-connect-buttons{display:flex;gap:7px;flex-wrap:wrap}
+.firmware-page .firmware-connect-buttons>.btn{flex:1 1 145px;min-width:0}
+.firmware-page .firmware-id-info{grid-template-columns:repeat(2,minmax(0,1fr))}
+.firmware-page .firmware-id-info b{display:block;overflow-wrap:anywhere;line-height:1.4;font-size:11px}
+.firmware-page .fw-diagnostic-toolbar{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;margin-bottom:7px;font-size:11px;color:#b4e6d7}
+.firmware-page .fw-diagnostic-toolbar label{display:flex;align-items:center;gap:7px}
+.firmware-page .fw-diagnostic-toolbar select{background:#fff;color:#163143;padding:7px;border:1px solid #a9c8d0;border-radius:6px;font-size:12px}
+.firmware-page .fw-single-line{white-space:pre!important;overflow-x:auto!important;overflow-y:hidden!important;min-height:58px!important;max-height:90px!important;font-size:11px!important;line-height:1.5!important;overflow-wrap:normal!important;word-break:normal!important}
+.firmware-page .fw-single-line[data-state="STALE"],.firmware-page .fw-single-line[data-state="ERROR"]{border-color:#b97734;color:#ffdc92}
+.firmware-page .fw-single-line[data-state="LIVE"]{border-color:#2e9369;color:#adf5d1}
+.firmware-page .fw-diagnostic-note{margin:6px 0 9px;font-size:10px;line-height:1.45;color:var(--muted)}
+.firmware-page #fwSerialOutput[hidden],.firmware-page #fwLiveDiagnosticLine[hidden],.firmware-page #fwDiagnosticState[hidden]{display:none!important}
+@media(max-width:620px){.firmware-page .firmware-id-info{grid-template-columns:1fr}}
