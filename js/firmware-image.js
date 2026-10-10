@@ -34,7 +34,9 @@ export function usbWritePlan({image,board,chipId,flashBytes,erase=false,appReady
   if(erase&&image.kind!=='factory')throw Error('Erase requires a complete Factory image.');
   if(image.kind==='app'&&!appReady)throw Error('Existing matching bootloader and dual OTA partitions must be confirmed.');
   const address=image.kind==='factory'?0:APP_OFFSET;
-  if(address+image.bytes.length>flashBytes)throw Error('Image exceeds detected flash capacity.');
+  const length=image.bytes instanceof Uint8Array?image.bytes.byteLength:Number(image.bytes);
+  if(!Number.isSafeInteger(length)||length<32768)throw Error('Firmware image size is missing or invalid.');
+  if(address+length>flashBytes)throw Error('Image exceeds detected flash capacity.');
   return {address,eraseAll:false,flashMode:'keep',flashFreq:'keep',flashSize:'keep'};
 }
 export function inspectUsbLayout(boot,table,board){
