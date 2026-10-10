@@ -26,12 +26,15 @@ test('simulated APP and Factory writes preserve exact offsets and header configu
 test('APP erase request cannot reach a writer',async()=>{
  const r=flashRuntime();r.elements.get('#fwEraseUsb').checked=true;await r.run();assert.equal(r.writes.length,0);assert.ok(r.logs.some(x=>x.includes('Erase is blocked')));
 });
-test('arbitrary serial bytes cannot claim scanner boot; split banner/activity can',()=>{
- const ctx={monitorPendingScan:true,monitorBootText:'',logs:[], $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log(v){this.logs?.push(v)}};
- // log callback receives no method receiver in production.
- ctx.log=v=>ctx.logs.push(v);
- const code=source.slice(source.indexOf('function appendSerialOutput('),source.indexOf('function clearSerialOutput('));vm.runInNewContext(code+';globalThis.append=appendSerialOutput;',ctx);
- ctx.append('ESP-ROM boot log\n');assert.equal(ctx.monitorPendingScan,true);
- ctx.append('=== I2C Address Sc');assert.equal(ctx.monitorPendingScan,true);
- ctx.append('anner ===\nScanning I2C bus...\n');assert.equal(ctx.monitorPendingScan,false);assert.ok(ctx.logs[0].includes('version is not reported'));
+test('ROM boot output and scanner-only text cannot claim firmware startup without live ZJINFO',()=>{
+ const ctx={monitorPendingScan:true,monitorBootText:'',usbRuntimeInfo:null,usbRomDownload:false,logs:[], $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log:v=>ctx.logs.push(v)};
+ const code=source.slice(source.indexOf('function appendSerialOutput('),source.indexOf('function clearSerialOutput('));
+ vm.runInNewContext(code+';globalThis.append=appendSerialOutput;',ctx);
+ ctx.append('ESP-ROM:esp32c3-api1-20210207\nwaiting for download\n');
+ assert.equal(ctx.monitorPendingScan,true);
+ ctx.append('=== I2C Address Scanner ===\nScanning I2C bus...\n');
+ assert.equal(ctx.monitorPendingScan,true);
+ ctx.usbRuntimeInfo={boardId:'ZFC-A1',version:'1.2.1'};
+ ctx.append('Scanning I2C bus...\n');
+ assert.equal(ctx.monitorPendingScan,false);assert.ok(ctx.logs[0].includes('Live USB firmware identity verified'));
 });
