@@ -2,7 +2,32 @@
 // Isolated Python 3 / Pyodide runtime adapted from Aerion Python Lab.
 // Reuses official Pyodide assets hosted by the original Aerion project.
 const PYODIDE_INDEX=new URL('./vendor/pyodide/',self.location.href).href;
-const pending=new Map();let py=null,sequence=0,running=false,lastScanSnapshot=null;
+const pending=new Map();let py=null,sequence=0,running=false,lastScanSnapshot=null,hardwareInfo=null;
+const ERROR_HELP={
+ SyntaxError:'Check punctuation, colons, quotes and brackets on the highlighted line.',
+ IndentationError:'Python blocks require consistent indentation (usually four spaces).',
+ TabError:'Do not mix tabs with spaces. Use four spaces for each indent level.',
+ NameError:'A variable or function name is missing or misspelled.',
+ TypeError:'Check function argument count and data types.',
+ ValueError:'The supplied value is invalid for the requested operation.',
+ AttributeError:'This object has no such property/method. Check spelling and Drone API suggestions.',
+ ModuleNotFoundError:'The requested Python module is unavailable in the browser runtime.',
+ ImportError:'This import is not supported or the module is missing.',
+ IndexError:'List index is outside the available range.',
+ KeyError:'Dictionary key does not exist.',
+ ZeroDivisionError:'Check for a division by zero.',
+ PinConflictError:'GPIO8 is an I2C SDA pin on older A1 wiring. Connect LSM6DS3 SDA to GPIO4 and SCL to GPIO5; reflash the new firmware.',
+ USBDisconnectedError:'Reconnect USB Serial at 115200 baud and select the running A1/A2 firmware port.',
+ SensorNotFoundError:'Check sensor 3.3V/GND, SDA/SCL pins and I2C address.'
+};
+function explainWorkerError(error,filename='main.py'){
+ const raw=String(error?.stack||error?.message||error);
+ const type=([...raw.matchAll(/\\b([A-Z][A-Za-z]+Error):/g)].at(-1)||[])[1]||'RuntimeError';
+ const locations=[...raw.matchAll(/File ["']([^"']+)["'], line (\\d+)/g)];
+ const userLocation=locations.reverse().find(m=>m[1].endsWith(filename))||locations[0];
+ const line=Number(userLocation?.[2])||0;
+ return {error:raw,errorType:type,line,column:0,explanation:ERROR_HELP[type]||'Read the traceback and inspect the reported line and arguments.',filename};
+}
 const send=(type,data={})=>postMessage({type,...data});
 function rpc(method,args={}){
  return new Promise((resolve,reject)=>{
@@ -14,7 +39,7 @@ function rpc(method,args={}){
 self.zebjusI2cBridge={
  i2cScan:(timeout)=>rpc('i2c_scan',{timeout:Number(timeout)||12000}),
  latestScanSync:()=>JSON.stringify(lastScanSnapshot),
- ledSend:(packet)=>{const line=String(packet);if(line.length>190||!/^ZJLED,[0-9]+,(?:SET|STOP|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,[0-9:|,]+)?\n$/.test(line))throw Error('Unsupported LED command');send('led-write',{packet:line});},
+ ledSend:(packet)=>{if(hardwareInfo?.led&&/PIN_CONFLICT|SDA_CONFLICT|UNAVAILABLE/.test(String(hardwareInfo.led))){const e=Error('LED is unavailable while GPIO8 is used as I2C SDA; use A1 SDA GPIO4 and SCL GPIO5');e.name='PinConflictError';throw e}const line=String(packet);if(line.length>190||!/^ZJLED,[0-9]+,(?:SET|STOP|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,[0-9:|,]+)?\n$/.test(line))throw Error('Unsupported LED command');send('led-write',{packet:line});},
  latestScan:()=>rpc('latest_scan'),
  emitImage:(base64,title='Python Plot')=>send('image',{base64:String(base64),title:String(title)})
 };
@@ -48,6 +73,11 @@ async function run(msg){
   }
   await runtime.runPythonAsync("import sys\nsys.path.insert(0, '/home/project')",{filename:'path_setup.py'});
   const source=String(msg.code||'');
+  send('status',{text:'Checking Python syntax…'});
+  // Compile-check before importing packages or starting hardware commands.
+  runtime.globals.set('_zj_source',source);
+  runtime.globals.set('_zj_filename',msg.filename||'main.py');
+  await runtime.runPythonAsync("import ast\\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
   send('status',{text:'Checking Python libraries…'});
   await runtime.loadPackagesFromImports(source);
   if(/\b(?:import\s+cv2|from\s+cv2\s+import)\b/.test(source)){send('status',{text:'Loading browser-compatible OpenCV Python…'});await runtime.loadPackage('opencv-python')}
@@ -81,12 +111,23 @@ _zj_transformed=ast.unparse(_ZjTree)`;
   const result=await runtime.runPythonAsync(userCode,{filename:msg.filename||'main.py'});
   if(result!==undefined&&result!==null)send('stdout',{text:'=> '+String(result)+'\n'});
   send('done',{filename:msg.filename||'main.py'});
- }catch(e){send('error',{error:String(e?.stack||e?.message||e),filename:msg.filename||'main.py'})}
+ }catch(e){send('error',explainWorkerError(e,msg.filename||'main.py'))}
  finally{running=false}
 }
 self.onmessage=e=>{
  const m=e.data||{};
  if(m.type==='run'){void run(m);return}
+ if(m.type==='hardware-info'){hardwareInfo=m.info||null;return}
+ if(m.type==='check-syntax'){
+  void (async()=>{
+   try{
+    const runtime=await prepare();runtime.globals.set('_zj_source',String(m.code||''));runtime.globals.set('_zj_filename',m.filename||'main.py');
+    await runtime.runPythonAsync("import ast\\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
+    send('syntax-ok',{filename:m.filename||'main.py'});
+   }catch(error){send('syntax-error',explainWorkerError(error,m.filename||'main.py'))}
+  })();
+  return
+ }
  if(m.type==='i2c-data'){lastScanSnapshot=m.scan||null;return}
  if(m.type==='rpc-result'){
   const p=pending.get(m.id);
