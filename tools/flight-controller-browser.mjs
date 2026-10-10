@@ -15,9 +15,13 @@ try{
  const touch=await ctx.newCDPSession(phone),l={id:1,x:left.x+left.width*.45,y:left.y+left.height*.67},r={id:2,x:right.x+right.width*.53,y:right.y+right.height*.65};
  const event=(type,touchPoints)=>touch.send('Input.dispatchTouchEvent',{type,touchPoints});
  await event('touchStart',[l]);await event('touchMove',[{...l,y:l.y-65}]);await phone.waitForTimeout(760);await event('touchEnd',[]);
- await wait(phone,()=>parseInt(document.getElementById('flightThrottle').textContent)>=1200);await phone.waitForTimeout(140);
- const held=await phone.locator('#flightThrottle').textContent();if(await web.locator('#tpThrottleReadout').textContent()!==held)throw Error('Authoritative throttle mirror differs');
- await phone.waitForTimeout(200);if(await phone.locator('#flightThrottle').textContent()!==held)throw Error('Throttle did not hold on release');
+ // Release must reach the actual receiver before sampling its independently
+ // scheduled 10-Hz Web readout and ACK-driven phone UI. Keep ARM required.
+ await wait(web,()=>{const a=window.ZebjusTraining.snapshot();return a.armed&&a.sticks.left.y===0&&a.throttle>=1200});
+ const heldState=await web.evaluate(()=>window.ZebjusTraining.snapshot()),held=heldState.throttle+' µs';
+ await Promise.all([web.waitForFunction(value=>document.getElementById('tpThrottleReadout').textContent===value,held,{timeout:2500}),phone.waitForFunction(value=>document.getElementById('flightThrottle').textContent===value,held,{timeout:2500})]);
+ await phone.waitForTimeout(200);const holdAfter=await web.evaluate(()=>window.ZebjusTraining.snapshot());
+ if(!holdAfter.armed||holdAfter.throttle!==heldState.throttle||await phone.locator('#flightThrottle').textContent()!==held)throw Error('Applied throttle did not stay held/armed after release: '+JSON.stringify({before:heldState.throttle,after:holdAfter.throttle,armed:holdAfter.armed}));
  await wait(phone,()=>document.getElementById('flightTimer').textContent!=='00:00');
  await event('touchStart',[l]);await event('touchStart',[l,r]);
  await event('touchMove',[{...l,x:l.x+28},{...r,x:r.x+25,y:r.y-20}]);
