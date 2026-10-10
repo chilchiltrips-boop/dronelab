@@ -70,3 +70,13 @@ The built-in Python Lab executes `from zebjus_simple import Drone` in the browse
 **A1 SuperMini:** Check `Wire.begin()` on ESP32-C3 Dev Module default SDA GPIO8 / SCL GPIO9 first (user-confirmed scanner finds LSM6DS3 `0x6B`). If absent, probe optional GPIO4 / GPIO5. If neither responds, revert to default and keep retrying. Report the selected bus using `ZJI2C,PINS` and `ZJI2C,MODE` serial messages. **A2 C6** MPU6050 `0x68` on GPIO22/23 remains unchanged.
 
 **LED versus SDA conflict:** GPIO8 is also A1's active-low onboard LED. When GPIO8 is SDA, disable PWM LED control to preserve I²C integrity. Report `ZJLED,INFO,ZFC-A1,GPIO8,UNAVAILABLE,SDA_CONFLICT`; a LED command receives `ZJLED,ACK,<id>,PIN_CONFLICT`. To use the onboard LED and I²C at the same time, move the sensor's SDA/SCL wiring to GPIO4/5 and reboot. GPIO9 is a boot strap, so pull-up/wiring influences boot behavior and BOOT must be released on reset.
+
+## FlightCore v1.3.0 — Dedicated A1 I2C and unified USB telemetry
+
+**Both firmwares:** A1 ESP32-C3 uses **SDA GPIO4, SCL GPIO5, LSM6DS3 at 0x6B**. A2 XIAO ESP32-C6 uses **SDA GPIO22, SCL GPIO23, MPU6050 at 0x68**. The GPIO8 onboard LED remains independent of I2C on A1. Remove any old A1 SDA8/SCL9 sensor wiring and reconnect to GPIO4/5 before flashing v1.3.0. No firmware fallback scans GPIO8/9.
+
+Gyro sensor sampling is 50 Hz on both boards; USB telemetry defaults to 20 Hz (50 ms). The Serial Monitor can change streaming frequency using `ZJTEL,RATE,10`, `ZJTEL,RATE,20` or `ZJTEL,RATE,50`. Every canonical frame is `ZJTEL,1,A1|A2,sequence,millis,0xADDR,READY|NOT_FOUND|READ_ERROR,roll_dps,pitch_dps,yaw_dps,LED_READY,device_dropped_frames`. A low-rate legacy `ZJGYRO,DATA` remains for old chart clients. Full I2C scanning is incremental, three addresses maximum per loop pass, every five seconds or via `ZJI2C,SCAN`, and retains previous Arduino human-readable scanner output.
+
+Telemetry is diagnostics only; 50 Hz USB output is **not** the future 250 Hz flight-controller stabilization loop. The sampling loop uses `millis()` and only writes serial frames when UART TX capacity is available. Dropped frames are counted rather than blocking the flight loop. At present no live motor control is implemented in this scanner firmware.
+
+**Python Lab:** LED ACK failure and loss of USB Hardware Serial terminate the Python worker. The **Check Syntax** button validates using Python `ast.parse` without executing user code, and Monaco places line diagnostics on uncaught exceptions. No code is silently edited. Note that current browser autocomplete offers known API methods and snippets; it is not a full static type checker, and arbitrary Python semantics may not be diagnosable before Run.

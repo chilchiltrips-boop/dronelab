@@ -171,3 +171,23 @@ test('Serial monitor shows A1 I2C bus and shared LED restriction',()=>{
  for(const token of ['ZJI2C,MODE,','Arduino default wiring','Alternate GPIO4/5 wiring','fwUsbMode'])assert.ok(updater.includes(token),token);
  for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('GPIO8 is reserved for the onboard LED'));}
 });
+
+
+test('ZJTEL v1 parses A1/A2 gyros and rejects unavailable sensor data',()=>{
+ assert.deepEqual(parseSerialPlotLine('ZJTEL,1,A1,37,1832,0x6B,READY,-1.20,0.33,2.74,LED_READY,0'),{GyroX:-1.2,GyroY:0.33,GyroZ:2.74});
+ assert.deepEqual(parseSerialPlotLine('ZJTEL,1,A2,5,300,0x68,READY,0.14,1.00,-0.40,LED_READY,1'),{GyroX:0.14,GyroY:1,GyroZ:-0.4});
+ assert.equal(parseSerialPlotLine('ZJTEL,1,A1,38,1852,0x6B,NOT_FOUND,0,0,0,LED_READY,0'),null);
+ assert.equal(parseSerialPlotLine('ZJTEL,1,A1,bad,100,0x6B,READY,-1.2,0.3,0.0,LED_READY,0'),null);
+});
+test('50Hz telemetry compatibility simulated for 30 minutes, old gyro text still works',()=>{
+ const now=Date.now(),start=now;
+ let processed=0;
+ for(let seq=1;seq<=90000;seq++){
+  const x=Math.sin(seq/10).toFixed(2);
+  const frame='ZJTEL,1,A1,'+seq+','+(seq*20)+',0x6B,READY,'+x+',0.02,-0.03,LED_READY,0';
+  const result=parseSerialPlotLine(frame);
+  assert.equal(result.GyroY,0.02);processed++;
+ }
+ assert.equal(processed,90000);
+ assert.deepEqual(parseSerialPlotLine('ZJGYRO,DATA,A1,LSM6DS3,0x6B,0.21,-0.14,0.07'),{GyroX:0.21,GyroY:-0.14,GyroZ:0.07});
+});

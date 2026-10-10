@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vmBridge from 'node:vm';
 import {createI2CParser,createI2CBridge} from '../js/usb-i2c-bridge.js';
 const root=new URL('../',import.meta.url);
 const file=name=>readFileSync(new URL(name,root),'utf8');
@@ -56,3 +57,29 @@ test('Python USB LED acknowledgements and missing sensor warning remain visible'
  const js=file('js/python-lab.js');
  for(const token of ["Controller acknowledged command","ESP ROM DOWNLOAD MODE","3.3V/GND and SDA/SCL wiring","firmwareInfo?.()"])assert.ok(js.includes(token),token);
 });
+
+
+test('Python worker classifies traceback and blocks known shared GPIO8 hardware pin error',()=>{
+ const vm=requireTestVm();
+ const source=file('python-lab-worker.js');
+ const messages=[],self={location:{href:'https://example.invalid/dronelab/python-lab-worker.js'}};
+ const ctx={self,URL,postMessage:x=>messages.push(x)};
+ vm.runInNewContext(source+';globalThis.__test={explainWorkerError};',ctx);
+ const syntax=ctx.__test.explainWorkerError({stack:'Traceback:\n File "main.py", line 7\n SyntaxError: invalid syntax'},'main.py');
+ assert.equal(syntax.errorType,'SyntaxError');assert.equal(syntax.line,7);assert.ok(syntax.explanation.includes('punctuation'));
+ const type=ctx.__test.explainWorkerError({stack:'File "main.py", line 4\nTypeError: wrong argument count'},'main.py');
+ assert.equal(type.errorType,'TypeError');assert.equal(type.line,4);
+ self.onmessage({data:{type:'hardware-info',info:{led:'GPIO8 • UNAVAILABLE • SDA_CONFLICT'}}});
+ assert.throws(()=>self.zebjusI2cBridge.ledSend('ZJLED,1,SET,100\n'),/LED is unavailable/);
+ self.onmessage({data:{type:'hardware-info',info:{led:'GPIO8 • ACTIVE_LOW'}}});
+ self.zebjusI2cBridge.ledSend('ZJLED,1,SET,100\n');
+ assert.ok(messages.some(m=>m.type==='led-write'&&m.packet==='ZJLED,1,SET,100\n'));
+});
+test('Python Lab checks AST before execution and surfaces runtime errors with editor markers',()=>{
+ const page=file('js/python-lab.js'),worker=file('python-lab-worker.js');
+ for(const token of ['ast.parse(_zj_source','type:\\'hardware-info\\'','type:\\'check-syntax\\'','syntax-error','syntax-ok'])assert.ok(worker.includes(token)||page.includes(token),token);
+ for(const token of ['abortPythonWithHardwareError','PinConflictError','USBDisconnectedError','setModelMarkers','revealLineInCenter','pythonCheckSyntaxBtn','dronelab:usb-state'])assert.ok(page.includes(token),token);
+ for(const p of ['index.html','lab.html'])assert.ok(file(p).includes('id="pythonCheckSyntaxBtn"'));
+});
+// vm import is a shared Node built-in; avoid importing any browser runtime.
+function requireTestVm(){return vmBridge}
