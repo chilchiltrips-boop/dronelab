@@ -24,6 +24,7 @@ export function createPythonIDEShell(api){
  if(!root||!toolbar||!layout||!editorCard||!side)return null;
  const folders=new Set(readJson(FOLDERS,[]).filter(p=>folderPattern.test(p))),assets=new Map();
  let currentFolder='',selected='',right='closed',bottom='closed',rightWidth=360,bottomHeight=230,projectOpen=true,previewUrl='';
+ const collapsedFolders=new Set(readJson('zebjus-python-ide-collapsed-v1',[]));
  const stored=readJson(UI,{});
  if(stored&&typeof stored==='object'){rightWidth=Math.max(270,Math.min(700,Number(stored.rightWidth)||360));bottomHeight=Math.max(130,Math.min(520,Number(stored.bottomHeight)||230));projectOpen=stored.projectOpen!==false}
  const savePanels=()=>{try{localStorage.setItem(UI,JSON.stringify({rightWidth,bottomHeight,projectOpen}))}catch{}};
@@ -77,6 +78,14 @@ export function createPythonIDEShell(api){
  const heading=node('strong','','Tools'),rightMin=button('','minimize',()=>openRight('closed')),rightMax=button('','maximize',()=>{root.classList.toggle('py-right-max');fit()}),rightFloat=button('','panels',()=>{if(right==='closed')openRight('camera');root.classList.toggle('py-tool-floating');fit()});
  rightMin.title='Minimize tool window';rightMax.title='Expand tool window';
  rightFloat.title='Float / dock tool window';toolHead.append(heading,rightFloat,rightMax,rightMin);side.insertBefore(toolHead,side.firstChild);
+ toolHead.addEventListener('pointerdown',e=>{
+  if(!root.classList.contains('py-tool-floating')||e.target.closest('button'))return;
+  e.preventDefault();const rect=side.getBoundingClientRect(),dx=e.clientX-rect.left,dy=e.clientY-rect.top;
+  const move=v=>{root.style.setProperty('--py-float-left',Math.max(5,Math.min(window.innerWidth-100,v.clientX-dx))+'px');root.style.setProperty('--py-float-top',Math.max(48,Math.min(window.innerHeight-65,v.clientY-dy))+'px')};
+  const stop=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',stop)};
+  window.addEventListener('pointermove',move);window.addEventListener('pointerup',stop,{once:true})
+ });
+
  const toolContent=node('div','py-tool-window-content');side.insertBefore(toolContent,tools);
  const pane={};
  for(const [id] of panels){pane[id]=node('div','py-dock-page');pane[id].dataset.pyPane=id;toolContent.append(pane[id])}
@@ -134,6 +143,10 @@ export function createPythonIDEShell(api){
    const depth=path.split('/').length-1,active=selected===path||kind==='code'&&api.currentFile()===path;
    const b=button('',kind==='folder'?'folder':kind==='code'?'file':'image',()=>{
     selected=path;currentFolder=kind==='folder'?path:parent(path);
+    if(kind==='folder'){
+     if(collapsedFolders.has(path))collapsedFolders.delete(path);else collapsedFolders.add(path);
+     try{localStorage.setItem('zebjus-python-ide-collapsed-v1',JSON.stringify([...collapsedFolders]))}catch{}
+    }
     if(kind==='code')api.selectFile(path);
     else if(kind==='asset')showAsset(path);
     refreshExplorer();
@@ -143,7 +156,7 @@ export function createPythonIDEShell(api){
    list.append(b);
   };
   const combined=[...folderRows.map(path=>({path,kind:'folder'})),...fileRows].sort((a,b)=>a.path.localeCompare(b.path)||(a.kind==='folder'?-1:1));
-  for(const row of combined)makeRow(row.path,row.kind);
+  for(const row of combined)if(!folderChain(parent(row.path)).some(f=>collapsedFolders.has(f)))makeRow(row.path,row.kind);
  }
  function selectedKind(){const implicit=[...api.listFiles(),...assets.keys()].some(p=>p.startsWith(selected+'/'));return folders.has(selected)||implicit?'folder':api.listFiles().includes(selected)?'code':assets.has(selected)?'asset':null}
  function newFolder(){
@@ -207,12 +220,12 @@ export function createPythonIDEShell(api){
  async function importInput(input){
   const fileList=[...input.files||[]];input.value='';
   if(!fileList.length)return;
-  let imported=0,failed=0;
+  let imported=0,failed=0,batchBytes=0;
   for(const file of fileList.slice(0,80)){
    let rel=cleanPath(file.webkitRelativePath||file.name);
    if(file.webkitRelativePath&&rel.includes('/'))rel=rel.split('/').slice(1).join('/'); // drop browser's picked root
    const path=cleanPath([currentFolder,rel].filter(Boolean).join('/'));
-   if(!validPath(path)||file.size>10*1024*1024){failed++;continue}
+   if(!validPath(path)||file.size>10*1024*1024||batchBytes+file.size>48*1024*1024){failed++;continue}
    if(api.listFiles().includes(path)||assets.has(path)){failed++;continue}
    if(path.toLowerCase().endsWith('.py')){
     if(file.size>512*1024||!api.addFile(path,await file.text())){failed++;continue}
@@ -220,7 +233,7 @@ export function createPythonIDEShell(api){
     try{const entry={path,type:file.type||'application/octet-stream',blob:new Blob([await file.arrayBuffer()],{type:file.type||'application/octet-stream'}),modified:Date.now()};
      await assetQuery('put',entry);assets.set(path,entry)}catch{failed++;continue}
    }
-   addFolders(parent(path));imported++;
+   addFolders(parent(path));imported++;batchBytes+=file.size;
   }
   refreshExplorer();notice('Imported '+imported+' file(s)'+(failed?' · skipped '+failed+' (size, duplicate or invalid path)':''));
  }
@@ -268,7 +281,10 @@ export function createPythonIDEShell(api){
  if(obs){const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');if(header)obs.observe(header);if(nav)obs.observe(nav)}
  applyPanels();refreshExplorer();void loadAssets();return {
   refreshExplorer,openRight,openBottom,fit,getFolder:()=>currentFolder,
-  assetPayload:async()=>Promise.all([...assets.values()].map(async entry=>({path:entry.path,bytes:new Uint8Array(await entry.blob.arrayBuffer())}))),
+  assetPayload:async()=>{
+   if([...assets.values()].reduce((total,e)=>total+e.blob.size,0)>48*1024*1024)throw Error('Project assets exceed the 48 MB Python runtime limit');
+   return Promise.all([...assets.values()].map(async entry=>({path:entry.path,bytes:new Uint8Array(await entry.blob.arrayBuffer())})))
+  },
   bundle:async()=>{
    const items=[];let total=0;
    for(const e of assets.values()){total+=e.blob.size;if(total>24*1024*1024)throw Error('Export exceeds 24 MB; export large files individually');
