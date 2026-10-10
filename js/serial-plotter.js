@@ -7,7 +7,7 @@ export function parseSerialPlotLine(line){
  const s=String(line??'').trim();
  if(!s||s.length>512)return null;
  const tel=s.split(',');
- if(tel.length===12&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&tel.slice(7,10).every(x=>numberOnly.test(x))){
+ if(tel.length===12&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&Number.isSafeInteger(Number(tel[3]))&&Number(tel[3])>=0&&Number.isSafeInteger(Number(tel[4]))&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&Number.isSafeInteger(Number(tel[11]))&&tel.slice(7,10).every(x=>numberOnly.test(x))){
   // Do not graph stale gyro values when the sensor is not ready.
   if(tel[6]!=='READY')return null;
   return {GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])};
