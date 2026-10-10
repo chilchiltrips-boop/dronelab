@@ -42,6 +42,10 @@ export function createPythonIDEShell(api){
  const addDirectoryBtn=button('Import Folder','folder',()=>folderInput.click());
  fileBody.append(addFilesBtn,addDirectoryBtn);
  for(const id of ['pythonSaveFileBtn','pythonImportBtn','pythonExportBtn','pythonDeleteFileBtn'])move(id,fileBody);
+ const projectImport=$('pythonImportBtn'),projectExport=$('pythonExportBtn');
+ if(projectImport)projectImport.textContent='Open Project (.json)';
+ if(projectExport)projectExport.textContent='Export Project (.json)';
+ fileBody.append(button('Rename Selected','edit',()=>renameSelected()),button('Copy Project Path','copy',()=>copySelected()));
  for(const id of ['pythonUndoFileBtn','pythonRedoFileBtn','pythonCheckSyntaxBtn'])move(id,editBody);
  const fileInput=node('input'),folderInput=node('input');
  fileInput.type=folderInput.type='file';fileInput.multiple=folderInput.multiple=true;
