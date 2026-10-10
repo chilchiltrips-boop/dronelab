@@ -101,6 +101,6 @@ export function initControls(ctx){
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
   const linkedTab=location.hash.slice(1);
-  ctx.setActiveTab(['assembly','wiring','python','firmware','led','settings','simcontrol','flight'].includes(linkedTab)?linkedTab:'assembly');
+  ctx.setActiveTab(['assembly','wiring','python','pid','firmware','led','settings','simcontrol','flight'].includes(linkedTab)?linkedTab:'assembly');
   addEventListener('hashchange',()=>{const name=location.hash.slice(1);ctx.setActiveTab(name)});applyBranding(ctx);
 }
