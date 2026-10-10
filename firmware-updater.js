@@ -441,11 +441,6 @@ function configureDiagnosticTick(){
  diagnosticTimer=setInterval(renderLiveDiagnosticLine,1000/(Number($('#fwTelRate')?.value)||20));
  renderLiveDiagnosticLine();
 }
-function serialMonitorDisplayMode(){
- const raw=$('#fwSerialViewMode')?.value==='raw';
- for(const id of ['#fwLiveDiagnosticLine','#fwDiagnosticState']){const e=$(id);if(e)e.hidden=raw}
- const out=$('#fwSerialOutput');if(out)out.hidden=!raw;
-}
 async function setUsbTelemetryRate(rate){
  const n=Number(rate);
  if(![10,20,50].includes(n))return;
@@ -524,7 +519,7 @@ function setupSerialConveniences(){
   catch{log('Clipboard denied. Select text and use Ctrl/Cmd+C.')}
  });
 }
-function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
+function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';serialDisplayBuffer='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
 function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
 async function closeSerialMonitor(keepWanted=false){
  if(!keepWanted)monitorWanted=false;
@@ -710,7 +705,6 @@ function initSerialTools(){
  $('#fwLedTestBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJLED,900,BLINK,250,250,100\n','LED test (4-second safety timeout)'));
  $('#fwI2cScanBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJI2C,SCAN\n','I2C scan'));
  $('#fwTelRate')?.addEventListener('change',e=>{configureDiagnosticTick();void setUsbTelemetryRate(e.target.value)});
- $('#fwSerialViewMode')?.addEventListener('change',serialMonitorDisplayMode);
  $('#fwReadRunningBtn')?.addEventListener('click',()=>openSerialMonitor().catch(e=>log('Read Running Firmware: '+e.message)));
  $('#fwSerialInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendSerialMessage()}});
  $('#fwPlotClearBtn')?.addEventListener('click',()=>serialPlotter?.clear());
@@ -739,7 +733,7 @@ function initSerialTools(){
    void openSerialMonitor({port,allowPrompt:false}).catch(error=>log('USB auto reconnect: '+error.message));
   });
  }
- serialUi(false);selectSerialView('monitor');serialMonitorDisplayMode();configureDiagnosticTick();
+ serialUi(false);selectSerialView('monitor');configureDiagnosticTick();
 }
 async function rebootKit(){const{s,d,online}=kitStatus();if(!online)return log('Kit is offline.');if(d.armed)return log('Reboot blocked: DISARM the kit first.');if(!s?.canControl?.())return log('Take Control before reboot.');if(!await confirmInLab('Reboot the selected flight controller now?'))return;try{badge('#fwOverallBadge','REBOOTING','warn');resetStages();stage('Reboot','active');progress(45,'Sending reboot command…');const j=await s.client.reboot();if(j?.ok===false)throw new Error(j.message||'Reboot failed');s.markOffline?.('Manual reboot');stage('Reboot','done');stage('Reconnect','active');progress(65,'Waiting for kit…');for(let i=0;i<20;i++){await sleep(1000);const d2=await s.reconnectNow?.().catch(()=>null);if(d2?.online){stage('Reconnect','done');progress(100,'Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good');return}}throw new Error('Reconnect timed out')}catch(e){badge('#fwOverallBadge','RECONNECT','warn');log(e.message)}}
 async function reconnectKit(){const s=school();if(!s)return;stage('Reconnect','active');progress(60,'Reconnecting to kit…');try{const d=await s.reconnectNow?.(true);if(d?.online){stage('Reconnect','done');progress(100,'Kit online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}else throw new Error('Kit not found yet.')}catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}}
