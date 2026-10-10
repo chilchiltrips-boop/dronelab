@@ -5,6 +5,7 @@ import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Build;
 import android.os.SystemClock;
@@ -17,6 +18,7 @@ import android.webkit.WebView;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,6 +35,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private long down;
     private int checks;
     private int touchCalls;
+    private boolean fullscreenHelpDismissed;
     private String lastTouch="";
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
     private WebView findWeb(View view) {
@@ -61,6 +64,42 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         if(image==null)return;
         try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getExternalFilesDir(null),name))){image.compress(Bitmap.CompressFormat.PNG,100,out);}
         catch(Exception ignored){}finally{image.recycle();}
+    }
+    private void prepareCockpitWindow() throws Exception {
+        // Android's first immersive launch shows an OS tutorial that owns focus
+        // and swallows thumb touches. Acknowledge ONLY that identified tutorial
+        // with real touchscreen input, rather than disabling a system setting.
+        long until=SystemClock.uptimeMillis()+2500;
+        while(SystemClock.uptimeMillis()<until){
+            AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+            Rect button=null;
+            if(root!=null){
+                if("android".contentEquals(root.getPackageName())){
+                    List<AccessibilityNodeInfo> titles=root.findAccessibilityNodeInfosByText("Viewing full screen");
+                    List<AccessibilityNodeInfo> buttons=root.findAccessibilityNodeInfosByText("Got it");
+                    if(!titles.isEmpty())for(AccessibilityNodeInfo node:buttons){
+                        if(node.isClickable()&&node.isVisibleToUser()){button=new Rect();node.getBoundsInScreen(button);break;}
+                    }
+                    for(AccessibilityNodeInfo node:titles)node.recycle();
+                    for(AccessibilityNodeInfo node:buttons)node.recycle();
+                }
+                root.recycle();
+            }
+            if(button!=null){
+                float[] xy={button.exactCenterX(),button.exactCenterY()};
+                touch(MotionEvent.ACTION_DOWN,new int[]{9},xy);touch(MotionEvent.ACTION_UP,new int[]{9},xy);
+                fullscreenHelpDismissed=true;break;
+            }
+            SystemClock.sleep(80);
+        }
+        until=SystemClock.uptimeMillis()+5000;
+        while(SystemClock.uptimeMillis()<until){
+            AtomicReference<Boolean> focused=new AtomicReference<>(false);
+            runOnMainSync(()->focused.set(activity.hasWindowFocus()));
+            if(focused.get()){waitForIdleSync();return;}
+            SystemClock.sleep(80);
+        }
+        throw new AssertionError("Cockpit window is still obscured by system UI");
     }
     private float[] point(String id,float rx,float ry) throws Exception {
         String result=js("(()=>{const r=document.getElementById('"+id+"').getBoundingClientRect();return [r.x+r.width*"+rx+",r.y+r.height*"+ry+",devicePixelRatio]})()");
@@ -164,8 +203,10 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
             }
             observeNativeInput();
+            prepareCockpitWindow();
             multitouch();
-            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout.\n");
+            screenshot("native-completed.png");
+            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
             screenshot("native-failure.png");

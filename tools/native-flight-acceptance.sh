@@ -16,6 +16,9 @@ run_case() {
     echo "Native acceptance failed: $case_name"
     exit 1
   fi
+  if [[ "$case_name" == touch-* ]]; then
+    adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-completed.png "test-output/native/landscape-${case_name}.png"
+  fi
   adb shell am force-stop in.zebjus.dronelab.companion
 }
 adb install "$RUNNER_TEMP/zebjus-previous.apk"

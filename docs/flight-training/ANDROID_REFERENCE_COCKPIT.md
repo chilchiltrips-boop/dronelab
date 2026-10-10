@@ -18,7 +18,7 @@ The supplied `image.png` requests a landscape transmitter with a slim metal-tone
 | Timer | Counts receiver-confirmed armed time, freezes on STOP, resets on explicit new ARM. Preview does not start it. |
 | Attitude ladder and footer | Receiver-applied simulator pose/RPM/mount height and joystick values, with explicit preview/ownership status. |
 
-The reference's side Trim/camera decoration is represented by functional response and QR controls. No physical motor trim or camera recording is implied. The top-right STOP stays visible. Each action keeps a44CSS-pixel touch height; the two rings remain circular down to488×227 landscape. Native Android enters immersive mode; swipe gestures can reveal Android system navigation. Cutout and keyboard insets remain handled once by MainActivity.
+The reference's side Trim/camera decoration is represented by functional response and QR controls. No physical motor trim or camera recording is implied. The top-right STOP stays visible. Each action keeps a 44 CSS-pixel touch height; the two rings remain circular down to 488×227 landscape. Native Android enters immersive mode; swipe gestures can reveal Android system navigation. Cutout and keyboard insets remain handled once by MainActivity.
 
 ## Regression fixed during the UI audit
 
@@ -26,9 +26,11 @@ The reference's side Trim/camera decoration is represented by functional respons
 
 ## Release and evidence
 
-Android versionCode13 / versionName1.6.2-flight-training retains package `in.zebjus.dronelab.companion` and the permanent release certificate. The signed verifier requires version13 and an increase above the currently published APK12. Native CI installs12, upgrades in place to13, checks retained preferences, OS multitouch, immersive system bars, circular geometry, CONNECT, all three response profiles, menu, STOP and lifecycle behavior at16:9/19.5:9 in both orientations. The baseline preference sentinel is a fixed string; its historical name does not identify the installed baseline version.
+Android versionCode 13 / versionName 1.6.2-flight-training retains package `in.zebjus.dronelab.companion` and the permanent release certificate. The signed verifier requires version13 and an increase above the currently published APK 12. Native CI installs 12, upgrades in place to 13, checks retained preferences, OS multitouch, immersive system bars, circular geometry, CONNECT, all three response profiles, menu, STOP and lifecycle behavior at 16:9/19.5:9 in both orientations. The baseline preference sentinel is a fixed string; its historical name does not identify the installed baseline version.
 
 Local browser screenshots use file-routed resources for layout/OS-pointer preview and cannot establish network ICE or camera performance. CI repeats actual HTTP/DTLS/SCTP WebRTC. Review/main workflow links and publication hash are recorded in the PR once observed. Mandatory exact-source checks and available native acceptance must pass before stable APK publication.
+
+Eight browser viewport cases include 488×227/595×227 with visible navigation and 488×275/595×275 in immersive native density. Initial native acceptance captured Android's first-launch “Viewing full screen / Got it” tutorial: the active package was `android`, the app had no window focus and the WebView received no pointer events. Instrumentation now identifies that exact OS tutorial and taps its button using real MotionEvents before requiring cockpit focus. It does not disable the tutorial, fabricate WebView input or relax the independent-pointer assertions. Foreground screenshots are captured before instrumentation closes the activity; they cover all four completed native cases.
 
 Physical handset native-WebView-to-Web RTC, autofocus/radio/OEM behavior, 120-Hz performance and perceived audio comfort remain UNVERIFIED. Follow DEVICE_ACCEPTANCE.md for those results. This change preserves the single Flight Training receiver and plant, firmware, assembly, wiring and Python labs; no AP/STA or real motor control is introduced.
 
