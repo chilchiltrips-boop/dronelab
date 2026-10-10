@@ -26,7 +26,7 @@ test('D gain changes actual response damping',()=>{
  'D gain failed to change actual overshoot');
 });
 test('Angle outer P vs Rate inner P are independent and produce distinct cascaded response',()=>{
- const outer=compare('angleRoll','p',1,6,'angle'),inner=compare('angleRateRoll','p',.3,2.4,'angle');
+ const outer=compare('angleRoll','p',1,6,'angle'),inner=compare('rateRoll','p',.3,2.4,'angle');
  assert.ok(Math.abs(outer.results[0].metrics.peakRate-outer.results[1].metrics.peakRate)>1,'Outer P no measurable response');
  assert.ok(Math.abs(inner.results[0].metrics.peakRate-inner.results[1].metrics.peakRate)>1,'Inner P no measurable response');
  assert.notEqual(outer.results[0].metrics.rms,inner.results[0].metrics.rms);
@@ -34,11 +34,11 @@ test('Angle outer P vs Rate inner P are independent and produce distinct cascade
 test('PID apply while running retains throttle, attitude, actual motors and integrators reset separately',()=>{
  const s=createSimulator();assert.ok(startSimulator(s));s.throttle=1560;disturb(s,10,-6);for(let t=0;t<125;t++)stepSimulator(s);
  const oldMotors=[...s.motors],oldPose=[s.roll,s.pitch];
- assert.ok(setPID(s,'angleRateRoll',{p:1.35,i:15,d:.035}));
+ assert.ok(setPID(s,'rateRoll',{p:1.35,i:15,d:.035}));
  assert.ok(s.running);assert.equal(s.throttle,1560);
  assert.deepEqual(s.motors,oldMotors);assert.deepEqual([s.roll,s.pitch],oldPose);
- stepSimulator(s);assert.ok(s.memory.angleRateRoll.ready);
- resetIntegrators(s);assert.equal(s.memory.angleRateRoll.sum,0);assert.ok(s.running);
+ stepSimulator(s);assert.ok(s.memory.rateRoll.ready);
+ resetIntegrators(s);assert.equal(s.memory.rateRoll.sum,0);assert.ok(s.running);
 });
 test('each physical motor thrust obeys approximate RPM-squared scaling',()=>{
  const s=createSimulator();startSimulator(s);s.throttle=1500;for(let i=0;i<200;i++)stepSimulator(s);
