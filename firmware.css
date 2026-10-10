@@ -80,3 +80,6 @@
  .firmware-page .firmware-recovery-actions .btn{flex:0 0 auto;min-height:44px;padding:10px 12px}
  .firmware-page .firmware-source-actions .btn,.firmware-page .firmware-file-label,.firmware-page .fw-serial-tabs .btn{min-height:44px}
 }
+
+/* Explain USB Flash prerequisites without weakening bootloader/board/image checks. */
+.firmware-flash-help{margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--muted,#94a3b8);overflow-wrap:anywhere}.firmware-flash-help.ready{color:#79d7b5}
