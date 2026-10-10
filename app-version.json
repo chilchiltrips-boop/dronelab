@@ -1,5 +1,5 @@
 {
-  "version": "1.6.3+81",
+  "version": "1.6.3+82",
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
@@ -10,6 +10,6 @@
     "250 Hz RPM-squared thrust, constrained mount travel and Rate/Angle cascade PID",
     "Quiet persistent audio preferences, actual-RPM effects and adaptive graphics"
   ],
-  "publishedAt": "2026-10-10T18:52:18.649044+00:00",
-  "buildCommit": "8d50f99da265"
+  "publishedAt": "2026-10-10T18:52:27.435354+00:00",
+  "buildCommit": "ecc4ee786254"
 }
