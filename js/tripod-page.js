@@ -182,7 +182,7 @@ function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
- receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • MOTORS OFF • HOME RESET');syncActions();renderStickKnobs();drawUI();visual?.draw(getSnapshot(s),0);
+ receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();syncActions();setStatus('STOP • MOTORS OFF • HOME RESET');renderStickKnobs();drawUI();visual?.draw(getSnapshot(s),0);
  window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
 }
 function start(){
