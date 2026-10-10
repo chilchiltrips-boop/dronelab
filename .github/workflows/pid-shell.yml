@@ -14,6 +14,7 @@ on:
       - 'sw.js'
       - 'tools/pid-shell-browser.mjs'
       - 'tools/python-lab.test.mjs'
+      - 'tools/training-ui-contract.test.mjs'
       - '.github/workflows/pid-shell.yml'
   workflow_dispatch:
 permissions:
