@@ -175,7 +175,12 @@ async function onRpc(w,m){
   let result;
   if(m.method==='i2c_scan'){
    if(!window.DroneLabSerial?.isOpen?.())throw Error('USB disconnected. Click Connect USB Serial, select the board, and use 115200 baud.');
-   result=await bridge.waitForScan(m.args?.timeout||12000);
+   // Request a fresh scan; new firmware has no periodic I2C polling.
+   // Attach the receiver before writing to avoid missing an immediate response.
+   const pending=bridge.waitForScan(m.args?.timeout||12000);
+   pending.catch(()=>{});
+   await window.DroneLabSerial.writeLine('ZJI2C,SCAN\n');
+   result=await pending;
   }else if(m.method==='read_gyro'){
     if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
     result=await gyroBridge.readGyro(m.args?.timeout||3000);
