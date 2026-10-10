@@ -39,12 +39,15 @@ try{
  });
  const beforeScroll=await chromeScroll();
  if(!beforeScroll.horizontalBar||!beforeScroll.verticalBar)throw Error('Missing Monaco X/Y scrollbar elements');
- await page.locator('#pythonMonaco .monaco-scrollable-element').hover({position:{x:90,y:140}});
- await page.mouse.wheel(550,0);
+ // Use deterministic real editor keystrokes rather than synthetic horizontal
+ // mouse-wheel deltas, which some CI/Chromium runners occasionally discard.
+ await page.locator('#pythonMonaco .monaco-scrollable-element').click({position:{x:100,y:90}});
+ await page.keyboard.press('ControlOrMeta+Home');
+ await page.keyboard.press('End');  // Last column of the 520-character first line
  await page.waitForTimeout(170);
  const afterHorizontal=await chromeScroll();
  if(Math.abs(afterHorizontal.horizontal-beforeScroll.horizontal)<3)throw Error('Long Python line cannot scroll horizontally: '+JSON.stringify({beforeScroll,afterHorizontal}));
- await page.mouse.wheel(0,600);
+ await page.keyboard.press('ControlOrMeta+End'); // Navigate to the 140th line
  await page.waitForTimeout(170);
  const afterVertical=await chromeScroll();
  if(Math.abs(afterVertical.vertical-afterHorizontal.vertical)<3)throw Error('140-line Python file cannot scroll vertically: '+JSON.stringify({before:afterHorizontal,afterVertical}));
