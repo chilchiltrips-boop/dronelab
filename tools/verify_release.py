@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate board-aware scanner-only release metadata and compiled binaries."""
+"""Validate board-aware I2C scanner + LED release metadata and binaries."""
 from pathlib import Path
 import hashlib,json,struct
 ROOT=Path(__file__).resolve().parents[1]
@@ -11,7 +11,7 @@ assert LATEST['version']==CAT['version']
 assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2
 sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
-assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'delay(5000);' in sketch
+assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch
 def sha(b):return hashlib.sha256(b).hexdigest()
 def chip(b,at=0):
  assert b[at]==0xe9 and 1<=b[at+1]<=16
