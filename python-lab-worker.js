@@ -84,7 +84,10 @@ async function run(msg){
    runtime.FS.writeFile(full,new Uint8Array(bytes));
   }
   runtime.FS.chdir('/home/project');
-  await runtime.runPythonAsync("import sys\nsys.path.insert(0, '/home/project')",{filename:'path_setup.py'});
+  const filename=String(msg.filename||'main.py');
+  const folder=validProjectPath(filename)&&filename.includes('/')?filename.slice(0,filename.lastIndexOf('/')):'';
+  runtime.globals.set('_zj_script_folder',folder);
+  await runtime.runPythonAsync("import sys\nsys.path.insert(0, '/home/project')\nif _zj_script_folder: sys.path.insert(0, '/home/project/' + _zj_script_folder)",{filename:'path_setup.py'});
   const source=String(msg.code||'');
   send('status',{text:'Checking Python syntax…'});
   // Compile-check before importing packages or starting hardware commands.
