@@ -503,7 +503,8 @@ function showPythonPlot(message){
  const image=$('pythonInlinePlot');image.src=plotUrl;image.hidden=false;
  $('pythonCameraStatus').textContent='Python Matplotlib figure generated. Click Open Plot Window to enlarge.';
  $('pythonVisualTools').open=true;
- openPlotWindow();
+ // Show Matplotlib figures inside the Plotter dock; floating is optional.
+ if(workspace)workspace.openRight('plotter');else openPlotWindow();
 }
 function bindPlotWindow(){
  const modal=$('pythonOutputWindow'),title=$('pythonOutputDrag');
