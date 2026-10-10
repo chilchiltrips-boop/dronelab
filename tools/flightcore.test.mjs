@@ -51,7 +51,7 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
 });
 
 test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
- for(const token of ['FW_VERSION="1.3.0"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+ for(const token of ['FW_VERSION="1.3.1"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
 });
 
 test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{

@@ -1,7 +1,7 @@
-name: Build FlightCore A1/A2 USB Firmware 1.3
+name: Build FlightCore A1/A2 USB Firmware 1.3.1
 on:
   push:
-    branches: [main, release/flightcore-v1-3-unified-telemetry-python-guard]
+    branches: [main, fix/usb-rom-runtime-identity-single-line-telemetry]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/catalog.json'
@@ -46,7 +46,7 @@ jobs:
       - name: Upload A1/A2 APP and Factory firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zebjus-flightcore-a1-a2-usb-v1-3
+          name: zebjus-flightcore-a1-a2-usb-v1-3-1
           path: |
             FlightCore_Firmware/*_APP.bin
             FlightCore_Firmware/*_FACTORY.bin

@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "product": "ZEBJUS_FLIGHTCORE",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "defaultBoardId": "ZFC-A1",
   "boards": [
     {
@@ -12,22 +12,22 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.3.0",
+        "version": "1.3.1",
         "app": {
-          "available": true,
+          "available": false,
           "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
-          "sha256": "dc3af5187dccf065f6f1681783cab9801bf08a0daf130fbe782d0aa2d24032d0",
-          "size": 337792,
-          "builtAt": "2026-10-10T17:46:36Z",
-          "buildId": "1.3.0-ZFC-A1-dc3af5187dcc"
+          "sha256": "",
+          "size": 0,
+          "builtAt": "",
+          "buildId": ""
         },
         "factory": {
-          "available": true,
+          "available": false,
           "file": "ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
-          "sha256": "287e70afd15a75734e409751c2045082c4700f00565ff31110f9929848f78c07",
-          "size": 4194304,
-          "builtAt": "2026-10-10T17:46:36Z",
-          "buildId": "1.3.0-ZFC-A1-FACTORY-287e70afd15a"
+          "sha256": "",
+          "size": 0,
+          "builtAt": "",
+          "buildId": ""
         },
         "builtAt": "2026-10-10T17:46:36Z"
       },
@@ -57,22 +57,22 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.3.0",
+        "version": "1.3.1",
         "app": {
-          "available": true,
+          "available": false,
           "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
-          "sha256": "55268dbec3b33d96a545c1fe8458ae9a19a3d4a9d574adf2c93b6472db84cdbe",
-          "size": 295072,
-          "builtAt": "2026-10-10T17:46:36Z",
-          "buildId": "1.3.0-ZFC-A2-55268dbec3b3"
+          "sha256": "",
+          "size": 0,
+          "builtAt": "",
+          "buildId": ""
         },
         "factory": {
-          "available": true,
+          "available": false,
           "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
-          "sha256": "6459ee2d38b40a6d875ee892ba08840c62ab531f3a9df3587795508206996537",
-          "size": 4194304,
-          "builtAt": "2026-10-10T17:46:36Z",
-          "buildId": "1.3.0-ZFC-A2-FACTORY-6459ee2d38b4"
+          "sha256": "",
+          "size": 0,
+          "builtAt": "",
+          "buildId": ""
         },
         "builtAt": "2026-10-10T17:46:36Z"
       },
