@@ -10,7 +10,6 @@ const wrap=a=>((a+180)%360+360)%360-180;
 const clone=x=>JSON.parse(JSON.stringify(x));
 export const DEFAULT_PID={
  rateRoll:{p:.9,i:15,d:.03},ratePitch:{p:.9,i:15,d:.03},rateYaw:{p:3,i:15,d:0},
- angleRateRoll:{p:.9,i:15,d:.03},angleRatePitch:{p:.9,i:15,d:.03},angleRateYaw:{p:3,i:15,d:0},
  angleRoll:{p:3,i:0,d:0},anglePitch:{p:3,i:0,d:0}
 };
 export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:.12,gyroNoise:.07,noiseSeed:7919};
@@ -115,9 +114,8 @@ export function stepSimulator(s){
  const p=s.pulse&&s.time<s.pulse.until?s.pulse:null;
  if(s.pulse&&s.time>=s.pulse.until)s.pulse=null;
  const anglePulse=axis=>p?.axis===axis?p.amplitude:0,ratePulse=axis=>p?.axis===axis?p.amplitude*(axis==='yaw'?5:4):0;
- const bankR=s.mode==='angle'?'angleRateRoll':'rateRoll';
- const bankP=s.mode==='angle'?'angleRatePitch':'ratePitch';
- const bankY=s.mode==='angle'?'angleRateYaw':'rateYaw';
+ // Both ANGLE and ACRO share exactly one inner rate controller per axis.
+ const bankR='rateRoll',bankP='ratePitch',bankY='rateYaw';
  s.targetRoll=s.trimRoll+s.cmdRoll*26+(s.mode==='angle'?anglePulse('roll'):0);
  s.targetPitch=s.trimPitch+s.cmdPitch*26+(s.mode==='angle'?anglePulse('pitch'):0);
  s.targetRollRate=s.mode==='acro'?s.cmdRoll*220+ratePulse('roll'):computePID(s,'angleRoll',s.targetRoll,s.roll,true);
