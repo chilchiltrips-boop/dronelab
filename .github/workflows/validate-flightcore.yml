@@ -1,7 +1,7 @@
 name: Verify DroneLab FlightCore Firmware Center
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, release/flightcore-v1-3-unified-telemetry-python-guard, main]
+    branches: [feature/python-a1-a2-gyro-read, testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, release/flightcore-v1-3-unified-telemetry-python-guard, main]
     paths:
       - 'mobile-android/**'
       - 'companion.html'
@@ -35,6 +35,7 @@ on:
       - js/python-lab.js
       - python-lab-worker.js
       - tools/python-lab.test.mjs
+      - js/usb-i2c-bridge.js
       - tools/python-browser-smoke.mjs
       - tools/verify_release.py
       - tools/check.mjs
