@@ -9,11 +9,18 @@ try{
  await web.locator('#tpQuality').selectOption('low');
  if(await web.locator('iframe').count())throw Error('Flight Training must not contain an iframe');
  if(!await web.locator('#tpRun').isDisabled()||!await web.locator('#tpMode').isDisabled())throw Error('Local controls can fight mobile ownership');
- await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
- await wait(phone,()=>document.getElementById('flightAppliedTelemetry').textContent.includes('RPM')&&document.getElementById('flightAppliedControls').textContent.includes('VIRTUAL ARMED')&&document.getElementById('flightAttitude').dataset.source==='applied');
  const left=await phone.locator('#flightLeftZone').boundingBox(),right=await phone.locator('#flightRightZone').boundingBox();
  const touch=await ctx.newCDPSession(phone),l={id:1,x:left.x+left.width*.45,y:left.y+left.height*.67},r={id:2,x:right.x+right.width*.53,y:right.y+right.height*.65};
  const event=(type,touchPoints)=>touch.send('Input.dispatchTouchEvent',{type,touchPoints});
+ // Pre-arm Android sticks must mirror without commanding virtual motors.
+ await event('touchStart',[l]);await event('touchMove',[{...l,x:l.x+25,y:l.y-20}]);
+ await wait(web,()=>{const a=window.ZebjusTraining.snapshot();return a.source==='mobile'&&!a.armed&&a.throttle===1000&&a.sticks.left.x>.1&&a.previewAxes.yaw<0&&a.axes.yaw===0});
+ await wait(web,()=>document.getElementById('tpLeftReadout').textContent.includes('PREVIEW YAW'));
+ if(!await web.locator('#tpPidP').isEnabled()||!await web.locator('#tpApplyPid').isEnabled()||!await web.locator('#tpStop').isEnabled())throw Error('Web PID and emergency STOP must remain editable during mobile preview');
+ await event('touchEnd',[]);await wait(web,()=>window.ZebjusTraining.snapshot().sticks.left.x===0);
+ if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Preview unexpectedly armed simulator');
+ await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ await wait(phone,()=>document.getElementById('flightAppliedTelemetry').textContent.includes('RPM')&&document.getElementById('flightAppliedControls').textContent.includes('VIRTUAL ARMED')&&document.getElementById('flightAttitude').dataset.source==='applied');
  await event('touchStart',[l]);await event('touchMove',[{...l,y:l.y-65}]);await phone.waitForTimeout(760);await event('touchEnd',[]);
  // Release must reach the actual receiver before sampling its independently
  // scheduled 10-Hz Web readout and ACK-driven phone UI. Keep ARM required.
