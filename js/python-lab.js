@@ -1,4 +1,5 @@
 import {createI2CBridge,createGyroBridge} from './usb-i2c-bridge.js';
+import {createPythonIDEShell} from './python-ide-workspace.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
 const EXAMPLES={"scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope USB reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
 const bridge=createI2CBridge(),gyroBridge=createGyroBridge();
@@ -7,6 +8,8 @@ let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutRead
 let ledSession=false,ledHeartbeat=null,ledLastError=0;
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null;
 const fallbacks=new Map();
+let workspace=null;
+const PY_FILE_PATH=/^(?:[A-Za-z_][\w-]*\/)*[A-Za-z_][\w-]*\.py$/;
 function editHistory(){if(!fallbacks.has(active))fallbacks.set(active,{undo:[],redo:[]});return fallbacks.get(active)}
 function status(msg,kind=''){const p=$('pyStatus'),r=$('pyRuntimeState');if(p)p.textContent=msg;if(r){r.textContent=String(msg).length>34?String(msg).slice(0,34).toUpperCase()+'…':String(msg).toUpperCase();r.className='status '+kind}}
 function terminal(v,kind='out'){
@@ -26,7 +29,7 @@ function save(){
 function autosave(){clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
 function load(){
  try{const data=JSON.parse(localStorage.getItem(KEY)||'null');
- if(data&&data.files){const f=Object.fromEntries(Object.entries(data.files).filter(([name,v])=>/^[A-Za-z_][\w-]*\.py$/.test(name)&&typeof v==='string').slice(0,20));if(Object.keys(f).length){files=f;active=Object.hasOwn(f,data.active)?data.active:Object.keys(f)[0]}}}catch{}
+ if(data&&data.files){const f=Object.fromEntries(Object.entries(data.files).filter(([name,v])=>PY_FILE_PATH.test(name)&&typeof v==='string').slice(0,100));if(Object.keys(f).length){files=f;active=Object.hasOwn(f,data.active)?data.active:Object.keys(f)[0]}}}catch{}
 }
 function syncEditor(){
  loading=true;
@@ -43,7 +46,7 @@ function renderFiles(){
  for(const name of Object.keys(files)){const option=document.createElement('option');option.value=name;option.textContent=name;root.append(option)}
  root.value=active;
  const label=$('pythonActiveFileLabel');label.textContent=active;label.title='Active Python file: '+active;
- updateButtons();
+ workspace?.refreshExplorer();updateButtons();
 }
 function switchFile(name){if(!Object.hasOwn(files,name))return;files[active]=currentCode();active=name;syncEditor();renderFiles();autosave()}
 function setCode(code){
@@ -59,18 +62,37 @@ function undoRedo(redo=false){
  const h=editHistory(),from=redo?h.redo:h.undo,to=redo?h.undo:h.redo;if(!from.length)return;
  to.push(currentCode());const code=from.pop();files[active]=code;$('pythonEditor').value=code;autosave();updateButtons();editorPosition();
 }
+function addProjectFile(path,source){
+ if(!PY_FILE_PATH.test(path)||Object.hasOwn(files,path)||Object.keys(files).length>=100)return false;
+ files[active]=currentCode();files[path]=String(source);renderFiles();save();return true;
+}
+function renameProjectFile(from,to){
+ if(!Object.hasOwn(files,from)||!PY_FILE_PATH.test(to)||(from!==to&&Object.hasOwn(files,to)))return false;
+ if(from===to)return true;
+ files[active]=currentCode();const value=files[from],wasActive=active;
+ if(wasActive===from&&editor)editor.setModel(null);
+ models.get(from)?.dispose();models.delete(from);
+ const history=fallbacks.get(from);fallbacks.delete(from);if(history)fallbacks.set(to,history);
+ delete files[from];files[to]=value;if(wasActive===from)active=to;
+ syncEditor();renderFiles();save();return true;
+}
+function removeProjectFile(path,ask=false){
+ if(!Object.hasOwn(files,path)||Object.keys(files).length<=1)return false;
+ if(ask&&!confirm('Delete '+path+'?'))return false;
+ files[active]=currentCode();if(active===path&&editor)editor.setModel(null);
+ models.get(path)?.dispose();models.delete(path);fallbacks.delete(path);delete files[path];
+ if(active===path)active=Object.keys(files)[0];
+ syncEditor();renderFiles();save();return true;
+}
 function newFile(){
- if(Object.keys(files).length>=20)return alert('Maximum 20 files.');
- let name=prompt('New Python file','sensor.py');if(name===null)return;name=name.trim();if(!name.endsWith('.py'))name+='.py';
- if(!/^[A-Za-z_][\w-]*\.py$/.test(name))return alert('Use a Python filename such as sensor.py');
+ if(Object.keys(files).length>=100)return alert('Maximum 100 Python files.');
+ let name=prompt('New Python file path',((workspace?.getFolder()||'')?workspace.getFolder()+'/':'')+'sensor.py');
+ if(name===null)return;name=name.trim();if(!name.endsWith('.py'))name+='.py';
+ if(!PY_FILE_PATH.test(name))return alert('Use a path such as scripts/sensor.py');
  if(Object.hasOwn(files,name)){switchFile(name);return}
- files[active]=currentCode();files[name]='# '+name+'\n';active=name;syncEditor();renderFiles();save();
+ if(addProjectFile(name,'# '+name+'\n'))switchFile(name);
 }
-function deleteFile(){
- if(Object.keys(files).length<=1)return alert('Keep at least one .py file.');
- if(!confirm('Delete '+active+'?'))return;
- models.get(active)?.dispose();models.delete(active);fallbacks.delete(active);delete files[active];active=Object.keys(files)[0];syncEditor();renderFiles();save();
-}
+function deleteFile(){if(Object.keys(files).length<=1)return alert('Keep at least one .py file.');removeProjectFile(active,true)}
 function applyExample(key){
  const code=EXAMPLES[key];if(!code)return;
  if(!Object.values(EXAMPLES).includes(currentCode())&&!confirm('Replace the selected file with the example?'))return;
@@ -84,7 +106,7 @@ function exportProject(){
 async function importProject(file){
  if(!file)return;
  try{
-  const data=JSON.parse(await file.text()),f=Object.fromEntries(Object.entries(data.files||{}).filter(([name,v])=>/^[A-Za-z_][\w-]*\.py$/.test(name)&&typeof v==='string').slice(0,20));
+  const data=JSON.parse(await file.text()),f=Object.fromEntries(Object.entries(data.files||{}).filter(([name,v])=>PY_FILE_PATH.test(name)&&typeof v==='string').slice(0,100));
   if(!Object.keys(f).length)throw Error('No valid .py files found');
   if(!confirm('Replace current project with imported files?'))return;
   for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();renderFiles();save();status('Imported project','good');
