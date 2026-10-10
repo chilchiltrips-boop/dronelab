@@ -12,18 +12,15 @@ Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the ap
 
 The control DataChannel uses local ICE candidates without a TURN relay. Direct QR exchange can work on a reachable local network; campus client isolation/firewalls can prevent transport. Online code signaling cannot work without Internet. The channel carries authenticated controls for the virtual Flight Training plant and receiver-applied telemetry. The legacy WebRTC Virtual LED demo has been removed; physical LED wiring and Python examples remain.
 
-## Scanner firmware 1.0.1
+## FlightCore A1/A2 USB diagnostics firmware 1.3.2
 
-`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` is a standalone USB I²C address scanner. It contains no flight control, motor output, arming, Wi-Fi/AP or OTA service. Arduino ESP32 core **3.3.12** builds both board profiles:
+`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` is USB-only sensor/LED diagnostic firmware, **not** flight-control software. It contains no motor output, arming, AP/STA or Wi-Fi OTA service. Build automation compiles separate A1 (ESP32-C3 Super Mini, SDA4/SCL5) and A2 (XIAO ESP32-C6, SDA22/SCL23) images.
 
-| Board | ID | FQBN | Default I²C pins |
-| --- | --- | --- | --- |
-| ESP32-C3 Super Mini | ZFC-A1 | `esp32:esp32:esp32c3` | SDA GPIO8, SCL GPIO9 |
-| Seeed XIAO ESP32-C6 | ZFC-A2 | `esp32:esp32:XIAO_ESP32C6` | SDA D4/GPIO22, SCL D5/GPIO23 |
+USB Serial at 115200 uses compact messages. `ZJTEL,1,A1,seq,ms,0x6B,READY,roll,pitch,yaw,1,drops` is the only periodic gyro frame; the penultimate field `1` means the LED output pin is available (`0` indicates a conflict). Verbose `Scanning I2C bus...`, device-count banners, dashed separators and duplicate `ZJGYRO,DATA` frames are no longer emitted by version 1.3.2.
 
-Select the actual board and verified image. Factory/Merged writes the complete 4 MB image at **0x0**. APP writes at **0x10000** and requires the existing matching bootloader and dual 0x1e0000 OTA slots. APP cannot erase flash. The UI verifies chip/size/hash/layout and transfer MD5 before reset. Scanner boot confirmation requires its banner and scan activity; this source does **not** print board/version identity, so serial output cannot certify that version. No hardware is flashed automatically.
+The board scans I2C once at startup or when it receives `ZJI2C,SCAN\n`, rather than polling every five seconds. Its single structured response is `ZJSCAN,A1,millis,count,0x6B[,0x77...]`. Python Lab explicitly sends the scan command and parses the address list. The browser monitor hides legacy scanner text and duplicate gyro frames from already-flashed v1.3.1 firmware, while still forwarding the raw input to diagnostics and Python.
 
-Disconnect external wiring for bootloader recovery and use stable USB power. GPIO8/GPIO9 on A1 are strapping pins, and GPIO9 is BOOT. An I²C response demonstrates an address acknowledgement, not sensor or flight readiness.
+**Firmware release safety:** Changing the Arduino sketch does not update a controller by itself. The release workflow builds/verifies separate APP and Factory binaries, updates SHA-256/board metadata and commits a new catalog. Check that the firmware selection shows **1.3.2** before flashing; **1.3.1** binaries still contain the old scanner text. Use a verified board profile and USB port. Factory/Merged flashes at `0x0`; APP flashes at `0x10000` only with a compatible existing partition layout. Disconnect motors and remove propellers before hardware work.
 
 ## Runtime and validation
 
