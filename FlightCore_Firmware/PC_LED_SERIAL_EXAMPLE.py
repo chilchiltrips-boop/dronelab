@@ -25,10 +25,11 @@ def main():
     p=argparse.ArgumentParser(description="Blink A1/A2 onboard LED through USB Serial at 115200 baud")
     p.add_argument("port",help="Serial device, e.g. COM5 or /dev/cu.usbmodemXXXX")
     args=p.parse_args()
-    with serial.Serial() as ser:
-        ser.port=args.port;ser.baudrate=115200;ser.timeout=0.1
-        ser.dtr=False;ser.rts=False
-        ser.open()
+    ser=serial.Serial()
+    ser.port=args.port;ser.baudrate=115200;ser.timeout=0.1
+    ser.dtr=False;ser.rts=False
+    ser.open()
+    try:
         time.sleep(1)
         send(ser,"ZJINFO,GET")
         listen(ser,1)
@@ -42,6 +43,8 @@ def main():
             pass
         finally:
             send(ser,f"ZJLED,{seq},STOP");listen(ser,0.3)
+    finally:
+        ser.close()
 
 if __name__=="__main__":
     main()
