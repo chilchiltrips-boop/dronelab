@@ -9,6 +9,30 @@ case "$label" in
 esac
 runner='in.zebjus.dronelab.companion.test/in.zebjus.dronelab.companion.FlightTouchInstrumentation'
 test_apk='mobile-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk'
+# The API 35 emulator's first immersive launch can display Android's own
+# "Viewing full screen" onboarding over the WebView and steal window focus.
+# Pre-confirm ONLY this disposable CI emulator's OS tutorial (not any app dialog).
+# Keep every production WebView, focus, signed-upgrade and multitouch assertion.
+adb wait-for-device
+boot_ready=0
+for ((attempt=0; attempt<60; attempt++)); do
+  if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; then
+    boot_ready=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$boot_ready" != 1 ]]; then
+  echo "::error::Android emulator did not complete boot"
+  exit 1
+fi
+adb shell settings put secure immersive_mode_confirmations confirmed
+immersive_confirmed="$(adb shell settings get secure immersive_mode_confirmations | tr -d '\r')"
+if [[ "$immersive_confirmed" != confirmed ]]; then
+  echo "::error::CI emulator fullscreen onboarding remains unconfirmed: $immersive_confirmed"
+  exit 1
+fi
+echo "Android emulator fully booted; first-run immersive tutorial pre-confirmed."
 run_case() {
   local case_name="$1"
   shift
