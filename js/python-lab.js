@@ -4,6 +4,7 @@ const EXAMPLES={"scanner":"import asyncio\nfrom zebjus import i2c_scan\n\n# Chan
 const bridge=createI2CBridge();
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
+let ledSession=false,ledHeartbeat=null,ledLastError=0;
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false;
 const fallbacks=new Map();
 function editHistory(){if(!fallbacks.has(active))fallbacks.set(active,{undo:[],redo:[]});return fallbacks.get(active)}
@@ -100,7 +101,30 @@ async function connectUsb(){
  try{await api.connect();usbStatus();status('USB listening • 115200 baud','good')}
  catch(e){usbStatus();status('USB: '+e.message,'warn')}
 }
+function sendLedPacket(packet){
+ const api=window.DroneLabSerial;
+ if(!api?.isOpen?.()||!api.writeLine){
+  if(Date.now()-ledLastError>1000){terminal('[LED] USB disconnected. Connect at 115200 baud.\n','error');ledLastError=Date.now()}
+  return;
+ }
+ void api.writeLine(packet).catch(error=>{
+  if(Date.now()-ledLastError>1000){terminal('[LED] '+error.message+'\n','error');ledLastError=Date.now()}
+ });
+}
+function stopLedSession(){
+ if(ledHeartbeat){clearInterval(ledHeartbeat);ledHeartbeat=null}
+ if(ledSession)sendLedPacket('ZJLED,0,STOP\n');
+ ledSession=false;
+}
+function startLedSession(packet){
+ if(!ledSession){
+  ledSession=true;
+  ledHeartbeat=setInterval(()=>{if(running&&ledSession)sendLedPacket('ZJLED,0,KEEP\n')},1000);
+ }
+ sendLedPacket(packet);
+}
 function stopPython(notify=true){
+ stopLedSession();
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
  updateButtons();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
 }
@@ -120,11 +144,13 @@ function makeWorker(){
  w.onmessage=e=>{
   if(worker!==w)return;const m=e.data||{};
   if(m.type==='rpc')return void onRpc(w,m);
+  if(m.type==='led-write'){startLedSession(m.packet);return}
   if(m.type==='image')return showPythonPlot(m);
   if(m.type==='stdout'||m.type==='stderr')return terminal(m.text,m.type==='stderr'?'error':'out');
   if(m.type==='status'||m.type==='ready')return status(m.text,m.type==='ready'?'good':'');
   if(m.type==='started'){status('Running '+m.filename,'good');$('pyLastRun').textContent='RUNNING';return}
   if(m.type==='done'||m.type==='error'){
+   stopLedSession();
    if(m.type==='error'){terminal('\n[Python error]\n'+m.error+'\n','error');status('Python error','warn');$('pyLastRun').textContent='ERROR'}
    else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE'}
    running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;updateButtons();
@@ -135,11 +161,13 @@ function makeWorker(){
 }
 function runPython(){
  if(running)return;
+ stopLedSession();
  const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
- if(/\bi2c_scan\s*\(/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this I2C script.\n','error');status('USB connection required','warn');return}
+ if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this I2C script.\n','error');status('USB connection required','warn');return}
  files[active]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
  clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
+ worker.postMessage({type:'i2c-data',scan:bridge.getLatest()});
  worker.postMessage({type:'run',filename:active,code,files});
 }
 
@@ -350,8 +378,9 @@ function bind(){
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
  window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()});else stopCamera()});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
- window.addEventListener('pagehide',()=>{worker?.terminate();stopCamera();bridge.close()});
+ window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close()});
  bridge.subscribe(data=>{
+  if(worker)worker.postMessage({type:'i2c-data',scan:data});
   $('pyDeviceAddresses').textContent=data.addresses.join('  ')||'No devices';
   $('pyScanStatus').textContent='Last scan: '+data.total+' device(s) • '+new Date(data.timestamp).toLocaleTimeString();
   usbStatus();
