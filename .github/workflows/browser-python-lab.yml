@@ -21,6 +21,10 @@ on:
       - '.github/workflows/browser-python-lab.yml'
       - 'tools/python-browser-smoke.mjs'
       - 'python-lab.css'
+      - 'python-ide-workspace.css'
+      - 'js/python-ide-workspace.js'
+      - 'assets/python-ide-icons.svg'
+      - 'tools/python-ide-workspace.test.mjs'
       - 'project.css'
       - 'styles.css'
       - 'sw.js'
@@ -46,6 +50,8 @@ jobs:
       - name: Syntax check Python IDE and Worker
         run: |
           node --check js/python-lab.js
+          node --check js/python-ide-workspace.js
+          node --test tools/python-ide-workspace.test.mjs
           node --check python-lab-worker.js
           node --check tools/python-browser-smoke.mjs
       - name: Install isolated Chromium test environment
