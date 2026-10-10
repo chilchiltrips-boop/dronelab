@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -69,12 +70,12 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         // Android's first immersive launch shows an OS tutorial that owns focus
         // and swallows thumb touches. Acknowledge ONLY that identified tutorial
         // with real touchscreen input, rather than disabling a system setting.
-        long until=SystemClock.uptimeMillis()+2500;
+        long started=SystemClock.uptimeMillis(),until=started+15000,focusedSince=0;
         while(SystemClock.uptimeMillis()<until){
             AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
             Rect button=null;
             if(root!=null){
-                if("android".contentEquals(root.getPackageName())){
+                if("android".equals(String.valueOf(root.getPackageName()))){
                     List<AccessibilityNodeInfo> titles=root.findAccessibilityNodeInfosByText("Viewing full screen");
                     List<AccessibilityNodeInfo> buttons=root.findAccessibilityNodeInfosByText("Got it");
                     if(!titles.isEmpty())for(AccessibilityNodeInfo node:buttons){
@@ -88,15 +89,14 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             if(button!=null){
                 float[] xy={button.exactCenterX(),button.exactCenterY()};
                 touch(MotionEvent.ACTION_DOWN,new int[]{9},xy);touch(MotionEvent.ACTION_UP,new int[]{9},xy);
-                fullscreenHelpDismissed=true;break;
+                fullscreenHelpDismissed=true;
             }
-            SystemClock.sleep(80);
-        }
-        until=SystemClock.uptimeMillis()+5000;
-        while(SystemClock.uptimeMillis()<until){
             AtomicReference<Boolean> focused=new AtomicReference<>(false);
             runOnMainSync(()->focused.set(activity.hasWindowFocus()));
-            if(focused.get()){waitForIdleSync();return;}
+            if(focused.get()){
+                if(focusedSince==0)focusedSince=SystemClock.uptimeMillis();
+                if(SystemClock.uptimeMillis()-started>=2500&&SystemClock.uptimeMillis()-focusedSince>=500){waitForIdleSync();return;}
+            }else focusedSince=0;
             SystemClock.sleep(80);
         }
         throw new AssertionError("Cockpit window is still obscured by system UI");
@@ -170,9 +170,18 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         float[] back=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},back);touch(MotionEvent.ACTION_UP,new int[]{4},back);
         check("!document.getElementById('mobileConnection').open");
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);touch(MotionEvent.ACTION_MOVE,new int[]{0},lm);
-        runOnMainSync(()->callActivityOnPause(activity));SystemClock.sleep(300);runOnMainSync(()->callActivityOnResume(activity));
-        check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false'");
-        touch(MotionEvent.ACTION_CANCEL,new int[]{0},lm);
+        // Exercise actual Android background/resume rather than invoking the
+        // Activity callbacks without the window/compositor lifecycle.
+        if(!getUiAutomation().injectInputEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_HOME),true)||
+           !getUiAutomation().injectInputEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_HOME),true))throw new AssertionError("OS rejected HOME");
+        SystemClock.sleep(400);
+        Intent resume=new Intent(getTargetContext(),MainActivity.class);
+        resume.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        runOnMainSync(()->getTargetContext().startActivity(resume));
+        prepareCockpitWindow();
+        check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false' && !document.getElementById('flightLeftRing').classList.contains('dragging') && !document.getElementById('flightRightRing').classList.contains('dragging')");
+        js("window.__nativePaintReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__nativePaintReady=true));true");
+        waitJs("window.__nativePaintReady===true");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().top>=0 && innerWidth>innerHeight");
     }
     @Override public void onStart() {
@@ -206,7 +215,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             prepareCockpitWindow();
             multitouch();
             screenshot("native-completed.png");
-            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, native pause/resume, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
+            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, OS HOME/resume, resumed compositor frames, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
             screenshot("native-failure.png");

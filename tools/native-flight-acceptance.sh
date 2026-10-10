@@ -32,12 +32,12 @@ adb shell svc data disable
 # Native display metrics in portrait coordinates; activity remains landscape.
 for spec in '720 1280 16x9' '720 1560 19_5x9'; do
   read -r display_w display_h label <<< "$spec"
+  # Resize while the app is stopped. Each completed case already captures its
+  # real foreground; restarting only to take another screenshot is redundant.
+  adb shell am force-stop in.zebjus.dronelab.companion
   adb shell wm size "${display_w}x${display_h}"
   run_case "touch-${label}" -e expectedPreset Fast
   run_case "touch-reverse-${label}" -e expectedPreset Fast -e reverse true
-  adb shell am start -n in.zebjus.dronelab.companion/.MainActivity
-  sleep 6
-  adb exec-out screencap -p > "test-output/native/landscape-${label}.png"
 done
 adb shell wm size reset
 adb logcat -d -t 1200 > test-output/native/logcat.txt
