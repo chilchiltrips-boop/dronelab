@@ -491,6 +491,14 @@ function pushSerialLines(data){
  if(monitorLineBuffer.length>2048)monitorLineBuffer=monitorLineBuffer.slice(-2048);
  for(const line of lines){readUsbTelemetry(line);serialPlotter?.pushLine(line);try{window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,at:Date.now()}}))}catch{}}
 }
+// Keep raw USB packets for parsers and plotters; filter display noise only.
+function serialVisibleLine(raw){
+ const line=String(raw||'').trim();
+ if(!line||/^(?:Scanning I2C bus\.\.\.|[✔✓]\s*Found device at 0x[0-9a-f]+|[✅]?\s*Total I2C devices found:\s*\d+|[❌]?\s*No I2C devices found\.?|-{3,})$/i.test(line))return null;
+ if(/^ZJSCAN,/.test(line)||/^ZJGYRO,DATA,/.test(line))return null;
+ // Older v1.3.1 binaries use verbose pin labels; newer firmware sends 1/0.
+ return /^ZJTEL,1,/.test(line)?line.replace(/,LED_READY,(\d+)$/,',1,$1').replace(/,PIN_CONFLICT,(\d+)$/,',0,$1'):line;
+}
 let serialDisplayBuffer='';
 function appendSerialOutput(value){
  if(!value)return;
@@ -501,9 +509,11 @@ function appendSerialOutput(value){
  if(serialDisplayBuffer.length>2048)serialDisplayBuffer=serialDisplayBuffer.slice(-2048);
  if(out&&lines.length){
   const scroll=$('#fwSerialAutoScroll')?.checked!==false;
-  const complete=lines.filter(line=>line.trim().length).join('\n');
-  if(complete)out.textContent=(out.textContent+complete+'\n').slice(-48000);
-  if(scroll)out.scrollTop=out.scrollHeight;
+  const complete=lines.map(serialVisibleLine).filter(Boolean).join('\n');
+  if(complete){
+   out.textContent=(out.textContent+complete+'\n').slice(-48000);
+   if(scroll)out.scrollTop=out.scrollHeight;
+  }
  }
  pushSerialLines(value);
  // Random boot bytes are not scanner confirmation. This build has no board/version banner.
