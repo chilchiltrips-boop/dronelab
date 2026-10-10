@@ -36,6 +36,19 @@ try{
 
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
  if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
+  const viewport=page.viewportSize();
+  const fit=await page.evaluate(()=>({
+   editor:document.querySelector('.python-editor-card').getBoundingClientRect().toJSON(),
+   dock:document.querySelector('#pythonBottomDock').getBoundingClientRect().toJSON(),
+   bar:document.querySelector('.python-project-bar').getBoundingClientRect().toJSON(),
+   footer:document.querySelector('.python-status-footer').getBoundingClientRect().toJSON(),
+   docWidth:document.documentElement.scrollWidth
+  }));
+  if(fit.footer.bottom>viewport.height+12||fit.docWidth>viewport.width+20)
+   throw Error('Desktop viewport overflow: '+JSON.stringify({fit,viewport}));
+  if(fit.editor.bottom>fit.dock.top+3||fit.bar.bottom>fit.editor.top+2)
+   throw Error('Editor/toolbar/Run dock overlap: '+JSON.stringify(fit));
+
  if(await page.locator('#pythonEditor').isVisible())throw Error('Textarea fallback is covering Monaco');
 
  // Code editor: long lines scroll horizontally without wrap; long files scroll
@@ -134,6 +147,7 @@ try{
  // Verify real Pyodide AST validation without running user code.
  const syntaxBad='def broken(:\n    pass\n';
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),syntaxBad);
+ await page.locator('.py-ide-menu:has(#pythonCheckSyntaxBtn) > summary').click();
  await page.locator('#pythonCheckSyntaxBtn').click();
  await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='ERROR'&&document.getElementById('pythonTerminal').textContent.includes('SyntaxError'),null,{timeout:90000});
  const markers=await page.evaluate(()=>window.monaco.editor.getModelMarkers({owner:'zebjus-diagnostics'}));
@@ -185,6 +199,7 @@ try{
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('CV2_READY'),null,{timeout:120000});
  await page.screenshot({path:'test-output/python-lab-desktop.png',fullPage:true});
+ await page.locator('.py-tool-rail [data-py-rail="usb"]').click();
  const before=await page.locator('#pythonSideStack').boundingBox(),split=await page.locator('#pythonColResizer').boundingBox();
  await page.mouse.move(split.x+split.width/2,split.y+110);await page.mouse.down();await page.mouse.move(split.x-120,split.y+110,{steps:6});await page.mouse.up();
  const after=await page.locator('#pythonSideStack').boundingBox();
@@ -193,17 +208,20 @@ try{
  await page.mouse.move(row.x+60,row.y+row.height/2);await page.mouse.down();await page.mouse.move(row.x+60,row.y-100,{steps:6});await page.mouse.up();
  const terminalAfter=await page.locator('.python-terminal-card').boundingBox();
  if(terminalAfter.height-terminalBefore.height<40)throw Error('Terminal vertical resize failed: '+terminalBefore.height+' -> '+terminalAfter.height);
- const layout=await page.evaluate(()=>JSON.parse(localStorage.getItem('dronelab-python-layout-v2')||'{}'));
- if(!(layout.side>330&&layout.terminal>350))throw Error('Layout dimensions were not saved: '+JSON.stringify(layout));
+ const layout=await page.evaluate(()=>JSON.parse(localStorage.getItem('zebjus-python-ide-panels-v1')||'{}'));
+ if(!(layout.rightWidth>360&&layout.bottomHeight>200))throw Error('Layout dimensions were not saved: '+JSON.stringify(layout));
  page.once('dialog',dialog=>dialog.accept('browser_test.py'));
+ await page.locator('.py-ide-menu:has(#pythonNewFileBtn) > summary').click();
  await page.locator('#pythonNewFileBtn').click();
  await page.waitForFunction(()=>[...document.querySelectorAll('#pythonFileList option')].some(o=>o.value==='browser_test.py'));
  const fileCount=await page.locator('#pythonFileList option').count();
  if(fileCount<2)throw Error('New Python file not added');
  if((await page.locator('#pythonActiveFileLabel').textContent())!=='browser_test.py')throw Error('New file not reflected in heading');
+ await page.locator('.py-ide-menu:has(#pythonFileList) > summary').click();
  await page.locator('#pythonFileList').selectOption('main.py');
  if((await page.locator('#pythonActiveFileLabel').textContent())!=='main.py')throw Error('Python file picker failed to switch to main.py');
  await page.locator('#pythonFileList').selectOption('browser_test.py');
+ await page.locator('.py-ide-menu:has(#pythonFileList) > summary').click();
  if((await page.locator('#pythonActiveFileLabel').textContent())!=='browser_test.py')throw Error('Python file picker failed to restore working file');
  page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('basic');
@@ -224,9 +242,9 @@ try{
   const image=document.getElementById('pythonInlinePlot');
   return image?.complete&&image.naturalWidth>10;
  },null,{timeout:30000});
- if(!(await page.locator('#pythonOutputWindow').isVisible()))throw Error('Python Plot Window did not open');
+ if(!(await page.locator('#pythonSideStack').isVisible()))throw Error('Python Plotter dock did not open');
  if(!(await page.locator('#pyLastRun').textContent()).includes('COMPLETE'))throw Error('Matplotlib example did not finish');
- await page.locator('#pythonOutputClose').click();
+ await page.locator('.py-tool-rail [data-py-rail="plotter"]').click();
 
 
  await page.setViewportSize({width:390,height:800});
@@ -234,7 +252,7 @@ try{
  await testStickyExecutionToolbar(460);
  await page.screenshot({path:'test-output/python-lab-mobile.png',fullPage:true});
  const mobile=await page.locator('.python-editor-card').boundingBox();
- if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
+ if(!mobile||mobile.width>420||mobile.height<185)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
  console.log('PASS Python Lab: editor X/Y scroll, sticky Run/Stop on desktop/mobile, live A1/A2 gyro in Python while True, AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
