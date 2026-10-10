@@ -31,6 +31,11 @@ try{
   await event('touchMove',[{...edge,x:edge.x+80}]);
   if(await p.locator('#flightLeftRing').evaluate(e=>parseFloat(e.style.left))!==edgeAnchor)throw Error('Edge motion moved base');
   await event('touchCancel',[]);
+  // The reference cockpit keeps circular thumb pads and usable central actions.
+  const cockpit=await p.evaluate(()=>({rings:['flightLeftRing','flightRightRing'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {width:r.width,height:r.height}}),connect:document.getElementById('flightConnect').getBoundingClientRect().toJSON(),header:document.querySelector('.flight-topbar').getBoundingClientRect().height,timer:document.getElementById('flightTimer').textContent}));
+  if(cockpit.rings.some(r=>Math.abs(r.width-r.height)>1||r.width<65)||cockpit.header>56||cockpit.connect.height<44||cockpit.connect.bottom>height||cockpit.timer!=='00:00')throw Error('Reference cockpit geometry/timer incorrect '+JSON.stringify(cockpit));
+  await p.locator('#flightConnect').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('CONNECT did not open pairing');await p.locator('#flightBack').click();
+  for(const expected of ['Fast','Slow','Medium']){await p.locator('#flightResponse').click();if(await p.locator('#flightPreset').inputValue()!==expected)throw Error('Response button did not cycle '+expected)}
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');

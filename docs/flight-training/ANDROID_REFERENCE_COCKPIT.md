@@ -1,0 +1,35 @@
+# Android reference cockpit — 1.6.2
+
+The supplied `image.png` requests a landscape transmitter with a slim metal-toned header, dark circuit-pattern background, large circular joysticks at the lower left/right, coral-ringed knobs, a central attitude ladder, ARM and CONNECT. The existing APK previously used a tall header and central telemetry cards. This update implements the supplied layout in the existing production companion.
+
+## Controls
+
+| Visible control | Behavior |
+|---|---|
+| MENU | Opens existing WebRTC connection and joystick settings. |
+| CONNECT / LINK SETTINGS | Opens the same pairing sheet directly from the cockpit. |
+| Left circular stick | Floating first-touch center; yaw and elapsed-time throttle; neutral yaw and held applied throttle on release. |
+| Right circular stick | Independent floating first-touch center; roll/pitch; neutral on release. |
+| ARM switch | Explicit virtual ARM after paired ownership, receiver readiness and low throttle; armed state follows receiver feedback. |
+| STOP | Immediate disarm and neutral output, including a third pointer while both thumb sticks are held. |
+| ANGLE / ACRO | Selects the existing simulator mode with protected command sequencing. |
+| RESP pill | Cycles Slow, Medium and Fast and persists the chosen joystick response. |
+| QR scan icon | Opens connection settings and starts the existing camera offer scanner with the existing Android permission flow. |
+| Timer | Counts receiver-confirmed armed time, freezes on STOP, resets on explicit new ARM. Preview does not start it. |
+| Attitude ladder and footer | Receiver-applied simulator pose/RPM/mount height and joystick values, with explicit preview/ownership status. |
+
+The reference's side Trim/camera decoration is represented by functional response and QR controls. No physical motor trim or camera recording is implied. The top-right STOP stays visible. Each action keeps a44CSS-pixel touch height; the two rings remain circular down to488×227 landscape. Native Android enters immersive mode; swipe gestures can reveal Android system navigation. Cutout and keyboard insets remain handled once by MainActivity.
+
+## Regression fixed during the UI audit
+
+`onTelemetry` targeted `flightAppliedControls`, but that element was absent from the production HTML. Peer callbacks caught the exception, so joystick ACK and periodic control rendering continued while the detailed telemetry display stopped updating. The cockpit now contains the element. The real encrypted browser WebRTC test requires visible RPM, receiver-applied ARM text and an applied attitude source; unit/geometry tests alone do not prove this feedback path.
+
+## Release and evidence
+
+Android versionCode13 / versionName1.6.2-flight-training retains package `in.zebjus.dronelab.companion` and the permanent release certificate. The signed verifier requires version13 and an increase above the currently published APK12. Native CI installs12, upgrades in place to13, checks retained preferences, OS multitouch, immersive system bars, circular geometry, CONNECT, all three response profiles, menu, STOP and lifecycle behavior at16:9/19.5:9 in both orientations. The baseline preference sentinel is a fixed string; its historical name does not identify the installed baseline version.
+
+Local browser screenshots use file-routed resources for layout/OS-pointer preview and cannot establish network ICE or camera performance. CI repeats actual HTTP/DTLS/SCTP WebRTC. Review/main workflow links and publication hash are recorded in the PR once observed. Mandatory exact-source checks and available native acceptance must pass before stable APK publication.
+
+Physical handset native-WebView-to-Web RTC, autofocus/radio/OEM behavior, 120-Hz performance and perceived audio comfort remain UNVERIFIED. Follow DEVICE_ACCEPTANCE.md for those results. This change preserves the single Flight Training receiver and plant, firmware, assembly, wiring and Python labs; no AP/STA or real motor control is introduced.
+
+Android immersive API guidance: https://developer.android.com/develop/ui/views/layout/immersive

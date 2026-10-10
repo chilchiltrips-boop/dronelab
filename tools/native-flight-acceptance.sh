@@ -19,7 +19,7 @@ adb install "$test_apk"
 run_case baseline-preference -e baselineOnly true
 adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee test-output/native/in-place-upgrade.log
 adb shell dumpsys package in.zebjus.dronelab.companion | grep -E 'versionCode|versionName|signatures' > test-output/native/installed-identity.txt
-grep -q 'versionCode=12' test-output/native/installed-identity.txt
+grep -q 'versionCode=13' test-output/native/installed-identity.txt
 adb shell svc wifi disable
 adb shell svc data disable
 # Native display metrics in portrait coordinates; activity remains landscape.

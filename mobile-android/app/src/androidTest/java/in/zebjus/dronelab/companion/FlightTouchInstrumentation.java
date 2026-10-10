@@ -5,11 +5,13 @@ import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.webkit.WebView;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -65,6 +67,12 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     }
     private void multitouch() throws Exception {
         check("window.ZebjusFlightApp && !document.getElementById('flightCockpit').hidden");
+        if(Build.VERSION.SDK_INT>=30){
+            AtomicReference<Boolean> hidden=new AtomicReference<>(false);
+            runOnMainSync(()->{WindowInsets insets=activity.getWindow().getDecorView().getRootWindowInsets();hidden.set(insets!=null&&!insets.isVisible(WindowInsets.Type.statusBars())&&!insets.isVisible(WindowInsets.Type.navigationBars()));});
+            if(!hidden.get())throw new AssertionError("Cockpit system bars did not enter immersive mode");checks++;
+        }
+        check("document.getElementById('flightTimer').textContent==='00:00' && ['flightLeftRing','flightRightRing'].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return Math.abs(r.width-r.height)<=1&&r.width>=65}) && document.querySelector('.flight-topbar').getBoundingClientRect().height<=56");
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
         check("['flightLeftTouch','flightRightTouch'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=document.querySelector('.flight-footer').getBoundingClientRect().top+1)");
@@ -93,6 +101,15 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         touch(MotionEvent.ACTION_POINTER_UP|(2<<MotionEvent.ACTION_POINTER_INDEX_SHIFT),new int[]{0,1,2},lm,rm,stop);
         check("document.getElementById('flightRoll').textContent==='0%' && document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightThrottle').textContent==='1000 µs'");
         touch(MotionEvent.ACTION_CANCEL,new int[]{0,1},lm,rm);
+        float[] connect=point("flightConnect",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},connect);touch(MotionEvent.ACTION_UP,new int[]{4},connect);
+        check("document.getElementById('mobileConnection').open");
+        float[] connectBack=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},connectBack);touch(MotionEvent.ACTION_UP,new int[]{4},connectBack);
+        check("!document.getElementById('mobileConnection').open");
+        // Cycle all response modes via actual OS taps and restore retained Fast.
+        for(String name:new String[]{"Slow","Medium","Fast"}){
+            float[] response=point("flightResponse",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},response);touch(MotionEvent.ACTION_UP,new int[]{4},response);
+            check("document.getElementById('flightPreset').value==='"+name+"'");
+        }
         // Header sheet does not hide STOP or freeze preview after closing.
         float[] gear=point("flightSettings",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},gear);touch(MotionEvent.ACTION_UP,new int[]{4},gear);
         check("document.getElementById('mobileConnection').open && document.getElementById('mobileSettingsStop').getBoundingClientRect().height>=44");

@@ -1,7 +1,7 @@
 name: Android Landscape Flight WebRTC Tests
 on:
   push:
-    branches: [feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, main]
+    branches: [feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, main]
     paths:
       - 'mobile-android/**'
       - 'pairing-code.js'

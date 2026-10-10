@@ -1,38 +1,40 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/><meta name="theme-color" content="#07111b"/><title>ZEBJUS DroneLab Companion</title><link rel="stylesheet" href="companion.css"/></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/><meta name="theme-color" content="#12121f"/><title>ZEBJUS Flight Control</title><link rel="stylesheet" href="companion.css"/></head><body>
 <div id="flightSplash" class="flight-splash" hidden aria-hidden="true"><div class="splash-grid"></div><div class="splash-icon"><i></i><i></i><i></i><i></i><b>Z</b></div><div class="splash-title">ZEBJUS <span>FLIGHT CONTROL</span></div><small>SECURE WEBRTC SIMULATOR TRANSMITTER</small><div class="splash-progress"><i></i></div></div>
 <section id="flightCockpit" class="flight-cockpit" aria-label="Landscape joystick flight simulator controller" hidden>
- <header class="flight-topbar"><span class="flight-brand"><b>Z</b><span>ZEBJUS <em>FLIGHT CONTROL</em></span></span>
- <span id="flightConnection" class="flight-state">DISCONNECTED</span><span id="flightOwner" class="flight-state">VIEW ONLY</span>
- <select id="flightMode" aria-label="Flight simulator mode"><option value="angle">ANGLE</option><option value="acro">ACRO / RATE</option></select>
- <button id="flightArm" class="flight-arm" disabled>ARM</button><button id="flightStop" class="flight-stop">■ STOP</button>
- <button id="flightSettings" class="flight-small" aria-label="Connection and joystick settings" aria-expanded="false">⚙</button></header>
+ <header class="flight-topbar">
+ <button id="flightSettings" class="flight-menu" aria-label="Connection and joystick settings" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>MENU</span></button>
+ <span class="flight-brand"><b>Z</b><span>ZEBJUS <em>FLIGHT CONTROL</em></span></span>
+ <div class="flight-session"><span id="flightConnection" class="flight-state">NOT CONNECTED</span><b id="flightTimer" title="Receiver-confirmed armed time">00:00</b></div>
+ <span class="flight-link" aria-label="WebRTC feedback latency"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0M9 16a4 4 0 0 1 6 0"/><circle cx="12" cy="20" r="1"/></svg><b id="flightLatency">— ms</b></span>
+ <button id="flightStop" class="flight-stop">■ STOP</button></header>
+ <div class="flight-status-line"><span id="flightOwner">INPUT PREVIEW</span><span class="flight-sim-badge">SIMULATOR</span></div>
  <div class="flight-field">
  <div id="flightLeftZone" class="flight-touch-zone" aria-label="Left joystick yaw and throttle" role="application">
-  <span class="flight-zone-title">LEFT STICK <b>YAW / THROTTLE</b></span>
-  <span class="flight-axis-label up">THROTTLE +</span><span class="flight-axis-label down">THROTTLE −</span>
-  <div id="flightLeftRing" class="flight-ring"><span class="flight-cross x"></span><span class="flight-cross y"></span><div id="flightLeftKnob" class="flight-knob"></div></div>
+  <span class="flight-zone-title">LEFT STICK <b>THROTTLE / YAW</b></span>
+  <div id="flightLeftRing" class="flight-ring"><svg class="flight-directions" viewBox="0 0 200 200" aria-hidden="true"><path d="m82 35 18-15 18 15m-36 11 18-15 18 15m-36 119 18 15 18-15m-36-11 18 15 18-15M48 90c-32 2-27 30-2 26l9-9m-10-22 5 10-11 4M152 90c32 2 27 30 2 26l-9-9m10-22-5 10 11 4"/></svg><div id="flightLeftKnob" class="flight-knob"></div></div>
   <span id="flightLeftTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
- <div class="flight-center"><div class="flight-heading">VIRTUAL TRANSMITTER <small>NO PHYSICAL MOTORS</small></div>
- <div class="flight-readouts"><div><small>THROTTLE</small><b id="flightThrottle">1000 µs</b></div><div><small>ROLL</small><b id="flightRoll">0%</b></div><div><small>PITCH</small><b id="flightPitch">0%</b></div><div><small>YAW</small><b id="flightYaw">0%</b></div></div>
- <div class="flight-center-state"><span id="flightModeState">ANGLE</span><span>SEQ <b id="flightSent">#0</b></span><span>RTT <b id="flightLatency">—</b></span></div>
- <div id="flightAppliedTelemetry" class="flight-feedback">APPLIED STATE —</div><div id="flightFeedback" class="flight-feedback">NO ACK</div><p id="flightWarning" class="flight-warning">PAIR WITH WEB APP TO ENABLE FLIGHT</p></div>
+ <div class="flight-center">
+ <div id="flightAttitude" class="flight-attitude" data-source="preview" aria-label="Simulator attitude indicator"><div id="flightAttitudeLadder" class="flight-attitude-ladder"><i></i><i></i><i></i><i></i><i></i></div><svg viewBox="0 0 80 32" aria-hidden="true"><path d="M5 16h23l5 6h14l5-6h23M28 16v-6h24v6M40 6v20"/><circle cx="40" cy="16" r="10"/></svg><span id="flightAttitudeLabel">INPUT PREVIEW</span></div>
+ <div class="flight-center-actions"><select id="flightMode" aria-label="Flight simulator mode"><option value="angle">ANGLE</option><option value="acro">ACRO</option></select><button id="flightArm" class="flight-arm" disabled aria-pressed="false">ARM</button></div>
+ <button id="flightConnect" class="flight-connect">CONNECT</button>
+ <p id="flightWarning" class="flight-warning">PAIR WITH WEB APP TO ENABLE FLIGHT</p></div>
  <div id="flightRightZone" class="flight-touch-zone" aria-label="Right joystick roll and pitch" role="application">
-  <span class="flight-zone-title">RIGHT STICK <b>ROLL / PITCH</b></span>
-  <span class="flight-axis-label up">PITCH +</span><span class="flight-axis-label down">PITCH −</span>
-  <div id="flightRightRing" class="flight-ring"><span class="flight-cross x"></span><span class="flight-cross y"></span><div id="flightRightKnob" class="flight-knob"></div></div>
+  <span class="flight-zone-title">RIGHT STICK <b>PITCH / ROLL</b></span>
+  <div id="flightRightRing" class="flight-ring"><svg class="flight-directions" viewBox="0 0 200 200" aria-hidden="true"><path d="m88 29 12-15 12 15m-24 142 12 15 12-15M29 88l-15 12 15 12m142-24 15 12-15 12"/></svg><div id="flightRightKnob" class="flight-knob"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="12"/><path d="M20 2v36M2 20h36"/></svg></div></div>
   <span id="flightRightTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
+ <div class="flight-utilities"><button id="flightResponse" class="flight-response" aria-label="Joystick response Medium. Tap to change"><small>RESP</small><b id="flightResponseValue">MED</b><span aria-hidden="true">↕</span></button><button id="flightQuickScan" class="flight-quick-scan" aria-label="Scan Web QR"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="M8 8h3v3H8zM14 8h2v3h-2zM8 14h3v2H8zM14 14h3v3h-3z"/></svg></button></div>
  </div>
- <footer class="flight-footer">Left stick Yaw direction matches reversed Tripod V1.5.3 • WebRTC DataChannel only • STOP always available</footer>
+ <footer class="flight-footer"><div class="flight-readouts"><span><small>THR</small><b id="flightThrottle">1000 µs</b></span><span><small>ROLL</small><b id="flightRoll">0%</b></span><span><small>PITCH</small><b id="flightPitch">0%</b></span><span><small>YAW</small><b id="flightYaw">0%</b></span></div><div class="flight-center-state"><span id="flightModeState">PREVIEW • ANGLE</span><span>SEQ <b id="flightSent">#0</b></span><span id="flightFeedback" hidden>NO ACK</span></div><div id="flightAppliedControls" class="flight-applied-controls">INPUT PREVIEW • NO FLIGHT COMMAND</div><div id="flightAppliedTelemetry" class="flight-feedback"></div></footer>
 </section>
 <dialog id="mobileConnection" class="mobile-connection" aria-label="Mobile connection settings"><div class="mobile-dialog-actions"><button id="mobileSettingsStop" class="danger">■ STOP</button><button id="flightBack" class="flight-back" type="button">↩ BACK TO CONTROLLER</button></div>
  <div class="flight-options" id="flightOptions"><label for="flightPreset">JOYSTICK RESPONSE</label>
  <select id="flightPreset"><option value="Slow">Slow</option><option value="Medium">Medium</option><option value="Fast">Fast</option></select>
  <small>Throttle holds on release • simulation only</small><button id="flightPair">Pair / Connection Settings</button><button id="flightTakeControl">Request Mobile Control</button><button id="flightReleaseControl">Release Control</button></div>
-<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Flight Controller • v1.6.1 WEBRTC</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
+<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Flight Controller • v1.6.2 WEBRTC</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
 <main>
 <section class="hero"><small>KIT-FREE • SAME WI-FI • QR OFFLINE / CODE ONLINE</small><h1>Flight Training Connection</h1><p><strong>Recommended: 6-Digit CONNECT Code.</strong> Scan the Web App QR, then type the short code shown here on your College PC. Camera-based response QR is also available.</p></section>
 <section class="card"><div class="section-title"><strong>1. Scan Web App Offer</strong><span id="offerState">Waiting for QR</span></div>
-<div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="phoneTorchBtn" disabled>Flashlight OFF</button><button id="stopCameraBtn">Close Camera</button></div><div id="phoneScanFeedback" class="phone-scan-feedback" role="status" aria-live="assertive">Ready to scan QR • good lighting recommended</div><p class="hint" id="cameraPermissionHelp">Tap Scan Web QR to request Android Camera permission. If no popup appears, open Android Settings → Apps → ZEBJUS DroneLab QR → Permissions → Camera → Allow only while using the app.</p><div id="phoneScanFrame" class="phone-scan-frame" hidden><video id="scanVideo" autoplay muted playsinline hidden></video><span class="phone-scan-guide" aria-hidden="true"></span></div><canvas id="scanCanvas" hidden></canvas>
+<div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="phoneTorchBtn" disabled>Flashlight OFF</button><button id="stopCameraBtn">Close Camera</button></div><div id="phoneScanFeedback" class="phone-scan-feedback" role="status" aria-live="assertive">Ready to scan QR • good lighting recommended</div><p class="hint" id="cameraPermissionHelp">Tap Scan Web QR to request Android Camera permission. If no popup appears, open Android Settings → Apps → ZEBJUS Flight Control → Permissions → Camera → Allow only while using the app.</p><div id="phoneScanFrame" class="phone-scan-frame" hidden><video id="scanVideo" autoplay muted playsinline hidden></video><span class="phone-scan-guide" aria-hidden="true"></span></div><canvas id="scanCanvas" hidden></canvas>
 <textarea id="offerInput" placeholder="Alternatively paste Web App pairing offer here"></textarea>
 <div class="actions"><button id="useOfferBtn">Use Pasted Offer</button><button id="resetPairBtn" class="danger">Cancel / New Pairing</button></div>
 <div class="pin-box"><span>Confirmation code — verify on Web App</span><strong id="appPairCode">------</strong></div>

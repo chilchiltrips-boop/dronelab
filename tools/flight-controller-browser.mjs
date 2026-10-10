@@ -10,6 +10,7 @@ try{
  if(await web.locator('iframe').count())throw Error('Flight Training must not contain an iframe');
  if(!await web.locator('#tpRun').isDisabled()||!await web.locator('#tpMode').isDisabled())throw Error('Local controls can fight mobile ownership');
  await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ await wait(phone,()=>document.getElementById('flightAppliedTelemetry').textContent.includes('RPM')&&document.getElementById('flightAppliedControls').textContent.includes('VIRTUAL ARMED')&&document.getElementById('flightAttitude').dataset.source==='applied');
  const left=await phone.locator('#flightLeftZone').boundingBox(),right=await phone.locator('#flightRightZone').boundingBox();
  const touch=await ctx.newCDPSession(phone),l={id:1,x:left.x+left.width*.45,y:left.y+left.height*.67},r={id:2,x:right.x+right.width*.53,y:right.y+right.height*.65};
  const event=(type,touchPoints)=>touch.send('Input.dispatchTouchEvent',{type,touchPoints});
@@ -17,6 +18,7 @@ try{
  await wait(phone,()=>parseInt(document.getElementById('flightThrottle').textContent)>=1200);await phone.waitForTimeout(140);
  const held=await phone.locator('#flightThrottle').textContent();if(await web.locator('#tpThrottleReadout').textContent()!==held)throw Error('Authoritative throttle mirror differs');
  await phone.waitForTimeout(200);if(await phone.locator('#flightThrottle').textContent()!==held)throw Error('Throttle did not hold on release');
+ await wait(phone,()=>document.getElementById('flightTimer').textContent!=='00:00');
  await event('touchStart',[l]);await event('touchStart',[l,r]);
  await event('touchMove',[{...l,x:l.x+28},{...r,x:r.x+25,y:r.y-20}]);
  await wait(phone,()=>parseInt(document.getElementById('flightYaw').textContent)<-5&&parseInt(document.getElementById('flightRoll').textContent)>5);

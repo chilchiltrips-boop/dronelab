@@ -35,6 +35,23 @@ public class MainActivity extends Activity {
     private final AtomicBoolean seenNetwork = new AtomicBoolean(false);
     private volatile Network lastNetwork;
 
+    private void cockpitFullscreen() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                controller.hide(WindowInsets.Type.systemBars());
+            }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(android.view.View.SYSTEM_UI_FLAG_FULLSCREEN |
+                android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+        }
+    }
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) cockpitFullscreen();
+    }
+
     private boolean isLocalOrigin(PermissionRequest request) {
         if (request == null || request.getOrigin() == null) return false;
         android.net.Uri origin = request.getOrigin();
@@ -75,7 +92,7 @@ public class MainActivity extends Activity {
     private void explainDeniedCameraPermission() {
         new AlertDialog.Builder(this)
             .setTitle("Camera permission required")
-            .setMessage("To scan the Web App QR, allow Camera access for ZEBJUS DroneLab QR. " +
+            .setMessage("To scan the Web App QR, allow Camera access for ZEBJUS Flight Control. " +
                 "If Android no longer displays the permission popup, open App Settings > Permissions > Camera " +
                 "and select Allow only while using the app.")
             .setNegativeButton("Later", (dialog, which) -> dialog.dismiss())
@@ -103,11 +120,11 @@ public class MainActivity extends Activity {
     }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(Color.rgb(7, 17, 27));
-        getWindow().setNavigationBarColor(Color.rgb(7, 17, 27));
+        getWindow().setStatusBarColor(Color.rgb(18, 18, 31));
+        getWindow().setNavigationBarColor(Color.rgb(18, 18, 31));
         // API35 edge-to-edge bars are transparent; paint the inset background
         // with the cockpit color so light system icons retain contrast.
-        getWindow().getDecorView().setBackgroundColor(Color.rgb(7, 17, 27));
+        getWindow().getDecorView().setBackgroundColor(Color.rgb(18, 18, 31));
         if (Build.VERSION.SDK_INT >= 30 && getWindow().getInsetsController() != null) {
             getWindow().getInsetsController().setSystemBarsAppearance(0,
                 android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS |
@@ -118,7 +135,7 @@ public class MainActivity extends Activity {
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
             .build();
         view = new WebView(this);
-        view.setBackgroundColor(Color.rgb(7, 17, 27));
+        view.setBackgroundColor(Color.rgb(18, 18, 31));
         view.getSettings().setJavaScriptEnabled(true);
         view.getSettings().setDomStorageEnabled(true);
         view.getSettings().setMediaPlaybackRequiresUserGesture(false);
@@ -171,7 +188,7 @@ public class MainActivity extends Activity {
         };
         if (connectivity != null) connectivity.registerDefaultNetworkCallback(networkCallback);
         FrameLayout container = new FrameLayout(this);
-        container.setBackgroundColor(Color.rgb(7, 17, 27));
+        container.setBackgroundColor(Color.rgb(18, 18, 31));
         container.addView(view, new FrameLayout.LayoutParams(-1, -1));
         setContentView(container, new ViewGroup.LayoutParams(-1, -1));
         // targetSdk 35 draws edge-to-edge: keep QR, touch targets and the keyboard
@@ -204,6 +221,7 @@ public class MainActivity extends Activity {
         });
         container.requestApplyInsets();
         view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
+        cockpitFullscreen();
     }
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
