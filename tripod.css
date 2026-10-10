@@ -121,3 +121,15 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
  .tp-layout-full-pid .tp-pid-matrix{gap:8px}
  .tp-layout-full-pid .tp-telemetry .tp-chart-wrap{height:170px}
 }
+
+/* Tiny phones: allow the connection header and command toolbar to wrap rather
+   than widening the entire document (especially at 320px). */
+@media(max-width:380px){
+ .tp-header{flex-wrap:wrap;gap:8px}
+ .tp-header-state{width:100%;min-width:0;justify-content:flex-start;gap:6px}
+ .tp-brand{min-width:0}
+ .tp-heading h1{overflow-wrap:anywhere}
+ .tp-command,.tp-command-group{min-width:0}
+ .tp-command-buttons{max-width:100%;gap:7px}
+ .tp-command-buttons button{min-width:88px;white-space:normal}
+}
