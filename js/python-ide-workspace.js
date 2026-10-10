@@ -55,6 +55,8 @@ export function createPythonIDEShell(api){
  for(const d of [fileMenu,editMenu])d.addEventListener('click',e=>{if(e.target.closest('button'))d.open=false});
  document.addEventListener('click',e=>{if(!fileMenu.contains(e.target))fileMenu.open=false;if(!editMenu.contains(e.target))editMenu.open=false});
  // Project explorer: virtual project paths, folders and assets are persisted in the browser.
+ const editorTop=editorCard.querySelector('.python-editor-top'),editorTab=node('div','py-open-file-tab');
+ if(editorTop)editorTop.replaceChildren(editorTab);
  const explorer=node('aside','py-project-explorer');explorer.id='pythonProjectExplorer';
  const exploreHead=node('div','py-explorer-head');
  exploreHead.append(node('strong','','PROJECT'),button('','folder-plus',()=>newFolder()),button('','upload',()=>fileInput.click()),button('','panel-left-close',()=>{projectOpen=false;applyPanels()}));
@@ -72,9 +74,9 @@ export function createPythonIDEShell(api){
  layout.append(rail);
  const tools=side.querySelector('.python-tools-card'),usb=$('pythonUsbTools'),visual=$('pythonVisualTools'),market=side.querySelector('.python-market-card');
  const toolHead=node('div','py-tool-window-head');
- const heading=node('strong','','Tools'),rightMin=button('','minimize',()=>openRight('closed')),rightMax=button('','maximize',()=>{root.classList.toggle('py-right-max');fit()});
+ const heading=node('strong','','Tools'),rightMin=button('','minimize',()=>openRight('closed')),rightMax=button('','maximize',()=>{root.classList.toggle('py-right-max');fit()}),rightFloat=button('','panels',()=>{if(right==='closed')openRight('camera');root.classList.toggle('py-tool-floating');fit()});
  rightMin.title='Minimize tool window';rightMax.title='Expand tool window';
- toolHead.append(heading,rightMax,rightMin);side.insertBefore(toolHead,side.firstChild);
+ rightFloat.title='Float / dock tool window';toolHead.append(heading,rightFloat,rightMax,rightMin);side.insertBefore(toolHead,side.firstChild);
  const toolContent=node('div','py-tool-window-content');side.insertBefore(toolContent,tools);
  const pane={};
  for(const [id] of panels){pane[id]=node('div','py-dock-page');pane[id].dataset.pyPane=id;toolContent.append(pane[id])}
@@ -121,6 +123,8 @@ export function createPythonIDEShell(api){
  async function loadAssets(){try{for(const entry of await assetQuery('getAll'))assets.set(entry.path,entry);refreshExplorer()}catch(e){notice('Asset storage unavailable: '+e.message)}}
  function notice(message){const s=$('pyStatus');if(s)s.textContent=message}
  function refreshExplorer(){
+  editorTab.replaceChildren(icon('file'),document.createTextNode(api.currentFile()));
+  editorTab.title='/home/project/'+api.currentFile();
   list.replaceChildren();
   const code=api.listFiles(),allFolders=new Set(folders);
   for(const path of [...code,...assets.keys()])for(const f of folderChain(parent(path)))allFolders.add(f);
@@ -141,7 +145,7 @@ export function createPythonIDEShell(api){
   const combined=[...folderRows.map(path=>({path,kind:'folder'})),...fileRows].sort((a,b)=>a.path.localeCompare(b.path)||(a.kind==='folder'?-1:1));
   for(const row of combined)makeRow(row.path,row.kind);
  }
- function selectedKind(){return folders.has(selected)?'folder':api.listFiles().includes(selected)?'code':assets.has(selected)?'asset':null}
+ function selectedKind(){const implicit=[...api.listFiles(),...assets.keys()].some(p=>p.startsWith(selected+'/'));return folders.has(selected)||implicit?'folder':api.listFiles().includes(selected)?'code':assets.has(selected)?'asset':null}
  function newFolder(){
   let path=prompt('New folder path (inside the project)',currentFolder?currentFolder+'/images':'images');
   if(path===null)return;path=cleanPath(path);
@@ -176,7 +180,9 @@ export function createPythonIDEShell(api){
   if(!confirm('Delete '+selected+(kind==='folder'?' and all its contents':'')+'?'))return;
   if(kind==='code'){api.removeFile(selected)}
   if(kind==='asset'){await assetQuery('delete',null,selected);assets.delete(selected)}
-  if(kind==='folder'){for(const path of api.listFiles().filter(x=>x.startsWith(selected+'/')))api.removeFile(path);
+  if(kind==='folder'){const removing=api.listFiles().filter(x=>x.startsWith(selected+'/'));
+   if(removing.length>=api.listFiles().length)return alert('Keep at least one Python file.');
+   for(const path of removing)api.removeFile(path);
    for(const path of [...assets.keys()].filter(x=>x.startsWith(selected+'/'))){await assetQuery('delete',null,path);assets.delete(path)}
    for(const f of [...folders])if(f===selected||f.startsWith(selected+'/'))folders.delete(f);saveFolders()
   }
@@ -231,14 +237,16 @@ export function createPythonIDEShell(api){
   heading.textContent=panels.find(x=>x[0]===right)?.[1]||'Tools';
   savePanels();fit()
  }
- function openRight(id){right=id;root.classList.remove('py-right-max');applyPanels();if(id==='plotter')paintPlot()}
+ function openRight(id){right=id;root.classList.remove('py-right-max');if(id==='closed')root.classList.remove('py-tool-floating');applyPanels();if(id==='plotter')paintPlot()}
  function openBottom(id='run'){bottom=id;root.classList.remove('py-bottom-max');applyPanels()}
  let raf=0;
  function fit(){
   if(raf)return;
   raf=requestAnimationFrame(()=>{raf=0;if(!root.classList.contains('active'))return;
-   const top=layout.getBoundingClientRect().top,available=Math.max(310,window.innerHeight-top-42);
-   const b=bottom==='closed'?36:bottomHeight;
+   const top=Math.max(layout.getBoundingClientRect().top,toolbar.getBoundingClientRect().bottom+7);
+   const available=Math.max(310,window.innerHeight-top-40);
+   const b=bottom==='closed'?36:Math.min(bottomHeight,Math.max(130,available-280));
+   root.style.setProperty('--py-terminal-h',b+'px');
    root.style.setProperty('--py-work-height',Math.max(280,available-b)+'px');
    api.layoutEditor();
   })
