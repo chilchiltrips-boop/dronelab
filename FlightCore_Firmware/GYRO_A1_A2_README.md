@@ -1,82 +1,55 @@
-# FlightCore v1.2.2 — Board-specific I²C gyroscopes
+# ZEBJUS FlightCore v1.3.0 — Hardware / USB / Python Lab
 
-This firmware **adds** gyro reads to existing I²C Scanner (every 5 seconds) and onboard LED control. Only sensor readouts are implemented; no motor commands, PID updates, arm/disarm actions, fusion or gyro-based flight stabilization.
+## Current supported hardware (IMPORTANT)
 
-## Hardware
+| Board | Profile | Gyro | I2C wiring | Onboard LED |
+|---|---|---|---|---|
+| ZEBJUS FlightCore A1 SuperMini | `ZFC-A1`, ESP32-C3 | LSM6DS3, address `0x6B` | **SDA GPIO4 / SCL GPIO5** | GPIO8, active-low, usable for Python LED effects |
+| ZEBJUS FlightCore A2 C6 | `ZFC-A2`, XIAO ESP32-C6 | MPU6050, address `0x68` | **SDA GPIO22 / SCL GPIO23** (XIAO D4/D5) | GPIO15, current board wiring |
 
-| Profile | Microcontroller | Gyro | I²C address | SDA/SCL | Gyro sensitivity | Display interval |
-| --- | --- | --- | --- | --- | --- | --- |
-| A2 | ZEBJUS FlightCore A2 C6 (XIAO ESP32-C6) | MPU6050 | `0x68` | D4/GPIO22, D5/GPIO23 | ±500 dps, 65.5 LSB/(dps) | 50 ms |
-| A1 | ZEBJUS FlightCore A1 SuperMini (ESP32-C3) | GY-LSM6DS3 | **`0x6B`** | **Default GPIO8/9; fallback GPIO4/5** | ±2000 dps, 70 mdps/LSB | 20 ms |
+Connect sensor VCC to **3V3** and GND to GND. **A1 firmware v1.3.0 does NOT use Arduino's default GPIO8/GPIO9 I2C pins.** Physically disconnect any sensor SDA/SCL leads from GPIO8/GPIO9 before installation; connect to GPIO4/GPIO5. GPIO8 remains LED only; GPIO9 is the ESP32-C3 BOOT strap. The user previously found LSM6DS3 at `0x6B` with `Wire.begin()`; that is evidence that the older wiring worked, *not* evidence that the new GPIO4/5 wiring has yet been checked in hardware.
 
-**A1 wiring compatibility:** The verified Arduino IDE `Wire.begin()` scanner uses SDA GPIO8 and SCL GPIO9. FlightCore v1.2.2 detects the sensor on those pins first; optional GPIO4/5 wiring is also supported. If GPIO8 is SDA, PWM control of the onboard LED is deliberately disabled to protect I²C communication. Move the sensor to SDA GPIO4 / SCL GPIO5 only if simultaneous sensor scanning and onboard LED effects are needed. Keep I²C logic at 3.3V; GPIO9 is a BOOT strapping pin and must not be held low during normal reset.
+## USB installation
 
-Both boards use 400kHz I²C. A2 XIAO C6 remains on GPIO22/23, while A1 selects Arduino-default GPIO8/9 or optional GPIO4/5.
+Open **Firmware** in desktop Chrome/Edge and select **Connect USB**. ROM chip ID `5` selects A1; chip ID `13` selects A2. A1/C3 and A2/C6 USB VID/PID may be the same — never identify a board by VID/PID alone. Check the selected board profile. Use **Factory image** (`0x0`) on first install or when migrating from Arduino's default partitions; **APP** at `0x10000` requires a matching existing dual-OTA partition layout. Verify current firmware version `1.3.0`, `LOADED`, and USB bootloader + flash verified before pressing **Flash over USB**. Leave BOOT and press RESET after flashing if the controller stays in ROM DOWNLOAD. Open USB Serial Monitor at 115200 baud; it identifies the actual running firmware using `ZJINFO,FW,...`.
 
-## Register configuration (once at sensor initialization)
+The built-in USB flashing page validates the selected profile, detected ROM chip, firmware ESP image header, SHA-256 catalog integrity and flash capacity. This is chip-family protection, *not* unique manufacturer board authentication.
 
-**A2 MPU6050**
-- `0x75` WHO_AM_I, expected `0x68`.
-- `0x6B <- 0x00`: leave sleep mode.
-- `0x1A <- 0x05`: DLPF_CFG=5.
-- `0x1B <- 0x08`: ±500 dps gyro, divide raw values by 65.5.
-- Burst read 6 bytes from `0x43`: X/Y/Z, MSB-first.
+## Nonblocking USB telemetry
 
-**A1 LSM6DS3**
-- I²C **slave** address `0x6B` was detected by the user's scanner. It is not the `0x6A` fallback used in some examples.
-- `0x0F` WHO_AM_I, expected `0x69` (also supports compatible `0x6C` LSM6DS-family ID).
-- `0x12 <- 0x44`: block data update, enable auto-increment.
-- `0x11 <- 0x4C`: 104Hz ODR, ±2000 dps, multiply raw values by 0.070.
-- Burst read 6 bytes from `0x22`: X/Y/Z, LSB-first.
+Both boards sample gyro at **50 Hz** (20 ms). The USB telemetry stream defaults to **20 Hz** (50 ms), configurable to **10 / 20 / 50 Hz** in the Serial Monitor toolbar. These settings change *transport frequency*, not IMU sampling rate or a motor-control loop.
 
-Initialization retries every 2.5 seconds if the device is absent or stops responding. The scanner runs independently and continues to list other attached I²C devices.
-
-## Serial output (115200 baud)
-
-The firmware emits independent CSV-format gyro data suitable for parsing:
+Versioned canonical frame (12 CSV fields):
 
 ```text
-ZJGYRO,STATUS,A2,MPU6050,0x68,READY
-ZJGYRO,DATA,A2,MPU6050,0x68,-0.31,0.12,1.43
-
-ZJGYRO,STATUS,A1,LSM6DS3,0x6B,READY
-ZJGYRO,DATA,A1,LSM6DS3,0x6B,-0.28,0.14,1.39
+ZJTEL,1,A1,42,8120,0x6B,READY,-0.12,0.55,1.46,LED_READY,0
+ZJTEL,1,A2,43,8140,0x68,READY,-0.21,0.09,0.73,LED_READY,0
 ```
 
-The signed X/Y/Z values are sensor-native angular rates in degrees/second; **not** absolute pitch/roll/yaw angles, and **not** guaranteed body-frame mapping without mounting orientation alignment. No gyro bias calibration is applied, so stationary values may be small nonzero values. Sensor ODR (104Hz for LSM6DS3) is distinct from serial reporting (50Hz).
+Fields in order: prefix, version, board A1/A2, monotonic sequence, board milliseconds, I2C address, sensor health, roll dps, pitch dps, yaw dps, LED capability/status, cumulative dropped telemetry frames. `NOT_FOUND` or `READ_ERROR` means gyro values are **not trustworthy**. Serial Plotter ignores such frames. Sequence gaps and device-reported drops are displayed in the UI.
 
-No `delay(20)` or `delay(50)` blocks the loop. Existing I²C Scanner messages, LED control commands and watchdog remain unchanged. New `ZJGYRO` lines can be inspected in **Firmware & Connect → Serial Monitor**, while **Python Lab** continues to support the existing I²C and LED functions. A typed Python gyroscope API is not part of this firmware-only change.
+Select 10/20/50 Hz or send `ZJTEL,RATE,10\n`, `ZJTEL,RATE,20\n`, `ZJTEL,RATE,50\n`; firmware replies `ZJTEL,ACK,RATE,20` etc. No `delay(20)` / `delay(50)` in the main loop. USB writer skips and counts frames when insufficient TX buffer space is available.
 
-## Validation and safety
+**Compatibility:** The prior `ZJGYRO,DATA` frame is retained at low rate (5 Hz), and the original human-readable I2C scan output remains for `zebjus_simple.Drone().i2c_scan()`. Full address scanning is split over multiple loop passes, at most **3 addresses per pass**, every **5 seconds** or via `ZJI2C,SCAN\n`. Do not scan all 126 addresses on every 20 ms telemetry tick.
 
-`tools/build_scanner.py` compiles **both** the A1 and A2 images from the same board-conditional source. APP and FACTORY binaries are verified for the corresponding chip and SHA256. Physical module detection, voltage, sample values, axis directions and wiring must still be checked on the user's hardware. Always bench-test with motors disconnected before integrating gyro feedback into a flight controller.
+## Python Lab, LED, and error handling
 
-## Native USB Serial
+`from zebjus_simple import Drone`, `drone=Drone()`, `drone.led_blink(250,250)` uses USB Serial commands `ZJLED,id,...`. A1 dedicated GPIO4/5 wiring permits onboard GPIO8 LED control. Unsupported commands or hardware `PIN_CONFLICT` acknowledgements terminate the **running** Python worker, safely send LED STOP, and show an error. USB disconnect interrupts hardware-target Python execution.
 
-FlightCore A1 builds with `esp32:esp32:esp32c3:CDCOnBoot=cdc` so `Serial` uses native USB Serial/JTAG (VID 303A, PID 1001). After Factory flashing, press RESET if the port does not reopen. FlightCore A2 retains its Seeed XIAO ESP32-C6 build profile.
+**Check Syntax** runs Python `ast.parse()` inside the isolated Pyodide worker without executing the project. Runtime Python exceptions show original traceback plus explanations and Monaco editor line markers. Autocomplete lists known `Drone` methods and Python snippets. Monaco is not a complete static type checker; exceptions inside user `try/except` blocks may be intentionally handled by the student's code rather than treated as failures. Automatically applying code edits is intentionally disabled.
 
-## Firmware v1.2.1 diagnostics
+## Test and release checklist
 
-After USB Factory flash, exit ROM DOWNLOAD mode: release BOOT and press RESET. Web Serial status distinguishes `ROM DOWNLOAD • APP NOT RUNNING` from `USB FIRMWARE RUNNING` only after receiving the live `ZJINFO,FW` banner. The USB Serial Monitor can send `ZJINFO,GET` to request firmware identity, and `ZJI2C,SCAN` to trigger an immediate sensor scan.
+Automated: build A1 and A2 via Arduino-ESP32 toolchain; validate APP and FACTORY image headers/catalog SHA-256; run Node regression tests for telemetry parsing, legacy I2C scanner, Python hardware errors; use Playwright on Python Lab desktop/mobile layouts. A synthetic 90,000-frame trace exercises parser throughput for 30 minutes at 50 Hz, but **does not measure real hardware throughput or jitter**.
 
-ESP32-C3 SuperMini accepts the user's Arduino-default LSM6DS3 SDA GPIO8 and SCL GPIO9, or the alternate GPIO4/5 bus, with VCC 3.3V and GND. GPIO8 shares the onboard LED and therefore LED effects are disabled on the default bus. If `ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND` occurs after firmware boot, physical sensor/wire/power/CS/SA0 wiring needs verification; no software retry can recover disconnected wires.
+Hardware bench tests still needed (propellers removed, motors disconnected):
 
-Test LED with the Firmware page's **Test onboard LED** control, or send `ZJLED,900,BLINK,250,250,100` followed by a newline at 115200 baud. With alternate A1 GPIO4/5 wiring or on A2, the controller should respond `ZJLED,ACK,900,OK`. On A1 default GPIO8/9 bus, the response is `ZJLED,ACK,900,PIN_CONFLICT` instead. The LED pattern automatically stops after a four-second safety lease without renewed commands.
+1. Flash A1 Factory image on C3 and A2 Factory image on C6, verify ROM chip ID and board-specific APP/Factory selection.
+2. Repeat USB connect, flash/restart, unplug/replug, and native serial reconnect several times on each board.
+3. Confirm A1 `ZJI2C,PINS,ZFC-A1,4,5,0x6B`, I2C device `0x6B`, gyro `READY` and actual motion response. Verify onboard GPIO8 LED `ZJLED,ACK,1,OK` and brightness changes.
+4. Confirm A2 `ZJI2C,PINS,ZFC-A2,22,23,0x68`, device `0x68`, gyro `READY`, and onboard LED behavior.
+5. Test telemetry 10/20/50 Hz with live timestamps, dropped-frame counts, USB unplug under load, and 30-minute continuous Serial Monitor operation.
+6. Test Python syntax mistakes, uncaught TypeError, hardware PIN_CONFLICT, and disconnected USB. Confirm Run/Stop states and line highlighting.
+7. Negative hardware safety check: never deliberately erase a board using a mismatched image; verify mismatches are blocked *before* the write stage using test harness/fake loader.
 
-The built-in Python Lab executes `from zebjus_simple import Drone` in the browser's Pyodide worker and needs the **USB Serial connection** to the *running* controller. Normal desktop PyCharm Python instead requires the separate PC `pyserial` example; the browser's `zebjus_simple` module is not an installed system package.
-
-## FlightCore v1.2.2 — Arduino-default I²C compatibility
-
-**A1 SuperMini:** Check `Wire.begin()` on ESP32-C3 Dev Module default SDA GPIO8 / SCL GPIO9 first (user-confirmed scanner finds LSM6DS3 `0x6B`). If absent, probe optional GPIO4 / GPIO5. If neither responds, revert to default and keep retrying. Report the selected bus using `ZJI2C,PINS` and `ZJI2C,MODE` serial messages. **A2 C6** MPU6050 `0x68` on GPIO22/23 remains unchanged.
-
-**LED versus SDA conflict:** GPIO8 is also A1's active-low onboard LED. When GPIO8 is SDA, disable PWM LED control to preserve I²C integrity. Report `ZJLED,INFO,ZFC-A1,GPIO8,UNAVAILABLE,SDA_CONFLICT`; a LED command receives `ZJLED,ACK,<id>,PIN_CONFLICT`. To use the onboard LED and I²C at the same time, move the sensor's SDA/SCL wiring to GPIO4/5 and reboot. GPIO9 is a boot strap, so pull-up/wiring influences boot behavior and BOOT must be released on reset.
-
-## FlightCore v1.3.0 — Dedicated A1 I2C and unified USB telemetry
-
-**Both firmwares:** A1 ESP32-C3 uses **SDA GPIO4, SCL GPIO5, LSM6DS3 at 0x6B**. A2 XIAO ESP32-C6 uses **SDA GPIO22, SCL GPIO23, MPU6050 at 0x68**. The GPIO8 onboard LED remains independent of I2C on A1. Remove any old A1 SDA8/SCL9 sensor wiring and reconnect to GPIO4/5 before flashing v1.3.0. No firmware fallback scans GPIO8/9.
-
-Gyro sensor sampling is 50 Hz on both boards; USB telemetry defaults to 20 Hz (50 ms). The Serial Monitor can change streaming frequency using `ZJTEL,RATE,10`, `ZJTEL,RATE,20` or `ZJTEL,RATE,50`. Every canonical frame is `ZJTEL,1,A1|A2,sequence,millis,0xADDR,READY|NOT_FOUND|READ_ERROR,roll_dps,pitch_dps,yaw_dps,LED_READY,device_dropped_frames`. A low-rate legacy `ZJGYRO,DATA` remains for old chart clients. Full I2C scanning is incremental, three addresses maximum per loop pass, every five seconds or via `ZJI2C,SCAN`, and retains previous Arduino human-readable scanner output.
-
-Telemetry is diagnostics only; 50 Hz USB output is **not** the future 250 Hz flight-controller stabilization loop. The sampling loop uses `millis()` and only writes serial frames when UART TX capacity is available. Dropped frames are counted rather than blocking the flight loop. At present no live motor control is implemented in this scanner firmware.
-
-**Python Lab:** LED ACK failure and loss of USB Hardware Serial terminate the Python worker. The **Check Syntax** button validates using Python `ast.parse` without executing user code, and Monaco places line diagnostics on uncaught exceptions. No code is silently edited. Note that current browser autocomplete offers known API methods and snippets; it is not a full static type checker, and arbitrary Python semantics may not be diagnosable before Run.
+**No physical hardware flashing or frequency/jitter certification was performed in GitHub Actions.** Do not use these diagnostics-only firmware images to drive armed flight hardware.
