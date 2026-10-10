@@ -23,6 +23,55 @@ try{
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
  if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
  if(await page.locator('#pythonEditor').isVisible())throw Error('Textarea fallback is covering Monaco');
+
+ // Code editor: long lines scroll horizontally without wrap; long files scroll
+ // vertically inside Monaco. Preserve the current model for the existing tests.
+ const originalSource=await page.evaluate(()=>{
+  const model=window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'));
+  const previous=model.getValue();
+  model.setValue('print("'+('X'.repeat(520))+'")\\n'+Array.from({length:140},(_,i)=>'print('+i+')').join('\\n'));
+  return previous;
+ });
+ await page.waitForTimeout(170);
+ const chromeScroll=()=>page.evaluate(()=>{
+  const root=document.querySelector('#pythonMonaco'),h=root.querySelector('.scrollbar.horizontal .slider'),v=root.querySelector('.scrollbar.vertical .slider');
+  return {horizontal:h?.getBoundingClientRect().x??null,vertical:v?.getBoundingClientRect().y??null,verticalBar:!!v,horizontalBar:!!h,viewport:root.getBoundingClientRect().width};
+ });
+ const beforeScroll=await chromeScroll();
+ if(!beforeScroll.horizontalBar||!beforeScroll.verticalBar)throw Error('Missing Monaco X/Y scrollbar elements');
+ await page.locator('#pythonMonaco .monaco-scrollable-element').hover({position:{x:90,y:140}});
+ await page.mouse.wheel(550,0);
+ await page.waitForTimeout(170);
+ const afterHorizontal=await chromeScroll();
+ if(Math.abs(afterHorizontal.horizontal-beforeScroll.horizontal)<3)throw Error('Long Python line cannot scroll horizontally: '+JSON.stringify({beforeScroll,afterHorizontal}));
+ await page.mouse.wheel(0,600);
+ await page.waitForTimeout(170);
+ const afterVertical=await chromeScroll();
+ if(Math.abs(afterVertical.vertical-afterHorizontal.vertical)<3)throw Error('140-line Python file cannot scroll vertically: '+JSON.stringify({before:afterHorizontal,afterVertical}));
+ await page.evaluate(source=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue(source),originalSource);
+
+ // Browser page scrolling must not move Run / Stop / Rerun out of reach.
+ async function testStickyExecutionToolbar(scroll){
+  await page.evaluate(amount=>{
+   const tab=document.querySelector('#tab-python'),spacer=document.createElement('div');
+   spacer.id='pythonTestScrollSpacer';spacer.style.height='1100px';tab.append(spacer);
+   window.scrollTo({top:amount,behavior:'instant'});
+  },scroll);
+  await page.waitForFunction(()=>document.querySelector('#tab-python .python-project-bar')?.classList.contains('is-stuck'),null,{timeout:6000});
+  const result=await page.evaluate(()=>{
+   const bar=document.querySelector('#tab-python .python-project-bar'),nav=document.querySelector('#app>.tabs'),header=document.querySelector('#app>.topbar');
+   const rect=bar.getBoundingClientRect(),stickyTop=Number.parseFloat(getComputedStyle(document.querySelector('#tab-python')).getPropertyValue('--py-sticky-top'));
+   const run=document.querySelector('#runPythonBtn').getBoundingClientRect(),stop=document.querySelector('#stopPythonBtn').getBoundingClientRect();
+   return {pageY:window.scrollY,top:rect.top,stickyTop,headerBottom:header.getBoundingClientRect().bottom,navBottom:nav.getBoundingClientRect().bottom,run,stop,
+     runVisible:getComputedStyle(document.querySelector('#runPythonBtn')).display!=='none',stopVisible:getComputedStyle(document.querySelector('#stopPythonBtn')).display!=='none'};
+  });
+  if(result.pageY<100||Math.abs(result.top-result.stickyTop)>5||!result.runVisible||!result.stopVisible||result.run.width<55||result.stop.width<55||result.run.top<result.navBottom-5)
+   throw Error('Sticky Python Run/Stop toolbar failed: '+JSON.stringify(result));
+  await page.evaluate(()=>{document.getElementById('pythonTestScrollSpacer')?.remove();window.scrollTo({top:0,behavior:'instant'})});
+  await page.waitForFunction(()=>!document.querySelector('#tab-python .python-project-bar')?.classList.contains('is-stuck'),null,{timeout:6000});
+ }
+ await testStickyExecutionToolbar(420);
+
  await page.locator('#pythonMonaco .monaco-editor').click({position:{x:130,y:88}});
  await page.keyboard.press('ControlOrMeta+Space');
  await page.locator('.suggest-widget').first().waitFor({state:'visible',timeout:10000});
@@ -163,11 +212,12 @@ try{
 
  await page.setViewportSize({width:390,height:800});
  await page.locator('#tab-python.active').waitFor();
+ await testStickyExecutionToolbar(460);
  await page.screenshot({path:'test-output/python-lab-mobile.png',fullPage:true});
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
- console.log('PASS Python Lab: live A1/A2 gyro in Python while True, AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
+ console.log('PASS Python Lab: editor X/Y scroll, sticky Run/Stop on desktop/mobile, live A1/A2 gyro in Python while True, AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
 }catch(error){
  console.error('BROWSER SMOKE FAILED:',error.stack||error);
