@@ -63,6 +63,24 @@ try{
  await page.locator('#stopPythonBtn').click();
  await page.waitForFunction(()=>window.__ledTestWrites.some(x=>x.includes('STOP')),null,{timeout:10000});
  await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
+ // Verify real Pyodide AST validation without running user code.
+ const syntaxBad='def broken(:\\n    pass\\n';
+ await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),syntaxBad);
+ await page.locator('#pythonCheckSyntaxBtn').click();
+ await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='ERROR'&&document.getElementById('pythonTerminal').textContent.includes('SyntaxError'),null,{timeout:90000});
+ const markers=await page.evaluate(()=>window.monaco.editor.getModelMarkers({owner:'zebjus-diagnostics'}));
+ if(!markers.some(x=>x.startLineNumber===1))throw Error('SyntaxError marker is not attached to the invalid Python line: '+JSON.stringify(markers));
+ // Hardware ACK failure must terminate an active while True program.
+ await page.evaluate(()=>{window.DroneLabSerial={...window.__previousDroneSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>(window.__ledTestWrites.push(line),true),firmwareInfo:()=>({boardId:'ZFC-A1',led:'GPIO8 • ACTIVE_LOW'})}});
+ await page.locator('#pythonTarget').selectOption('usb');
+ const loopingLED='from zebjus_simple import Drone\\nimport time\\ndrone=Drone()\\nwhile True:\\n    drone.led(1)\\n    time.sleep(0.2)\\n';
+ await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),loopingLED);
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>window.__ledTestWrites.some(x=>x.includes('SET,100')),null,{timeout:90000});
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:'ZJLED,ACK,1,PIN_CONFLICT'}})));
+ await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='ERROR'&&document.getElementById('pythonTerminal').textContent.includes('PinConflictError'),null,{timeout:12000});
+ if(!(await page.locator('#runPythonBtn').isEnabled()))throw Error('Hardware error did not release Python Run control');
+ await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
  // Verify the actual vendored OpenCV wheel loads in Python, not just in metadata.
  const cvTest="import cv2\nprint('CV2_READY', cv2.__version__)\n";
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),cvTest);
@@ -119,7 +137,7 @@ try{
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
- console.log('PASS Python Lab: Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
+ console.log('PASS Python Lab: AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
 }catch(error){
  console.error('BROWSER SMOKE FAILED:',error.stack||error);
