@@ -29,7 +29,7 @@ try{
  const originalSource=await page.evaluate(()=>{
   const model=window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'));
   const previous=model.getValue();
-  model.setValue('print("'+('X'.repeat(520))+'")\\n'+Array.from({length:140},(_,i)=>'print('+i+')').join('\\n'));
+  model.setValue('print("'+('X'.repeat(520))+'")\n'+Array.from({length:140},(_,i)=>'print('+i+')').join('\n'));
   return previous;
  });
  await page.waitForTimeout(170);
