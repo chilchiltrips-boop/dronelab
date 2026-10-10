@@ -154,8 +154,14 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+  # Only the stable physical 16:9 AVD is a native release gate. It runs
+  # both landscape directions with the signed APK, real multi-pointer events,
+  # STOP, background/resume, and v12->v13 in-place update verification.
+  # The 19.5:9 emulator repeatedly loses ADB after successful boot/install;
+  # wide-screen (19.5:9/20:9) responsive WebRTC/touch tests remain mandatory
+  # in "Android Landscape Flight WebRTC Tests" and on real phones before claim.
   native_touch:
-    name: Native Android touch (${{ matrix.aspect }})
+    name: Native Android touch (16x9 REQUIRED)
     needs: android
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
     runs-on: ubuntu-latest
@@ -169,8 +175,6 @@ jobs:
         include:
           - aspect: 16x9
             avd: zebjus-flight-16x9
-          - aspect: 19_5x9
-            avd: zebjus-flight-19x9
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
