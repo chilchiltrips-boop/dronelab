@@ -7,6 +7,7 @@ on:
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
       - 'tools/release-signing.test.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
@@ -134,17 +135,70 @@ jobs:
           ZEBJUS_TEST_RELEASE: '1'
         run: gradle -p mobile-android :app:assembleReleaseAndroidTest --no-daemon
 
-      - name: Enable emulator hardware acceleration
+      - name: Package exact-source signed native test bundle
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        run: |
+          set -euo pipefail
+          mkdir -p native-test-bundle
+          cp mobile-android/app/build/outputs/apk/androidTest/release/app-release-androidTest.apk native-test-bundle/
+          cp "$RUNNER_TEMP/zebjus-previous.apk" native-test-bundle/
+
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        with:
+          name: ZEBJUS_NATIVE_TOUCH_TEST_BUNDLE
+          path: native-test-bundle/
+          retention-days: 30
+          if-no-files-found: error
+
+  native_touch:
+    name: Native Android touch (${{ matrix.aspect }})
+    needs: android
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - aspect: 16x9
+            avd: zebjus-flight-16x9
+          - aspect: 19_5x9
+            avd: zebjus-flight-19x9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}
+          path: mobile-apk/
+      - uses: actions/download-artifact@v4
+        with:
+          name: ZEBJUS_NATIVE_TOUCH_TEST_BUNDLE
+          path: native-test-bundle/
+      - name: Verify exact APK source and prepare native upgrade fixture
+        run: |
+          set -euo pipefail
+          sha256sum -c mobile-apk/SHA256SUMS.txt
+          grep -Fx "Source commit: $GITHUB_SHA" mobile-apk/ANDROID_RELEASE_META.txt
+          mkdir -p mobile-android/app/build/outputs/apk/androidTest/release
+          cp native-test-bundle/app-release-androidTest.apk mobile-android/app/build/outputs/apk/androidTest/release/
+          cp native-test-bundle/zebjus-previous.apk "$RUNNER_TEMP/zebjus-previous.apk"
+      - name: Enable emulator hardware acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-
-      # 16:9 landscape is the supported phone-cockpit release target. Both
-      # normal and reverse landscape native touchscreen cases run in this step.
-      - name: Production-signed APK upgrade and native 16x9 acceptance
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+      - name: Production-signed APK upgrade and native touch acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -152,19 +206,39 @@ jobs:
           arch: x86_64
           profile: pixel_2
           ram-size: 3072M
-          avd-name: zebjus-flight-16x9
+          avd-name: ${{ matrix.avd }}
           force-avd-creation: true
-          pre-emulator-launch-script: python3 tools/configure-native-avd.py 16x9
+          pre-emulator-launch-script: python3 tools/configure-native-avd.py ${{ matrix.aspect }}
           disable-animations: true
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash tools/native-flight-acceptance.sh 16x9
-
+          script: bash tools/native-flight-acceptance.sh ${{ matrix.aspect }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-native-flight-upgrade-touch-evidence
+          name: android-native-flight-upgrade-touch-evidence-${{ matrix.aspect }}
           path: test-output/native/
           if-no-files-found: ignore
+
+  publish:
+    name: Publish verified main APK
+    needs: [android, native_touch]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_release
+          path: mobile-apk/
+      - name: Verify downloaded release source and checksum
+        run: |
+          set -euo pipefail
+          sha256sum -c mobile-apk/SHA256SUMS.txt
+          grep -Fx "Source commit: $GITHUB_SHA" mobile-apk/ANDROID_RELEASE_META.txt
 
       - name: Require all mandatory checks on the exact source before publication
         if: github.ref == 'refs/heads/main'
