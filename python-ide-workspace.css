@@ -177,3 +177,7 @@
 #tab-python.py-right-max:not(.py-right-closed):not(.py-tool-floating) .python-ide-layout{
  grid-template-columns:var(--py-project-w) minmax(0,1fr) 7px minmax(0,min(68vw,700px)) 38px!important
 }
+
+#tab-python .py-explorer-feedback{padding:7px 8px;min-height:27px;max-height:58px;overflow:auto;
+ border-top:1px solid #284d60;color:#8fbcba;font-size:9px;line-height:1.35}
+#tab-python .py-tree-entry[aria-expanded="false"] .py-ide-icon{opacity:.7}
