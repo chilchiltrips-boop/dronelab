@@ -182,7 +182,7 @@ function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
- receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();audioStop();setStatus('MOTORS OFF');syncActions();renderStickKnobs();drawUI();
+ receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • MOTORS OFF • HOME RESET');syncActions();renderStickKnobs();drawUI();visual?.draw(getSnapshot(s),0);
  window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
 }
 function start(){
@@ -273,24 +273,34 @@ function keyHandler(e,down){
 function pidBank(){
  let loop=$('tpPidLoop').value,axis=$('tpPidAxis').value;
  if(s.mode==='acro'||axis==='yaw'){loop='rate';$('tpPidLoop').value='rate'}
- return loop==='angle'?'angle'+axis[0].toUpperCase()+axis.slice(1):(s.mode==='angle'?'angleRate':'rate')+axis[0].toUpperCase()+axis.slice(1);
+ return (loop==='angle'?'angle':'rate')+axis[0].toUpperCase()+axis.slice(1);
+}
+function syncPIDMatrix(bank=null,values=null){
+ for(const row of $('tpPidMatrix').querySelectorAll('[data-pid-bank]')){
+  const key=row.dataset.pidBank,p=bank===key&&values?values:s.pid[key];
+  for(const gain of ['p','i','d'])row.querySelector('[data-gain="'+gain+'"]').value=p[gain];
+ }
+ $('tpAnglePidSection').hidden=s.mode==='acro';
+ $('tpPidTopology').textContent=s.mode==='acro'
+  ?'ACRO / RATE • Rate Roll/Pitch/Yaw PID only • No Angle PID'
+  :'ANGLE / CASCADE • Angle Roll/Pitch → Rate Roll/Pitch/Yaw • Yaw Rate only';
 }
 function updatePidEditor(){
  $('tpPidLoop').querySelector('option[value=angle]').disabled=s.mode==='acro'||$('tpPidAxis').value==='yaw';
  const bank=pidBank(),p=s.pid[bank];if(!p)return;
  for(const k of ['p','i','d'])$('tpPid'+k.toUpperCase()).value=p[k];
  $('tpReadoutMode').textContent=s.mode==='acro'?'ACRO • RATE':'ANGLE • LEVEL';
- $('tpMode').value=s.mode;
+ $('tpMode').value=s.mode;syncPIDMatrix();
 }
 function coach(){
  const bank=pidBank(),p=s.pid[bank];if(!p)return;
  let msg='Stable baseline. Increase P gradually, then add I to correct persistent offset. Add D sparingly to damp overshoot.';
  if(p.p<.55)msg='LOW P: correction may be weak and slow. Watch how far actual response lags target.';
- else if(p.p>2.1&&bank!=='rateYaw'&&bank!=='angleRateYaw')msg='HIGH P: watch for aggressive correction and possible oscillation.';
- else if(p.i<4&&bank.indexOf('angleRate')!==0&&bank.startsWith('rate'))msg='LOW I: a persistent bias may not be corrected fully.';
+ else if(p.p>2.1&&bank!=='rateYaw')msg='HIGH P: watch for aggressive correction and possible oscillation.';
+ else if(p.i<4&&bank.startsWith('rate'))msg='LOW I: a persistent bias may not be corrected fully.';
  else if(p.i>25)msg='HIGH I: sustained errors can build overshoot and slower recovery.';
  else if(p.d>.12)msg='HIGH D: strong differentiation may amplify fast changes.';
- else if(p.d===0&&bank!=='rateYaw'&&bank!=='angleRateYaw')msg='LOW D: observe overshoot and add damping gradually if needed.';
+ else if(p.d===0&&bank!=='rateYaw')msg='LOW D: observe overshoot and add damping gradually if needed.';
  $('tpCoach').textContent=msg+' Observe live P / I / D terms; this is a teaching heuristic, not a hardware recommendation.';
 }
 function triggerTuningResponse(){
@@ -440,9 +450,9 @@ function drawUI(){
   el.querySelector('.tp-motor-detail').textContent=readable(v.motorRPM[i-1],0)+' / '+readable(v.motorRequestedRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
  }
  const axisForPID=$('tpPidAxis').value,cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
- const outer=s.memory['angle'+cAxis],inner=s.memory[(s.mode==='angle'?'angleRate':'rate')+cAxis];
- $('tpOuterLoop').textContent=outer&&s.mode==='angle'?'Angle '+readable(outer.target)+'° → '+readable(outer.output)+'°/s':'ACRO • outer loop bypassed';
- $('tpOuterTerms').textContent=outer&&s.mode==='angle'?'P '+readable(outer.p)+' • I '+readable(outer.i)+' • D '+readable(outer.d):'Pure angular-rate target';
+ const outer=s.memory['angle'+cAxis],inner=s.memory['rate'+cAxis];
+ $('tpOuterLoop').textContent=outer&&s.mode==='angle'?'Angle '+readable(outer.target)+'° → '+readable(outer.output)+'°/s':axisForPID==='yaw'?'YAW • RATE ONLY':'ACRO • outer loop bypassed';
+ $('tpOuterTerms').textContent=outer&&s.mode==='angle'?'P '+readable(outer.p)+' • I '+readable(outer.i)+' • D '+readable(outer.d):axisForPID==='yaw'?'No yaw angle PID':'Pure angular-rate target';
  $('tpInnerLoop').textContent='Target '+readable(inner.target,1)+'°/s → Actual '+readable(inner.actual,1)+'°/s';
  $('tpInnerTerms').textContent='P '+readable(inner.p)+' • I '+readable(inner.i)+' • D '+readable(inner.d);
  $('tpActuator').textContent=readable(v.motorRPM.reduce((a,b)=>a+b,0)/4,0)+' avg RPM';
@@ -465,7 +475,7 @@ function frame(time){
 window.ZebjusTraining={
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
  setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
- stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();audioStop();setStatus('MOTORS OFF • '+reason);drawUI()},
+ stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI();visual?.draw(getSnapshot(s),0)},
  snapshot:receiver.snapshot,tick:receiver.tick,
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
