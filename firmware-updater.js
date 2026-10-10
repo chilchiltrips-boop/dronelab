@@ -491,12 +491,18 @@ function pushSerialLines(data){
  if(monitorLineBuffer.length>2048)monitorLineBuffer=monitorLineBuffer.slice(-2048);
  for(const line of lines){readUsbTelemetry(line);serialPlotter?.pushLine(line);try{window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,at:Date.now()}}))}catch{}}
 }
+let serialDisplayBuffer='';
 function appendSerialOutput(value){
  if(!value)return;
  const out=$('#fwSerialOutput');
- if(out){
+ serialDisplayBuffer+=value;
+ const lines=serialDisplayBuffer.split(/\r\n|\n|\r/);
+ serialDisplayBuffer=lines.pop()||'';
+ if(serialDisplayBuffer.length>2048)serialDisplayBuffer=serialDisplayBuffer.slice(-2048);
+ if(out&&lines.length){
   const scroll=$('#fwSerialAutoScroll')?.checked!==false;
-  out.textContent=(out.textContent+value).slice(-48000);
+  const complete=lines.filter(line=>line.trim().length).join('\n');
+  if(complete)out.textContent=(out.textContent+complete+'\n').slice(-48000);
   if(scroll)out.scrollTop=out.scrollHeight;
  }
  pushSerialLines(value);
