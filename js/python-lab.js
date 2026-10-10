@@ -221,6 +221,32 @@ function addCompletions(M){
    const names=[],seen=new Set(examples.map(x=>x[0]));
    const add=(name,kind,detail)=>{if(!name||seen.has(name)||name.startsWith('_'))return;seen.add(name);names.push([name,name,kind,detail])};
    const code=model.getValue();
+   // Provide member suggestions for objects created with Drone(), and core modules.
+   const before=model.getLineContent(position.lineNumber).slice(0,word.startColumn-1);
+   const dot=before.match(/([A-Za-z_]\w*)\.$/);
+   if(dot){
+    const owner=dot[1];
+    const drones=new Set([...code.matchAll(/\b([A-Za-z_]\w*)\s*=\s*Drone\s*\(/g)].map(m=>m[1]));
+    const functions={
+     led:['led(1)','Board LED ON (1) or OFF (0)'],
+     led_brightness:['led_brightness(50)','Brightness 0..100 percent'],
+     led_blink:['led_blink(500, 500, 100)','ON ms / OFF ms / brightness'],
+     led_fade:['led_fade(1200)','Breathing fade, duration in milliseconds'],
+     led_safe:['led_safe()','Gentle safe-status indicator'],
+     led_warning:['led_warning()','Double flash warning pattern'],
+     led_sos:['led_sos()','SOS Morse pattern'],
+     led_pattern:['led_pattern([(100,150),(0,900)])','Custom brightness/duration sequence'],
+     led_stop:['led_stop()','Switch LED off and end effect'],
+     i2c_scan:['i2c_scan()','Last complete I2C scan (or None)'],
+     latest_i2c_scan:['latest_i2c_scan()','Latest I2C scan snapshot']
+    };
+    const methods=drones.has(owner)?functions:
+      owner==='time'?{sleep:['sleep(1)','Wait in seconds with no await'],time:['time()','Unix time in seconds']}:
+      owner==='cv2'?{cvtColor:['cvtColor(image, cv2.COLOR_BGR2GRAY)','Convert color'],resize:['resize(image,(320,240))','Resize image'],GaussianBlur:['GaussianBlur(image,(5,5),0)','Blur image']}:{};
+    return {suggestions:Object.entries(methods).map(([label,[insertText,documentation]])=>({
+     label,insertText,documentation,kind:K.Method,range,sortText:'0'+label
+    }))};
+   }
    for(const m of code.matchAll(/^\s*([A-Za-z_]\w*)\s*=\s*/gm))add(m[1],K.Variable,'Your Python variable');
    for(const m of code.matchAll(/^\s*for\s+([A-Za-z_]\w*)\s+in\s+/gm))add(m[1],K.Variable,'Python for-loop variable');
    for(const m of code.matchAll(/^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/gm))add(m[1],K.Function,'Your Python function');
