@@ -38,6 +38,8 @@ The protected HOME key and activity return use Android's shell input/activity se
 
 CI boots two fresh named AVDs, one per aspect ratio, and repeats APK12→13 installation/data retention plus forward/reverse native input in each. Both emulator steps must succeed before the mandatory release gate. This avoids the observed emulator 37.2.12 connection loss when changing the two display sizes in one running virtual device; it does not omit the wider-screen cases. Snapshot save/load is disabled for these disposable test devices.
 
+Physical LCD width/height/density are written to each disposable AVD before boot, and acceptance checks the reported physical size. The running emulator is never resized; emulator 37.2.12 also lost connection when applying the wider runtime override on a fresh device. The four native assertions/foreground captures remain required. AVD configuration follows Android's documented override of hardware-profile properties: https://developer.android.com/studio/run/managing-avds .
+
 Android immersive API guidance: https://developer.android.com/develop/ui/views/layout/immersive
 
 The integration preserves main's WebApp 1.6.3 shared PID shell and persistent connection settings. APK 1.6.2/versionCode 13 is an independent Android version. Publication now also requires the shared PID shell WebRTC workflow for the exact source SHA, in addition to the original five browser/regression workflows and native signed-APK acceptance.

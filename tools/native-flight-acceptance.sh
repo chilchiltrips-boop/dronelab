@@ -40,7 +40,8 @@ adb shell svc data disable
 # independent AVDs and requires BOTH forward/reverse runs in each, with a new
 # APK12->13 preference-preserving upgrade in each device.
 adb shell am force-stop in.zebjus.dronelab.companion
-adb shell wm size "${display_w}x${display_h}"
+adb shell wm size | tee "test-output/native/display-metrics-${label}.txt"
+grep -q "Physical size: ${display_w}x${display_h}" "test-output/native/display-metrics-${label}.txt"
 run_case "touch-${label}" -e expectedPreset Fast
 run_case "touch-reverse-${label}" -e expectedPreset Fast -e reverse true
 adb logcat -d -t 1200 > "test-output/native/logcat-${label}.txt"

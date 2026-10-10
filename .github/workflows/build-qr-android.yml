@@ -150,6 +150,7 @@ jobs:
           profile: pixel_2
           avd-name: zebjus-flight-16x9
           force-avd-creation: true
+          pre-emulator-launch-script: python3 tools/configure-native-avd.py 16x9
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash tools/native-flight-acceptance.sh 16x9
@@ -164,6 +165,7 @@ jobs:
           profile: pixel_2
           avd-name: zebjus-flight-19x9
           force-avd-creation: true
+          pre-emulator-launch-script: python3 tools/configure-native-avd.py 19_5x9
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: bash tools/native-flight-acceptance.sh 19_5x9
