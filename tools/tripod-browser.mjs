@@ -118,7 +118,13 @@ try{
    const r=s=>{const x=document.querySelector(s)?.getBoundingClientRect();return x&&{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}};
    return {scroll:document.documentElement.scrollWidth,view:r('.tp-view-panel'),sticks:r('.tp-sticks'),vertical:r('.tp-vertical'),pid:r('.tp-pid-panel'),telemetry:r('.tp-telemetry'),env:r('.tp-env-panel'),ab:r('.tp-ab-compare'),rate:r('#tpRatePidSection'),angle:r('#tpAnglePidSection'),left:r('#tpLeftPad'),right:r('#tpRightPad')}
   });
-  if(m.scroll>width+2)throw Error('Responsive PID page overflow '+JSON.stringify({width,m}));
+  if(m.scroll>width+2){
+   const offenders=await page.evaluate(()=>[...document.body.querySelectorAll('*')]
+    .map(e=>{const r=e.getBoundingClientRect();return {tag:e.tagName,id:e.id,cls:typeof e.className==='string'?e.className.slice(0,90):'',left:r.left,right:r.right,width:r.width,scroll:e.scrollWidth,top:r.top}})
+    .filter(x=>x.right>innerWidth+1&&x.width>0)
+    .sort((a,b)=>b.right-a.right).slice(0,24));
+   throw Error('Responsive PID page overflow '+JSON.stringify({width,m,offenders}));
+  }
   const {view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right}=m;
   if([view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right].some(x=>!x||x.width<50))throw Error('PID section clipped or missing '+JSON.stringify({width,m}));
   if(width>1050){
