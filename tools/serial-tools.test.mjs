@@ -227,3 +227,15 @@ test('both Firmware pages have structured raw serial and no obsolete View select
  }
  for(const x of ['lastVerifiedRuntime','readUnifiedTelemetry','renderLiveDiagnosticLine','configureDiagnosticTick','serialVisibleLine','usb-live-diagnostic.js'])assert.ok(source.includes(x),x);
 });
+
+test('raw serial monitor suppresses legacy scan banners but keeps telemetry frames',()=>{
+ const begin=s=>s.indexOf('function serialVisibleLine(');
+ const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=begin(src),end=src.indexOf('let serialDisplayBuffer=',start);
+ assert.ok(start>0&&end>start,'serial display filter is present');
+ const ctx={};vm.runInNewContext(src.slice(start,end)+';globalThis.visible=serialVisibleLine;',ctx);
+ for(const line of ['Scanning I2C bus...','✔ Found device at 0x6B','✅ Total I2C devices found: 1','-----------------------------','ZJSCAN,A1,1799614,1','ZJGYRO,DATA,A1,LSM6DS3,0x6B,1.89,-6.02,-2.03'])
+  assert.equal(ctx.visible(line),null,line);
+ assert.equal(ctx.visible('ZJTEL,1,A1,354,1799465,0x6B,READY,1.96,-6.02,-1.96,LED_READY,0'),'ZJTEL,1,A1,354,1799465,0x6B,READY,1.96,-6.02,-1.96,1,0');
+ assert.equal(ctx.visible('ZJTEL,1,A1,355,1799565,0x6B,READY,2.03,-6.02,-1.89,1,0'),'ZJTEL,1,A1,355,1799565,0x6B,READY,2.03,-6.02,-1.89,1,0');
+});
