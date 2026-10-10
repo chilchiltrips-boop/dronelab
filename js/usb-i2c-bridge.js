@@ -76,7 +76,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
   if(!line)return null;
   const f=line.split(',');
   if(f[0]==='ZJTEL'&&f[1]==='1'&&f.length===12){
-   const board=f[2],spec=FLIGHTCORE_GYROS[board],addr=f[5].toUpperCase();
+   const board=f[2],spec=FLIGHTCORE_GYROS[board],addr=/^0x[0-9a-f]{2}$/i.test(f[5])?'0x'+f[5].slice(2).toUpperCase():'';
    const seq=Number(f[3]),ms=Number(f[4]),drops=Number(f[11]);
    if(!spec||addr!==spec.address||![seq,ms,drops].every(x=>Number.isSafeInteger(x)&&x>=0))return null;
    unifiedSeen=true;
@@ -86,7 +86,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
   }
   if(f[0]==='ZJGYRO'&&f[1]==='STATUS'&&f.length>=6){
    const board=f[2],spec=FLIGHTCORE_GYROS[board];
-   if(spec&&f[3]===spec.sensor&&f[4].toUpperCase()===spec.address&&f[5]!=='READY')
+   if(spec&&f[3]===spec.sensor&&/^0x[0-9a-f]{2}$/i.test(f[4])&&('0x'+f[4].slice(2).toUpperCase())===spec.address&&f[5]!=='READY')
     fail(spec.sensor+' '+spec.address+' on '+board+' is '+f[5]+'. Check SDA/SCL, 3V3, GND.');
    return null;
   }
@@ -94,7 +94,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
   // low-rate legacy frame after a versioned ZJTEL stream has been seen.
   if(!unifiedSeen&&f[0]==='ZJGYRO'&&f[1]==='DATA'&&f.length===8){
    const board=f[2],spec=FLIGHTCORE_GYROS[board];
-   if(spec&&f[3]===spec.sensor&&f[4].toUpperCase()===spec.address)
+   if(spec&&f[3]===spec.sensor&&/^0x[0-9a-f]{2}$/i.test(f[4])&&('0x'+f[4].slice(2).toUpperCase())===spec.address)
     return makeReading(board,spec.address,f[5],f[6],f[7],'ZJGYRO');
   }
   return null;
