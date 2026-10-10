@@ -43,7 +43,7 @@ try{
  await page.locator('#pairCreateBtn').click();await page.waitForFunction(()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
  check(await page.evaluate(()=>window.__cameraCalls===0),'Step 1 starts laptop webcam');
 
- await page.locator('#pairStep1NextBtn').click();check(await page.locator('#pairStep1').getAttribute('open')===null,'Step 1 not collapsed on Next');
+ await page.locator('#pairStep1NextBtn').click();check(await page.locator('#pairStep1').getAttribute('open')!==null,'QR Step 1 must remain visible beside code in compact Settings');check(await page.locator('#pairStep2').getAttribute('open')!==null,'CONNECT Code Step 2 must open beside QR');
  await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:dir+'/settings-step2-code-1366x768.png',fullPage:true});await inventory('pair-step2-code');
  await page.locator('#pairCameraMode').click();await page.locator('#pairScanAnswerBtn').click();
  await page.waitForFunction(()=>document.getElementById('pairAnswerState').textContent.includes('denied')||document.getElementById('pairAnswerState').textContent.includes('Permission'));
@@ -63,12 +63,13 @@ try{
  await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
  await page.evaluate(()=>{location.hash='wiring'});await page.locator('#tab-wiring.active').waitFor();
  for(const hash of ['simcontrol','flight','led']){
-  await page.goto(base+'#'+hash);await page.waitForURL('**/tripod.html*');await page.waitForFunction(()=>window.ZebjusTraining);
-  check(await page.locator('iframe').count()===0,'Legacy bookmark created duplicate simulator');
+  await page.goto(base+'#'+hash);
+  await page.waitForFunction(()=>location.hash==='#pid'&&document.getElementById('tab-pid')?.classList.contains('active'));
+  await page.waitForFunction(()=>window.ZebjusTraining?.isReady?.(),null,{timeout:30000});
+  check(await page.locator('#pidFrame').count()===1,'Legacy bookmark created more than one simulator');
   check(!await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Navigation retained ARM');
-  if(await page.locator('#connectionDialog').evaluate(d=>d.open))await page.locator('#connectionClose').click();
-  await page.locator('.tp-nav a[href="./index.html#assembly"]').click();await page.waitForFunction(()=>document.getElementById('app')?.dataset.ready==='true');
-  check(await page.evaluate(()=>!window.ZebjusTraining),'Main tab retained hidden Flight Training plant');
+  await page.locator('[data-tab=assembly]').click();await page.waitForFunction(()=>document.getElementById('tab-assembly')?.classList.contains('active'));
+  check(await page.evaluate(()=>!!window.ZebjusTraining?.isReady?.()&&!window.ZebjusTraining.snapshot().armed),'Switching labs discarded mounted safe PID receiver');
  }
  await page.goto(base+'companion.html');await page.locator('#flightSettings').click();check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
  check(await page.locator('#copyAnswerBtn').isDisabled(),'Copy response enabled without response');
@@ -89,7 +90,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('offerState').textContent==='Invalid or expired QR');
  await page.locator('#resetPairBtn').click();check(await page.locator('#useOfferBtn').isDisabled(),'Reset retains manual offer');
  check(!errors.length,'JavaScript errors: '+errors.join('; '));check(!failed.length,'Failed local assets: '+JSON.stringify(failed));
- console.log('PASS: viewport screenshots, compact steps, hashes, permission denied/cancel/reopen, camera dialog cleanup, Flight Training, unavailable firmware controls; 0 JS errors/failed local assets');
+ console.log('PASS: viewport screenshots, horizontal QR/CONNECT, legacy hashes to persistent PID Tuning, camera permission/cancellation and firmware controls; 0 JS errors/failed assets');
 }finally{
  writeFileSync(dir+'/metrics.json',JSON.stringify({environment:process.env.DRONELAB_TEST_FILE_ROUTES==='1'?'file-route sandbox; ICE timing simulated for QR rendering':'HTTP Chromium',errors,failed,data:metrics},null,2));
  writeFileSync(dir+'/controls.json',JSON.stringify(controls,null,2));
