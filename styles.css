@@ -1162,3 +1162,32 @@ button:disabled,.btn:disabled{transform:none!important;box-shadow:none!important
 .topbar-main .qr-header-controls{gap:9px}
 @media(max-width:1050px){.top-grant-control span:first-child{max-width:92px;white-space:normal;font-size:10px}.settings-connection-pill{display:none}}
 @media(max-width:720px){#pidFrame{height:max(780px,calc(100dvh - 174px))}.settings-heading{padding:12px}.top-grant-control{font-size:10px}}
+
+
+/* Main WebApp header is identical while Assembly, Wiring, Python, PID, Settings
+ * and Firmware are selected; compact 2-row responsive fallback. */
+#app .topbar-main{grid-template-areas:"brand shop pairing edit";grid-template-columns:minmax(205px,auto) minmax(105px,1fr) auto auto;gap:11px}
+#app .topbar-main>.brand{grid-area:brand}
+#app .topbar-main>.zebjus-top-shop{grid-area:shop;justify-self:center}
+#app .topbar-main>.qr-header-controls{grid-area:pairing;justify-content:end;min-width:0;margin:0;flex-wrap:nowrap}
+#app .topbar-main>.topbar-edit{grid-area:edit;justify-self:end}
+#app .topbar-main #mobileHeaderStatus{max-width:142px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#app .topbar-main .qr-build-version{padding:7px;font-size:9px}
+#app .topbar-main .top-grant-control{font-size:10px}
+#app .topbar-main .top-grant-control span:first-child{max-width:91px;line-height:1.2}
+@media(max-width:1420px){
+ #app .topbar-main>.zebjus-top-shop{display:none}
+ #app .topbar-main{grid-template-areas:"brand pairing edit";grid-template-columns:minmax(190px,1fr) auto auto}
+}
+@media(max-width:1060px){
+ #app .topbar-main{grid-template-areas:"brand pairing" "edit edit";grid-template-columns:minmax(0,1fr) auto;gap:7px}
+ #app .topbar-main>.topbar-edit{justify-self:end}
+}
+@media(max-width:670px){
+ #app .topbar-main{grid-template-areas:"brand brand" "pairing pairing" "edit edit";grid-template-columns:minmax(0,1fr)}
+ #app .topbar-main>.qr-header-controls{justify-content:space-between;gap:6px;flex-wrap:wrap}
+ #app .topbar-main #mobileHeaderStatus{display:none}
+ #app .topbar-main .top-grant-control span:first-child{max-width:none}
+ #app .topbar-main>.topbar-edit{justify-self:end}
+ .settings-workspace{padding:7px!important}
+}
