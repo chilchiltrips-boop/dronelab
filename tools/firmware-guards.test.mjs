@@ -28,7 +28,7 @@ test('APP erase request cannot reach a writer',async()=>{
 });
 test('ROM boot output and scanner-only text cannot claim firmware startup without live ZJINFO',()=>{
  const ctx={monitorPendingScan:true,monitorBootText:'',usbRuntimeInfo:null,usbFlashBoardId:'',usbFlashPhase:'idle',usbRomDownload:false,logs:[], $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log:v=>ctx.logs.push(v)};
- const code=source.slice(source.indexOf('function appendSerialOutput('),source.indexOf('function clearSerialOutput('));
+ const code=source.slice(source.indexOf('function serialVisibleLine('),source.indexOf('function clearSerialOutput('));
  vm.runInNewContext(code+';globalThis.append=appendSerialOutput;',ctx);
  ctx.append('ESP-ROM:esp32c3-api1-20210207\nwaiting for download\n');
  assert.equal(ctx.monitorPendingScan,true);
