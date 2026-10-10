@@ -133,3 +133,12 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
  .tp-command-buttons{max-width:100%;gap:7px}
  .tp-command-buttons button{min-width:88px;white-space:normal}
 }
+
+/* Camera toolbar must wrap inside the 3D card at 320px; never push scene
+   status outside the card. All camera/effects/quality controls stay visible. */
+@media(max-width:540px){
+ .tp-view-panel>.panel-title{flex-wrap:wrap;align-items:flex-start}
+ .tp-view-panel>.panel-title>div:first-child{min-width:0;width:100%}
+ .tp-view-panel .tp-view-actions{width:100%;max-width:100%;min-width:0;flex:1 1 100%;justify-content:flex-start}
+ .tp-view-panel .tp-view-actions .smallstate{white-space:normal;max-width:100%;min-width:0;margin-left:0;overflow-wrap:anywhere}
+}
