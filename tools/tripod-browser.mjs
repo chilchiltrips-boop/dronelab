@@ -8,7 +8,7 @@ page.on('pageerror',e=>errors.push(e.message));
 const text=async id=>page.locator('#'+id).textContent();
 const until=(code,timeout=10000)=>page.waitForFunction(code,null,{timeout});
 try{
- await page.goto('http://127.0.0.1:8765/tripod.html');
+ await page.goto('http://127.0.0.1:8765/tripod.html?standalone=1');
  await until(()=>document.querySelector('#tpSceneStatus')?.textContent!=='Preparing 3D…');
  const docText=await page.locator('body').textContent();
  if(/CONNECT USB SERIAL|STA MODE|AP MODE/.test(docText))throw Error('Hardware controls must not exist in Tripod page');
