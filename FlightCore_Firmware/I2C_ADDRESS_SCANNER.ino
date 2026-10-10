@@ -265,7 +265,7 @@ void scanI2C(unsigned long now){
  if(!scanActive){
   if(!scanRequested&&now-lastScanStart<SCAN_PERIOD_MS)return;
   scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;lastScanStart=now;
-  Serial.println("Scanning I2C bus...\\n");
+  Serial.println("Scanning I2C bus...\n");
  }
  for(uint8_t budget=0;budget<3&&scanAddress<127;budget++,scanAddress++){
   Wire.beginTransmission(scanAddress);
@@ -281,9 +281,9 @@ void scanI2C(unsigned long now){
   }
  }
  if(scanAddress>=127){
-  if(!scanCount)Serial.println("❌ No I2C devices found.\\n");
-  else{Serial.print("\\n✅ Total I2C devices found: ");Serial.println(scanCount);}
-  Serial.println("\\n-----------------------------\\n");
+  if(!scanCount)Serial.println("❌ No I2C devices found.\n");
+  else{Serial.print("\n✅ Total I2C devices found: ");Serial.println(scanCount);}
+  Serial.println("\n-----------------------------\n");
   Serial.print("ZJSCAN,");Serial.print(GYRO_BOARD);Serial.print(',');
   Serial.print(now);Serial.print(',');Serial.println(scanCount);
   scanActive=false;
@@ -328,7 +328,7 @@ void setup(){
  pinMode(LED_PIN,OUTPUT);
  ledcAttach(LED_PIN,5000,8);
  ledOff();
- Serial.println("\\n=== I2C Address Scanner ===");
+ Serial.println("\n=== I2C Address Scanner ===");
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
  lastGyro=millis()-GYRO_PERIOD_MS;
