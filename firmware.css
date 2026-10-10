@@ -116,3 +116,8 @@
  .firmware-page .firmware-target-option.usb>.firmware-connect-buttons{grid-column:1/-1;width:100%;min-width:0}
  .firmware-page .firmware-connect-buttons>.btn{flex:1 1 160px}
 }
+
+/* Structured raw USB serial: each received frame occupies exactly one row. */
+#fwSerialOutput.fw-raw-lines{white-space:pre;overflow-x:auto;overflow-y:auto;overscroll-behavior:contain;tab-size:2;line-height:1.65;min-height:230px;max-height:410px;padding:12px 15px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#fwSerialOutput.fw-raw-lines::-webkit-scrollbar{width:11px;height:11px}
+#fwSerialOutput.fw-raw-lines::-webkit-scrollbar-thumb{background:#486879;border-radius:7px}
