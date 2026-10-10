@@ -405,24 +405,45 @@ function selectSerialView(view){
 function readUnifiedTelemetry(line){
  const p=String(line||'').trim().split(',');
  if(p[0]==='ZJTEL'&&p[1]==='ACK'&&p[2]==='RATE'){
-  const rate=Number(p[3]);
-  if([10,20,50].includes(rate)){telRateActual=rate;text('#fwTelStatus','Streaming '+rate+' Hz');}
-  return true;
+  const rate=Number(p[3]);if([10,20,50].includes(rate)){telRateActual=rate;text('#fwTelStatus','Streaming '+rate+' Hz');}return true
  }
- if(p[0]==='ZJTEL'&&p[1]==='ERR'){
-  text('#fwTelStatus','Rate rejected: '+p.slice(2).join(','));
-  return true;
- }
- if(p.length!==12||p[0]!=='ZJTEL'||p[1]!=='1'||!/^A[12]$/.test(p[2]))return false;
- const seq=Number(p[3]),stamp=Number(p[4]),loss=Number(p[11]);
- if(!Number.isSafeInteger(seq)||!Number.isSafeInteger(stamp)||!Number.isSafeInteger(loss))return false;
- if(telRxSeq!==null&&seq>telRxSeq+1)telMissed+=seq-telRxSeq-1;
- telRxSeq=seq;telLastAt=Date.now();telDeviceDrops=loss;
- const expected=p[2]==='A1'?'LSM6DS3':'MPU6050';
- usbSensorState=expected+' '+p[5]+' • '+p[6];
- usbLedState=p[10];
+ if(p[0]==='ZJTEL'&&p[1]==='ERR'){diagnosticError='BAD_RATE';text('#fwTelStatus','Rate rejected: '+p.slice(2).join(','));return true}
+ if(p[0]!=='ZJTEL'||p[1]!=='1')return false;
+ const sample=liveDiagnostic?.parseTelemetry(line);
+ if(!sample){diagnosticError='BAD_FRAME';return false}
+ const boardId='ZFC-'+sample.board;
+ if((usbBoardId&&usbBoardId!==boardId)||(usbRuntimeInfo?.boardId&&usbRuntimeInfo.boardId!==boardId)){diagnosticError='BOARD_MISMATCH';return false}
+ if(telRxSeq!==null&&sample.sequence>telRxSeq+1)telMissed+=sample.sequence-telRxSeq-1;
+ if(telRxSeq!==null&&sample.sequence<=telRxSeq)telMissed=0;
+ telRxSeq=sample.sequence;telLastAt=Date.now();telDeviceDrops=sample.deviceDrops;
+ diagnosticSample=sample;diagnosticAt=telLastAt;diagnosticError='';
+ usbSensorState=sample.sensor+' '+sample.address+' • '+sample.sensorStatus;
+ usbLedState=sample.led;
  text('#fwTelStatus','Live • '+(telRateActual||($('#fwTelRate')?.value||20))+' Hz • dropped '+(telMissed+telDeviceDrops));
- return true;
+ return true
+}
+function renderLiveDiagnosticLine(now=Date.now()){
+ const e=$('#fwLiveDiagnosticLine');if(!e||!liveDiagnostic)return;
+ const rate=telRateActual||Number($('#fwTelRate')?.value)||20;
+ const value=liveDiagnostic.formatDiagnostic({
+  sample:diagnosticSample,now,lastAt:diagnosticAt,connected:!!monitorPort,
+  bootloader:!!loader||usbRomDownload,firmware:usbRuntimeInfo?.version||'?',
+  missed:telMissed,error:diagnosticError,staleAfter:Math.max(250,3000/rate),
+  lastRenderedSeq:diagnosticRenderedSeq
+ });
+ e.textContent=value.text;e.dataset.state=value.state;
+ text('#fwDiagnosticState',value.state+' • '+(diagnosticAt?Math.max(0,now-diagnosticAt)+' ms since sample':'no gyro sample'));
+ diagnosticRenderedSeq=diagnosticSample?.sequence??null;
+}
+function configureDiagnosticTick(){
+ if(diagnosticTimer)clearInterval(diagnosticTimer);
+ diagnosticTimer=setInterval(renderLiveDiagnosticLine,1000/(Number($('#fwTelRate')?.value)||20));
+ renderLiveDiagnosticLine();
+}
+function serialMonitorDisplayMode(){
+ const raw=$('#fwSerialViewMode')?.value==='raw';
+ for(const id of ['#fwLiveDiagnosticLine','#fwDiagnosticState']){const e=$(id);if(e)e.hidden=raw}
+ const out=$('#fwSerialOutput');if(out)out.hidden=!raw;
 }
 async function setUsbTelemetryRate(rate){
  const n=Number(rate);
@@ -491,7 +512,7 @@ function appendSerialOutput(value){
   log('Live USB firmware identity verified: '+usbRuntimeInfo.boardId+' v'+usbRuntimeInfo.version+'.');
  }
 }
-function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';monitorLineBuffer=''}
+function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
 function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
 async function closeSerialMonitor(keepWanted=false){
  if(!keepWanted)monitorWanted=false;
@@ -652,6 +673,7 @@ async function disconnectAllUsb(){
  await closeSerialMonitor();await disconnectUsb();usbLastPort=null;usbLastInfo=null;monitorPendingScan=false;
 }
 function initSerialTools(){
+ import('./js/usb-live-diagnostic.js').then(mod=>{liveDiagnostic=mod;renderLiveDiagnosticLine()}).catch(e=>log('Live diagnostic parser unavailable: '+e.message));
  window.DroneLabSerial={
    connect:()=>openSerialMonitor(),
    reconnect:()=>reconnectSerialMonitor(),
@@ -675,7 +697,9 @@ function initSerialTools(){
  $('#fwSerialSendBtn')?.addEventListener('click',sendSerialMessage);
  $('#fwLedTestBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJLED,900,BLINK,250,250,100\n','LED test (4-second safety timeout)'));
  $('#fwI2cScanBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJI2C,SCAN\n','I2C scan'));
- $('#fwTelRate')?.addEventListener('change',e=>void setUsbTelemetryRate(e.target.value));
+ $('#fwTelRate')?.addEventListener('change',e=>{configureDiagnosticTick();void setUsbTelemetryRate(e.target.value)});
+ $('#fwSerialViewMode')?.addEventListener('change',serialMonitorDisplayMode);
+ $('#fwReadRunningBtn')?.addEventListener('click',()=>openSerialMonitor().catch(e=>log('Read Running Firmware: '+e.message)));
  $('#fwSerialInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendSerialMessage()}});
  $('#fwPlotClearBtn')?.addEventListener('click',()=>serialPlotter?.clear());
  $('#fwSerialBaud')?.addEventListener('change',()=>{
@@ -703,7 +727,7 @@ function initSerialTools(){
    void openSerialMonitor({port,allowPrompt:false}).catch(error=>log('USB auto reconnect: '+error.message));
   });
  }
- serialUi(false);selectSerialView('monitor');
+ serialUi(false);selectSerialView('monitor');serialMonitorDisplayMode();configureDiagnosticTick();
 }
 async function rebootKit(){const{s,d,online}=kitStatus();if(!online)return log('Kit is offline.');if(d.armed)return log('Reboot blocked: DISARM the kit first.');if(!s?.canControl?.())return log('Take Control before reboot.');if(!await confirmInLab('Reboot the selected flight controller now?'))return;try{badge('#fwOverallBadge','REBOOTING','warn');resetStages();stage('Reboot','active');progress(45,'Sending reboot command…');const j=await s.client.reboot();if(j?.ok===false)throw new Error(j.message||'Reboot failed');s.markOffline?.('Manual reboot');stage('Reboot','done');stage('Reconnect','active');progress(65,'Waiting for kit…');for(let i=0;i<20;i++){await sleep(1000);const d2=await s.reconnectNow?.().catch(()=>null);if(d2?.online){stage('Reconnect','done');progress(100,'Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good');return}}throw new Error('Reconnect timed out')}catch(e){badge('#fwOverallBadge','RECONNECT','warn');log(e.message)}}
 async function reconnectKit(){const s=school();if(!s)return;stage('Reconnect','active');progress(60,'Reconnecting to kit…');try{const d=await s.reconnectNow?.(true);if(d?.online){stage('Reconnect','done');progress(100,'Kit online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}else throw new Error('Kit not found yet.')}catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}}
