@@ -5,12 +5,13 @@
 
 // FlightCore USB diagnostics v1.2.1; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.2.1";
+constexpr const char* FW_VERSION="1.2.2";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
-constexpr uint8_t BUS_SDA=22,BUS_SCL=23;
+constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
 #else
-constexpr uint8_t BUS_SDA=4,BUS_SCL=5;
+constexpr uint8_t BUS_SDA=SDA,BUS_SCL=SCL; // Arduino ESP32-C3 Dev Module default: GPIO8 / GPIO9
+constexpr uint8_t ALT_BUS_SDA=4,ALT_BUS_SCL=5; // optional wiring that frees the onboard LED
 constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS FlightCore A1 SuperMini";
 #endif
 
@@ -27,24 +28,28 @@ enum LedMode:uint8_t {LED_OFF,LED_MANUAL,LED_BLINK,LED_FADE,LED_SAFE,LED_WARNING
 LedMode ledMode=LED_OFF;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,lastScan=0;
+uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
+bool ledAvailable=true,usingAlternateBus=false;
 uint16_t onDuration=500,offDuration=500,fadeDuration=1200;
 char serialLine[192];size_t serialUsed=0;
 
-void ledLevel(uint8_t pct){ledcWrite(LED_PIN,255-(uint32_t(constrain(pct,0,100))*255/100));}
+void ledLevel(uint8_t pct){if(ledAvailable)ledcWrite(LED_PIN,255-(uint32_t(constrain(pct,0,100))*255/100));}
 void ledOff(){ledMode=LED_OFF;manualBrightness=0;patternCount=0;ledLevel(0);}
 void printFirmwareInfo(){
  Serial.print("ZJINFO,FW,");Serial.print(FC_BOARD);Serial.print(',');
  Serial.print(FW_VERSION);Serial.print(',');Serial.print(__DATE__);Serial.print(',');
  Serial.print(__TIME__);Serial.print(',');Serial.println(FC_LABEL);
  Serial.print("ZJI2C,PINS,");Serial.print(FC_BOARD);Serial.print(',');
- Serial.print(BUS_SDA);Serial.print(',');Serial.print(BUS_SCL);Serial.print(",0x");
+ Serial.print(activeSda);Serial.print(',');Serial.print(activeScl);Serial.print(",0x");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  Serial.println("68");
 #else
  Serial.println("6B");
 #endif
  Serial.print("ZJLED,INFO,");Serial.print(FC_BOARD);Serial.print(",GPIO");
- Serial.print(LED_PIN);Serial.println(",ACTIVE_LOW");
+ Serial.print(LED_PIN);
+ Serial.println(ledAvailable?",ACTIVE_LOW":",UNAVAILABLE,SDA_CONFLICT");
+ Serial.print("ZJI2C,MODE,");Serial.print(FC_BOARD);Serial.println(usingAlternateBus?",ALTERNATE_4_5":",ARDUINO_DEFAULT");
 }
 void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
@@ -62,6 +67,13 @@ void ledCommand(char* line){
  char* id=strtok_r(line+6,",",&state);
  char* action=strtok_r(nullptr,",",&state);
  if(!id||!action)return;
+ // GPIO8 is both the C3 SuperMini onboard LED and Arduino default SDA.
+ // Never attach PWM or alter this pin while I2C uses it.
+ if(!ledAvailable){
+  if(!strcmp(action,"STOP")){ledOff();ledAck(id,"OK");}
+  else ledAck(id,"PIN_CONFLICT");
+  return;
+ }
  // Heartbeats do not alter the running pattern.
  if(!strcmp(action,"KEEP")){leaseStart=millis();ledAck(id,"OK");return;}
  long a=0,b=0,c=0;LedMode next=LED_OFF;
@@ -259,17 +271,42 @@ void scanI2C(){
  else{Serial.print("\n✅ Total I2C devices found: ");Serial.println(deviceCount);}
  Serial.println("\n-----------------------------\n");
 }
+// Probe only the expected IMU at startup. The full address scan stays unchanged.
+bool detectedImuOnBus(){
+ Wire.beginTransmission(GYRO_ADDR);
+ return Wire.endTransmission()==0;
+}
+void selectI2cBus(){
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ Wire.begin(BUS_SDA,BUS_SCL);Wire.setClock(400000);
+ activeSda=BUS_SDA;activeScl=BUS_SCL;
+#else
+ // Match the user's proven Arduino IDE Wire.begin() sketch first.
+ Wire.begin();Wire.setClock(400000);
+ activeSda=BUS_SDA;activeScl=BUS_SCL;
+ if(!detectedImuOnBus()){
+  Wire.end();
+  Wire.begin(ALT_BUS_SDA,ALT_BUS_SCL);Wire.setClock(400000);
+  if(detectedImuOnBus()){activeSda=ALT_BUS_SDA;activeScl=ALT_BUS_SCL;usingAlternateBus=true;}
+  else{Wire.end();Wire.begin();Wire.setClock(400000);} // default remains the published wiring contract
+ }
+ // The onboard LED's GPIO8 overlaps the default I2C SDA.
+ ledAvailable=activeSda!=LED_PIN&&activeScl!=LED_PIN;
+#endif
+}
 void setup(){
  Serial.begin(115200);
-// Do not route I2C through GPIO8 (active-low LED) or GPIO9 (BOOT strap) on A1.
- Wire.begin(BUS_SDA,BUS_SCL);
- Wire.setClock(400000);
- digitalWrite(LED_PIN,HIGH);
- pinMode(LED_PIN,OUTPUT);
- ledcAttach(LED_PIN,5000,8);
- ledOff();
+ selectI2cBus();
+ // Never drive the I2C SDA pin through the LED driver.
+ if(ledAvailable){
+  digitalWrite(LED_PIN,HIGH);
+  pinMode(LED_PIN,OUTPUT);
+  ledcAttach(LED_PIN,5000,8);
+  ledOff();
+ }
  Serial.println("\n=== I2C Address Scanner ===");
  printFirmwareInfo();
+ if(!ledAvailable)Serial.println("ZJLED,STATUS,PIN_CONFLICT: GPIO8 is I2C SDA; move sensor to SDA4/SCL5 for onboard LED control");
  delay(1000);
  lastScan=millis()-SCAN_PERIOD_MS;
 }
