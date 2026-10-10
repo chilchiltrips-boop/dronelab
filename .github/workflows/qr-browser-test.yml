@@ -1,7 +1,7 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/unified-flight-training-v1.6.1, main]
+    branches: [testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/unified-flight-training-v1.6.1, testing/pid-shell-qr-audit-hotfix, main]
     paths:
       - 'mobile-android/**'
       - 'companion-flight.js'
