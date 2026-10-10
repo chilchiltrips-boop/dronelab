@@ -2,12 +2,13 @@
 const $=id=>document.getElementById(id),DB='zebjus-python-ide-assets-v1',STORE='assets',FOLDERS='zebjus-python-ide-folders-v1',UI='zebjus-python-ide-panels-v1';
 const ICONS='./assets/python-ide-icons.svg#';
 const folderPattern=/^[A-Za-z_][A-Za-z0-9_-]*(\/[A-Za-z_][A-Za-z0-9_-]*)*$/;
-const filePattern=/^[A-Za-z_][A-Za-z0-9_-]*(\/[A-Za-z_][A-Za-z0-9_-]*)*\/[A-Za-z_][A-Za-z0-9_.-]*$|^[A-Za-z_][A-Za-z0-9_.-]*$/;
+const filePattern=/^[A-Za-z_][A-Za-z0-9_-]*(\/[A-Za-z_][A-Za-z0-9_-]*)*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$|^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 function node(tag,cls='',txt=''){const e=document.createElement(tag);if(cls)e.className=cls;if(txt)e.textContent=txt;return e}
 function icon(name){const e=document.createElementNS('http://www.w3.org/2000/svg','svg');e.classList.add('py-ide-icon');e.setAttribute('aria-hidden','true');const u=document.createElementNS('http://www.w3.org/2000/svg','use');u.setAttribute('href',ICONS+name);e.append(u);return e}
 function button(label,symbol,fn,cls=''){const b=node('button','py-ide-button '+cls);b.type='button';if(symbol)b.append(icon(symbol));b.append(document.createTextNode(label));b.addEventListener('click',fn);return b}
 function cleanPath(path){const parts=String(path||'').replace(/\\/g,'/').replace(/^\/+|\/+$/g,'').split('/');return parts.some(s=>!s||s==='.'||s==='..')?'':parts.join('/')}
 function validPath(path){return path.length<=190&&filePattern.test(path)&&!path.split('/').some(p=>p==='.'||p==='..')}
+function safeImportPath(path){return cleanPath(path).split('/').map(part=>part.replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/^[0-9]/,'_function validPath(path){return path.length<=190&&filePattern.test(path)&&!path.split('/').some(p=>p==='.'||p==='..')}')).join('/')}
 function parent(path){return path.includes('/')?path.slice(0,path.lastIndexOf('/')):''}
 function folderChain(path){let q='',out=[];for(const part of path.split('/')){if(!part)continue;q=q?q+'/'+part:part;out.push(q)}return out}
 function readJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
@@ -222,8 +223,8 @@ export function createPythonIDEShell(api){
   if(!fileList.length)return;
   let imported=0,failed=0,batchBytes=0;
   for(const file of fileList.slice(0,80)){
-   let rel=cleanPath(file.webkitRelativePath||file.name);
-   if(file.webkitRelativePath&&rel.includes('/'))rel=rel.split('/').slice(1).join('/'); // drop browser's picked root
+   // Keep the selected OS folder in the project and sanitize space-containing image filenames.
+   const rel=safeImportPath(file.webkitRelativePath||file.name);
    const path=cleanPath([currentFolder,rel].filter(Boolean).join('/'));
    if(!validPath(path)||file.size>10*1024*1024||batchBytes+file.size>48*1024*1024){failed++;continue}
    if(api.listFiles().includes(path)||assets.has(path)){failed++;continue}
