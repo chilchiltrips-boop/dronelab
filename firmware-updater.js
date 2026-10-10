@@ -350,13 +350,25 @@ async function reconnectSerialMonitor(){
  await closeSerialMonitor(true);
  try{await openSerialMonitor({port,allowPrompt:true})}catch(e){log('Serial reconnect: '+e.message);serialUi(false,'Reconnect failed • select the USB port')}
 }
+// Serialize interactive serial writes and Python LED writes on one port lock.
+let serialWriteTail=Promise.resolve();
+function writePythonSerialLine(line){
+ const operation=serialWriteTail.then(async()=>{
+  if(!monitorPort||busy||!monitorPort.writable)throw Error('USB Serial not connected or firmware flash in progress');
+  const writer=monitorPort.writable.getWriter();
+  try{await writer.write(new TextEncoder().encode(line));}
+  finally{writer.releaseLock();}
+ });
+ serialWriteTail=operation.catch(()=>{});
+ return operation;
+}
 async function sendSerialMessage(){
  const port=monitorPort,input=$('#fwSerialInput');if(!port||!input||serialSending)return;
  const lineMode=$('#fwSerialLineEnding')?.value||'',endings=({nl:'\n',cr:'\r',crlf:'\r\n'})[lineMode]||'';
- let writer;serialSending=true;serialUi(true);
- try{writer=port.writable?.getWriter?.();if(!writer)throw Error('This port is not writable.');await writer.write(new TextEncoder().encode(input.value+endings));input.value=''}
+ serialSending=true;serialUi(true);
+ try{await writePythonSerialLine(input.value+endings);input.value=''}
  catch(e){log('Serial send failed: '+e.message)}
- finally{writer?.releaseLock();serialSending=false;serialUi(!!monitorPort)}
+ finally{serialSending=false;serialUi(!!monitorPort)}
 }
 async function disconnectAllUsb(){
  await closeSerialMonitor();await disconnectUsb();usbLastPort=null;usbLastInfo=null;monitorPendingScan=false;
@@ -370,7 +382,8 @@ function initSerialTools(){
    isOpen:()=>!!monitorPort,
    isFlashing:()=>!!busy,
    baud:()=>serialBaud(),
-   status:()=>monitorPort?'connected':busy?'busy':'disconnected'
+   status:()=>monitorPort?'connected':busy?'busy':'disconnected',
+   writeLine:line=>writePythonSerialLine(String(line))
  };
  const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
  serialPlotterPromise=import('./js/serial-plotter.js').then(({createSerialPlotter})=>{
