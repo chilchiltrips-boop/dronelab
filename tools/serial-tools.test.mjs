@@ -136,7 +136,7 @@ test('Step 3 reflects physical USB chip separately from firmware identity and Wi
  const st=src.indexOf('function kitStatus(){'),en=src.indexOf('\nasync function refreshKit(',st);
  assert.ok(st>0&&en>st);
  const ui=new Map(),catalog=[{id:'ZFC-A1',name:'ZEBJUS FlightCore A1 SuperMini'},{id:'ZFC-A2',name:'ZEBJUS FlightCore A2 C6'}];
- const ctx={monitorPort:null,usbRuntimeInfo:null,usbRomDownload:false,loader:null,usbBoardId:'',usbSensorState:'',usbBusPins:'--',usbLedState:'--',liveFirmwareBuiltAt:'',school:()=>({getSelectedDevice:()=>({online:false})}),boardName:id=>catalog.find(x=>x.id===id)?.name||id||'Unknown',verifiedUsbConnection:()=>!!ctx.loader&&!!ctx.usbBoardId,$:id=>ui.get(id)||null,text:(id,val)=>ui.set(id,{textContent:val}),textTitle:(id,val)=>ui.set(id,{textContent:val,title:val}),formatBuildTime:x=>x};
+ const ctx={monitorPort:null,usbRuntimeInfo:null,usbRomDownload:false,loader:null,usbBoardId:'',usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbBusMode:'--',liveFirmwareBuiltAt:'',school:()=>({getSelectedDevice:()=>({online:false})}),boardName:id=>catalog.find(x=>x.id===id)?.name||id||'Unknown',verifiedUsbConnection:()=>!!ctx.loader&&!!ctx.usbBoardId,$:id=>ui.get(id)||null,text:(id,val)=>ui.set(id,{textContent:val}),textTitle:(id,val)=>ui.set(id,{textContent:val,title:val}),formatBuildTime:x=>x};
  vm.runInNewContext(src.slice(st,en)+';globalThis.runStatus=kitStatus;',ctx);
  ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'OFFLINE');
  ctx.loader={};ctx.usbBoardId='ZFC-A1';ctx.runStatus();
