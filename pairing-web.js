@@ -4,6 +4,7 @@ const $=id=>document.getElementById(id);
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
 let flightTimer=null,statsTimer=null;
 const training=()=>window.ZebjusTraining;
+const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
  training()?.stop(reason);
  const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
@@ -15,12 +16,12 @@ function forwardSimulatorControl(m){
   'Control denied: '+result.reason;
  return result;
 }
-function openSettings(){const dialog=$('connectionDialog');if(!dialog.open)dialog.showModal()}
-function closeSettings(){stopCamera();$('connectionDialog').close();$('topPairMobileBtn').focus()}
+function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){document.querySelector('[data-tab="settings"]')?.click();return}if(!dialog.open)dialog.showModal()}
+function closeSettings(){stopCamera();if(inlineSettings()){document.querySelector('[data-tab="pid"]')?.click();return}$('connectionDialog').close();$('topPairMobileBtn').focus()}
 function openStep(number){
  const s=host.status();
  if((number===2&&!offer)||(number===3&&!s.connected))return;
- for(let i=1;i<=3;i++)$('pairStep'+i).open=i===number;
+ for(let i=1;i<=3;i++)$('pairStep'+i).open=inlineSettings()?i<=number:i===number;
  if(number!==2)stopCamera();
 }
 function cancelCode(){codeAbort?.abort();codeAbort=null;codeBusy=false;if($('pairConnectCodeBtn'))$('pairConnectCodeBtn').textContent='Connect with Code'}
@@ -90,7 +91,7 @@ function go(){openSettings()}
 function callbacks(){
  return {
   status:s=>{status(s);sync()},
-  connected:()=>{host.setSimulatorReady(!!training());clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
+  connected:()=>{host.setSimulatorReady(!!training()?.isReady?.()||!!(!inlineSettings()&&training()));clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
   paired:()=>{status('Connected • paired');scanFeedback('✓ Pairing confirmed • Turn ON Grant Mobile Control after Android Take Control','success');stamp('Pairing approved, mobile needs control permission');sync()},
   control:()=>{sync();stamp('Control: '+(host.status().controller||'none'))},
   simControl:forwardSimulatorControl,
@@ -245,8 +246,8 @@ function bind(){
  },2000);
  $('topPairMobileBtn').onclick=openSettings;
  $('connectionClose').onclick=closeSettings;
- $('connectionDialog').addEventListener('close',stopCamera);
- $('connectionDialog').addEventListener('cancel',stopCamera);
+ if(!inlineSettings())$('connectionDialog').addEventListener('close',stopCamera);
+ if(!inlineSettings())$('connectionDialog').addEventListener('cancel',stopCamera);
  $('pairCreateBtn').onclick=createOffer;
  $('pairCameraMode').onclick=()=>selectMode('camera');
  $('pairCodeMode').onclick=()=>selectMode('code');
@@ -284,5 +285,5 @@ function bind(){
  window.addEventListener('pagehide',()=>{stopSimulatorRemote('Page closed');clearInterval(flightTimer);clearInterval(statsTimer);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCamera();if(host.status().controller==='mobile')host.releaseControl()}});
 }
-function init(){if(!$('topPairMobileBtn'))return;startHost();bind();selectMode('code');void showVersion();status('Disconnected');sync();if(new URLSearchParams(location.search).has('connection'))openSettings()}
+function init(){if(new URLSearchParams(location.search).has('embedded')||!$('topPairMobileBtn'))return;startHost();bind();selectMode('code');void showVersion();status('Disconnected');sync();if(new URLSearchParams(location.search).has('connection'))openSettings()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();

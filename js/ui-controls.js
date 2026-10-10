@@ -32,12 +32,13 @@ export function initControls(ctx){
   ctx.stopMotorTest=()=>{ctx.wireMotorRun=false;ctx.destroyMotorAudio('wire');
     $('#wireRunBtn').textContent='RUN MOTOR TEST';ctx.updateMotorTestUI();};
   ctx.setActiveTab=name=>{
-    if(['simcontrol','flight','led'].includes(name)){location.replace('./tripod.html'+(name==='led'?'?connection=1':''));return;}
-    if(!['assembly','wiring','python','firmware','settings'].includes(name))return;
+    if(['simcontrol','flight','led','tripod'].includes(name))name='pid';
+    if(!['assembly','wiring','python','firmware','settings','pid'].includes(name))return;
     if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
     if(name==='assembly')requestAnimationFrame(ctx.resize3D);else if(name==='wiring')ctx.render2D();
+    if(name==='pid'||name==='settings')window.ZebjusPairingBridge?.ensureSimulator();
     history.replaceState(null,'','#'+name);window.dispatchEvent(new CustomEvent('dronelab:tab',{detail:{name}}));
   };
   $$('.tab').forEach(b=>b.onclick=()=>ctx.setActiveTab(b.dataset.tab));
