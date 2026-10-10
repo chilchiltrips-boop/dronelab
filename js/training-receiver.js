@@ -1,6 +1,6 @@
 /* One authoritative simulator receiver. Ownership is supplied by the existing
  * authenticated WebRTC host, never by a packet or a decorative stick field. */
-import {startSimulator,stopSimulator,setFlightMode,releaseInputs,getSnapshot} from './tripod-physics.js';
+import {startSimulator,stopSimulator,resetSimulator,setFlightMode,releaseInputs,getSnapshot} from './tripod-physics.js';
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const vector=v=>v&&['x','y'].every(k=>Number.isFinite(v[k])&&Math.abs(v[k])<=1)&&Math.hypot(v.x,v.y)<=1.001;
 export function validTrainingFrame(m){
@@ -12,7 +12,7 @@ export function validTrainingFrame(m){
 export function createTrainingReceiver(s,{now=()=>performance.now(),onChange=()=>{},onTimeout=()=>{}}={}){
  let owner='web',session='',seq=0,appliedAt=0,needsDisarm=true,sticks={left:{x:0,y:0},right:{x:0,y:0}},previewAxes={roll:0,pitch:0,yaw:0};
  function stop(reason='Stopped'){
-  stopSimulator(s);releaseInputs(s);sticks={left:{x:0,y:0},right:{x:0,y:0}};previewAxes={roll:0,pitch:0,yaw:0};needsDisarm=true;appliedAt=0;onChange({reason});
+  resetSimulator(s);releaseInputs(s);sticks={left:{x:0,y:0},right:{x:0,y:0}};previewAxes={roll:0,pitch:0,yaw:0};needsDisarm=true;appliedAt=0;onChange({reason});
  }
  function setOwner(value){
   const next=value==='mobile'?'mobile':'web';
@@ -37,7 +37,7 @@ export function createTrainingReceiver(s,{now=()=>performance.now(),onChange=()=
   if(!m.armed){
    // Disarmed mobile sticks are visual-only: expose previews but never touch
    // simulator axes, throttle, motors, or the arming interlock.
-   stopSimulator(s);needsDisarm=false;
+   if(s.running)resetSimulator(s);else stopSimulator(s);needsDisarm=false;
    sticks=m.sticks?{left:{...m.sticks.left},right:{...m.sticks.right}}:{left:{x:0,y:0},right:{x:0,y:0}};
    previewAxes={...m.axes};
   }
