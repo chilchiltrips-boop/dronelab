@@ -20,6 +20,17 @@ test('I2C scanner serial payloads become structured Python results',()=>{
  const zero=p.acceptLine('❌ No I2C devices found.');
  assert.equal(zero.total,0);assert.deepEqual(zero.addresses,[]);
 });
+test('compact request-driven ZJSCAN returns exact I2C addresses without scanner banners',()=>{
+ const events=[],parser=createI2CParser(scan=>events.push(scan));
+ const scan=parser.acceptLine('ZJSCAN,A1,409527,2,0x6B,0x77');
+ assert.deepEqual(scan.addresses,['0x6B','0x77']);
+ assert.equal(scan.total,2);
+ assert.equal(scan.reported_count,2);
+ assert.equal(events.length,1);
+ const empty=parser.acceptLine('ZJSCAN,A1,409600,0');
+ assert.equal(empty.total,0);
+ assert.deepEqual(empty.addresses,[]);
+});
 test('USB stream event bridge resolves only complete scan, not partial output',async()=>{
  const host=new EventTarget(),bridge=createI2CBridge({host});
  let resolved=false;
