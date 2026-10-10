@@ -34,4 +34,6 @@ Eight browser viewport cases include 488×227/595×227 with visible navigation a
 
 Physical handset native-WebView-to-Web RTC, autofocus/radio/OEM behavior, 120-Hz performance and perceived audio comfort remain UNVERIFIED. Follow DEVICE_ACCEPTANCE.md for those results. This change preserves the single Flight Training receiver and plant, firmware, assembly, wiring and Python labs; no AP/STA or real motor control is introduced.
 
+The protected HOME key and activity return use Android's shell input/activity services on API 35; the test requires actual loss/restoration of window focus. Thumb inputs remain real touchscreen MotionEvents. No JavaScript input surrogate or direct Activity callback invocation substitutes for the native checks.
+
 Android immersive API guidance: https://developer.android.com/develop/ui/views/layout/immersive

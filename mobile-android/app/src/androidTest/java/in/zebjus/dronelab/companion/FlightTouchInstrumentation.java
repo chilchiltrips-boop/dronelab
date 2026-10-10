@@ -8,9 +8,9 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.view.InputDevice;
-import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -65,6 +65,13 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         if(image==null)return;
         try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getExternalFilesDir(null),name))){image.compress(Bitmap.CompressFormat.PNG,100,out);}
         catch(Exception ignored){}finally{image.recycle();}
+    }
+    private void systemCommand(String command) throws Exception {
+        // The shell driver owns protected system keys on API35. These commands
+        // still travel through Android's input/activity services, never JS.
+        try(ParcelFileDescriptor.AutoCloseInputStream out=new ParcelFileDescriptor.AutoCloseInputStream(getUiAutomation().executeShellCommand(command))){
+            byte[] buffer=new byte[512];while(out.read(buffer)!=-1){}
+        }
     }
     private void prepareCockpitWindow() throws Exception {
         // Android's first immersive launch shows an OS tutorial that owns focus
@@ -172,12 +179,14 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);touch(MotionEvent.ACTION_MOVE,new int[]{0},lm);
         // Exercise actual Android background/resume rather than invoking the
         // Activity callbacks without the window/compositor lifecycle.
-        if(!getUiAutomation().injectInputEvent(new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_HOME),true)||
-           !getUiAutomation().injectInputEvent(new KeyEvent(KeyEvent.ACTION_UP,KeyEvent.KEYCODE_HOME),true))throw new AssertionError("OS rejected HOME");
-        SystemClock.sleep(400);
-        Intent resume=new Intent(getTargetContext(),MainActivity.class);
-        resume.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-        runOnMainSync(()->getTargetContext().startActivity(resume));
+        systemCommand("input keyevent KEYCODE_HOME");
+        long backgroundUntil=SystemClock.uptimeMillis()+5000;boolean backgrounded=false;
+        while(SystemClock.uptimeMillis()<backgroundUntil){
+            AtomicReference<Boolean> focused=new AtomicReference<>(true);runOnMainSync(()->focused.set(activity.hasWindowFocus()));
+            if(!focused.get()){backgrounded=true;break;}SystemClock.sleep(80);
+        }
+        if(!backgrounded)throw new AssertionError("Android HOME did not background the cockpit");
+        systemCommand("am start -W -n in.zebjus.dronelab.companion/.MainActivity -f 0x30020000");
         prepareCockpitWindow();
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false' && !document.getElementById('flightLeftRing').classList.contains('dragging') && !document.getElementById('flightRightRing').classList.contains('dragging')");
         js("window.__nativePaintReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__nativePaintReady=true));true");
