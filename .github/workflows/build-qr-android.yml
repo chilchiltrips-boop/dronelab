@@ -3,15 +3,11 @@ on:
   push:
     branches: [testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, main]
     paths:
-      - 'docs/flight-training/**'
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/native-flight-acceptance.sh'
       - 'tools/configure-native-avd.py'
       - 'tools/release-signing.test.mjs'
-      - 'tools/apk-verifier.test.mjs'
-      - 'tools/flight-input.test.mjs'
-      - 'tools/flight-preview-browser.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
       - 'companion.html'
@@ -19,16 +15,14 @@ on:
       - 'companion.js'
       - 'companion-flight.js'
       - 'flight-input.js'
-      - 'js/tripod-page.js'
-      - 'js/training-receiver.js'
-      - 'tools/flight-controller-browser.mjs'
-      - 'tools/training-receiver.test.mjs'
       - 'pairing-core.js'
       - 'pairing-code.js'
       - 'pairing-qr-ui.js'
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
-      - '.github/workflows/build-qr-android.yml'
+  # Web-only PID changes do not produce a duplicate signed APK. Existing APK
+  # releases are immutable; Android UI/package changes require incrementing
+  # versionCode and passing the exact-source signed native release gate.
   workflow_dispatch:
 permissions:
   contents: write
