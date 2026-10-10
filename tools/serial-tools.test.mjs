@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {parseSerialPlotLine} from '../js/serial-plotter.js';
 
 test('generic plotter parses Arduino numeric and CSV/TSV streams',()=>{
@@ -33,4 +34,58 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  for(const term of ['setSignals','dataTerminalReady:true','requestToSend:false','navigator.serial.addEventListener','closeSerialMonitor','resetSerialBoard','sendSerialMessage','serialPlotter?.pushLine','import(\'./js/serial-plotter.js\')'])assert.ok(code.includes(term),term);
  assert.ok(!code.includes('── USB Serial connected'));
  assert.ok(code.includes("nl:'\\n',cr:'\\r',crlf:'\\r\\n'"));
+});
+
+test('native ESP32-C3 Web Serial selects guarded ROM recovery plans',()=>{
+ const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=src.indexOf('function isEspNativeUsbPort('),end=src.indexOf('async function connectUsb(){',start);
+ assert.ok(start>0&&end>start);
+ const ctx={usbPortInfo:port=>port?.getInfo?.()};
+ vm.runInNewContext(src.slice(start,end)+';globalThis.recovery={isEspNativeUsbPort,usbBootPlans,usbConnectFailureGuidance};',ctx);
+ const native={getInfo:()=>({usbVendorId:0x303a,usbProductId:0x1001})};
+ const uart={getInfo:()=>({usbVendorId:0x10c4,usbProductId:0xea60})};
+ const plans=port=>Array.from(ctx.recovery.usbBootPlans(port,115200,false),p=>[p.mode,p.baud]);
+ assert.equal(ctx.recovery.isEspNativeUsbPort(native),true);
+ assert.equal(ctx.recovery.isEspNativeUsbPort(uart),false);
+ assert.deepEqual(plans(native),[['default_reset',115200],['no_reset',115200]]);
+ assert.deepEqual(plans(uart),[['default_reset',115200]]);
+ assert.deepEqual(Array.from(ctx.recovery.usbBootPlans(native,460800,false),p=>[p.mode,p.baud]),
+  [['default_reset',460800],['default_reset',115200],['no_reset',115200]]);
+ assert.deepEqual(Array.from(ctx.recovery.usbBootPlans(native,115200,true),p=>[p.mode,p.baud]),
+  [['no_reset',115200]]);
+ const hint=ctx.recovery.usbConnectFailureGuidance(native,new Error('Failed to connect with the device'));
+ assert.ok(hint.includes('303A:1001')&&hint.includes('GPIO9')&&hint.includes('Already in BOOT mode'));
+ assert.ok(!ctx.recovery.usbConnectFailureGuidance(uart,new Error('timeout')).includes('GPIO9'));
+});
+
+test('USB Flash button explains disabled state and validates loaded board/type before unlock',()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=source.indexOf('function usbFlashReadiness(){'),end=source.indexOf('function setBusy(',start);
+ assert.ok(start>0&&end>start,'USB readiness guard exists');
+ const els=new Map([['#fwBoardProfile',{value:'ZFC-A1'}],['#fwImageType',{value:'factory'}],['#fwUsbFlashBtn',{disabled:false,title:''}],['#fwUsbFlashHelp',{textContent:'',classList:{toggle(){}}}]]);
+ const ctx={
+  navigator:{serial:{}},isSecureContext:true,
+  busy:false,loader:null,monitorPort:null,fw:null,usbBoardId:'',
+  catalog:{defaultBoardId:'ZFC-A1'},school:()=>null,
+  $:selector=>els.get(selector)||null,boardName:id=>id
+ };
+ vm.runInNewContext(source.slice(start,end)+';globalThis.check=usbFlashReadiness;globalThis.refresh=syncFirmwareControls;',ctx);
+ const check=()=>({ready:ctx.check().ready,message:ctx.check().message});
+ let result=check();assert.equal(result.ready,false);assert.ok(result.message.includes('Connect USB'));
+ ctx.monitorPort={};assert.ok(check().message.includes('Serial Monitor'));
+ ctx.monitorPort=null;ctx.loader={};ctx.usbBoardId='ZFC-A1';
+ result=check();assert.equal(result.ready,false);assert.ok(result.message.includes('Auto Load Latest'));
+ ctx.fw={boardId:'ZFC-A2',type:'factory'};
+ assert.ok(check().message.includes('belongs to'));
+ ctx.fw={boardId:'ZFC-A1',type:'app'};
+ assert.ok(check().message.includes('image type'));
+ ctx.fw={boardId:'ZFC-A1',type:'factory'};
+ assert.equal(check().ready,true);
+ ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,false);
+ assert.ok(els.get('#fwUsbFlashHelp').textContent.includes('Factory image verified'));
+ els.get('#fwBoardProfile').value='ZFC-A2';
+ assert.equal(check().ready,false);ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,true);
+ assert.ok(els.get('#fwUsbFlashHelp').textContent.includes('Board profile mismatch'));
+ els.get('#fwBoardProfile').value='ZFC-A1';
+ ctx.busy=true;ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,true);
 });

@@ -17,9 +17,24 @@ function formatBuildTime(v){if(!v)return'--';const d=new Date(v);return Number.i
 function stage(name,state){const e=$('#fwStage'+name);if(e)e.className=state||''}
 function resetStages(){['Prepare','Flash','Verify','Reboot','Reconnect'].forEach(x=>stage(x,''))}
 function progress(p,title){p=Math.max(0,Math.min(100,Math.round(p)));const b=$('#fwProgressBar');if(b)b.style.width=p+'%';text('#fwProgressPct',p+'%');if(title)text('#fwProgressTitle',title)}
+function usbFlashReadiness(){
+ if(busy)return {ready:false,message:'Preparing USB or loading firmware…'};
+ if(!loader)return {ready:false,message:monitorPort?'Serial Monitor is open, but USB flashing requires Connect USB (bootloader + flash verification).':'Step 2: Click Connect USB and wait for Bootloader + flash verified.'};
+ const chosen=$('#fwBoardProfile')?.value||'auto',target=chosen!=='auto'?chosen:(usbBoardId||catalog?.defaultBoardId||'');
+ if(usbBoardId&&target!==usbBoardId)return {ready:false,message:'Board profile mismatch. Connected '+boardName(usbBoardId)+'; select that board or Auto detect.'};
+ if(!fw)return {ready:false,message:'USB READY. Step 1: Select Factory image (first flash), then Auto Load Latest. Check Firmware Log if loading fails.'};
+ if(target&&fw.boardId!==target)return {ready:false,message:'Loaded image belongs to '+boardName(fw.boardId)+'. Click Auto Load Latest for '+boardName(target)+'.'};
+ const kind=$('#fwImageType')?.value||'app';
+ if(fw.type!==kind)return {ready:false,message:'The selected image type has not finished loading. Click Auto Load Latest.'};
+ return {ready:true,message:kind==='factory'?'USB READY + Factory image verified for '+boardName(target)+'. Flash overwrites the existing firmware/partition layout after confirmation.':'USB READY + APP image verified. Existing compatible dual-OTA partitions must be present; otherwise choose Factory image.'};
+}
 function syncFirmwareControls(){
  const serialSupported=!!navigator.serial&&globalThis.isSecureContext;
- for(const [id,ready] of [['#fwUsbFlashBtn',!!loader&&!!fw],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
+ const flash=usbFlashReadiness();
+ for(const [id,ready] of [['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
+ const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');
+ if(flashButton)flashButton.title=flash.message;
+ if(flashHelp){flashHelp.textContent=flash.message;flashHelp.classList.toggle('ready',flash.ready)}
  for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=busy||!school();e.title=school()?'':'Unavailable: this scanner firmware has no Wi-Fi/AP service.'}}
  const erase=$('#fwEraseUsb');if(erase){erase.disabled=busy||($('#fwImageType')?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}
 }
@@ -74,7 +89,7 @@ async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))
 function renderFirmware(){const has=!!fw;textTitle('#fwFileName',has?fw.name:'No firmware loaded');text('#fwFileVersion',has?fw.version:'--');textTitle('#fwBuildTime',has?formatBuildTime(fw.builtAt):'--');textTitle('#fwBuildId',has?(fw.buildId||'Imported / custom'):'--');text('#fwFileSize',has?prettyBytes(fw.bytes.length):'--');textTitle('#fwFileHash',has?(fw.hash?fw.hash.slice(0,18)+'…':'Unavailable'):'--');badge('#fwSourceBadge',has?'LOADED':'NO FILE',has?'good':'');const t=$('#fwImageType');if(t&&has)t.value=fw.type;const erase=$('#fwEraseUsb');if(erase){erase.disabled=(t?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}syncFirmwareControls()}
 async function onlineBoardInfo(){const s=school(),d=s?.getSelectedDevice?.();if(!d?.online||!s?.client?.connected)return null;try{const i=await s.client.firmwareInfo();liveFirmwareBuiltAt=i.firmwareBuiltAt||i.buildDateTime||i.buildTime||liveFirmwareBuiltAt;return{...i,boardId:i.boardId||mapHardwareSignature(i.chip),boardName:i.boardName||boardName(i.boardId||mapHardwareSignature(i.chip))}}catch{return null}}
 async function targetBoardId(updateUi=true){await loadCatalog();const manual=$('#fwBoardProfile')?.value||'auto';let id='',source='';if(manual!=='auto'){id=manual;source='Manual selection'}else if(usbBoardId){id=usbBoardId;source='USB auto-detect'}else{const info=await onlineBoardInfo();if(info?.boardId){id=info.boardId;source='Online kit auto-detect'}}if(!id){id=catalog.defaultBoardId;source='Default profile'}if(updateUi){text('#fwDetectedBoard',boardName(id));text('#fwBoardSource',source);const p=boardById(id)?.latest?.[$('#fwImageType')?.value||'app'];text('#fwPackageState',p?.available?`Bundled ${boardById(id).latest.version}`:'Build not bundled')}return id}
-async function autoLoad(){setBusy(true);resetStages();stage('Prepare','active');progress(5,'Detecting board and checking latest firmware…');let id='',type='app';try{id=await targetBoardId(true);type=$('#fwImageType')?.value||'app';const b=boardById(id),pkg=b?.latest?.[type];if(pkg?.available&&pkg.file){const fetched=pkg.url?{response:await fetch(pkg.url,{cache:'no-store'}),src:pkg.url}:await fetchBundledFirmware(pkg.file,b.latest.version||VERSION),r=fetched.response;if(!r.ok)throw new Error('The catalog points to a firmware file that is not present.');const bytes=new Uint8Array(await r.arrayBuffer()),hash=await sha256(bytes);if(pkg.sha256&&hash.toLowerCase()!==String(pkg.sha256).toLowerCase())throw new Error('Bundled firmware checksum mismatch.');await setFirmware(bytes,pkg.file,{type,version:b.latest.version,builtAt:pkg.builtAt||b.latest.builtAt,buildId:pkg.buildId||'',boardId:id,source:'Bundled latest'});text('#fwSourceMessage',`Latest ${boardName(id)} firmware loaded automatically.`);text('#fwPackageState',`READY • ${b.latest.version}`);progress(100,'Firmware ready');stage('Prepare','done');return}if(await loadCached(id,type)){text('#fwSourceMessage',`No bundled build is present for ${boardName(id)}; restored the matching firmware cached in this browser.`);text('#fwPackageState','CACHED BUILD');progress(100,'Cached firmware ready');stage('Prepare','done');return}fw=null;renderFirmware();text('#fwSourceMessage',`Board selected: ${boardName(id)}. The compiled package has not been published yet. If this is a fresh GitHub upload, wait for Build FlightCore Firmware in Actions to finish and refresh; otherwise import a matching .bin.`);text('#fwPackageState','BUILD PENDING');progress(0,'Firmware package not bundled');stage('Prepare','');log(`No bundled binary for ${boardName(id)}.`)}catch(e){if(id&&await loadCached(id,type)){text('#fwSourceMessage',`Loaded matching ${boardName(id)} firmware from this browser for offline/AP use.`);text('#fwPackageState','CACHED BUILD');progress(100,'Cached firmware ready');stage('Prepare','done')}else{log('Auto load: '+e.message);text('#fwSourceMessage','In AP mode without internet, import the matching APP .bin downloaded before joining kit Wi-Fi. Files are checked after selection.');progress(0,'Import a downloaded .bin for AP mode');stage('Prepare','error')}}finally{setBusy(false)}}
+async function autoLoad(){setBusy(true);resetStages();stage('Prepare','active');progress(5,'Detecting board and checking latest firmware…');let id='',type='app';try{id=await targetBoardId(true);type=$('#fwImageType')?.value||'app';const b=boardById(id),pkg=b?.latest?.[type];if(pkg?.available&&pkg.file){const fetched=pkg.url?{response:await fetch(pkg.url,{cache:'no-store'}),src:pkg.url}:await fetchBundledFirmware(pkg.file,b.latest.version||VERSION),r=fetched.response;if(!r.ok)throw new Error('The catalog points to a firmware file that is not present.');const bytes=new Uint8Array(await r.arrayBuffer()),hash=await sha256(bytes);if(pkg.sha256&&hash.toLowerCase()!==String(pkg.sha256).toLowerCase())throw new Error('Bundled firmware checksum mismatch.');await setFirmware(bytes,pkg.file,{type,version:b.latest.version,builtAt:pkg.builtAt||b.latest.builtAt,buildId:pkg.buildId||'',boardId:id,source:'Bundled latest'});text('#fwSourceMessage',`Latest ${boardName(id)} firmware loaded automatically.`);text('#fwPackageState',`READY • ${b.latest.version}`);progress(100,'Firmware ready');stage('Prepare','done');return}if(await loadCached(id,type)){text('#fwSourceMessage',`No bundled build is present for ${boardName(id)}; restored the matching firmware cached in this browser.`);text('#fwPackageState','CACHED BUILD');progress(100,'Cached firmware ready');stage('Prepare','done');return}fw=null;renderFirmware();text('#fwSourceMessage',`Board selected: ${boardName(id)}. The compiled package has not been published yet. If this is a fresh GitHub upload, wait for Build FlightCore Firmware in Actions to finish and refresh; otherwise import a matching .bin.`);text('#fwPackageState','BUILD PENDING');progress(0,'Firmware package not bundled');stage('Prepare','');log(`No bundled binary for ${boardName(id)}.`)}catch(e){if(id&&await loadCached(id,type)){text('#fwSourceMessage',`Loaded matching ${boardName(id)} firmware from this browser for offline/AP use.`);text('#fwPackageState','CACHED BUILD');progress(100,'Cached firmware ready');stage('Prepare','done')}else{fw=null;renderFirmware();const reason=String(e?.message||e);log('Auto load '+(id||'unknown')+' '+type+' failed: '+reason);text('#fwPackageState','LOAD FAILED');text('#fwSourceMessage','Unable to load the '+type.toUpperCase()+' firmware for '+(boardName(id)||'selected board')+': '+reason+' — check your connection, then click Auto Load Latest again.');progress(0,'Firmware load failed • check Firmware Log');stage('Prepare','error')}}finally{setBusy(false)}}
 async function importFile(file){if(!file)return;if(!/\.bin$/i.test(file.name))throw new Error('Select a compiled .bin firmware file.');const id=await targetBoardId(true),type=inferType(file.name),release=boardById(id)?.latest?.[type],bytes=new Uint8Array(await file.arrayBuffer());if(!release?.available||!release.sha256)throw Error('Only the published I2C Scanner firmware is supported. Load the matching release first.');const hash=await sha256(bytes);if(hash.toLowerCase()!==release.sha256.toLowerCase())throw Error('Imported .bin does not match the official I2C Scanner image for '+boardName(id)+'. No other firmware can be installed from this page.');await setFirmware(bytes,file.name,{boardId:id,type,version:catalog.version,builtAt:release.builtAt,buildId:release.buildId,source:'Verified I2C Scanner import'});text('#fwSourceMessage',`Verified official scanner image imported for ${boardName(id)}.`);text('#fwPackageState','VERIFIED IMPORT');progress(100,'Scanner firmware ready');stage('Prepare','done')}
 function kitStatus(){const s=school(),d=s?.getSelectedDevice?.(),online=!!d?.online;text('#fwCurrentVersion',online?(d.firmware||d.version||'--'):'--');textTitle('#fwCurrentBuildTime',online?formatBuildTime(d.firmwareBuiltAt||d.buildDateTime||d.buildTime||liveFirmwareBuiltAt):'--');text('#fwDeviceId',online?(d.deviceName||d.name||'--'):'--');text('#fwKitState',online?(d.armed?'ARMED':'ONLINE • DISARMED'):'OFFLINE');text('#fwLiveBoard',online?(d.boardName||boardName(d.boardId)||'Detecting…'):'--');const kb=$('#fwKitBadge');if(kb){kb.textContent=online?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(online?'online':'offline')}return{s,d,online}}
 async function refreshKit(){const{s}=kitStatus();try{await s?.refreshNow?.();const info=await onlineBoardInfo();if(info?.boardId){text('#fwLiveBoard',info.boardName||boardName(info.boardId));text('#fwCurrentVersion',info.firmware||info.version||'--');textTitle('#fwCurrentBuildTime',formatBuildTime(info.firmwareBuiltAt||info.buildDateTime||info.buildTime||''));if(!usbBoardId)await targetBoardId(true)}kitStatus();log('Kit status refreshed.')}catch(e){log('Kit check: '+e.message)}}
@@ -167,18 +182,88 @@ function usbMd5Hex(bytes){
  for(let block=0;block<data.length;block+=64){let [a,b,c,d]=state;for(let i=0;i<64;i++){let f,g;if(i<16){f=(b&c)|(~b&d);g=i}else if(i<32){f=(d&b)|(~d&c);g=(5*i+1)%16}else if(i<48){f=b^c^d;g=(3*i+5)%16}else{f=c^(b|~d);g=(7*i)%16}const shift=shifts[(i>>>4)*4+(i%4)],sum=(a+f+Math.floor(Math.abs(Math.sin(i+1))*4294967296)+view.getUint32(block+g*4,true))|0,next=(b+((sum<<shift)|(sum>>>(32-shift))))|0;a=d;d=c;c=b;b=next}state[0]=(state[0]+a)|0;state[1]=(state[1]+b)|0;state[2]=(state[2]+c)|0;state[3]=(state[3]+d)|0}
  return state.map(word=>[0,8,16,24].map(shift=>((word>>>shift)&255).toString(16).padStart(2,'0')).join('')).join('');
 }
+// USB serial/JTAG (VID 0x303A PID 0x1001) is a native ROM-capable interface,
+// not a CH340/CP210x UART bridge. A visible port alone is not proof of ROM sync.
+function isEspNativeUsbPort(port){
+ const info=usbPortInfo(port);
+ return info?.usbVendorId===0x303A&&info?.usbProductId===0x1001;
+}
+function usbBootPlans(port,baud,manual){
+ const rates=baud===115200?[115200]:[baud,115200];
+ const primary=manual?'no_reset':'default_reset';
+ const plans=rates.map(rate=>({baud:rate,mode:primary}));
+ // Only native USB-JTAG receives a secondary non-reset sync attempt. It may
+ // succeed when the user has already placed the chip in download mode.
+ if(!manual&&isEspNativeUsbPort(port))plans.push({baud:115200,mode:'no_reset'});
+ return plans;
+}
+function usbConnectFailureGuidance(port,error){
+ const message=String(error?.message||error||'Unknown USB failure');
+ if(!isEspNativeUsbPort(port))return 'USB bootloader handshake failed: '+message+'. Close all Arduino Serial Monitors and other browser tabs, select the correct port, then retry at 115200 baud.';
+ return 'Native ESP USB/JTAG port detected (303A:1001); Web Serial permission succeeded, but ROM bootloader sync failed: '+message+'. Close Arduino IDE Serial Monitor, disconnect attached GPIO8/GPIO9 wiring, hold BOOT (GPIO9), tap RESET, release BOOT, select Already in BOOT mode, then reconnect at 115200. If RESET is unavailable, hold BOOT while reconnecting USB. Do not flash until the chip and flash are verified.';
+}
 async function connectUsb(){
- if(busy)return;if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
+ if(busy)return;
+ if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}
+ setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
+ let port=null;
  try{
-  const port=await navigator.serial.requestPort();if(monitorPort)await closeSerialMonitor();log('USB port access granted • checking bootloader and flash chip.');await disconnectUsb(false);usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;await loadCatalog();const mod=await loadUsbFlasher(),requested=+($('#fwUsbBaud')?.value||115200),rates=requested===115200?[115200]:[requested,115200],mode=$('#fwUsbManualBoot')?.checked?'no_reset':'default_reset';
-  for(let attempt=0;attempt<rates.length;attempt++){
-   try{serialPort=port;transport=new mod.Transport(port,true);loader=new mod.ESPLoader({transport,baudrate:rates[attempt],terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}});installUsbCompatibility(loader);usbSignature=await loader.main(mode);usbBoardId=mapHardwareSignature(usbSignature);const board=boardById(usbBoardId);if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');await probeUsbFlash(loader,board);if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(rates[attempt]);break}
-   catch(error){await disconnectUsb(false);if(attempt+1===rates.length||/Unsupported USB chip|smaller than/.test(error.message))throw error;log('USB handshake failed at '+rates[attempt]+' baud; retrying the same port at 115200.');}
+  port=await navigator.serial.requestPort();
+  if(monitorPort)await closeSerialMonitor();
+  log('USB port access granted • checking bootloader and flash chip.');
+  await disconnectUsb(false);
+  usbLastPort=port;usbLastInfo=usbPortInfo(port)||usbLastInfo;
+  await loadCatalog();
+  const mod=await loadUsbFlasher();
+  const requested=+($('#fwUsbBaud')?.value||115200);
+  const manual=!!$('#fwUsbManualBoot')?.checked;
+  const native=isEspNativeUsbPort(port);
+  const plans=usbBootPlans(port,requested,manual);
+  const portInfo=usbPortInfo(port);
+  if(native)log('USB interface: Espressif native USB-Serial/JTAG (VID 303A, PID 1001). This is not a missing board library.');
+  else log('USB interface: '+(portInfo?.usbVendorId?.toString(16)||'unknown')+':'+(portInfo?.usbProductId?.toString(16)||'unknown')+'.');
+  let connectionError=null,connected=false;
+  for(let attempt=0;attempt<plans.length;attempt++){
+   const plan=plans[attempt];
+   log('USB ROM sync attempt '+(attempt+1)+'/'+plans.length+' • '+plan.baud+' baud • '+plan.mode);
+   try{
+    serialPort=port;transport=new mod.Transport(port,true);
+    loader=new mod.ESPLoader({
+     transport,baudrate:plan.baud,debugLogging:native,
+     terminal:{clean(){},writeLine(d){if(String(d).trim())log('[BOOT] '+String(d).trim())},write(d){if(String(d).trim())log('[BOOT] '+String(d).trim())}}
+    });
+    installUsbCompatibility(loader);
+    usbSignature=await loader.main(plan.mode);
+    usbBoardId=mapHardwareSignature(usbSignature);
+    const board=boardById(usbBoardId);
+    if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');
+    log('ROM chip identified • '+usbSignature+'; verifying flash before enabling USB flashing.');
+    await probeUsbFlash(loader,board);
+    if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(plan.baud);
+    connected=true;break;
+   }catch(error){
+    connectionError=error;
+    log('USB ROM sync '+(attempt+1)+' failed ('+plan.mode+'): '+String(error?.message||error));
+    await disconnectUsb(false);
+    if(/Unsupported USB chip|smaller than|Flash chip did not respond/.test(String(error?.message||error)))throw error;
+    if(attempt+1<plans.length)log('Releasing the same USB port before retry • no firmware bytes have been written.');
+   }
   }
-  text('#fwUsbChip',boardName(usbBoardId));text('#fwUsbState','Bootloader + flash verified');const b=$('#fwSerialBadge');if(b){b.textContent='USB CONNECTED';b.className='firmware-badge online'}badge('#fwOverallBadge','USB READY','good');await targetBoardId(true);log('USB bootloader connected: '+usbSignature);
+  if(!connected)throw connectionError||new Error('No ESP32 ROM bootloader synchronization response');
+  text('#fwUsbChip',boardName(usbBoardId));
+  text('#fwUsbState','Bootloader + flash verified');
+  const b=$('#fwSerialBadge');if(b){b.textContent='USB CONNECTED';b.className='firmware-badge online'}
+  badge('#fwOverallBadge','USB READY','good');
+  await targetBoardId(true);log('USB bootloader connected: '+usbSignature);
   if($('#fwImageType')){$('#fwImageType').value='factory';fw=null;renderFirmware();log('USB scanner default: FACTORY first-flash image. Existing flash settings will be replaced.')}
   await autoLoad();
- }catch(e){await disconnectUsb(false);badge('#fwOverallBadge','USB FAILED','danger');log('USB connect failed: '+e.message);log('Close Arduino/other serial tabs. For manual recovery: hold BOOT, tap RESET, release BOOT, select Already in BOOT mode and reconnect the USB port.')}finally{setBusy(false)}
+ }catch(e){
+  await disconnectUsb(false);
+  badge('#fwOverallBadge','USB FAILED','danger');
+  log('USB connect failed: '+String(e?.message||e));
+  if(port)log(usbConnectFailureGuidance(port,e));
+  else log('No USB port was selected. Allow port access in Chrome/Edge and retry.');
+ }finally{setBusy(false)}
 }
 function flashReconnectPending(expectedVersion){
  stage('Reboot','active');stage('Reconnect','active');progress(99,'Firmware written • boot/reconnect not confirmed');badge('#fwOverallBadge','FLASHED • BOOT / RECONNECT PENDING','warn');

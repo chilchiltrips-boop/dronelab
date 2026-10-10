@@ -191,6 +191,7 @@
 <label class="firmware-check"><input id="fwUsbManualBoot" type="checkbox"/> Already in BOOT mode <small>For recovery: USB power only, hold BOOT, tap RESET, release BOOT, then connect the USB port. Close Arduino Serial Monitor first. Pairing grants port access; USB READY confirms the bootloader and flash chip.</small></label>
 <label class="firmware-check"><input id="fwEraseUsb" type="checkbox"/> Erase entire flash before USB factory flash <small>Only available for Factory/Merged images. Never erase when flashing an app-only image.</small></label>
 <div class="firmware-target-actions"><button class="btn ghost full" id="fwUsbFlashBtn">Flash I²C over USB</button></div>
+<p id="fwUsbFlashHelp" class="firmware-flash-help" role="status" aria-live="polite">Click Connect USB and load a matching Factory image to enable flashing.</p>
 </div>
 <div class="form-card firmware-control-card">
 <div class="panel-head"><div><small>STEP 3 • UPDATE MONITOR</small><h2>Flash &amp; live USB output</h2></div><span class="status" id="fwOverallBadge">READY</span></div>
