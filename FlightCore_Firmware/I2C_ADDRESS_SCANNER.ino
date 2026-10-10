@@ -121,6 +121,94 @@ void updateLedEffect(unsigned long now){
   default:ledOff();break;
  }
 }
+
+// Board-specific USB gyroscope telemetry. No flight control, motors or PID logic.
+// A1: LSM6DS3 @ 0x6B; A2: MPU6050 @ 0x68.
+// The serial frame is ZJGYRO,DATA,A1|A2,SENSOR,0xADDR,X,Y,Z (degrees/second).
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+constexpr uint8_t GYRO_ADDR=0x68;
+constexpr unsigned long GYRO_PERIOD_MS=50; // 20 Hz, matching MPU6050 example
+constexpr const char* GYRO_BOARD="A2",*GYRO_NAME="MPU6050";
+#else
+constexpr uint8_t GYRO_ADDR=0x6B; // Verified GY-LSM6DS3 SA0 high
+constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz; sensor internally operates at 104 Hz
+constexpr const char* GYRO_BOARD="A1",*GYRO_NAME="LSM6DS3";
+#endif
+bool gyroReady=false;
+unsigned long lastGyro=0,lastGyroProbe=0;
+float RateRoll=0,RatePitch=0,RateYaw=0;
+
+bool gyroWrite(uint8_t reg,uint8_t value){
+ Wire.beginTransmission(GYRO_ADDR);Wire.write(reg);Wire.write(value);
+ return Wire.endTransmission()==0;
+}
+bool gyroRead(uint8_t reg,uint8_t* data,uint8_t length){
+ Wire.beginTransmission(GYRO_ADDR);Wire.write(reg);
+ if(Wire.endTransmission(false)!=0)return false;
+ if(Wire.requestFrom(GYRO_ADDR,length)!=length)return false;
+ for(uint8_t i=0;i<length;i++)data[i]=uint8_t(Wire.read());
+ return true;
+}
+void gyroStatus(const char* state){
+ Serial.print("ZJGYRO,STATUS,");Serial.print(GYRO_BOARD);Serial.print(',');
+ Serial.print(GYRO_NAME);Serial.print(",0x");
+ if(GYRO_ADDR<16)Serial.print('0');
+ Serial.print(GYRO_ADDR,HEX);Serial.print(',');Serial.println(state);
+}
+bool beginGyro(){
+ uint8_t id=0;
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ // MPU6050 WHO_AM_I=0x68; wake, DLPF_CFG=5 and ±500 dps (65.5 LSB/dps).
+ if(!gyroRead(0x75,&id,1)||id!=0x68)return false;
+ if(!gyroWrite(0x6B,0x00))return false; // PWR_MGMT_1
+ if(!gyroWrite(0x1A,0x05))return false; // DLPF_CFG
+ if(!gyroWrite(0x1B,0x08))return false; // GYRO_CONFIG
+#else
+ // LSM6DS3 WHO_AM_I=0x69. 0x6C is accepted for compatible LSM6DS-family revisions.
+ if(!gyroRead(0x0F,&id,1)||(id!=0x69&&id!=0x6C))return false;
+ if(!gyroWrite(0x12,0x44))return false; // CTRL3_C: block data update + register auto-increment
+ if(!gyroWrite(0x11,0x4C))return false; // CTRL2_G: 104 Hz, ±2000 dps
+#endif
+ return true;
+}
+bool gyroSignals(){
+ uint8_t d[6];
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ if(!gyroRead(0x43,d,6))return false; // GYRO_XOUT_H, MSB first
+ const int16_t x=int16_t((uint16_t(d[0])<<8)|d[1]);
+ const int16_t y=int16_t((uint16_t(d[2])<<8)|d[3]);
+ const int16_t z=int16_t((uint16_t(d[4])<<8)|d[5]);
+ RateRoll=float(x)/65.5f;RatePitch=float(y)/65.5f;RateYaw=float(z)/65.5f;
+#else
+ if(!gyroRead(0x22,d,6))return false; // OUTX_L_G, LSB first
+ const int16_t x=int16_t((uint16_t(d[1])<<8)|d[0]);
+ const int16_t y=int16_t((uint16_t(d[3])<<8)|d[2]);
+ const int16_t z=int16_t((uint16_t(d[5])<<8)|d[4]);
+ RateRoll=float(x)*0.070f;RatePitch=float(y)*0.070f;RateYaw=float(z)*0.070f;
+#endif
+ return true;
+}
+void updateGyro(unsigned long now){
+ if(!gyroReady){
+  if(now-lastGyroProbe<2500)return;
+  lastGyroProbe=now;gyroReady=beginGyro();
+  gyroStatus(gyroReady?"READY":"NOT_FOUND");
+  if(gyroReady)lastGyro=now-GYRO_PERIOD_MS;
+  return;
+ }
+ if(now-lastGyro<GYRO_PERIOD_MS)return;
+ lastGyro=now;
+ if(!gyroSignals()){
+  gyroReady=false;lastGyroProbe=now;gyroStatus("READ_ERROR");return;
+ }
+ // Machine-readable for serial plotter / future Python Lab bridge.
+ Serial.print("ZJGYRO,DATA,");Serial.print(GYRO_BOARD);Serial.print(',');
+ Serial.print(GYRO_NAME);Serial.print(",0x");Serial.print(GYRO_ADDR,HEX);Serial.print(',');
+ Serial.print(RateRoll,2);Serial.print(',');
+ Serial.print(RatePitch,2);Serial.print(',');
+ Serial.println(RateYaw,2);
+}
+
 // Original I2C scanner behavior and text preserved: address range 1..126, every 5 seconds.
 void scanI2C(){
  byte error,address;int deviceCount=0;
@@ -143,7 +231,14 @@ void scanI2C(){
 }
 void setup(){
  Serial.begin(115200);
- Wire.begin(); // SDA/SCL default pins, same as the existing scanner
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ Wire.begin(); // XIAO D4 GPIO22 SDA / D5 GPIO23 SCL
+#else
+ // Arduino esp32c3 default SDA GPIO8 conflicts with the onboard LED GPIO8.
+ // FlightCore A1 therefore uses GPIO4 SDA / GPIO5 SCL; rewire the IMU accordingly.
+ Wire.begin(4,5);
+#endif
+ Wire.setClock(400000);
  digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
  ledcAttach(LED_PIN,5000,8);
@@ -156,5 +251,6 @@ void loop(){
  const unsigned long now=millis();
  readLedCommands();
  updateLedEffect(now);
+ updateGyro(now);
  if(now-lastScan>=SCAN_PERIOD_MS){lastScan=now;scanI2C();}
 }
