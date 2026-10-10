@@ -139,7 +139,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Production-signed APK upgrade and Android WebView multitouch acceptance
+      - name: Production-signed APK upgrade and native 16x9 acceptance
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -147,9 +147,25 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          avd-name: zebjus-flight-16x9
+          force-avd-creation: true
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash tools/native-flight-acceptance.sh
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash tools/native-flight-acceptance.sh 16x9
+
+      - name: Production-signed APK upgrade and native 19_5x9 acceptance
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          avd-name: zebjus-flight-19x9
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash tools/native-flight-acceptance.sh 19_5x9
 
       - uses: actions/upload-artifact@v4
         if: always()
