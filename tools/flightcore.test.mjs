@@ -11,7 +11,8 @@ const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.product,'ZEBJUS_I2C_SCANNER');assert.match(catalog.version,/^1\.[012]\.\d+$/);
- assert.equal(catalog.boards.length,2);
+ assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
+ assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin();','Scanning I2C bus...','address<127','Wire.endTransmission()','SCAN_PERIOD_MS=5000','✔ Found device at 0x'])assert.ok(sketch.includes(token),token);
  for(const token of ['WiFi.h','Update.h','AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);

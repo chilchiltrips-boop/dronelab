@@ -10,6 +10,8 @@ assert CAT['schema']==2 and CAT['product']=='ZEBJUS_I2C_SCANNER'
 assert LATEST['version']==CAT['version']
 assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2
+assert [b['name'] for b in CAT['boards']]==['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']
+assert CAT['boards'][0]['build']['fqbn']=='esp32:esp32:esp32c3:CDCOnBoot=cdc'
 sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
 assert '#include <Wire.h>' in sketch and 'Wire.begin();' in sketch and 'SCAN_PERIOD_MS=5000' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch and 'updateGyro(now);' in sketch
 def sha(b):return hashlib.sha256(b).hexdigest()

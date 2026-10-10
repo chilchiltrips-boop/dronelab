@@ -85,8 +85,8 @@
     <div class="python-project-heading"><small>PROJECT</small><strong id="pythonActiveFileLabel" title="Active Python file">main.py</strong><button class="btn ghost small" id="pythonNewFileBtn" type="button">+ New</button></div>
     <div class="python-project-picker"><label for="pythonFileList" class="python-visually-hidden">Choose Python file</label><select id="pythonFileList" title="Choose Python file" aria-label="Choose Python file"></select></div>
     <div class="python-toolbar-actions" role="group" aria-label="Python execution controls">
-      <select id="pythonQuickHardware" title="Select a Python project example" aria-label="Python examples"><option value="">Python project examples…</option><option value="scanner">USB I²C Scanner • while True</option><option value="custom">Custom I²C Print Output</option><option value="basic">Python Basics • print and loops</option><option value="plot">Python Plot • matplotlib</option><option value="led">Onboard LED • Simple Blink</option><option value="fade">Onboard LED • Breathing Fade</option><option value="warning">Onboard LED • Warning</option><option value="safe">Onboard LED • Safe Indication</option><option value="sos">Onboard LED • SOS</option><option value="pattern">Onboard LED • Custom Pattern</option></select>
-      <select id="pythonTarget" title="Python execution target" aria-label="Python execution target"><option value="python">Python 3 / Simulator</option><option value="usb">USB I²C Hardware</option></select>
+      <select id="pythonQuickHardware" title="Select a Python project example" aria-label="Python examples"><option value="">Python project examples…</option><option value="scanner">USB Sensor Scan • while True</option><option value="custom">USB Sensor Print Example</option><option value="basic">Python Basics • print and loops</option><option value="plot">Python Plot • matplotlib</option><option value="led">Onboard LED • Simple Blink</option><option value="fade">Onboard LED • Breathing Fade</option><option value="warning">Onboard LED • Warning</option><option value="safe">Onboard LED • Safe Indication</option><option value="sos">Onboard LED • SOS</option><option value="pattern">Onboard LED • Custom Pattern</option></select>
+      <select id="pythonTarget" title="Python execution target" aria-label="Python execution target"><option value="python">Python 3 / Simulator</option><option value="usb">USB Hardware</option></select>
       <button class="btn danger ghost small" id="stopPythonBtn" type="button">Stop ■</button>
       <button class="btn primary small" id="runPythonBtn" type="button">Run ▶</button>
       <button class="btn ghost small" id="rerunPythonBtn" type="button">Rerun ↻</button>
@@ -119,12 +119,12 @@
     <div class="python-side-stack" id="pythonSideStack">
       <div class="python-tools-card">
         <details class="python-tools-section" id="pythonUsbTools" open>
-          <summary>USB I²C • Python Hardware</summary>
+          <summary>USB Hardware • Python</summary>
           <div class="python-usb-tools">
             <div class="python-usb-head"><span id="pyUsbState" class="status">USB DISCONNECTED</span><button class="btn primary small" id="pyConnectUsbBtn" type="button">Connect USB Serial</button></div>
-            <span class="micro-note" id="pyScanStatus">Waiting for a complete I²C scan.</span>
+            <span class="micro-note" id="pyScanStatus">Waiting for connected sensor addresses.</span>
             <div class="py-device-pill" id="pyDeviceAddresses">No scan data yet</div>
-            <p class="micro-note">Read scan results in Python using <code>await i2c_scan()</code>. Python terminal shows your own <code>print()</code> messages, not raw Serial text.</p>
+            <p class="micro-note">Read sensor addresses with <code>from zebjus_simple import Drone</code> and <code>Drone().i2c_scan()</code> — no await required. Open Serial Monitor for raw hardware output.</p>
           </div>
         </details>
         <details class="python-tools-section" id="pythonVisualTools">
@@ -162,7 +162,7 @@
       </div>
     </div>
   </div>
-  <div class="python-status-footer"><span>Python 3 • Pyodide • Monaco smart editor</span><span>USB I²C • ESP32-C3 / ESP32-C6</span><span>Resizing and project changes save automatically</span></div>
+  <div class="python-status-footer"><span>Python 3 • Pyodide • Monaco smart editor</span><span>USB Devices • FlightCore A1 / A2</span><span>Resizing and project changes save automatically</span></div>
   <div class="python-output-window" id="pythonOutputWindow" hidden role="dialog" aria-label="Python plot output">
     <div class="python-output-title" id="pythonOutputDrag"><b id="pythonOutputTitle">Python Plot Output</b><button class="btn ghost small" id="pythonOutputClose" type="button">✕ Close</button></div>
     <img id="pythonOutputImage" alt="Python graph output"/><p>Drag title to move • resize using lower-right corner</p>
@@ -170,27 +170,27 @@
 </div>
 </section><section class="panel tab-panel firmware-page" id="tab-firmware">
 <div class="firmware-hero">
-<div><span class="connect-kicker">USB FLASH • I²C SCANNER • SERIAL MONITOR</span><h2>ZEBJUS I²C Scanner Firmware Center</h2><p>Load only the I²C Address Scanner for ESP32-C3 or ESP32-C6. Connect USB to detect the board, flash, and view live I²C addresses at 115200 baud.</p></div>
+<div><span class="connect-kicker">USB FLASH • SENSOR TELEMETRY • SERIAL MONITOR</span><h2>ZEBJUS FlightCore Firmware Center</h2><p>Flash board-matched ZEBJUS FlightCore A1 SuperMini or A2 C6 firmware over USB. Includes I²C sensor discovery, onboard LED control, and gyro telemetry at 115200 baud.</p></div>
 <div class="firmware-hero-badges"><span class="firmware-badge offline" id="fwKitBadge">KIT OFFLINE</span><span class="firmware-badge offline" id="fwSerialBadge">USB NOT CONNECTED</span></div>
 </div>
 <div class="firmware-grid">
 <div class="form-card firmware-source-card">
 <div class="panel-head"><div><small>STEP 1 • FIRMWARE SOURCE</small><h2>Choose firmware</h2></div><span class="status" id="fwSourceBadge">NO FILE</span></div>
 <div class="firmware-source-actions"><button class="btn primary" id="fwAutoLoadBtn">Auto Load Latest</button><label class="btn ghost firmware-file-label">Import .bin<input id="fwFileInput" type="file"/></label><button class="btn ghost" id="fwDownloadBinBtn">Download loaded .bin</button><button class="btn ghost" id="fwForgetBtn">Forget Cached</button></div>
-<div class="firmware-drop-zone" id="fwDropZone"><b>Drop firmware .bin here</b><span>Scanner APP: USB @ 0x10000 on matching existing partitions • Scanner FACTORY: USB @ 0x0 (first flash)</span></div>
+<div class="firmware-drop-zone" id="fwDropZone"><b>Drop firmware .bin here</b><span>APP @ 0x10000 requires the existing matching partition layout • FACTORY @ 0x0 for first-time USB installation</span></div>
 <div class="firmware-file-info">
 <div><span>FILE</span><b id="fwFileName">No firmware loaded</b></div><div><span>VERSION</span><b id="fwFileVersion">--</b></div><div><span>BUILD DATE / TIME</span><b id="fwBuildTime">--</b></div><div><span>BUILD ID</span><b class="mono" id="fwBuildId">--</b></div><div><span>SIZE</span><b id="fwFileSize">--</b></div><div><span>SHA-256</span><b class="mono" id="fwFileHash">--</b></div>
 </div>
-<div class="firmware-config-row"><label>Image type<select id="fwImageType"><option value="app">Application image (existing layout)</option><option value="factory">Factory image (first flash)</option></select></label><label>Board profile<select id="fwBoardProfile"><option value="auto">Auto detect / current default</option></select></label></div><div class="firmware-board-detect"><div><span>TARGET BOARD</span><b id="fwDetectedBoard">ZEBJUS FlightCore A1</b></div><div><span>DETECTION</span><b id="fwBoardSource">Default profile</b></div><div><span>LATEST PACKAGE</span><b id="fwPackageState">Checking…</b></div></div>
-<p class="micro-note" id="fwSourceMessage">Connect USB for automatic board detection. Without USB, select a board profile to load the matching scanner image.</p>
+<div class="firmware-config-row"><label>Image type<select id="fwImageType"><option value="app">Application image (existing layout)</option><option value="factory">Factory image (first flash)</option></select></label><label>Board profile<select id="fwBoardProfile"><option value="auto">Auto detect connected board</option></select></label></div><div class="firmware-board-detect"><div><span>TARGET BOARD</span><b id="fwDetectedBoard">ZEBJUS FlightCore A1 SuperMini</b></div><div><span>DETECTION</span><b id="fwBoardSource">Default profile</b></div><div><span>LATEST PACKAGE</span><b id="fwPackageState">Checking…</b></div></div>
+<p class="micro-note" id="fwSourceMessage">Connect USB for automatic board detection. Without USB, select a board profile to load the matching firmware.</p>
 </div>
 <div class="form-card firmware-target-card">
 <div class="panel-head"><div><small>STEP 2 • TARGET</small><h2>Connect controller</h2></div></div>
-<div class="firmware-target-option usb"><div class="firmware-target-icon">USB</div><div><b>USB Web Serial</b><span>Detect ESP32-C3 / ESP32-C6 and flash scanner firmware. Desktop Chrome or Edge on HTTPS / localhost.</span></div><button class="btn primary small" id="fwConnectUsbBtn">Connect USB</button></div>
+<div class="firmware-target-option usb"><div class="firmware-target-icon">USB</div><div><b>USB Web Serial</b><span>Detect FlightCore A1 SuperMini / A2 C6 and flash the correct firmware. Desktop Chrome or Edge on HTTPS / localhost.</span></div><button class="btn primary small" id="fwConnectUsbBtn">Connect USB</button></div>
 <div class="firmware-usb-info"><div><span>Detected board</span><b id="fwUsbChip">--</b></div><div><span>USB status</span><b id="fwUsbState">Not connected</b></div><div><span>Baud</span><select id="fwUsbBaud"><option selected="" value="115200">115200</option><option value="460800">460800</option><option value="921600">921600</option></select></div></div>
 <label class="firmware-check"><input id="fwUsbManualBoot" type="checkbox"/> Already in BOOT mode <small>For recovery: USB power only, hold BOOT, tap RESET, release BOOT, then connect the USB port. Close Arduino Serial Monitor first. Pairing grants port access; USB READY confirms the bootloader and flash chip.</small></label>
 <label class="firmware-check"><input id="fwEraseUsb" type="checkbox"/> Erase entire flash before USB factory flash <small>Only available for Factory/Merged images. Never erase when flashing an app-only image.</small></label>
-<div class="firmware-target-actions"><button class="btn ghost full" id="fwUsbFlashBtn">Flash I²C over USB</button></div>
+<div class="firmware-target-actions"><button class="btn ghost full" id="fwUsbFlashBtn">Flash over USB</button></div>
 <p id="fwUsbFlashHelp" class="firmware-flash-help" role="status" aria-live="polite">Click Connect USB and load a matching Factory image to enable flashing.</p>
 </div>
 <div class="form-card firmware-control-card">

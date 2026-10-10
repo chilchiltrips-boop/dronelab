@@ -94,7 +94,7 @@ def write_metadata(catalog,version,built_at):
 
 
 def main():
-    ap=argparse.ArgumentParser(description='Build only the I2C Address Scanner firmware with stable replace-in-place filenames.')
+    ap=argparse.ArgumentParser(description='Build board-specific FlightCore USB firmware with scanner, LED, and gyro support with stable replace-in-place filenames.')
     ap.add_argument('--board',default='all',help='Board profile ID from catalog.json, or all')
     setup=ap.add_mutually_exclusive_group()
     setup.add_argument('--skip-core-install',action='store_true')

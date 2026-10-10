@@ -6,7 +6,7 @@
   "boards": [
     {
       "id": "ZFC-A1",
-      "name": "ZEBJUS I2C Scanner A1 \u2022 ESP32-C3",
+      "name": "ZEBJUS FlightCore A1 SuperMini",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
@@ -15,7 +15,7 @@
         "version": "1.2.0",
         "app": {
           "available": true,
-          "file": "ZEBJUS_I2C_SCANNER_A1_APP.bin",
+          "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
           "sha256": "453355b59bef71aea72fcbd7202659dee6c95eec9e9f57823f191bbf178838ed",
           "size": 339920,
           "builtAt": "2026-10-10T13:41:44Z",
@@ -23,7 +23,7 @@
         },
         "factory": {
           "available": true,
-          "file": "ZEBJUS_I2C_SCANNER_A1_FACTORY.bin",
+          "file": "ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
           "sha256": "e6990a706ae3c6534e1ea3afade5c7ac944ac5e5a9d5fa25aa352263841c6431",
           "size": 4194304,
           "builtAt": "2026-10-10T13:41:44Z",
@@ -38,7 +38,7 @@
       "flasher": "serial-loader-v1",
       "build": {
         "builder": "arduino-cli",
-        "fqbn": "esp32:esp32:esp32c3"
+        "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc"
       },
       "imageChipIds": [
         5
@@ -51,7 +51,7 @@
     },
     {
       "id": "ZFC-A2",
-      "name": "ZEBJUS I2C Scanner A2 \u2022 XIAO ESP32-C6",
+      "name": "ZEBJUS FlightCore A2 C6",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
@@ -60,7 +60,7 @@
         "version": "1.2.0",
         "app": {
           "available": true,
-          "file": "ZEBJUS_I2C_SCANNER_A2_APP.bin",
+          "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
           "sha256": "e1e7382d30c9067bb91dfcb6ea6ca2fe4b63e5dfb3986e30bf8f9c0eb4965cac",
           "size": 293360,
           "builtAt": "2026-10-10T13:41:44Z",
@@ -68,7 +68,7 @@
         },
         "factory": {
           "available": true,
-          "file": "ZEBJUS_I2C_SCANNER_A2_FACTORY.bin",
+          "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
           "sha256": "deaeef6829d59a0e471264a4163145fdeb4c3586323e499b25ed87b05ba34699",
           "size": 4194304,
           "builtAt": "2026-10-10T13:41:44Z",

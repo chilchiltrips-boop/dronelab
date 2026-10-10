@@ -6,8 +6,8 @@ This firmware **adds** gyro reads to existing I²C Scanner (every 5 seconds) and
 
 | Profile | Microcontroller | Gyro | I²C address | SDA/SCL | Gyro sensitivity | Display interval |
 | --- | --- | --- | --- | --- | --- | --- |
-| A2 | Seeed XIAO ESP32-C6 | MPU6050 | `0x68` | D4/GPIO22, D5/GPIO23 | ±500 dps, 65.5 LSB/(dps) | 50 ms |
-| A1 | ESP32-C3 Super Mini | GY-LSM6DS3 | **`0x6B`** | **GPIO4, GPIO5** | ±2000 dps, 70 mdps/LSB | 20 ms |
+| A2 | ZEBJUS FlightCore A2 C6 (XIAO ESP32-C6) | MPU6050 | `0x68` | D4/GPIO22, D5/GPIO23 | ±500 dps, 65.5 LSB/(dps) | 50 ms |
+| A1 | ZEBJUS FlightCore A1 SuperMini (ESP32-C3) | GY-LSM6DS3 | **`0x6B`** | **GPIO4, GPIO5** | ±2000 dps, 70 mdps/LSB | 20 ms |
 
 **Important wiring change on A1:** Generic Arduino ESP32-C3 defaults to GPIO8 SDA / GPIO9 SCL, but GPIO8 is the onboard LED pin. Sharing GPIO8 between the I²C bus and LED PWM is not safe or functional. This firmware explicitly uses GPIO4 (SDA) and GPIO5 (SCL) on A1. Move the LSM6DS3 module's SDA wire to GPIO4 and SCL to GPIO5. This change is mandatory if the previous module was wired to GPIO8/9. Connect 3.3V and GND, and keep I²C lines at 3.3V logic; do not use GPIO22/23 on C3. GPIO4/5 overlap JTAG-capable pins; don't connect external JTAG to these lines while using I²C.
 
@@ -50,3 +50,7 @@ No `delay(20)` or `delay(50)` blocks the loop. Existing I²C Scanner messages, L
 ## Validation and safety
 
 `tools/build_scanner.py` compiles **both** the A1 and A2 images from the same board-conditional source. APP and FACTORY binaries are verified for the corresponding chip and SHA256. Physical module detection, voltage, sample values, axis directions and wiring must still be checked on the user's hardware. Always bench-test with motors disconnected before integrating gyro feedback into a flight controller.
+
+## Native USB Serial
+
+FlightCore A1 builds with `esp32:esp32:esp32c3:CDCOnBoot=cdc` so `Serial` uses native USB Serial/JTAG (VID 303A, PID 1001). After Factory flashing, press RESET if the port does not reopen. FlightCore A2 retains its Seeed XIAO ESP32-C6 build profile.

@@ -26,7 +26,7 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  for(const page of [html,lab]){
   for(const id of ['fwSerialOutput','fwSerialMonitorBtn','fwSerialReconnectBtn','fwSerialResetBtn','fwSerialTabMonitor','fwSerialTabPlotter','fwSerialPlotCanvas','fwSerialBaud','fwSerialInput','fwSerialSendBtn','fwSerialLineEnding','fwSerialClearBtn','fwPlotClearBtn'])assert.ok(page.includes('id="'+id+'"'),id);
   assert.ok(page.includes('USB SERIAL TOOLS'));
-  assert.ok(page.includes('Flash I²C over USB'));
+  assert.ok(page.includes('Flash over USB'));
   for(const ending of ['value="nl"','value="cr"','value="crlf"'])assert.ok(page.includes(ending),ending);
   assert.ok(!page.includes('LIVE I²C SCANNER OUTPUT'));
   assert.ok(!page.includes('Scans repeat every 5 seconds.'));
@@ -88,4 +88,12 @@ test('USB Flash button explains disabled state and validates loaded board/type b
  assert.ok(els.get('#fwUsbFlashHelp').textContent.includes('Board profile mismatch'));
  els.get('#fwBoardProfile').value='ZFC-A1';
  ctx.busy=true;ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,true);
+});
+
+test('both public firmware pages brand FlightCore and show generic Flash over USB',()=>{
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('ZEBJUS FlightCore Firmware Center'));assert.ok(html.includes('>Flash over USB</button>'));assert.ok(!html.includes('Flash I²C over USB'));}
+ const cat=JSON.parse(readFileSync(new URL('../firmware-catalog.json',import.meta.url),'utf8'));
+ assert.deepEqual(cat.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
+ assert.equal(cat.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
+ assert.ok(cat.boards.every(b=>b.latest.app.file.startsWith('ZEBJUS_FLIGHTCORE_')));
 });
