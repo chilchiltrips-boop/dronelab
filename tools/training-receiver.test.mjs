@@ -62,3 +62,12 @@ test('mobile pre-arm joystick mirror is visible but cannot arm, move motors or e
  assert.deepEqual(r.snapshot().sticks.left,{x:0,y:0});
  assert.deepEqual(r.snapshot().previewAxes,{roll:0,pitch:0,yaw:0});
 });
+
+test('remote DISARM and STOP return virtual drone position and height to home',()=>{
+ const b=bench(),{s,r}=b;r.setOwner('mobile');r.apply(frame(1));r.apply(frame(2,{armed:true}));
+ s.roll=18;s.pitch=-9;s.yaw=57;s.vertical.z=.06;s.vertical.velocity=.1;
+ r.apply(frame(3,{armed:false}));
+ assert.deepEqual([s.roll,s.pitch,s.yaw,s.vertical.z,s.vertical.velocity],[0,0,0,0,0]);
+ r.apply(frame(4,{armed:true}));s.roll=7;s.vertical.z=.09;r.stop('Emergency STOP');
+ assert.equal(s.roll,0);assert.equal(s.vertical.z,0);assert.equal(s.running,false);
+});
