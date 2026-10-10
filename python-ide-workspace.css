@@ -343,3 +343,36 @@
  #tab-python .python-ide-layout>.python-editor-card{grid-column:1!important}
  #tab-python .python-ide-layout>.py-tool-rail{grid-column:2!important}
 }
+
+
+/* Sticky Python IDE never drops behind the page tabs, even after page scrolling.
+   Run/Stop/Rerun remain one unbreakable group at every viewport width. */
+#tab-python .python-project-bar.is-stuck{
+ position:fixed!important;
+ top:var(--py-sticky-top,0px)!important;
+ left:var(--py-fixed-left,0px)!important;
+ width:var(--py-fixed-width,100%)!important;
+ right:auto!important;
+ z-index:110!important;
+ margin:0!important;
+}
+#tab-python .py-run-group{
+ display:flex!important;flex:0 0 auto!important;
+ flex-flow:row nowrap!important;align-items:center!important;
+ justify-content:flex-end!important;gap:5px!important;
+ min-width:0!important;white-space:nowrap!important;
+}
+#tab-python .python-project-bar .py-run-group .btn{
+ flex:0 0 auto!important;min-height:32px!important;height:32px!important;min-width:54px!important;
+}
+#tab-python .python-project-bar .python-toolbar-actions{
+ align-content:center!important;align-items:center!important
+}
+@media(max-width:1100px){
+ #tab-python .python-project-bar .python-toolbar-actions,
+ #tab-python .python-project-bar.is-stuck .python-toolbar-actions{align-items:center!important;row-gap:5px!important}
+}
+@media(max-width:560px){
+ #tab-python .python-project-bar .py-run-group{margin-left:auto}
+ #tab-python .python-project-bar .py-run-group .btn{min-width:48px!important;padding:4px 6px!important}
+}
