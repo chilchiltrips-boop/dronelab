@@ -274,25 +274,23 @@ void scanI2C(unsigned long now){
  if(!scanActive){
   if(!scanRequested&&now-lastScanStart<SCAN_PERIOD_MS)return;
   scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;lastScanStart=now;
-  Serial.println("Scanning I2C bus...\n");
+
+  // Structured scan only.
  }
  for(uint8_t budget=0;budget<3&&scanAddress<127;budget++,scanAddress++){
   Wire.beginTransmission(scanAddress);
   const byte error=Wire.endTransmission();
   if(error==0){
-   Serial.print("✔ Found device at 0x");
-   if(scanAddress<16)Serial.print("0");
-   Serial.println(scanAddress,HEX);scanCount++;
+
+   scanCount++;
   }else if(error==4){
-   Serial.print("⚠ Unknown error at 0x");
-   if(scanAddress<16)Serial.print("0");
-   Serial.println(scanAddress,HEX);
+
+   // Suppress noisy I2C diagnostic output.
   }
  }
  if(scanAddress>=127){
-  if(!scanCount)Serial.println("❌ No I2C devices found.\n");
-  else{Serial.print("\n✅ Total I2C devices found: ");Serial.println(scanCount);}
-  Serial.println("\n-----------------------------\n");
+
+  // ZJSCAN summary follows.
   Serial.print("ZJSCAN,");Serial.print(GYRO_BOARD);Serial.print(',');
   Serial.print(now);Serial.print(',');Serial.println(scanCount);
   scanActive=false;
@@ -330,7 +328,7 @@ void emitTelemetry(unsigned long now){
  Serial.print(GYRO_ADDR,HEX);Serial.print(',');Serial.print(gyroHealth);Serial.print(',');
  Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
  Serial.print(RateYaw,2);Serial.print(',');
- Serial.print(ledAvailable?"LED_READY":"PIN_CONFLICT");
+ Serial.print(ledAvailable?"1":"0");
  Serial.print(',');Serial.println(telemetryDropped);
  telemetrySent++;
 }
@@ -341,7 +339,7 @@ void setup(){
  pinMode(LED_PIN,OUTPUT);
  ledcAttach(LED_PIN,5000,8);
  ledOff();
- Serial.println("\n=== I2C Address Scanner ===");
+ // No decorative startup banner.
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
  lastGyro=millis()-GYRO_PERIOD_MS;
