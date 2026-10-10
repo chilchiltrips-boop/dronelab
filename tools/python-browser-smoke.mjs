@@ -52,7 +52,7 @@ try{
    window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line}}));
   }
  });
- const ledTest="from zebjus_simple import Drone\\nimport time\\ndrone=Drone()\\nprint('SCAN_READY', drone.i2c_scan()['addresses'])\\ndrone.led_blink(200, 300)\\ntime.sleep(0.3)\\nprint('LED_SENT')\\n";
+ const ledTest="from zebjus_simple import Drone\nimport time\ndrone=Drone()\nprint('SCAN_READY', drone.i2c_scan()['addresses'])\ndrone.led_blink(200, 300)\ntime.sleep(0.3)\nprint('LED_SENT')\n";
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),ledTest);
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('LED_SENT'),null,{timeout:90000});
@@ -64,7 +64,7 @@ try{
  await page.waitForFunction(()=>window.__ledTestWrites.some(x=>x.includes('STOP')),null,{timeout:10000});
  await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
  // Verify the actual vendored OpenCV wheel loads in Python, not just in metadata.
- const cvTest="import cv2\\nprint('CV2_READY', cv2.__version__)\\n";
+ const cvTest="import cv2\nprint('CV2_READY', cv2.__version__)\n";
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),cvTest);
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('CV2_READY'),null,{timeout:120000});
