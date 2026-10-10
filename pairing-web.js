@@ -216,7 +216,7 @@ async function createOffer(){
   ZebjusQR.draw($('pairOfferCanvas'),data.qr);
   $('pairOfferCanvas').hidden=false;$('pairOfferBox').querySelector('p')?.setAttribute('hidden','');
   $('pairAnswerState').textContent='Step 1 ready. Scan the Web QR with Android. When Phone Response QR appears, initialize Step 2 by clicking Start Camera.';
-  status('Waiting for Android QR');scanFeedback('Step 1 QR READY ✓ • Scan with Android, then type its six-digit CONNECT code','ready');go('settings');
+  status('Waiting for Android QR');scanFeedback('Step 1 QR READY ✓ • Scan with Android, then type its six-digit CONNECT code','ready');go('settings');if(inlineSettings())openStep(2);
   stamp('Web QR ready; expiry in 3 minutes');
   // The webcam must NEVER open during Step 1. Step 2 explicitly starts it.
   if(pairMode==='camera')$('pairAnswerState').textContent='Step 2 ready • Show Android Phone QR, then press Start Camera.';
