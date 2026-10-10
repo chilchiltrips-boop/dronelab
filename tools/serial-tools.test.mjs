@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {parseSerialPlotLine} from '../js/serial-plotter.js';
 
 test('generic plotter parses Arduino numeric and CSV/TSV streams',()=>{
@@ -33,4 +34,26 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  for(const term of ['setSignals','dataTerminalReady:true','requestToSend:false','navigator.serial.addEventListener','closeSerialMonitor','resetSerialBoard','sendSerialMessage','serialPlotter?.pushLine','import(\'./js/serial-plotter.js\')'])assert.ok(code.includes(term),term);
  assert.ok(!code.includes('── USB Serial connected'));
  assert.ok(code.includes("nl:'\\n',cr:'\\r',crlf:'\\r\\n'"));
+});
+
+test('native ESP32-C3 Web Serial selects guarded ROM recovery plans',()=>{
+ const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=src.indexOf('function isEspNativeUsbPort('),end=src.indexOf('async function connectUsb(){',start);
+ assert.ok(start>0&&end>start);
+ const ctx={usbPortInfo:port=>port?.getInfo?.()};
+ vm.runInNewContext(src.slice(start,end)+';globalThis.recovery={isEspNativeUsbPort,usbBootPlans,usbConnectFailureGuidance};',ctx);
+ const native={getInfo:()=>({usbVendorId:0x303a,usbProductId:0x1001})};
+ const uart={getInfo:()=>({usbVendorId:0x10c4,usbProductId:0xea60})};
+ const plans=port=>Array.from(ctx.recovery.usbBootPlans(port,115200,false),p=>[p.mode,p.baud]);
+ assert.equal(ctx.recovery.isEspNativeUsbPort(native),true);
+ assert.equal(ctx.recovery.isEspNativeUsbPort(uart),false);
+ assert.deepEqual(plans(native),[['default_reset',115200],['no_reset',115200]]);
+ assert.deepEqual(plans(uart),[['default_reset',115200]]);
+ assert.deepEqual(Array.from(ctx.recovery.usbBootPlans(native,460800,false),p=>[p.mode,p.baud]),
+  [['default_reset',460800],['default_reset',115200],['no_reset',115200]]);
+ assert.deepEqual(Array.from(ctx.recovery.usbBootPlans(native,115200,true),p=>[p.mode,p.baud]),
+  [['no_reset',115200]]);
+ const hint=ctx.recovery.usbConnectFailureGuidance(native,new Error('Failed to connect with the device'));
+ assert.ok(hint.includes('303A:1001')&&hint.includes('GPIO9')&&hint.includes('Already in BOOT mode'));
+ assert.ok(!ctx.recovery.usbConnectFailureGuidance(uart,new Error('timeout')).includes('GPIO9'));
 });
