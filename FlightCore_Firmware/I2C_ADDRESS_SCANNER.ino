@@ -5,7 +5,7 @@
 
 // FlightCore USB diagnostics v1.3.0; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.3.0";
+constexpr const char* FW_VERSION="1.3.1";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
@@ -113,7 +113,11 @@ void serialCommand(char* line){
  if(!strncmp(line,"ZJTEL,RATE,",11)){
   const long rate=atol(line+11);
   if((rate==10||rate==20||rate==50)&&strlen(line+11)<=2){
-   telRateHz=uint16_t(rate);telLast=millis();Serial.print("ZJTEL,ACK,RATE,");Serial.println(telRateHz);
+   telRateHz=uint16_t(rate);
+   // Reset reported loss on a fresh telemetry-rate session. An earlier loop
+   // timestamp may predate this command: emitTelemetry() handles that safely.
+   telemetryDropped=0;telemetrySeq=0;telLast=millis();
+   Serial.print("ZJTEL,ACK,RATE,");Serial.println(telRateHz);
   }else Serial.println("ZJTEL,ERR,RATE,USE_10_20_50");
   return;
  }
@@ -310,10 +314,14 @@ void emitLegacyGyro(unsigned long now){
 }
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
- if(now-telLast<period)return;
- // Drop frames when USB transmission is congested; never block sensor/loop.
- const unsigned long due=(now-telLast)/period;
- if(telLast&&due>1)telemetryDropped+=uint32_t(due-1);
+ // A rate-change command can update telLast after loop() captured "now".
+ // Signed modular subtraction rejects such a future timestamp and also
+ // handles normal millis() rollover without 2^32/period bogus frame loss.
+ const int32_t elapsed=int32_t(uint32_t(now-telLast));
+ if(elapsed<0||uint32_t(elapsed)<period)return;
+ // Count only actual skipped periods; never infer loss from a clock underflow.
+ const uint32_t due=uint32_t(elapsed)/period;
+ if(telLast&&due>1)telemetryDropped+=due-1;
  telLast=now;
  if(Serial.availableForWrite()<108){telemetryDropped++;return;}
  // Canonical frame: ZJTEL,1,board,seq,millis,addr,status,x,y,z,LED_STATUS,drops
