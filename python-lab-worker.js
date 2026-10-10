@@ -69,10 +69,21 @@ async function run(msg){
   const runtime=await prepare();
   const files=msg.files||{};
   try{runtime.FS.mkdirTree('/home/project')}catch{}
+  const validProjectPath=path=>/^(?:[A-Za-z_][\w-]*\/)*[A-Za-z_][\w.-]*$/.test(path)&&!path.split('/').some(x=>x==='.'||x==='..');
   for(const [name,source] of Object.entries(files)){
-   if(!/^[\w-]+\.py$/i.test(name))continue;
-   runtime.FS.writeFile('/home/project/'+name,String(source));
+   if(!validProjectPath(name)||!name.endsWith('.py'))continue;
+   const full='/home/project/'+name;
+   runtime.FS.mkdirTree(full.slice(0,full.lastIndexOf('/')));
+   runtime.FS.writeFile(full,String(source));
   }
+  for(const asset of (msg.assets||[]).slice(0,80)){
+   const path=String(asset.path||''),bytes=asset.bytes;
+   if(!validProjectPath(path)||!bytes||bytes.length>10*1024*1024)continue;
+   const full='/home/project/'+path;
+   runtime.FS.mkdirTree(full.slice(0,full.lastIndexOf('/')));
+   runtime.FS.writeFile(full,new Uint8Array(bytes));
+  }
+  runtime.FS.chdir('/home/project');
   await runtime.runPythonAsync("import sys\nsys.path.insert(0, '/home/project')",{filename:'path_setup.py'});
   const source=String(msg.code||'');
   send('status',{text:'Checking Python syntax…'});
