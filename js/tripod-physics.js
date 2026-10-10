@@ -47,7 +47,7 @@ export function startSimulator(s){
  if(s.running)return true;if(s.throttle>1025)return false;
  s.running=true;clearPID(s);resetMetrics(s);return true;
 }
-export function resetSimulator(s){stopSimulator(s);s.vertical.z=s.vertical.velocity=s.vertical.acceleration=0;s.vertical.stop='BOTTOM';s.roll=s.pitch=s.yaw=s.trimRoll=s.trimPitch=s.time=0;s.targetRoll=s.targetPitch=0;resetMetrics(s)}
+export function resetSimulator(s){for(const [bank,values] of Object.entries(s.pendingPID))applyPID(s,bank,values);stopSimulator(s);s.vertical.z=s.vertical.velocity=s.vertical.acceleration=0;s.vertical.stop='BOTTOM';s.roll=s.pitch=s.yaw=s.trimRoll=s.trimPitch=s.time=0;s.targetRoll=s.targetPitch=0;resetMetrics(s)}
 export function setFlightMode(s,mode){
  if(!['angle','acro'].includes(mode))return false;
  if(s.mode!==mode){s.mode=mode;s.pulse=null;clearPID(s);resetMetrics(s)}
