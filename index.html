@@ -213,10 +213,9 @@
 <button class="btn ghost small" id="fwSerialReconnectBtn" type="button">Reconnect</button><button class="btn ghost small" id="fwSerialResetBtn" type="button">Reset Board</button>
 </div>
 <div id="fwSerialMonitorPane">
-<div class="fw-diagnostic-toolbar"><label>View <select id="fwSerialViewMode" aria-label="USB serial output mode"><option value="live" selected>Live Single Line</option><option value="raw">Raw Serial Log</option></select></label><span id="fwDiagnosticState" role="status">Waiting for sensor data</span></div>
-<pre id="fwLiveDiagnosticLine" class="terminal fw-serial-console fw-single-line" role="status" aria-live="off">ZJDIAG|v=1|state=WAITING|err=NO_DATA</pre>
-<pre class="terminal fw-serial-console" id="fwSerialOutput" role="log" aria-live="off" hidden></pre>
-<p class="fw-diagnostic-note">Live line refreshes at 10/20/50 Hz. NEW = next reading, HOLD = last reading, STALE = no new frame; Raw Log preserves boot, I²C, and error events. In Flash Mode, the ESP ROM cannot report an installed firmware version.</p>
+<div class="fw-diagnostic-toolbar"><strong>Serial Output</strong><span id="fwDiagnosticState" role="status">Waiting for sensor data</span></div>
+<pre class="terminal fw-serial-console fw-raw-lines" id="fwSerialOutput" role="log" aria-live="off" aria-label="Raw USB serial output, one message per line"></pre>
+<p class="fw-diagnostic-note">Raw serial frames appear in arrival order, one complete message per line. Pause Scroll stops viewport movement without stopping data capture. In Flash Mode, the ESP ROM cannot report an installed firmware version.</p>
 <div class="fw-serial-send"><input id="fwSerialInput" placeholder="Message to send to board…" aria-label="Serial message"/><select id="fwSerialLineEnding" aria-label="Line ending"><option value="">No line ending</option><option value="nl" selected>Newline</option><option value="cr">Carriage return</option><option value="crlf">Both NL &amp; CR</option></select><button class="btn primary small" id="fwSerialSendBtn" type="button">Send</button></div>
 <div class="fw-serial-actions"><label class="fw-serial-autoscroll"><input type="checkbox" id="fwSerialAutoScroll" checked/> Auto-scroll</label><button type="button" class="btn ghost small" id="fwSerialPauseScrollBtn">Pause Scroll</button><button type="button" class="btn ghost small" id="fwSerialCopyBtn">Copy Last 100 Lines</button></div>
 </div>
