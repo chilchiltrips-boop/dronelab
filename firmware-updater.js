@@ -326,6 +326,30 @@ function flashReconnectPending(expectedVersion){
  stage('Reboot','active');stage('Reconnect','active');progress(99,'Firmware written • boot/reconnect not confirmed');badge('#fwOverallBadge','FLASHED • BOOT / RECONNECT PENDING','warn');
  log('Firmware bytes were written. Join the kit Wi-Fi to verify boot. If its Wi-Fi is absent, release BOOT and press RESET once; check the USB boot log if it remains absent.');startPostFlashWatch(expectedVersion)
 }
+// Verify the ROM chip, board profile, image header, checksum and flash capacity
+// again at the point of writing. Never trust VID/PID or a dropdown as board ID.
+async function verifiedUsbWritePlan(board,type,erase){
+ if(!loader||!serialPort||!transport||!usbBoardId||!board?.id)throw Error('No ROM-verified USB controller is connected.');
+ const chipId=loader.chip?.IMAGE_CHIP_ID;
+ if(!Number.isInteger(chipId)||!board.imageChipIds?.includes(chipId)||usbBoardId!==board.id)throw Error('BLOCKED WRONG BOARD: connected ROM chip differs from the selected board profile.');
+ if(!fw||fw.boardId!==board.id||fw.type!==type||!(fw.bytes instanceof Uint8Array))throw Error('BLOCKED WRONG FIRMWARE: image does not match the connected board.');
+ const {inspectImage,usbWritePlan}=await import('./js/firmware-image.js');
+ const image=inspectImage(fw.bytes,type,board,catalog);
+ if(image.boardId!==board.id||image.chipId!==chipId)throw Error('BLOCKED WRONG BOARD IMAGE: firmware image chip ID differs from connected ROM.');
+ const digest=await sha256(fw.bytes);
+ if(!digest||!fw.hash||digest.toLowerCase()!==fw.hash.toLowerCase())throw Error('Firmware SHA-256 failed or image bytes changed. Reload the .bin.');
+ if(['Bundled latest','Verified browser cache'].includes(fw.source)){
+  const release=board.latest?.[type];
+  if(!release?.available||!release.sha256||digest.toLowerCase()!==String(release.sha256).toLowerCase())throw Error('Published firmware checksum mismatch; refusing to write an altered image.');
+ }
+ const id=await probeUsbFlash(loader,board);
+ const code=(id>>>16)&255,name=loader.DETECTED_FLASH_SIZES?.[code];
+ const bytes=name?loader.flashSizeBytes(name):(code>=18&&code<=28?2**code:0);
+ if(!Number.isSafeInteger(bytes)||bytes<=0)throw Error('Physical flash size could not be verified.');
+ const plan=usbWritePlan({image,board,chipId,flashBytes:bytes,erase,appReady:type==='factory'});
+ log('USB SAFETY PASS • ROM '+chipId+' • '+board.name+' • physical '+prettyBytes(bytes)+' • SHA-256 '+digest.slice(0,12)+'…');
+ return plan;
+}
 async function usbFlash(){
  if(busy)return;
  const readiness=usbFlashReadiness();if(!readiness.ready)return log('USB flash blocked: '+readiness.message);
@@ -343,12 +367,17 @@ async function usbFlash(){
  if(!await confirmInLab(`Flash firmware over USB?\n${fw.name}\nBoard: ${boardName(target)}\nOffset: ${type==='factory'?'0x0 (factory)':'0x10000 (application)'}${type==='factory'?'\nExisting flash configuration will be replaced.':''}\n\nContinue?`)){setBusy(false);return}
  }catch(error){log('Blocked before erase/write: '+error.message);setBusy(false);return}
  usbFlashPhase='flashing';usbFlashBoardId=target;
+ let safePlan;
+ try{
+  safePlan=await verifiedUsbWritePlan(bp,type,erase);
+  if(safePlan.address!==address||safePlan.flashMode!=='keep'||safePlan.eraseAll!==false)throw Error('Final USB write plan is invalid.');
+ }catch(error){log('USB flash BLOCKED before erase/write: '+String(error?.message||error));badge('#fwOverallBadge','WRONG BOARD / IMAGE • BLOCKED','danger');setBusy(false);return}
  resetStages();stage('Prepare','done');stage('Flash','active');progress(2,'Preparing USB flash…');badge('#fwOverallBadge','FLASHING','warn');let written=false;
  try{
   if(erase){progress(4,'Erasing flash…');await loader.eraseFlash()}
   // Preserve the compiled boot header/hash. C6 encodes 80 MHz differently from C3;
   // rewriting it with the generic JS driver's 80m value invalidates its appended hash.
-  await loader.writeFlash({fileArray:[{data:fw.bytes,address}],flashMode:'keep',flashFreq:'keep',flashSize:'keep',eraseAll:false,compress:true,calculateMD5Hash:usbMd5Hex,reportProgress:(i,w,t)=>progress(5+(w/t)*80,`USB flash ${prettyBytes(w)} / ${prettyBytes(t)}`)});
+  await loader.writeFlash({fileArray:[{data:fw.bytes,address:safePlan.address}],flashMode:safePlan.flashMode,flashFreq:safePlan.flashFreq,flashSize:safePlan.flashSize,eraseAll:safePlan.eraseAll,compress:true,calculateMD5Hash:usbMd5Hex,reportProgress:(i,w,t)=>progress(5+(w/t)*80,`USB flash ${prettyBytes(w)} / ${prettyBytes(t)}`)});
   written=true;usbFlashPhase='written';stage('Flash','done');stage('Verify','done');stage('Reboot','active');progress(90,'Firmware written • requesting reset…');await loader.after('hard_reset');
   if(isEspNativeUsbPort(serialPort)){
    try{await nativeUsbRunFlash(transport);log('Native USB/JTAG download flag cleared; SPI flash boot requested.')}
