@@ -1,0 +1,52 @@
+name: Unified PID Tuning Shell & Persistent WebRTC
+on:
+  push:
+    branches: [feature/unified-pid-settings-shell-v1.6.3, main]
+    paths:
+      - 'index.html'
+      - 'tripod.html'
+      - 'pairing-host-bridge.js'
+      - 'pairing-web.js'
+      - 'pairing.css'
+      - 'tripod.css'
+      - 'styles.css'
+      - 'js/ui-controls.js'
+      - 'sw.js'
+      - 'tools/pid-shell-browser.mjs'
+      - 'tools/python-lab.test.mjs'
+      - '.github/workflows/pid-shell.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify code and repository tests
+        run: |
+          node --check pairing-host-bridge.js
+          node --check pairing-web.js
+          node --check js/ui-controls.js
+          npm test
+          npm run check
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Test persistent real WebRTC and shared header
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/pid-shell-http.log 2>&1 &
+          sleep 3
+          node tools/pid-shell-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pid-shell-visuals
+          path: test-output/
+          if-no-files-found: ignore
