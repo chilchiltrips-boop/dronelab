@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-// FlightCore USB diagnostics v1.3.0; version is emitted by the RUNNING app,
+// FlightCore USB diagnostics v1.3.1; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
 constexpr const char* FW_VERSION="1.3.1";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -28,6 +28,7 @@ LedMode ledMode=LED_OFF;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,lastScan=0,telLast=0;
 uint16_t telRateHz=20;
+uint32_t telemetrySeq=0,telemetryDropped=0; // Declare before serialCommand() so rate changes compile
 uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
 bool ledAvailable=true;
 uint16_t onDuration=500,offDuration=500,fadeDuration=1200;
@@ -192,7 +193,6 @@ bool gyroReady=false;
 unsigned long lastGyro=0,lastGyroProbe=0;
 const char* gyroHealth="STARTING";
 unsigned long legacyLast=0,telemetrySent=0;
-uint32_t telemetrySeq=0,telemetryDropped=0;
 constexpr unsigned long LEGACY_PERIOD_MS=200; // 5 Hz legacy gyro frames; low traffic
 float RateRoll=0,RatePitch=0,RateYaw=0;
 
