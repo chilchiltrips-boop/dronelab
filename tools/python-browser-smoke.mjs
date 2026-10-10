@@ -35,7 +35,15 @@ try{
   if(await page.locator('#pythonTerminal').isVisible())throw Error('Run tool window did not minimize');
 
  const bounds=await page.locator('#pythonMonaco .monaco-editor').boundingBox();
- if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds));
+ const editorDebug=await page.evaluate(()=>{
+  const ids=['pythonIdeLayout','pythonMonaco','pythonBottomDock','tab-python'];
+  const rect=id=>{const e=document.getElementById(id),r=e?.getBoundingClientRect(),c=e&&getComputedStyle(e);return {height:r?.height,top:r?.top,display:c?.display,cssHeight:c?.height,minHeight:c?.minHeight,gridRows:c?.gridTemplateRows,flex:c?.flex}}
+  const shell=document.querySelector('.python-editor-shell'),card=document.querySelector('.python-editor-card');
+  const rt=e=>{const r=e?.getBoundingClientRect(),c=e&&getComputedStyle(e);return {height:r?.height,top:r?.top,flex:c?.flex,display:c?.display,minHeight:c?.minHeight}};
+  return {layout:rect('pythonIdeLayout'),monaco:rect('pythonMonaco'),dock:rect('pythonBottomDock'),root:rect('tab-python'),shell:rt(shell),card:rt(card),variables:{work:getComputedStyle(document.getElementById('tab-python')).getPropertyValue('--py-work-height'),terminal:getComputedStyle(document.getElementById('tab-python')).getPropertyValue('--py-terminal-h')}}
+ });
+ console.log('PYTHON_VIEWPORT_DIAGNOSTIC',JSON.stringify(editorDebug));
+ if(!bounds||bounds.width<250||bounds.height<280)throw Error('Monaco editor is invisible or too small: '+JSON.stringify(bounds)+' metrics='+JSON.stringify(editorDebug));
   const viewport=page.viewportSize();
   const fit=await page.evaluate(()=>({
    editor:document.querySelector('.python-editor-card').getBoundingClientRect().toJSON(),
