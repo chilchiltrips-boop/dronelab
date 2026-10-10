@@ -166,9 +166,9 @@ test('Downloaded firmware is not counted as flashed and both pages expose USB ch
  }
 });
 
-test('Serial monitor shows A1 I2C bus and shared LED restriction',()=>{
+test('Serial monitor shows dedicated A1 I2C and A2 XIAO wiring labels',()=>{
  const updater=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
- for(const token of ['ZJI2C,MODE,','Arduino default wiring','Alternate GPIO4/5 wiring','fwUsbMode'])assert.ok(updater.includes(token),token);
+ for(const token of ['ZJI2C,MODE,','Dedicated SDA4/SCL5','XIAO D4/D5','fwUsbMode'])assert.ok(updater.includes(token),token);
  for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('GPIO8 is reserved for the onboard LED'));}
 });
 
