@@ -106,3 +106,26 @@ test('ESP32 ROM download cannot be confused with running USB firmware',()=>{
   for(const id of ['fwUsbSensor','fwUsbPins','fwUsbLed','fwLedTestBtn','fwI2cScanBtn'])assert.ok(h.includes('id="'+id+'"'),id);
  }
 });
+
+test('running firmware identity and native ROM download are distinct serial states',()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=source.indexOf('function readUsbTelemetry('),end=source.indexOf('function pushSerialLines(',start);
+ assert.ok(start>0&&end>start);
+ const logs=[],ctx={usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,log:x=>logs.push(x),kitStatus(){}};
+ vm.runInNewContext(source.slice(start,end)+';globalThis.read=readUsbTelemetry;',ctx);
+ ctx.read('waiting for download');assert.equal(ctx.usbRomDownload,true);assert.equal(ctx.usbRuntimeInfo,null);
+ ctx.read('ZJINFO,FW,ZFC-A1,1.2.1,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
+ assert.equal(ctx.usbRomDownload,false);assert.equal(ctx.usbRuntimeInfo.boardId,'ZFC-A1');assert.equal(ctx.usbRuntimeInfo.version,'1.2.1');
+ ctx.read('ZJI2C,PINS,ZFC-A1,4,5,0x6B');assert.ok(ctx.usbBusPins.includes('GPIO4')&&ctx.usbBusPins.includes('GPIO5'));
+ ctx.read('ZJGYRO,STATUS,A1,LSM6DS3,0x6B,NOT_FOUND');assert.ok(ctx.usbSensorState.includes('NOT_FOUND'));
+ ctx.read('ZJLED,ACK,900,OK');assert.ok(ctx.usbLedState.includes('acknowledged'));
+ ctx.read('ZJINFO,FW,ZFC-A2,1.2.1,Oct 10 2026,14:41:00,ZEBJUS FlightCore A2 C6');
+ assert.equal(ctx.usbRuntimeInfo.boardId,'ZFC-A2');
+ assert.ok(logs.some(x=>x.includes('ESP ROM DOWNLOAD')));
+});
+test('native C3/C6 port duplicates must not be auto-selected by same VID/PID',()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ assert.ok(source.includes('Multiple matching ESP controllers are connected'));
+ assert.ok(source.includes('Never guess between them')||source.includes('Never guess'));
+ assert.ok(source.includes('select A1 or A2'));
+});
