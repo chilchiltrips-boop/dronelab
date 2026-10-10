@@ -443,7 +443,7 @@ function readUsbTelemetry(line){
  }else if(value.startsWith('ZJI2C,PINS,')){
   const parts=value.split(',');if(parts.length>=6)usbBusPins='SDA GPIO'+parts[3]+' • SCL GPIO'+parts[4]+' • expected '+parts[5];
  }else if(value.startsWith('ZJI2C,MODE,')){
-  const parts=value.split(',');usbBusMode=parts[3]==='ARDUINO_DEFAULT'?'Arduino default wiring':parts[3]==='ALTERNATE_4_5'?'Alternate GPIO4/5 wiring':parts.slice(3).join(' • ');
+  const parts=value.split(',');usbBusMode=parts[3]==='DEDICATED_4_5'?'Dedicated SDA4/SCL5':parts[3]==='XIAO_D4_D5'?'XIAO D4/D5 • GPIO22/23':parts.slice(3).join(' • ');
  }else if(value.startsWith('ZJTEL,')){
   readUnifiedTelemetry(value);
  }else if(value.startsWith('ZJGYRO,STATUS,')){
