@@ -70,7 +70,8 @@ export function createPythonIDEShell(api){
  const exploreActions=node('div','py-explorer-actions');
  const renameBtn=button('Rename','edit',()=>renameSelected()),copyBtn=button('Copy Path','copy',()=>copySelected()),deleteBtn=button('Delete','trash',()=>deleteSelected());
  exploreActions.append(renameBtn,copyBtn,deleteBtn);
- explorer.append(exploreHead,list,exploreActions);layout.insertBefore(explorer,editorCard);
+ const explorerFeedback=node('div','py-explorer-feedback','Files and images saved in this browser');
+ explorer.append(exploreHead,list,exploreActions,explorerFeedback);layout.insertBefore(explorer,editorCard);
  // Right side: one tool window at a time, with a persistent slim tool stripe.
  const rail=node('div','py-tool-rail');rail.setAttribute('aria-label','Python tool windows');
  const panels=[
@@ -135,7 +136,7 @@ export function createPythonIDEShell(api){
  layout.insertAdjacentElement('afterend',dock);
  // Asset database stores binary Blobs outside localStorage quotas.
  async function loadAssets(){try{for(const entry of await assetQuery('getAll'))assets.set(entry.path,entry);refreshExplorer()}catch(e){notice('Asset storage unavailable: '+e.message)}}
- function notice(message){const s=$('pyStatus');if(s)s.textContent=message}
+ function notice(message){const s=$('pyStatus');if(s)s.textContent=message;explorerFeedback.textContent=message}
  function refreshExplorer(){
   editorTab.replaceChildren(icon('file'),document.createTextNode(api.currentFile()));
   editorTab.title='/home/project/'+api.currentFile();
@@ -156,7 +157,9 @@ export function createPythonIDEShell(api){
     else if(kind==='asset')showAsset(path);
     refreshExplorer();
    },'py-tree-entry'+(active?' selected':''));
-   b.style.paddingLeft=(8+depth*15)+'px';b.append(document.createTextNode(path.split('/').pop()));b.dataset.path=path;b.title=path;b.setAttribute('role','treeitem');
+   b.style.paddingLeft=(8+depth*15)+'px';
+   if(kind==='folder')b.setAttribute('aria-expanded',String(!collapsedFolders.has(path)));
+   b.append(document.createTextNode(path.split('/').pop()));b.dataset.path=path;b.title=path;b.setAttribute('role','treeitem');
    b.addEventListener('contextmenu',e=>{e.preventDefault();selected=path;currentFolder=parent(path);refreshExplorer();renameSelected()});
    list.append(b);
   };
