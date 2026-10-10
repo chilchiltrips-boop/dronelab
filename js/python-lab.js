@@ -215,6 +215,8 @@ function addCompletions(M){
  M.languages.registerCompletionItemProvider('python',{
   triggerCharacters:['.','_'],
   provideCompletionItems(model,position){
+   if(!model||model.isDisposed?.()||position.lineNumber<1||position.lineNumber>model.getLineCount()||position.column<1)return {suggestions:[]};
+   try{
    const word=model.getWordUntilPosition(position);
    const range={startLineNumber:position.lineNumber,endLineNumber:position.lineNumber,startColumn:word.startColumn,endColumn:word.endColumn};
    const names=[],seen=new Set(examples.map(x=>x[0]));
@@ -255,6 +257,7 @@ function addCompletions(M){
     label,kind,insertText,documentation,range,sortText:(names.some(n=>n[0]===label)?'0':'1')+label,
     insertTextRules:kind===K.Snippet?M.languages.CompletionItemInsertTextRule.InsertAsSnippet:undefined
    }))};
+   }catch{return {suggestions:[]}}
   }
  });
 }
