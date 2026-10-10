@@ -9,6 +9,7 @@ on:
       - 'FlightCore_Firmware/partitions.csv'
       - 'tools/build_scanner.py'
       - 'tools/flightcore.test.mjs'
+      - 'tools/verify_release.py'
       - 'tools/firmware-guards.test.mjs'
       - 'tools/offline-cache.test.mjs'
       - 'sw.js'
