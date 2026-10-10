@@ -4,7 +4,7 @@ import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync,writeFileSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});
 const browser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1440,height:920},serviceWorkers:'block'});
-await configureContext(context);const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await configureContext(context);const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.stack||e.message));
 const wait=fn=>page.waitForFunction(fn),diagnostics=()=>page.evaluate(()=>window.ZebjusTraining.diagnostics());
 try{
  await page.goto('http://127.0.0.1:8765/tripod.html?standalone=1');
@@ -33,7 +33,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('tpSceneStatus').textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide')));await page.waitForTimeout(200);const disposed=await diagnostics();
  if(disposed.audio.voices!==0||disposed.physics.running||await page.locator('#tpStage canvas:not(#tpFallback)').count())throw Error('Page teardown left resources/motors active');
- const fallback=await context.newPage();fallback.on('pageerror',e=>errors.push(e.message));
+ const fallback=await context.newPage();fallback.on('pageerror',e=>errors.push(e.stack||e.message));
  await fallback.addInitScript(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return /webgl/i.test(type)?null:get.call(this,type,...args)}});
  await fallback.goto('http://127.0.0.1:8765/tripod.html?standalone=1');await fallback.waitForFunction(()=>document.getElementById('tpSceneStatus').textContent==='2D FALLBACK');
  await fallback.locator('#tpRun').click();await fallback.locator('body').click({position:{x:20,y:180}});await fallback.keyboard.press('w');
