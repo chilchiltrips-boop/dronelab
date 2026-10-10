@@ -108,7 +108,8 @@ function makeScene(){
   }).catch(err=>console.warn('Assembly Lab tripod model unavailable',err));
   let quality='high',slowFrames=0;const rotorWorld=new THREE.Vector3(),axisDown=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
   const applyQuality=value=>{quality=value;renderer.setPixelRatio(value==='low'?1:Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=value!=='low';resize()};
-  let radius=9.9,azimuth=.67,elevation=.33,wantedAzimuth=.67,wantedElevation=.33,view='isometric';
+  // Front red arms (+Z) face the viewer by default: positive pitch drops the drone nose.
+   let radius=9.9,azimuth=0,elevation=.20,wantedAzimuth=0,wantedElevation=.20,view='front';
   const resize=()=>{const {width,height}=stage.getBoundingClientRect();if(width<1||height<1)return;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)};
   const observer=new ResizeObserver(resize);observer.observe(stage);resize();
   $('tpSceneStatus').textContent='3D ACTIVE';$('tpSceneTip').textContent='Drag to orbit • Scroll to zoom';
