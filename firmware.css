@@ -83,3 +83,8 @@
 
 /* Explain USB Flash prerequisites without weakening bootloader/board/image checks. */
 .firmware-flash-help{margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--muted,#94a3b8);overflow-wrap:anywhere}.firmware-flash-help.ready{color:#79d7b5}
+
+/* USB/ROM connection and running-app status must remain readable on narrow screens. */
+.firmware-page .firmware-live-status b{white-space:normal;overflow-wrap:anywhere;line-height:1.45;min-height:1.3em}
+.firmware-page .fw-monitor-help{margin:5px 0 11px;color:var(--muted,#95a7b8);font-size:11px;line-height:1.55;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:620px){.firmware-page .firmware-live-status{grid-template-columns:repeat(2,minmax(0,1fr))}.firmware-page .fw-monitor-help{font-size:11px}}

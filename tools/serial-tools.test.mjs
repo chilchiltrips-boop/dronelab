@@ -129,3 +129,39 @@ test('native C3/C6 port duplicates must not be auto-selected by same VID/PID',()
  assert.ok(source.includes('Never guess between them')||source.includes('Never guess'));
  assert.ok(source.includes('select A1 or A2'));
 });
+
+
+test('Step 3 reflects physical USB chip separately from firmware identity and Wi-Fi availability',()=>{
+ const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const st=src.indexOf('function kitStatus(){'),en=src.indexOf('\nasync function refreshKit(',st);
+ assert.ok(st>0&&en>st);
+ const ui=new Map(),catalog=[{id:'ZFC-A1',name:'ZEBJUS FlightCore A1 SuperMini'},{id:'ZFC-A2',name:'ZEBJUS FlightCore A2 C6'}];
+ const ctx={monitorPort:null,usbRuntimeInfo:null,usbRomDownload:false,loader:null,usbBoardId:'',usbSensorState:'',usbBusPins:'--',usbLedState:'--',liveFirmwareBuiltAt:'',school:()=>({getSelectedDevice:()=>({online:false})}),boardName:id=>catalog.find(x=>x.id===id)?.name||id||'Unknown',verifiedUsbConnection:()=>!!ctx.loader&&!!ctx.usbBoardId,$:id=>ui.get(id)||null,text:(id,val)=>ui.set(id,{textContent:val}),textTitle:(id,val)=>ui.set(id,{textContent:val,title:val}),formatBuildTime:x=>x};
+ vm.runInNewContext(src.slice(st,en)+';globalThis.runStatus=kitStatus;',ctx);
+ ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'OFFLINE');
+ ctx.loader={};ctx.usbBoardId='ZFC-A1';ctx.runStatus();
+ assert.equal(ui.get('#fwLiveBoard').textContent,'ZEBJUS FlightCore A1 SuperMini');
+ assert.equal(ui.get('#fwKitState').textContent,'USB BOOTLOADER VERIFIED');
+ assert.equal(ui.get('#fwCurrentVersion').textContent,'Not readable • bootloader');
+ assert.equal(ui.get('#fwConnectionType').textContent,'USB • ROM bootloader');
+ ctx.loader=null;ctx.usbBoardId='';ctx.monitorPort={};ctx.runStatus();
+ assert.equal(ui.get('#fwKitState').textContent,'USB SERIAL • IDENTIFYING');
+ ctx.usbRuntimeInfo={boardId:'ZFC-A2',boardName:'ZEBJUS FlightCore A2 C6',version:'1.2.1',buildStamp:'Oct 10 2026 15:00'};
+ ctx.runStatus();assert.equal(ui.get('#fwCurrentVersion').textContent,'1.2.1');
+ assert.equal(ui.get('#fwLiveBoard').textContent,'ZEBJUS FlightCore A2 C6');
+ assert.equal(ui.get('#fwFirmwareEvidence').textContent,'Verified from live ZJINFO');
+ ctx.usbRomDownload=true;ctx.usbRuntimeInfo=null;ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'ROM DOWNLOAD • APP NOT RUNNING');
+});
+
+test('Downloaded firmware is not counted as flashed and both pages expose USB chip and runtime evidence',()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ assert.ok(source.includes("progress(0,'Checking firmware package • no flash started')"));
+ assert.ok(source.includes('markPackagePrepared('));
+ assert.ok(source.includes("usbFlashPhase='flashing'"));
+ assert.ok(source.includes("usbFlashPhase='written'"));
+ assert.ok(source.includes("usbFlashPhase='verified'"));
+ for(const p of ['index.html','lab.html']){
+  const html=readFileSync(new URL('../'+p,import.meta.url),'utf8');
+  for(const id of ['fwConnectionType','fwFirmwareEvidence','fwCurrentVersion','fwCurrentBuildTime','fwLiveBoard','fwMonitorHelp'])assert.ok(html.includes('id="'+id+'"'),id);
+ }
+});
