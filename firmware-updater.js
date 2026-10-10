@@ -6,6 +6,8 @@ const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.3.0',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
+let lastVerifiedRuntime=null,lastVerifiedAt=0,liveDiagnostic=null;
+let diagnosticSample=null,diagnosticAt=0,diagnosticError='',diagnosticRenderedSeq=null,diagnosticTimer=null;
 let telRxSeq=null,telMissed=0,telLastAt=0,telDeviceDrops=0,telRateActual=0;
 let usbFlashPhase='idle',usbFlashBoardId='',usbVerifiedPortInfo=null; // package loading is not flashing
 function expectedUsbBoard(){return (monitorPort&&usbRuntimeInfo?.boardId)||usbBoardId||''}
@@ -128,15 +130,19 @@ function kitStatus(){
  const usbConnected=bootloader||serial;
  // Physical USB presence takes precedence: an unrelated Wi-Fi kit is not this USB controller.
  const board=running?usbRuntimeInfo.boardId:bootloader?usbBoardId:'';
- const version=running?usbRuntimeInfo.version:bootloader?'Not readable • bootloader':serial?'Waiting for firmware ID':wifiOnline?(d.firmware||d.version||'--'):'--';
- const build=running?usbRuntimeInfo.buildStamp:bootloader?'Not readable • bootloader':serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(d.firmwareBuiltAt||d.buildDateTime||d.buildTime||liveFirmwareBuiltAt):'--';
+ const prior=lastVerifiedRuntime&&((bootloader&&lastVerifiedRuntime.boardId===usbBoardId)||(serial&&!usbRuntimeInfo))?lastVerifiedRuntime:null;
+ const version=running?usbRuntimeInfo.version:bootloader?(prior?'Last verified '+prior.version+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for firmware ID':wifiOnline?(d.firmware||d.version||'--'):'--';
+ const build=running?usbRuntimeInfo.buildStamp:bootloader?(prior?'Last verified '+prior.buildStamp+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(d.firmwareBuiltAt||d.buildDateTime||d.buildTime||liveFirmwareBuiltAt):'--';
  const name=running?usbRuntimeInfo.boardName:bootloader?boardName(board):serial?'USB serial • identifying…':wifiOnline?(d.deviceName||d.name||'--'):'--';
  const state=usbRomDownload&&serial?'ROM DOWNLOAD • APP NOT RUNNING':running?'USB FIRMWARE RUNNING':bootloader?'USB BOOTLOADER VERIFIED':serial?'USB SERIAL • IDENTIFYING':wifiOnline?(d.armed?'ARMED':'ONLINE • DISARMED'):'OFFLINE';
  const profile=board?boardName(board):serial?'Reading firmware board ID…':wifiOnline?(d.boardName||boardName(d.boardId)||'Detecting…'):'--';
  text('#fwCurrentVersion',version);textTitle('#fwCurrentBuildTime',build);
  text('#fwDeviceId',name);text('#fwKitState',state);text('#fwLiveBoard',profile);
  text('#fwConnectionType',running?'USB • Running firmware':bootloader?'USB • ROM bootloader':serial?'USB • Serial':wifiOnline?'Wi-Fi / WebRTC':'Not connected');
- text('#fwFirmwareEvidence',running?'Verified from live ZJINFO':bootloader?'Not available from bootloader':serial?'Waiting for running firmware data':wifiOnline?'Reported by online kit':'Not connected');
+ text('#fwFirmwareEvidence',running?'Verified from live ZJINFO':bootloader?(prior?'Previously verified • not currently readable':'ROM has no firmware version'):serial?'Waiting for running firmware data':wifiOnline?'Reported by online kit':'Not connected');
+ const rel=boardById(board||usbBoardId||usbRuntimeInfo?.boardId);
+ text('#fwPublishedVersion',rel?.latest?.version?'Published '+rel.latest.version+' (not installed proof)':'No verified board package');
+ text('#fwPreviouslyVerified',running?'v'+usbRuntimeInfo.version+' • live':prior?'v'+prior.version+' • last observed':'None this session');
  const kb=$('#fwKitBadge');
  if(kb){kb.textContent=running?'USB FIRMWARE ACTIVE':bootloader?'USB BOOTLOADER READY':serial?(usbRomDownload?'ROM DOWNLOAD':'USB SERIAL OPEN'):wifiOnline?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(running||bootloader||wifiOnline?'online':'offline')}
  text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');text('#fwUsbMode',serial?usbBusMode:'--');
@@ -437,6 +443,8 @@ function readUsbTelemetry(line){
   const fields=value.split(',');
   if(fields.length>=7&&/^ZFC-A[12]$/.test(fields[2])&&/^\d+\.\d+\.\d+$/.test(fields[3])){
    usbRuntimeInfo={boardId:fields[2],version:fields[3],buildStamp:fields[4]+' '+fields[5],boardName:fields.slice(6).join(',')};
+   lastVerifiedRuntime={...usbRuntimeInfo};lastVerifiedAt=Date.now();
+   text('#fwUsbState','Running firmware verified: v'+usbRuntimeInfo.version);
    usbRomDownload=false;
    syncUsbBoardSelection(usbRuntimeInfo.boardId,'Live firmware identity (USB Serial)');
   }
@@ -574,6 +582,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
     }else{usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
    }
   monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
+  diagnosticSample=null;diagnosticAt=0;diagnosticError='';diagnosticRenderedSeq=null;
   usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
   // Native CDC firmware often waits for DTR before delivering Serial.println() messages.
   try{await port.setSignals({dataTerminalReady:true,requestToSend:false})}catch{}
