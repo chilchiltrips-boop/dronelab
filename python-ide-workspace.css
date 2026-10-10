@@ -172,3 +172,8 @@
 
 #tab-python .py-tool-window-head{cursor:grab}#tab-python.py-tool-floating .py-tool-window-head:active{cursor:grabbing}
 #tab-python .py-tree-entry[aria-expanded="false"]>.py-ide-icon{opacity:.68}
+
+/* Right-tool Maximize overrides the persisted normal width, without changing user width preferences. */
+#tab-python.py-right-max:not(.py-right-closed):not(.py-tool-floating) .python-ide-layout{
+ grid-template-columns:var(--py-project-w) minmax(0,1fr) 7px minmax(0,min(68vw,700px)) 38px!important
+}
