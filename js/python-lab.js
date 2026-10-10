@@ -91,7 +91,10 @@ async function importProject(file){
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
 function usbStatus(){
- const connected=!!window.DroneLabSerial?.isOpen?.();const el=$('pyUsbState');el.textContent=connected?'USB SERIAL CONNECTED':'USB SERIAL DISCONNECTED';el.className='status '+(connected?'good':'');
+ const connected=!!window.DroneLabSerial?.isOpen?.(),info=window.DroneLabSerial?.firmwareInfo?.()||{};
+ const el=$('pyUsbState');
+ el.textContent=!connected?'USB SERIAL DISCONNECTED':info.romDownload?'ESP ROM DOWNLOAD MODE':info.boardId?'USB '+info.boardId+' • v'+info.version:'USB SERIAL • WAITING FOR FIRMWARE';
+ el.className='status '+(connected&&!info.romDownload?'good':'');
  $('pyConnectUsbBtn').textContent=connected?'USB Connected':'Connect USB Serial';
 }
 async function connectUsb(){
@@ -412,6 +415,16 @@ function bind(){
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
  window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()});else stopCamera()});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
+ window.addEventListener('dronelab:serial-line',e=>{
+  const line=String(e.detail?.line||'').trim();
+  if(/^ZJLED,ACK,/.test(line)){
+   const parts=line.split(',');
+   if(parts[2]!=='0')terminal('[LED] '+(parts[3]==='OK'?'Controller acknowledged command '+parts[2]:'Controller rejected command '+parts[2]+': '+parts[3])+'\n',parts[3]==='OK'?'out':'error');
+  }else if(/^ZJGYRO,STATUS,/.test(line)){
+   const parts=line.split(',');
+   if(parts[5]==='NOT_FOUND')$('pyScanStatus').textContent=parts[3]+' '+parts[4]+' not found. Check 3.3V/GND and SDA/SCL wiring.';
+  }
+ });
  window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close()});
  bridge.subscribe(data=>{
   if(worker)worker.postMessage({type:'i2c-data',scan:data});

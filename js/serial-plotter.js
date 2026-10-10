@@ -6,6 +6,10 @@ const numberOnly=new RegExp('^'+NUMBER+'$');
 export function parseSerialPlotLine(line){
  const s=String(line??'').trim();
  if(!s||s.length>512)return null;
+ const gyro=s.split(',');
+ if(gyro.length===8&&gyro[0]==='ZJGYRO'&&gyro[1]==='DATA'&&/^A[12]$/.test(gyro[2])&&/^(MPU6050|LSM6DS3)$/.test(gyro[3])&&/^0x[0-9a-f]{2}$/i.test(gyro[4])&&gyro.slice(5).every(x=>numberOnly.test(x))){
+  return {GyroX:Number(gyro[5]),GyroY:Number(gyro[6]),GyroZ:Number(gyro[7])};
+ }
  const matches=[...s.matchAll(pair)];
  if(matches.length){
   if(s.replace(pair,'').replace(/[,;\s]/g,'')!=='')return null;

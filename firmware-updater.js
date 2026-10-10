@@ -552,6 +552,7 @@ function initSerialTools(){
    isFlashing:()=>!!busy,
    baud:()=>serialBaud(),
    status:()=>monitorPort?'connected':busy?'busy':'disconnected',
+   firmwareInfo:()=>({...usbRuntimeInfo,romDownload:usbRomDownload,sensor:usbSensorState,pins:usbBusPins,led:usbLedState}),
    writeLine:line=>writePythonSerialLine(String(line))
  };
  const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
