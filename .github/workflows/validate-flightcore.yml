@@ -29,6 +29,7 @@ on:
       - sw.js
       - package.json
       - tools/flightcore.test.mjs
+      - 'tools/firmware-guards.test.mjs'
       - tools/serial-tools.test.mjs
       - tools/verify_release.py
       - tools/check.mjs
