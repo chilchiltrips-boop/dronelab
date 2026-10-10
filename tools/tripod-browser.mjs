@@ -110,6 +110,36 @@ try{
  await page.screenshot({path:'test-output/flight-training-mobile.png',fullPage:true});
  const layout=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:innerWidth}));
  if(layout.width>layout.viewport+2)throw Error('Mobile horizontal overflow '+JSON.stringify(layout));
+
+ // Layout geometry contract across 7 wide, tablet and phone sizes.
+ for(const [width,height] of [[1920,1080],[1440,900],[1100,800],[900,750],[768,850],[390,844],[320,740]]){
+  await page.setViewportSize({width,height});
+  const m=await page.evaluate(()=>{
+   const r=s=>{const x=document.querySelector(s)?.getBoundingClientRect();return x&&{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}};
+   return {scroll:document.documentElement.scrollWidth,view:r('.tp-view-panel'),sticks:r('.tp-sticks'),vertical:r('.tp-vertical'),pid:r('.tp-pid-panel'),telemetry:r('.tp-telemetry'),env:r('.tp-env-panel'),ab:r('.tp-ab-compare'),rate:r('#tpRatePidSection'),angle:r('#tpAnglePidSection'),left:r('#tpLeftPad'),right:r('#tpRightPad')}
+  });
+  if(m.scroll>width+2)throw Error('Responsive PID page overflow '+JSON.stringify({width,m}));
+  const {view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right}=m;
+  if([view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right].some(x=>!x||x.width<50))throw Error('PID section clipped or missing '+JSON.stringify({width,m}));
+  if(width>1050){
+   if(Math.abs(view.top-sticks.top)>8||pid.top<view.bottom-8||pid.top<vertical.bottom-8||
+     pid.left>view.left+5||pid.right<sticks.right-5||telemetry.top<pid.bottom-8||
+     Math.abs(telemetry.top-env.top)>8||ab.top<env.bottom-8||ab.left<telemetry.right-8)
+    throw Error('Desktop PID workbench misplaced '+JSON.stringify({width,m}));
+  }else{
+   if(sticks.top<view.bottom-8||vertical.top<sticks.bottom-8||pid.top<vertical.bottom-8||
+     telemetry.top<pid.bottom-8||env.top<telemetry.bottom-8||ab.top<env.bottom-8)
+    throw Error('Mobile sections overlap '+JSON.stringify({width,m}));
+  }
+  if(angle.width<width*.20||rate.width<width*.20)throw Error('PID editor compressed '+JSON.stringify({width,m}));
+  if([1920,900,390].includes(width))await page.screenshot({path:`test-output/pid-full-width-${width}.png`,fullPage:true});
+ }
+ await page.setViewportSize({width:1440,height:900});
+ await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').fill('1.15');
+ await page.locator('[data-pid-bank="rateRoll"] button').click();
+ if(!(await text('tpStatus')).includes('PID APPLIED LIVE'))throw Error('Reflow broke PID Apply');
+ await page.locator('#tpAbGain').selectOption('i');
+ if(await page.locator('#tpAbGain').inputValue()!=='i')throw Error('Reflow broke A/B');
  if(errors.length)throw Error('Page errors: '+errors.join(' | '));
  console.log('PASS V1.5.2 Tripod: Assembly GLBs, ACRO/ANGLE, live Apply, A/B, PID pulse, camera follow, audio, mobile and safe Stop');
 }catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/flight-training-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}

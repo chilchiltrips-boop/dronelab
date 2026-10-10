@@ -1,7 +1,7 @@
 name: Unified PID Tuning Shell & Persistent WebRTC
 on:
   push:
-    branches: [feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main]
+    branches: [feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main, feature/pid-fullwidth-responsive-layout]
     paths:
       - 'mobile-android/**'
       - 'docs/flight-training/**'
