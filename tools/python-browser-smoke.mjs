@@ -81,6 +81,36 @@ try{
  await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='ERROR'&&document.getElementById('pythonTerminal').textContent.includes('PinConflictError'),null,{timeout:12000});
  if(!(await page.locator('#runPythonBtn').isEnabled()))throw Error('Hardware error did not release Python Run control');
  await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
+ // Live USB gyro integration: actual Python awaits asynchronous worker RPC data,
+ // distinct from a static I2C address scan. Check both A1 and A2 on one Python example.
+ page.once('dialog',dialog=>dialog.accept());
+ await page.locator('#pythonQuickHardware').selectOption('gyro');
+ await page.waitForFunction(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'))?.getValue().includes('await drone.read_gyro('));
+ if((await page.locator('#pythonTarget').inputValue())!=='usb')throw Error('Gyro Python example must select USB Hardware mode');
+ await page.evaluate(()=>{
+  window.DroneLabSerial={...window.__previousDroneSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async()=>true};
+  window.dispatchEvent(new CustomEvent('dronelab:usb-state',{detail:{connected:true}}));
+  window.__gyroBoard='A1';window.__gyroSeq=0;
+  window.__gyroTimer=setInterval(()=>{
+   const board=window.__gyroBoard,addr=board==='A1'?'0x6B':'0x68',seq=++window.__gyroSeq;
+   const line='ZJTEL,1,'+board+','+seq+','+(seq*50)+','+addr+',READY,1.23,-2.34,3.45,LED_READY,0';
+   window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line}}));
+  },50);
+ });
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>{
+  const out=document.getElementById('pythonTerminal').textContent;
+  return out.includes('Sensor: LSM6DS3')&&out.includes('0x6B')&&out.includes('RateRoll=')&&out.includes('RateYaw=');
+ },null,{timeout:90000});
+ await page.locator('#stopPythonBtn').click();
+ await page.evaluate(()=>{window.__gyroBoard='A2'});
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>{
+  const out=document.getElementById('pythonTerminal').textContent;
+  return out.includes('Sensor: MPU6050')&&out.includes('0x68')&&out.includes('RatePitch=');
+ },null,{timeout:90000});
+ await page.locator('#stopPythonBtn').click();
+ await page.evaluate(()=>{clearInterval(window.__gyroTimer);window.__gyroTimer=null;window.DroneLabSerial=window.__previousDroneSerial});
  // Verify the actual vendored OpenCV wheel loads in Python, not just in metadata.
  const cvTest="import cv2\nprint('CV2_READY', cv2.__version__)\n";
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),cvTest);
@@ -137,7 +167,7 @@ try{
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<450)throw Error('Mobile editor layout invalid');
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
- console.log('PASS Python Lab: AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
+ console.log('PASS Python Lab: live A1/A2 gyro in Python while True, AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
 }catch(error){
  console.error('BROWSER SMOKE FAILED:',error.stack||error);
