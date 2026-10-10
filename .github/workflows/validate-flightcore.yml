@@ -31,6 +31,11 @@ on:
       - tools/flightcore.test.mjs
       - 'tools/firmware-guards.test.mjs'
       - tools/serial-tools.test.mjs
+      - js/serial-plotter.js
+      - js/python-lab.js
+      - python-lab-worker.js
+      - tools/python-lab.test.mjs
+      - tools/python-browser-smoke.mjs
       - tools/verify_release.py
       - tools/check.mjs
       - .github/workflows/validate-flightcore.yml
