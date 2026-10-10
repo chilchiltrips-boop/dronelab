@@ -149,3 +149,57 @@
 
 /* Python diagnostic action is compact even on horizontal tablet layouts. */
 #pythonCheckSyntaxBtn{min-width:94px}
+
+/* Python IDE: two independent code scroll axes and page-persistent execution.
+ * The application topbar and navigation are already sticky; JS measures their
+ * actual lower edge to avoid covering the Run/Stop controls on compact screens.
+ */
+#tab-python{--py-sticky-top:126px}
+#tab-python .python-toolbar-sentinel{height:1px;pointer-events:none}
+#tab-python .python-project-bar{
+ position:sticky;top:var(--py-sticky-top);z-index:42;
+ background:#071c2a;border-color:#295368;
+ box-shadow:0 7px 20px rgba(0,0,0,.35);
+}
+#tab-python .python-project-bar.is-stuck{
+ padding:6px 11px;min-height:45px;gap:6px;
+ background:#102738;border-color:#3a8c78;border-radius:10px;
+ box-shadow:0 10px 25px rgba(0,0,0,.55);
+}
+#tab-python .python-project-bar.is-stuck::before{
+ content:"PYTHON";color:#73dfbc;font-size:10px;font-weight:900;
+ letter-spacing:.12em;flex:0 0 auto;
+}
+#tab-python .python-project-bar.is-stuck .python-project-heading,
+#tab-python .python-project-bar.is-stuck .python-project-picker,
+#tab-python .python-project-bar.is-stuck .python-project-actions,
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions select,
+#tab-python .python-project-bar.is-stuck #pythonCheckSyntaxBtn{display:none!important}
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions{
+ flex:1 1 0;justify-content:flex-end;flex-wrap:nowrap;min-width:0;
+ gap:8px;
+}
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions #runPythonBtn,
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions #stopPythonBtn,
+#tab-python .python-project-bar.is-stuck .python-toolbar-actions #rerunPythonBtn{
+ flex:0 1 104px;min-width:68px;min-height:36px;
+}
+/* Monaco supplies the actual internal X/Y scrollbars. The editor shell must
+ * stay a bounded viewport, rather than expanding with source file length. */
+#tab-python .python-editor-shell{min-width:0;min-height:0;overflow:hidden}
+#tab-python #pythonMonaco{overflow:hidden;min-width:0;min-height:0}
+#tab-python #pythonEditor{
+ white-space:pre;overflow-x:auto;overflow-y:auto;
+ overflow-wrap:normal;word-break:normal;overscroll-behavior:contain;
+}
+/* Keep horizontal scroll usable in non-Monaco fallback and touch devices. */
+#tab-python #pythonEditor::-webkit-scrollbar{width:12px;height:12px}
+#tab-python #pythonEditor::-webkit-scrollbar-thumb{background:#36596d;border:2px solid #06111b;border-radius:8px}
+#tab-python #pythonEditor::-webkit-scrollbar-track{background:#071825}
+@media(max-width:760px){
+ #tab-python .python-project-bar.is-stuck{padding:6px 8px;flex-wrap:nowrap}
+ #tab-python .python-project-bar.is-stuck .python-toolbar-actions{gap:5px}
+ #tab-python .python-project-bar.is-stuck .python-toolbar-actions .btn{
+  flex:1 1 0;min-width:0;padding:7px 6px;font-size:11px;
+ }
+}

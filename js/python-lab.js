@@ -344,7 +344,7 @@ async function enableMonaco(){
   // Own all models explicitly: Monaco auto-disposes an editor-created default
   // model after a switch, which breaks reopening previously selected .py files.
   const initialModel=M.editor.createModel(files[active]||'','python',M.Uri.parse('inmemory://zebjus/'+active));
-  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,stickyScroll:{enabled:false},minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'on',wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
+  editor=M.editor.create($('pythonMonaco'),{model:initialModel,theme:'zebjus-pycharm',automaticLayout:true,stickyScroll:{enabled:false},minimap:{enabled:false},fontSize:13,lineHeight:21,wordWrap:'off',scrollbar:{vertical:'visible',horizontal:'visible',verticalScrollbarSize:12,horizontalScrollbarSize:12,useShadows:false},scrollBeyondLastColumn:5,wrappingIndent:'indent',autoIndent:'full',tabSize:4,insertSpaces:true,quickSuggestions:{other:true,comments:false,strings:true},suggestOnTriggerCharacters:true,suggest:{showWords:true,showSnippets:true},acceptSuggestionOnEnter:'on',scrollBeyondLastLine:false,padding:{top:13,bottom:13},bracketPairColorization:{enabled:true},guides:{bracketPairs:true,indentation:true}});
   models.set(active,initialModel);
   editor.onDidChangeModelContent(()=>{if(loading)return;clearPythonMarkers();files[active]=editor.getValue();autosave();updateButtons();editorPosition()});
   editor.onDidChangeCursorPosition(editorPosition);
@@ -354,6 +354,31 @@ async function enableMonaco(){
  }catch(e){$('pythonMonaco').style.display='none';$('pythonEditor').style.display='block';status('Basic editor fallback','warn');terminal('[Editor] '+e.message+'\n')}
 }
 
+let pythonStickyFrame=0;
+function updatePythonStickyToolbar(){
+ const tab=$('tab-python'),sentinel=$('pythonToolbarSentinel'),bar=tab?.querySelector('.python-project-bar');
+ if(!tab||!sentinel||!bar)return;
+ const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');
+ const stickyTop=Math.ceil(Math.max(0,header?.getBoundingClientRect().bottom||0,nav?.getBoundingClientRect().bottom||0));
+ tab.style.setProperty('--py-sticky-top',stickyTop+'px');
+ if(!tab.classList.contains('active')){bar.classList.remove('is-stuck');return}
+ const stuck=sentinel.getBoundingClientRect().top<stickyTop-5;
+ bar.classList.toggle('is-stuck',stuck);
+}
+function schedulePythonStickyToolbar(){
+ if(pythonStickyFrame)return;
+ pythonStickyFrame=requestAnimationFrame(()=>{pythonStickyFrame=0;updatePythonStickyToolbar()});
+}
+function initPythonStickyToolbar(){
+ window.addEventListener('scroll',schedulePythonStickyToolbar,{passive:true});
+ window.addEventListener('resize',schedulePythonStickyToolbar,{passive:true});
+ window.addEventListener('orientationchange',schedulePythonStickyToolbar);
+ if(typeof ResizeObserver!=='undefined'){
+  const resize=new ResizeObserver(schedulePythonStickyToolbar);
+  for(const el of [document.querySelector('#app>.topbar'),document.querySelector('#app>.tabs')])if(el)resize.observe(el);
+ }
+ schedulePythonStickyToolbar();
+}
 function initPythonWorkspaceResizers(){
  const tab=$('tab-python'),side=$('pythonSideStack'),col=$('pythonColResizer'),row=$('pythonRowResizer');if(!tab||layoutReady)return;
  layoutReady=true;
@@ -475,11 +500,11 @@ function bind(){
  $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
- $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();
+ $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonWorkspaceResizers();initPythonStickyToolbar();
  $('pythonEditor').oninput=e=>{recordText(e.target.value);editorPosition()};$('pythonEditor').onkeyup=editorPosition;$('pythonEditor').onclick=editorPosition;
  $('pythonEditor').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const ta=e.target;ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');recordText(ta.value)}else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!editor){e.preventDefault();undoRedo(e.shiftKey)}};
  document.addEventListener('keydown',e=>{if(!$('tab-python')?.classList.contains('active'))return;if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runPython()}});
- window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition()});else stopCamera()});
+ window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')requestAnimationFrame(()=>{editor?.layout();editorPosition();schedulePythonStickyToolbar()});else{stopCamera();schedulePythonStickyToolbar()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
  window.addEventListener('dronelab:serial-line',e=>{
   const line=String(e.detail?.line||'').trim();

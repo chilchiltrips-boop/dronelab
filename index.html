@@ -81,6 +81,7 @@
 </div>
 </section><section class="panel tab-panel python-lab-page" id="tab-python">
 <div class="python-workspace">
+  <div class="python-toolbar-sentinel" id="pythonToolbarSentinel" aria-hidden="true"></div>
   <div class="python-project-bar" aria-label="Python file and execution toolbar">
     <div class="python-project-heading"><small>PROJECT</small><strong id="pythonActiveFileLabel" title="Active Python file">main.py</strong><button class="btn ghost small" id="pythonNewFileBtn" type="button">+ New</button></div>
     <div class="python-project-picker"><label for="pythonFileList" class="python-visually-hidden">Choose Python file</label><select id="pythonFileList" title="Choose Python file" aria-label="Choose Python file"></select></div>
@@ -108,7 +109,7 @@
       </div>
       <div class="python-editor-shell">
         <div id="pythonMonaco" aria-label="Python smart code editor"></div>
-        <textarea id="pythonEditor" spellcheck="false" aria-label="Python editor fallback"></textarea>
+        <textarea id="pythonEditor" spellcheck="false" wrap="off" aria-label="Python editor fallback"></textarea>
       </div>
       <div class="python-editor-footer">
         <span>Ctrl/⌘ + Space • Suggestions</span><span>Ctrl/⌘ + Enter • Run</span>
