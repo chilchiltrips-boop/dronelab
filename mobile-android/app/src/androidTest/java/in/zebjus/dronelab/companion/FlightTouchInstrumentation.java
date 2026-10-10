@@ -164,8 +164,10 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         touch(MotionEvent.ACTION_CANCEL,new int[]{0,1},lm,rm);
         float[] connect=point("flightConnect",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},connect);touch(MotionEvent.ACTION_UP,new int[]{4},connect);
         check("document.getElementById('mobileConnection').open");
-        float[] connectBack=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},connectBack);touch(MotionEvent.ACTION_UP,new int[]{4},connectBack);
-        check("!document.getElementById('mobileConnection').open");
+        // Holding a touch action must never select its label or open Android's
+        // selection toolbar. This also covers slower native pointer delivery.
+        float[] connectBack=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},connectBack);SystemClock.sleep(650);touch(MotionEvent.ACTION_UP,new int[]{4},connectBack);
+        check("!document.getElementById('mobileConnection').open && !window.getSelection().toString()");
         // Cycle all response modes via actual OS taps and restore retained Fast.
         for(String name:new String[]{"Slow","Medium","Fast"}){
             float[] response=point("flightResponse",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},response);touch(MotionEvent.ACTION_UP,new int[]{4},response);

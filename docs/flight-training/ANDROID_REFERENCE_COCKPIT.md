@@ -34,6 +34,8 @@ Eight browser viewport cases include 488×227/595×227 with visible navigation a
 
 Physical handset native-WebView-to-Web RTC, autofocus/radio/OEM behavior, 120-Hz performance and perceived audio comfort remain UNVERIFIED. Follow DEVICE_ACCEPTANCE.md for those results. This change preserves the single Flight Training receiver and plant, firmware, assembly, wiring and Python labs; no AP/STA or real motor control is introduced.
 
+Native wide-screen acceptance also identified Android selecting the BACK button label and opening a text-selection toolbar. Touch actions now prevent label selection and their context menu; manual pairing textarea/code text remains selectable. Both native and browser acceptance hold BACK beyond the long-press threshold and require the sheet to close without selecting text.
+
 The protected HOME key and activity return use Android's shell input/activity services on API 35; the test requires actual loss/restoration of window focus. Thumb inputs remain real touchscreen MotionEvents. No JavaScript input surrogate or direct Activity callback invocation substitutes for the native checks.
 
 CI boots two fresh named AVDs, one per aspect ratio, and repeats APK12→13 installation/data retention plus forward/reverse native input in each. Both emulator steps must succeed before the mandatory release gate. This avoids the observed emulator 37.2.12 connection loss when changing the two display sizes in one running virtual device; it does not omit the wider-screen cases. Snapshot save/load is disabled for these disposable test devices.

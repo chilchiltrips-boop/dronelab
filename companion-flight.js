@@ -153,6 +153,7 @@ function bind(){
   sent.clear();send(true);
  }};
  $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
+ document.addEventListener('contextmenu',event=>{if(event.target.closest('button,select,.flight-touch-zone'))event.preventDefault()});
  $('flightPair').onclick=openConnection;$('flightBack').onclick=closeConnection;$('flightSettings').onclick=openConnection;
  $('flightConnect').onclick=openConnection;
  $('flightQuickScan').onclick=()=>{openConnection();$('scanOfferBtn').click()};

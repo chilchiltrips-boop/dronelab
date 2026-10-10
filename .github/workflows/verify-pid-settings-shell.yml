@@ -1,0 +1,26 @@
+name: Verify PID Settings Shell
+on:
+  push:
+    branches: [fix/pid-tuning-unified-header-pairing-ui]
+    paths:
+      - 'styles.css'
+      - 'pairing.css'
+      - 'tools/pid-settings-unified.test.mjs'
+      - '.github/workflows/verify-pid-settings-shell.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify unified header and settings shell
+        run: |
+          node --test tools/pid-settings-unified.test.mjs
+          npm test
+          npm run check
