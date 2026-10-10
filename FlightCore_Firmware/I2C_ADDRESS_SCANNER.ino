@@ -3,15 +3,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-// FlightCore USB diagnostics v1.2.1; version is emitted by the RUNNING app,
+// FlightCore USB diagnostics v1.3.0; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.2.2";
+constexpr const char* FW_VERSION="1.3.0";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
 #else
-constexpr uint8_t BUS_SDA=SDA,BUS_SCL=SCL; // Arduino ESP32-C3 Dev Module default: GPIO8 / GPIO9
-constexpr uint8_t ALT_BUS_SDA=4,ALT_BUS_SCL=5; // optional wiring that frees the onboard LED
+constexpr uint8_t BUS_SDA=4,BUS_SCL=5; // A1: dedicated I2C pins; GPIO8 stays onboard LED-only
 constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS FlightCore A1 SuperMini";
 #endif
 
@@ -29,7 +28,7 @@ LedMode ledMode=LED_OFF;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,lastScan=0;
 uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
-bool ledAvailable=true,usingAlternateBus=false;
+bool ledAvailable=true;
 uint16_t onDuration=500,offDuration=500,fadeDuration=1200;
 char serialLine[192];size_t serialUsed=0;
 
@@ -48,8 +47,8 @@ void printFirmwareInfo(){
 #endif
  Serial.print("ZJLED,INFO,");Serial.print(FC_BOARD);Serial.print(",GPIO");
  Serial.print(LED_PIN);
- Serial.println(ledAvailable?",ACTIVE_LOW":",UNAVAILABLE,SDA_CONFLICT");
- Serial.print("ZJI2C,MODE,");Serial.print(FC_BOARD);Serial.println(usingAlternateBus?",ALTERNATE_4_5":",ARDUINO_DEFAULT");
+ Serial.println(",ACTIVE_LOW");
+ Serial.print("ZJI2C,MODE,");Serial.print(FC_BOARD);Serial.println(",DEDICATED_4_5");
 }
 void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
@@ -67,13 +66,8 @@ void ledCommand(char* line){
  char* id=strtok_r(line+6,",",&state);
  char* action=strtok_r(nullptr,",",&state);
  if(!id||!action)return;
- // GPIO8 is both the C3 SuperMini onboard LED and Arduino default SDA.
- // Never attach PWM or alter this pin while I2C uses it.
- if(!ledAvailable){
-  if(!strcmp(action,"STOP")){ledOff();ledAck(id,"OK");}
-  else ledAck(id,"PIN_CONFLICT");
-  return;
- }
+ // A1 hardware contract: GPIO4 SDA / GPIO5 SCL; GPIO8 LED-only.
+ // PIN_CONFLICT cannot occur on the supported board wiring.
  // Heartbeats do not alter the running pattern.
  if(!strcmp(action,"KEEP")){leaseStart=millis();ledAck(id,"OK");return;}
  long a=0,b=0,c=0;LedMode next=LED_OFF;
@@ -106,9 +100,17 @@ void ledCommand(char* line){
  }else{ledAck(id,"UNKNOWN");return;}
  ledMode=next;effectStart=leaseStart=millis();ledAck(id,"OK");
 }
+void requestScan();
 void serialCommand(char* line){
  if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
- if(!strcmp(line,"ZJI2C,SCAN")){lastScan=millis()-SCAN_PERIOD_MS;return;}
+ if(!strcmp(line,"ZJI2C,SCAN")){requestScan();return;}
+ if(!strncmp(line,"ZJTEL,RATE,",11)){
+  const long rate=atol(line+11);
+  if((rate==10||rate==20||rate==50)&&strlen(line+11)<=2){
+   telRateHz=uint16_t(rate);telLast=millis();Serial.print("ZJTEL,ACK,RATE,");Serial.println(telRateHz);
+  }else Serial.println("ZJTEL,ERR,RATE,USE_10_20_50");
+  return;
+ }
  ledCommand(line);
 }
 void readLedCommands(){
@@ -169,15 +171,20 @@ void updateLedEffect(unsigned long now){
 // The serial frame is ZJGYRO,DATA,A1|A2,SENSOR,0xADDR,X,Y,Z (degrees/second).
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t GYRO_ADDR=0x68;
-constexpr unsigned long GYRO_PERIOD_MS=50; // 20 Hz, matching MPU6050 example
+constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling independent of USB telemetry
 constexpr const char* GYRO_BOARD="A2",*GYRO_NAME="MPU6050";
 #else
 constexpr uint8_t GYRO_ADDR=0x6B; // Verified GY-LSM6DS3 SA0 high
-constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz; sensor internally operates at 104 Hz
+constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling; LSM6DS3 ODR 104 Hz
 constexpr const char* GYRO_BOARD="A1",*GYRO_NAME="LSM6DS3";
 #endif
 bool gyroReady=false;
 unsigned long lastGyro=0,lastGyroProbe=0;
+const char* gyroHealth="STARTING";
+unsigned long telLast=0,legacyLast=0,telemetrySent=0;
+uint16_t telRateHz=20;
+uint32_t telemetrySeq=0,telemetryDropped=0;
+constexpr unsigned long LEGACY_PERIOD_MS=200; // 5 Hz legacy gyro frames; low traffic
 float RateRoll=0,RatePitch=0,RateYaw=0;
 
 bool gyroWrite(uint8_t reg,uint8_t value){
@@ -192,6 +199,7 @@ bool gyroRead(uint8_t reg,uint8_t* data,uint8_t length){
  return true;
 }
 void gyroStatus(const char* state){
+ gyroHealth=state;
  Serial.print("ZJGYRO,STATUS,");Serial.print(GYRO_BOARD);Serial.print(',');
  Serial.print(GYRO_NAME);Serial.print(",0x");
  if(GYRO_ADDR<16)Serial.print('0');
@@ -243,77 +251,96 @@ void updateGyro(unsigned long now){
  if(!gyroSignals()){
   gyroReady=false;lastGyroProbe=now;gyroStatus("READ_ERROR");return;
  }
- // Machine-readable for serial plotter / future Python Lab bridge.
- Serial.print("ZJGYRO,DATA,");Serial.print(GYRO_BOARD);Serial.print(',');
- Serial.print(GYRO_NAME);Serial.print(",0x");Serial.print(GYRO_ADDR,HEX);Serial.print(',');
- Serial.print(RateRoll,2);Serial.print(',');
- Serial.print(RatePitch,2);Serial.print(',');
- Serial.println(RateYaw,2);
+ // Gyro sampling is independent of USB transmission timing.
+ // Maintain a separate low-rate ZJGYRO frame for legacy Python/plot clients.
 }
 
-// Original I2C scanner behavior and text preserved: address range 1..126, every 5 seconds.
-void scanI2C(){
- byte error,address;int deviceCount=0;
- Serial.println("Scanning I2C bus...\n");
- for(address=1;address<127;address++){
-  Wire.beginTransmission(address);error=Wire.endTransmission();
+// Non-blocking I2C scan: up to 3 addresses per pass; once per 5 seconds or on request.
+// Legacy Arduino scanner text remains available for existing Python USB scan examples.
+uint8_t scanAddress=1,scanCount=0;
+bool scanActive=false,scanRequested=true;
+unsigned long lastScanStart=0;
+void requestScan(){scanRequested=true;}
+void scanI2C(unsigned long now){
+ if(!scanActive){
+  if(!scanRequested&&now-lastScanStart<SCAN_PERIOD_MS)return;
+  scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;lastScanStart=now;
+  Serial.println("Scanning I2C bus...\\n");
+ }
+ for(uint8_t budget=0;budget<3&&scanAddress<127;budget++,scanAddress++){
+  Wire.beginTransmission(scanAddress);
+  const byte error=Wire.endTransmission();
   if(error==0){
    Serial.print("✔ Found device at 0x");
-   if(address<16)Serial.print("0");
-   Serial.println(address,HEX);deviceCount++;
+   if(scanAddress<16)Serial.print("0");
+   Serial.println(scanAddress,HEX);scanCount++;
   }else if(error==4){
    Serial.print("⚠ Unknown error at 0x");
-   if(address<16)Serial.print("0");
-   Serial.println(address,HEX);
+   if(scanAddress<16)Serial.print("0");
+   Serial.println(scanAddress,HEX);
   }
  }
- if(deviceCount==0)Serial.println("❌ No I2C devices found.\n");
- else{Serial.print("\n✅ Total I2C devices found: ");Serial.println(deviceCount);}
- Serial.println("\n-----------------------------\n");
-}
-// Probe only the expected IMU at startup. The full address scan stays unchanged.
-bool detectedImuOnBus(){
- Wire.beginTransmission(GYRO_ADDR);
- return Wire.endTransmission()==0;
+ if(scanAddress>=127){
+  if(!scanCount)Serial.println("❌ No I2C devices found.\\n");
+  else{Serial.print("\\n✅ Total I2C devices found: ");Serial.println(scanCount);}
+  Serial.println("\\n-----------------------------\\n");
+  Serial.print("ZJSCAN,");Serial.print(GYRO_BOARD);Serial.print(',');
+  Serial.print(now);Serial.print(',');Serial.println(scanCount);
+  scanActive=false;
+ }
 }
 void selectI2cBus(){
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ // A1 dedicated SDA4/SCL5, preserving GPIO8 for the active-low LED.
+ // A2 remains GPIO22/23. Both controllers use 400 kHz.
  Wire.begin(BUS_SDA,BUS_SCL);Wire.setClock(400000);
- activeSda=BUS_SDA;activeScl=BUS_SCL;
-#else
- // Match the user's proven Arduino IDE Wire.begin() sketch first.
- Wire.begin();Wire.setClock(400000);
- activeSda=BUS_SDA;activeScl=BUS_SCL;
- if(!detectedImuOnBus()){
-  Wire.end();
-  Wire.begin(ALT_BUS_SDA,ALT_BUS_SCL);Wire.setClock(400000);
-  if(detectedImuOnBus()){activeSda=ALT_BUS_SDA;activeScl=ALT_BUS_SCL;usingAlternateBus=true;}
-  else{Wire.end();Wire.begin();Wire.setClock(400000);} // default remains the published wiring contract
- }
- // The onboard LED's GPIO8 overlaps the default I2C SDA.
- ledAvailable=activeSda!=LED_PIN&&activeScl!=LED_PIN;
-#endif
+ activeSda=BUS_SDA;activeScl=BUS_SCL;ledAvailable=true;
+}
+void emitLegacyGyro(unsigned long now){
+ if(!gyroReady||now-legacyLast<LEGACY_PERIOD_MS||Serial.availableForWrite()<65)return;
+ legacyLast=now;
+ Serial.print("ZJGYRO,DATA,");Serial.print(GYRO_BOARD);Serial.print(',');
+ Serial.print(GYRO_NAME);Serial.print(",0x");Serial.print(GYRO_ADDR,HEX);Serial.print(',');
+ Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
+ Serial.println(RateYaw,2);
+}
+void emitTelemetry(unsigned long now){
+ const unsigned long period=1000UL/telRateHz;
+ if(now-telLast<period)return;
+ // Drop frames when USB transmission is congested; never block sensor/loop.
+ const unsigned long due=(now-telLast)/period;
+ if(telLast&&due>1)telemetryDropped+=uint32_t(due-1);
+ telLast=now;
+ if(Serial.availableForWrite()<108){telemetryDropped++;return;}
+ // Canonical frame: ZJTEL,1,board,seq,millis,addr,status,x,y,z,LED_STATUS,drops
+ Serial.print("ZJTEL,1,");Serial.print(GYRO_BOARD);Serial.print(',');
+ Serial.print(++telemetrySeq);Serial.print(',');Serial.print(now);Serial.print(",0x");
+ Serial.print(GYRO_ADDR,HEX);Serial.print(',');Serial.print(gyroHealth);Serial.print(',');
+ Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
+ Serial.print(RateYaw,2);Serial.print(',');
+ Serial.print(ledAvailable?"LED_READY":"PIN_CONFLICT");
+ Serial.print(',');Serial.println(telemetryDropped);
+ telemetrySent++;
 }
 void setup(){
  Serial.begin(115200);
  selectI2cBus();
- // Never drive the I2C SDA pin through the LED driver.
- if(ledAvailable){
-  digitalWrite(LED_PIN,HIGH);
-  pinMode(LED_PIN,OUTPUT);
-  ledcAttach(LED_PIN,5000,8);
-  ledOff();
- }
- Serial.println("\n=== I2C Address Scanner ===");
+ digitalWrite(LED_PIN,HIGH);
+ pinMode(LED_PIN,OUTPUT);
+ ledcAttach(LED_PIN,5000,8);
+ ledOff();
+ Serial.println("\\n=== I2C Address Scanner ===");
  printFirmwareInfo();
- if(!ledAvailable)Serial.println("ZJLED,STATUS,PIN_CONFLICT: GPIO8 is I2C SDA; move sensor to SDA4/SCL5 for onboard LED control");
- delay(1000);
- lastScan=millis()-SCAN_PERIOD_MS;
+ Serial.println("ZJTEL,ACK,RATE,20");
+ lastGyro=millis()-GYRO_PERIOD_MS;
+ lastGyroProbe=millis()-2500;
+ telLast=millis();
 }
 void loop(){
  const unsigned long now=millis();
  readLedCommands();
  updateLedEffect(now);
  updateGyro(now);
- if(now-lastScan>=SCAN_PERIOD_MS){lastScan=now;scanI2C();}
+ scanI2C(now);
+ emitTelemetry(now);
+ emitLegacyGyro(now);
 }
