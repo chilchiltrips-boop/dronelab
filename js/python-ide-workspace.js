@@ -8,7 +8,7 @@ function icon(name){const e=document.createElementNS('http://www.w3.org/2000/svg
 function button(label,symbol,fn,cls=''){const b=node('button','py-ide-button '+cls);b.type='button';if(symbol)b.append(icon(symbol));b.append(document.createTextNode(label));b.addEventListener('click',fn);return b}
 function cleanPath(path){const parts=String(path||'').replace(/\\/g,'/').replace(/^\/+|\/+$/g,'').split('/');return parts.some(s=>!s||s==='.'||s==='..')?'':parts.join('/')}
 function validPath(path){return path.length<=190&&filePattern.test(path)&&!path.split('/').some(p=>p==='.'||p==='..')}
-function safeImportPath(path){return cleanPath(path).split('/').map(part=>part.replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/^[0-9]/,'_function validPath(path){return path.length<=190&&filePattern.test(path)&&!path.split('/').some(p=>p==='.'||p==='..')}')).join('/')}
+function safeImportPath(path){return cleanPath(path).split('/').map(part=>part.replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/^[0-9]/,n=>'_'+n)).join('/')}
 function parent(path){return path.includes('/')?path.slice(0,path.lastIndexOf('/')):''}
 function folderChain(path){let q='',out=[];for(const part of path.split('/')){if(!part)continue;q=q?q+'/'+part:part;out.push(q)}return out}
 function readJson(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
