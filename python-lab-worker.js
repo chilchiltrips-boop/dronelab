@@ -54,7 +54,21 @@ async function run(msg){
   // Convert simple top-level time.sleep(seconds) to a cooperative pause internally.
   // The student's script remains ordinary synchronous-looking Python, without await.
   // Python-defined synchronous functions are left untouched.
-  const rewrite=String.raw`import ast\nclass _ZjSleepRewrite(ast.NodeTransformer):\n    def visit_FunctionDef(self,node): return node\n    def visit_AsyncFunctionDef(self,node): return node\n    def visit_ClassDef(self,node): return node\n    def visit_Lambda(self,node): return node\n    def visit_Call(self,node):\n        node=self.generic_visit(node)\n        if isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name) and node.func.value.id=='time' and node.func.attr=='sleep':\n            call=ast.Call(func=ast.Attribute(value=ast.Call(func=ast.Name(id='__import__',ctx=ast.Load()),args=[ast.Constant(value='asyncio')],keywords=[]),attr='sleep',ctx=ast.Load()),args=node.args,keywords=node.keywords)\n            return ast.copy_location(ast.Await(value=call),node)\n        return node\n_ZjTree=_ZjSleepRewrite().visit(ast.parse(_zj_source))\nast.fix_missing_locations(_ZjTree)\n_zj_transformed=ast.unparse(_ZjTree)`;
+  const rewrite=`import ast
+class _ZjSleepRewrite(ast.NodeTransformer):
+    def visit_FunctionDef(self,node): return node
+    def visit_AsyncFunctionDef(self,node): return node
+    def visit_ClassDef(self,node): return node
+    def visit_Lambda(self,node): return node
+    def visit_Call(self,node):
+        node=self.generic_visit(node)
+        if isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name) and node.func.value.id=='time' and node.func.attr=='sleep':
+            call=ast.Call(func=ast.Attribute(value=ast.Call(func=ast.Name(id='__import__',ctx=ast.Load()),args=[ast.Constant(value='asyncio')],keywords=[]),attr='sleep',ctx=ast.Load()),args=node.args,keywords=node.keywords)
+            return ast.copy_location(ast.Await(value=call),node)
+        return node
+_ZjTree=_ZjSleepRewrite().visit(ast.parse(_zj_source))
+ast.fix_missing_locations(_ZjTree)
+_zj_transformed=ast.unparse(_ZjTree)`;
   runtime.globals.set('_zj_source',source);
   await runtime.runPythonAsync(rewrite,{filename:'zebjus_simplify.py'});
   const userCode=runtime.globals.get('_zj_transformed');
