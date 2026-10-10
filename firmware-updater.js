@@ -40,6 +40,8 @@ function progress(p,title){p=Math.max(0,Math.min(100,Math.round(p)));const b=$('
 function usbFlashReadiness(){
  if(busy)return {ready:false,message:'Preparing USB or loading firmware…'};
  if(!loader)return {ready:false,message:monitorPort?'Serial Monitor is open, but USB flashing requires Connect USB (bootloader + flash verification).':'Step 2: Click Connect USB and wait for Bootloader + flash verified.'};
+ if(!usbBoardId||!loader.chip||!Number.isInteger(loader.chip.IMAGE_CHIP_ID)||!boardById(usbBoardId)?.imageChipIds?.includes(loader.chip.IMAGE_CHIP_ID))
+  return {ready:false,message:'Cannot verify connected ROM chip and board. Disconnect, then Connect USB again before flashing.'};
  const chosen=$('#fwBoardProfile')?.value||'auto',target=chosen!=='auto'?chosen:(usbBoardId||catalog?.defaultBoardId||'');
  if(usbBoardId&&target!==usbBoardId)return {ready:false,message:'Board profile mismatch. Connected '+boardName(usbBoardId)+'; select that board or Auto detect.'};
  if(!fw)return {ready:false,message:'USB READY. Step 1: Select Factory image (first flash), then Auto Load Latest. Check Firmware Log if loading fails.'};
