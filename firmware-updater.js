@@ -6,6 +6,7 @@ const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.2.2',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
+let telRxSeq=null,telMissed=0,telLastAt=0,telDeviceDrops=0,telRateActual=0;
 let usbFlashPhase='idle',usbFlashBoardId='',usbVerifiedPortInfo=null; // package loading is not flashing
 function expectedUsbBoard(){return (monitorPort&&usbRuntimeInfo?.boardId)||usbBoardId||''}
 function verifiedUsbConnection(){return !!loader&&!!usbBoardId}
@@ -394,6 +395,37 @@ function selectSerialView(view){
  }
  if(plot){serialPlotterPromise?.then(()=>requestAnimationFrame(()=>serialPlotter?.draw()));serialPlotter?.draw()}
 }
+function readUnifiedTelemetry(line){
+ const p=String(line||'').trim().split(',');
+ if(p[0]==='ZJTEL'&&p[1]==='ACK'&&p[2]==='RATE'){
+  const rate=Number(p[3]);
+  if([10,20,50].includes(rate)){telRateActual=rate;text('#fwTelStatus','Streaming '+rate+' Hz');}
+  return true;
+ }
+ if(p[0]==='ZJTEL'&&p[1]==='ERR'){
+  text('#fwTelStatus','Rate rejected: '+p.slice(2).join(','));
+  return true;
+ }
+ if(p.length!==12||p[0]!=='ZJTEL'||p[1]!=='1'||!/^A[12]$/.test(p[2]))return false;
+ const seq=Number(p[3]),stamp=Number(p[4]),loss=Number(p[11]);
+ if(!Number.isSafeInteger(seq)||!Number.isSafeInteger(stamp)||!Number.isSafeInteger(loss))return false;
+ if(telRxSeq!==null&&seq>telRxSeq+1)telMissed+=seq-telRxSeq-1;
+ telRxSeq=seq;telLastAt=Date.now();telDeviceDrops=loss;
+ const expected=p[2]==='A1'?'LSM6DS3':'MPU6050';
+ usbSensorState=expected+' '+p[5]+' • '+p[6];
+ usbLedState=p[10];
+ text('#fwTelStatus','Live • '+(telRateActual||($('#fwTelRate')?.value||20))+' Hz • dropped '+(telMissed+telDeviceDrops));
+ return true;
+}
+async function setUsbTelemetryRate(rate){
+ const n=Number(rate);
+ if(![10,20,50].includes(n))return;
+ if(!monitorPort){text('#fwTelStatus','Open USB Serial to set rate');return}
+ try{
+  await window.DroneLabSerial.writeLine('ZJTEL,RATE,'+n+'\n');
+  text('#fwTelStatus','Requesting '+n+' Hz…');
+ }catch(e){text('#fwTelStatus','Rate command failed: '+String(e?.message||e))}
+}
 function readUsbTelemetry(line){
  const value=String(line||'').trim();
  if(!value)return;
@@ -411,6 +443,8 @@ function readUsbTelemetry(line){
   const parts=value.split(',');if(parts.length>=6)usbBusPins='SDA GPIO'+parts[3]+' • SCL GPIO'+parts[4]+' • expected '+parts[5];
  }else if(value.startsWith('ZJI2C,MODE,')){
   const parts=value.split(',');usbBusMode=parts[3]==='ARDUINO_DEFAULT'?'Arduino default wiring':parts[3]==='ALTERNATE_4_5'?'Alternate GPIO4/5 wiring':parts.slice(3).join(' • ');
+ }else if(value.startsWith('ZJTEL,')){
+  readUnifiedTelemetry(value);
  }else if(value.startsWith('ZJGYRO,STATUS,')){
   const parts=value.split(',');if(parts.length>=6)usbSensorState=parts[3]+' '+parts[4]+' • '+parts[5];
  }else if(value.startsWith('ZJLED,INFO,')){
@@ -565,6 +599,8 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   serialIdleWatch(port,0);
   // Request actual live firmware identity; never derive a running version from a downloaded .bin.
   void writePythonSerialLine('ZJINFO,GET\n').catch(()=>{});
+  telRxSeq=null;telMissed=0;telDeviceDrops=0;telRateActual=0;
+  void setUsbTelemetryRate($('#fwTelRate')?.value||20);
  }finally{monitorStarting=false}
 }
 async function toggleSerialMonitor(){
@@ -629,6 +665,7 @@ function initSerialTools(){
  $('#fwSerialSendBtn')?.addEventListener('click',sendSerialMessage);
  $('#fwLedTestBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJLED,900,BLINK,250,250,100\n','LED test (4-second safety timeout)'));
  $('#fwI2cScanBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJI2C,SCAN\n','I2C scan'));
+ $('#fwTelRate')?.addEventListener('change',e=>void setUsbTelemetryRate(e.target.value));
  $('#fwSerialInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendSerialMessage()}});
  $('#fwPlotClearBtn')?.addEventListener('click',()=>serialPlotter?.clear());
  $('#fwSerialBaud')?.addEventListener('change',()=>{

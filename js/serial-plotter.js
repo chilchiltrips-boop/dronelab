@@ -6,6 +6,12 @@ const numberOnly=new RegExp('^'+NUMBER+'$');
 export function parseSerialPlotLine(line){
  const s=String(line??'').trim();
  if(!s||s.length>512)return null;
+ const tel=s.split(',');
+ if(tel.length===12&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&tel.slice(7,10).every(x=>numberOnly.test(x))){
+  // Do not graph stale gyro values when the sensor is not ready.
+  if(tel[6]!=='READY')return null;
+  return {GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])};
+ }
  const gyro=s.split(',');
  if(gyro.length===8&&gyro[0]==='ZJGYRO'&&gyro[1]==='DATA'&&/^A[12]$/.test(gyro[2])&&/^(MPU6050|LSM6DS3)$/.test(gyro[3])&&/^0x[0-9a-f]{2}$/i.test(gyro[4])&&gyro.slice(5).every(x=>numberOnly.test(x))){
   return {GyroX:Number(gyro[5]),GyroY:Number(gyro[6]),GyroZ:Number(gyro[7])};

@@ -88,3 +88,6 @@
 .firmware-page .firmware-live-status b{white-space:normal;overflow-wrap:anywhere;line-height:1.45;min-height:1.3em}
 .firmware-page .fw-monitor-help{margin:5px 0 11px;color:var(--muted,#95a7b8);font-size:11px;line-height:1.55;max-width:100%;overflow-wrap:anywhere}
 @media(max-width:620px){.firmware-page .firmware-live-status{grid-template-columns:repeat(2,minmax(0,1fr))}.firmware-page .fw-monitor-help{font-size:11px}}
+
+/* Unified FlightCore telemetry options: keep readable on desktop and mobile. */
+.fw-tel-state{font-size:11px;white-space:normal;line-height:1.4;max-width:170px;overflow-wrap:anywhere;color:var(--muted,#94a3b8)}
