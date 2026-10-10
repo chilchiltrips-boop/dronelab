@@ -1,7 +1,7 @@
 name: Vendor Python Lab Runtime
 on:
   push:
-    branches: [main]
+    branches: [main, feature/python-led-i2c-tripod-front-v1]
     paths:
       - '.github/workflows/vendor-python-lab.yml'
   workflow_dispatch:
@@ -61,13 +61,23 @@ jobs:
             test -s "$path"
             echo "$path $(wc -c < "$path") bytes"
           done
-      - name: Verify Matplotlib Python wheel integrity
+      - name: Vendor pinned OpenCV Python WASM wheel
+        run: |
+          set -euo pipefail
+          wheel="$(python3 - <<'PY'
+          import json
+          print(json.load(open('vendor/pyodide/pyodide-lock.json'))['packages']['opencv-python']['file_name'])
+          PY
+          )"
+          curl --fail --location --silent --show-error --retry 4 "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/${wheel}" --output "vendor/pyodide/${wheel}"
+          test -s "vendor/pyodide/${wheel}"
+      - name: Verify Matplotlib and OpenCV Python wheels
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json,hashlib
           pkg=json.loads(Path('vendor/pyodide/pyodide-lock.json').read_text())['packages']
-          for name in ["matplotlib","contourpy","numpy","cycler","six","fonttools","kiwisolver","packaging","pillow","pyparsing","python-dateutil","pytz","matplotlib-pyodide"]:
+          for name in ["matplotlib","contourpy","numpy","cycler","six","fonttools","kiwisolver","packaging","pillow","pyparsing","python-dateutil","pytz","matplotlib-pyodide","opencv-python"]:
               d=pkg[name]; f=Path('vendor/pyodide')/d['file_name']
               assert f.is_file(),str(f)
               digest=hashlib.sha256(f.read_bytes()).hexdigest()
@@ -80,11 +90,11 @@ jobs:
           node --check vendor/monaco/min/vs/loader.js
           test "$(stat -c %s vendor/pyodide/pyodide.asm.wasm)" -gt 8000000
           test "$(stat -c %s vendor/monaco/min/vs/editor/editor.main.js)" -gt 3000000
-      - name: Publish required Python Lab assets to DroneLab main
+      - name: Publish checked Python runtime assets to this branch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add vendor/pyodide vendor/monaco
           git diff --cached --quiet || git commit -m 'Vendor Pyodide Python 3 and Monaco Python IDE assets from Aerion'
-          git pull --rebase origin main
-          git push origin main
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
