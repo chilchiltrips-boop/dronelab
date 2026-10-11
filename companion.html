@@ -44,6 +44,28 @@
 <div class="status-grid"><div><small>CONNECTION</small><b id="connectionDetail">Disconnected</b></div><div><small>CONTROLLER</small><b id="controllerDetail">None</b></div><div><small>HEARTBEAT</small><b id="heartbeatDetail">—</b></div></div>
 <div class="actions"><button id="requestControlBtn" class="primary" disabled>Take Control</button><button id="releaseControlBtn" disabled>Release Control</button><button id="disconnectBtn" class="danger">Disconnect</button></div>
 <p id="commandStatus" class="hint" role="status">Pair and grant control to the virtual Flight Training simulator.</p><pre id="mobileLog">Android companion ready. Scan the Web App QR.</pre></section>
+<section class="card kit-network-card" id="kitNetworkCard" aria-label="FlightCore Wi-Fi transport and setup">
+<div class="section-title"><strong>FlightCore Connection • AP / STA</strong><span>USB alternative • bench only</span></div>
+<p class="hint">Join the controller AP in Android Wi-Fi settings or join the same router as the controller. Read the unique AP password and access key from USB Serial (ZJNET,ACCESS). Wi-Fi cannot ARM motors in this firmware.</p>
+<div class="kit-net-grid">
+<label>Device IP<input id="kitIp" inputmode="decimal" value="192.168.4.1" autocomplete="off" spellcheck="false"/></label>
+<label>Access key<input id="kitKey" type="password" autocomplete="off" placeholder="32-character key from USB"/></label>
+<label>Operating mode<select id="kitMode"><option value="auto">AUTO • STA then AP fallback</option><option value="ap">AP • direct FlightCore Wi-Fi</option><option value="sta">STA • router network</option></select></label>
+</div>
+<div class="actions"><button id="kitWifiSettings">Open Wi-Fi Settings</button><button class="primary" id="kitConnect">Connect / Refresh</button><button id="kitSwitch">Apply Mode</button></div>
+<p id="kitNetStatus" class="hint" role="status">Not connected to FlightCore</p>
+<div class="status-grid"><div><small>FLIGHTCORE</small><b id="kitDevice">—</b></div><div><small>IP ADDRESSES</small><b id="kitAddresses">—</b></div></div>
+<div class="kit-net-grid">
+<label>Detected networks<select id="kitNetworks"><option value="">Scan Wi-Fi first</option></select></label>
+<label>Router SSID<input id="kitSsid" autocomplete="off" placeholder="Wi-Fi name"/></label>
+<label>Router password<input type="password" id="kitPassword" autocomplete="new-password" placeholder="Password kept on FlightCore"/></label></div>
+<div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
+<div class="actions"><button id="kitRead">Read Telemetry</button><button id="kitI2cScan">Scan I²C</button><button id="kitLedOff">LED OFF</button></div>
+<pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
+<label class="kit-net-toggle"><input id="kitAllowWeb" type="checkbox"/> Allow paired WebApp to access this FlightCore</label>
+<label class="kit-net-toggle"><input id="kitRcPreview" type="checkbox"/> Receive Android joystick at FlightCore (preview only, motors disabled)</label>
+<p class="hint">For WebApp access pair Android using existing two-way WebRTC QR. Switching AP ⇄ STA interrupts the pairing session; make a new QR afterward. Do not switch networks during flight.</p>
+</section>
 <section class="card"><div class="section-title"><strong>App Updates</strong><span>Permanent ZEBJUS release signing</span></div><p class="hint">From V1.4.2 onward, download the newer APK and tap Update. You won't need to uninstall again as long as the official ZEBJUS certificate remains unchanged and the version increases. Older debug APKs require one final uninstall to migrate.</p><a id="downloadStableApk" class="primary" href="https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk">Check / Download Latest Android APK</a></section><footer>Official stable-signed ZEBJUS Android APK • WebRTC DataChannel • Local Wi-Fi</footer>
 </main>
-</dialog><script src="vendor/qrgen.js"></script><script src="vendor/jsqr.js"></script><script src="pairing-core.js"></script><script src="pairing-code.js"></script><script src="pairing-qr-ui.js"></script><script src="companion.js"></script><script src="flight-input.js"></script><script src="companion-flight.js"></script></body></html>
+</dialog><script src="vendor/qrgen.js"></script><script src="vendor/jsqr.js"></script><script src="pairing-core.js"></script><script src="pairing-code.js"></script><script src="pairing-qr-ui.js"></script><script src="companion.js"></script><script src="companion-network.js"></script><script src="flight-input.js"></script><script src="companion-flight.js"></script></body></html>
