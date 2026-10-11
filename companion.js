@@ -36,6 +36,7 @@ function initPeer(){
   simTelemetry:d=>window.ZebjusFlightApp?.onTelemetry(d),
   simStop:d=>window.ZebjusFlightApp?.remoteStop(d?.reason),
   simReady:()=>window.ZebjusFlightApp?.onStatus(peer?.status()),
+   networkRequest:req=>window.ZebjusNetwork?.onWebRequest?.(req,peer),
   heartbeat:t=>{$('heartbeatDetail').textContent=new Date(t).toLocaleTimeString()},
   reconnecting:()=>{status('Reconnecting • control released');message('Wi-Fi interrupted, controls are locked until sync')},
   disconnected:r=>{if(!processing){++epoch;pending=false;stopScanner();stopPhoneCode();clearResponse()}status('Disconnected');message(r);$('answerState').textContent='Connection lost • scan NEW Web QR';sync()},
