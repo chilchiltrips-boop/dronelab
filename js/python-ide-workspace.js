@@ -148,10 +148,10 @@ export function createPythonIDEShell(api){
   const control=$(id);if(!control)continue;
   hint(control,description);
   control.classList.add('py-icon-control');
-  if(id==='pyConnectUsbBtn'){
-   const label=node('span','py-usb-button-text',control.textContent.trim());
+  if(id==='pyConnectUsbBtn'||id==='copyTerminalBtn'){
+   const label=node('span',id==='pyConnectUsbBtn'?'py-usb-button-text':'py-copy-output-text',control.textContent.trim());
    control.replaceChildren(icon(glyph),label);
-   control.classList.add('py-usb-connect');
+   if(id==='pyConnectUsbBtn')control.classList.add('py-usb-connect');
   }else if(!control.querySelector('svg')){
    if(['runPythonBtn','stopPythonBtn','rerunPythonBtn'].includes(id))
     control.replaceChildren(icon(glyph),document.createTextNode(id==='runPythonBtn'?'Run':id==='stopPythonBtn'?'Stop':'Rerun'));
