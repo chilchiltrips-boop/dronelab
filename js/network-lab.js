@@ -1,20 +1,23 @@
-/* Web HTTPS -> encrypted paired WebRTC -> Android native Wi-Fi -> FlightCore.
- * Direct ws://192.168.x.x from GitHub Pages is intentionally not used. */
+/* FlightCore diagnostics use the verified MY KITS session when present.
+ * Legacy Android WebRTC relay remains a fallback on browsers blocking local HTTP.
+ * Raw serial vs simulated network telemetry must remain labeled. */
 (function(){
 'use strict';
 const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay;
 let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0;
 const output=(text,kind='')=>{const e=$('netResult');if(e){e.textContent=text;e.dataset.state=kind;}};
 async function request(route,method='GET',args={}){
- if(!bridge()?.request)throw Error('Android WebRTC bridge unavailable');
- const data=await bridge().request(route,method,args);
+ const kits=window.ZebjusKits;
+ const selected=kits?.getState?.();
+ const data=selected?.connected&&selected.transport!=='usb'?await kits.request(route,method,args):
+  bridge()?.request?await bridge().request(route,method,args):(()=>{throw Error('Connect MY KITS over STA/AP or pair Android first')})();
  if(data?.board&&route==='/api/status'){netReady=true;netMode=data.mode;lastSeen=Date.now();}
  return data;
 }
 async function read(){
  const d=await request('/api/status'),e=$('netRuntime');
  if(e)e.textContent=(d.board||'FlightCore')+' • '+d.version+' • '+d.phase+' • STA '+(d.ip||'offline')+' • AP '+(d.apIp||'offline');
- output('FlightCore connected via Android • '+(d.staConnected?'STA':'AP'),'good');return d;
+ output('FlightCore connected • '+(d.kitName||d.board)+' • '+(d.staConnected?'STA':'AP'),'good');return d;
 }
 async function scan(){
  const d=await request('/api/wifi/scan');if(d.state!=='ready'){output('Scanning Wi-Fi. Select Scan again to load results.');return}
@@ -43,7 +46,7 @@ async function getTelemetry(){
   const frame='ZJSCAN,'+d.board+','+d.millis+','+d.scanner.length+d.scanner.map(x=>',0x'+Number(x).toString(16).toUpperCase().padStart(2,'0')).join('');
   window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:frame,transport:netMode||'network'}}));
  }
- const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices';
+ const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
  return d;
 }
 async function writeLine(text){
@@ -63,6 +66,6 @@ function init(){
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
 window.DroneLabNetwork={request,read,scan,getTelemetry,writeLine,stream,
- isConnected:()=>netReady&&Date.now()-lastSeen<15000,mode:()=>netMode};
+ isConnected:()=>!!(window.ZebjusKits?.getState?.().connected&&window.ZebjusKits?.getState?.().transport!=='usb')||(netReady&&Date.now()-lastSeen<15000),mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
