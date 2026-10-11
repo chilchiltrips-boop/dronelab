@@ -14,6 +14,7 @@ let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPendi
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
 let headerNetworkChoice='sta',headerModePending=false;
+let lastWifiLog='',lastWifiLogAt=0,lastWifiTestState='',wifiTestNonce=0;
 const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0,reconnectTicket=0,pollErrors=0,pollBusy=false;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
@@ -24,14 +25,14 @@ function byId(id,v){const e=$(id);if(e)e.textContent=v;}
 function tone(s,t='offline'){state.tone=t;state.lastError=t==='error'?s:'';byId('kitMessage',s);const e=$('kitMessage');if(e)e.dataset.tone=t;render();}
 function render(){
  const ready=state.connected,code=state.kitCode||'------';
- if(ready&&['ap','sta'].includes(state.transport))headerNetworkChoice=state.transport;
+ // Keep selected target independent of the currently verified transport.
  const label=ready?(state.kitName||'AERION')+' • '+code:'NO KIT CONNECTED';
  byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.version||'?'):'Offline • discover / USB');
  byId('kitWifiModeLive',ready?'Wi-Fi '+String(state.mode||'unknown').toUpperCase()+' • Link '+state.transport.toUpperCase():'Not connected');
  byId('kitDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
  byId('fwDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
- const globalTone=state.working?'info':state.tone==='locked'?'locked':state.rc?.claimed&&!state.owner?'locked':state.tone==='error'?'error':state.tone==='warn'?'warn':ready?'good':'offline';
- byId('kitGlobalState',state.working?'CONNECTING':globalTone==='locked'?'KIT LOCKED':state.tone==='error'?'LINK ERROR':ready?'CONNECTED':'DISCONNECTED');
+ const globalTone=state.working?'info':state.rc?.claimed&&!state.owner?'locked':ready?'good':state.tone==='error'?'error':state.tone==='warn'?'warn':'offline';
+ byId('kitGlobalState',state.working?'CONNECTING':globalTone==='locked'?'KIT LOCKED':ready?'CONNECTED':state.tone==='error'?'LINK ERROR':'DISCONNECTED');
  const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
  const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
@@ -59,10 +60,10 @@ function render(){
  if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.dataset.link=ready?state.transport:'offline';switcher.title='Selected '+headerNetworkChoice.toUpperCase()+' • live link '+(ready?state.transport.toUpperCase():'OFFLINE')+' • controller mode '+String(state.mode||'?').toUpperCase()+' • AUTO in MY KITS';}
  const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():headerNetworkChoice.toUpperCase()+' Connect';}
  const controlButton=$('kitTopControl');
- if(controlButton){controlButton.disabled=!ready||!['ap','sta'].includes(state.transport)||state.working;
- controlButton.textContent=state.owner?'Release Control':state.rc?.claimed?'Kit Locked':'Take Control';
+ if(controlButton){controlButton.disabled=!ready||!['usb','ap','sta'].includes(state.transport)||state.working||(!state.owner&&!!state.rc?.claimed);
+ byId('kitTopControlLabel',state.owner?'ON':state.rc?.claimed?'LOCKED':'OFF');
  controlButton.classList.toggle('kit-control-active',!!state.owner);
- controlButton.setAttribute('aria-pressed',String(!!state.owner));}
+ controlButton.setAttribute('aria-checked',String(!!state.owner));controlButton.title=state.owner?'Release WEB diagnostic control and neutralize input':'Take WEB diagnostic control (motors disabled)';}
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
  if($('kitTopStop'))$('kitTopStop').disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
@@ -245,8 +246,8 @@ async function read(){
  const d=await deviceRequest('/api/status');
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
- headerNetworkChoice=['ap','sta'].includes(state.transport)?state.transport:headerNetworkChoice;
  const monitor=$('kitNetworkMonitor');
  if(monitor){
   const rc=state.rc||{},ts=new Date().toLocaleTimeString();
@@ -346,6 +347,7 @@ function webControls(){
  if(pythonActive){void sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},'WEB');return}
  const f=$('pidFrame')?.contentWindow?.ZebjusTraining?.hardwareInput?.();
  if(f)void sendFrame(f,'WEB');
+ else void sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},'WEB');
 }
 async function identify(){
  if(!state.connected)throw Error('Connect a kit first');
@@ -356,6 +358,8 @@ async function identify(){
  audit('Identify LED pattern requested','success');
 }
 function wifiNote(message,tone='info'){
+ const now=Date.now();if(message===lastWifiLog&&now-lastWifiLogAt<18000)return;
+ lastWifiLog=message;lastWifiLogAt=now;
  const e=$('kitWifiStatus');if(e){e.textContent=message;e.dataset.tone=tone}
  audit(message,tone);render();
  // A network transition is independent of the USB flash writer; forward sanitized
@@ -395,6 +399,26 @@ async function applyMode(){
  }
  return true;
 }
+async function waitNetworkWifiTest(nonce){
+ const until=Date.now()+24000;
+ while(nonce===wifiTestNonce&&Date.now()<until&&state.connected&&['ap','sta'].includes(state.transport)){
+  await sleep(1200);
+  try{
+   const d=await deviceRequest('/api/status');
+   if(d.kitId!==state.kitId)throw Error('Device ID changed');
+   const phase=String(d.wifiTestState||d.phase||'');
+   if(phase==='saved'||phase==='sta_test_pass_saved'||phase==='ap_ready_credentials_saved'){
+    wifiTesting=false;lastWifiTestState='saved';state.staConnected=!!d.staConnected;state.staIp=d.ip||'';
+    wifiNote('STA credentials VERIFIED and saved by ESP32. Now select STA / AUTO mode.','good');return true;
+   }
+   if(phase==='failed'||phase==='sta_test_failed_not_saved'){
+    wifiTesting=false;lastWifiTestState='failed';wifiNote('STA association failed; password NOT saved. ESP Wi-Fi reason '+(d.lastStaFailureReason||'unknown')+'. Check router 2.4 GHz/WPA2 and selected SSID.','error');return false;
+   }
+  }catch(e){if(/Device ID changed/.test(e.message)){wifiTesting=false;wifiNote('STA test identity mismatch; check USB','error');return false}}
+ }
+ if(nonce===wifiTestNonce){wifiTesting=false;wifiNote('STA outcome not verified over network; reconnect USB to inspect ZJNET,TEST_STATE. Do not assume saved.','warn')}
+ return false;
+}
 async function wifiSave(){
  if(!state.connected)throw Error('Connect a kit by USB, AP or STA first');
  if(state.owner)throw Error('Release controller before Wi-Fi provisioning');
@@ -404,11 +428,14 @@ async function wifiSave(){
   throw Error('SSID/password invalid for USB provisioning (commas and line breaks are unsupported)');
  if(state.transport==='usb'){
   // No credential appears in event history or the URL; the firmware does not echo it.
-  await usbWrite('ZJNET,TEST,'+ssid+','+password);
-  wifiTesting=true;wifiNote('Testing STA Wi-Fi via USB • waiting for result (up to 12 s). Credentials save only on success.','info');
+  wifiTesting=true;lastWifiTestState='testing';
+  try{await usbWrite('ZJNET,TEST,'+ssid+','+password)}catch(e){wifiTesting=false;throw e}
+  wifiNote('STA test in progress (up to 20 s). Save only after firmware confirms association.','info');
  }else{
-  await deviceRequest('/api/wifi/test','POST',{ssid,password});
-  wifiNote('STA test started. Firmware saves credentials after successful association.','info');
+  wifiTesting=true;lastWifiTestState='testing';
+  try{await deviceRequest('/api/wifi/test','POST',{ssid,password})}catch(e){wifiTesting=false;throw e}
+  wifiNote('STA association in progress; WAIT for verified saved/failed status (up to 20 s).','info');
+  void waitNetworkWifiTest(++wifiTestNonce);
  }
  if($('kitRouterPass'))$('kitRouterPass').value='';
 }
@@ -512,13 +539,14 @@ function onSerial(e){
    const match=/^ZJNET,SCAN,ITEM,(.*),(-?\d+),(OPEN|SECURE)$/.exec(text);
    if(match&&$('kitWifiNetworks'))$('kitWifiNetworks').add(new Option(match[1]+' • '+match[2]+' dBm'+(match[3]==='SECURE'?' 🔒':''),match[1]));
   }else if(text==='ZJNET,SCAN,END')wifiNote('Router scan complete • select SSID and enter password','good');
-  else if(text==='ZJNET,TEST,SAVED'){wifiTesting=false;wifiNote('STA router connected and credentials saved in kit NVS','good')}
-  else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched. Check 2.4 GHz router SSID/password, signal and security; keep AUTO/AP for recovery.','error');void usbWrite('ZJNET,GET').catch(()=>{})}
+  else if(text==='ZJNET,TEST,SAVED'){wifiTesting=false;lastWifiTestState='saved';wifiNote('STA CONNECTED and credentials saved. Select AUTO/STA and Apply Mode.','good')}
+  else if(text.startsWith('ZJNET,TEST,FAILED_NOT_SAVED')){wifiTesting=false;lastWifiTestState='failed';const n=Number(text.split(',')[3])||0;wifiNote('STA FAILED • not saved. Disconnect reason '+(n===36?'36 (STA_LEAVING, not password proof)':n||'unknown')+'. Check selected 2.4 GHz WPA2 router.','error');void usbWrite('ZJNET,GET').catch(()=>{})}
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
   else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
   else if(text.startsWith('ZJNET,AP,')){state.apActive=text.startsWith('ZJNET,AP,ON,');wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info');render()}
-  else if(text.startsWith('ZJNET,STA_REASON,')){state.staDisconnectReason=Number(text.slice(17))||0;wifiNote('ESP Wi-Fi disconnect reason '+state.staDisconnectReason+' • check 2.4 GHz router, security and signal','warn');render()}
+  else if(text.startsWith('ZJNET,TEST_STATE,')){lastWifiTestState=text.slice(17);if(lastWifiTestState==='testing'&&!wifiTesting)wifiNote('ESP32 STA test is running; waiting for association','info')}
+  else if(text.startsWith('ZJNET,STA_REASON,')){state.staDisconnectReason=Number(text.slice(17))||0;if(state.staDisconnectReason&&state.staDisconnectReason!==36&&lastWifiTestState==='failed')wifiNote('STA failure reason '+state.staDisconnectReason+' • check 2.4 GHz SSID/security/signal','warn');render()}
   else if(text.startsWith('ZJNET,STA,')){const p=text.split(',');state.staConnected=p[2]==='CONNECTED';state.staIp=state.staConnected?p[3]:'';if(state.staConnected&&privateIPv4(p[3])){$('kitIpInput').value=p[3];state.usbInfo.staIp=p[3];recordKnown()}render()}
  }
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
@@ -645,16 +673,9 @@ async function discoverKits(){
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{const locked=/locked|occupied|not_controller_owner/i.test(e.message);tone(e.message,locked?'locked':'error');audit(e.message,locked?'warn':'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
 async function toggleHeaderNetwork(){
- if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before switching AP/STA');
- const previous=headerNetworkChoice,next=previous==='ap'?'sta':'ap';
- headerNetworkChoice=next;headerModePending=true;
- if($('kitWifiMode'))$('kitWifiMode').value=next;
- render();
- try{
-  if(state.connected){const changed=await applyMode();if(changed===false){headerNetworkChoice=previous;if($('kitWifiMode'))$('kitWifiMode').value=state.mode||previous;}}
-  else tone('Selected '+next.toUpperCase()+'. Use Connect '+next.toUpperCase()+' to verify hardware identity.','info');
- }catch(e){headerNetworkChoice=previous;throw e}
- finally{headerModePending=false;render()}
+ if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before selecting a connection');
+ headerNetworkChoice=headerNetworkChoice==='ap'?'sta':'ap';render();
+ tone('Selected '+headerNetworkChoice.toUpperCase()+' transport (not a firmware mode change). Press Connect; configure STA after successful Test & Save.','info');
 }
 async function connectHeaderNetwork(mode=headerNetworkChoice){
  if(!['sta','ap'].includes(mode))throw Error('Choose STA or AP first');
@@ -663,6 +684,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
  if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
  if(state.connected&&state.kitCode&&$('kitCodeInput'))$('kitCodeInput').value=state.kitCode;
+ if(mode==='sta'&&state.staIp&&privateIPv4(state.staIp)&&$('kitIpInput'))$('kitIpInput').value=state.staIp;
  const code=selectedCode(),ip=($('kitIpInput')?.value||'').trim();
  const discovered=discoveredKits.find(k=>k.kitCode===code&&k.ip===ip);
  const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(discovered?.kitId)||
@@ -674,7 +696,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  await connect();
 }
 async function toggleHeaderControl(){
- if(!state.connected||!['sta','ap'].includes(state.transport))throw Error('Connect the verified kit over STA or AP first');
+ if(!state.connected||!['usb','sta','ap'].includes(state.transport))throw Error('Connect a verified kit over USB, STA or AP first');
  if(state.owner){await releaseRc();return}
  if(state.rc?.claimed)throw Error('Kit already locked by a controller');
  // Hardware target is BENCH RC diagnostics only. Firmware does not drive motors.
