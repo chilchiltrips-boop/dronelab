@@ -38,7 +38,7 @@ try{
     usbButton:document.querySelector('#pyConnectUsbBtn use')?.getAttribute('href'),
     descriptions:ids.map(id=>document.getElementById(id)?.title)};
   });
-  if(hints.missing.length||!hints.usbRail?.endsWith('#usb')||!hints.usbButton?.endsWith('#usb'))
+  if(hints.missing.length||!hints.usbRail?.endsWith('#usb-connect')||!hints.usbButton?.endsWith('#usb-connect'))
    throw Error('USB SVG or hover help missing: '+JSON.stringify(hints));
   await page.locator('.py-tool-rail [data-py-rail="usb"]').click();
   await page.waitForTimeout(1300);
@@ -47,7 +47,7 @@ try{
    label:document.querySelector('#pyConnectUsbBtn .py-usb-button-text')?.textContent,
    hover:document.querySelector('#pyConnectUsbBtn')?.dataset.tooltip
   }));
-  if(!usbTip.svg?.endsWith('#usb')||!usbTip.label||!usbTip.hover)throw Error('USB status update removed its icon: '+JSON.stringify(usbTip));
+  if(!usbTip.svg?.endsWith('#usb-connect')||!usbTip.label||!usbTip.hover)throw Error('USB status update removed its icon: '+JSON.stringify(usbTip));
   await page.locator('.py-tool-rail [data-py-rail="usb"]').click();
   await page.locator('.py-tool-rail [data-py-rail="camera"]').click();
   if(!await page.locator('#pythonSideStack').isVisible())throw Error('Camera tool window did not open');
@@ -55,6 +55,22 @@ try{
   if(await page.locator('#pythonSideStack').isVisible())throw Error('Camera tool window did not minimize');
   await page.locator('.py-bottom-head .py-ide-button').first().click();
   if(!await page.locator('#pythonTerminal').isVisible())throw Error('Run tool window did not open');
+  const compact=await page.evaluate(()=>{
+   const h=document.querySelector('#pythonBottomDock .py-bottom-head');
+   const ids=['pyStatus','pyLastRun','pyRuntimeState','copyTerminalBtn','clearTerminalBtn'];
+   const widths=['copyTerminalBtn','clearTerminalBtn','runPythonBtn'].map(id=>getComputedStyle(document.getElementById(id).querySelector('.py-ide-icon')).width);
+   const railWidth=getComputedStyle(document.querySelector('.py-tool-rail [data-py-rail="usb"] .py-ide-icon')).width;
+   return {headerHeight:h.getBoundingClientRect().height,headerOverflow:h.scrollWidth>h.clientWidth+3,
+    allInOneRow:ids.every(id=>h.contains(document.getElementById(id))),
+    duplicateTitles:document.querySelectorAll('#pythonBottomDock .python-terminal-heading').length,
+    widths,railWidth,
+    actionOrder:ids.map(id=>document.getElementById(id).getBoundingClientRect().top)
+   };
+  });
+  if(!compact.allInOneRow||compact.duplicateTitles||compact.headerHeight>44||compact.headerOverflow||compact.widths.some(w=>parseFloat(w)<18)||parseFloat(compact.railWidth)<18)
+   throw Error('Compact one-row terminal or shared icon theme failed: '+JSON.stringify(compact));
+  if(Math.max(...compact.actionOrder)-Math.min(...compact.actionOrder)>15)
+   throw Error('Run status / Copy / Clear controls are not on the same row: '+JSON.stringify(compact));
   await page.locator('.py-bottom-head .py-ide-button').first().click();
   if(await page.locator('#pythonTerminal').isVisible())throw Error('Run tool window did not minimize');
 
@@ -297,6 +313,13 @@ try{
  await page.screenshot({path:'test-output/python-lab-mobile.png',fullPage:true});
  const mobile=await page.locator('.python-editor-card').boundingBox();
  if(!mobile||mobile.width>420||mobile.height<185)throw Error('Mobile editor layout invalid');
+ const compactMobile=await page.evaluate(()=>{
+  const h=document.querySelector('#pythonBottomDock .py-bottom-head'),r=h.getBoundingClientRect();
+  return {height:r.height,width:r.width,scrollWidth:h.scrollWidth,scrollClient:h.clientWidth,
+   buttons:[...h.querySelectorAll('button')].map(b=>({id:b.id||b.textContent.trim(),right:b.getBoundingClientRect().right}))};
+ });
+ if(compactMobile.scrollWidth>compactMobile.scrollClient+3||compactMobile.height>44)
+  throw Error('Mobile Run/Terminal header overflows: '+JSON.stringify(compactMobile));
  if(failures.length)throw Error('Browser JavaScript error(s): '+failures.join(' | '));
  console.log('PASS Python Lab: editor X/Y scroll, sticky Run/Stop on desktop/mobile, live A1/A2 gyro in Python while True, AST syntax diagnostics, LED pin-conflict auto-stop, Monaco suggestions, working Undo/Redo, Python 3 output, responsive mobile layout, while True Stop, Matplotlib PNG, project files, persisted resizers');
  console.log('PASS UI box: '+JSON.stringify({editor:bounds,side:after.width,terminal:terminalAfter.height,mobile:mobile.width}));
