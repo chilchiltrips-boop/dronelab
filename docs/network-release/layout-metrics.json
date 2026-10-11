@@ -1,0 +1,39 @@
+[
+  {
+    "label": "before",
+    "width": 1366,
+    "header": 82,
+    "bodyWidth": 1366
+  },
+  {
+    "label": "after",
+    "width": 1366,
+    "header": 82,
+    "bodyWidth": 1366
+  },
+  {
+    "label": "after",
+    "width": 360,
+    "bodyWidth": 360
+  },
+  {
+    "label": "after",
+    "width": 390,
+    "bodyWidth": 390
+  },
+  {
+    "label": "after",
+    "width": 768,
+    "bodyWidth": 768
+  },
+  {
+    "label": "after",
+    "width": 1024,
+    "bodyWidth": 1024
+  },
+  {
+    "label": "after",
+    "width": 1920,
+    "bodyWidth": 1920
+  }
+]

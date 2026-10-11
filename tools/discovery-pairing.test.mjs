@@ -44,7 +44,8 @@ test('physical USB pairing and real radio status never leak credentials into cac
  assert.match(kit,/if\(!safeKitHost\(ip\)\)/);
  assert.match(kit,/recoverVerifiedLink\(old\)/);
  assert.match(kit,/headerNetworkChoice=state\.transport/);
- assert.match(kit,/if\(d\.rc\?\.claimed\)throw Error/);
+ assert.match(kit,/Restore read-only monitoring even while Android owns input/);
+ assert.match(kit,/owner:false,rcSource:'',rcSession:''/);
  assert.match(updater,/Private controller credentials received \(redacted\)/);
  for(const id of ['kitDiscover','fwDiscoverKits','kitPairUsb','kitDiscoveryResults','fwDiscoveryResults','kitSelectedMode','kitSelectedSta','kitSelectedAp','kitSelectedReason'])
   assert.ok(page.includes('id="'+id+'"'),id);
@@ -52,8 +53,8 @@ test('physical USB pairing and real radio status never leak credentials into cac
 test('firmware release metadata and Service Worker cache version are aligned with source',()=>{
  const sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
- assert.equal(version,'1.3.9');
- assert.ok(sketch.includes('FW_VERSION="1.3.9"'));
+ assert.equal(version,'1.4.0');
+ assert.ok(sketch.includes('FW_VERSION="1.4.0"'));
  assert.ok(sw.includes('classroom-kits.css?v=brand-stack2'));
  assert.ok(page.includes('classroom-kits.css?v=brand-stack2'));
 });

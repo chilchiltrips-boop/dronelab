@@ -1,16 +1,17 @@
 /* FlightCore diagnostics use the verified MY KITS session when present.
- * Legacy Android WebRTC relay remains a fallback on browsers blocking local HTTP.
- * Raw serial vs simulated network telemetry must remain labeled. */
+ * Every read is bound to the selected Device ID; Python executes in the browser. */
 (function(){
 'use strict';
 const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay;
-let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0;
+let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0,pollBusy=false;
+let joystickReadAt=0,joystickPending=null;
 const output=(text,kind='')=>{const e=$('netResult');if(e){e.textContent=text;e.dataset.state=kind;}};
 async function request(route,method='GET',args={}){
  const kits=window.ZebjusKits;
  const selected=kits?.getState?.();
- const data=selected?.connected&&selected.transport!=='usb'?await kits.request(route,method,args):
-  bridge()?.request?await bridge().request(route,method,args):(()=>{throw Error('Connect MY KITS over STA/AP or pair Android first')})();
+ if(!selected?.connected||selected.transport==='usb')throw Error('Connect a verified STA/AP kit in MY KITS.');
+ const data=await kits.request(route,method,args);
+ if(data.kitId&&data.kitId!==selected.kitId)throw Error('Device ID mismatch: network sample rejected.');
  if(data?.board&&route==='/api/status'){netReady=true;netMode=data.mode;lastSeen=Date.now();}
  return data;
 }
@@ -20,14 +21,14 @@ async function read(){
  output('FlightCore connected • '+(d.kitName||d.board)+' • '+(d.staConnected?'STA':'AP'),'good');return d;
 }
 async function scan(){
- const d=await request('/api/wifi/scan');if(d.state!=='ready'){output('Scanning Wi-Fi. Select Scan again to load results.');return}
+ output('Scanning nearby 2.4 GHz routers…');const networks=await pythonWifiScan(),d={networks};
  const select=$('netNetworks');if(select){select.replaceChildren(new Option('Select Wi-Fi',''));for(const n of d.networks||[])if(n.ssid)select.add(new Option(n.ssid+' ('+n.rssi+' dBm)',n.ssid));}
  output('Found '+(d.networks||[]).length+' Wi-Fi networks','good');
 }
 async function save(){
  const ssid=$('netSsid').value.trim(),password=$('netPass').value;if(!ssid)throw Error('Enter or select a Wi-Fi SSID');
- await request('/api/wifi/test','POST',{ssid,password});$('netPass').value='';
- output('STA connection test started. Credentials are saved only after a successful association.','good');
+ $('netPass').value='';output('Testing router association • not saved yet.');const result=await pythonWifiTestSave(ssid,password);
+ output(result.saved?'Verified & saved • STA '+result.staIp:'Not saved: '+(result.message||result.reason||result.state),result.saved?'good':'warn');
 }
 async function switchMode(){
  const mode=$('netMode').value;if(!['auto','ap','sta'].includes(mode))throw Error('Invalid mode');
@@ -64,39 +65,39 @@ async function pythonWifiScan(){
  throw Error('2.4 GHz router scan timed out; retry while connected via verified AP/STA.');
 }
 async function pythonWifiTestSave(ssid,password){
- ssid=String(ssid||'').trim();password=String(password||'');
- if(!ssid||ssid.length>32||password.length>63||(password.length>0&&password.length<8))
-  throw Error('SSID must be 1–32 chars; password 8–63 chars, or empty for open Wi-Fi.');
  const kit=window.ZebjusKits?.getState?.();
- if(!kit?.connected||!['sta','ap'].includes(kit.transport)||!kit.owner||kit.rcSource!=='WEB')
-  throw Error('Connect a verified AP/STA kit and Take Control (WEB) before running Wi-Fi provisioning.');
- // Changing Wi-Fi can invalidate the transport. Explicit Python wifi_test_save()
- // is the student's authorization to end the diagnostic RC lease before testing.
- await window.ZebjusKits.releaseRc();
- output('Python released diagnostic control for STA test; credentials save only after association.','warn');
- const reply=await request('/api/wifi/test','POST',{ssid,password});
- if(reply.state!=='testing')throw Error('Controller did not confirm STA test started.');
- for(let attempt=0;attempt<17;attempt++){
-  await new Promise(resolve=>setTimeout(resolve,800));
-  let state;
+ if(!kit?.connected||!['sta','ap'].includes(kit.transport))throw Error('Connect a verified kit first.');
+ if(kit.rc?.claimed)throw Error('Controller busy: release Android/WEB diagnostic control before network setup.');
+ if(!kit.setupAuthorized)throw Error('Renew the 5-minute setup authorization with your private label on the kit AP.');
+ await request('/api/wifi/test','POST',{ssid:String(ssid),password:String(password)});
+ for(let attempt=0;attempt<30;attempt++){
+  await new Promise(resolve=>setTimeout(resolve,1000));let state;
   try{state=await request('/api/status')}catch{continue}
-  const phase=String(state.phase||'');
-  if(state.kitId!==kit.kitId)throw Error('Kit hardware identity changed during Wi-Fi test.');
-  if(phase==='sta_test_pass_saved'||phase==='ap_ready_credentials_saved'){
-   output('STA test succeeded • credentials saved in FlightCore NVS. Reconnect and Take Control again.','good');
-   return {saved:true,state:phase,mode:state.mode,staIp:state.ip||''};
-  }
-  if(phase==='sta_test_failed_not_saved'){
-   output('STA test failed • existing saved Wi-Fi was preserved. Check 2.4 GHz SSID/password.','warn');
-   return {saved:false,state:phase,message:'Association failed; previous Wi-Fi was preserved.'};
-  }
+  if(state.kitId!==kit.kitId)throw Error('Device ID changed during Wi-Fi test.');
+  if(state.wifiTestState==='saved')return {saved:true,state:'saved',staIp:state.ip};
+  if(state.wifiTestState==='failed')return {saved:false,state:'failed',reason:state.lastStaFailureReason};
  }
- output('STA test started but final save not verified; inspect USB ZJNET status before retrying.','warn');
- return {saved:false,state:'unverified',message:'No save confirmation received; do not assume success.'};
+ return {saved:false,state:'unverified',message:'Reconnect and verify status before retrying.'};
+}
+async function readJoystick(){
+ if(joystickPending)return joystickPending;
+ const read=async()=>{
+  const wait=Math.max(0,100-(performance.now()-joystickReadAt));if(wait)await new Promise(r=>setTimeout(r,wait));
+  const before=window.ZebjusKits?.getState?.(),start=performance.now();
+  if(!before?.connected||!['sta','ap'].includes(before.transport))throw Error('Select a verified STA/AP kit before reading firmware joystick input.');
+  const rc=await request('/api/rc/snapshot');const after=window.ZebjusKits?.getState?.();
+  if(!after?.connected||after.kitId!==before.kitId||rc.kitId!==before.kitId||rc.motorsDisabled!==true)throw Error('Firmware joystick identity or motor-disabled confirmation failed.');
+  const rtt=Math.round(performance.now()-start),valid=rc.inputValid===true&&rc.failsafe===false&&Number.isFinite(rc.ageMs)&&rc.ageMs+rtt<=350;
+  joystickReadAt=performance.now();
+  return {...rc,device_id:rc.kitId,owner_id:rc.ownerId,age_ms:rc.ageMs===null?null:rc.ageMs+rtt,input_valid:valid,failsafe:!valid,
+   throttle:valid?rc.throttle:1000,roll:valid?rc.roll:1500,pitch:valid?rc.pitch:1500,yaw:valid?rc.yaw:1500,
+   response_mode:rc.responseMode,received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:true,transport:before.transport};
+ };
+ joystickPending=read().finally(()=>{joystickPending=null});return joystickPending;
 }
 function stream(on=true){
  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
- if(on)pollTimer=setInterval(()=>getTelemetry().catch(()=>{netReady=false;lastSeen=0;stream(false)}),170);
+ if(on)pollTimer=setInterval(async()=>{if(pollBusy||!window.ZebjusKits?.isConnected?.())return;pollBusy=true;try{await getTelemetry()}catch{netReady=false;lastSeen=0}finally{pollBusy=false}},170);
 }
 function bindAction(id,callback){$(id)?.addEventListener('click',()=>Promise.resolve().then(callback).catch(e=>output(e.message,'warn')))}
 function init(){
@@ -106,7 +107,7 @@ function init(){
  bindAction('netScanI2c',async()=>{await writeLine('ZJI2C,SCAN');output('I²C scan triggered; fetch telemetry after scan completes','good')});
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
-window.DroneLabNetwork={request,read,scan,getTelemetry,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
+window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
  isConnected:()=>!!(window.ZebjusKits?.getState?.().connected&&window.ZebjusKits?.getState?.().transport!=='usb')||(netReady&&Date.now()-lastSeen<15000),mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

@@ -23,7 +23,7 @@ test('intentional STA_LEAVING 36 is not treated as password error and firmware r
  const kit=read('js/classroom-kits.js');
  assert.match(fw,/zjLastStaFailureReason/);
  assert.match(fw,/WiFi\.status\(\)==WL_CONNECTED&&WiFi\.SSID\(\)==zjPendingSsid/);
- assert.match(fw,/zjPrefs\.putString\("ssid",zjSavedSsid\)/);
+ assert.match(fw,/zjPrefs\.putString\("staConfig",record\)/);
  assert.match(kit,/n===36\?'36 \(STA_LEAVING, not password proof\)'/);
  assert.match(kit,/waitNetworkWifiTest\(\+\+wifiTestNonce\)/);
 });

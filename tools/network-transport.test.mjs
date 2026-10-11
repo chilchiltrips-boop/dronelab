@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only after association',()=>{
  const f=read('FlightCore_Firmware/FlightCoreNetwork.h'),ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
- for(const expected of ['#include <WiFi.h>','#include <Preferences.h>','WiFi.scanNetworks(true,false)','WiFi.begin(','zjPrefs.putString("ssid"','sta_test_pass_saved','sta_failed_ap_fallback','sta_connecting','/api/wifi/test','/api/wifi/mode','/api/telemetry','/api/command','/api/status'])assert.ok(f.includes(expected),expected);
+ for(const expected of ['#include <WiFi.h>','#include <Preferences.h>','WiFi.scanNetworks(true,false)','WiFi.begin(','zjPrefs.putString("staConfig"','sta_test_pass_saved','sta_failed_ap_fallback','sta_connecting','/api/wifi/test','/api/wifi/mode','/api/telemetry','/api/command','/api/status'])assert.ok(f.includes(expected),expected);
  assert.ok(ino.includes('#include "FlightCoreNetwork.h"'));
  assert.ok(ino.includes('zjNetworkSetup();')&&ino.includes('zjNetworkLoop(now);'));
  assert.ok(!f.includes('WiFi.begin("')&&!f.includes('SSID="'),'No hard-coded router credentials');
@@ -51,7 +51,7 @@ test('AERION classroom six-digit code persists and never acts as the control pas
 });
 
 
-test('AERION 1.3.9 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
+test('AERION 1.4.0 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
  const net=read('FlightCore_Firmware/FlightCoreNetwork.h'),c=read('FlightCore_Firmware/FlightCoreClassroom.h');
  for(const k of ['zjCorsAllowed()','Access-Control-Allow-Private-Network','origin_denied','zjKitPrefs.getString("apPass","12345678")','zjKitPrefs.getString("apName"','rssi\\":'])assert.ok(net.includes(k),k);
  for(const k of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM'])assert.ok(c.includes(k),k);

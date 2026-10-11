@@ -10,9 +10,9 @@ const page=read('index.html');
 const native=read('companion-network.js');
 const cockpit=read('companion-flight.js');
 test('AUTO retains AP; STA-only explicitly disables hotspot',()=>{
- assert.match(ino,/FW_VERSION="1\.3\.9"/);
+ assert.match(ino,/FW_VERSION="1\.4\.0"/);
  assert.match(fw,/if\(zjMode=="sta"&&WiFi\.status\(\)==WL_CONNECTED\)/);
- assert.match(fw,/if\(zjMode=="sta"\)zjNetApOffAt=now\+10000/);
+ assert.match(fw,/zjMode="auto";zjPrefs\.putString\("mode","auto"\);zjNetApOffAt=0;zjEnsureAP\(\)/);
  assert.match(fw,/zjNetApOffAt=mode=="sta"/);
  assert.match(fw,/ZJNET,AP,/);
  assert.match(fw,/apActive/);
@@ -35,7 +35,8 @@ test('Controller preview keeps separate direct AP and WebRTC counters and drops 
  assert.match(native,/requestTransport==='AP'/);
  assert.doesNotMatch(native,/onKitAp=!data\.staConnected/);
  assert.match(native,/seq:\+\+rcSeq/);
- assert.match(cockpit,/seq:\+\+directPreviewSeq/);
+ assert.match(cockpit,/previewControls\?\.\(diagnosticInput\(\)\)/);
+ assert.match(cockpit,/let diagnosticThrottle=1000/);
  assert.doesNotMatch(cockpit,/previewControls\?\.\(\{seq:\+\+seq,throttle/);
  assert.match(kits,/\.\.\.frame,armed:false/);
  assert.match(kits,/throttle:1000,axes:\{roll:0,pitch:0,yaw:0\},armed:false/);

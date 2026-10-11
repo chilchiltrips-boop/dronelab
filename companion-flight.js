@@ -2,6 +2,8 @@
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
 let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
+let diagnosticThrottle=1000;
+const diagnosticInput=()=>{const m=current();return {throttle:diagnosticThrottle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},responseMode:preset}};
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
@@ -47,7 +49,8 @@ function render(){
  $('flightArm').textContent=armed?'DISARM':'ARM';$('flightArm').disabled=!isOwned()||(!armed&&(!ready||throttle>1050));$('flightArm').setAttribute('aria-pressed',String(armed));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
- $('flightFeedback').hidden=!lastAckSeq;
+ const diagnostic=window.ZebjusNetwork?.feedback?.();if(diagnostic){$('flightFeedback').textContent='ESP32 RX #'+diagnostic.seq+' • '+diagnostic.rtt+' ms • '+(Date.now()-diagnostic.at>350?'STALE':'DIAGNOSTIC • MOTORS OFF');$('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';}
+ $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!isOwned()||!armed);
  $('flightTakeControl').disabled=!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
@@ -76,6 +79,7 @@ function setupStick(side){
 function tick(now){
  if(!loopStarted)return;
  const dt=last?Math.min(.08,Math.max(0,(now-last)/1000)):0;last=now;
+ if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
  if(isOwned()&&armed&&lastAckAt&&now-lastAckAt>650){stopLocally('NO RECEIVER ACK FOR >650ms • SAFE DISARM; CHECK WI-FI / WEBAPP LOAD');send(true)}
@@ -88,13 +92,13 @@ function send(critical=false){
  const m=halted?{...current(),armed:false,throttle:1000}:current();
  const payload={seq:++seq,sessionId:peer.status().sessionId,mode:m.mode,armed:m.armed,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},sticks:{left:{...(left||{x:0,y:0})},right:{...(right||{x:0,y:0})}}};
  if(critical)criticalRequestSeq=seq;
- window.ZebjusNetwork?.previewControls?.(payload);
+ window.ZebjusNetwork?.previewControls?.(diagnosticInput());
   if(!peer.sendSimulatorControl(payload,critical))return false;
  sent.set(seq,performance.now());return true;
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{const m=current();window.ZebjusNetwork?.previewControls?.({seq:++directPreviewSeq,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}})}},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{window.ZebjusNetwork?.previewControls?.(diagnosticInput())}},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
@@ -138,7 +142,7 @@ function onTelemetry(packet){
  if(!isOwned())$('flightAppliedTelemetry').textContent+=' • '+a.throttle+' µs '+a.mode.toUpperCase()+' '+(a.armed?'WEB ARMED':'DISARMED');
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
-function doStop(){stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
+function doStop(){diagnosticThrottle=1000;void window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
 function openConnection(){clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')}
 function closeConnection(){
   window.ZebjusPairingStopCamera?.();
@@ -180,6 +184,7 @@ function bind(){
  $('mobileConnection').addEventListener('close',()=>{window.ZebjusPairingStopCamera?.();$('flightSettings').setAttribute('aria-expanded','false')});
  $('flightTakeControl').onclick=()=>{peer?.requestControl();updateStatus('REQUESTED • GRANT MOBILE CONTROL ON WEB')};
  $('flightReleaseControl').onclick=()=>{doStop();peer?.releaseControl();render()};
+ window.addEventListener('zebjus:diagnostic-control',()=>{diagnosticThrottle=1000;clearTouches();render()});
  window.addEventListener('blur',()=>{if(!document.hidden&&!armed)return;stopLocally('APP LOST FOCUS • SAFE DISARM');send(true)});document.addEventListener('visibilitychange',()=>{if(document.hidden){stopLocally('APP BACKGROUND • SAFE DISARM');send(true)}});
  window.addEventListener('pagehide',()=>{doStop();clearInterval(sender);cancelAnimationFrame(raf);loopStarted=false});
  window.addEventListener('pageshow',e=>{if(e.persisted){connect(peer);doStop()}});

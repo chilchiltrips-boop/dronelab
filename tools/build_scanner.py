@@ -122,10 +122,12 @@ def main():
         cfg=b['build']; pkg=b['latest']['app']; filename=pkg['file']
         with tempfile.TemporaryDirectory(prefix='zfc-build-') as td:
             td=Path(td); sketch=td/'I2C_ADDRESS_SCANNER'; sketch.mkdir(); shutil.copy2(SRC,sketch/'I2C_ADDRESS_SCANNER.ino'); shutil.copy2(OUT/'FlightCoreNetwork.h',sketch/'FlightCoreNetwork.h'); shutil.copy2(OUT/'FlightCoreClassroom.h',sketch/'FlightCoreClassroom.h')
+            
+            for header in OUT.glob('*.h'): shutil.copy2(header,sketch/header.name)
             shutil.copy2(OUT/'partitions.csv',sketch/'partitions.csv')
             build=td/'build'; build.mkdir()
             print(f'\n=== BUILD {b["id"]} • {b["name"]} • {cfg["fqbn"]} ===',flush=True)
-            run(command+['compile','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
+            run(command+['compile','--jobs','2','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
             verified=verify_build(build,b,version);report['boards'].append(verified)
             srcbin=find_app_bin(build); dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
             build_id=f'{version}-{b["id"]}-{digest[:12]}'
