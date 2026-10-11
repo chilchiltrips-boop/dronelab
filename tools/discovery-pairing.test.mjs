@@ -35,6 +35,12 @@ test('physical USB pairing and real radio status never leak credentials into cac
  assert.match(firmware,/zjStaDisconnectReason/);
  assert.match(firmware,/MDNS\.begin\(host\.c_str\(\)\)/);
  assert.match(kit,/pairedKeys=new Map/);
+ assert.match(kit,/async function resolveKitAccess\(code,ip\)/);
+ assert.match(kit,/await pairing\(\)\?\.restore\?\.\(found\.kitId\)/);
+ assert.match(kit,/if\(access&&access\.kitId!==verified\.kitId\)/);
+ assert.match(page,/id="kitRememberBrowser"/);
+ assert.match(page,/id="kitForgetBrowserPairing"/);
+ assert.match(page,/js\/kit-pairing-store\.js\?v=1/);
  assert.match(kit,/if\(!safeKitHost\(ip\)\)/);
  assert.match(kit,/recoverVerifiedLink\(old\)/);
  assert.match(kit,/headerNetworkChoice=state\.transport/);
@@ -48,6 +54,6 @@ test('firmware release metadata and Service Worker cache version are aligned wit
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
  assert.equal(version,'1.3.9');
  assert.ok(sketch.includes('FW_VERSION="1.3.9"'));
- assert.ok(sw.includes('classroom-kits.css?v=1.3.8-sta1'));
- assert.ok(page.includes('classroom-kits.css?v=1.3.8-sta1'));
+ assert.ok(sw.includes('classroom-kits.css?v=pair-browser1'));
+ assert.ok(page.includes('classroom-kits.css?v=pair-browser1'));
 });

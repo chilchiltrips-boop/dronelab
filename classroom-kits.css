@@ -301,3 +301,10 @@
  #app .topbar-main>.brand #webappVersion{display:inline-flex!important}
  #app .topbar-main>.kit-top-status{min-width:315px!important}
 }
+
+/* Powered-AP pairing: trusted browser storage is explicit and never exposed in kit list. */
+.kit-trust-option{display:inline-flex!important;flex:0 0 auto;align-items:center;gap:8px;border:1px solid #496e7b;border-radius:9px;padding:8px 11px;cursor:pointer;color:#e6f7ff;background:#132b39;font-size:12px;font-weight:700;white-space:nowrap}
+.kit-trust-option input{width:16px;height:16px;accent-color:#27c692;flex:0 0 auto}
+.kit-trust-option:focus-within{outline:2px solid #48d3ae;outline-offset:2px}
+#kitForgetBrowserPairing{font-size:11px;padding:6px 10px;white-space:nowrap}
+#kitTrustHelp{max-width:100%;line-height:1.45}
