@@ -49,3 +49,11 @@ test('AERION classroom six-digit code persists and never acts as the control pas
  assert.ok(ino.includes('ZEBJUS AERION A1')&&ino.includes('ZEBJUS AERION A2'));
  assert.ok(!k.includes('ledcWrite(')&&!k.includes('digitalWrite('),'Joystick diagnostic handler must never activate motors');
 });
+
+
+test('AERION 1.3.5 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
+ const net=read('FlightCore_Firmware/FlightCoreNetwork.h'),c=read('FlightCore_Firmware/FlightCoreClassroom.h');
+ for(const k of ['zjCorsAllowed()','Access-Control-Allow-Private-Network','origin_denied','zjKitPrefs.getString("apPass","12345678")','zjKitPrefs.getString("apName"','rssi\\":'])assert.ok(net.includes(k),k);
+ for(const k of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM'])assert.ok(c.includes(k),k);
+ assert.ok(!net.includes('/api/admin/'),'remote admin and key changes must not be exposed');
+});
