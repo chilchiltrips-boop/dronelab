@@ -25,13 +25,33 @@ static String zjJson(const String& src){
 static String zjNewSecret(size_t bytes){
  String s;for(size_t n=0;n<bytes;n++){const uint8_t b=uint8_t(esp_random());if(b<16)s+='0';s+=String(b,HEX);}return s;
 }
+// CORS enables supported Chromium Local Network Access only for this trusted WebApp
+// and the local development harness. Authentication still requires X-ZJ-Key.
+static bool zjCorsAllowed(){
+ const String origin=zjHttp.header("Origin");
+ return origin=="https://chilchiltrips-boop.github.io"||
+  origin=="http://localhost:8765"||origin=="http://127.0.0.1:8765"||
+  origin=="http://localhost:8000"||origin=="http://127.0.0.1:8000";
+}
+static void zjCorsHeaders(){
+ if(zjCorsAllowed()){
+  zjHttp.sendHeader("Access-Control-Allow-Origin",zjHttp.header("Origin"));
+  zjHttp.sendHeader("Vary","Origin");
+  zjHttp.sendHeader("Access-Control-Allow-Headers","X-ZJ-Key, Content-Type");
+  zjHttp.sendHeader("Access-Control-Allow-Methods","GET, POST, OPTIONS");
+  zjHttp.sendHeader("Access-Control-Max-Age","300");
+  if(zjHttp.header("Access-Control-Request-Private-Network")=="true")
+   zjHttp.sendHeader("Access-Control-Allow-Private-Network","true");
+ }
+}
 static bool zjAuthenticated(){
  const String provided=zjHttp.header("X-ZJ-Key");
  if(provided.length()!=zjNetKey.length()||provided.length()<24)return false;
  uint8_t diff=0;for(size_t i=0;i<provided.length();i++)diff|=uint8_t(provided[i]^zjNetKey[i]);return diff==0;
 }
-static bool zjAllow(){if(zjAuthenticated())return true;zjHttp.send(401,"application/json","{\"error\":\"access_key_required\"}");return false;}
-static void zjReply(int status,const String& body){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send(status,"application/json",body);}
+static void zjReply(int status,const String& body);
+static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"access_key_required\"}");return false;}
+static void zjReply(int status,const String& body){zjCorsHeaders();zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send(status,"application/json",body);}
 static void zjEnsureAP(){
  if((WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
  WiFi.mode(WIFI_AP_STA);
@@ -50,13 +70,13 @@ static String zjStatus(){
  out+=",\"ssid\":"+zjJson(sta?WiFi.SSID():String(""))+",\"ip\":"+zjJson(sta?WiFi.localIP().toString():String(""));
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
  out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
- out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName);
+ out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0);
  out+=",\"rc\":"+zjRcState()+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
 static const char* zjClientTransport(){const IPAddress ip=zjHttp.client().remoteIP();return ip[0]==192&&ip[1]==168&&ip[2]==4?"AP":"STA";}
 static void zjSetupHttp(){
- const char* headers[]={"X-ZJ-Key"};zjHttp.collectHeaders(headers,1);
+ const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network"};zjHttp.collectHeaders(headers,3);
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"name\":"+zjJson(zjKitName)+",\"board\":"+zjJson(FC_BOARD)+"}");});
@@ -153,7 +173,13 @@ static void zjSetupHttp(){
   }else if(u.status==UPLOAD_FILE_END&&!zjOtaFailed){zjOtaComplete=Update.end(true);zjOtaFailed=!zjOtaComplete;}
   else if(u.status==UPLOAD_FILE_ABORTED){zjOtaFailed=true;Update.abort();}
  });
- zjHttp.onNotFound([](){zjReply(404,"{\"error\":\"not_found\"}");});
+ zjHttp.onNotFound([](){
+  if(zjHttp.method()==HTTP_OPTIONS){
+   if(!zjCorsAllowed()){zjReply(403,"{\"error\":\"origin_denied\"}");return;}
+   zjCorsHeaders();zjHttp.send(204,"text/plain","");return;
+  }
+  zjReply(404,"{\"error\":\"not_found\"}");
+ });
  zjHttp.begin();
 }
 static void zjNetworkSetup(){
@@ -161,10 +187,13 @@ static void zjNetworkSetup(){
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");zjMode=zjPrefs.getString("mode","auto");
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
  // Classroom AP common WPA2 password; per-device access key remains separate and secret.
- zjApPass="12345678";
+ zjApPass=zjKitPrefs.getString("apPass","12345678");
+ if(zjApPass.length()<8||zjApPass.length()>63)zjApPass="12345678";
  const uint64_t mac=ESP.getEfuseMac();
  char suffix[7];snprintf(suffix,sizeof(suffix),"%06X",unsigned(mac&0xFFFFFF));
- zjApSsid=String("ZEBJUS-AERION-")+GYRO_BOARD+"-"+zjKitCode;
+ String apRoot=zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+GYRO_BOARD);
+ if(apRoot.length()<3||apRoot.length()>24)apRoot=String("ZEBJUS-AERION-")+GYRO_BOARD;
+ zjApSsid=apRoot+"-"+zjKitCode;
  if(zjMode=="ap"||zjSavedSsid.length()==0){zjEnsureAP();zjPhase="ap_ready";}
  else zjConnectSaved();
  zjSetupHttp();
