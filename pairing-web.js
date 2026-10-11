@@ -19,7 +19,8 @@ window.ZebjusDeviceRelay={request:networkRequest,status:()=>host?.status()||null
 const training=()=>window.ZebjusTraining;
 const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
- window.ZebjusKits?.stop?.();
+ // A virtual peer reset must not stop a separately owned Android AP diagnostic session.
+ if(window.ZebjusKits?.getState?.()?.owner)window.ZebjusKits?.stop?.();
  training()?.stop(reason);
  const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
 }

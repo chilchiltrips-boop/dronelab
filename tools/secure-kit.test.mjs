@@ -74,3 +74,11 @@ test('firmware scopes OTA to idle teacher-authorized STA; setup labels never gra
  assert.match(source,/zjPrefs\.putString\("staConfig",record\)!=record\.length\(\)/);
  assert.match(source,/zjAssociationEpoch!=zjTestAssociationEpoch/);
 });
+
+test('WebRTC reset stops only hardware owned by this WebApp, never a separate Android AP owner',()=>{
+ const source=read('pairing-web.js'),fn=source.slice(source.indexOf('function stopSimulatorRemote('),source.indexOf('function forwardSimulatorControl('));
+ let owner=false,stops=0,virtual=0;
+ const context={window:{ZebjusKits:{getState:()=>({owner}),stop:()=>stops++}},training:()=>({stop:()=>virtual++}),$:()=>({})};
+ vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,1);
+ owner=true;vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,1);assert.equal(virtual,2);
+});

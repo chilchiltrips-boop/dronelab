@@ -90,6 +90,11 @@ try{
   pad.dispatchEvent(new PointerEvent('pointermove',{pointerId:71,pointerType:'touch',clientX:r.x+r.width/2+35,clientY:r.y+r.height/2-25,bubbles:true}));
  });
  await wait(phone,()=>window.ZebjusNetwork.feedback()?.seq>2);assert.ok(frame.roll>1500);assert.ok(frame.pitch!==1500);
+ // Real simulator/peer reset must not send an emergency stop from a read-only STA observer.
+ await wait(web,()=>window.ZebjusTraining?.isReady?.());
+ await web.evaluate(()=>window.ZebjusTraining.stop('Observer simulator reset regression'));
+ assert.ok(owner,'virtual reset released independently owned AP input');
+ assert.ok(!calls.some(c=>c.host==='192.168.1.42'&&c.path==='/api/rc/stop'));
  await web.evaluate(()=>{
   window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue('from zebjus_simple import Drone\nimport asyncio\n\nrc = await Drone().read_joystick()\nassert rc["source"] == "ANDROID"\nassert rc["input_valid"] is True\nassert rc["motors_disabled"] is True\nassert rc["roll"] > 1500\nprint("ESP32_RECEIVE_PYTHON_PASS", rc["seq"], rc["roll"])');
   document.getElementById('runPythonBtn').click();
@@ -103,5 +108,5 @@ try{
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
  console.log('PASS simulated network integration: private label → encrypted Test & Save → same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
-}catch(e){console.error(e);console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
+}catch(e){console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}
