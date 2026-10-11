@@ -48,6 +48,6 @@ test('firmware release metadata and Service Worker cache version are aligned wit
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
  assert.equal(version,'1.3.8');
  assert.ok(sketch.includes('FW_VERSION="1.3.8"'));
- assert.ok(sw.includes('classroom-kits.css?v=1.3.8-discovery1'));
- assert.ok(page.includes('classroom-kits.css?v=1.3.8-discovery1'));
+ assert.ok(sw.includes('classroom-kits.css?v=1.3.8-sta1'));
+ assert.ok(page.includes('classroom-kits.css?v=1.3.8-sta1'));
 });
