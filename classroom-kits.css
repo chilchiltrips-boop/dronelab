@@ -329,3 +329,6 @@
 @media(max-width:700px){.kit-discovery-card{grid-template-columns:1fr auto}.kit-discovery-card .kit-actions{grid-column:1/-1}.kit-discovery-help{grid-column:1/-1}}
 
 .kit-column{display:grid;gap:12px;align-content:start;min-width:0}.kit-browser-access{align-items:center}.kit-browser-access .kit-trust-option{flex-direction:row!important;min-height:32px;padding:5px 8px;margin:0}.kit-browser-access .kit-trust-option input{margin:0!important}.kit-offline-hint{display:none}#kitCenter[data-connected="false"] .kit-offline-hint{display:block}#kitCenter[data-connected="false"] .kit-facts{display:none}
+
+/* Short visible label + full accessible name; reserve the 40px switch column. */
+#app .topbar-main .qr-header-controls .top-grant-control{width:126px!important;min-width:126px!important;max-width:126px!important;column-gap:8px!important;grid-template-columns:minmax(0,1fr) 40px}

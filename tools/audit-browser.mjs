@@ -22,7 +22,7 @@ async function inventory(screen){
  controls.push(...await page.evaluate(screen=>[...document.querySelectorAll('button,input,select,textarea,summary,a[href],[role=button],[role=switch]')].filter(e=>e.getBoundingClientRect().height>0).map(e=>({screen,id:e.id||'',type:e.tagName.toLowerCase(),label:(e.getAttribute('aria-label')||e.textContent||e.getAttribute('placeholder')||'').trim().slice(0,100),disabled:!!e.disabled,events:[...new Set([...(e.__auditEvents||[]),...['click','change','input','keydown','pointerdown'].filter(t=>typeof e['on'+t]==='function')])],width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height),verification:['SUMMARY','A','INPUT','TEXTAREA','SELECT'].includes(e.tagName)?'native behavior plus source review':'handler/state inspection; selected interactions below'})),screen));
 }
 try{
- await page.goto(base+'#settings');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
+ await page.goto(base+'#settings',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  check(await page.locator('[data-tab=settings]').getAttribute('class').then(x=>x.includes('active')),'Settings deep link ignored');
  for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[768,1024],[360,800],[1024,768],[390,844],[844,390],[915,412]]){
   await page.setViewportSize({width,height});
@@ -40,7 +40,7 @@ try{
    if(width===1366)await inventory(tab);
   }
  }
- await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html');await page.locator('#topPairMobileBtn').click();
+ await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html',{waitUntil:'domcontentloaded'});await page.locator('#topPairMobileBtn').click();
  check((await page.locator('#pairStep1').getAttribute('open'))!==null,'Step 1 must be open');
  check((await page.locator('#pairStep2').getAttribute('open'))===null,'Step 2 opens prematurely');
  check(await page.locator('#pairStep1NextBtn').isDisabled(),'Next enabled before offer');
@@ -63,12 +63,12 @@ try{
  await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:dir+'/settings-step2-camera-1366x768.png',fullPage:true});await inventory('pair-step2-camera');
  await page.locator('#connectionClose').click();await page.waitForFunction(()=>window.__reopenStream.getTracks().every(t=>t.readyState==='ended'));
  await page.locator('#topPairMobileBtn').click();await page.locator('#pairStep2BackBtn').click();await page.locator('#pairCancelBtn').click();check(await page.locator('#pairStep1NextBtn').isDisabled(),'Cancel retains old offer');
- await page.goto(base+'#firmware');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
+ await page.goto(base+'#firmware',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  await page.locator('[data-tab=firmware]').click();check(await page.locator('#fwUsbFlashBtn').isDisabled(),'Flash enabled before USB connection');check(await page.locator('#fwReconnectBtn').isDisabled(),'Unavailable kit reconnect enabled');
  await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
  await page.evaluate(()=>{location.hash='wiring'});await page.locator('#tab-wiring.active').waitFor();
  for(const hash of ['simcontrol','flight','led']){
-  await page.goto(base+'#'+hash);
+  await page.goto(base+'#'+hash,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>location.hash==='#pid'&&document.getElementById('tab-pid')?.classList.contains('active'));
   await page.waitForFunction(()=>window.ZebjusTraining?.isReady?.(),null,{timeout:30000});
   check(await page.locator('#pidFrame').count()===1,'Legacy bookmark created more than one simulator');
@@ -76,7 +76,7 @@ try{
   await page.locator('[data-tab=assembly]').click();await page.waitForFunction(()=>document.getElementById('tab-assembly')?.classList.contains('active'));
   check(await page.evaluate(()=>!!window.ZebjusTraining?.isReady?.()&&!window.ZebjusTraining.snapshot().armed),'Switching labs discarded mounted safe PID receiver');
  }
- await page.goto(base+'companion.html');await page.locator('#flightSettings').click();check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
+ await page.goto(base+'companion.html',{waitUntil:'domcontentloaded'});await page.locator('#flightSettings').click();check((await page.locator('#appConnection').getAttribute('class')).includes('disconnected'),'Disconnected Android indicator shown connected');
  check(await page.locator('#copyAnswerBtn').isDisabled(),'Copy response enabled without response');
  for(const [width,height] of [[390,844],[844,390],[915,412]]){
   await page.setViewportSize({width,height});await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/companion-${width}x${height}.png`,fullPage:true});

@@ -19,6 +19,9 @@ try{
   // Test disabled, enabled and checked states; no live connection/armed flight is affected.
   for(const state of ['disabled','enabled','checked']){
    await page.locator('#topGrantMobileSwitch').evaluate((el,state)=>{el.disabled=state==='disabled';el.checked=state==='checked'},state);
+   // The intentionally single-row mobile header is horizontally scrollable.
+   // Require this control to become visible by normal scrolling, then retain all geometry checks.
+   await page.locator('.top-grant-control').scrollIntoViewIfNeeded();
    const layout=await page.locator('.top-grant-control').evaluate(label=>{
     const text=label.querySelector('.grant-control-text'),track=label.querySelector('.qr-switch-track');
     const get=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
@@ -49,9 +52,9 @@ try{
  for(const tab of ['pid','settings','python','assembly']){
   await page.locator('[data-tab="'+tab+'"]').click();
   const t=await page.locator('.top-grant-control .grant-control-text').textContent();
-  if(t.trim()!=='Grant Mobile Control')throw Error('Grant switch disappeared on '+tab);
+  if(t.trim()!=='Mobile Ctrl'||await page.locator('#topGrantMobileSwitch').getAttribute('aria-label')!=='Grant Mobile Control')throw Error('Grant switch disappeared on '+tab);
   const r=await page.locator('.top-grant-control').boundingBox();
-  if(!r||r.width<170)throw Error('Header control collapsed on '+tab);
+  if(!r||r.width<120)throw Error('Header control collapsed on '+tab);
  }
  if(errors.length)throw Error('Browser errors: '+errors.join(' | '));
  console.log('PASS Grant Mobile Control switch: '+checks+' widths/states geometric non-overlap checks + persistent top header across 4 pages');
