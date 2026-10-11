@@ -94,7 +94,7 @@ function send(critical=false){
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send()},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{const m=current();window.ZebjusNetwork?.previewControls?.({seq:++seq,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}})}},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
