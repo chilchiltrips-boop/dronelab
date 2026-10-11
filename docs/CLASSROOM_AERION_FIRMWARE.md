@@ -64,3 +64,27 @@ The GitHub Actions firmware builder compiles A1 and A2 separately with Arduino-E
 - Firmware exposes restricted cross-origin permissions for the official HTTPS Pages origin plus local development origins. Browser support for HTTPS→local HTTP varies. Unsupported browsers require USB or Android's approved WebRTC bridge. CORS is not authentication: X-ZJ-Key and verified RC session are still mandatory. No general-purpose admin or flash API is exposed over Wi-Fi.
 - WebApp includes a selected hardware session, kit status in top bar, source-owned joystick forwarding in PID Tuning (motors disabled), USB Serial Plotter RC frames, and Network Telemetry. WebApp cannot enumerate mDNS directly: current Classroom Known Kits are previously verified entries, **not** live LAN discovery; don't label them online without probing.
 - Physical hardware acceptance (A1/A2, factory partition migration, 3+ devices/collisions, AP/STA switching, USB controller lease, browser Local Network Access, Android mode, signed OTA) is still pending.
+
+## Firmware 1.3.6 AP recovery and USB-first Wi-Fi provisioning
+
+**Why an older flashed kit can have no AP:** firmware 1.3.5 switched AP off after a successful STA join in AUTO mode. In 1.3.6 AUTO keeps the unique AP visible while the kit joins STA; only deliberate STA-only mode disables the AP after joining. If the kit was previously set to STA-only, that NVS setting survives a normal APP update. To restore AP choose AUTO or AP over verified USB:
+
+1. Connect **Read Running Firmware / Open Serial Port** on the Firmware tab, select the physical A1/A2 serial port, baud 115200, newline.
+2. The WebApp requests `ZJKIT,GET` and `ZJNET,GET` automatically. Read the *running* `ZJINFO,FW,...,1.3.6,...` response, do not rely on a downloaded image's version.
+3. Open **MY KITS → Classroom Network** (or press **Configure Kit Wi-Fi** on Firmware). The USB hardware identity should be auto-selected from the running firmware.
+4. **Scan Wi-Fi**: sends `ZJNET,SCAN` and waits asynchronously for `ZJNET,SCAN,COUNT,...`, `ZJNET,SCAN,ITEM,SSID,RSSI,SECURE` and `ZJNET,SCAN,END`. Select the 2.4 GHz SSID.
+5. **Test & Save STA**: sends `ZJNET,TEST,SSID,PASSWORD` over local USB; firmware replies `ZJNET,TEST,STARTED`, then either `ZJNET,TEST,SAVED` after real association or `ZJNET,TEST,FAILED_NOT_SAVED`. Failed credentials are never persisted and passwords are not echoed in firmware logs. Wi-Fi SSIDs/passwords with commas are not supported by the diagnostic serial protocol.
+6. **Apply Mode → AUTO**: sends `ZJNET,MODE,auto` (or `ap` for AP-only). `sta` hides the AP intentionally after STA successfully joins. `ZJNET,GET` shows the actual mode, AP state, STA IP and connection phase. AP SSID: `ZEBJUS-AERION-A1-<kitcode>` or `ZEBJUS-AERION-A2-<kitcode>`; initial password `12345678` unless a teacher has changed it.
+7. If AUTO/AP is selected but Wi-Fi networks cannot see the board: check hardware power and USB supply, leave BOOT/ROM mode, restart the running app, and examine `ZJNET,AP,ERROR,...` vs `ZJNET,AP,ON,...`. Do not assume flashing means the APP is executing.
+
+Firmware's 350 ms input watchdog and 1.8 s RC owner lease still apply. The browser sends one safe neutral frame as soon as a controller is claimed. Android virtual ARM flags are **never** forwarded as a hardware ARM: hardware preview sends `armed=false` at all times. The JavaScript Android direct-AP sender recognizes verified `requestTransport: AP` instead of guessing from STA connectivity; the latter can be true while AP is simultaneously enabled.
+
+## Teacher USB authorization (new in 1.3.6)
+
+Normal kit naming, AP naming/password, 6-digit selector changes, access-key rotation and reset are locked until teacher enrollment/unlock. On the physically attached kit, **MY KITS → Device Admin** allows **Enroll Teacher Passphrase**, **Unlock Admin (60s)** and **Lock Admin**. Initial enrollment requires a unique 12–64 character passphrase kept by the teacher (no hardcoded default). Firmware stores a per-device salted SHA-256 digest in NVS, rejects repeated failed attempts with a cooldown, and does not echo the passphrase. The teacher can also send `ZJADMIN,ENROLL,<passphrase>`, `ZJADMIN,UNLOCK,<passphrase>`, `ZJADMIN,LOCK` over a trusted USB terminal. A reset clears NVS teacher credentials. The six-digit kit selector and default AP password are **not** teacher/admin passwords.
+
+**Threat model:** This is software authorization for normal USB commands, not tamper protection against a student who can physically erase or reflash ESP32. Production classroom ownership requires hardware Secure Boot, flash encryption, protected debug interfaces and approved signed OTA. Never claim these are enabled by the 1.3.6 diagnostic release.
+
+## Release verification
+
+Run `npm test`, `npm run check`, `python3 tools/build_scanner.py`, `python3 tools/verify_release.py` and browser/Android regression workflows. Full acceptance still requires physical A1 and A2 checks with motors and propellers disconnected, including AP visibility after reboot, USB STA test/save, bad passwords, code collisions, kit ID changes, Android WebRTC RC packets, RC timeout, Android direct AP and STA-only AP shutdown.
