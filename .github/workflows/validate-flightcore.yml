@@ -30,6 +30,14 @@ on:
       - package.json
       - tools/flightcore.test.mjs
       - 'tools/firmware-guards.test.mjs'
+      - 'tools/classroom-kits.test.mjs'
+      - 'tools/header-ota-regression.test.mjs'
+      - 'tools/discovery-pairing.test.mjs'
+      - 'tools/wifi-onboarding-recovery.test.mjs'
+      - 'tools/python-wifi-ownership.test.mjs'
+      - 'js/classroom-kits.js'
+      - 'js/network-lab.js'
+      - 'classroom-kits.css'
       - tools/serial-tools.test.mjs
       - js/serial-plotter.js
       - js/usb-live-diagnostic.js
