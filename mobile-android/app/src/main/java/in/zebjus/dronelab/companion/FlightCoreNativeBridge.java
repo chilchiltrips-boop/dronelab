@@ -12,6 +12,10 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import java.io.InputStream;
 import java.io.OutputStream;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
+import android.net.Uri;
+import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +30,8 @@ import org.json.JSONObject;
  */
 final class FlightCoreNativeBridge {
     private final Activity activity;
+    static final int OTA_DOCUMENT_PICKER=802;
+    private volatile String otaIp,otaToken;
     private final WebView view;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ConnectivityManager connectivity;
@@ -102,6 +108,62 @@ final class FlightCoreNativeBridge {
                 Intent i=Build.VERSION.SDK_INT>=29?new Intent(Settings.Panel.ACTION_WIFI):new Intent(Settings.ACTION_WIFI_SETTINGS);
                 activity.startActivity(i);
             }catch(Exception ignored){}
+        });
+    }
+    private void otaReply(boolean ok,String message){
+        try{
+            JSONObject obj=new JSONObject();obj.put("ok",ok);obj.put("message",message);
+            activity.runOnUiThread(()->{if(view.getParent()!=null)view.evaluateJavascript("window.zebjusNativeOtaResult && window.zebjusNativeOtaResult("+obj.toString()+")",null);});
+        }catch(Exception ignored){}
+    }
+    @JavascriptInterface public void pickAppFirmware(String ip,String token){
+        if(!privateIp(ip)||token==null||!token.matches("[0-9a-fA-F]{32}")){otaReply(false,"Invalid IP or access key");return;}
+        otaIp=ip;otaToken=token;
+        activity.runOnUiThread(()->{
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");
+            activity.startActivityForResult(intent,OTA_DOCUMENT_PICKER);
+        });
+    }
+    void onFirmwareFile(Uri file){
+        final String ip=otaIp,token=otaToken;otaIp=null;otaToken=null;
+        if(file==null||!privateIp(ip)||token==null){otaReply(false,"No APP image selected");return;}
+        worker.execute(()->{
+            HttpURLConnection connection=null;
+            try{
+                String name="";
+                try(Cursor c=activity.getContentResolver().query(file,null,null,null,null)){
+                    if(c!=null&&c.moveToFirst()){
+                        int n=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if(n>=0)name=c.getString(n);
+                    }
+                }
+                if(!name.toLowerCase(java.util.Locale.ROOT).endsWith(".bin")||name.toLowerCase(java.util.Locale.ROOT).contains("factory")||name.toLowerCase(java.util.Locale.ROOT).contains("merged"))
+                    throw new IllegalArgumentException("Select APP .bin only (never Factory or Merged)");
+                byte[] bytes;
+                try(InputStream in=activity.getContentResolver().openInputStream(file)){
+                    if(in==null)throw new IllegalArgumentException("Firmware file unavailable");
+                    bytes=in.readNBytes(1966081);
+                }
+                if(bytes.length<32768||bytes.length>1966080||((int)bytes[0]&255)!=0xe9)
+                    throw new IllegalArgumentException("Invalid or oversized APP firmware image");
+                String boundary="ZJ"+System.currentTimeMillis();
+                String prefix="--"+boundary+"\r\nContent-Disposition: form-data; name=\"firmware\"; filename=\"FlightCore_APP.bin\"\r\nContent-Type: application/octet-stream\r\n\r\n";
+                String suffix="\r\n--"+boundary+"--\r\n";
+                byte[] start=prefix.getBytes(StandardCharsets.UTF_8),end=suffix.getBytes(StandardCharsets.UTF_8);
+                URL target=new URL("http://"+ip+"/api/ota");Network wifi=wifiNetwork();
+                connection=(HttpURLConnection)(wifi!=null?wifi.openConnection(target):target.openConnection());
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(5000);connection.setReadTimeout(20000);
+                connection.setRequestMethod("POST");connection.setRequestProperty("X-ZJ-Key",token);
+                connection.setRequestProperty("Content-Type","multipart/form-data; boundary="+boundary);
+                connection.setDoOutput(true);connection.setFixedLengthStreamingMode(start.length+bytes.length+end.length);
+                try(OutputStream out=connection.getOutputStream()){out.write(start);out.write(bytes);out.write(end);}
+                int status=connection.getResponseCode();
+                if(status!=200)throw new IllegalStateException("Device rejected APP OTA (HTTP "+status+")");
+                otaReply(true,"APP image accepted. Controller rebooting; rejoin Wi-Fi and verify running firmware.");
+            }catch(Exception e){otaReply(false,"APP OTA failed: "+e.getMessage());}
+            finally{if(connection!=null)connection.disconnect();}
         });
     }
     void shutdown(){worker.shutdownNow();}
