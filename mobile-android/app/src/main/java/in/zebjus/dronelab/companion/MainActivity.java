@@ -227,6 +227,11 @@ public class MainActivity extends Activity {
         view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
         cockpitFullscreen();
     }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==FlightCoreNativeBridge.OTA_DOCUMENT_PICKER&&nativeFlightCore!=null)
+            nativeFlightCore.onFirmwareFile(resultCode==RESULT_OK&&data!=null?data.getData():null);
+    }
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
         // pending getUserMedia request finish rather than cancelling the prompt.
