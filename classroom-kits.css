@@ -78,3 +78,20 @@
 .firmware-page #fwUsbFlashBtn.factory-risk:not(:disabled){background:#804b1b;border-color:#eeb465;color:#fff6e6}
 .firmware-page #fwUsbFlashBtn:disabled{background:#27394a;color:#a9b6c4;border-color:#41566a;cursor:not-allowed;opacity:.65}
 .firmware-page #fwUsbFlashBtn:focus-visible{outline:3px solid #77f2c9;outline-offset:3px}
+
+/* Shared AERION operational states: icons and text accompany all colors. */
+.kit-top-status[data-tone=offline]{border-color:#64748b;background:#101c29}
+.kit-top-status[data-tone=warn]{border-color:#f59e0b;background:#302614}
+.kit-top-status[data-tone=error]{border-color:#ef4444;background:#301820}
+.kit-top-status[data-tone=locked]{border-color:#a78bfa;background:#251e38}
+#kitGlobalState[data-tone=offline]{color:#cbd5e1}
+#kitGlobalState[data-tone=warn]{color:#fcd34d}
+#kitGlobalState[data-tone=error]{color:#fca5a5}
+#kitGlobalState[data-tone=locked]{color:#c4b5fd}
+#kitTopStop{border-color:#f87171;background:#6f2031;color:#fff;font-weight:850}
+#kitTopStop:not(:disabled):focus-visible{outline:3px solid #fda4af;outline-offset:2px}
+#kitTopStop:disabled{opacity:.45;cursor:not-allowed}
+.kit-center button:focus-visible,.kit-center input:focus-visible,.kit-center select:focus-visible{outline:3px solid #53efbd;outline-offset:2px}
+.kit-center button:disabled{opacity:.48;cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){.kit-center *,.kit-top-status *{animation:none!important;transition:none!important}}
+@media(max-width:1000px){.kit-top-status{flex-wrap:wrap;max-width:100%;gap:6px}.kit-top-detail{flex:1 1 160px}}
