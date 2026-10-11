@@ -31,7 +31,7 @@ function markPackagePrepared(label='Firmware package verified'){
 const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_FLIGHTCORE","version":"1.3.1","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS AERION A1","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.3.1","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":"2026-10-10T15:08:41Z"},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3:CDCOnBoot=cdc"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS AERION A2","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.3.1","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":"2026-10-10T15:08:41Z"},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-10T15:08:41Z"};
 function school(){return window.zebjusSchool||null}
 function flashDiagnostic(kind,detail={}){try{window.dispatchEvent(new CustomEvent('aerion-link-event',{detail:{kind:'firmware',phase:kind,message:kind,...detail}}))}catch{}}
-function log(msg){const e=$('#fwLog');if(e)e.textContent=`${new Date().toLocaleTimeString()}  ${msg}\n${e.textContent}`.slice(0,16000);flashDiagnostic('log',{message:String(msg).slice(0,1200)})}
+function log(msg){msg=String(msg).replace(/ZJNET,(?:PAIR|ACCESS),[^\r\n]*/g,'[USB private credentials redacted]');const e=$('#fwLog');if(e)e.textContent=`${new Date().toLocaleTimeString()}  ${msg}\n${e.textContent}`.slice(0,16000);flashDiagnostic('log',{message:String(msg).slice(0,1200)})}
 function text(id,v){const e=$(id);if(e)e.textContent=v}
 function textTitle(id,v){const e=$(id);if(e){e.textContent=v;e.title=String(v||'')}}
 function badge(id,label,cls=''){const e=$(id);if(e){e.textContent=label;e.className='status '+cls}}
@@ -543,6 +543,8 @@ function serialVisibleLine(raw){
  const line=String(raw||'').trim();
  if(!line||/^(?:Scanning I2C bus\.\.\.|[✔✓]\s*Found device at 0x[0-9a-f]+|[✅]?\s*Total I2C devices found:\s*\d+|[❌]?\s*No I2C devices found\.?|-{3,})$/i.test(line))return null;
  if(/^ZJSCAN,/.test(line)||/^ZJGYRO,DATA,/.test(line))return null;
+ // Never render Wi-Fi authorization material into Serial Monitor, logs or exports.
+ if(/^ZJNET,(?:PAIR|ACCESS),/.test(line))return '[USB PAIRING] Private controller credentials received (redacted)';
  // Older v1.3.1 binaries use verbose pin labels; newer firmware sends 1/0.
  return /^ZJTEL,1,/.test(line)?line.replace(/,LED_READY,(\d+)$/,',1,$1').replace(/,PIN_CONFLICT,(\d+)$/,',0,$1'):line;
 }
