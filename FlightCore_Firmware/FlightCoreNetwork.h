@@ -5,15 +5,14 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Update.h>
+#include <ESPmDNS.h>
 
 static WebServer zjHttp(80);
 static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
-static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjRcLast=0,zjRcSeq=0,zjOtaRebootAt=0,zjLastScanSeq=0;
-static IPAddress zjRcOwner;
+static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjOtaRebootAt=0,zjLastScanSeq=0;
 static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
-static int zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500,zjRcThrottle=1000;
-static bool zjPreviousScanActive=false;
+static bool zjPreviousScanActive=false,zjMdnsReady=false;
 
 // Escapes all user-provided Wi-Fi identifiers before emitting JSON.
 static String zjJson(const String& src){
@@ -50,14 +49,17 @@ static String zjStatus(){
  out+=",\"phase\":"+zjJson(zjPhase)+",\"staConnected\":"+(sta?String("true"):String("false"));
  out+=",\"ssid\":"+zjJson(sta?WiFi.SSID():String(""))+",\"ip\":"+zjJson(sta?WiFi.localIP().toString():String(""));
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
- out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(millis()-zjRcLast<350?String("true"):String("false"));
- out+=",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
+ out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
+ out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName);
+ out+=",\"rc\":"+zjRcState()+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
+static const char* zjClientTransport(){const IPAddress ip=zjHttp.client().remoteIP();return ip[0]==192&&ip[1]==168&&ip[2]==4?"AP":"STA";}
 static void zjSetupHttp(){
  const char* headers[]={"X-ZJ-Key"};zjHttp.collectHeaders(headers,1);
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
+ zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"name\":"+zjJson(zjKitName)+",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/wifi/scan",HTTP_GET,[](){
   if(!zjAllow())return;
   const int n=WiFi.scanComplete();
@@ -79,7 +81,7 @@ static void zjSetupHttp(){
   if(!zjAllow())return;const String mode=zjHttp.arg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
   if(mode=="sta"&&!zjSavedSsid.length()){zjReply(409,"{\"error\":\"save_sta_credentials_first\"}");return;}
-  zjMode=mode;zjPrefs.putString("mode",mode);
+  zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);
   zjReply(202,"{\"mode\":"+zjJson(mode)+",\"state\":\"switching\"}");
   if(mode=="ap"){WiFi.disconnect();zjEnsureAP();zjPhase="ap_manual";}
   else if(WiFi.status()==WL_CONNECTED){zjNetApOffAt=millis()+3000;zjPhase="sta_connected";}
@@ -92,7 +94,7 @@ static void zjSetupHttp(){
   out+=",\"scanner\":[";
   for(uint8_t i=0;i<scanCount;i++){if(i)out+=',';out+=String(scanAddresses[i]);}
   out+="],\"scannerRunning\":"+(scanActive?String("true"):String("false"))+",\"scanSequence\":"+String(zjLastScanSeq);
-  out+=",\"rcSeq\":"+String(zjRcSeq)+",\"rcAlive\":"+(millis()-zjRcLast<350?String("true"):String("false"))+"}";
+  out+=",\"rcSeq\":"+String(zjRcSeq)+",\"rcAlive\":"+(zjRcHasFrame?String("true"):String("false"))+",\"rc\":"+zjRcState()+"}";
   zjReply(200,out);
  });
  zjHttp.on("/api/command",HTTP_POST,[](){
@@ -102,19 +104,33 @@ static void zjSetupHttp(){
   char line[sizeof(serialLine)];cmd.toCharArray(line,sizeof(line));serialCommand(line);
   zjReply(200,"{\"accepted\":true,\"motorControl\":false}");
  });
- // Joystick frames are received for hardware transport testing only.
- // They cannot arm motors or change PID until a reviewed flight controller exists.
+ // RC diagnostics only: motors always disarmed. Kit code selects; access key authorizes.
+ zjHttp.on("/api/rc/claim",HTTP_POST,[](){
+  if(!zjAllow())return;
+  const String source=zjHttp.arg("source"),code=zjHttp.arg("kitCode");
+  if(code!=zjKitCode){zjReply(404,"{\"error\":\"kit_code_mismatch\"}");return;}
+  if(!zjRcClaim(source,code,true,zjHttp.client().remoteIP(),zjClientTransport())){
+   zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
+  }
+  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false}");
+ });
+ zjHttp.on("/api/rc/release",HTTP_POST,[](){
+  if(!zjAllow())return;
+  if(!zjRcOwned||!zjRcNetwork||zjHttp.arg("session")!=zjRcSession||
+     zjHttp.client().remoteIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
+  zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
+ });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
   if(!zjAllow())return;
   if(zjHttp.arg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
-  const IPAddress remote=zjHttp.client().remoteIP();
-  if(zjRcLast&&millis()-zjRcLast<350&&zjRcOwner!=remote){zjReply(423,"{\"error\":\"controller_owned_by_another_client\"}");return;}
-  const uint32_t seq=uint32_t(zjHttp.arg("seq").toInt());
-  if(!seq||(millis()-zjRcLast<350&&seq<=zjRcSeq)){zjReply(409,"{\"error\":\"stale_rc_sequence\"}");return;}
-  const int t=zjHttp.arg("throttle").toInt(),r=zjHttp.arg("roll").toInt(),p=zjHttp.arg("pitch").toInt(),y=zjHttp.arg("yaw").toInt();
-  if(t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000){zjReply(400,"{\"error\":\"rc_out_of_range\"}");return;}
-  zjRcOwner=remote;zjRcLast=millis();zjRcSeq=seq;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
-  zjReply(200,"{\"received\":true,\"motorsArmed\":false}");
+  const long seq=zjHttp.arg("seq").toInt();
+  const int t=zjHttp.arg("throttle").toInt(),r=zjHttp.arg("roll").toInt();
+  const int p=zjHttp.arg("pitch").toInt(),y=zjHttp.arg("yaw").toInt();
+  if(seq<=0||!zjRcFrame(uint32_t(seq),t,r,p,y,zjHttp.arg("source"),
+     zjHttp.arg("session"),true,zjHttp.client().remoteIP())){
+   zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
+  }
+  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false}");
  });
  // Secure-by-default factory flashing remains USB-only. OTA is APP-only with per-device key,
  // ESP chip header check and Update partition guard. Production requires signed-image policy.
@@ -144,10 +160,11 @@ static void zjNetworkSetup(){
  zjPrefs.begin("zj-network",false);
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");zjMode=zjPrefs.getString("mode","auto");
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
- zjApPass=zjPrefs.getString("apPass","");if(zjApPass.length()!=12){zjApPass=zjNewSecret(6);zjPrefs.putString("apPass",zjApPass);}
+ // Classroom AP common WPA2 password; per-device access key remains separate and secret.
+ zjApPass="12345678";
  const uint64_t mac=ESP.getEfuseMac();
  char suffix[7];snprintf(suffix,sizeof(suffix),"%06X",unsigned(mac&0xFFFFFF));
- zjApSsid=String("ZEBJUS_")+FC_BOARD+"_"+suffix;
+ zjApSsid=String("ZEBJUS-AERION-")+GYRO_BOARD+"-"+zjKitCode;
  if(zjMode=="ap"||zjSavedSsid.length()==0){zjEnsureAP();zjPhase="ap_ready";}
  else zjConnectSaved();
  zjSetupHttp();
@@ -183,5 +200,16 @@ static void zjNetworkLoop(uint32_t now){
   zjNetApOffAt=0;
   if(zjMode!="ap"&&WiFi.status()==WL_CONNECTED){WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);zjPhase="sta_connected";}
  }
- if(zjRcLast&&now-zjRcLast>350){zjRcLast=0;zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;}
+ // Advertise device ID and six-digit selector over STA mDNS, never the access key.
+ const bool staUp=WiFi.status()==WL_CONNECTED;
+ if(staUp&&!zjMdnsReady){
+  const String host=String("zebjus-")+GYRO_BOARD+"-"+zjKitId.substring(zjKitId.length()-6);
+  if(MDNS.begin(host.c_str())){
+   MDNS.addService("zebjus","tcp",80);
+   MDNS.addServiceTxt("zebjus","tcp","code",zjKitCode);
+   MDNS.addServiceTxt("zebjus","tcp","id",zjKitId);
+   MDNS.addServiceTxt("zebjus","tcp","board",FC_BOARD);
+   zjMdnsReady=true;
+  }
+ }else if(!staUp&&zjMdnsReady){MDNS.end();zjMdnsReady=false;}
 }
