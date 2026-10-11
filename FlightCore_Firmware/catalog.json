@@ -6,7 +6,7 @@
   "boards": [
     {
       "id": "ZFC-A1",
-      "name": "ZEBJUS FlightCore A1 SuperMini",
+      "name": "ZEBJUS AERION A1",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
@@ -51,7 +51,7 @@
     },
     {
       "id": "ZFC-A2",
-      "name": "ZEBJUS FlightCore A2 C6",
+      "name": "ZEBJUS AERION A2",
       "appAddress": "0x10000",
       "flashMode": "dio",
       "flashFreq": "80m",
