@@ -7,7 +7,12 @@ const browser=await chromium.launch(browserOptions);
 const ctx=await browser.newContext({viewport:{width:1600,height:930},deviceScaleFactor:1});await configureContext(ctx);
 const page=await ctx.newPage();
 const failures=[],logs=[];
-page.on('pageerror',e=>failures.push(e.stack||e.message));
+page.on('pageerror',e=>{
+ // Monaco cancels pending suggestion promises when switching editor models.
+ // Its vendored build can emit a benign unhandled Canceled rejection.
+ if((e.message||'')==='Canceled: Canceled'&&String(e.stack||'').includes('/vendor/monaco/'))return;
+ failures.push(e.stack||e.message)
+});
 page.on('console',m=>{if(m.type()==='error')logs.push(m.text())});
 try{
  await page.goto('http://127.0.0.1:8765/#python',{waitUntil:'domcontentloaded',timeout:30000});
