@@ -121,7 +121,7 @@ def main():
     for b in targets:
         cfg=b['build']; pkg=b['latest']['app']; filename=pkg['file']
         with tempfile.TemporaryDirectory(prefix='zfc-build-') as td:
-            td=Path(td); sketch=td/'I2C_ADDRESS_SCANNER'; sketch.mkdir(); shutil.copy2(SRC,sketch/'I2C_ADDRESS_SCANNER.ino'); shutil.copy2(OUT/'FlightCoreNetwork.h',sketch/'FlightCoreNetwork.h')
+            td=Path(td); sketch=td/'I2C_ADDRESS_SCANNER'; sketch.mkdir(); shutil.copy2(SRC,sketch/'I2C_ADDRESS_SCANNER.ino'); shutil.copy2(OUT/'FlightCoreNetwork.h',sketch/'FlightCoreNetwork.h'); shutil.copy2(OUT/'FlightCoreClassroom.h',sketch/'FlightCoreClassroom.h')
             shutil.copy2(OUT/'partitions.csv',sketch/'partitions.csv')
             build=td/'build'; build.mkdir()
             print(f'\n=== BUILD {b["id"]} • {b["name"]} • {cfg["fqbn"]} ===',flush=True)
