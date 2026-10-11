@@ -218,6 +218,13 @@ static void zjNetUsbStatus(){
 }
 static bool zjNetSerialCommand(char* line){
  if(!strcmp(line,"ZJNET,GET")){zjNetUsbStatus();return true;}
+ // A local USB-attached teacher can pair the *current browser session* without
+ // typing an access key. Never permit this endpoint over AP/STA or HTTP.
+ if(!strcmp(line,"ZJNET,PAIR")){
+  if(zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,PAIR_BUSY");return true;}
+  Serial.print("ZJNET,PAIR,");Serial.print(zjKitId);Serial.print(',');
+  Serial.println(zjNetKey);return true;
+ }
  if(!strcmp(line,"ZJNET,SCAN")){
   if(zjUsbScanning||zjNetTesting){Serial.println("ZJNET,ERR,SCAN_BUSY");return true;}
   if(zjMode!="sta"||WiFi.status()!=WL_CONNECTED)zjEnsureAP();
