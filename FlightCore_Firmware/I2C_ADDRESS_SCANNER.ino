@@ -3,15 +3,15 @@
 #include <string.h>
 #include <stdlib.h>
 
-// FlightCore USB diagnostics v1.3.2; version is emitted by the RUNNING app,
+// ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.3.3";
+constexpr const char* FW_VERSION="1.3.4";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
-constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
+constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS AERION A2";
 #else
 constexpr uint8_t BUS_SDA=4,BUS_SCL=5; // A1: dedicated I2C pins; GPIO8 stays onboard LED-only
-constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS FlightCore A1 SuperMini";
+constexpr const char* FC_BOARD="ZFC-A1",*FC_LABEL="ZEBJUS AERION A1";
 #endif
 
 // Compact scan output contains addresses for Python Lab without verbose banners.
@@ -67,6 +67,7 @@ bool parseNumber(const char* text,long minimum,long maximum,long& result){
 bool readLong(char*& state,long low,long high,long& result){
  return parseNumber(strtok_r(nullptr,",",&state),low,high,result);
 }
+#include "FlightCoreClassroom.h"
 void ledCommand(char* line){
  if(strncmp(line,"ZJLED,",6)!=0)return;
  char* state=nullptr;
@@ -109,6 +110,7 @@ void ledCommand(char* line){
 }
 void requestScan();
 void serialCommand(char* line){
+ if(zjRcSerialCommand(line))return;
  if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
  if(!strcmp(line,"ZJI2C,SCAN")){requestScan();return;}
  if(!strncmp(line,"ZJTEL,RATE,",11)){
@@ -339,6 +341,7 @@ void emitTelemetry(unsigned long now){
 #include "FlightCoreNetwork.h"
 void setup(){
  Serial.begin(115200);
+ zjKitSetup();
  selectI2cBus();
  digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
@@ -360,5 +363,6 @@ void loop(){
  scanI2C(now);
  emitTelemetry(now);
  zjNetworkLoop(now);
+ zjRcLoop(now);
  // Legacy ZJGYRO duplicates are disabled.
 }
