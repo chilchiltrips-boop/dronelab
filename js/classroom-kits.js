@@ -755,7 +755,10 @@ function init(){
  guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);
  guardAction('kitForgetBrowserPairing',forgetBrowserPairing);
  $('kitRememberBrowser')?.addEventListener('change',e=>{
-  if(e.target.checked){void rememberBrowserPairing().catch(err=>{e.target.checked=false;tone(err.message,'warn')})}
+  if(!e.target.checked)return;
+  const id=state.kitId||usbCandidate.kitId;
+  if(!id||!pairedKeys.get(id)){tone('Remember this browser enabled • connect this kit once over USB and press Pair via USB. The key will be saved after successful physical pairing.','info');return}
+  void rememberBrowserPairing().catch(err=>{e.target.checked=false;tone(err.message,'warn')});
  });guardAction('kitDiscover',discoverKits);guardAction('fwDiscoverKits',discoverKits);$('fwOpenDiscovery')?.addEventListener('click',goKits);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTopStop',stop);
