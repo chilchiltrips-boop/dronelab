@@ -479,7 +479,7 @@ function onSerial(e){
   else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched','error')}
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
-  else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
+  else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
   else if(text.startsWith('ZJNET,AP,')){wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info')}
  }
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
@@ -524,7 +524,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  const code=selectedCode(),key=($('kitKeyInput')?.value||'').trim();
  const ip=($('kitIpInput')?.value||'').trim();
  if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!privateIPv4(ip)){
-  goKits();tone('Enter the 6-digit Kit Code, verified STA IP (if STA) and private access key to connect over '+mode.toUpperCase(),'warn');
+  goKits();tone(mode==='ap'?'Join your ZEBJUS-AERION kit Wi-Fi in device settings (initial password 12345678), then enter 6-digit Kit Code and private device access key.':'Connect to the classroom router, then enter 6-digit Kit Code, verified STA IP and private device access key.','warn');
   $('kitKeyInput')?.focus();render();return;
  }
  await connect();
