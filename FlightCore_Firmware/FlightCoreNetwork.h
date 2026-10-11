@@ -12,7 +12,8 @@ static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjOtaRebootAt=0,zjLastScanSeq=0;
 static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
-static bool zjPreviousScanActive=false,zjMdnsReady=false;
+static bool zjPreviousScanActive=false,zjMdnsReady=false,zjUsbScanning=false;
+static int zjUsbScanIndex=0,zjUsbScanCount=0;
 
 // Escapes all user-provided Wi-Fi identifiers before emitting JSON.
 static String zjJson(const String& src){
@@ -56,22 +57,25 @@ static void zjEnsureAP(){
  if((WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
  WiFi.mode(WIFI_AP_STA);
  WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
- WiFi.softAP(zjApSsid.c_str(),zjApPass.c_str(),1,false,4);
+ const bool started=WiFi.softAP(zjApSsid.c_str(),zjApPass.c_str(),1,false,4);
+ if(Serial.availableForWrite()>90){Serial.print("ZJNET,AP,");Serial.print(started?"READY,":"ERROR,");Serial.println(zjApSsid);}
 }
 static void zjConnectSaved(){
  if(!zjSavedSsid.length()){zjPhase="ap_no_saved_wifi";zjEnsureAP();return;}
  zjEnsureAP();WiFi.begin(zjSavedSsid.c_str(),zjSavedPass.c_str());
  zjNetAttempt=millis();zjNetTesting=false;zjPhase="sta_connecting";
 }
+static const char* zjClientTransport();
 static String zjStatus(){
  const bool sta=WiFi.status()==WL_CONNECTED;
  String out="{\"board\":"+zjJson(FC_BOARD)+",\"version\":"+zjJson(FW_VERSION)+",\"mode\":"+zjJson(zjMode);
  out+=",\"phase\":"+zjJson(zjPhase)+",\"staConnected\":"+(sta?String("true"):String("false"));
  out+=",\"ssid\":"+zjJson(sta?WiFi.SSID():String(""))+",\"ip\":"+zjJson(sta?WiFi.localIP().toString():String(""));
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
+ out+=",\"apActive\":"+(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA?String("true"):String("false"));
  out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0);
- out+=",\"rc\":"+zjRcState()+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
+ out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
 static const char* zjClientTransport(){const IPAddress ip=zjHttp.client().remoteIP();return ip[0]==192&&ip[1]==168&&ip[2]==4?"AP":"STA";}
@@ -104,7 +108,7 @@ static void zjSetupHttp(){
   zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);
   zjReply(202,"{\"mode\":"+zjJson(mode)+",\"state\":\"switching\"}");
   if(mode=="ap"){WiFi.disconnect();zjEnsureAP();zjPhase="ap_manual";}
-  else if(WiFi.status()==WL_CONNECTED){zjNetApOffAt=millis()+3000;zjPhase="sta_connected";}
+  else if(WiFi.status()==WL_CONNECTED){zjNetApOffAt=mode=="sta"?millis()+3000:0;zjEnsureAP();zjPhase="sta_connected";}
   else zjConnectSaved();
  });
  zjHttp.on("/api/telemetry",HTTP_GET,[](){
@@ -185,6 +189,7 @@ static void zjSetupHttp(){
 static void zjNetworkSetup(){
  zjPrefs.begin("zj-network",false);
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");zjMode=zjPrefs.getString("mode","auto");
+ if(zjMode!="auto"&&zjMode!="sta"&&zjMode!="ap")zjMode="auto";
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
  // Classroom AP common WPA2 password; per-device access key remains separate and secret.
  zjApPass=zjKitPrefs.getString("apPass","12345678");
@@ -198,10 +203,70 @@ static void zjNetworkSetup(){
  else zjConnectSaved();
  zjSetupHttp();
  Serial.print("ZJNET,ACCESS,");Serial.print(zjApSsid);Serial.print(',');Serial.print(zjApPass);Serial.print(',');Serial.println(zjNetKey);
- Serial.println("ZJNET,HELP,Use AP 192.168.4.1 or STA IP; authenticated local API; motors disabled");
+ Serial.println("ZJNET,HELP,AUTO keeps AP visible; use USB ZJNET,SCAN / TEST / MODE; motors disabled");
+ Serial.print("ZJNET,MODE,");Serial.println(zjMode);
+}
+// USB bench provisioning remains available even if saved STA mode has disabled the AP.
+// The physical USB terminal MUST NOT echo the Wi-Fi password or access key.
+static void zjNetUsbStatus(){
+ Serial.print("ZJNET,MODE,");Serial.println(zjMode);
+ Serial.print("ZJNET,AP,");Serial.print((WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?"ON,":"OFF,");Serial.println(zjApSsid);
+ Serial.print("ZJNET,STA,");Serial.print(WiFi.status()==WL_CONNECTED?"CONNECTED,":"DISCONNECTED,");
+ Serial.print(WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():String("0.0.0.0"));Serial.print(",");
+ Serial.println(WiFi.status()==WL_CONNECTED?WiFi.SSID():String("NONE"));
+ Serial.print("ZJNET,PHASE,");Serial.println(zjPhase);
+}
+static bool zjNetSerialCommand(char* line){
+ if(!strcmp(line,"ZJNET,GET")){zjNetUsbStatus();return true;}
+ if(!strcmp(line,"ZJNET,SCAN")){
+  if(zjUsbScanning||zjNetTesting){Serial.println("ZJNET,ERR,SCAN_BUSY");return true;}
+  if(zjMode!="sta"||WiFi.status()!=WL_CONNECTED)zjEnsureAP();
+  WiFi.scanDelete();
+  WiFi.scanNetworks(true,false);
+  zjUsbScanning=true;zjUsbScanIndex=0;zjUsbScanCount=0;
+  Serial.println("ZJNET,SCAN,STARTED");return true;
+ }
+ if(!strncmp(line,"ZJNET,TEST,",11)){
+  if(zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
+  char* args=line+11;char* comma=strchr(args,',');
+  if(!comma){Serial.println("ZJNET,ERR,SSID_PASSWORD_REQUIRED");return true;}
+  *comma='\0';const String ssid=args,pass=comma+1;
+  if(!ssid.length()||ssid.length()>32||pass.length()>63||(!pass.isEmpty()&&pass.length()<8)){
+   Serial.println("ZJNET,ERR,INVALID_WIFI_CREDENTIALS");return true;
+  }
+  zjPendingSsid=ssid;zjPendingPass=pass;
+  zjEnsureAP();WiFi.begin(ssid.c_str(),pass.c_str());
+  zjNetAttempt=millis();zjNetTesting=true;zjPhase="testing_wifi";
+  Serial.println("ZJNET,TEST,STARTED");return true;
+ }
+ if(!strncmp(line,"ZJNET,MODE,",11)){
+  if(zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
+  const String mode=line+11;
+  if(mode!="auto"&&mode!="ap"&&mode!="sta"){Serial.println("ZJNET,ERR,INVALID_MODE");return true;}
+  if(mode=="sta"&&!zjSavedSsid.length()){Serial.println("ZJNET,ERR,SAVE_STA_FIRST");return true;}
+  zjRcRelease("NETWORK_MODE_CHANGED");zjNetApOffAt=0;zjMode=mode;zjPrefs.putString("mode",mode);
+  if(mode=="ap"){WiFi.disconnect();zjEnsureAP();zjPhase="ap_manual";}
+  else if(WiFi.status()==WL_CONNECTED){if(mode=="sta")zjNetApOffAt=millis()+3000;else zjEnsureAP();zjPhase="sta_connected";}
+  else zjConnectSaved();
+  Serial.print("ZJNET,ACK,MODE,");Serial.println(mode);return true;
+ }
+ return false;
 }
 static void zjNetworkLoop(uint32_t now){
  zjHttp.handleClient();
+ if(zjUsbScanning&&Serial.availableForWrite()>128){
+  const int n=WiFi.scanComplete();
+  if(n>=0&&zjUsbScanCount==0){zjUsbScanCount=n+1;Serial.print("ZJNET,SCAN,COUNT,");Serial.println(n);}
+  if(zjUsbScanCount>0){
+   if(zjUsbScanIndex<n&&zjUsbScanIndex<24){
+    const String ssid=WiFi.SSID(zjUsbScanIndex);
+    Serial.print("ZJNET,SCAN,ITEM,");Serial.print(ssid);
+    Serial.print(',');Serial.print(WiFi.RSSI(zjUsbScanIndex));Serial.print(',');
+    Serial.println(WiFi.encryptionType(zjUsbScanIndex)==WIFI_AUTH_OPEN?"OPEN":"SECURE");
+    zjUsbScanIndex++;
+   }else{WiFi.scanDelete();zjUsbScanning=false;zjUsbScanIndex=zjUsbScanCount=0;Serial.println("ZJNET,SCAN,END");}
+  }else if(n==WIFI_SCAN_FAILED){zjUsbScanning=false;Serial.println("ZJNET,ERR,SCAN_FAILED");}
+ }
  if(zjPreviousScanActive&&!scanActive)zjLastScanSeq++;
  zjPreviousScanActive=scanActive;
  if(zjOtaRebootAt&&int32_t(now-zjOtaRebootAt)>=0){ESP.restart();return;}
@@ -209,16 +274,16 @@ static void zjNetworkLoop(uint32_t now){
   if(WiFi.status()==WL_CONNECTED&&WiFi.SSID()==zjPendingSsid){
    zjSavedSsid=zjPendingSsid;zjSavedPass=zjPendingPass;
    zjPrefs.putString("ssid",zjSavedSsid);zjPrefs.putString("pass",zjSavedPass);
-   zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_pass_saved";
-   if(zjMode!="ap")zjNetApOffAt=now+10000;
+   zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_pass_saved";Serial.println("ZJNET,TEST,SAVED");
+   if(zjMode=="sta")zjNetApOffAt=now+10000;
    else{WiFi.disconnect();zjEnsureAP();zjPhase="ap_ready_credentials_saved";}
   }else if(now-zjNetAttempt>12000){
-   WiFi.disconnect();zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_failed_not_saved";
+   WiFi.disconnect();zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_failed_not_saved";Serial.println("ZJNET,TEST,FAILED_NOT_SAVED");
    zjEnsureAP();
   }
  }else if(zjMode!="ap"){
   if(WiFi.status()==WL_CONNECTED){
-   if(zjPhase=="sta_connecting"){zjPhase="sta_connected";zjNetApOffAt=now+10000;}
+   if(zjPhase=="sta_connecting"){zjPhase="sta_connected";if(zjMode=="sta")zjNetApOffAt=now+10000;}
   }else if(zjPhase=="sta_connecting"&&now-zjNetAttempt>12000){
    zjEnsureAP();zjPhase="sta_failed_ap_fallback";zjNetNextRetry=now+30000;
   }else if(zjSavedSsid.length()&&zjPhase!="sta_connecting"&&int32_t(now-zjNetNextRetry)>=0){
@@ -227,7 +292,7 @@ static void zjNetworkLoop(uint32_t now){
  }
  if(zjNetApOffAt&&int32_t(now-zjNetApOffAt)>=0){
   zjNetApOffAt=0;
-  if(zjMode!="ap"&&WiFi.status()==WL_CONNECTED){WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);zjPhase="sta_connected";}
+  if(zjMode=="sta"&&WiFi.status()==WL_CONNECTED){WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);zjPhase="sta_connected";}
  }
  // Advertise device ID and six-digit selector over STA mDNS, never the access key.
  const bool staUp=WiFi.status()==WL_CONNECTED;
