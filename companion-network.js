@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',rcSession='',rcClaiming=false,onKitAp=false;
+const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitAp=false,rcSeq=0;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','POST /api/wifi/test','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
@@ -28,7 +28,10 @@ window.zebjusNativeResult=data=>{
 };
 async function status(){
  const data=await request('/api/status');
- online=true;mode=data.mode||mode;lastStatus=Date.now();onKitAp=!data.staConnected;
+ if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;rcSession='';throw Error('Kit hardware ID changed — reconnect and verify physical board')}
+ verifiedKitId=data.kitId||'';online=true;mode=data.mode||mode;lastStatus=Date.now();
+ // AUTO can run AP + STA simultaneously. STA being connected does NOT imply AP request.
+ onKitAp=data.requestTransport==='AP'&&data.apActive===true;
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
@@ -82,14 +85,14 @@ function previewControls(m){
   if(!/^[0-9]{6}$/.test(kitCode)){show('Read kit status and verify six-digit code first','warn');return;}
   rcClaiming=true;
   request('/api/rc/claim','POST',{source:'ANDROID',kitCode})
-   .then(d=>{if(d.kitId&&d.session){rcSession=d.session;show('AERION kit RC preview claimed • motors OFF','good')}})
+   .then(d=>{if(d.kitId===verifiedKitId&&d.session){rcSession=d.session;rcSeq=0;show('AERION kit RC preview claimed • motors OFF','good')}})
    .catch(e=>show('Kit RC locked: '+e.message,'warn'))
    .finally(()=>{rcClaiming=false});
   return;
  }
  lastPreview=Date.now();previewBusy=true;
  const axes=m.axes,clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
- request('/api/rc/preview','POST',{session:rcSession,source:'ANDROID',seq:m.seq,armed:'false',
+ request('/api/rc/preview','POST',{session:rcSession,source:'ANDROID',seq:++rcSeq,armed:'false',
   throttle:Math.max(1000,Math.min(2000,m.throttle|0)),
   roll:clamp(axes.roll),pitch:clamp(axes.pitch),yaw:clamp(axes.yaw)})
  .catch(e=>{rcSession='';show('RC preview stopped: '+e.message,'warn')})
@@ -100,7 +103,7 @@ function bind(){
  if(!el('kitNetStatus'))return;
  if(!native?.request){show('Install updated Android APK for Wi-Fi connection');return;}
  el('kitIp').value=ip;
- el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false;rcSession='';kitCode=''});
+ el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false;rcSession='';kitCode='';verifiedKitId='';onKitAp=false});
  el('kitKey').addEventListener('input',()=>{key=el('kitKey').value.trim();online=false;rcSession=''});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)releaseRc();else if(online&&!onKitAp)show('Direct Android joystick needs kit AP mode; STA/USB uses WebRTC relay','warn')});
