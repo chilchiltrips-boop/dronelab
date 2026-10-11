@@ -1,7 +1,7 @@
 /* Landscape input preview + authenticated virtual-flight transmitter. */
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
-let peer=null,sender=null,raf=0,last=0,seq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
+let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
@@ -94,7 +94,7 @@ function send(critical=false){
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{const m=current();window.ZebjusNetwork?.previewControls?.({seq:++seq,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}})}},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{const m=current();window.ZebjusNetwork?.previewControls?.({seq:++directPreviewSeq,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}})}},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
