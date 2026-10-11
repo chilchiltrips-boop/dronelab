@@ -1,8 +1,8 @@
 {
   "schema": 2,
   "product": "ZEBJUS_I2C_SCANNER",
-  "version": "1.3.5",
-  "builtAt": "2026-10-11T17:28:22Z",
+  "version": "1.3.6",
+  "builtAt": "2026-10-11T18:08:34Z",
   "catalog": "firmware-catalog.json",
   "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
 }
