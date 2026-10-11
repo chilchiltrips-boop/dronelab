@@ -62,6 +62,7 @@ jobs:
           node --check pairing-qr-ui.js
           node --check pairing-web.js
           node --check js/classroom-kits.js
+          node --check firmware-updater.js
           node --check js/network-lab.js
           node --check js/tripod-page.js
           node --check pairing-host-bridge.js
