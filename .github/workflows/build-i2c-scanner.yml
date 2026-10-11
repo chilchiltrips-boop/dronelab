@@ -1,7 +1,7 @@
-name: Build FlightCore A1/A2 AP/STA Firmware 1.3.4
+name: Build FlightCore A1/A2 AP/STA Firmware 1.3.5
 on:
   push:
-    branches: [main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1]
+    branches: [main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-3-5]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/FlightCoreNetwork.h'
@@ -20,6 +20,7 @@ on:
       - 'tools/verify_release.py'
       - 'tools/firmware-guards.test.mjs'
       - 'tools/network-transport.test.mjs'
+      - 'tools/classroom-kits.test.mjs'
       - 'tools/offline-cache.test.mjs'
       - 'sw.js'
       - '.github/workflows/build-i2c-scanner.yml'
@@ -49,7 +50,7 @@ jobs:
       - name: Upload A1/A2 APP and Factory firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zebjus-flightcore-a1-a2-ap-sta-v1-3-4
+          name: zebjus-flightcore-a1-a2-ap-sta-v1-3-5
           path: |
             FlightCore_Firmware/*_APP.bin
             FlightCore_Firmware/*_FACTORY.bin
@@ -60,6 +61,6 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add FlightCore_Firmware firmware-catalog.json firmware-latest.json
-          git diff --cached --quiet || git commit -m 'Release FlightCore A1/A2 AP/STA firmware 1.3.4'
+          git diff --cached --quiet || git commit -m 'Release FlightCore A1/A2 AP/STA firmware 1.3.5'
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"

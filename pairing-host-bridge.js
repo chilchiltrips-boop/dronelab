@@ -46,6 +46,7 @@
   stop(reason){return target()?.stop(reason)},
   tick(){return target()?.tick()},
   snapshot(){return target()?.snapshot()||null},
+ hardwareInput(){return target()?.hardwareInput?.()||null},
   diagnostics(){return target()?.diagnostics()||null}
  };
  root.ZebjusPairingBridge={ensureSimulator,isReady};

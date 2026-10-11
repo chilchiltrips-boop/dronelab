@@ -24,6 +24,8 @@ static void zjKitSetup(){
  zjKitId=String(FC_BOARD)+"-"+id;
  zjKitName=FC_LABEL;
  zjKitPrefs.begin("zj-classroom",false);
+ zjKitName=zjKitPrefs.getString("name",FC_LABEL);
+ if(zjKitName.length()<3||zjKitName.length()>31)zjKitName=FC_LABEL;
  zjKitCode=zjKitPrefs.getString("code","");
  if(zjKitCode.length()!=6||zjKitCode.indexOf('-')>=0){
   char code[7];snprintf(code,sizeof(code),"%06lu",(unsigned long)(100000+(esp_random()%900000)));
@@ -97,7 +99,53 @@ static String zjRcState(){
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
   ",\"rejected\":"+String(zjRcRejected)+",\"motorsArmed\":false}";
 }
+// USB physical possession is required to provision a classroom kit.
+// The 6-digit code is public identification; credentials are never echoed.
+static bool zjAdminValue(const char* value,size_t minLen,size_t maxLen,bool spaces=true){
+ const size_t n=strlen(value);if(n<minLen||n>maxLen)return false;
+ for(size_t i=0;i<n;i++){const char c=value[i];
+  if(!(c>='a'&&c<='z')&&!(c>='A'&&c<='Z')&&!(c>='0'&&c<='9')&&c!='-'&&c!='_'&&!(spaces&&c==' '))return false;
+ }return true;
+}
+static void zjAdminInfo(){
+ Serial.print("ZJADMIN,NAME,");Serial.println(zjKitName);
+ Serial.print("ZJADMIN,APNAME,");Serial.println(zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+String(FC_BOARD).substring(4)));
+ Serial.println("ZJADMIN,APPASS,SET");
+ Serial.println("ZJADMIN,AUTH,USB_PHYSICAL_ONLY");
+}
+static bool zjAdminSerialCommand(char* line){
+ if(!strcmp(line,"ZJADMIN,GET")){zjAdminInfo();return true;}
+ if(strncmp(line,"ZJADMIN,",8))return false;
+ if(zjRcOwned){Serial.println("ZJADMIN,ERR,CONTROLLER_ACTIVE");return true;}
+ if(!strncmp(line,"ZJADMIN,NAME,",13)){
+  const char* name=line+13;if(!zjAdminValue(name,3,31)){Serial.println("ZJADMIN,ERR,INVALID_NAME");return true;}
+  zjKitName=name;zjKitPrefs.putString("name",zjKitName);Serial.println("ZJADMIN,ACK,NAME");return true;
+ }
+ if(!strncmp(line,"ZJADMIN,APNAME,",15)){
+  const char* name=line+15;if(!zjAdminValue(name,3,24,false)){Serial.println("ZJADMIN,ERR,INVALID_AP_NAME");return true;}
+  zjKitPrefs.putString("apName",String(name));Serial.println("ZJADMIN,ACK,APNAME,REBOOT_REQUIRED");return true;
+ }
+ if(!strncmp(line,"ZJADMIN,APPASS,",15)){
+  const char* pass=line+15;const size_t n=strlen(pass);
+  if(n<8||n>63){Serial.println("ZJADMIN,ERR,AP_PASSWORD_8_TO_63");return true;}
+  for(size_t i=0;i<n;i++)if(uint8_t(pass[i])<33||uint8_t(pass[i])>126||pass[i]==','){
+   Serial.println("ZJADMIN,ERR,INVALID_AP_PASSWORD");return true;
+  }
+  zjKitPrefs.putString("apPass",String(pass));Serial.println("ZJADMIN,ACK,APPASS,REBOOT_REQUIRED");return true;
+ }
+ if(!strcmp(line,"ZJADMIN,ROTATE_KEY,CONFIRM")){
+  Preferences net;net.begin("zj-network",false);net.remove("key");net.end();
+  Serial.println("ZJADMIN,ACK,KEY_ROTATED_ON_REBOOT");return true;
+ }
+ if(!strcmp(line,"ZJADMIN,FACTORY_RESET,CONFIRM")){
+  Preferences net;net.begin("zj-network",false);net.clear();net.end();
+  zjKitPrefs.clear();zjRcRelease("FACTORY_RESET");
+  Serial.println("ZJADMIN,ACK,FACTORY_RESET,RESTART_BOARD_TO_APPLY");return true;
+ }
+ Serial.println("ZJADMIN,ERR,UNSUPPORTED_COMMAND");return true;
+}
 static bool zjRcSerialCommand(char* line){
+ if(zjAdminSerialCommand(line))return true;
  if(!strcmp(line,"ZJKIT,GET")){zjKitInfo();return true;}
  if(!strncmp(line,"ZJKIT,CODE,",11)){
   const char* code=line+11;bool valid=strlen(code)==6;
@@ -105,7 +153,7 @@ static bool zjRcSerialCommand(char* line){
   if(!valid||zjRcOwned){Serial.println("ZJKIT,ERR,CODE_INVALID_OR_LOCKED");return true;}
   zjKitCode=code;zjKitPrefs.putString("code",zjKitCode);
   Serial.print("ZJKIT,ACK,CODE,");Serial.println(zjKitCode);
-  Serial.println("ZJKIT,INFO,VERIFY_NO_DUPLICATE_IN_CLASSROOM");return true;
+  Serial.println("ZJKIT,INFO,VERIFY_NO_DUPLICATE_IN_CLASSROOM_REBOOT_TO_REFRESH_AP");return true;
  }
  if(!strcmp(line,"ZJRC,STOP")){zjRcRelease("USB_STOP");return true;}
  if(!strcmp(line,"ZJRC,RELEASE")){

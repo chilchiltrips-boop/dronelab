@@ -19,17 +19,20 @@ window.ZebjusDeviceRelay={request:networkRequest,status:()=>host?.status()||null
 const training=()=>window.ZebjusTraining;
 const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
+ window.ZebjusKits?.stop?.();
  training()?.stop(reason);
  const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
 }
 function forwardSimulatorControl(m){
  const result=training()?.apply(m)||{accepted:false,reason:'Flight Training receiver is not ready'};
+ // WebRTC host owns the sender verification; hardware relay never bypasses the kit lease.
+ if(result.accepted&&host?.status()?.approved&&host.status().controller==='mobile')window.ZebjusKits?.ingestAndroid?.(m);
  $('simControlInfo').textContent=result.accepted?
   'Applied #'+m.seq+' • '+result.applied.mode.toUpperCase()+' • '+result.applied.throttle+' µs • '+(result.applied.armed?'VIRTUAL ARMED':'DISARMED'):
   'Control denied: '+result.reason;
  return result;
 }
-function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){document.querySelector('[data-tab="settings"]')?.click();return}if(!dialog.open)dialog.showModal()}
+function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){document.querySelector('[data-tab="settings"]')?.click();const details=$('kitMobilePairDetails');if(details)details.open=true;return}if(!dialog.open)dialog.showModal()}
 function closeSettings(){stopCamera();if(inlineSettings()){document.querySelector('[data-tab="pid"]')?.click();return}$('connectionDialog').close();$('topPairMobileBtn').focus()}
 function openStep(number){
  const s=host.status();

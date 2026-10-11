@@ -185,6 +185,7 @@ function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
  receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();syncActions();setStatus('STOP • MOTORS OFF • HOME RESET');renderStickKnobs();drawUI();
  window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
+ try{window.parent?.ZebjusKits?.stop?.()}catch{}
 }
 function start(){
  if(!localInput())return;audioUnlocked=true;
@@ -479,7 +480,7 @@ function drawUI(){
 }
 function frame(time){
  const dt=lastFrame?clamp((time-lastFrame)/1000,0,.064):.016;lastFrame=time;
- receiver.tick();const left=pointers.get('left');if(localInput()&&left&&s.running)s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
+ receiver.tick();const left=pointers.get('left');if(localInput()&&left&&(s.running||window.parent?.ZebjusKits?.targetHardware?.()))s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
  if(localInput())inputAxes();
  advanceSimulator(s,dt);const snapshot=getSnapshot(s);
  visual?.draw(snapshot,dt);
@@ -493,8 +494,9 @@ function frame(time){
 window.ZebjusTraining={
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
  setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
- stop:reason=>{receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI()},
+ stop:reason=>{try{window.parent?.ZebjusKits?.stop?.()}catch{}receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI()},
  snapshot:receiver.snapshot,tick:receiver.tick,
+ hardwareInput:()=>({armed:false,throttle:Math.round(s.throttle),axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw}}),
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
 function boot(){
