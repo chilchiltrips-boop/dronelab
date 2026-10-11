@@ -376,3 +376,42 @@
  #tab-python .python-project-bar .py-run-group{margin-left:auto}
  #tab-python .python-project-bar .py-run-group .btn{min-width:48px!important;padding:4px 6px!important}
 }
+
+
+/* Python IDE action icons + compact descriptive mouse/keyboard hover tips. */
+#tab-python button.py-icon-control,#tab-python .py-ide-button{
+ display:inline-flex;align-items:center;justify-content:center;gap:6px
+}
+#tab-python .py-icon-control .py-ide-icon{width:15px;height:15px;flex:0 0 15px}
+#tab-python .py-run-group .py-ide-icon{width:13px;height:13px;flex:0 0 13px}
+#tab-python .py-usb-connect{white-space:nowrap;gap:7px;font-weight:750}
+#tab-python .py-usb-connect .py-ide-icon{width:17px;height:17px;flex:0 0 17px}
+#tab-python .py-usb-connect.connected{border-color:#4dad94;background:#124839;color:#dcfff0}
+#tab-python .py-tool-rail .py-rail-button[data-py-rail="usb"]{color:#8edfd0}
+#tab-python .py-tool-rail .py-rail-button[data-py-rail="usb"].active{color:#bcffeb}
+#tab-python :is(button,summary)[data-tooltip]{position:relative}
+#tab-python :is(button,summary)[data-tooltip]:is(:hover,:focus-visible)::after{
+ content:attr(data-tooltip);
+ position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+ z-index:400;min-width:115px;width:max-content;max-width:min(290px,80vw);
+ padding:7px 9px;border:1px solid #486879;border-radius:7px;
+ background:#142b3d;color:#e5f8f5;font-size:11px;font-weight:500;
+ line-height:1.35;letter-spacing:0;white-space:normal;text-align:left;
+ box-shadow:0 10px 28px #000a;pointer-events:none
+}
+#tab-python .python-project-bar :is(button,summary)[data-tooltip]:is(:hover,:focus-visible)::after{
+ bottom:auto;top:calc(100% + 8px)
+}
+#tab-python .py-tool-rail .py-rail-button:is(:hover,:focus-visible)::after{
+ left:auto;right:calc(100% + 9px);top:50%;bottom:auto;transform:translateY(-50%);
+ max-width:230px;text-align:left
+}
+#tab-python .py-explorer-head .py-ide-button:is(:hover,:focus-visible)::after{
+ top:calc(100% + 7px);bottom:auto
+}
+#tab-python .py-bottom-head [data-tooltip]:is(:hover,:focus-visible)::after{
+ top:auto;bottom:calc(100% + 7px)
+}
+@media(hover:none){
+ #tab-python :is(button,summary)[data-tooltip]::after{display:none!important}
+}
