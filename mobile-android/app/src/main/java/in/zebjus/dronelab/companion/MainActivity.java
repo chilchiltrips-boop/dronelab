@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     private static final int CAMERA_REQUEST = 701;
     private static final String LOCAL_ORIGIN = "https://appassets.androidplatform.net";
     private WebView view;
+    private FlightCoreNativeBridge nativeFlightCore;
     private PermissionRequest pendingVideoRequest;
     private ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback networkCallback;
@@ -142,6 +143,9 @@ public class MainActivity extends Activity {
         view.getSettings().setAllowFileAccess(false);
         view.getSettings().setAllowContentAccess(false);
         view.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
+        view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        nativeFlightCore = new FlightCoreNativeBridge(this,view);
+        view.addJavascriptInterface(nativeFlightCore,"ZebjusNative");
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
                 Uri url = request.getUrl();
@@ -238,6 +242,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         if (connectivity != null && networkCallback != null) connectivity.unregisterNetworkCallback(networkCallback);
+        if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
         if (view != null) {
             view.loadUrl("about:blank");
