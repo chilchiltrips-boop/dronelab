@@ -250,7 +250,7 @@ function webControls(){
 async function identify(){
  if(!state.connected)throw Error('Connect a kit first');
  if(state.owner)throw Error('Release the RC input session before LED identification');
- const line='ZJLED,900,BLINK,150,150,3';
+ const line='ZJLED,900,BLINK,150,150,100';
  if(state.transport==='usb')await usbWrite(line);
  else await deviceRequest('/api/command','POST',{line});
  audit('Identify LED pattern requested','success');
@@ -286,7 +286,11 @@ async function adminSave(){
  if(pass)cmds.push('ZJADMIN,APPASS,'+pass);
  if(!cmds.length){audit('No admin changes needed');return}
  if(!confirm('Apply '+cmds.length+' USB-only settings to device '+state.kitId+'? Active AP clients may need to reconnect after restart.'))return;
- for(const cmd of cmds){await usbWrite(cmd);await sleep(100)}
+ for(const cmd of cmds){
+  const ack=waitSerial(/^ZJ(?:ADMIN|KIT),(?:ACK|ERR),/);
+  await usbWrite(cmd);const response=await ack;
+  if(response.includes(',ERR,'))throw Error('Device rejected admin setting: '+response);
+ }
  if($('kitAdminPass'))$('kitAdminPass').value='';
  audit('Admin settings submitted over physical USB; inspect Serial ACKs • reboot kit to apply AP settings','warn');
  await disconnect('Kit settings changed • verify Device ID / new code and reconnect');
@@ -307,6 +311,10 @@ function onSerial(e){
  if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,source:rc[1],seq:+rc[2],throttle:+rc[3],roll:+rc[4],pitch:+rc[5],yaw:+rc[6]};state.ackAt=Date.now();render()}
  if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE'))void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
  if(line.startsWith('ZJADMIN,ERR,')||line.startsWith('ZJKIT,ERR,'))audit(line,'error');
+ if(line.startsWith('ZJADMIN,NAME,')){$('kitAdminName').value=line.slice(13)}
+ if(line.startsWith('ZJADMIN,APNAME,')){$('kitAdminSsid').value=line.slice(15)}
+ if(line.startsWith('ZJKIT,CODE,')){$('kitAdminCode').value=line.slice(11)}
+ if(line.startsWith('ZJADMIN,ACK,')||line.startsWith('ZJKIT,ACK,'))audit(line,'success');
 }
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{tone(e.message,'error');audit(e.message,'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
@@ -318,7 +326,7 @@ function init(){
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
- guardAction('kitAdminApply',adminSave);guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
+ guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
