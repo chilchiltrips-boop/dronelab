@@ -82,6 +82,7 @@ jobs:
           npm run verify:firmware
           node tools/qr-pairing-browser.mjs
           node tools/audit-browser.mjs
+          node tools/header-ota-browser.mjs
           node tools/controls-browser.mjs
           node tools/offline-browser.mjs
       - name: Optional live PeerJS Cloud code pairing smoke
