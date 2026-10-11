@@ -160,11 +160,12 @@ static void zjNetworkLoop(uint32_t now){
  zjPreviousScanActive=scanActive;
  if(zjOtaRebootAt&&int32_t(now-zjOtaRebootAt)>=0){ESP.restart();return;}
  if(zjNetTesting){
-  if(WiFi.status()==WL_CONNECTED){
+  if(WiFi.status()==WL_CONNECTED&&WiFi.SSID()==zjPendingSsid){
    zjSavedSsid=zjPendingSsid;zjSavedPass=zjPendingPass;
    zjPrefs.putString("ssid",zjSavedSsid);zjPrefs.putString("pass",zjSavedPass);
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_pass_saved";
    if(zjMode!="ap")zjNetApOffAt=now+10000;
+   else{WiFi.disconnect();zjEnsureAP();zjPhase="ap_ready_credentials_saved";}
   }else if(now-zjNetAttempt>12000){
    WiFi.disconnect();zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_failed_not_saved";
    zjEnsureAP();
