@@ -103,7 +103,7 @@ function bind(){
  el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false;rcSession='';kitCode=''});
  el('kitKey').addEventListener('input',()=>{key=el('kitKey').value.trim();online=false;rcSession=''});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
- el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)releaseRc()});
+ el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)releaseRc();else if(online&&!onKitAp)show('Direct Android joystick needs kit AP mode; STA/USB uses WebRTC relay','warn')});
  action('kitWifiSettings',()=>native.openWifiSettings());
  action('kitConnect',status);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
  action('kitTestSave',testSave);action('kitSwitch',setMode);
