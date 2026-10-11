@@ -82,7 +82,7 @@ function checkIdentity(d,transport,code,expected=''){
 }
 function recordKnown(){if(!state.kitId)return;
  try{const key='zebjus.classroom.known.v1',list=JSON.parse(localStorage.getItem(key)||'[]');
- const entry={id:state.kitId,code:state.kitCode,name:state.kitName,board:state.board,ip:state.ip||'',at:Date.now()};
+ const entry={id:state.kitId,code:state.kitCode,name:state.kitName,board:state.board,ip:state.ip||state.usbInfo?.staIp||'',at:Date.now()};
  const next=[entry,...list.filter(v=>v.id!==entry.id)].slice(0,20);localStorage.setItem(key,JSON.stringify(next));showKnown();
  }catch{}
 }
@@ -433,6 +433,16 @@ function onSerial(e){
  if(line.startsWith('ZJKIT,CODE,'))usbCandidate.kitCode=line.slice(11);
  if(line.startsWith('ZJKIT,NAME,'))usbCandidate.kitName=line.slice(11);
  if(line.startsWith('ZJINFO,FW,')){const f=line.split(',');usbCandidate.board=f[2];usbCandidate.version=f[3];}
+ if(line.startsWith('ZJNET,STA,CONNECTED,')){
+  const parts=line.split(','),ip=parts[3]||'';
+  if(privateIPv4(ip)){
+   usbCandidate.staIp=ip;
+   if(state.connected&&state.transport==='usb'){
+    state.usbInfo.staIp=ip;if($('kitIpInput'))$('kitIpInput').value=ip;
+    recordKnown();audit('STA IP learned from verified USB kit: '+ip,'good');
+   }
+  }
+ }
  if(!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board){
   try{
    const kit=checkIdentity(usbCandidate,'usb',usbCandidate.kitCode);
