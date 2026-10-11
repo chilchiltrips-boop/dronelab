@@ -115,7 +115,16 @@ async function importProject(file){
   if(editor)editor.setModel(null);for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();if(workspace)await workspace.restore(data);renderFiles();save();status('Imported project','good');
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
+function wifiPythonSelected(){return ['ap','sta'].includes($('pythonTarget')?.value)}
+function wifiPythonReady(){return !!window.DroneLabNetwork?.isConnected?.()}
 function usbStatus(){
+ if(wifiPythonSelected()){
+  const ready=wifiPythonReady(),state=ready?'FlightCore '+$('pythonTarget').value.toUpperCase()+' • Android Relay':'Wi-Fi kit not connected';
+  $('pyUsbState').textContent=state;$('pyUsbState').className='status '+(ready?'good':'');
+  const button=$('pyConnectUsbBtn'),t=button?.querySelector('.py-usb-button-text');
+  if(t)t.textContent='Connect Kit (Wi-Fi)';else if(button)button.textContent='Connect Kit (Wi-Fi)';
+  return;
+ }
  const connected=!!window.DroneLabSerial?.isOpen?.(),info=window.DroneLabSerial?.firmwareInfo?.()||{};
  const el=$('pyUsbState');
  el.textContent=!connected?'USB SERIAL DISCONNECTED':info.romDownload?'ESP ROM DOWNLOAD MODE':info.boardId?'USB '+info.boardId+' • v'+info.version:'USB SERIAL • WAITING FOR FIRMWARE';
@@ -129,6 +138,10 @@ function usbStatus(){
  }
 }
 async function connectUsb(){
+ if(wifiPythonSelected()){
+  try{await window.DroneLabNetwork?.read?.();usbStatus();status('FlightCore Wi-Fi relay connected','good')}
+  catch(e){status('Wi-Fi: '+(e.message||e),'warn')}return;
+ }
  const api=window.DroneLabSerial;if(!api)return status('USB subsystem unavailable','warn');
  if(api.isOpen())return usbStatus();
  if(api.isFlashing())return status('Wait for firmware flashing to finish','warn');
@@ -136,6 +149,12 @@ async function connectUsb(){
  catch(e){usbStatus();status('USB: '+e.message,'warn')}
 }
 function sendLedPacket(packet){
+ if(wifiPythonSelected()){
+  window.DroneLabNetwork?.writeLine?.(packet).catch(e=>{
+   if(Date.now()-ledLastError>1000){terminal('[Network LED] '+e.message+'\\n','error');ledLastError=Date.now()}
+  });
+  return;
+ }
  const api=window.DroneLabSerial;
  if(!api?.isOpen?.()||!api.writeLine){
   if(Date.now()-ledLastError>1000){terminal('[LED] USB disconnected. Connect at 115200 baud.\n','error');ledLastError=Date.now()}
@@ -197,7 +216,7 @@ function abortPythonWithHardwareError(type,message){
  markPythonError({errorType:type,error:message,explanation:ERROR_DESCRIPTIONS[type]||message,filename:active},'hardware');
 }
 function stopPython(notify=true){
- stopLedSession();
+ stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
  updateButtons();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
 }
@@ -205,15 +224,17 @@ async function onRpc(w,m){
  try{
   let result;
   if(m.method==='i2c_scan'){
-   if(!window.DroneLabSerial?.isOpen?.())throw Error('USB disconnected. Click Connect USB Serial, select the board, and use 115200 baud.');
+   if(wifiPythonSelected()&&!wifiPythonReady())throw Error('FlightCore Wi-Fi disconnected. Pair Android, connect Kit and enable WebApp access.');
+   if(!wifiPythonSelected()&&!window.DroneLabSerial?.isOpen?.())throw Error('USB disconnected. Click Connect USB Serial, select the board, and use 115200 baud.');
    // Request a fresh scan; new firmware has no periodic I2C polling.
    // Attach the receiver before writing to avoid missing an immediate response.
    const pending=bridge.waitForScan(m.args?.timeout||12000);
    pending.catch(()=>{});
-   await window.DroneLabSerial.writeLine('ZJI2C,SCAN\n');
+   if(wifiPythonSelected())await window.DroneLabNetwork.writeLine('ZJI2C,SCAN');else await window.DroneLabSerial.writeLine('ZJI2C,SCAN\n');
    result=await pending;
   }else if(m.method==='read_gyro'){
-    if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
+    if(wifiPythonSelected()&&!wifiPythonReady())throw Error('NetworkDisconnectedError: FlightCore Wi-Fi relay unavailable.');
+    if(!wifiPythonSelected()&&!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
     result=await gyroBridge.readGyro(m.args?.timeout||3000);
    }else if(m.method==='latest_scan')result=bridge.getLatest();
   else throw Error('Unsupported Python hardware command: '+m.method);
@@ -235,9 +256,9 @@ function makeWorker(){
   if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\n');w.terminate();syntaxWorker=null}return}
   if(m.type==='done'||m.type==='error'){
    if(m.type==='error'){
-    stopLedSession();markPythonError(m,'runtime');
+    stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);markPythonError(m,'runtime');
     w.terminate();worker=null;running=false;
-   }else{status('Python finished','good');$('pyLastRun').textContent='COMPLETE';running=false;}
+   }else{if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);status('Python finished','good');$('pyLastRun').textContent='COMPLETE';running=false;}
    $('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
   }
  };
@@ -258,7 +279,13 @@ async function runPython(){
  if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
  const fileToRun=active,code=currentCode();if(!code.trim())return status('Nothing to run','warn');
- if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
+ if(wifiPythonSelected()){
+   try{if(!window.DroneLabNetwork?.isConnected?.())await window.DroneLabNetwork?.read?.();
+    if(!wifiPythonReady())throw Error('Pair Android and connect FlightCore first');
+    window.DroneLabNetwork.stream(true);
+   }catch(e){status('Wi-Fi hardware unavailable: '+(e.message||e),'warn');return}
+  }
+  if(!wifiPythonSelected()&&/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
  files[fileToRun]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
  clearTerminal();terminal('>>> Running '+fileToRun+'\n');status('Starting '+fileToRun+'…');updateButtons();
@@ -548,7 +575,7 @@ function bind(){
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
  $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'usb':'python';e.target.value=''};
- $('pyConnectUsbBtn').onclick=connectUsb;$('runPythonBtn').onclick=runPython;
+ $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',usbStatus);$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
  $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonStickyToolbar();
