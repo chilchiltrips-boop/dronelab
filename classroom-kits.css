@@ -201,3 +201,11 @@
   overscroll-behavior-x:contain;scrollbar-width:thin
  }
 }
+
+/* Guard the viewport against pre-existing wide assembly product flex items.
+   overflow:clip avoids creating a scroll container, preserving sticky tabs.
+   The product shelf and topbar still provide their own horizontal scrolling. */
+@media(max-width:760px){
+ html,body{width:100%;max-width:100%;overflow-x:clip!important}
+ #app{max-width:100%!important;overflow-x:clip!important}
+}
