@@ -214,6 +214,18 @@ async function read(){
  const d=await deviceRequest('/api/status');
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ const monitor=$('kitNetworkMonitor');
+ if(monitor){
+  const rc=state.rc||{},ts=new Date().toLocaleTimeString();
+  const line=ts+' NET-'+(d.requestTransport||state.transport).toUpperCase()+' '+state.kitId+
+   ' • phase '+(d.phase||'unknown')+' • '+(d.apActive?'AP ON':'AP OFF')+
+   ' • '+(d.staConnected?'STA CONNECTED':'STA OFFLINE')+
+   ' • RC '+(rc.active?'LIVE':rc.claimed?'IDLE':'UNCLAIMED')+
+   ' seq='+String(rc.seq||0)+' T='+String(rc.throttle??1000)+' R='+String(rc.roll??1500)+
+   ' P='+String(rc.pitch??1500)+' Y='+String(rc.yaw??1500)+
+   ' accepted='+String(rc.accepted??0)+' rejected='+String(rc.rejected??0);
+  monitor.textContent=(line+'\n'+monitor.textContent).slice(0,8000);
+ }
  render();return d;
 }
 async function claim(source='WEB'){
