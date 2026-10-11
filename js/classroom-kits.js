@@ -149,7 +149,7 @@ async function connectNetwork(code,mode){
  if(mode==='android-relay'&&!relay()?.request)throw Error('Pair Android over WebRTC first and enable its kit access');
  const d=mode==='android-relay'?await relay().request('/api/status'):await wifiDirect(ip,key,'/api/status');
  const verified=checkIdentity(d,transport,code,state.kitId||'');
- Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',since:Date.now()});
+ Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
  if(mode!=='android-relay')state.transport=ip==='192.168.4.1'?'ap':'sta';
 }
@@ -182,6 +182,8 @@ async function claim(source='WEB'){
  if(state.owner&&state.rcSource===source)return;
  if(state.owner)await releaseRc();
  if(source!=='WEB'&&source!=='ANDROID')throw Error('Invalid RC source');
+ if(source==='ANDROID'&&(state.transport==='ap'||state.transport==='android-relay'&&state.physicalLink==='ap'))throw Error('Android direct AP owns this path; do not relay via WebApp');
+ if(source==='ANDROID'){const mobile=root.ZebjusDeviceRelay?.status?.();if(!mobile?.paired||!mobile?.connected||mobile.controller!=='mobile')throw Error('Pair Android and grant Mobile Control in WebRTC settings first');}
  if(state.transport==='usb'){
   const promise=waitSerial(/^ZJRC,(?:ACK,CLAIM,USB|ERR,CLAIM_REJECTED)$/);
   await usbWrite('ZJRC,CLAIM,'+source+','+state.kitCode);
@@ -205,13 +207,10 @@ async function releaseRc(){
  audit('RC input session released');
 }
 async function stop(){
- const was=state.owner;state.owner=false;state.rcSession='';state.rcSource='';
+ const was=state.owner,session=state.rcSession;state.owner=false;state.rcSession='';state.rcSource='';
  state.rc={active:false,claimed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};render();
  try{if(state.connected&&state.transport==='usb')await usbWrite('ZJRC,STOP');
-  else if(was&&state.connected){ // retain former session only for this explicit STOP
-   // Release token is intentionally erased in state before the request settles.
-   await disconnect('RC STOP • network watchdog neutralizes input');
-  }
+  else if(was&&state.connected&&session){await deviceRequest('/api/rc/release','POST',{session}).catch(e=>audit('STOP release failed • firmware watchdog active: '+e.message,'warn'));}
  }catch(e){audit('STOP command lost; wait for hardware failsafe: '+e.message,'warn')}
  audit('STOP • RC input neutral • motors disabled','warn');
 }
@@ -237,7 +236,7 @@ async function sendFrame(frame,source='WEB'){
 }
 function ingestAndroid(frame){
  // AP direct belongs to Android native, never forward its WebRTC echo via WebApp.
- if(state.transport==='ap'||state.transport==='none'||!$('kitHardwareTarget')?.checked)return;
+ if(state.transport==='ap'||state.transport==='none'||(state.transport==='android-relay'&&state.physicalLink==='ap')||!$('kitHardwareTarget')?.checked)return;
  if(!state.owner||state.rcSource!=='ANDROID')return;
  if(!frame||frame.armed===true)return;
  void sendFrame(frame,'ANDROID');
@@ -306,7 +305,7 @@ function onSerial(e){
  if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
  const rc=/^ZJRC,USB,(WEB|ANDROID),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+)$/.exec(line);
  if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,source:rc[1],seq:+rc[2],throttle:+rc[3],roll:+rc[4],pitch:+rc[5],yaw:+rc[6]};state.ackAt=Date.now();render()}
- if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
+ if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE'))void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
  if(line.startsWith('ZJADMIN,ERR,')||line.startsWith('ZJKIT,ERR,'))audit(line,'error');
 }
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{tone(e.message,'error');audit(e.message,'error')}))}
@@ -317,7 +316,7 @@ function init(){
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
  guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
- guardAction('kitTakeControl',()=>claim('WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
+ guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
  guardAction('kitAdminApply',adminSave);guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
