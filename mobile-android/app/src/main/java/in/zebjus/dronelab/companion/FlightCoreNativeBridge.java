@@ -46,9 +46,9 @@ final class FlightCoreNativeBridge {
         return n[0]==10||(n[0]==192&&n[1]==168)||(n[0]==172&&n[1]>=16&&n[1]<=31);
     }
     private static boolean allowed(String method,String route) {
-        if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/telemetry");
+        if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/telemetry");
         if(!method.equals("POST"))return false;
-        return route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/preview");
+        return route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
     }
     private Network wifiNetwork() {
         if(connectivity==null)return null;
