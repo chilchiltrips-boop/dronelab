@@ -656,6 +656,9 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   serialIdleWatch(port,0);
   // Request actual live firmware identity; never derive a running version from a downloaded .bin.
   void writePythonSerialLine('ZJINFO,GET\n').catch(()=>{});
+  // Same physical USB connection is shared with MY KITS: request kit code and AP/STA status.
+  void writePythonSerialLine('ZJKIT,GET\n').catch(()=>{});
+  void writePythonSerialLine('ZJNET,GET\n').catch(()=>{});
   telRxSeq=null;telMissed=0;telDeviceDrops=0;telRateActual=0;
   void setUsbTelemetryRate($('#fwTelRate')?.value||20);
  }finally{monitorStarting=false}
