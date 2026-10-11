@@ -305,22 +305,58 @@ async function identify(){
  else await deviceRequest('/api/command','POST',{line});
  audit('Identify LED pattern requested','success');
 }
+function wifiNote(message,tone='info'){
+ const e=$('kitWifiStatus');if(e){e.textContent=message;e.dataset.tone=tone}
+ audit(message,tone);
+}
+async function scanWifi(){
+ if(!state.connected||state.owner)throw Error('Connect an unlocked kit first');
+ const select=$('kitWifiNetworks');if(select)select.replaceChildren(new Option('Scanning 2.4 GHz networks…',''));
+ if(state.transport==='usb'){
+  await usbWrite('ZJNET,SCAN');
+  wifiNote('Scanning via USB Serial • results will appear below','info');
+ }else{
+  const d=await deviceRequest('/api/wifi/scan');
+  if(d.state!=='ready'){wifiNote('Wi-Fi scan started. Use Scan again after a moment.','info');return;}
+  if(select){select.replaceChildren(new Option('Select a router',''));for(const v of d.networks||[])if(v.ssid)select.add(new Option(v.ssid+' • '+v.rssi+' dBm',v.ssid))}
+  wifiNote('Received '+(d.networks||[]).length+' nearby Wi-Fi networks','good');
+ }
+}
 async function applyMode(){
- if(!state.connected||state.transport==='usb')throw Error('AP/STA mode switching needs a live network connection');
- if(state.owner)throw Error('Release controller first');
+ if(!state.connected)throw Error('Select and verify your kit before changing modes');
+ if(state.owner)throw Error('Release controller before changing Wi-Fi modes');
  const mode=$('kitWifiMode')?.value||'auto';
- if(!['auto','ap','sta'].includes(mode))throw Error('Invalid mode');
- if(!confirm('Changing Wi-Fi mode will disconnect the kit. Continue?'))return;
- await deviceRequest('/api/wifi/mode','POST',{mode});audit('Wi-Fi mode changed to '+mode,'warn');await disconnect('Mode change • reconnect to same Device ID');
+ if(!['auto','ap','sta'].includes(mode))throw Error('Invalid Wi-Fi mode');
+ if(!confirm('Switch kit to '+mode.toUpperCase()+'? STA-only can hide AP. AUTO keeps AP visible. Proceed?'))return;
+ if(state.transport==='usb'){
+  const ack=waitSerial(/^ZJNET,(?:ACK,MODE|ERR,)/,3200);
+  await usbWrite('ZJNET,MODE,'+mode);
+  const line=await ack;
+  if(!line.startsWith('ZJNET,ACK,MODE,'))throw Error('Firmware rejected mode change: '+line);
+  state.mode=mode;wifiNote('Mode changed to '+mode.toUpperCase()+' over USB. You can still use Serial.','good');
+  await usbWrite('ZJNET,GET');render();
+ }else{
+  await deviceRequest('/api/wifi/mode','POST',{mode});
+  wifiNote('Switching to '+mode.toUpperCase()+'. Reconnect via matching AP or STA IP.','warn');
+  await disconnect('Wi-Fi mode changed • reconnect using Device ID');
+ }
 }
 async function wifiSave(){
- if(!state.connected||state.transport==='usb')throw Error('Connect over AP/STA for Wi-Fi Test & Save');
- if(state.owner)throw Error('Release the RC input session first');
+ if(!state.connected)throw Error('Connect a kit by USB, AP or STA first');
+ if(state.owner)throw Error('Release controller before Wi-Fi provisioning');
  const ssid=$('kitRouterSsid')?.value.trim()||'',password=$('kitRouterPass')?.value||'';
- if(!ssid||ssid.length>32||password.length>63||(password.length>0&&password.length<8))throw Error('Invalid router SSID / password');
- await deviceRequest('/api/wifi/test','POST',{ssid,password});
+ if(!ssid||ssid.length>32||/[,\\r\\n]/.test(ssid)||password.length>63||
+    /[,\\r\\n]/.test(password)||(password.length>0&&password.length<8))
+  throw Error('SSID/password invalid for USB provisioning (commas and line breaks are unsupported)');
+ if(state.transport==='usb'){
+  // No credential appears in event history or the URL; the firmware does not echo it.
+  await usbWrite('ZJNET,TEST,'+ssid+','+password);
+  wifiTesting=true;wifiNote('Testing STA Wi-Fi via USB • waiting for result (up to 12 s). Credentials save only on success.','info');
+ }else{
+  await deviceRequest('/api/wifi/test','POST',{ssid,password});
+  wifiNote('STA test started. Firmware saves credentials after successful association.','info');
+ }
  if($('kitRouterPass'))$('kitRouterPass').value='';
- audit('STA Wi-Fi test requested; saved only if joined successfully','info');
 }
 async function adminSave(){
  if(state.transport!=='usb'||!state.connected||state.owner)throw Error('USB admin access requires selected, unlocked physical kit');
@@ -381,8 +417,10 @@ function init(){
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTopStop',stop);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
- guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
+ guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);guardAction('kitWifiScan',scanWifi);
+ $('kitWifiNetworks')?.addEventListener('change',e=>{if(e.target.value)$('kitRouterSsid').value=e.target.value});
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
+ $('fwOpenKitNetwork')?.addEventListener('click',()=>{goKits();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
  $('kitTopConnect')?.addEventListener('click',goKits);$('kitTopMode')?.addEventListener('click',()=>{goKits();$('kitWifiMode')?.focus()});$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
