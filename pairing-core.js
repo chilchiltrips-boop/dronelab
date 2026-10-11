@@ -61,7 +61,9 @@ function session(role,events={}){
  function send(m){if(channel?.readyState!=='open')return false;try{channel.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
  function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
  function sendTelemetry(applied){return role==='host'&&approved&&connected&&channel?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
- function emergencyStop(reason='Web emergency STOP'){
+ function sendNetworkRequest(m){return role==='host'&&approved&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_REQUEST',sessionId,id:m.id,method:m.method,route:m.route,args:m.args||{}}):false}
+  function sendNetworkResponse(m){return role==='mobile'&&paired&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_RESPONSE',sessionId,id:m.id,ok:m.ok===true,data:m.data||{},error:String(m.error||'').slice(0,150)}):false}
+  function emergencyStop(reason='Web emergency STOP'){
   if(role!=='host')return false;emit('simStop',{reason});return send({type:'SIM_STOP',sessionId,reason});
  }
  function setSimulatorReady(value){if(role!=='host')return false;simulatorReady=!!value;broadcast();return true}
@@ -100,7 +102,8 @@ function session(role,events={}){
   if(m.type==='PAIR_APPROVED'&&role==='mobile'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST'});return}
   if(m.type==='PAIR_REJECTED'){close('Pairing rejected');return}
   if(role==='host'){
-   if(m.type==='SIM_CONTROL'){
+   if(m.type==='NET_RESPONSE'&&approved&&m.sessionId===sessionId&&Number.isInteger(m.id)){emit('networkResponse',m);return;}
+    if(m.type==='SIM_CONTROL'){
     const fail=reason=>send({type:'SIM_ACK',sessionId,ackSeq:Number.isSafeInteger(m.seq)?m.seq:0,accepted:false,reason});
     if(!approved||!connected||controller!=='mobile')return fail('Mobile control not granted');
     if(!validSimFrame(m))return fail('Invalid session or simulator control fields');
@@ -128,7 +131,8 @@ function session(role,events={}){
    if(m.type==='CONTROL_GRANTED'){if(!paired)return;controller='mobile';emit('control',{owner:'mobile'});send({type:'SYNC_REQUEST'});return}
    if(m.type==='CONTROL_DENIED'){emit('denied',m.reason||'Control denied');return}
    if(!paired||m.sessionId!==sessionId)return;
-   if(m.type==='SIM_ACK'&&Number.isSafeInteger(m.ackSeq)&&typeof m.accepted==='boolean'){emit('simAck',m);return}
+   if(m.type==='NET_REQUEST'&&Number.isInteger(m.id)&&m.id>0&&m.id<=1000000000){emit('networkRequest',{id:m.id,method:m.method,route:m.route,args:m.args||{}});return;}
+    if(m.type==='SIM_ACK'&&Number.isSafeInteger(m.ackSeq)&&typeof m.accepted==='boolean'){emit('simAck',m);return}
    if(m.type==='SIM_TELEMETRY'){emit('simTelemetry',m);return}
    if(m.type==='SIM_STOP'){emit('simStop',{reason:typeof m.reason==='string'?m.reason.slice(0,150):'Web STOP'});return}
   }
@@ -204,7 +208,7 @@ function session(role,events={}){
   send({type:'RELEASE_CONTROL'});controller=null;emit('control',{owner:null});
  }
  return {
-  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,setSimulatorReady,sendTelemetry,emergencyStop,
+  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,sendNetworkRequest,sendNetworkResponse,setSimulatorReady,sendTelemetry,emergencyStop,
   requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
   status:()=>({role,connected,paired,approved,controller,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
   get channel(){return channel},get peer(){return peer}
