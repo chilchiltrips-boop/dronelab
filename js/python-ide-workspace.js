@@ -368,7 +368,7 @@ export function createPythonIDEShell(api){
    const footerH=Math.max(24,footer?.getBoundingClientRect().height||24);
    const available=Math.max(220,Math.floor(viewport-top-footerH-14));
    const wanted=root.classList.contains('py-bottom-max')?Math.min(520,Math.round(available*.58)):bottomHeight;
-   const b=bottom==='closed'?35:Math.max(115,Math.min(wanted,Math.floor(available*.42)));
+   const b=bottom==='closed'?38:Math.max(115,Math.min(wanted,Math.floor(available*.42)));
    const h=Math.max(175,available-b-6);
    root.style.setProperty('--py-terminal-h',b+'px');
    root.style.setProperty('--py-work-height',h+'px');
