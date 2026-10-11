@@ -307,7 +307,7 @@ async function identify(){
 }
 function wifiNote(message,tone='info'){
  const e=$('kitWifiStatus');if(e){e.textContent=message;e.dataset.tone=tone}
- audit(message,tone);
+ audit(message,tone);render();
 }
 async function scanWifi(){
  if(!state.connected||state.owner)throw Error('Connect an unlocked kit first');
@@ -394,7 +394,41 @@ async function adminDanger(action){
  await disconnect('Admin operation acknowledged • reboot hardware and re-enroll');
 }
 function onSerial(e){
+ // Network telemetry is a remote readout; it must never impersonate a physical USB kit.
+ if(e.detail?.transport&&e.detail.transport!=='usb')return;
  const line=String(e.detail?.line||'').trim();
+ if(line.startsWith('ZJKIT,ID,'))usbCandidate.kitId=line.slice(9);
+ if(line.startsWith('ZJKIT,CODE,'))usbCandidate.kitCode=line.slice(11);
+ if(line.startsWith('ZJKIT,NAME,'))usbCandidate.kitName=line.slice(11);
+ if(line.startsWith('ZJINFO,FW,')){const f=line.split(',');usbCandidate.board=f[2];usbCandidate.version=f[3];}
+ if(!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board){
+  try{
+   const kit=checkIdentity(usbCandidate,'usb',usbCandidate.kitCode);
+   Object.assign(state,kit,{connected:true,transport:'usb',mode:'usb',key:'',ip:'',usbInfo:{...usbCandidate},rc:null,owner:false,since:Date.now()});
+   if($('kitCodeInput'))$('kitCodeInput').value=kit.kitCode;
+   if($('kitTransport'))$('kitTransport').value='usb';
+   recordKnown();tone('USB kit auto-verified • '+kit.kitName+' • '+kit.kitCode,'good');
+   audit('USB firmware handshake verified • '+kit.kitId,'success');
+   void usbWrite('ZJNET,GET').catch(()=>{});
+  }catch(err){audit('USB identity not verified: '+err.message,'warn')}
+ }
+ if(state.connected&&state.transport==='usb'&&line.startsWith('ZJNET,')){
+  const text=line.replace(/[\r\n]/g,'');
+  if(text.startsWith('ZJNET,SCAN,STARTED'))wifiNote('Searching nearby 2.4 GHz networks…','info');
+  else if(text.startsWith('ZJNET,SCAN,COUNT,')){
+   const count=Number(text.slice(17));
+   const select=$('kitWifiNetworks');if(select)select.replaceChildren(new Option('Select router ('+count+' found)',''));
+  }else if(text.startsWith('ZJNET,SCAN,ITEM,')){
+   const match=/^ZJNET,SCAN,ITEM,(.*),(-?\d+),(OPEN|SECURE)$/.exec(text);
+   if(match&&$('kitWifiNetworks'))$('kitWifiNetworks').add(new Option(match[1]+' • '+match[2]+' dBm'+(match[3]==='SECURE'?' 🔒':''),match[1]));
+  }else if(text==='ZJNET,SCAN,END')wifiNote('Router scan complete • select SSID and enter password','good');
+  else if(text==='ZJNET,TEST,SAVED'){wifiTesting=false;wifiNote('STA router connected and credentials saved in kit NVS','good')}
+  else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched','error')}
+  else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
+  else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(16).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
+  else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
+  else if(text.startsWith('ZJNET,AP,')){wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info')}
+ }
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
  if(!state.connected||state.transport!=='usb')return;
  if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
