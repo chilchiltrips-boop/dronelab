@@ -4,38 +4,64 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitAp=false,rcSeq=0;
+const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitAp=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','POST /api/wifi/test','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
 function form(v){return new URLSearchParams(v||{}).toString()}
-function request(route,method='GET',args={},timeout=5500){
- if(!native?.request)return Promise.reject(Error('Native Wi-Fi bridge requires the updated Android APK'));
- if(!validHost(ip)||key.length!==32)return Promise.reject(Error('Enter local FlightCore IP and the 32-character access key shown by USB'));
- if(!allowed.has(method+' '+route))return Promise.reject(Error('Unsupported FlightCore operation'));
- const id='zj'+(++requestId);return new Promise((resolve,reject)=>{
-  const timer=setTimeout(()=>{pending.delete(id);reject(Error('Device request timed out'))},timeout);
-  pending.set(id,{resolve,reject,timer});
-  native.request(id,ip,key,method,route,method==='POST'?form(args):'');
+function nativeTransport(route,method='GET',args={},headers={}){
+ if(!native?.requestSecure)return Promise.reject(Error('Install the current Android APK for private label enrollment.'));
+ if(!validHost(ip))return Promise.reject(Error('Use the kit private IPv4 address.'));
+ const id='zj'+(++requestId);
+ return new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{pending.delete(id);reject(Error('Device request timed out'))},4500);
+  pending.set(id,{resolve,reject,timer,raw:true});native.requestSecure(id,ip,method,route,method==='POST'?form(args):'',JSON.stringify(headers));
  });
 }
+async function request(route,method='GET',args={}){
+ if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
+ if(!auth||Date.now()>auth.expiresAt-5000){
+  if(!diagnosticKey||!verifiedKitId)throw Error('Enroll the private kit label first.');
+  auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,diagnosticKey);
+ }
+ try{const d=await auth.request(route,method,args);if(d.kitId&&d.kitId!==verifiedKitId)throw Error('Kit Device ID mismatch');return d}
+ catch(e){if(e.status===401)auth=null;throw e}
+}
+async function connectKit(){
+ if(connecting)return;connecting=true;
+ try{
+  const value=el('kitKey').value.trim();
+  if(value){
+   const p=window.ZebjusKitAuth.label(value),raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
+   if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this AP.');
+   if(rcSession)await releaseRc();
+   verifiedKitId=p.deviceId;diagnosticKey=window.ZebjusKitAuth.diagnosticKey(p.secret,p.deviceId);
+   auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,ip==='192.168.4.1'?p.secret:diagnosticKey,ip==='192.168.4.1'?'setup':'diagnostic');
+   el('kitKey').value='';
+  }
+  await status();reconnectEnabled=true;
+ }finally{connecting=false}
+}
+function dropInput(message){rcSession='';firmwareAck=null;if(el('kitRcPreview'))el('kitRcPreview').checked=false;window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');}
 window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;el('kitRcPreview').checked=false;}};
 window.zebjusNativeResult=data=>{
  const item=pending.get(data?.id);if(!item)return;
  clearTimeout(item.timer);pending.delete(data.id);
- if(data.ok)item.resolve(data.body||{});
+ if(data.ok&&item.raw)item.resolve({status:data.status,text:data.text||JSON.stringify(data.body||{}),proof:data.proof||''});
+ else if(data.ok&&data.status<400)item.resolve(data.body||{});
  else item.reject(Error(data.error||data.body?.error||'Device HTTP '+data.status));
 };
 async function status(){
  const data=await request('/api/status');
- if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;rcSession='';throw Error('Kit hardware ID changed — reconnect and verify physical board')}
+ if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
  verifiedKitId=data.kitId||'';online=true;mode=data.mode||mode;lastStatus=Date.now();
  // AUTO can run AP + STA simultaneously. STA being connected does NOT imply AP request.
  onKitAp=data.requestTransport==='AP'&&data.apActive===true;
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
- show((data.staConnected?'STA':'AP')+' CONNECTED • '+(data.ssid||data.apSsid||'Device'),'good');
+ if(el('kitAppOta'))el('kitAppOta').disabled=true;
+ show('Phone → '+data.requestTransport+' VERIFIED • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
  return data;
 }
 async function scan(){
@@ -49,7 +75,13 @@ async function testSave(){
  const ssid=el('kitSsid').value.trim(),password=el('kitPassword').value;
  if(!ssid)throw Error('Choose or enter an SSID first');
  await request('/api/wifi/test','POST',{ssid,password});
- el('kitPassword').value='';show('Testing Wi-Fi; save occurs on verified association. Connection may switch.');
+ el('kitPassword').value='';show('Testing router association and DHCP • not saved yet.');
+ for(let attempt=0;attempt<30;attempt++){
+  await new Promise(r=>setTimeout(r,1000));let d;try{d=await request('/api/status')}catch{continue}
+  if(d.wifiTestState==='saved'){show('VERIFIED & SAVED • STA '+d.ip+' • reconnect laptop to '+d.ssid,'good');return}
+  if(d.wifiTestState==='failed')throw Error('Not saved • router test failed (reason '+d.lastStaFailureReason+'). Previous credentials preserved.');
+ }
+ throw Error('Save not verified. Reconnect the kit and inspect status before retrying.');
 }
 async function setMode(){
  if(rcSession){await request('/api/rc/release','POST',{session:rcSession}).catch(()=>{});rcSession='';}
@@ -74,28 +106,29 @@ async function onWebRequest(req,peer){
  }catch(e){peer.sendNetworkResponse({id,ok:false,error:String(e.message||e).slice(0,150)})}
 }
 async function releaseRc(){
- const session=rcSession;rcSession='';
+ const session=rcSession;dropInput('Diagnostic input released • motors disabled');
  if(session&&online)await request('/api/rc/release','POST',{session}).catch(()=>{});
 }
+async function claimRc(){
+ if(!online||!onKitAp)throw Error('Connect and verify the phone on the kit AP first.');
+ rcClaiming=true;
+ try{
+  const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode});
+  if(d.kitId!==verifiedKitId||!d.session)throw Error('Firmware claim identity failed');
+  rcSession=d.session;rcSeq=0;firmwareAck=null;
+  window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
+  show('Android owns diagnostic input • motors disabled','good');
+ }finally{rcClaiming=false}
+}
 function previewControls(m){
- // Direct Android→kit RC is AP-only. STA/USB Android frames must flow via the WebRTC host.
- if(!online||!onKitAp||!el('kitRcPreview')?.checked||previewBusy||rcClaiming||Date.now()-lastPreview<100)return;
- if(!m?.axes||!Number.isFinite(m.axes.roll)||!Number.isFinite(m.axes.pitch)||!Number.isFinite(m.axes.yaw))return;
- if(!rcSession){
-  if(!/^[0-9]{6}$/.test(kitCode)){show('Read kit status and verify six-digit code first','warn');return;}
-  rcClaiming=true;
-  request('/api/rc/claim','POST',{source:'ANDROID',kitCode})
-   .then(d=>{if(d.kitId===verifiedKitId&&d.session){rcSession=d.session;rcSeq=0;show('AERION kit RC preview claimed • motors OFF','good')}})
-   .catch(e=>show('Kit RC locked: '+e.message,'warn'))
-   .finally(()=>{rcClaiming=false});
-  return;
- }
- lastPreview=Date.now();previewBusy=true;
- const axes=m.axes,clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
- request('/api/rc/preview','POST',{session:rcSession,source:'ANDROID',seq:++rcSeq,armed:'false',
-  throttle:Math.max(1000,Math.min(2000,m.throttle|0)),
-  roll:clamp(axes.roll),pitch:clamp(axes.pitch),yaw:clamp(axes.yaw)})
- .catch(e=>{rcSession='';show('RC preview stopped: '+e.message,'warn')})
+ if(!online||!onKitAp||!rcSession||!el('kitRcPreview')?.checked||previewBusy||rcClaiming||document.hidden||Date.now()-lastPreview<100)return;
+ if(!m?.axes||![m.axes.roll,m.axes.pitch,m.axes.yaw,m.throttle].every(Number.isFinite))return;
+ lastPreview=Date.now();previewBusy=true;const at=performance.now(),session=rcSession;
+ const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
+ request('/api/rc/preview','POST',{session,source:'ANDROID',seq:++rcSeq,armed:'false',responseMode:m.responseMode||'Medium',
+  throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw)})
+ .then(d=>{if(session!==rcSession)return;if(!d.received||d.kitId!==verifiedKitId||d.seq!==rcSeq)throw Error('Invalid firmware receive ACK');firmwareAck={seq:d.seq,at:Date.now(),rtt:Math.round(performance.now()-at)};if(el('kitRcAck'))el('kitRcAck').textContent='ESP32 received #'+d.seq+' • '+firmwareAck.rtt+' ms round trip';})
+ .catch(e=>{dropInput('Input stopped: '+e.message);void request('/api/rc/release','POST',{session}).catch(()=>{});})
  .finally(()=>{previewBusy=false});
 }
 function action(id,fn){el(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>show(e.message,'warn')))}
@@ -103,12 +136,14 @@ function bind(){
  if(!el('kitNetStatus'))return;
  if(!native?.request){show('Install updated Android APK for Wi-Fi connection');return;}
  el('kitIp').value=ip;
- el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false;rcSession='';kitCode='';verifiedKitId='';onKitAp=false});
- el('kitKey').addEventListener('input',()=>{key=el('kitKey').value.trim();online=false;rcSession=''});
+ el('kitIp').addEventListener('change',()=>{void releaseRc();ip=el('kitIp').value.trim();online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitAp=false});
+ el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
- el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)releaseRc();else if(online&&!onKitAp)show('Direct Android joystick needs kit AP mode; STA/USB uses WebRTC relay','warn')});
+ el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc()});
+ window.addEventListener('blur',()=>{if(rcSession)void releaseRc()});
  action('kitWifiSettings',()=>native.openWifiSettings());
- action('kitConnect',status);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
+ action('kitConnect',connectKit);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
  action('kitTestSave',testSave);action('kitSwitch',setMode);
  action('kitRead',async()=>{const data=await pollTelemetry();el('kitTelemetry').textContent=JSON.stringify(data,null,2)});
  action('kitI2cScan',async()=>{await command('ZJI2C,SCAN');show('I²C scan requested; refresh telemetry for device addresses','good')});
@@ -118,8 +153,8 @@ function bind(){
   if(!confirm('APP OTA BENCH UPDATE ONLY. Propellers removed and ESC power disconnected? Use matching A1/A2 APP .bin only. Continue?'))return;
   native.pickAppFirmware(ip,key);show('Select matching FlightCore APP .bin using Android Files');
  });
- setInterval(()=>{if(!online)return;status().catch(()=>{online=false;show('Kit disconnected. Check phone Wi-Fi and IP.','warn')})},3500);
+ setInterval(()=>{if(!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
-window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
+window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,hasControl:()=>!!rcSession&&online,feedback:()=>firmwareAck,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

@@ -1,7 +1,7 @@
 name: Full DroneLab Form and Input Fit Audit
 on:
   push:
-    branches: [fix/complete-webapp-input-fit-audit]
+    branches: [work/sta-ap-diagnostics-20261012, fix/complete-webapp-input-fit-audit]
     paths:
       - 'pairing.css'
       - 'index.html'

@@ -24,10 +24,10 @@ async function inventory(screen){
 try{
  await page.goto(base+'#settings');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  check(await page.locator('[data-tab=settings]').getAttribute('class').then(x=>x.includes('active')),'Settings deep link ignored');
- for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[1024,768],[390,844],[844,390],[915,412]]){
+ for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[768,1024],[360,800],[1024,768],[390,844],[844,390],[915,412]]){
   await page.setViewportSize({width,height});
   for(const tab of ['assembly','wiring','python','settings','firmware']){
-   await page.locator('[data-tab='+tab+']').click();await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
+   await page.locator('[data-tab='+tab+']').click({noWaitAfter:true});await page.waitForFunction(name=>document.getElementById('tab-'+name)?.classList.contains('active'),tab);await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
    const metric=await page.evaluate(({tab,width,height})=>({tab,width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight,panelHeight:document.querySelector('#tab-'+tab).getBoundingClientRect().height}),{tab,width,height});
    metrics.push(metric);
    if(metric.scrollWidth>width){

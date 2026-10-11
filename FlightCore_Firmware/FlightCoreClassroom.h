@@ -8,7 +8,7 @@ static Preferences zjKitPrefs;
 static bool zjAdminUnlocked=false;static uint32_t zjAdminUnlockAt=0,zjAdminCooldownAt=0;static uint8_t zjAdminFailures=0;
 static String zjKitId,zjKitCode,zjKitName;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
-static String zjRcSource="NONE",zjRcSession="";
+static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
@@ -52,7 +52,7 @@ static void zjRcNeutral(){
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
  zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
- zjRcSession="";zjRcSource="NONE";zjRcTransport="NONE";
+ zjRcSession="";zjRcOwnerId="";zjRcSource="NONE";zjRcTransport="NONE";
  if(had&&Serial.availableForWrite()>70){Serial.print("ZJRC,RELEASE,");Serial.println(reason);}
 }
 static bool zjRcClaim(const String& source,const String& code,bool network,const IPAddress& ip,const char* transport){
@@ -61,7 +61,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");
  zjRcOwned=true;zjRcNetwork=network;zjRcSource=source;zjRcOwnerIP=ip;
- zjRcTransport=transport;zjRcSession=zjRcNewSession();zjRcSeq=0;
+ zjRcTransport=transport;zjRcSession=zjRcNewSession();zjRcOwnerId=zjRcNewSession().substring(0,12);zjRcSeq=0;
  zjRcLast=0;zjRcLeaseAt=now;zjRcNeutral();
  if(Serial.availableForWrite()>75){Serial.print("ZJRC,CLAIM,");Serial.print(transport);Serial.print(',');Serial.println(source);}
  return true;
@@ -70,7 +70,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  const uint32_t now=millis();
  if(!zjRcOwned||zjRcNetwork!=network||zjRcSource!=source||now-zjRcLeaseAt>ZJ_RC_LEASE_MS||
     (network&&(session!=zjRcSession||ip!=zjRcOwnerIP))||
-    seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
+    (zjRcHasFrame&&uint32_t(now-zjRcLast)<20)||seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
     t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000){
   ++zjRcRejected;return false;
  }
@@ -92,11 +92,11 @@ static void zjRcLoop(uint32_t now){
  if(zjRcOwned&&int32_t(now-zjRcLeaseAt)>=0&&uint32_t(now-zjRcLeaseAt)>ZJ_RC_LEASE_MS)zjRcRelease("LEASE_TIMEOUT");
 }
 static String zjRcState(){
- const uint32_t age=zjRcHasFrame?millis()-zjRcLast:0;
- return String("{\"claimed\":")+(zjRcOwned?"true":"false")+
+ const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
+ return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
   ",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
-  ",\"ageMs\":"+String(age)+",\"throttle\":"+String(zjRcThrottle)+
+  ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
   ",\"rejected\":"+String(zjRcRejected)+",\"motorsArmed\":false}";

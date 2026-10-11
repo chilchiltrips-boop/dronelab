@@ -49,5 +49,5 @@ test('AP is identity-verified before authenticated access and never treats the A
  assert.match(main,/await pairing\(\)\?\.restore\?\.\(found\.kitId\)/);
  assert.match(main,/if\(!\/\^\[a-fA-F0-9\]\{32\}\$\/\.test\(key\)\)/);
  assert.match(main,/if\(access&&access\.kitId!==verified\.kitId\)/);
- assert.ok(main.includes('not the Device Access Key'));
+ assert.ok(main.includes('Kit Code and the AP Wi-Fi password do not authorize access'));
 });

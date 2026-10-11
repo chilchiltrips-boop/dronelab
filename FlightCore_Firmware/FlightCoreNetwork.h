@@ -12,7 +12,8 @@ static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjOtaRebootAt=0,zjLastScanSeq=0;
 static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
-static uint8_t zjStaDisconnectReason=0,zjLastStaFailureReason=0;
+static volatile uint8_t zjStaDisconnectReason=0,zjLastStaFailureReason=0;
+static volatile uint32_t zjAssociationEpoch=0;static uint32_t zjTestAssociationEpoch=0;
 static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
 static String zjWifiTestState="idle";
 static bool zjPreviousScanActive=false,zjMdnsReady=false,zjUsbScanning=false;
@@ -41,21 +42,26 @@ static void zjCorsHeaders(){
  if(zjCorsAllowed()){
   zjHttp.sendHeader("Access-Control-Allow-Origin",zjHttp.header("Origin"));
   zjHttp.sendHeader("Vary","Origin");
-  zjHttp.sendHeader("Access-Control-Allow-Headers","X-ZJ-Key, Content-Type");
+  zjHttp.sendHeader("Access-Control-Expose-Headers","X-ZJ-Response");
+  zjHttp.sendHeader("Access-Control-Allow-Headers","X-ZJ-Key, X-ZJ-Device, X-ZJ-Session, X-ZJ-Seq, X-ZJ-Proof, Content-Type");
   zjHttp.sendHeader("Access-Control-Allow-Methods","GET, POST, OPTIONS");
   zjHttp.sendHeader("Access-Control-Max-Age","300");
   if(zjHttp.header("Access-Control-Request-Private-Network")=="true")
    zjHttp.sendHeader("Access-Control-Allow-Private-Network","true");
  }
 }
-static bool zjAuthenticated(){
- const String provided=zjHttp.header("X-ZJ-Key");
- if(provided.length()!=zjNetKey.length()||provided.length()<24)return false;
- uint8_t diff=0;for(size_t i=0;i<provided.length();i++)diff|=uint8_t(provided[i]^zjNetKey[i]);return diff==0;
-}
 static void zjReply(int status,const String& body);
-static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"access_key_required\"}");return false;}
-static void zjReply(int status,const String& body){zjCorsHeaders();zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send(status,"application/json",body);}
+static bool zjAllow();static const char* zjClientTransport();
+#include "FlightCoreEnrollment.h"
+#include "FlightCoreSetupPortal.h"
+static bool zjAuthenticated(){return zjSessionAuthenticated();}
+static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
+static bool zjAllowSetup(){if(!zjAllow())return false;if(zjSetupAuthorized())return true;zjReply(403,"{\"error\":\"setup_authorization_required\"}");return false;}
+static void zjReply(int status,const String& body){
+ zjCorsHeaders();zjHttp.sendHeader("Cache-Control","no-store");
+ if(zjRequestSession>=0){const auto& s=zjSessions[zjRequestSession];zjHttp.sendHeader("X-ZJ-Response",zjHmac(s.key,"response|"+String(s.seq)+"|"+String(status)+"|"+body));}
+ zjHttp.send(status,"application/json",body);
+}
 static void zjEnsureAP(){
  if((WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
  WiFi.mode(WIFI_AP_STA);
@@ -76,20 +82,27 @@ static String zjStatus(){
  out+=",\"ssid\":"+zjJson(sta?WiFi.SSID():String(""))+",\"ip\":"+zjJson(sta?WiFi.localIP().toString():String(""));
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
  out+=",\"apActive\":"+(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA?String("true"):String("false"));
- out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
+ out+=",\"scanActive\":"+(WiFi.scanComplete()==WIFI_SCAN_RUNNING?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
+ const bool ap=WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA;
+ const String networkState=zjNetTesting?"STA_TESTING":sta?(ap?"AP_STA_COEXISTENCE":"STA_CONNECTED"):zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
+ out+=",\"networkState\":"+zjJson(networkState);
+ out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
-static const char* zjClientTransport(){const IPAddress ip=zjHttp.client().remoteIP();return ip[0]==192&&ip[1]==168&&ip[2]==4?"AP":"STA";}
+static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
 static void zjSetupHttp(){
- const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network"};zjHttp.collectHeaders(headers,3);
+ const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7);
+ zjSetupEnrollmentHttp();
+ zjHttp.on("/",HTTP_GET,[](){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send_P(200,"text/html",ZJ_SETUP_PORTAL);});
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
- zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"name\":"+zjJson(zjKitName)+",\"board\":"+zjJson(FC_BOARD)+"}");});
+ zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/wifi/scan",HTTP_GET,[](){
-  if(!zjAllow())return;
+  if(!zjAllowSetup())return;
+  if(zjRcOwned||zjNetTesting||zjUsbScanning){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
   const int n=WiFi.scanComplete();
   if(n==WIFI_SCAN_FAILED){WiFi.scanNetworks(true,false);zjReply(202,"{\"state\":\"scanning\"}");return;}
   if(n==WIFI_SCAN_RUNNING){zjReply(202,"{\"state\":\"scanning\"}");return;}
@@ -98,18 +111,18 @@ static void zjSetupHttp(){
   WiFi.scanDelete();zjReply(200,out+"]}");
  });
  zjHttp.on("/api/wifi/test",HTTP_POST,[](){
-  if(!zjAllow())return;
+  if(!zjAllowSetup())return;
   if(zjRcOwned||zjNetTesting){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
-  const String ssid=zjHttp.arg("ssid"),pass=zjHttp.arg("password");
+  const String ssid=zjArg("ssid"),pass=zjArg("password");
   if(ssid.length()==0||ssid.length()>32||pass.length()>63||(!pass.isEmpty()&&pass.length()<8)){zjReply(400,"{\"error\":\"invalid_ssid_or_password\"}");return;}
   zjPendingSsid=ssid;zjPendingPass=pass;zjStaDisconnectReason=0;zjLastStaFailureReason=0;zjWifiTestState="testing";zjEnsureAP();
-  WiFi.begin(ssid.c_str(),pass.c_str());zjNetAttempt=millis();zjNetTesting=true;zjPhase="testing_wifi";
+  zjTestAssociationEpoch=zjAssociationEpoch;WiFi.disconnect(false,false);WiFi.begin(ssid.c_str(),pass.c_str());zjNetAttempt=millis();zjNetTesting=true;zjPhase="testing_wifi";
   zjReply(202,"{\"state\":\"testing\",\"saved\":false}");
  });
  zjHttp.on("/api/wifi/mode",HTTP_POST,[](){
-  if(!zjAllow())return;const String mode=zjHttp.arg("mode");
+  if(!zjAllowSetup())return;const String mode=zjArg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
-  if(zjNetTesting){zjReply(409,"{\"error\":\"wifi_test_in_progress\"}");return;}
+  if(zjNetTesting||zjRcOwned){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
   if(mode=="sta"&&!zjSavedSsid.length()){zjReply(409,"{\"error\":\"save_sta_credentials_first\"}");return;}
   zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);
   zjReply(202,"{\"mode\":"+zjJson(mode)+",\"state\":\"switching\"}");
@@ -119,7 +132,7 @@ static void zjSetupHttp(){
  });
  zjHttp.on("/api/telemetry",HTTP_GET,[](){
   if(!zjAllow())return;
-  String out="{\"board\":"+zjJson(GYRO_BOARD)+",\"millis\":"+String(millis())+",\"gyroReady\":"+(gyroReady?String("true"):String("false"));
+  String out="{\"kitId\":"+zjJson(zjKitId)+",\"board\":"+zjJson(GYRO_BOARD)+",\"millis\":"+String(millis())+",\"gyroReady\":"+(gyroReady?String("true"):String("false"));
   out+=",\"address\":"+String(GYRO_ADDR)+",\"roll\":"+String(RateRoll,3)+",\"pitch\":"+String(RatePitch,3)+",\"yaw\":"+String(RateYaw,3);
   out+=",\"scanner\":[";
   for(uint8_t i=0;i<scanCount;i++){if(i)out+=',';out+=String(scanAddresses[i]);}
@@ -128,16 +141,17 @@ static void zjSetupHttp(){
   zjReply(200,out);
  });
  zjHttp.on("/api/command",HTTP_POST,[](){
-  if(!zjAllow())return;const String cmd=zjHttp.arg("line");
+  if(!zjAllow())return;const String cmd=zjArg("line");
   if(cmd.length()<5||cmd.length()>=sizeof(serialLine)||cmd.indexOf('\n')>=0||cmd.indexOf('\r')>=0){zjReply(400,"{\"error\":\"invalid_command\"}");return;}
   if(cmd!="ZJI2C,SCAN"&&cmd!="ZJINFO,GET"&&!cmd.startsWith("ZJLED,")&&!cmd.startsWith("ZJTEL,RATE,")){zjReply(403,"{\"error\":\"command_not_allowed\"}");return;}
   char line[sizeof(serialLine)];cmd.toCharArray(line,sizeof(line));serialCommand(line);
-  zjReply(200,"{\"accepted\":true,\"motorControl\":false}");
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"accepted\":true,\"motorControl\":false}");
  });
  // RC diagnostics only: motors always disarmed. Kit code selects; access key authorizes.
  zjHttp.on("/api/rc/claim",HTTP_POST,[](){
   if(!zjAllow())return;
-  const String source=zjHttp.arg("source"),code=zjHttp.arg("kitCode");
+  if(zjNetTesting||zjOtaAuthorized||zjOtaRebootAt){zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;}
+  const String source=zjArg("source"),code=zjArg("kitCode");
   if(code!=zjKitCode){zjReply(404,"{\"error\":\"kit_code_mismatch\"}");return;}
   if(!zjRcClaim(source,code,true,zjHttp.client().remoteIP(),zjClientTransport())){
    zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
@@ -146,31 +160,36 @@ static void zjSetupHttp(){
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
-  if(!zjRcOwned||!zjRcNetwork||zjHttp.arg("session")!=zjRcSession||
+  if(!zjRcOwned||!zjRcNetwork||zjArg("session")!=zjRcSession||
      zjHttp.client().remoteIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
   zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
  });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
   if(!zjAllow())return;
-  if(zjHttp.arg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
-  const long seq=zjHttp.arg("seq").toInt();
-  const int t=zjHttp.arg("throttle").toInt(),r=zjHttp.arg("roll").toInt();
-  const int p=zjHttp.arg("pitch").toInt(),y=zjHttp.arg("yaw").toInt();
-  if(seq<=0||!zjRcFrame(uint32_t(seq),t,r,p,y,zjHttp.arg("source"),
-     zjHttp.arg("session"),true,zjHttp.client().remoteIP())){
+  if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
+  long seq=0,t=0,r=0,p=0,y=0;
+  const String response=zjArg("responseMode");
+  if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
+     !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
+     (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.client().remoteIP())){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
-  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false}");
+  zjRcResponse=response.length()?response:String("Medium");
+  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsArmed\":false}");
  });
+ zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjRcLoop(millis());zjReply(200,zjRcState());});
+
  // Secure-by-default factory flashing remains USB-only. OTA is APP-only with per-device key,
  // ESP chip header check and Update partition guard. Production requires signed-image policy.
  zjHttp.on("/api/ota",HTTP_POST,[](){
-  if(!zjAuthenticated()){zjReply(401,"{\"error\":\"access_key_required\"}");return;}
-  if(zjOtaFailed||!zjOtaComplete||Update.hasError()){zjReply(400,"{\"error\":\"ota_rejected_or_incomplete\"}");return;}
+  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(401,"{\"error\":\"access_key_required\"}");return;}
+  if(zjOtaFailed||!zjOtaComplete||Update.hasError()){zjOtaAuthorized=false;zjReply(400,"{\"error\":\"ota_rejected_or_incomplete\"}");return;}
   zjReply(200,"{\"updated\":true,\"rebooting\":true}");zjOtaRebootAt=millis()+1200;
  },[](){
   HTTPUpload& u=zjHttp.upload();
-  if(u.status==UPLOAD_FILE_START){zjOtaAuthorized=zjAuthenticated();zjOtaFailed=!zjOtaAuthorized;zjOtaComplete=false;if(!zjOtaFailed&&(!u.filename.endsWith(".bin")||!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)))zjOtaFailed=true;}
+  if(u.status==UPLOAD_FILE_START){zjOtaAuthorized=zjAuthenticated()&&zjAuthAdmin&&String(zjClientTransport())=="STA"&&!zjRcOwned&&!zjNetTesting&&!zjUsbScanning;zjOtaFailed=!zjOtaAuthorized;zjOtaComplete=false;if(!zjOtaFailed&&(!u.filename.endsWith(".bin")||!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)))zjOtaFailed=true;}
   else if(u.status==UPLOAD_FILE_WRITE&&!zjOtaFailed){
    if(u.totalSize==0){const uint16_t chip=u.currentSize>13?uint16_t(u.buf[12])|uint16_t(u.buf[13])<<8:0;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -179,9 +198,9 @@ static void zjSetupHttp(){
     if(u.currentSize<24||u.buf[0]!=0xe9||chip!=5){zjOtaFailed=true;Update.abort();return;}
 #endif
    }
-   if(Update.write(u.buf,u.currentSize)!=u.currentSize){zjOtaFailed=true;Update.abort();}
+   if(Update.write(u.buf,u.currentSize)!=u.currentSize){zjOtaFailed=true;zjOtaAuthorized=false;Update.abort();}
   }else if(u.status==UPLOAD_FILE_END&&!zjOtaFailed){zjOtaComplete=Update.end(true);zjOtaFailed=!zjOtaComplete;}
-  else if(u.status==UPLOAD_FILE_ABORTED){zjOtaFailed=true;Update.abort();}
+  else if(u.status==UPLOAD_FILE_ABORTED){zjOtaFailed=true;zjOtaAuthorized=false;Update.abort();}
  });
  zjHttp.onNotFound([](){
   if(zjHttp.method()==HTTP_OPTIONS){
@@ -194,13 +213,16 @@ static void zjSetupHttp(){
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
+  if(event==ARDUINO_EVENT_WIFI_STA_GOT_IP){zjAssociationEpoch=zjAssociationEpoch+1;zjStaDisconnectReason=0;}
   if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
    zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
    if(zjNetTesting&&zjStaDisconnectReason!=36&&zjStaDisconnectReason!=0)zjLastStaFailureReason=zjStaDisconnectReason;
   }
  });
  zjPrefs.begin("zj-network",false);
- zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");zjMode=zjPrefs.getString("mode","auto");
+ WiFi.persistent(false);WiFi.setAutoReconnect(false);zjEnrollmentInit();
+ zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");
+ const String saved=zjPrefs.getString("staConfig","");if(saved.length()>2){const int n=saved.substring(0,2).toInt();if(n>0&&n<=32&&saved.length()>=size_t(n+2)){zjSavedSsid=saved.substring(2,n+2);zjSavedPass=saved.substring(n+2);}}zjMode=zjPrefs.getString("mode","auto");
  if(zjMode!="auto"&&zjMode!="sta"&&zjMode!="ap")zjMode="auto";
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
  // Classroom AP common WPA2 password; per-device access key remains separate and secret.
@@ -214,7 +236,8 @@ static void zjNetworkSetup(){
  if(zjMode=="ap"||zjSavedSsid.length()==0){zjEnsureAP();zjPhase="ap_ready";}
  else zjConnectSaved();
  zjSetupHttp();
- Serial.print("ZJNET,ACCESS,");Serial.print(zjApSsid);Serial.print(',');Serial.print(zjApPass);Serial.print(',');Serial.println(zjNetKey);
+ Serial.print("ZJNET,AP_NAME,");Serial.println(zjApSsid);
+ Serial.println(zjLabelSecret.length()?"ZJNET,LABEL,INSTALLED":"ZJNET,LABEL,MANUFACTURER_SETUP_REQUIRED");
  Serial.println("ZJNET,HELP,AUTO keeps AP visible; use USB ZJNET,SCAN / TEST / MODE; motors disabled");
  Serial.print("ZJNET,MODE,");Serial.println(zjMode);
 }
@@ -231,6 +254,14 @@ static void zjNetUsbStatus(){
  Serial.print("ZJNET,TEST_STATE,");Serial.println(zjWifiTestState);
 }
 static bool zjNetSerialCommand(char* line){
+ if(!strncmp(line,"ZJNET,LABEL,",12)||!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM")){
+  if(!zjAdminAuthorized()||zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,ADMIN_LOCKED_OR_BUSY");return true;}
+  const bool revoke=!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM");const String label=revoke?String(""):String(line+12);
+  if(!revoke&&!zjHex(label,64)){Serial.println("ZJNET,ERR,LABEL_MUST_BE_256_BITS");return true;}
+  zjPrefs.putString("label",label);zjEnrollmentInit();zjRcRelease("ENROLLMENT_REVOKED");
+  Serial.println("ZJNET,ACK,LABEL_UPDATED");return true;
+ }
+
  if(!strcmp(line,"ZJNET,GET")){zjNetUsbStatus();return true;}
  // A local USB-attached teacher can pair the *current browser session* without
  // typing an access key. Never permit this endpoint over AP/STA or HTTP.
@@ -240,7 +271,7 @@ static bool zjNetSerialCommand(char* line){
   Serial.println(zjNetKey);return true;
  }
  if(!strcmp(line,"ZJNET,SCAN")){
-  if(zjUsbScanning||zjNetTesting){Serial.println("ZJNET,ERR,SCAN_BUSY");return true;}
+  if(zjUsbScanning||zjNetTesting||zjRcOwned){Serial.println("ZJNET,ERR,SCAN_BUSY");return true;}
   if(zjMode!="sta"||WiFi.status()!=WL_CONNECTED)zjEnsureAP();
   WiFi.scanDelete();
   WiFi.scanNetworks(true,false);
@@ -256,7 +287,7 @@ static bool zjNetSerialCommand(char* line){
    Serial.println("ZJNET,ERR,INVALID_WIFI_CREDENTIALS");return true;
   }
   zjPendingSsid=ssid;zjPendingPass=pass;zjStaDisconnectReason=0;zjLastStaFailureReason=0;zjWifiTestState="testing";
-  zjEnsureAP();WiFi.begin(ssid.c_str(),pass.c_str());
+  zjEnsureAP();zjTestAssociationEpoch=zjAssociationEpoch;WiFi.disconnect(false,false);WiFi.begin(ssid.c_str(),pass.c_str());
   zjNetAttempt=millis();zjNetTesting=true;zjPhase="testing_wifi";
   Serial.println("ZJNET,TEST,STARTED");return true;
  }
@@ -274,7 +305,8 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
- zjHttp.handleClient();
+ zjAuthResetRequest();zjHttp.handleClient();now=millis();
+ zjRcLoop(now);
  if(zjUsbScanning&&Serial.availableForWrite()>128){
   const int n=WiFi.scanComplete();
   if(n>=0&&zjUsbScanCount==0){zjUsbScanCount=n+1;Serial.print("ZJNET,SCAN,COUNT,");Serial.println(n);}
@@ -292,18 +324,18 @@ static void zjNetworkLoop(uint32_t now){
  zjPreviousScanActive=scanActive;
  if(zjOtaRebootAt&&int32_t(now-zjOtaRebootAt)>=0){ESP.restart();return;}
  if(zjNetTesting){
-  if(WiFi.status()==WL_CONNECTED&&WiFi.SSID()==zjPendingSsid){
+  if(zjAssociationEpoch!=zjTestAssociationEpoch&&WiFi.status()==WL_CONNECTED&&WiFi.SSID()==zjPendingSsid&&WiFi.localIP()!=IPAddress(0,0,0,0)&&uint32_t(now-zjNetAttempt)>=1200){
+   const String record=(zjPendingSsid.length()<10?String("0"):String(""))+String(zjPendingSsid.length())+zjPendingSsid+zjPendingPass;
+   if(zjPrefs.putString("staConfig",record)!=record.length()||zjPrefs.getString("staConfig","")!=record){zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="failed";zjPhase="credential_storage_failed";return;}
    zjSavedSsid=zjPendingSsid;zjSavedPass=zjPendingPass;
-   zjPrefs.putString("ssid",zjSavedSsid);zjPrefs.putString("pass",zjSavedPass);
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="saved";zjLastStaFailureReason=0;zjPhase="sta_test_pass_saved";Serial.println("ZJNET,TEST,SAVED");
-   if(zjMode=="sta")zjNetApOffAt=now+10000;
-   else{WiFi.disconnect();zjEnsureAP();zjPhase="ap_ready_credentials_saved";}
+   zjMode="auto";zjPrefs.putString("mode","auto");zjNetApOffAt=0;zjEnsureAP(); // retain verified STA and Android AP together
   }else if(int32_t(now-zjNetAttempt)>int32_t(ZJ_NET_TEST_TIMEOUT_MS)){
    // Record the last genuine association reason before our own disconnect can emit STA_LEAVING (36).
    if(zjLastStaFailureReason==0&&zjStaDisconnectReason!=36)zjLastStaFailureReason=zjStaDisconnectReason;
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="failed";zjPhase="sta_test_failed_not_saved";
    Serial.print("ZJNET,TEST,FAILED_NOT_SAVED,");Serial.println(zjLastStaFailureReason);
-   WiFi.disconnect();zjEnsureAP();
+   WiFi.disconnect();zjEnsureAP();zjNetNextRetry=now+30000;
   }
  }else if(zjMode!="ap"){
   if(WiFi.status()==WL_CONNECTED){

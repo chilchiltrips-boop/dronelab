@@ -1,7 +1,7 @@
 name: Verify Grant Mobile Toggle Layout
 on:
   push:
-    branches: [fix/grant-mobile-toggle-no-overlap]
+    branches: [work/sta-ap-diagnostics-20261012, fix/grant-mobile-toggle-no-overlap]
     paths:
       - 'styles.css'
       - 'index.html'

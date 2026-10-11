@@ -32,7 +32,8 @@ try{
   const after=await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked');
   assert.notEqual(before,after,'STA/AP header switch did not change target');
   const label=await page.locator('#kitTopWifiConnect').innerText();
-  assert.match(label,/Connect (AP|STA)/);
+  assert.equal(label,(after==='true'?'AP':'STA')+' Connect');
+  assert.equal(await page.locator('#kitTopControl').isDisabled(),true,'Selecting transport must not claim hardware');
   await ctx.close();
   if(errors.length)throw Error('Browser console exception: '+errors.join('; '));
   console.log('PASS AERION header '+width+'x'+height+' single-row and offline-safe mode/flash controls');

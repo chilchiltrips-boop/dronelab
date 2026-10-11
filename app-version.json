@@ -1,14 +1,12 @@
 {
-  "version": "1.6.4+192",
-  "channel": "release",
+  "version": "1.7.0+0",
+  "channel": "review",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
-    "One canonical Flight Training page with top-right WebRTC connection gear",
-    "Existing two-way QR and authenticated optional six-digit code pairing",
-    "Android independent floating multitouch preview with explicit virtual ARM and ownership",
-    "Applied control ACK and 10 Hz bidirectional simulator telemetry; no virtual LED demo",
-    "250 Hz RPM-squared thrust, constrained mount travel and Rate/Angle cascade PID",
-    "Quiet persistent audio preferences, actual-RPM effects and adaptive graphics"
+    "USB-free manufacturer-label enrollment and offline setup portal",
+    "STA-first AP coexistence with verified save and recovery",
+    "Android direct AP diagnostic input to firmware to browser Python",
+    "Scoped encrypted requests and signed device responses; motors disabled"
   ],
   "publishedAt": "2026-10-11T20:51:25.477799+00:00",
   "buildCommit": "1a69722e5f8d"

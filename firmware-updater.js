@@ -54,8 +54,9 @@ function usbFlashReadiness(){
 function networkFlashReadiness(){
  const device=globalThis.ZebjusKits?.getState?.();
  if(busy)return{ready:false,message:'Firmware update or USB flashing already in progress'};
- if(!device?.connected||!['sta','ap'].includes(device.transport))
-  return{ready:false,message:'Connect and verify an AERION kit over STA or AP in MY KITS first. USB uses the separate Flash over USB button.'};
+ if(!device?.connected||device.transport!=='sta')
+  return{ready:false,message:'Connect and verify the kit over STA for APP OTA. AP joystick sessions cannot update firmware. USB uses the separate Flash over USB button.'};
+ if(device.otaAuthorized===false)return{ready:false,message:'Teacher OTA authorization required; private label enrollment grants diagnostics only.'};
  if(device.working||device.owner||device.rc?.claimed)
   return{ready:false,message:'Release diagnostic control; firmware cannot be updated while a controller owns the kit.'};
  if(!fw||!(fw.bytes instanceof Uint8Array)||fw.type!=='app')
@@ -68,7 +69,7 @@ function syncFirmwareControls(){
  const serialSupported=!!navigator.serial&&globalThis.isSecureContext;
  const flash=usbFlashReadiness(),network=networkFlashReadiness();
  const netButton=$('#fwNetworkFlashBtn'),netHelp=$('#fwNetworkFlashHelp');
- if(netButton){netButton.disabled=busy||!network.ready;netButton.textContent=network.ready?'Flash APP via '+globalThis.ZebjusKits.getState().transport.toUpperCase()+' OTA':'Flash via Connected STA / AP';netButton.title=network.message;}
+ if(netButton){netButton.disabled=busy||!network.ready;netButton.textContent=network.ready?'Flash APP via '+globalThis.ZebjusKits.getState().transport.toUpperCase()+' OTA':'Flash APP via STA';netButton.title=network.message;}
  if(netHelp){netHelp.textContent=network.message;netHelp.classList.toggle('ready',network.ready)}
  for(const [id,ready] of [['#fwReadRunningBtn',serialSupported],['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
  const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');

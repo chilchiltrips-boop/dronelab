@@ -1,7 +1,7 @@
 name: Vendor Python Lab Runtime
 on:
   push:
-    branches: [main, feature/python-led-i2c-tripod-front-v1]
+    branches: [work/sta-ap-diagnostics-20261012, main, feature/python-led-i2c-tripod-front-v1]
     paths:
       - '.github/workflows/vendor-python-lab.yml'
   workflow_dispatch:

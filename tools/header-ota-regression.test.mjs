@@ -31,7 +31,8 @@ test('network OTA is APP-only, verified for exact physical A1/A2 kit and never u
  assert.match(network,/zjOtaAuthorized=zjAuthenticated\(\)/);
 });
 test('network OTA UI excludes USB/relay and does not claim success without runtime version verification',()=>{
- assert.match(updater,/\['sta','ap'\]\.includes\(device\.transport\)/);
+ assert.match(updater,/device\.transport!=='sta'/);
+ assert.match(updater,/device\.otaAuthorized===false/);
  assert.match(kit,/while\(Date\.now\(\)<deadline\)/);
  assert.match(kit,/written:true,verified:false/);
  assert.match(updater,/OTA ACK • RECONNECT PENDING/);

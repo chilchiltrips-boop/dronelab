@@ -1,7 +1,7 @@
 name: QR WebRTC Browser Pairing Test
 on:
   push:
-    branches: [release/flightcore-v1-2-usb-ui, testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-3-5, feature/single-row-header-wifi-ota-v1-3-6, testing/pid-shell-qr-audit-hotfix, main]
+    branches: [work/sta-ap-diagnostics-20261012, release/flightcore-v1-2-usb-ui, testing/audit-compact-pairing-v1.4.5, testing/two-way-qr-pairing, fix/android-camera-permission-v1.1.1, testing/one-scan-qr-v1.2.0, testing/smart-two-way-qr-v1.3.0, testing/qr-and-6digit-code-v1.4.0, testing/fix-code-timeout-v1.4.1, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-3-5, feature/single-row-header-wifi-ota-v1-3-6, testing/pid-shell-qr-audit-hotfix, main]
     paths:
       - 'mobile-android/**'
       - 'companion-flight.js'
@@ -82,6 +82,7 @@ jobs:
           npm run verify:firmware
           node tools/qr-pairing-browser.mjs
           node tools/audit-browser.mjs
+          node tools/network-browser.mjs
           node tools/header-ota-browser.mjs
           node tools/controls-browser.mjs
           node tools/offline-browser.mjs
