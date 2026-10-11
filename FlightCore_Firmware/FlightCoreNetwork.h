@@ -65,6 +65,7 @@ static void zjConnectSaved(){
  zjEnsureAP();WiFi.begin(zjSavedSsid.c_str(),zjSavedPass.c_str());
  zjNetAttempt=millis();zjNetTesting=false;zjPhase="sta_connecting";
 }
+static const char* zjClientTransport();
 static String zjStatus(){
  const bool sta=WiFi.status()==WL_CONNECTED;
  String out="{\"board\":"+zjJson(FC_BOARD)+",\"version\":"+zjJson(FW_VERSION)+",\"mode\":"+zjJson(zjMode);
@@ -74,7 +75,7 @@ static String zjStatus(){
  out+=",\"apActive\":"+(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA?String("true"):String("false"));
  out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0);
- out+=",\"rc\":"+zjRcState()+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
+ out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
 static const char* zjClientTransport(){const IPAddress ip=zjHttp.client().remoteIP();return ip[0]==192&&ip[1]==168&&ip[2]==4?"AP":"STA";}
@@ -219,7 +220,7 @@ static bool zjNetSerialCommand(char* line){
  if(!strcmp(line,"ZJNET,GET")){zjNetUsbStatus();return true;}
  if(!strcmp(line,"ZJNET,SCAN")){
   if(zjUsbScanning||zjNetTesting){Serial.println("ZJNET,ERR,SCAN_BUSY");return true;}
-  zjEnsureAP();
+  if(zjMode!="sta"||WiFi.status()!=WL_CONNECTED)zjEnsureAP();
   WiFi.scanDelete();
   WiFi.scanNetworks(true,false);
   zjUsbScanning=true;zjUsbScanIndex=0;zjUsbScanCount=0;
