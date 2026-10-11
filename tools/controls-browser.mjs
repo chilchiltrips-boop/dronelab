@@ -1,6 +1,8 @@
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+const a2Factory=JSON.parse(readFileSync('firmware-catalog.json','utf8')).boards.find(b=>b.id==='ZFC-A2')?.latest?.factory;
+if(!a2Factory?.available||!a2Factory.file)throw Error('A2 factory firmware is missing from the release catalog');
 const browser=await chromium.launch(browserOptions),ctx=await browser.newContext({viewport:{width:1366,height:768},serviceWorkers:'block'});await configureContext(ctx);
 const page=await ctx.newPage(),results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
 async function click(id){const b=page.locator('#'+id);if(await b.isVisible()&&await b.isEnabled()){await b.click();results.push({id,result:'clicked; no exception'})}else results.push({id,result:'disabled/hidden guard inspected'})}
@@ -35,7 +37,7 @@ try{
  await page.locator('#fwBoardProfile').selectOption('ZFC-A2');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_APP.bin'));
  await page.locator('#fwImageType').selectOption('factory');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_FACTORY.bin'));
  await page.locator('#fwFileInput').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.alloc(32)});await page.waitForFunction(()=>document.getElementById('fwLog').textContent.includes('does not match'));
- await page.locator('#fwFileInput').setInputFiles({name:'ZEBJUS_I2C_SCANNER_A2_FACTORY.bin',mimeType:'application/octet-stream',buffer:readFileSync('FlightCore_Firmware/ZEBJUS_I2C_SCANNER_A2_FACTORY.bin')});await page.waitForFunction(()=>document.getElementById('fwPackageState').textContent==='VERIFIED IMPORT');
+ await page.locator('#fwFileInput').setInputFiles({name:a2Factory.file,mimeType:'application/octet-stream',buffer:readFileSync('FlightCore_Firmware/'+a2Factory.file)});await page.waitForFunction(()=>document.getElementById('fwPackageState').textContent==='VERIFIED IMPORT');
  if(await page.locator('#fwUsbFlashBtn').isEnabled())throw Error('Flash enabled after denied USB selection');
  results.push({id:'firmware-select/import',result:'A2 APP/factory loaded; truncated image rejected; flash remains disabled'});
  await page.locator('[data-tab=python]').click();for(const id of ['pyConnectUsbBtn','clearTerminalBtn','copyTerminalBtn','pythonSaveFileBtn','pythonOutputOpen'])await click(id);
