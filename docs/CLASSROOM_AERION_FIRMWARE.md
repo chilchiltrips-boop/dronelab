@@ -1,4 +1,4 @@
-# ZEBJUS AERION 1.3.5: classroom firmware protocol
+# ZEBJUS AERION 1.3.6: classroom firmware protocol
 
 BENCH DIAGNOSTICS ONLY. Joystick packets never arm a motor or drive ESCs. Keep propellers and motor power disconnected for these tests.
 
@@ -56,7 +56,7 @@ Compile both A1 and A2; verify matching Factory and APP firmware images, checksu
 
 The GitHub Actions firmware builder compiles A1 and A2 separately with Arduino-ESP32 3.3.12, verifies 4MB factory/APP images, SHA-256 and dual OTA partitions, and republishes firmware catalogs. The hardwareFlashingTested flag remains false until physical boards are exercised.
 
-## 1.3.5 classroom WebApp / USB-only administration
+## 1.3.6 classroom WebApp / USB-only administration
 
 - Open MY KITS (former Settings) and select USB, STA, AP or authorized Android WebRTC relay. Enter the six-digit public selector and verify the immutable eFuse Device ID before sending RC test frames. The WebApp does not use the code as authorization.
 - USB admin provisioning only (physical possession required): `ZJADMIN,GET`, `ZJADMIN,NAME,Classroom-A-07`, `ZJKIT,CODE,482716`, `ZJADMIN,APNAME,ZEBJUS-AERION-A1`, `ZJADMIN,APPASS,12345678`, `ZJADMIN,ROTATE_KEY,CONFIRM`, `ZJADMIN,FACTORY_RESET,CONFIRM`. Critical reset/key changes require explicit confirmation in the WebApp. Changes to AP credentials or code take effect after reboot.
