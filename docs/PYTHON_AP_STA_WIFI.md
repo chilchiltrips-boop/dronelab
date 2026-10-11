@@ -1,10 +1,10 @@
 # FlightCore AP/STA from Python Lab (bench only)
 
-This Python code runs **inside the browser's Pyodide Worker**, not on the ESP32. FlightCore firmware 1.3.7 remains diagnostic-only: no ESC output, motors, or flight arming.
+This Python code runs **inside the browser's Pyodide Worker**, not on the ESP32. FlightCore firmware 1.3.8 remains diagnostic-only: no ESC output, motors, or flight arming.
 
 ## Connection and ownership
 
-1. Flash matching A1/A2 firmware **over USB** and verify running `ZJINFO,FW,...,1.3.7`, not just flash MD5.
+1. Flash matching A1/A2 firmware **over USB** and verify running `ZJINFO,FW,...,1.3.8`, not just flash MD5.
 2. Connect MY KITS via verified AP (`192.168.4.1`) or STA (router IP). The six-digit Kit Code **selects** the kit. The 32-character access key **authenticates** HTTP; it is generated on device and printed to physical USB startup as `ZJNET,ACCESS`. Keep this key private. Initial AP network password `12345678` is a **third, separate** credential.
 3. In MY KITS, select source WEB, enable **Send to selected kit**, choose **Take Control**, then return to Python Lab. Select Python target **AP or STA**, matching the active MY KITS transport. Plain `Python 3 / Simulator` needs no hardware.
 4. Run the script. A neutral, **motor-disabled** RC diagnostic heartbeat keeps the temporary owner lease alive only during Python Run. Stop/finish releases it. Link loss must never automatically arm.

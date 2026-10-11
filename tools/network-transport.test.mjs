@@ -51,7 +51,7 @@ test('AERION classroom six-digit code persists and never acts as the control pas
 });
 
 
-test('AERION 1.3.7 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
+test('AERION 1.3.8 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
  const net=read('FlightCore_Firmware/FlightCoreNetwork.h'),c=read('FlightCore_Firmware/FlightCoreClassroom.h');
  for(const k of ['zjCorsAllowed()','Access-Control-Allow-Private-Network','origin_denied','zjKitPrefs.getString("apPass","12345678")','zjKitPrefs.getString("apName"','rssi\\":'])assert.ok(net.includes(k),k);
  for(const k of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM'])assert.ok(c.includes(k),k);
