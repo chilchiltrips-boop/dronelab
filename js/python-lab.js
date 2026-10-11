@@ -120,7 +120,13 @@ function usbStatus(){
  const el=$('pyUsbState');
  el.textContent=!connected?'USB SERIAL DISCONNECTED':info.romDownload?'ESP ROM DOWNLOAD MODE':info.boardId?'USB '+info.boardId+' • v'+info.version:'USB SERIAL • WAITING FOR FIRMWARE';
  el.className='status '+(connected&&!info.romDownload?'good':'');
- $('pyConnectUsbBtn').textContent=connected?'USB Connected':'Connect USB Serial';
+ const usbButton=$('pyConnectUsbBtn'),usbLabel=usbButton?.querySelector('.py-usb-button-text');
+ if(usbLabel)usbLabel.textContent=connected?'USB Connected':'Connect USB Serial';
+ else if(usbButton)usbButton.textContent=connected?'USB Connected':'Connect USB Serial';
+ if(usbButton){
+  usbButton.classList.toggle('connected',connected);
+  usbButton.setAttribute('aria-label',connected?'USB serial connected to FlightCore':'Connect USB serial to FlightCore A1/A2');
+ }
 }
 async function connectUsb(){
  const api=window.DroneLabSerial;if(!api)return status('USB subsystem unavailable','warn');
@@ -532,7 +538,7 @@ function bindPlotWindow(){
 async function copyTerminal(){
  const value=$('pythonTerminal').textContent;
  if(!value.trim())return status('Terminal is empty','warn');
- try{await navigator.clipboard.writeText(value);$('copyTerminalBtn').textContent='Copied ✓';setTimeout(()=>{$('copyTerminalBtn').textContent='Copy Output'},1400)}
+ try{await navigator.clipboard.writeText(value);const b=$('copyTerminalBtn'),label=b?.querySelector('.py-copy-output-text');if(label){label.textContent='Copied ✓';setTimeout(()=>{label.textContent='Copy Output'},1400)}else{b.textContent='Copied ✓';setTimeout(()=>{b.textContent='Copy Output'},1400)}}
  catch(e){status('Select terminal text and use Ctrl/⌘+C','warn')}
 }
 function bind(){
