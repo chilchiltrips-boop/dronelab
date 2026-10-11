@@ -40,7 +40,11 @@ test('network OTA UI excludes USB/relay and does not claim success without runti
 
 test('header network switch preserves AUTO setup separately and never claims physical motor arming',()=>{
  assert.match(kit,/headerNetworkChoice==='ap'/);
- assert.match(kit,/if\(state\.connected\)\{const changed=await applyMode\(\)/);
+ assert.match(kit,/Selected .*transport \(not a firmware mode change\)/);
+ assert.match(html,/id="kitTopControl"[^>]*role="switch"/);
+ assert.match(html,/id="kitTopControlLabel"/);
+ assert.ok(html.indexOf('id="kitTopStop"')>html.indexOf('id="tab-settings"'),'Emergency stop is not occupying the header');
+ assert.ok(html.includes('id="webappVersion"')&&html.indexOf('id="webappVersion"')<html.indexOf('id="kitTopStatus"'));
  assert.match(kit,/await claim\('WEB'\)/);
  assert.match(kit,/if\(\$\('kitHardwareTarget'\)\)\$\('kitHardwareTarget'\)\.checked=true/);
  assert.match(kit,/APP-only OTA/);
