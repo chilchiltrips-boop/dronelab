@@ -120,7 +120,8 @@ ast.fix_missing_locations(_ZjTree)
 _zj_transformed=ast.unparse(_ZjTree)`;
   runtime.globals.set('_zj_source',source);
   await runtime.runPythonAsync(rewrite,{filename:'zebjus_simplify.py'});
-  const userCode=runtime.globals.get('_zj_transformed');
+  // Preserve original traceback lines when no synchronous sleep rewrite is needed.
+  const userCode=/\btime\s*\.\s*sleep\s*\(/.test(source)?runtime.globals.get('_zj_transformed'):source;
   if(/\b(?:matplotlib|plt\.show)\b/.test(source)){
    send('status',{text:'Preparing Matplotlib plot output…'});
    await runtime.loadPackage('matplotlib');

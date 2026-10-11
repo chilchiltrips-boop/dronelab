@@ -96,7 +96,7 @@ try{
  assert.ok(owner,'virtual reset released independently owned AP input');
  assert.ok(!calls.some(c=>c.host==='192.168.1.42'&&c.path==='/api/rc/stop'));
  await web.evaluate(()=>{
-  window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue('from zebjus_simple import Drone\nimport asyncio\n\nrc = await Drone().read_joystick()\nassert rc["source"] == "ANDROID"\nassert rc["input_valid"] is True\nassert rc["motors_disabled"] is True\nassert rc["roll"] > 1500\nprint("ESP32_RECEIVE_PYTHON_PASS", rc["seq"], rc["roll"])');
+  window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue("from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nlive = 0\nprevious_seq = 0\nfor attempt in range(60):\n    rc = await drone.read_joystick()\n    assert rc[\"source\"] == \"ANDROID\", repr(rc)\n    assert rc[\"motors_disabled\"] is True, repr(rc)\n    if rc[\"input_valid\"]:\n        assert rc[\"roll\"] > 1500, repr(rc)\n        assert rc[\"seq\"] >= previous_seq, repr(rc)\n        previous_seq = rc[\"seq\"]\n        live += 1\n        if live >= 3:\n            break\n    else:\n        assert rc[\"throttle\"] == 1000 and rc[\"roll\"] == 1500, repr(rc)\n        assert rc[\"failsafe\"] is True, repr(rc)\n    await asyncio.sleep(0.1)\nassert live >= 3, repr(rc)\nprint(\"ESP32_RECEIVE_PYTHON_PASS\", live, rc[\"seq\"], rc[\"roll\"])\n");
   document.getElementById('runPythonBtn').click();
  });
  await wait(web,()=>document.getElementById('pythonTerminal').textContent.includes('ESP32_RECEIVE_PYTHON_PASS'));
