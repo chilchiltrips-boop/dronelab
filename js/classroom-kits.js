@@ -566,10 +566,74 @@ function init(){
  rcTimer=setInterval(webControls,RC_INTERVAL);
  audit('MY KITS loaded • no hardware connected');
 }
+// Verified APP-only OTA via the already authenticated direct STA/AP session.
+// No binary relay through WebRTC JSON messages. Browser Local Network Access may
+// block HTTPS→ESP32 HTTP; never claim flashing succeeded without a firmware ACK.
+async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}={}){
+ if(!state.connected||!['sta','ap'].includes(state.transport)||state.working)
+  throw Error('Connect one verified AERION kit over direct STA or AP in MY KITS first');
+ if(state.owner||state.rc?.claimed)throw Error('Release all RC diagnostic controllers before firmware OTA');
+ if(!(bytes instanceof Uint8Array)||bytes.length<32768||bytes[0]!==0xe9)
+  throw Error('Only a verified application firmware image can be flashed via Wi-Fi');
+ if(!/\.bin$/i.test(name||'')||!/^(ZFC-A1|ZFC-A2)$/.test(boardId||'')||!state.kitId.startsWith(boardId+'-'))
+  throw Error('Firmware board or image name does not match the selected physical kit');
+ const expectedChip=boardId==='ZFC-A2'?13:5;
+ if((bytes[12]|bytes[13]<<8)!==expectedChip)throw Error('ESP chip ID mismatch. Image was NOT uploaded.');
+ const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
+ const pre=await wifiDirect(ip,key,'/api/status');
+ if(pre.kitId!==deviceId||pre.kitCode!==kitCode||pre.board!==boardId)
+  throw Error('OTA blocked: network target Device ID/Kit Code/board mismatch');
+ if(pre.rc?.claimed||pre.motorsArmed!==false||pre.firmwareControl!==false||pre.otaAppOnly!==true)
+  throw Error('OTA blocked: controller busy or firmware cannot guarantee motors are disabled');
+ if(!/^\d+\.\d+\.\d+$/.test(pre.version||''))
+  throw Error('Unable to verify running firmware and OTA partition compatibility');
+ state.working=true;render();
+ try{
+  onProgress({phase:'upload',percent:4,message:'Uploading authenticated APP image to '+transport.toUpperCase()});
+  const response=await new Promise((resolve,reject)=>{
+   const req=new XMLHttpRequest();
+   req.open('POST','http://'+ip+'/api/ota',true);
+   req.timeout=120000;req.responseType='text';
+   req.setRequestHeader('X-ZJ-Key',key);
+   req.upload.onprogress=e=>{if(e.lengthComputable)onProgress({phase:'upload',percent:Math.min(87,4+Math.round(e.loaded/e.total*82)),message:'Uploading firmware '+Math.round(100*e.loaded/e.total)+'%'})};
+   req.onerror=()=>reject(Error('Wi-Fi OTA browser/network request blocked or disconnected. Do not retry until firmware version is checked via USB/STA/AP.'));
+   req.ontimeout=()=>reject(Error('OTA timed out. Check firmware version before retrying.'));
+   req.onload=()=>{let data={};try{data=JSON.parse(req.responseText||'{}')}catch{}
+    if(req.status!==200||data.updated!==true)return reject(Error(data.error||'OTA rejected • HTTP '+req.status));
+    resolve(data);
+   };
+   const body=new FormData();
+   body.append('firmware',new Blob([bytes],{type:'application/octet-stream'}),name);
+   req.send(body);
+  });
+  if(!response.updated)throw Error('No firmware write acknowledgement');
+  onProgress({phase:'reboot',percent:89,message:'OTA written • rebooting selected '+transport.toUpperCase()+' kit'});
+  await sleep(2300);
+  const deadline=Date.now()+120000;let latest=null;
+  while(Date.now()<deadline){
+   try{
+    const d=await wifiDirect(ip,key,'/api/status');
+    if(d.kitId!==deviceId||d.kitCode!==kitCode||d.board!==boardId)
+      throw Error('Different physical kit answered at the saved IP • connection aborted');
+    if(version&&d.version!==version){latest=d.version;throw Error('Reconnected but running version is '+d.version+' (expected '+version+')');}
+    Object.assign(state,{connected:true,version:d.version,mode:d.mode||state.mode,rc:d.rc||null});
+    recordKnown();tone('OTA verified on '+deviceId+' • firmware '+d.version,'good');
+    onProgress({phase:'verified',percent:100,message:'Firmware running and Device ID verified • '+d.version});
+    return {written:true,verified:true,version:d.version,kitId:deviceId};
+   }catch(e){if(/Different physical kit/.test(e.message))throw e}
+   const elapsed=120000-(deadline-Date.now());
+   onProgress({phase:'reconnect',percent:Math.min(98,90+Math.floor(elapsed/16000)),message:'Waiting for '+transport.toUpperCase()+' kit reboot / same IP • '+Math.floor(elapsed/1000)+'s'});
+   await sleep(2100);
+  }
+  audit('OTA acknowledged but kit runtime not yet independently verified','warn');
+  onProgress({phase:'reconnect',percent:99,message:'OTA write acknowledged • reconnect and verify firmware using Serial'});
+  return {written:true,verified:false,expectedVersion:version,kitId:deviceId};
+ }finally{state.working=false;render();}
+}
 root.ZebjusKits={
- connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,
+ connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,
  getState:()=>({connected:state.connected,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
-  kitName:state.kitName,owner:state.owner,rcSource:state.rcSource,rc:state.rc,version:state.version}),
+  kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:()=>state.connected,isConnected:()=>state.connected,view:goKits
 };
