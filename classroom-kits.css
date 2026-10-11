@@ -184,3 +184,20 @@
  #app .tabs{top:74px!important}
 }
 @media(prefers-reduced-motion:reduce){.kit-top-switch i{transition:none}}
+
+/* Prevent the assembly catalog's long horizontal product shelf from widening
+   the whole document on a 390px phone. The shelf itself stays independently
+   swipeable; do not clip USB/network dialogs or the entire app. */
+@media(max-width:760px){
+ #app #tab-assembly.assembly-grid.active{
+  grid-template-columns:minmax(0,1fr)!important;min-width:0!important;
+  width:100%!important;max-width:100%!important;overflow-x:clip
+ }
+ #app #tab-assembly .left-panel,#app #tab-assembly .component-shelf{
+  min-width:0!important;max-width:100%!important
+ }
+ #app #tab-assembly .component-shelf{
+  width:100%!important;overflow-x:auto!important;overflow-y:hidden;
+  overscroll-behavior-x:contain;scrollbar-width:thin
+ }
+}
