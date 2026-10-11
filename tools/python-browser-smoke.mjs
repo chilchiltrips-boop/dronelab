@@ -313,7 +313,7 @@ try{
  await testStickyExecutionToolbar(460);
  await page.screenshot({path:'test-output/python-lab-mobile.png',fullPage:true});
  const mobile=await page.locator('.python-editor-card').boundingBox();
- if(!mobile||mobile.width>420||mobile.height<185)throw Error('Mobile editor layout invalid');
+ if(!mobile||mobile.width>420||mobile.height<185)throw Error('Mobile editor layout invalid '+JSON.stringify({mobile,windowWidth:await page.evaluate(()=>innerWidth),docWidth:await page.evaluate(()=>document.documentElement.scrollWidth)}));
  const compactMobile=await page.evaluate(()=>{
   const h=document.querySelector('#pythonBottomDock .py-bottom-head'),r=h.getBoundingClientRect();
   return {height:r.height,width:r.width,scrollWidth:h.scrollWidth,scrollClient:h.clientWidth,
