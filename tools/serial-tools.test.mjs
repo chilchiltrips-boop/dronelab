@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {parseSerialPlotLine} from '../js/serial-plotter.js';
 import {parseTelemetry,formatDiagnostic} from '../js/usb-live-diagnostic.js';
 
+test('AERION RC plotter receives kit-acknowledged USB input values',()=>{assert.deepEqual(parseSerialPlotLine('ZJRC,USB,WEB,12,T=1300,R=1530,P=1470,Y=1500'),{Throttle:1300,Roll:1530,Pitch:1470,Yaw:1500});assert.equal(parseSerialPlotLine('ZJRC,FAILSAFE,INPUT_TIMEOUT'),null)});
 test('generic plotter parses Arduino numeric and CSV/TSV streams',()=>{
  assert.deepEqual(parseSerialPlotLine('25.2'),{Value:25.2});
  assert.deepEqual(parseSerialPlotLine('25.2, 60, -1.2'),{'Value 1':25.2,'Value 2':60,'Value 3':-1.2});
