@@ -39,6 +39,7 @@ function render(){
  byId('kitRcOrigin',rc.source||state.rcSource||'NONE');
  byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'warn':'info';
+ if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
  const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
@@ -154,6 +155,31 @@ async function connectNetwork(code,mode){
  Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
  if(mode!=='android-relay')state.transport=ip==='192.168.4.1'?'ap':'sta';
+}
+async function findSaved(){
+ const code=selectedCode();if(!codePattern.test(code))throw Error('Enter a 6-digit code first');
+ if(state.working)return;
+ let list=[];try{list=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+ const known=list.filter(k=>k.code===code&&privateIPv4(k.ip)).slice(0,10);
+ if(!known.length)throw Error('No previously verified IP for this code; enter STA IP or connect USB for first enrollment');
+ const seen=new Set(known.map(k=>k.id));if(seen.size>1)throw Error('Duplicate six-digit kit code in saved devices; teacher must resolve via USB');
+ state.working=true;render();tone('Checking previously verified kit IP(s)…','info');
+ try{
+  const online=[];
+  for(const k of known){
+   const ctr=new AbortController(),timer=setTimeout(()=>ctr.abort(),3300);
+   try{
+    const reply=await fetch('http://'+k.ip+'/api/identify',{method:'GET',mode:'cors',cache:'no-store',
+     credentials:'omit',redirect:'error',signal:ctr.signal,targetAddressSpace:'local'});
+    if(!reply.ok)continue;
+    const d=await reply.json();if(d.kitId===k.id&&d.kitCode===code)online.push(k);
+   }catch{}finally{clearTimeout(timer)}
+  }
+  if(online.length!==1)throw Error(online.length?'Multiple online matches; verify each physical kit':'Saved IP not reachable; check browser local-network permission, Wi-Fi or Android relay');
+  $('kitIpInput').value=online[0].ip;$('kitTransport').value=online[0].ip==='192.168.4.1'?'ap':'sta';
+  audit('Saved IP verified by code and full hardware Device ID • '+online[0].id,'success');
+  tone('Matching kit IP verified • enter private access key and press Connect & Verify','good');
+ }finally{state.working=false;render()}
 }
 async function connect(){
  if(state.working)return;const code=selectedCode(),mode=selectedMode();
@@ -331,7 +357,7 @@ function init(){
  if(!$('kitCenter'))return;
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
- guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
+ guardAction('kitFindSaved',findSaved);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
