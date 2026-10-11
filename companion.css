@@ -217,3 +217,13 @@ button{min-height:44px}
 /* Mandatory 44px emergency STOP and return action inside the compact sheet.
    Other noncritical pairing controls stay compact. */
 .mobile-connection .mobile-dialog-actions button{min-height:44px}
+
+.kit-network-card .kit-net-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:11px 0}
+.kit-network-card .kit-net-grid label{font-size:.82rem;display:flex;flex-direction:column;gap:5px;min-width:0}
+.kit-network-card .kit-net-grid :is(input,select){width:100%;min-width:0;background:#1c2334;color:#f1f5f9;border:1px solid #526075;border-radius:7px;min-height:38px;padding:8px;font-size:.91rem}
+.kit-network-card .kit-telemetry{max-height:140px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#101723;color:#d1eaff;padding:9px;border-radius:7px;font-size:.76rem}
+.kit-network-card .kit-net-toggle{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:.85rem}
+.kit-network-card .kit-net-toggle input{width:19px;height:19px;flex-shrink:0}
+#kitNetStatus[data-state=good]{color:#5fe1bb}#kitNetStatus[data-state=warn]{color:#ffd595}
+@media(max-width:680px){.kit-network-card .kit-net-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:390px){.kit-network-card .kit-net-grid{grid-template-columns:1fr}}
