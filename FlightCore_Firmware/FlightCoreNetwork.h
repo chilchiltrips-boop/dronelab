@@ -12,6 +12,7 @@ static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjOtaRebootAt=0,zjLastScanSeq=0;
 static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
+static uint8_t zjStaDisconnectReason=0;
 static bool zjPreviousScanActive=false,zjMdnsReady=false,zjUsbScanning=false;
 static int zjUsbScanIndex=0,zjUsbScanCount=0;
 
@@ -74,7 +75,7 @@ static String zjStatus(){
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
  out+=",\"apActive\":"+(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA?String("true"):String("false"));
  out+=",\"scanActive\":"+(zjNetTesting?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
- out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0);
+ out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
@@ -187,6 +188,10 @@ static void zjSetupHttp(){
  zjHttp.begin();
 }
 static void zjNetworkSetup(){
+ WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
+  if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)
+   zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
+ });
  zjPrefs.begin("zj-network",false);
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");zjMode=zjPrefs.getString("mode","auto");
  if(zjMode!="auto"&&zjMode!="sta"&&zjMode!="ap")zjMode="auto";
@@ -215,6 +220,7 @@ static void zjNetUsbStatus(){
  Serial.print(WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():String("0.0.0.0"));Serial.print(",");
  Serial.println(WiFi.status()==WL_CONNECTED?WiFi.SSID():String("NONE"));
  Serial.print("ZJNET,PHASE,");Serial.println(zjPhase);
+ Serial.print("ZJNET,STA_REASON,");Serial.println(zjStaDisconnectReason);
 }
 static bool zjNetSerialCommand(char* line){
  if(!strcmp(line,"ZJNET,GET")){zjNetUsbStatus();return true;}
@@ -241,7 +247,7 @@ static bool zjNetSerialCommand(char* line){
   if(!ssid.length()||ssid.length()>32||pass.length()>63||(!pass.isEmpty()&&pass.length()<8)){
    Serial.println("ZJNET,ERR,INVALID_WIFI_CREDENTIALS");return true;
   }
-  zjPendingSsid=ssid;zjPendingPass=pass;
+  zjPendingSsid=ssid;zjPendingPass=pass;zjStaDisconnectReason=0;
   zjEnsureAP();WiFi.begin(ssid.c_str(),pass.c_str());
   zjNetAttempt=millis();zjNetTesting=true;zjPhase="testing_wifi";
   Serial.println("ZJNET,TEST,STARTED");return true;
@@ -285,7 +291,7 @@ static void zjNetworkLoop(uint32_t now){
    if(zjMode=="sta")zjNetApOffAt=now+10000;
    else{WiFi.disconnect();zjEnsureAP();zjPhase="ap_ready_credentials_saved";}
   }else if(now-zjNetAttempt>12000){
-   WiFi.disconnect();zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_failed_not_saved";Serial.println("ZJNET,TEST,FAILED_NOT_SAVED");
+   WiFi.disconnect();zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjPhase="sta_test_failed_not_saved";Serial.println("ZJNET,TEST,FAILED_NOT_SAVED");Serial.print("ZJNET,STA_REASON,");Serial.println(zjStaDisconnectReason);
    zjEnsureAP();
   }
  }else if(zjMode!="ap"){
@@ -304,7 +310,9 @@ static void zjNetworkLoop(uint32_t now){
  // Advertise device ID and six-digit selector over STA mDNS, never the access key.
  const bool staUp=WiFi.status()==WL_CONNECTED;
  if(staUp&&!zjMdnsReady){
-  const String host=String("zebjus-")+GYRO_BOARD+"-"+zjKitId.substring(zjKitId.length()-6);
+  // Human-selectable code provides a deterministic same-router hostname;
+  // immutable Device ID is still verified separately on every connection.
+  const String host=String("zebjus-")+GYRO_BOARD+"-"+zjKitCode;
   if(MDNS.begin(host.c_str())){
    MDNS.addService("zebjus","tcp",80);
    MDNS.addServiceTxt("zebjus","tcp","code",zjKitCode);
