@@ -221,8 +221,13 @@ function abortPythonWithHardwareError(type,message){
  stopPython(false);
  markPythonError({errorType:type,error:message,explanation:ERROR_DESCRIPTIONS[type]||message,filename:active},'hardware');
 }
-function stopPython(notify=true){
+function closePythonHardwareControl(){
+ const owned=window.ZebjusPythonHardwareActive===true;
  window.ZebjusPythonHardwareActive=false;
+ if(owned&&wifiPythonSelected())void window.ZebjusKits?.releaseRc?.().catch(()=>{});
+}
+function stopPython(notify=true){
+ closePythonHardwareControl();
  stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
  updateButtons();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
@@ -273,7 +278,7 @@ function makeWorker(){
   if(m.type==='syntax-error'){markPythonError(m,'syntax');if(w===syntaxWorker){w.terminate();syntaxWorker=null}return}
   if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\n');w.terminate();syntaxWorker=null}return}
   if(m.type==='done'||m.type==='error'){
-   window.ZebjusPythonHardwareActive=false;
+   closePythonHardwareControl();
    if(m.type==='error'){
     stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);markPythonError(m,'runtime');
     w.terminate();worker=null;running=false;
@@ -335,6 +340,7 @@ function updateButtons(){
  if(r){r.disabled=!!running||(!editor&&!h?.redo?.length);r.title='Redo (Ctrl/⌘+Shift+Z)'}
  $('rerunPythonBtn').disabled=running||!hasRun;
  $('runPythonBtn').disabled=running;
+ $('pythonTarget').disabled=running; // prevent transport switch halfway through an authorized Python session
  $('stopPythonBtn').disabled=!running&&!ledSession;
 }
 function editorPosition(){
