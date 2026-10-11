@@ -36,6 +36,12 @@ on:
       - js/python-lab.js
       - python-lab-worker.js
       - tools/python-lab.test.mjs
+      - 'tools/wifi-onboarding-recovery.test.mjs'
+      - 'tools/python-wifi-ownership.test.mjs'
+      - 'tools/discovery-pairing.test.mjs'
+      - 'js/classroom-kits.js'
+      - 'js/network-lab.js'
+      - 'classroom-kits.css'
       - js/usb-i2c-bridge.js
       - tools/python-browser-smoke.mjs
       - tools/verify_release.py
