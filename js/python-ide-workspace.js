@@ -5,7 +5,18 @@ const folderPattern=/^[A-Za-z_][A-Za-z0-9_-]*(\/[A-Za-z_][A-Za-z0-9_-]*)*$/;
 const filePattern=/^[A-Za-z_][A-Za-z0-9_-]*(\/[A-Za-z_][A-Za-z0-9_-]*)*\/[A-Za-z0-9_][A-Za-z0-9_.-]*$|^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 function node(tag,cls='',txt=''){const e=document.createElement(tag);if(cls)e.className=cls;if(txt)e.textContent=txt;return e}
 function icon(name){const e=document.createElementNS('http://www.w3.org/2000/svg','svg');e.classList.add('py-ide-icon');e.setAttribute('aria-hidden','true');const u=document.createElementNS('http://www.w3.org/2000/svg','use');u.setAttribute('href',ICONS+name);e.append(u);return e}
-function button(label,symbol,fn,cls=''){const b=node('button','py-ide-button '+cls);b.type='button';if(symbol)b.append(icon(symbol));b.append(document.createTextNode(label));b.addEventListener('click',fn);return b}
+function hint(el,message){
+ if(!el||!message)return el;
+ el.title=message;el.dataset.tooltip=message;
+ if(el.tagName==='BUTTON'&&!el.textContent.trim())el.setAttribute('aria-label',message);
+ return el
+}
+function button(label,symbol,fn,cls=''){
+ const b=node('button','py-ide-button '+cls);b.type='button';
+ if(symbol)b.append(icon(symbol));b.append(document.createTextNode(label));
+ b.addEventListener('click',fn);
+ return hint(b,label||symbol?.replaceAll('-',' ')||'Tool')
+}
 function cleanPath(path){const parts=String(path||'').replace(/\\/g,'/').replace(/^\/+|\/+$/g,'').split('/');return parts.some(s=>!s||s==='.'||s==='..')?'':parts.join('/')}
 function validPath(path){return path.length<=190&&filePattern.test(path)&&!path.split('/').some(p=>p==='.'||p==='..')}
 function safeImportPath(path){return cleanPath(path).split('/').map(part=>part.replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/^[0-9]/,n=>'_'+n)).join('/')}
@@ -33,7 +44,7 @@ export function createPythonIDEShell(api){
  function addFolders(path){for(const f of folderChain(path))if(folderPattern.test(f))folders.add(f);saveFolders()}
  // Native details menus keep File and Edit controls visible while the toolbar is sticky.
  const fileMenu=node('details','py-ide-menu'),editMenu=node('details','py-ide-menu');
- const menu=(target,name)=>{const h=node('summary','py-menu-trigger');h.append(icon(name==='File'?'folder':'edit'),document.createTextNode(name));target.append(h,node('div','py-ide-menu-content'));return target.querySelector('.py-ide-menu-content')};
+ const menu=(target,name)=>{const h=node('summary','py-menu-trigger');h.append(icon(name==='File'?'folder':'edit'),document.createTextNode(name));hint(h,name==='File'?'Open, save, import and manage project files':'Undo, redo and check Python syntax');target.append(h,node('div','py-ide-menu-content'));return target.querySelector('.py-ide-menu-content')};
  const fileBody=menu(fileMenu,'File'),editBody=menu(editMenu,'Edit');
  const move=(id,target)=>{const e=$(id);if(e){e.classList.add('py-ide-menu-action');target.append(e)}};
  move('pythonNewFileBtn',fileBody);
@@ -82,9 +93,10 @@ export function createPythonIDEShell(api){
  // Right side: one tool window at a time, with a persistent slim tool stripe.
  const rail=node('div','py-tool-rail');rail.setAttribute('aria-label','Python tool windows');
  const panels=[
-  ['camera','Camera','camera'],['plotter','Plotter','chart'],['usb','USB Hardware','cpu'],['assets','Assets','image']
+  ['camera','Camera','camera'],['plotter','Plotter','chart'],['usb','USB Hardware','usb'],['assets','Assets','image']
  ];
- for(const [id,label,svg] of panels){const b=button('',svg,()=>openRight(right===id?'closed':id),'py-rail-button');b.title=label;b.dataset.pyRail=id;rail.append(b)}
+ const railHelp={camera:'Open Camera and MediaPipe preview',plotter:'Open live USB gyro charts and Python plots',usb:'Connect USB FlightCore A1 / A2 and read sensors',assets:'Preview imported project images and files'};
+ for(const [id,label,svg] of panels){const b=button('',svg,()=>openRight(right===id?'closed':id),'py-rail-button');hint(b,railHelp[id]);b.dataset.pyRail=id;rail.append(b)}
  layout.append(rail);
  const tools=side.querySelector('.python-tools-card'),usb=$('pythonUsbTools'),visual=$('pythonVisualTools'),market=side.querySelector('.python-market-card');
  const toolHead=node('div','py-tool-window-head');
@@ -113,6 +125,57 @@ export function createPythonIDEShell(api){
  const assetTitle=node('div','py-asset-caption','Select an imported file in Project Explorer');
  const assetPreview=node('div','py-asset-preview');
  pane.assets.append(assetTitle,assetPreview);
+ const descriptions={
+  pythonNewFileBtn:['file','Create a Python .py file and open it in the editor'],
+  pythonSaveFileBtn:['save','Save current Python project locally (Ctrl/⌘ + S)'],
+  pythonImportBtn:['upload','Open a previously exported Python project JSON'],
+  pythonExportBtn:['download','Export all project files and images as a JSON backup'],
+  pythonDeleteFileBtn:['trash','Delete the currently open Python file'],
+  pythonUndoFileBtn:['undo','Undo the last code edit (Ctrl/⌘ + Z)'],
+  pythonRedoFileBtn:['redo','Redo a code edit (Ctrl/⌘ + Shift + Z)'],
+  pythonCheckSyntaxBtn:['check','Check the active file for Python syntax errors'],
+  runPythonBtn:['play','Run the Python file currently open in the editor (Ctrl/⌘ + Enter)'],
+  stopPythonBtn:['stop','Stop the running Python script and release resources'],
+  rerunPythonBtn:['rerun','Stop and run the currently selected Python file again'],
+  pyConnectUsbBtn:['usb','Connect FlightCore A1/A2 via Web Serial at 115200 baud'],
+  pythonCameraStart:['camera','Request camera permission and open the live preview'],
+  pythonCameraStop:['stop','Stop the camera and release its stream'],
+  pythonOutputOpen:['chart','Open the latest Python Matplotlib plot window'],
+  clearTerminalBtn:['trash','Clear Run / Terminal output without stopping the script'],
+  copyTerminalBtn:['copy','Copy Run / Terminal output to the clipboard'],
+ };
+ for(const [id,[glyph,description]] of Object.entries(descriptions)){
+  const control=$(id);if(!control)continue;
+  hint(control,description);
+  control.classList.add('py-icon-control');
+  if(id==='pyConnectUsbBtn'){
+   const label=node('span','py-usb-button-text',control.textContent.trim());
+   control.replaceChildren(icon(glyph),label);
+   control.classList.add('py-usb-connect');
+  }else if(!control.querySelector('svg')){
+   if(['runPythonBtn','stopPythonBtn','rerunPythonBtn'].includes(id))
+    control.replaceChildren(icon(glyph),document.createTextNode(id==='runPythonBtn'?'Run':id==='stopPythonBtn'?'Stop':'Rerun'));
+   else control.prepend(icon(glyph));
+  }
+ }
+ for(const [id,description] of Object.entries({
+  pythonQuickHardware:'Load a Python example into the current file; confirm before replacing your code',
+  pythonTarget:'Choose Python Simulator or USB Hardware execution mode',
+  pythonFileList:'Choose the Python file to edit and run',
+ })){const e=$(id);if(e)hint(e,description)}
+ hint(projectToggle,'Show or hide the Project Explorer and its files');
+ hint(runTab,'Show or minimize the Run / Terminal output');
+ hint(dockMin,'Minimize Run / Terminal to give the editor more space');
+ hint(dockMax,'Expand the Run / Terminal panel');
+ hint(rightMin,'Minimize the Camera / Plotter / USB tool window');
+ hint(rightMax,'Expand the active tool window');
+ hint(rightFloat,'Float the tool window over the editor, or return to its dock');
+ hint(addFolderBtn,'Create a new project folder');
+ hint(addFilesBtn,'Import one or more images, Python scripts or other files');
+ hint(addDirectoryBtn,'Import a folder and preserve its hierarchy');
+ hint(renameBtn,'Rename or move the selected file/folder');
+ hint(copyBtn,'Copy the selected project file path for Python code');
+ hint(deleteBtn,'Delete the selected file or folder');
  const samples=[];
  function paintPlot(){
   if(right!=='plotter')return;
@@ -145,7 +208,10 @@ export function createPythonIDEShell(api){
  async function loadAssets(){try{for(const entry of await assetQuery('getAll'))assets.set(entry.path,entry);refreshExplorer()}catch(e){notice('Asset storage unavailable: '+e.message)}}
  function notice(message){const s=$('pyStatus');if(s)s.textContent=message;explorerFeedback.textContent=message}
  function refreshExplorer(){
-  editorTab.replaceChildren(icon('file'),document.createTextNode(api.currentFile()));
+  const activeFile=api.currentFile();
+  editorTab.replaceChildren(icon('file'),document.createTextNode(activeFile));
+  hint($('runPythonBtn'),'Run active file: '+activeFile+' (Ctrl/⌘ + Enter)');
+  hint($('rerunPythonBtn'),'Rerun active file: '+activeFile);
   editorTab.title='/home/project/'+api.currentFile();
   list.replaceChildren();
   const code=api.listFiles(),allFolders=new Set(folders);
