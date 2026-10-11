@@ -53,6 +53,47 @@ async function writeLine(text){
  const line=String(text||'').trim();if(!/^(ZJINFO,GET|ZJI2C,SCAN|ZJLED,[0-9]+,(?:STOP|SET|KEEP|BLINK|FADE|PATTERN|SAFE|WARNING|SOS)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Only FlightCore bench commands can use network transport');
  return request('/api/command','POST',{line});
 }
+// Python runs in Pyodide on the browser; firmware exposes only these allowlisted
+// authenticated Wi-Fi operations. The program itself is never uploaded to ESP32.
+async function pythonWifiScan(){
+ for(let attempt=0;attempt<12;attempt++){
+  const d=await request('/api/wifi/scan');
+  if(d.state==='ready')return d.networks||[];
+  await new Promise(resolve=>setTimeout(resolve,800));
+ }
+ throw Error('2.4 GHz router scan timed out; retry while connected via verified AP/STA.');
+}
+async function pythonWifiTestSave(ssid,password){
+ ssid=String(ssid||'').trim();password=String(password||'');
+ if(!ssid||ssid.length>32||password.length>63||(password.length>0&&password.length<8))
+  throw Error('SSID must be 1–32 chars; password 8–63 chars, or empty for open Wi-Fi.');
+ const kit=window.ZebjusKits?.getState?.();
+ if(!kit?.connected||!['sta','ap'].includes(kit.transport)||!kit.owner||kit.rcSource!=='WEB')
+  throw Error('Connect a verified AP/STA kit and Take Control (WEB) before running Wi-Fi provisioning.');
+ // Changing Wi-Fi can invalidate the transport. Explicit Python wifi_test_save()
+ // is the student's authorization to end the diagnostic RC lease before testing.
+ await window.ZebjusKits.releaseRc();
+ output('Python released diagnostic control for STA test; credentials save only after association.','warn');
+ const reply=await request('/api/wifi/test','POST',{ssid,password});
+ if(reply.state!=='testing')throw Error('Controller did not confirm STA test started.');
+ for(let attempt=0;attempt<17;attempt++){
+  await new Promise(resolve=>setTimeout(resolve,800));
+  let state;
+  try{state=await request('/api/status')}catch{continue}
+  const phase=String(state.phase||'');
+  if(state.kitId!==kit.kitId)throw Error('Kit hardware identity changed during Wi-Fi test.');
+  if(phase==='sta_test_pass_saved'||phase==='ap_ready_credentials_saved'){
+   output('STA test succeeded • credentials saved in FlightCore NVS. Reconnect and Take Control again.','good');
+   return {saved:true,state:phase,mode:state.mode,staIp:state.ip||''};
+  }
+  if(phase==='sta_test_failed_not_saved'){
+   output('STA test failed • existing saved Wi-Fi was preserved. Check 2.4 GHz SSID/password.','warn');
+   return {saved:false,state:phase,message:'Association failed; previous Wi-Fi was preserved.'};
+  }
+ }
+ output('STA test started but final save not verified; inspect USB ZJNET status before retrying.','warn');
+ return {saved:false,state:'unverified',message:'No save confirmation received; do not assume success.'};
+}
 function stream(on=true){
  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
  if(on)pollTimer=setInterval(()=>getTelemetry().catch(()=>{netReady=false;lastSeen=0;stream(false)}),170);
@@ -65,7 +106,7 @@ function init(){
  bindAction('netScanI2c',async()=>{await writeLine('ZJI2C,SCAN');output('I²C scan triggered; fetch telemetry after scan completes','good')});
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
-window.DroneLabNetwork={request,read,scan,getTelemetry,writeLine,stream,
+window.DroneLabNetwork={request,read,scan,getTelemetry,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
  isConnected:()=>!!(window.ZebjusKits?.getState?.().connected&&window.ZebjusKits?.getState?.().transport!=='usb')||(netReady&&Date.now()-lastSeen<15000),mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
