@@ -14,6 +14,7 @@ let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPendi
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
 let headerNetworkChoice='sta',headerModePending=false;
+const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
  logs.push(line);if(logs.length>EVENTS_MAX)logs.shift();
@@ -23,8 +24,12 @@ function byId(id,v){const e=$(id);if(e)e.textContent=v;}
 function tone(s,t='offline'){state.tone=t;state.lastError=t==='error'?s:'';byId('kitMessage',s);const e=$('kitMessage');if(e)e.dataset.tone=t;render();}
 function render(){
  const ready=state.connected,code=state.kitCode||'------';
+ if(ready&&['ap','sta'].includes(state.transport))headerNetworkChoice=state.transport;
  const label=ready?(state.kitName||'AERION')+' • '+code:'NO KIT CONNECTED';
- byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.version||'?'):'Connect using a 6-digit Kit Code');
+ byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.version||'?'):'Offline • discover / USB');
+ byId('kitWifiModeLive',ready?'Wi-Fi '+String(state.mode||'unknown').toUpperCase()+' • Link '+state.transport.toUpperCase():'Not connected');
+ byId('kitDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
+ byId('fwDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
  const globalTone=state.working?'info':state.tone==='locked'?'locked':state.rc?.claimed&&!state.owner?'locked':state.tone==='error'?'error':state.tone==='warn'?'warn':ready?'good':'offline';
  byId('kitGlobalState',state.working?'CONNECTING':globalTone==='locked'?'KIT LOCKED':state.tone==='error'?'LINK ERROR':ready?'CONNECTED':'DISCONNECTED');
  const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
@@ -32,6 +37,11 @@ function render(){
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
  byId('kitSelectedBoard',ready?state.board:'—');byId('kitSelectedVersion',ready?state.version:'—');
  byId('kitSelectedTransport',ready?state.transport.toUpperCase():'OFFLINE');
+ byId('kitSelectedMode',ready?String(state.mode||'unknown').toUpperCase():'—');
+ byId('kitSelectedSta',ready?(state.staConnected?'CONNECTED'+(state.staIp?' • '+state.staIp:''):'OFFLINE'):'—');
+ byId('kitSelectedAp',ready?(state.apActive?'ACTIVE':'OFFLINE'):'—');
+ byId('kitSelectedIp',ready?(state.ip||state.staIp||'USB'):'—');
+ byId('kitSelectedRssi',ready&&Number.isFinite(state.rssi)?state.rssi+' dBm':'—');
  byId('kitController',state.rc?.claimed?(state.rc.source+' • '+(state.rc.active?'ACTIVE':'IDLE')):state.owner?'SESSION RESERVED':'AVAILABLE');
  byId('kitLinkState',ready?(state.rc?.active?'RC INPUT LIVE':'TELEMETRY READY'):'NO KIT');
  const rc=state.rc||{};
@@ -45,8 +55,8 @@ function render(){
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
  const switcher=$('kitTopNetworkSwitch');
- if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.title='Wi-Fi '+headerNetworkChoice.toUpperCase()+' • AUTO stays in MY KITS';}
- const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():'Connect '+headerNetworkChoice.toUpperCase();}
+ if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.dataset.link=ready?state.transport:'offline';switcher.title='Selected '+headerNetworkChoice.toUpperCase()+' • live link '+(ready?state.transport.toUpperCase():'OFFLINE')+' • controller mode '+String(state.mode||'?').toUpperCase()+' • AUTO in MY KITS';}
+ const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():headerNetworkChoice.toUpperCase()+' Connect';}
  const controlButton=$('kitTopControl');
  if(controlButton){controlButton.disabled=!ready||!['ap','sta'].includes(state.transport)||state.working;
  controlButton.textContent=state.owner?'Release Control':state.rc?.claimed?'Kit Locked':'Take Control';
@@ -110,7 +120,7 @@ function showKnown(){
 async function disconnect(reason='Disconnected'){
  if(state.rcSession||state.owner)await releaseRc().catch(()=>{});
  state.connected=false;state.rc=null;state.key='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
- audit(reason);tone(reason,'offline'); // USB Serial remains open for Firmware/Python; never steal its port.
+ audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
 function waitSerial(pattern,timeout=2300){
  return new Promise((resolve,reject)=>{
@@ -164,12 +174,15 @@ async function deviceRequest(route,method='GET',args={}){
  return wifiDirect(state.ip,state.key,route,method,args);
 }
 async function connectNetwork(code,mode){
- const ip=($('kitIpInput')?.value||'').trim(),key=($('kitKeyInput')?.value||'').trim();
+ const ip=($('kitIpInput')?.value||'').trim();
+ const identified=discoveredKits.find(k=>k.ip===ip&&k.kitCode===code)||
+  (usbCandidate.kitCode===code?{kitId:usbCandidate.kitId}:null);
+ const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(identified?.kitId)||'';
  const transport=mode==='android-relay'?'android-relay':mode;
  if(mode==='android-relay'&&!relay()?.request)throw Error('Pair Android over WebRTC first and enable its kit access');
  const d=mode==='android-relay'?await relay().request('/api/status'):await wifiDirect(ip,key,'/api/status');
  const verified=checkIdentity(d,transport,code,state.kitId||'');
- Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
+ Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',staIp:d.ip||'',staConnected:!!d.staConnected,apActive:!!d.apActive,rssi:Number(d.rssi)||null,physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
  if(mode!=='android-relay')state.transport=String(d.requestTransport||'').toLowerCase()==='ap'?'ap':ip==='192.168.4.1'?'ap':'sta';
  state.physicalLink=String(d.requestTransport||'').toLowerCase()||state.physicalLink;
@@ -196,7 +209,7 @@ async function findSaved(){
   if(online.length!==1)throw Error(online.length?'Multiple online matches; verify each physical kit':'Saved IP not reachable; check browser local-network permission, Wi-Fi or Android relay');
   $('kitIpInput').value=online[0].ip;$('kitTransport').value=online[0].ip==='192.168.4.1'?'ap':'sta';
   audit('Saved IP verified by code and full hardware Device ID • '+online[0].id,'success');
-  tone('Matching kit IP verified • enter private access key and press Connect & Verify','good');
+  tone('Matching kit IP verified • Connect & Verify with paired USB session, or enter a legacy access key under Advanced','good');
  }finally{state.working=false;render()}
 }
 async function connect(){
@@ -213,6 +226,8 @@ async function connect(){
   state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
  audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
+  root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,transport:state.transport,kitId:state.kitId}}));
+  if(state.transport==='usb')void pairUsb().catch(e=>audit('USB pairing unavailable on older firmware: '+e.message,'warn'));
   if(mode!=='usb')await read().catch(e=>audit(e.message,'warn'));
  }catch(e){state.working=false;state.connected=false;state.key='';audit(e.message,'error');tone(e.message,'error')}
 }
@@ -225,6 +240,8 @@ async function read(){
  const d=await deviceRequest('/api/status');
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
+ headerNetworkChoice=['ap','sta'].includes(state.transport)?state.transport:headerNetworkChoice;
  const monitor=$('kitNetworkMonitor');
  if(monitor){
   const rc=state.rc||{},ts=new Date().toLocaleTimeString();
@@ -448,6 +465,12 @@ function onSerial(e){
  if(e.detail?.transport&&e.detail.transport!=='usb')return;
  const line=String(e.detail?.line||'').trim();
  if(line.startsWith('ZJKIT,ID,'))usbCandidate.kitId=line.slice(9);
+ if(line.startsWith('ZJNET,PAIR,')){
+  const f=line.split(',');if(/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
+    (f[2]===state.kitId||f[2]===usbCandidate.kitId)){
+   pairedKeys.set(f[2],f[3]);audit('Private USB session paired for '+f[2]+'; secret never shown in UI','success');
+  }
+ }
  if(line.startsWith('ZJKIT,CODE,'))usbCandidate.kitCode=line.slice(11);
  if(line.startsWith('ZJKIT,NAME,'))usbCandidate.kitName=line.slice(11);
  if(line.startsWith('ZJINFO,FW,')){const f=line.split(',');usbCandidate.board=f[2];usbCandidate.version=f[3];}
@@ -488,7 +511,8 @@ function onSerial(e){
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
   else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
-  else if(text.startsWith('ZJNET,AP,')){wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info')}
+  else if(text.startsWith('ZJNET,AP,')){state.apActive=text.startsWith('ZJNET,AP,ON,');wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info');render()}
+  else if(text.startsWith('ZJNET,STA,')){const p=text.split(',');state.staConnected=p[2]==='CONNECTED';state.staIp=state.staConnected?p[3]:'';if(state.staConnected&&privateIPv4(p[3])){$('kitIpInput').value=p[3];state.usbInfo.staIp=p[3];recordKnown()}render()}
  }
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
  if(!state.connected||state.transport!=='usb')return;
@@ -508,6 +532,82 @@ function onSerial(e){
  if(line.startsWith('ZJKIT,CODE,')){$('kitAdminCode').value=line.slice(11)}
  if(line.startsWith('ZJADMIN,ACK,')||line.startsWith('ZJKIT,ACK,'))audit(line,'success');
 }
+
+/* Bounded reference-style hostname discovery. Browsers cannot enumerate Wi-Fi,
+ * so probe advertised/saved hostnames, prior IPs, and the AP gateway only.
+ * /api/identify is public discovery data; controller operations remain authenticated. */
+async function pairUsb(){
+ if(!serial()?.isOpen?.()||!(state.transport==='usb'&&state.connected))
+  throw Error('Connect the selected physical USB kit first (running firmware, not ROM bootloader).');
+ const pending=waitSerial(/^ZJNET,(?:PAIR,|ERR,)/,3200);pending.catch(()=>{});
+ await usbWrite('ZJNET,PAIR');
+ const result=await pending,parts=result.split(',');
+ if(parts[1]!=='PAIR'||parts[2]!==state.kitId||!/^[a-fA-F0-9]{32}$/.test(parts[3]||''))
+  throw Error('USB pairing rejected or unsupported. A new firmware release is required for automatic keyless UI pairing.');
+ pairedKeys.set(state.kitId,parts[3]);tone('USB pairing verified • network OTA will not ask you to type the private key in this session','good');
+ return true;
+}
+async function probeIdentity(ip,timeoutMs=1550){
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs);
+ try{
+  const response=await fetch('http://'+ip+'/api/identify',{method:'GET',mode:'cors',credentials:'omit',
+   redirect:'error',cache:'no-store',signal:ctrl.signal,targetAddressSpace:'local'});
+  if(!response.ok)return null;
+  const d=await response.json();
+  if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(String(d.kitId||''))||!/^\d{6}$/.test(String(d.kitCode||''))||
+     !String(d.kitId).startsWith(String(d.board||'')+'-'))return null;
+  return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
+   board:d.board,ip:ip==='192.168.4.1'?ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
+ }catch{return null}finally{clearTimeout(timer)}
+}
+function showDiscovered(){
+ for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
+  const target=$(id);if(!target)continue;target.replaceChildren();
+  if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
+   empty.textContent=discovering?'Scanning named kits and saved addresses…':'No reachable kits in the attempted local addresses. Check 2.4 GHz router, AP or Local Network Access permission.';target.append(empty);continue}
+  for(const k of discoveredKits){
+   const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; control still requires pairing';
+   const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
+   const small=document.createElement('small');small.textContent=k.board+' • '+k.transport.toUpperCase()+' • '+k.ip+' • '+k.kitId;
+   btn.append(label,small);btn.onclick=()=>{
+    $('kitCodeInput').value=k.kitCode;$('kitIpInput').value=k.ip;$('kitTransport').value=k.transport;
+    headerNetworkChoice=k.transport;render();tone('Discovered '+k.kitName+' • identity shown; use Connect & Verify / paired USB session','info');
+    if(id==='fwDiscoveryResults')goKits();
+   };
+   target.append(btn);
+  }
+ }
+ render();
+}
+async function discoverKits(){
+ if(discovering)return discoveredKits;
+ discovering=true;render();showDiscovered();
+ try{
+  let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+  const candidates=new Set(['192.168.4.1']);
+  for(const k of known){
+   if(privateIPv4(k.ip))candidates.add(k.ip);
+   const id=String(k.id||'').match(/^ZFC-A([12])-([0-9A-F]{12})$/i);
+   if(id)candidates.add('zebjus-a'+id[1]+'-'+id[2].slice(-6).toLowerCase()+'.local');
+   if(k.name&&/^[a-zA-Z0-9_-]{3,31}$/.test(k.name))candidates.add(k.name.toLowerCase().replace(/_/g,'-')+'.local');
+  }
+  if(usbCandidate.staIp&&privateIPv4(usbCandidate.staIp))candidates.add(usbCandidate.staIp);
+  for(let n=1;n<=20;n++)candidates.add('zebjus-drone-'+n+'.local');
+  const addresses=[...candidates];let cursor=0;const found=new Map();
+  await Promise.all(Array.from({length:8},async()=>{
+   while(cursor<addresses.length){
+    const addr=addresses[cursor++],kit=await probeIdentity(addr);
+    if(!kit)continue;
+    const prior=found.get(kit.kitId);
+    if(!prior||prior.transport==='ap'&&kit.transport==='sta')found.set(kit.kitId,kit);
+   }
+  }));
+  discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
+  lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
+  return discoveredKits;
+ }finally{discovering=false;showDiscovered()}
+}
+
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{const locked=/locked|occupied|not_controller_owner/i.test(e.message);tone(e.message,locked?'locked':'error');audit(e.message,locked?'warn':'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
 async function toggleHeaderNetwork(){
@@ -529,10 +629,12 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
  if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
  if(state.connected&&state.kitCode&&$('kitCodeInput'))$('kitCodeInput').value=state.kitCode;
- const code=selectedCode(),key=($('kitKeyInput')?.value||'').trim();
- const ip=($('kitIpInput')?.value||'').trim();
+ const code=selectedCode(),ip=($('kitIpInput')?.value||'').trim();
+ const discovered=discoveredKits.find(k=>k.kitCode===code&&k.ip===ip);
+ const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(discovered?.kitId)||
+  (usbCandidate.kitCode===code?pairedKeys.get(usbCandidate.kitId):'')||'';
  if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!privateIPv4(ip)){
-  goKits();tone(mode==='ap'?'Join your ZEBJUS-AERION kit Wi-Fi in device settings (initial password 12345678), then enter 6-digit Kit Code and private device access key.':'Connect to the classroom router, then enter 6-digit Kit Code, verified STA IP and private device access key.','warn');
+  goKits();tone('Join selected '+mode.toUpperCase()+' network, select a discovered kit and Pair via physical USB once for this page session. Legacy 1.3.6 firmware may require Advanced → access key.','warn');
   $('kitKeyInput')?.focus();render();return;
  }
  await connect();
@@ -551,7 +653,7 @@ function init(){
  if(!$('kitCenter'))return;
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
- guardAction('kitFindSaved',findSaved);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
+ guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);guardAction('kitDiscover',discoverKits);guardAction('fwDiscoverKits',discoverKits);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTopStop',stop);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
@@ -567,11 +669,15 @@ function init(){
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc()});
- root.addEventListener('pagehide',()=>{if(state.owner)void releaseRc();clearInterval(pollTimer);clearInterval(rcTimer)});
+ root.addEventListener('pagehide',()=>{if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{if(!state.connected||state.working||state.transport==='usb')return;
   try{await read()}catch(e){audit('Network telemetry lost: '+e.message,'warn');await disconnect('Kit link lost • reconnect required')}
  },2200);
  rcTimer=setInterval(webControls,RC_INTERVAL);
+ // Recheck verified LAN hostnames and AP once per minute only when page is visible.
+ setTimeout(()=>{if(!document.hidden)void discoverKits().catch(()=>{})},600);
+ root.addEventListener('online',()=>{if(!document.hidden)void discoverKits().catch(()=>{})});
+ setInterval(()=>{if(!document.hidden&&!discovering&&Date.now()-lastDiscoverAt>60000)void discoverKits().catch(()=>{})},45000);
  audit('MY KITS loaded • no hardware connected');
 }
 // Verified APP-only OTA via the already authenticated direct STA/AP session.
@@ -639,9 +745,9 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  }finally{state.working=false;render();}
 }
 root.ZebjusKits={
- connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,
+ connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  getState:()=>({connected:state.connected,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
-  kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working}),
+  kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working,apActive:!!state.apActive,staConnected:!!state.staConnected,staIp:state.staIp||'',rssi:state.rssi,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:()=>state.connected,isConnected:()=>state.connected,view:goKits
 };
