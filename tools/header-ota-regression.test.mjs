@@ -37,3 +37,12 @@ test('network OTA UI excludes USB/relay and does not claim success without runti
  assert.match(updater,/OTA ACK • RECONNECT PENDING/);
  assert.match(updater,/NETWORK OTA FAILED \/ UNCONFIRMED/);
 });
+
+test('header network switch preserves AUTO setup separately and never claims physical motor arming',()=>{
+ assert.match(kit,/headerNetworkChoice==='ap'/);
+ assert.match(kit,/if\(state\.connected\)\{const changed=await applyMode\(\)/);
+ assert.match(kit,/await claim\('WEB'\)/);
+ assert.match(kit,/if\(\$\('kitHardwareTarget'\)\)\$\('kitHardwareTarget'\)\.checked=true/);
+ assert.match(kit,/APP-only OTA/);
+ assert.doesNotMatch(kit,/ledcWrite\(/);
+});
