@@ -43,6 +43,7 @@ function render(){
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
  const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
+ if($('kitTopStop'))$('kitTopStop').disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
  if($('kitReleaseControl'))$('kitReleaseControl').disabled=!ready||!state.owner||state.working;
  if($('kitAdminApply'))$('kitAdminApply').disabled=!ready||state.transport!=='usb'||state.owner||state.working;
@@ -67,6 +68,9 @@ function selectedCode(){return ($('kitCodeInput')?.value||'').replace(/\D/g,'').
 function selectedMode(){return $('kitTransport')?.value||'usb'}
 function checkIdentity(d,transport,code,expected=''){
  const kitId=String(d.kitId||''),got=String(d.kitCode||'');
+ const board=String(d.board||'');
+ // Do not silently accept an A2 running app on an A1 kit label or vice versa.
+ if(board&&/^ZFC-A[12]$/.test(board)&&!kitId.startsWith(board+'-'))throw Error('Firmware board does not match physical kit identity');
  if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(kitId)||!codePattern.test(got)||got!==code)throw Error('Kit identity mismatch: verify the 6-digit code and physical hardware');
  if(expected&&kitId!==expected)throw Error('Different hardware detected: Device ID mismatch');
  return {kitId,kitCode:got,kitName:String(d.kitName||d.name||d.board||'ZEBJUS AERION').slice(0,36),board:String(d.board||'').slice(0,24),version:String(d.version||'').slice(0,24),transport};
@@ -335,7 +339,12 @@ async function adminDanger(action){
  const cmd=action==='rotate'?'ZJADMIN,ROTATE_KEY,CONFIRM':'ZJADMIN,FACTORY_RESET,CONFIRM';
  const confirmation=prompt('DANGEROUS ADMIN OPERATION on '+state.kitId+'. Type the 6-digit Kit Code to confirm:');
  if(confirmation!==state.kitCode)return;
- await usbWrite(cmd);audit('Physical USB admin operation requested • '+action,'warn');await disconnect('Admin operation • reboot hardware and re-enroll');
+ const ackPromise=waitSerial(/^ZJADMIN,(?:ACK|ERR),/,3000);
+ await usbWrite(cmd);
+ const ack=await ackPromise;
+ if(ack.includes(',ERR,'))throw Error('Kit rejected operation: '+ack);
+ audit('Physical USB admin operation acknowledged • '+action,'warn');
+ await disconnect('Admin operation acknowledged • reboot hardware and re-enroll');
 }
 function onSerial(e){
  const line=String(e.detail?.line||'').trim();
@@ -359,6 +368,7 @@ function init(){
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
  guardAction('kitFindSaved',findSaved);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
+ guardAction('kitTopStop',stop);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
