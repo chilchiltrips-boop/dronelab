@@ -61,7 +61,7 @@
 <label>Router password<input type="password" id="kitPassword" autocomplete="new-password" placeholder="Password kept on FlightCore"/></label></div>
 <div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
 <div class="actions"><button id="kitRead">Read Telemetry</button><button id="kitI2cScan">Scan I²C</button><button id="kitLedOff">LED OFF</button></div>
-<pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
+<div class="actions"><button id="kitAppOta" type="button">Upload APP .bin over Wi-Fi (AP / STA)</button></div><p class="hint">Remove propellers, disconnect ESC power and keep USB power stable. OTA only accepts application images, not factory/bootloader files. Choose the matching FlightCore A1 or A2 APP .bin on this phone.</p><pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
 <label class="kit-net-toggle"><input id="kitAllowWeb" type="checkbox"/> Allow paired WebApp to access this FlightCore</label>
 <label class="kit-net-toggle"><input id="kitRcPreview" type="checkbox"/> Receive Android joystick at FlightCore (preview only, motors disabled)</label>
 <p class="hint">For WebApp access pair Android using existing two-way WebRTC QR. Switching AP ⇄ STA interrupts the pairing session; make a new QR afterward. Do not switch networks during flight.</p>
