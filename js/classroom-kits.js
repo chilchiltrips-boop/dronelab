@@ -11,7 +11,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
  version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
-const usbCandidate={};let wifiTesting=false;
+const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
@@ -48,11 +48,13 @@ function render(){
  if($('kitTopStop'))$('kitTopStop').disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
  if($('kitReleaseControl'))$('kitReleaseControl').disabled=!ready||!state.owner||state.working;
- if($('kitAdminApply'))$('kitAdminApply').disabled=!ready||state.transport!=='usb'||state.owner||state.working;
+ const adminReady=ready&&state.transport==='usb'&&!state.owner&&!state.working;
+ if($('kitAdminApply'))$('kitAdminApply').disabled=!adminReady||Date.now()>adminUnlockedUntil;
+ for(const id of ['kitAdminEnroll','kitAdminUnlock','kitAdminLock'])if($(id))$(id).disabled=!adminReady;
  if($('kitAdminRead'))$('kitAdminRead').disabled=!ready||state.transport!=='usb'||state.working;
- for(const id of ['kitRotateKey','kitFactoryReset'])if($(id))$(id).disabled=!ready||state.transport!=='usb'||state.owner||state.working;
+ for(const id of ['kitRotateKey','kitFactoryReset'])if($(id))$(id).disabled=!adminReady||Date.now()>adminUnlockedUntil;
  for(const id of ['kitModeApply','kitWifiSave','kitWifiScan'])if($(id))$(id).disabled=!ready||state.working||state.owner||wifiTesting;
- const status=$('kitAdminAccess');if(status)status.textContent=ready&&state.transport==='usb'?'Physical USB provisioning available':'Admin edits require selected kit on USB';
+ const status=$('kitAdminAccess');if(status)status.textContent=!adminReady?'Admin requires the selected unlocked USB kit':Date.now()<adminUnlockedUntil?'Teacher admin unlocked temporarily — complete configuration before 60s':adminEnrolled===false?'Teacher must enroll a strong passphrase first':'Teacher passphrase required for admin changes';
  const readOnly=$('kitHwId');if(readOnly)readOnly.value=state.kitId||'Not verified';
  const selected=$('kitActiveCode');if(selected)selected.textContent=code;
  const target=$('kitTargetLabel');if(target)target.textContent=ready?state.kitName+' • '+code:'Connect a kit in MY KITS';
@@ -372,6 +374,7 @@ async function wifiSave(){
 }
 async function adminSave(){
  if(state.transport!=='usb'||!state.connected||state.owner)throw Error('USB admin access requires selected, unlocked physical kit');
+ if(Date.now()>adminUnlockedUntil)throw Error('Unlock teacher admin using your 12+ character passphrase first');
  const name=$('kitAdminName')?.value.trim()||'',code=$('kitAdminCode')?.value.trim()||'',ap=$('kitAdminSsid')?.value.trim()||'',pass=$('kitAdminPass')?.value||'';
  const validName=/^[A-Za-z0-9 _-]{3,31}$/,validAP=/^[A-Za-z0-9_-]{3,24}$/;
  if(name&&!validName.test(name)||code&&!codePattern.test(code)||ap&&!validAP.test(ap)||pass&&(pass.length<8||pass.length>63||/[^\x21-\x7E]|,/.test(pass)))throw Error('Invalid admin input. Kit name 3–31, code six digits, AP prefix 3–24, password 8–63 printable characters.');
@@ -395,6 +398,7 @@ async function adminSave(){
 }
 async function adminDanger(action){
  if(!state.connected||state.transport!=='usb'||state.owner)throw Error('Admin operation requires unlocked USB kit');
+ if(Date.now()>adminUnlockedUntil)throw Error('Unlock teacher admin first');
  const cmd=action==='rotate'?'ZJADMIN,ROTATE_KEY,CONFIRM':'ZJADMIN,FACTORY_RESET,CONFIRM';
  const confirmation=prompt('DANGEROUS ADMIN OPERATION on '+state.kitId+'. Type the 6-digit Kit Code to confirm:');
  if(confirmation!==state.kitCode)return;
@@ -404,6 +408,22 @@ async function adminDanger(action){
  if(ack.includes(',ERR,'))throw Error('Kit rejected operation: '+ack);
  audit('Physical USB admin operation acknowledged • '+action,'warn');
  await disconnect('Admin operation acknowledged • reboot hardware and re-enroll');
+}
+async function adminAccess(action){
+ if(!state.connected||state.transport!=='usb'||state.owner)throw Error('Connect your selected USB kit with controller released');
+ const pass=$('kitAdminSecret')?.value||'';
+ if(action!=='LOCK'&&(pass.length<12||pass.length>64||/[,\r\n]/.test(pass)))throw Error('Teacher passphrase must be 12–64 characters without commas or line breaks');
+ if(action==='ENROLL'&&!confirm('Teacher: enroll a new admin passphrase on this kit? Save it securely; it cannot be recovered from USB.'))return;
+ const response=waitSerial(/^ZJADMIN,(?:ACK|ERR),/,3300);
+ // Password is written directly over physical USB, never stored in localStorage or UI logs.
+ await usbWrite(action==='LOCK'?'ZJADMIN,LOCK':'ZJADMIN,'+action+','+pass);
+ if($('kitAdminSecret'))$('kitAdminSecret').value='';
+ const line=await response;
+ if(line.startsWith('ZJADMIN,ERR,'))throw Error('Admin refused: '+line.replace('ZJADMIN,ERR,',''));
+ adminUnlockedUntil=action==='LOCK'?0:Date.now()+60000;
+ if(action==='ENROLL')adminEnrolled=true;
+ wifiNote('Teacher admin '+(action==='LOCK'?'locked':'unlocked for 60 seconds')+' on physical USB','good');
+ render();
 }
 function onSerial(e){
  // Network telemetry is a remote readout; it must never impersonate a physical USB kit.
@@ -422,6 +442,7 @@ function onSerial(e){
    recordKnown();tone('USB kit auto-verified • '+kit.kitName+' • '+kit.kitCode,'good');
    audit('USB firmware handshake verified • '+kit.kitId,'success');
    void usbWrite('ZJNET,GET').catch(()=>{});
+   void usbWrite('ZJADMIN,GET').catch(()=>{});
   }catch(err){audit('USB identity not verified: '+err.message,'warn')}
  }
  if(state.connected&&state.transport==='usb'&&line.startsWith('ZJNET,')){
@@ -448,6 +469,12 @@ function onSerial(e){
  if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,source:rc[1],seq:+rc[2],throttle:+rc[3],roll:+rc[4],pitch:+rc[5],yaw:+rc[6]};state.ackAt=Date.now();render()}
  if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE'))void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
  if(line.startsWith('ZJADMIN,ERR,')||line.startsWith('ZJKIT,ERR,'))audit(line,'error');
+ if(line.startsWith('ZJADMIN,AUTH,')){
+  const status=line.slice(13);adminEnrolled=status!=='ENROLL_REQUIRED';
+  if(status==='LOCKED'||status==='ENROLL_REQUIRED')adminUnlockedUntil=0;
+  render();
+ }
+ if(line==='ZJADMIN,ACK,LOCKED')adminUnlockedUntil=0;
  if(line.startsWith('ZJADMIN,NAME,')){$('kitAdminName').value=line.slice(13)}
  if(line.startsWith('ZJADMIN,APNAME,')){$('kitAdminSsid').value=line.slice(15)}
  if(line.startsWith('ZJKIT,CODE,')){$('kitAdminCode').value=line.slice(11)}
@@ -465,6 +492,7 @@ function init(){
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);guardAction('kitWifiScan',scanWifi);
  $('kitWifiNetworks')?.addEventListener('change',e=>{if(e.target.value)$('kitRouterSsid').value=e.target.value});
+ guardAction('kitAdminEnroll',()=>adminAccess('ENROLL'));guardAction('kitAdminUnlock',()=>adminAccess('UNLOCK'));guardAction('kitAdminLock',()=>adminAccess('LOCK'));
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('fwOpenKitNetwork')?.addEventListener('click',()=>{goKits();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
  $('kitTopConnect')?.addEventListener('click',goKits);$('kitTopMode')?.addEventListener('click',()=>{goKits();$('kitWifiMode')?.focus()});$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
