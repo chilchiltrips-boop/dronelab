@@ -88,7 +88,8 @@ function send(critical=false){
  const m=halted?{...current(),armed:false,throttle:1000}:current();
  const payload={seq:++seq,sessionId:peer.status().sessionId,mode:m.mode,armed:m.armed,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},sticks:{left:{...(left||{x:0,y:0})},right:{...(right||{x:0,y:0})}}};
  if(critical)criticalRequestSeq=seq;
- if(!peer.sendSimulatorControl(payload,critical))return false;
+ window.ZebjusNetwork?.previewControls?.(payload);
+  if(!peer.sendSimulatorControl(payload,critical))return false;
  sent.set(seq,performance.now());return true;
 }
 function connect(p){
