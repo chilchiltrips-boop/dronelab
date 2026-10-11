@@ -62,3 +62,12 @@
 @media(max-width:840px){.kit-connect-grid{grid-template-columns:minmax(0,1fr)}.kit-section-heading{align-items:flex-start;flex-wrap:wrap}.kit-card{padding:13px}.kit-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){#app .topbar-main>.kit-top-status{flex:1 1 100%;min-width:0}.kit-top-status{padding:8px 7px}.kit-top-status .btn{font-size:10px;padding:6px 8px}.kit-top-detail b{font-size:10px}#kitGlobalState{font-size:8px}.kit-form-row{grid-template-columns:1fr}.kit-actions .btn{flex:1 1 135px}.kit-facts{grid-template-columns:minmax(0,1fr)}.kit-receiver-readouts{grid-template-columns:repeat(2,minmax(0,1fr))}.kit-section-heading h2{font-size:19px}.kit-center{gap:10px}.kit-pid-toolbar{gap:9px}#kitPidMonitor{margin-left:0}}
 @media(prefers-reduced-motion:reduce){.kit-center *,.kit-top-status *{animation:none!important;transition:none!important}}
+
+/* Mobile screen may shrink the editor to the 175px hard minimum after the
+ * topbar gains hardware status. Preserve a usable code viewport and keep
+ * the terminal dock independent of that height. */
+@media(max-width:520px){
+ #tab-python .python-ide-layout,#tab-python.py-right-closed .python-ide-layout{
+  height:max(210px,var(--py-work-height))!important;min-height:210px!important;
+ }
+}
