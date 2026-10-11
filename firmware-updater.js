@@ -151,7 +151,7 @@ function kitStatus(){
  const board=running?usbRuntimeInfo.boardId:bootloader?usbBoardId:kit?.board||'';
  const prior=lastVerifiedRuntime&&((bootloader&&lastVerifiedRuntime.boardId===usbBoardId)||(serial&&!usbRuntimeInfo))?lastVerifiedRuntime:null;
  const version=running?usbRuntimeInfo.version:bootloader?(prior?'Last verified '+prior.version+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for firmware ID':wifiOnline?(kit?.version||d?.firmware||d?.version||'--'):'--';
- const build=running?usbRuntimeInfo.buildStamp:bootloader?(prior?'Last verified '+prior.buildStamp+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(d.firmwareBuiltAt||d.buildDateTime||d.buildTime||liveFirmwareBuiltAt):'--';
+ const build=running?usbRuntimeInfo.buildStamp:bootloader?(prior?'Last verified '+prior.buildStamp+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(d?.firmwareBuiltAt||d?.buildDateTime||d?.buildTime||liveFirmwareBuiltAt):'--';
  const name=running?usbRuntimeInfo.boardName:bootloader?boardName(board):serial?'USB serial • identifying…':wifiOnline?(kit?.kitName||d?.deviceName||d?.name||'--'):'--';
  const state=usbRomDownload&&serial?'ROM DOWNLOAD • APP NOT RUNNING':running?'USB FIRMWARE RUNNING':bootloader?'USB BOOTLOADER VERIFIED':serial?'USB SERIAL • IDENTIFYING':wifiOnline?'ONLINE • MOTORS DISABLED':'OFFLINE';
  const profile=board?boardName(board):serial?'Reading firmware board ID…':wifiOnline?(boardName(kit?.board||d?.boardId)||'Detecting…'):'--';
