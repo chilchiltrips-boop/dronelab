@@ -1,6 +1,6 @@
 {
-  "version": "1.7.0+0",
-  "channel": "review",
+  "version": "1.7.0+193",
+  "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
     "USB-free manufacturer-label enrollment and offline setup portal",
@@ -8,6 +8,6 @@
     "Android direct AP diagnostic input to firmware to browser Python",
     "Scoped encrypted requests and signed device responses; motors disabled"
   ],
-  "publishedAt": "2026-10-11T20:51:25.477799+00:00",
-  "buildCommit": "1a69722e5f8d"
+  "publishedAt": "2026-10-11T22:17:51.806802+00:00",
+  "buildCommit": "436744baf7c6"
 }
