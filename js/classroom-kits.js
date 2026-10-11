@@ -14,7 +14,7 @@ let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPendi
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
 let headerNetworkChoice='sta',headerModePending=false;
-const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0;
+const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0,reconnectTicket=0,pollErrors=0,pollBusy=false;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
  logs.push(line);if(logs.length>EVENTS_MAX)logs.shift();
@@ -121,6 +121,7 @@ function showKnown(){
  }
 }
 async function disconnect(reason='Disconnected'){
+ ++reconnectTicket;
  if(state.rcSession||state.owner)await releaseRc().catch(()=>{});
  state.connected=false;state.rc=null;state.key='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
@@ -216,7 +217,7 @@ async function findSaved(){
  }finally{state.working=false;render()}
 }
 async function connect(){
- if(state.working)return;const code=selectedCode(),mode=selectedMode();
+ if(state.working)return;++reconnectTicket;const code=selectedCode(),mode=selectedMode();
  if(mode!=='usb'){try{const known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]');
   if(new Set(known.filter(k=>k.code===code).map(k=>k.id)).size>1){tone('Duplicate Kit Code detected in known classroom kits • use physical USB admin to assign a unique code','error');return;}
  }catch{}}
@@ -225,7 +226,7 @@ async function connect(){
  state.working=true;state.connected=false;render();tone('Verifying hardware identity…','info');
  try{
   if(mode==='usb')await connectUSB(code);else await connectNetwork(code,mode);
-  state.connected=true;state.since=Date.now();state.rc=null;state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
+  state.connected=true;pollErrors=0;state.since=Date.now();state.rc=null;state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
   state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
  audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
@@ -536,6 +537,31 @@ function onSerial(e){
  if(line.startsWith('ZJADMIN,ACK,')||line.startsWith('ZJKIT,ACK,'))audit(line,'success');
 }
 
+// Read-only reconnect to exactly the same kit; RC ownership is NEVER resumed.
+async function recoverVerifiedLink(old){
+ if(!old||!['sta','ap'].includes(old.transport)||!old.key||!safeKitHost(old.ip))return false;
+ const ticket=++reconnectTicket;
+ for(const delay of [400,1100,2400,5000,8000]){
+  await sleep(delay);
+  if(reconnectTicket!==ticket||document.hidden||state.connected)return false;
+  try{
+   const d=await wifiDirect(old.ip,old.key,'/api/status');
+   const verified=checkIdentity(d,old.transport,old.kitCode,old.kitId);
+   if(d.board!==old.board||String(d.requestTransport||'').toLowerCase()!==old.transport)
+    throw Error('Transport or physical hardware changed; reconnect blocked');
+   if(d.rc?.claimed)throw Error('Kit locked by another controller; reconnect remains view-only');
+   if(reconnectTicket!==ticket)return false;
+   Object.assign(state,verified,{connected:true,ip:old.ip,key:old.key,transport:old.transport,
+    mode:d.mode||'',apActive:!!d.apActive,staConnected:!!d.staConnected,staIp:d.ip||'',
+    rssi:Number(d.rssi)||null,rc:d.rc||null,owner:false,rcSource:'',rcSession:'',since:Date.now()});
+   pollErrors=0;headerNetworkChoice=old.transport;recordKnown();tone('Wi-Fi recovered • same Device ID verified • Take Control again','good');
+   root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,transport:old.transport,kitId:old.kitId}}));
+   return true;
+  }catch(e){audit('Verified reconnect attempt: '+String(e.message||e).slice(0,100),'warn')}
+ }
+ if(reconnectTicket===ticket)tone('Wi-Fi reconnect timed out • use Rescan Kits or physical USB','warn');
+ return false;
+}
 /* Bounded reference-style hostname discovery. Browsers cannot enumerate Wi-Fi,
  * so probe advertised/saved hostnames, prior IPs, and the AP gateway only.
  * /api/identify is public discovery data; controller operations remain authenticated. */
@@ -672,9 +698,21 @@ function init(){
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc()});
- root.addEventListener('pagehide',()=>{if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
- pollTimer=setInterval(async()=>{if(!state.connected||state.working||state.transport==='usb')return;
-  try{await read()}catch(e){audit('Network telemetry lost: '+e.message,'warn');await disconnect('Kit link lost • reconnect required')}
+ root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
+ pollTimer=setInterval(async()=>{
+  if(!state.connected||state.working||state.transport==='usb'||pollBusy)return;
+  pollBusy=true;
+  try{await read();pollErrors=0}
+  catch(e){
+   if(++pollErrors<3){audit('Wi-Fi check '+pollErrors+'/3 missed • '+e.message,'warn')}
+   else{
+    const old={kitId:state.kitId,kitCode:state.kitCode,transport:state.transport,ip:state.ip,
+     key:state.key,board:state.board};
+    audit('3 missed Wi-Fi checks • releasing diagnostic control and reconnecting same hardware','warn');
+    await disconnect('Wi-Fi link lost • automatic identity-checked reconnect');
+    if(!document.hidden)void recoverVerifiedLink(old);
+   }
+  }finally{pollBusy=false}
  },2200);
  rcTimer=setInterval(webControls,RC_INTERVAL);
  // Recheck verified LAN hostnames and AP once per minute only when page is visible.
