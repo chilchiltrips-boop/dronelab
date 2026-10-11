@@ -53,7 +53,7 @@ function render(){
  byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
- const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
+ const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Kit':'＋ Kit';
  const switcher=$('kitTopNetworkSwitch');
  if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.dataset.link=ready?state.transport:'offline';switcher.title='Selected '+headerNetworkChoice.toUpperCase()+' • live link '+(ready?state.transport.toUpperCase():'OFFLINE')+' • controller mode '+String(state.mode||'?').toUpperCase()+' • AUTO in MY KITS';}
  const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():headerNetworkChoice.toUpperCase()+' Connect';}
@@ -82,6 +82,9 @@ function render(){
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
+function safeKitHost(host){
+ return privateIPv4(host)||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.local$/i.test(String(host||''));
+}
 function privateIPv4(host){
  const parts=String(host).split('.').map(Number);
  if(parts.length!==4||parts.some((v,i)=>!Number.isInteger(v)||v<0||v>255||!String(host).split('.')[i].match(/^\d{1,3}$/)))return false;
@@ -150,7 +153,7 @@ async function connectUSB(code){
 }
 const form=args=>new URLSearchParams(args||{});
 async function wifiDirect(ip,key,route,method='GET',args={}){
- if(!privateIPv4(ip))throw Error('Enter a valid private IPv4 address for your kit');
+ if(!safeKitHost(ip))throw Error('Use a verified private IP or safe .local host for your kit');
  if(!/^[a-fA-F0-9]{32}$/.test(key))throw Error('Use the separate 32-character kit access key enrolled over USB');
  const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),4200);
  try{
@@ -191,7 +194,7 @@ async function findSaved(){
  const code=selectedCode();if(!codePattern.test(code))throw Error('Enter a 6-digit code first');
  if(state.working)return;
  let list=[];try{list=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
- const known=list.filter(k=>k.code===code&&privateIPv4(k.ip)).slice(0,10);
+ const known=list.filter(k=>k.code===code&&safeKitHost(k.ip)).slice(0,10);
  if(!known.length)throw Error('No previously verified IP for this code; enter STA IP or connect USB for first enrollment');
  const seen=new Set(known.map(k=>k.id));if(seen.size>1)throw Error('Duplicate six-digit kit code in saved devices; teacher must resolve via USB');
  state.working=true;render();tone('Checking previously verified kit IP(s)…','info');
@@ -633,7 +636,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  const discovered=discoveredKits.find(k=>k.kitCode===code&&k.ip===ip);
  const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(discovered?.kitId)||
   (usbCandidate.kitCode===code?pairedKeys.get(usbCandidate.kitId):'')||'';
- if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!privateIPv4(ip)){
+ if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!safeKitHost(ip)){
   goKits();tone('Join selected '+mode.toUpperCase()+' network, select a discovered kit and Pair via physical USB once for this page session. Legacy 1.3.6 firmware may require Advanced → access key.','warn');
   $('kitKeyInput')?.focus();render();return;
  }
@@ -653,7 +656,7 @@ function init(){
  if(!$('kitCenter'))return;
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
- guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);guardAction('kitDiscover',discoverKits);guardAction('fwDiscoverKits',discoverKits);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
+ guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);guardAction('kitDiscover',discoverKits);guardAction('fwDiscoverKits',discoverKits);$('fwOpenDiscovery')?.addEventListener('click',goKits);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',read);
  guardAction('kitTopStop',stop);
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
