@@ -9,6 +9,8 @@ This is a **lab diagnostics release**, not production flight-control firmware. N
 - **STA:** FlightCore joins the configured router; phone must join a reachable Wi-Fi network. Internet is **not needed** for local AP/STA operations. This is not cloud control.
 - **AUTO:** Firmware tries the saved SSID, falls back to its AP when missing or failing, and periodically retries. Manually switching mode drops old sessions; pair again.
 
+**AP with WebApp and Android simultaneously:** both the laptop and phone must join the same FlightCore AP. Load and cache the GitHub Pages WebApp before switching networks, because that AP does not provide Internet; then use **offline two-way QR** rather than an Internet-only pairing code. If the laptop remains on another router, local-only WebRTC without a relay cannot connect to the phone on the isolated AP. In STA mode both devices should join the same router (and the router must permit client-to-client communication).
+
 **Important GitHub Pages restriction:** the published HTTPS WebApp cannot safely call the kit's ordinary `http://192.168.4.1` API. The preview uses the bundled Android app's *restricted native Wi-Fi transport*, with WebApp requests forwarded over the existing encrypted, approved WebRTC DataChannel. Thus the WebApp Wi-Fi tools require a paired Android companion. A future standalone desktop native bridge or authenticated HTTPS/WSS transport is needed for **direct laptop↔kit Wi-Fi without Android**.
 
 ## First setup
