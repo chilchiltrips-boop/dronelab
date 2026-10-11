@@ -3,6 +3,19 @@
 const $=id=>document.getElementById(id);
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
 let flightTimer=null,statsTimer=null;
+const networkPending=new Map();let networkId=0;
+function networkRequest(route,method='GET',args={}){
+ if(!host?.status()?.paired||!host?.status()?.connected)return Promise.reject(Error('Pair Android first, then enable WebApp kit access in Android Wi-Fi settings'));
+ if(!/^(GET|POST)$/.test(method)||typeof route!=='string'||route.length>60)return Promise.reject(Error('Invalid network operation'));
+ return new Promise((resolve,reject)=>{const id=++networkId;
+  const timer=setTimeout(()=>{networkPending.delete(id);reject(Error('Android or FlightCore did not respond'))},8500);
+  networkPending.set(id,{resolve,reject,timer});
+  if(!host.sendNetworkRequest({id,route,method,args})){clearTimeout(timer);networkPending.delete(id);reject(Error('WebRTC DataChannel not connected'))}
+ });
+}
+function networkResponse(m){const v=networkPending.get(m.id);if(!v)return;clearTimeout(v.timer);networkPending.delete(m.id);if(m.ok)v.resolve(m.data);else v.reject(Error(m.error||'FlightCore request failed'))}
+function clearNetworkRequests(reason){for(const p of networkPending.values()){clearTimeout(p.timer);p.reject(Error(reason))}networkPending.clear()}
+window.ZebjusDeviceRelay={request:networkRequest,status:()=>host?.status()||null};
 const training=()=>window.ZebjusTraining;
 const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
@@ -96,10 +109,11 @@ function callbacks(){
   control:()=>{sync();stamp('Control: '+(host.status().controller||'none'))},
   simControl:forwardSimulatorControl,
   simStop:d=>stopSimulatorRemote(d?.reason||'Pairing stopped'),
+   networkResponse,
   controlRequest:d=>{$('pairAnswerState').textContent='Android requested control: turn ON Grant Mobile Control below.';stamp('Mobile requests control • '+d.deviceId);sync()},
   heartbeat:at=>$('pairHeartbeat').textContent='Last heartbeat: '+new Date(at).toLocaleTimeString(),
   reconnecting:()=>{status('Reconnecting • control released');sync()},
-  disconnected:reason=>{stopSimulatorRemote(reason);if(offer){++offerEpoch;offer='';answerAccepted=false;answerProcessing=false;cancelCode();stopCamera();clearOfferUi()}status('Disconnected');scanFeedback('Mobile disconnected • Create a new QR','error');stamp(reason);sync();$('pairAnswerState').textContent='Connection lost. Pair Mobile → new QR.'},
+  disconnected:reason=>{clearNetworkRequests('Android disconnected');stopSimulatorRemote(reason);if(offer){++offerEpoch;offer='';answerAccepted=false;answerProcessing=false;cancelCode();stopCamera();clearOfferUi()}status('Disconnected');scanFeedback('Mobile disconnected • Create a new QR','error');stamp(reason);sync();$('pairAnswerState').textContent='Connection lost. Pair Mobile → new QR.'},
   error:reason=>{$('pairAnswerState').textContent=reason;stamp('Pairing error: '+reason);sync()}
  };
 }
@@ -282,7 +296,7 @@ function bind(){
   }
   if(s.connected&&s.lastHeartbeat&&Date.now()-s.lastHeartbeat>9500)$('pairHeartbeat').textContent='Heartbeat delayed; check Wi-Fi';
  },1000);
- window.addEventListener('pagehide',()=>{stopSimulatorRemote('Page closed');clearInterval(flightTimer);clearInterval(statsTimer);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
+ window.addEventListener('pagehide',()=>{clearNetworkRequests('Page closed');stopSimulatorRemote('Page closed');clearInterval(flightTimer);clearInterval(statsTimer);++offerEpoch;stopCamera();host?.close('Web App refreshed');clearInterval(expiryTimer)});
  document.addEventListener('visibilitychange',()=>{if(document.hidden){stopCamera();if(host.status().controller==='mobile')host.releaseControl()}});
 }
 function init(){if(new URLSearchParams(location.search).has('embedded')||!$('topPairMobileBtn'))return;startHost();host.setSimulatorReady(!!training()?.isReady?.()||!!(!inlineSettings()&&training()));bind();selectMode('code');void showVersion();status('Disconnected');sync();if(new URLSearchParams(location.search).has('connection'))openSettings()}

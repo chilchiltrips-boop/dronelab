@@ -10,7 +10,8 @@ const failures=[],logs=[];
 page.on('pageerror',e=>{
  // Monaco cancels pending suggestion promises when switching editor models.
  // Its vendored build can emit a benign unhandled Canceled rejection.
- if(String(e.message||'').startsWith('Canceled: Canceled')&&String(e.stack||e.message||'').includes('/vendor/monaco/'))return;
+ const message=String(e.message||''),stack=String(e.stack||e.message||'');
+ if(/^Canceled(?:: Canceled)?$/.test(message)&&stack.includes('/vendor/monaco/min/vs/editor/editor.main.js')&&stack.includes('.dispose ('))return;
  failures.push(e.stack||e.message)
 });
 page.on('console',m=>{if(m.type()==='error')logs.push(m.text())});

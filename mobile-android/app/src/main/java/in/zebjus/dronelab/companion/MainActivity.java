@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     private static final int CAMERA_REQUEST = 701;
     private static final String LOCAL_ORIGIN = "https://appassets.androidplatform.net";
     private WebView view;
+    private FlightCoreNativeBridge nativeFlightCore;
     private PermissionRequest pendingVideoRequest;
     private ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback networkCallback;
@@ -142,6 +143,9 @@ public class MainActivity extends Activity {
         view.getSettings().setAllowFileAccess(false);
         view.getSettings().setAllowContentAccess(false);
         view.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
+        view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        nativeFlightCore = new FlightCoreNativeBridge(this,view);
+        view.addJavascriptInterface(nativeFlightCore,"ZebjusNative");
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
                 Uri url = request.getUrl();
@@ -223,6 +227,11 @@ public class MainActivity extends Activity {
         view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
         cockpitFullscreen();
     }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==FlightCoreNativeBridge.OTA_DOCUMENT_PICKER&&nativeFlightCore!=null)
+            nativeFlightCore.onFirmwareFile(resultCode==RESULT_OK&&data!=null?data.getData():null);
+    }
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
         // pending getUserMedia request finish rather than cancelling the prompt.
@@ -238,6 +247,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         if (connectivity != null && networkCallback != null) connectivity.unregisterNetworkCallback(networkCallback);
+        if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
         if (view != null) {
             view.loadUrl("about:blank");
