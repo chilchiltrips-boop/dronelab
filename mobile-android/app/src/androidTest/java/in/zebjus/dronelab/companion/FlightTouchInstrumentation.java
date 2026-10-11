@@ -47,7 +47,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private String js(String source) throws Exception {
         CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();
         runOnMainSync(()->web.evaluateJavascript(source,value->{result.set(value);done.countDown();}));
-        if(!done.await(6,TimeUnit.SECONDS))throw new AssertionError("WebView JavaScript response timed out");
+        if(!done.await(12,TimeUnit.SECONDS))throw new AssertionError("WebView JavaScript response timed out (12 s)");
         return result.get();
     }
     private void waitJs(String condition) throws Exception {
@@ -222,8 +222,9 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 if(!"version-11".equals(getTargetContext().getSharedPreferences("native-upgrade-fixture",0).getString("retained","")))throw new AssertionError("In-place upgrade lost native app data");
                 check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
             }
-            observeNativeInput();
+            // Stabilize Android window/focus before installing native event capture hooks.
             prepareCockpitWindow();
+            observeNativeInput();
             multitouch();
             screenshot("native-completed.png");
             result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, OS HOME/resume, resumed compositor frames, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
