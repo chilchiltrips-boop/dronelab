@@ -1,4 +1,4 @@
-# ZEBJUS AERION 1.3.4: classroom firmware protocol
+# ZEBJUS AERION 1.3.5: classroom firmware protocol
 
 BENCH DIAGNOSTICS ONLY. Joystick packets never arm a motor or drive ESCs. Keep propellers and motor power disconnected for these tests.
 
@@ -55,3 +55,12 @@ Compile both A1 and A2; verify matching Factory and APP firmware images, checksu
 ## CI release check
 
 The GitHub Actions firmware builder compiles A1 and A2 separately with Arduino-ESP32 3.3.12, verifies 4MB factory/APP images, SHA-256 and dual OTA partitions, and republishes firmware catalogs. The hardwareFlashingTested flag remains false until physical boards are exercised.
+
+## 1.3.5 classroom WebApp / USB-only administration
+
+- Open MY KITS (former Settings) and select USB, STA, AP or authorized Android WebRTC relay. Enter the six-digit public selector and verify the immutable eFuse Device ID before sending RC test frames. The WebApp does not use the code as authorization.
+- USB admin provisioning only (physical possession required): `ZJADMIN,GET`, `ZJADMIN,NAME,Classroom-A-07`, `ZJKIT,CODE,482716`, `ZJADMIN,APNAME,ZEBJUS-AERION-A1`, `ZJADMIN,APPASS,12345678`, `ZJADMIN,ROTATE_KEY,CONFIRM`, `ZJADMIN,FACTORY_RESET,CONFIRM`. Critical reset/key changes require explicit confirmation in the WebApp. Changes to AP credentials or code take effect after reboot.
+- AP SSID format: `<admin-configured-prefix>-<6-digit-code>`. Hardware ID is immutable; default AP WPA2 password is 12345678; WPA2 password and 128-bit access key are distinct.
+- Firmware exposes restricted cross-origin permissions for the official HTTPS Pages origin plus local development origins. Browser support for HTTPS→local HTTP varies. Unsupported browsers require USB or Android's approved WebRTC bridge. CORS is not authentication: X-ZJ-Key and verified RC session are still mandatory. No general-purpose admin or flash API is exposed over Wi-Fi.
+- WebApp includes a selected hardware session, kit status in top bar, source-owned joystick forwarding in PID Tuning (motors disabled), USB Serial Plotter RC frames, and Network Telemetry. WebApp cannot enumerate mDNS directly: current Classroom Known Kits are previously verified entries, **not** live LAN discovery; don't label them online without probing.
+- Physical hardware acceptance (A1/A2, factory partition migration, 3+ devices/collisions, AP/STA switching, USB controller lease, browser Local Network Access, Android mode, signed OTA) is still pending.
