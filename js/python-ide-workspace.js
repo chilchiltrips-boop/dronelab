@@ -164,9 +164,6 @@ export function createPythonIDEShell(api){
   pythonFileList:'Choose the Python file to edit and run',
  })){const e=$(id);if(e)hint(e,description)}
  hint(projectToggle,'Show or hide the Project Explorer and its files');
- hint(runTab,'Show or minimize the Run / Terminal output');
- hint(dockMin,'Minimize Run / Terminal to give the editor more space');
- hint(dockMax,'Expand the Run / Terminal panel');
  hint(rightMin,'Minimize the Camera / Plotter / USB tool window');
  hint(rightMax,'Expand the active tool window');
  hint(rightFloat,'Float the tool window over the editor, or return to its dock');
@@ -201,6 +198,9 @@ export function createPythonIDEShell(api){
  const dockMin=button('','minimize',()=>openBottom('closed'));dockMin.title='Minimize terminal';
  const dockMax=button('','maximize',()=>{root.classList.toggle('py-bottom-max');fit()});dockMax.title='Expand terminal';
  dockHead.append(runTab,node('span','py-bottom-badge','Output console'),dockMax,dockMin);
+ hint(runTab,'Show or minimize the Run / Terminal output');
+ hint(dockMin,'Minimize Run / Terminal to give the editor more space');
+ hint(dockMax,'Expand the Run / Terminal panel');
  const row=$('pythonRowResizer'),terminal=$('pythonTerminal')?.closest('.python-terminal-card');
  dock.append(dockHead);if(row)dock.append(row);if(terminal)dock.append(terminal);
  layout.insertAdjacentElement('afterend',dock);
