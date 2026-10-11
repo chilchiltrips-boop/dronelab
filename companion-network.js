@@ -4,9 +4,9 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0;
+const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',rcSession='',rcClaiming=false,onKitAp=false;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
-const allowed=new Set(['GET /api/health','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','POST /api/wifi/test','POST /api/wifi/mode','POST /api/command','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','POST /api/wifi/test','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
 function form(v){return new URLSearchParams(v||{}).toString()}
 function request(route,method='GET',args={},timeout=5500){
@@ -28,7 +28,8 @@ window.zebjusNativeResult=data=>{
 };
 async function status(){
  const data=await request('/api/status');
- online=true;mode=data.mode||mode;lastStatus=Date.now();
+ online=true;mode=data.mode||mode;lastStatus=Date.now();onKitAp=!data.staConnected;
+ if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
  show((data.staConnected?'STA':'AP')+' CONNECTED • '+(data.ssid||data.apSsid||'Device'),'good');
@@ -48,6 +49,7 @@ async function testSave(){
  el('kitPassword').value='';show('Testing Wi-Fi; save occurs on verified association. Connection may switch.');
 }
 async function setMode(){
+ if(rcSession){await request('/api/rc/release','POST',{session:rcSession}).catch(()=>{});rcSession='';}
  const v=el('kitMode').value;
  if(!['ap','sta','auto'].includes(v))throw Error('Invalid Wi-Fi mode');
  await request('/api/wifi/mode','POST',{mode:v});show('Switching to '+v.toUpperCase()+'; reconnect your phone to the new network.');
@@ -68,22 +70,40 @@ async function onWebRequest(req,peer){
   peer.sendNetworkResponse({id,ok:true,data});
  }catch(e){peer.sendNetworkResponse({id,ok:false,error:String(e.message||e).slice(0,150)})}
 }
+async function releaseRc(){
+ const session=rcSession;rcSession='';
+ if(session&&online)await request('/api/rc/release','POST',{session}).catch(()=>{});
+}
 function previewControls(m){
- if(!online||!el('kitRcPreview')?.checked||previewBusy||Date.now()-lastPreview<100)return;
+ // Direct Android→kit RC is AP-only. STA/USB Android frames must flow via the WebRTC host.
+ if(!online||!onKitAp||!el('kitRcPreview')?.checked||previewBusy||rcClaiming||Date.now()-lastPreview<100)return;
  if(!m?.axes||!Number.isFinite(m.axes.roll)||!Number.isFinite(m.axes.pitch)||!Number.isFinite(m.axes.yaw))return;
+ if(!rcSession){
+  if(!/^[0-9]{6}$/.test(kitCode)){show('Read kit status and verify six-digit code first','warn');return;}
+  rcClaiming=true;
+  request('/api/rc/claim','POST',{source:'ANDROID',kitCode})
+   .then(d=>{if(d.kitId&&d.session){rcSession=d.session;show('AERION kit RC preview claimed • motors OFF','good')}})
+   .catch(e=>show('Kit RC locked: '+e.message,'warn'))
+   .finally(()=>{rcClaiming=false});
+  return;
+ }
  lastPreview=Date.now();previewBusy=true;
  const axes=m.axes,clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
- request('/api/rc/preview','POST',{seq:m.seq,armed:'false',throttle:Math.max(1000,Math.min(2000,m.throttle|0)),roll:clamp(axes.roll),pitch:clamp(axes.pitch),yaw:clamp(axes.yaw)})
- .catch(()=>{online=false;show('RC preview disconnected — no motor commands transmitted','warn')}).finally(()=>{previewBusy=false});
+ request('/api/rc/preview','POST',{session:rcSession,source:'ANDROID',seq:m.seq,armed:'false',
+  throttle:Math.max(1000,Math.min(2000,m.throttle|0)),
+  roll:clamp(axes.roll),pitch:clamp(axes.pitch),yaw:clamp(axes.yaw)})
+ .catch(e=>{rcSession='';show('RC preview stopped: '+e.message,'warn')})
+ .finally(()=>{previewBusy=false});
 }
 function action(id,fn){el(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>show(e.message,'warn')))}
 function bind(){
  if(!el('kitNetStatus'))return;
  if(!native?.request){show('Install updated Android APK for Wi-Fi connection');return;}
  el('kitIp').value=ip;
- el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false});
- el('kitKey').addEventListener('input',()=>{key=el('kitKey').value.trim();online=false});
+ el('kitIp').addEventListener('change',()=>{ip=el('kitIp').value.trim();online=false;rcSession='';kitCode=''});
+ el('kitKey').addEventListener('input',()=>{key=el('kitKey').value.trim();online=false;rcSession=''});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
+ el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)releaseRc()});
  action('kitWifiSettings',()=>native.openWifiSettings());
  action('kitConnect',status);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
  action('kitTestSave',testSave);action('kitSwitch',setMode);
@@ -97,6 +117,6 @@ function bind(){
  });
  setInterval(()=>{if(!online)return;status().catch(()=>{online=false;show('Kit disconnected. Check phone Wi-Fi and IP.','warn')})},3500);
 }
-window.ZebjusNetwork={request,status,scan,command,previewControls,onWebRequest,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
+window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
