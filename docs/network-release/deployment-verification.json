@@ -1,0 +1,57 @@
+{
+  "verifiedAt": "2026-10-11T22:24:14Z",
+  "releaseSource": "436744baf7c6966edc9e6a630b4174d8d095fc3b",
+  "artifactMainCommit": "07a83058a236c7e881cf80cfc62c636eb701a146",
+  "web": {
+    "version": "1.7.0+193",
+    "channel": "release",
+    "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
+    "features": [
+      "USB-free manufacturer-label enrollment and offline setup portal",
+      "STA-first AP coexistence with verified save and recovery",
+      "Android direct AP diagnostic input to firmware to browser Python",
+      "Scoped encrypted requests and signed device responses; motors disabled"
+    ],
+    "publishedAt": "2026-10-11T22:17:51.806802+00:00",
+    "buildCommit": "436744baf7c6"
+  },
+  "files": [
+    {
+      "path": "FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin",
+      "url": "https://chilchiltrips-boop.github.io/dronelab/FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin",
+      "bytes": 1152000,
+      "sha256": "e237056045e40289712552ef60ea57574a80f5bbd5c2f0fa8a457888860c3986",
+      "status": "PASS"
+    },
+    {
+      "path": "FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
+      "url": "https://chilchiltrips-boop.github.io/dronelab/FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
+      "bytes": 4194304,
+      "sha256": "17ab7fb45be84d05c4801ab3f1e74e13d3a8005425d37911f1d545b57f3efde2",
+      "status": "PASS"
+    },
+    {
+      "path": "FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin",
+      "url": "https://chilchiltrips-boop.github.io/dronelab/FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin",
+      "bytes": 1159504,
+      "sha256": "87c355a78af1337bafb24813e50428253d7eac36eb57be718ae6fb00429cf5fe",
+      "status": "PASS"
+    },
+    {
+      "path": "FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
+      "url": "https://chilchiltrips-boop.github.io/dronelab/FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
+      "bytes": 4194304,
+      "sha256": "8c1a4b856de8dca357e1f60c1d5160d267b5c71d52e459d4d46db60f3a735534",
+      "status": "PASS"
+    },
+    {
+      "path": "mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk",
+      "url": "https://chilchiltrips-boop.github.io/dronelab/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk",
+      "bytes": 1029355,
+      "sha256": "e06bbd5462ccf315b1c902d8340e79ec182b978b571ecfa8dc0797d0c546d3b6",
+      "status": "PASS"
+    }
+  ],
+  "androidMetadata": "App: in.zebjus.dronelab.companion\nVersion: 1.7.0\nVersionCode: 16\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\nSource commit: 436744baf7c6966edc9e6a630b4174d8d095fc3b\n",
+  "physicalHardwareTested": false
+}
