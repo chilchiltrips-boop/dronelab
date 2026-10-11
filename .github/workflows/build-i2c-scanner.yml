@@ -20,6 +20,7 @@ on:
       - 'tools/verify_release.py'
       - 'tools/firmware-guards.test.mjs'
       - 'tools/network-transport.test.mjs'
+      - 'tools/classroom-kits.test.mjs'
       - 'tools/offline-cache.test.mjs'
       - 'sw.js'
       - '.github/workflows/build-i2c-scanner.yml'
