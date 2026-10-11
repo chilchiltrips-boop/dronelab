@@ -119,7 +119,9 @@ function wifiPythonSelected(){return ['ap','sta'].includes($('pythonTarget')?.va
 function wifiPythonReady(){return !!window.DroneLabNetwork?.isConnected?.()}
 function usbStatus(){
  if(wifiPythonSelected()){
-  const ready=wifiPythonReady(),state=ready?'FlightCore '+$('pythonTarget').value.toUpperCase()+' • Android Relay':'Wi-Fi kit not connected';
+  const ready=wifiPythonReady(),selected=window.ZebjusKits?.getState?.();
+  const transport=selected?.connected?selected.transport:'android-relay';
+  const state=ready?'FlightCore '+$('pythonTarget').value.toUpperCase()+' • '+(transport==='android-relay'?'Android Relay':'Direct '+transport.toUpperCase()):'Wi-Fi kit not connected';
   $('pyUsbState').textContent=state;$('pyUsbState').className='status '+(ready?'good':'');
   const button=$('pyConnectUsbBtn'),t=button?.querySelector('.py-usb-button-text');
   if(t)t.textContent='Connect Kit (Wi-Fi)';else if(button)button.textContent='Connect Kit (Wi-Fi)';
