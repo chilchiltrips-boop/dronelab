@@ -11,7 +11,7 @@ const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.[0-4]\.\d+$/);
- assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
+ assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','ZJSCAN,','scanAddress<127','Wire.endTransmission()','if(!scanRequested)return;','scanAddresses[scanCount++]'])assert.ok(sketch.includes(token),token);
  for(const token of ['AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
@@ -52,7 +52,7 @@ for(const board of catalog.boards)test(board.name+' scanner image integrity',()=
 });
 
 test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
- for(const token of ['FW_VERSION="1.3.4"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
+ for(const token of ['FW_VERSION="1.3.5"','ZJINFO,FW,','ZJI2C,PINS,','ZJLED,INFO,','ZJINFO,GET','ZJI2C,SCAN','serialCommand(serialLine)'])assert.ok(sketch.includes(token),token);
 });
 
 test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{
@@ -70,7 +70,7 @@ test('firmware telemetry counter is rollover-safe across rate command after loop
  assert.ok(sketch.includes('const int32_t elapsed=int32_t(uint32_t(now-telLast))'));
  assert.ok(sketch.includes('if(elapsed<0||uint32_t(elapsed)<period)return'));
  assert.ok(sketch.includes('telemetryDropped=0;telemetrySeq=0;telLast=millis();'));
- assert.ok(sketch.includes('FW_VERSION="1.3.4"'));
+ assert.ok(sketch.includes('FW_VERSION="1.3.5"'));
  const whenMillisBeforeRateCommand=500,whenRateCommandUpdates=501;
  const difference=(whenMillisBeforeRateCommand-whenRateCommandUpdates)>>>0;
  assert.ok(difference>4000000000,'legacy unsigned elapsed would wrap and falsely report huge loss');
