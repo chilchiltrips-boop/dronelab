@@ -83,7 +83,13 @@ export function createPythonIDEShell(api){
  if(editorTop)editorTop.replaceChildren(editorTab);
  const explorer=node('aside','py-project-explorer');explorer.id='pythonProjectExplorer';
  const exploreHead=node('div','py-explorer-head');
- exploreHead.append(node('strong','','PROJECT'),button('','folder-plus',()=>newFolder()),button('','upload',()=>fileInput.click()),button('','panel-left-close',()=>{projectOpen=false;applyPanels()}));
+ const explorerNewFolder=button('','folder-plus',()=>newFolder()),
+ explorerImportFiles=button('','upload',()=>fileInput.click()),
+ explorerClose=button('','panel-left-close',()=>{projectOpen=false;applyPanels()});
+ hint(explorerNewFolder,'Create a folder in this Python project');
+ hint(explorerImportFiles,'Import Python code, images and files into the project');
+ hint(explorerClose,'Collapse Project Explorer to expand the code editor');
+ exploreHead.append(node('strong','','PROJECT'),explorerNewFolder,explorerImportFiles,explorerClose);
  const list=node('div','py-explorer-tree');list.id='pythonExplorerTree';list.setAttribute('role','tree');
  const exploreActions=node('div','py-explorer-actions');
  const renameBtn=button('Rename','edit',()=>renameSelected()),copyBtn=button('Copy Path','copy',()=>copySelected()),deleteBtn=button('Delete','trash',()=>deleteSelected());
