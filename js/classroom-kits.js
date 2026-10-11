@@ -14,7 +14,7 @@ let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPendi
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
 let headerNetworkChoice='sta',headerModePending=false;
-let lastWifiLog='',lastWifiLogAt=0,lastWifiTestState='',wifiTestNonce=0;
+let lastWifiTestState='',wifiTestNonce=0;const recentWifiMessages=new Map();
 const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0,reconnectTicket=0,pollErrors=0,pollBusy=false;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
@@ -358,8 +358,9 @@ async function identify(){
  audit('Identify LED pattern requested','success');
 }
 function wifiNote(message,tone='info'){
- const now=Date.now();if(message===lastWifiLog&&now-lastWifiLogAt<18000)return;
- lastWifiLog=message;lastWifiLogAt=now;
+ const now=Date.now();if(now-(recentWifiMessages.get(message)||0)<30000)return;
+ recentWifiMessages.set(message,now);
+ if(recentWifiMessages.size>60)for(const [key,at] of recentWifiMessages)if(now-at>30000)recentWifiMessages.delete(key);
  const e=$('kitWifiStatus');if(e){e.textContent=message;e.dataset.tone=tone}
  audit(message,tone);render();
  // A network transition is independent of the USB flash writer; forward sanitized
@@ -544,7 +545,7 @@ function onSerial(e){
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
   else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
-  else if(text.startsWith('ZJNET,AP,')){state.apActive=text.startsWith('ZJNET,AP,ON,');wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info');render()}
+  else if(text.startsWith('ZJNET,AP,')){state.apActive=/^ZJNET,AP,(?:ON|READY),/.test(text);wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info');render()}
   else if(text.startsWith('ZJNET,TEST_STATE,')){lastWifiTestState=text.slice(17);if(lastWifiTestState==='testing'&&!wifiTesting)wifiNote('ESP32 STA test is running; waiting for association','info')}
   else if(text.startsWith('ZJNET,STA_REASON,')){state.staDisconnectReason=Number(text.slice(17))||0;if(state.staDisconnectReason&&state.staDisconnectReason!==36&&lastWifiTestState==='failed')wifiNote('STA failure reason '+state.staDisconnectReason+' • check 2.4 GHz SSID/security/signal','warn');render()}
   else if(text.startsWith('ZJNET,STA,')){const p=text.split(',');state.staConnected=p[2]==='CONNECTED';state.staIp=state.staConnected?p[3]:'';if(state.staConnected&&privateIPv4(p[3])){$('kitIpInput').value=p[3];state.usbInfo.staIp=p[3];recordKnown()}render()}
@@ -727,7 +728,7 @@ function init(){
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc()});
  root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{
-  if(!state.connected||state.working||state.transport==='usb'||pollBusy)return;
+  if(!state.connected||state.working||wifiTesting||state.transport==='usb'||pollBusy)return;
   pollBusy=true;
   try{await read();pollErrors=0}
   catch(e){
