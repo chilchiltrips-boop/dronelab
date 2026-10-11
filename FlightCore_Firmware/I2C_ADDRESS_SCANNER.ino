@@ -5,7 +5,7 @@
 
 // FlightCore USB diagnostics v1.3.2; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.3.2";
+constexpr const char* FW_VERSION="1.3.3";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS FlightCore A2 C6";
@@ -335,6 +335,8 @@ void emitTelemetry(unsigned long now){
  Serial.print(',');Serial.println(telemetryDropped);
  telemetrySent++;
 }
+// Network code can access verified scanner/gyro state and existing serial commands.
+#include "FlightCoreNetwork.h"
 void setup(){
  Serial.begin(115200);
  selectI2cBus();
@@ -345,6 +347,7 @@ void setup(){
  // No decorative startup banner.
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
+ zjNetworkSetup();
  lastGyro=millis()-GYRO_PERIOD_MS;
  lastGyroProbe=millis()-2500;
  telLast=millis();
@@ -356,5 +359,6 @@ void loop(){
  updateGyro(now);
  scanI2C(now);
  emitTelemetry(now);
+ zjNetworkLoop(now);
  // Legacy ZJGYRO duplicates are disabled.
 }
