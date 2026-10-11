@@ -25,6 +25,25 @@ try{
    if(await page.locator('#'+id).count()!==1)throw Error('Python IDE missing '+id);
   }
   if(await page.locator('.py-tool-rail [data-py-rail]').count()!==4)throw Error('Python IDE right tool buttons missing');
+  // Every primary action has short hover help; USB controls use the dedicated USB icon.
+  const hints=await page.evaluate(()=>{
+   const ids=['pythonNewFileBtn','pythonSaveFileBtn','pythonUndoFileBtn','runPythonBtn','stopPythonBtn','rerunPythonBtn','pyConnectUsbBtn','pythonCameraStart','pythonCameraStop','pythonCheckSyntaxBtn','copyTerminalBtn'];
+   return {missing:ids.filter(id=>!document.getElementById(id)?.dataset.tooltip),
+    usbRail:document.querySelector('[data-py-rail="usb"] use')?.getAttribute('href'),
+    usbButton:document.querySelector('#pyConnectUsbBtn use')?.getAttribute('href'),
+    descriptions:ids.map(id=>document.getElementById(id)?.title)};
+  });
+  if(hints.missing.length||!hints.usbRail?.endsWith('#usb')||!hints.usbButton?.endsWith('#usb'))
+   throw Error('USB SVG or hover help missing: '+JSON.stringify(hints));
+  await page.locator('.py-tool-rail [data-py-rail="usb"]').click();
+  await page.waitForTimeout(1300);
+  const usbTip=await page.evaluate(()=>({
+   svg:document.querySelector('#pyConnectUsbBtn use')?.getAttribute('href'),
+   label:document.querySelector('#pyConnectUsbBtn .py-usb-button-text')?.textContent,
+   hover:document.querySelector('#pyConnectUsbBtn')?.dataset.tooltip
+  }));
+  if(!usbTip.svg?.endsWith('#usb')||!usbTip.label||!usbTip.hover)throw Error('USB status update removed its icon: '+JSON.stringify(usbTip));
+  await page.locator('.py-tool-rail [data-py-rail="usb"]').click();
   await page.locator('.py-tool-rail [data-py-rail="camera"]').click();
   if(!await page.locator('#pythonSideStack').isVisible())throw Error('Camera tool window did not open');
   await page.locator('.py-tool-rail [data-py-rail="camera"]').click();
@@ -231,6 +250,18 @@ try{
  await page.locator('#pythonFileList').selectOption('browser_test.py');
  await page.locator('.py-ide-menu:has(#pythonFileList) > summary').click();
  if((await page.locator('#pythonActiveFileLabel').textContent())!=='browser_test.py')throw Error('Python file picker failed to restore working file');
+ // Run must execute code from the newly created and currently selected file,
+ // not the formerly opened main.py even when previous programs have finished.
+ const activeFileCode='print("ZJ_NEW_ACTIVE_FILE_EXECUTED")\\n'.replace('\\n','\n');
+ await page.evaluate(code=>{
+  const model=window.monaco.editor.getModels().find(m=>m.uri.toString().includes('browser_test.py'));
+  if(!model)throw Error('New file has no active Monaco model');model.setValue(code);
+ },activeFileCode);
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('ZJ_NEW_ACTIVE_FILE_EXECUTED'),null,{timeout:90000});
+ const activeOutput=await page.locator('#pythonTerminal').textContent();
+ if(!activeOutput.includes('>>> Running browser_test.py'))throw Error('Run executed the wrong Python file: '+activeOutput);
+ await page.waitForFunction(()=>document.getElementById('runPythonBtn').disabled===false,null,{timeout:90000});
  page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('basic');
  const modelValue=await page.evaluate(()=>window.monaco.editor.getModels().map(m=>m.getValue()).join('\n'));
