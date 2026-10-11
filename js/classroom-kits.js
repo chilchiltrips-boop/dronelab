@@ -157,6 +157,9 @@ async function connectNetwork(code,mode){
 }
 async function connect(){
  if(state.working)return;const code=selectedCode(),mode=selectedMode();
+ if(mode!=='usb'){try{const known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]');
+  if(new Set(known.filter(k=>k.code===code).map(k=>k.id)).size>1){tone('Duplicate Kit Code detected in known classroom kits • use physical USB admin to assign a unique code','error');return;}
+ }catch{}}
  if(!codePattern.test(code)){tone('Enter your 6-digit Kit Code','warn');return}
  if(state.owner)await releaseRc().catch(()=>{});
  state.working=true;state.connected=false;render();tone('Verifying hardware identity…','info');
@@ -230,8 +233,12 @@ async function sendFrame(frame,source='WEB'){
  try{
   const seq=++state.seq;
   if(state.transport==='usb')await usbWrite('ZJRC,SET,'+[seq,rc.throttle,rc.roll,rc.pitch,rc.yaw,source].join(','));
-  else await deviceRequest('/api/rc/preview','POST',{session:state.rcSession,source,seq,armed:'false',...rc});
-  state.frameAt=Date.now();state.ackAt=Date.now();state.sent++;state.rc={...(state.rc||{}),...rc,active:true,claimed:true,source,seq};
+  else{const ack=await deviceRequest('/api/rc/preview','POST',{session:state.rcSession,source,seq,armed:'false',...rc});
+   if(ack?.received!==true||ack.kitId!==state.kitId)throw Error('Kit did not acknowledge the intended hardware Device ID');
+   state.ackAt=Date.now();state.rc={...(state.rc||{}),...rc,active:true,claimed:true,source,seq};
+  }
+  // USB writes are not hardware ACKs. Serial ZJRC frames update readouts separately.
+  state.frameAt=Date.now();state.sent++;
   render();return true;
  }catch(e){state.rejected++;audit('RC frame rejected: '+e.message,'error');state.owner=false;state.rcSession='';state.rcSource='';tone('RC lost • '+e.message,'error');return false}
  finally{sendBusy=false}
