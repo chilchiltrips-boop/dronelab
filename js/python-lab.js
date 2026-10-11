@@ -90,7 +90,7 @@ function newFile(){
  if(name===null)return;name=name.trim();if(!name.endsWith('.py'))name+='.py';
  if(!PY_FILE_PATH.test(name))return alert('Use a path such as scripts/sensor.py');
  if(Object.hasOwn(files,name)){switchFile(name);return}
- if(addProjectFile(name,'# '+name+'\n'))switchFile(name);
+ if(addProjectFile(name,'# '+name+'\n')){switchFile(name);workspace?.openBottom('closed');editor?.focus();status('Created and opened '+name,'good')}
 }
 function deleteFile(){if(Object.keys(files).length<=1)return alert('Keep at least one .py file.');removeProjectFile(active,true)}
 function applyExample(key){
@@ -251,18 +251,18 @@ async function runPython(){
  workspace?.openBottom('run');
  if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
- const code=currentCode();if(!code.trim())return status('Nothing to run','warn');
+ const fileToRun=active,code=currentCode();if(!code.trim())return status('Nothing to run','warn');
  if(/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
- files[active]=code;save();if(worker){worker.terminate();worker=null}
+ files[fileToRun]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
- clearTerminal();terminal('>>> Running '+active+'\n');status('Starting Python 3…');updateButtons();
+ clearTerminal();terminal('>>> Running '+fileToRun+'\n');status('Starting '+fileToRun+'…');updateButtons();
  clearPythonMarkers();
  worker.postMessage({type:'hardware-info',info:window.DroneLabSerial?.firmwareInfo?.()||null});
  worker.postMessage({type:'i2c-data',scan:bridge.getLatest()});
  const runWorker=worker;
  try{const assets=workspace?await workspace.assetPayload():[];
-  if(worker===runWorker)runWorker.postMessage({type:'run',filename:active,code,files,assets});
- }catch(e){if(worker===runWorker){status('Assets: '+e.message,'warn');runWorker.postMessage({type:'run',filename:active,code,files,assets:[]})}}
+  if(worker===runWorker)runWorker.postMessage({type:'run',filename:fileToRun,code,files:{...files,[fileToRun]:code},assets});
+ }catch(e){if(worker===runWorker){status('Assets: '+e.message,'warn');runWorker.postMessage({type:'run',filename:fileToRun,code,files:{...files,[fileToRun]:code},assets:[]})}}
 
 }
 
