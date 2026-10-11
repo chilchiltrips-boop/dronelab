@@ -11,7 +11,7 @@ test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only 
 });
 test('Network operations are authenticated and flight outputs remain disabled',()=>{
  const f=read('FlightCore_Firmware/FlightCoreNetwork.h');
- for(const text of ['X-ZJ-Key','zjAuthenticated()','access_key_required','hardware_arming_disabled','motorsArmed\\":false','controller_owned_by_another_client','stale_rc_sequence','now-zjRcLast>350','/api/ota','U_FLASH','u.buf[0]!=0xe9','chip!=13','chip!=5'])assert.ok(f.includes(text),text);
+ for(const text of ['X-ZJ-Key','zjAuthenticated()','access_key_required','hardware_arming_disabled','motorsArmed\\":false','/api/rc/claim','/api/rc/release','/api/rc/preview','zjRcState()','/api/ota','U_FLASH','u.buf[0]!=0xe9','chip!=13','chip!=5'])assert.ok(f.includes(text),text);
  assert.ok(!f.includes('ledcWrite(ESC'),'No motor mixer on diagnostics API');
 });
 test('Android local HTTP is isolated from bundled HTTPS WebView and public sites',()=>{
@@ -38,4 +38,14 @@ test('Web and Python expose distinct USB/AP/STA paths without claiming motor sup
  for(const v of ['value="usb"','value="ap"','value="sta"','id="netScan"','id="netSave"','id="netSwitch"'])assert.ok(html.includes(v),v);
  assert.ok(app.includes('wifiPythonSelected()')&&app.includes('DroneLabNetwork.writeLine'));
  assert.ok(firmware.includes('motorControl\\":false')||firmware.includes('motorControl":false'));
+});
+
+test('AERION classroom six-digit code persists and never acts as the control password',()=>{
+ const k=read('FlightCore_Firmware/FlightCoreClassroom.h'),f=read('FlightCore_Firmware/FlightCoreNetwork.h');
+ const ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
+ for(const t of ['zjKitPrefs.getString("code"','zjKitPrefs.putString("code"','ZJKIT,CODE,','ZJKIT,ID,','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,STOP','ZJ_RC_DEADMAN_MS=350','ZJ_RC_LEASE_MS=1800','ZJRC,FAILSAFE,INPUT_TIMEOUT','zjRcFrame(','zjRcClaim(','zjRcRelease(','zjRcOwned','zjRcSession','Serial.availableForWrite()>100'])assert.ok(k.includes(t),t);
+ for(const t of ['zjApPass="12345678"','ZEBJUS-AERION-','/api/identify','MDNS.addService','MDNS.addServiceTxt','zjClientTransport','zjRcClaim(','zjRcFrame(','zjRcRelease("NETWORK_MODE_CHANGED")'])assert.ok(f.includes(t),t);
+ assert.ok(ino.includes('zjKitSetup();')&&ino.includes('zjRcLoop(now);'));
+ assert.ok(ino.includes('ZEBJUS AERION A1')&&ino.includes('ZEBJUS AERION A2'));
+ assert.ok(!k.includes('ledcWrite(')&&!k.includes('digitalWrite('),'Joystick diagnostic handler must never activate motors');
 });
