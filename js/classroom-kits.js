@@ -345,8 +345,8 @@ async function wifiSave(){
  if(!state.connected)throw Error('Connect a kit by USB, AP or STA first');
  if(state.owner)throw Error('Release controller before Wi-Fi provisioning');
  const ssid=$('kitRouterSsid')?.value.trim()||'',password=$('kitRouterPass')?.value||'';
- if(!ssid||ssid.length>32||/[,\\r\\n]/.test(ssid)||password.length>63||
-    /[,\\r\\n]/.test(password)||(password.length>0&&password.length<8))
+ if(!ssid||ssid.length>32||/[,\r\n]/.test(ssid)||password.length>63||
+    /[,\r\n]/.test(password)||(password.length>0&&password.length<8))
   throw Error('SSID/password invalid for USB provisioning (commas and line breaks are unsupported)');
  if(state.transport==='usb'){
   // No credential appears in event history or the URL; the firmware does not echo it.
@@ -425,7 +425,7 @@ function onSerial(e){
   else if(text==='ZJNET,TEST,SAVED'){wifiTesting=false;wifiNote('STA router connected and credentials saved in kit NVS','good')}
   else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched','error')}
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
-  else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(16).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
+  else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
   else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
   else if(text.startsWith('ZJNET,AP,')){wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info')}
  }
