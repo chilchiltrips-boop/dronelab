@@ -24,8 +24,8 @@ function render(){
  const ready=state.connected,code=state.kitCode||'------';
  const label=ready?(state.kitName||'AERION')+' • '+code:'NO KIT CONNECTED';
  byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.version||'?'):'Connect using a 6-digit Kit Code');
- const globalTone=state.working?'info':state.tone==='error'?'error':state.tone==='warn'?'warn':ready?'good':'offline';
- byId('kitGlobalState',state.working?'CONNECTING':state.tone==='error'?'LINK ERROR':ready?'CONNECTED':'DISCONNECTED');
+ const globalTone=state.working?'info':state.tone==='locked'?'locked':state.rc?.claimed&&!state.owner?'locked':state.tone==='error'?'error':state.tone==='warn'?'warn':ready?'good':'offline';
+ byId('kitGlobalState',state.working?'CONNECTING':globalTone==='locked'?'KIT LOCKED':state.tone==='error'?'LINK ERROR':ready?'CONNECTED':'DISCONNECTED');
  const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
  const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
@@ -40,7 +40,7 @@ function render(){
  byId('kitRcCounts',(rc.accepted??state.sent)+' / '+(rc.rejected??state.rejected));
  byId('kitRcOrigin',rc.source||state.rcSource||'NONE');
  byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
- const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'warn':'info';
+ const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
  const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
@@ -480,7 +480,7 @@ function onSerial(e){
  if(line.startsWith('ZJKIT,CODE,')){$('kitAdminCode').value=line.slice(11)}
  if(line.startsWith('ZJADMIN,ACK,')||line.startsWith('ZJKIT,ACK,'))audit(line,'success');
 }
-function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{tone(e.message,'error');audit(e.message,'error')}))}
+function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{const locked=/locked|occupied|not_controller_owner/i.test(e.message);tone(e.message,locked?'locked':'error');audit(e.message,locked?'warn':'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
 function init(){
  if(!$('kitCenter'))return;
