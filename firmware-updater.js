@@ -164,7 +164,7 @@ function kitStatus(){
  text('#fwPreviouslyVerified',running?'v'+usbRuntimeInfo.version+' • live':prior?'v'+prior.version+' • last observed':'None this session');
  const kb=$('#fwKitBadge');
  if(kb){kb.textContent=running?'USB FIRMWARE ACTIVE':bootloader?'USB BOOTLOADER READY':serial?(usbRomDownload?'ROM DOWNLOAD':'USB SERIAL OPEN'):wifiOnline?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(running||bootloader||wifiOnline?'online':'offline')}
- syncFirmwareControls();
+ if(typeof syncFirmwareControls==='function')syncFirmwareControls();
  text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');text('#fwUsbMode',serial?usbBusMode:'--');
  return {s:schoolApi,d,online:wifiOnline,usbConnected,board,state,version};
 }
