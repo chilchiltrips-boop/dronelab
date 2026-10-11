@@ -11,6 +11,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
  version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
+const usbCandidate={};let wifiTesting=false;
 const EVENTS_MAX=70;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
@@ -23,9 +24,10 @@ function render(){
  const ready=state.connected,code=state.kitCode||'------';
  const label=ready?(state.kitName||'AERION')+' • '+code:'NO KIT CONNECTED';
  byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.version||'?'):'Connect using a 6-digit Kit Code');
- byId('kitGlobalState',ready?'CONNECTED':state.working?'CONNECTING':'DISCONNECTED');
- const pill=$('kitGlobalState');if(pill)pill.dataset.tone=ready?'good':state.working?'info':'offline';
- const bar=$('kitTopStatus');if(bar)bar.dataset.tone=ready?'good':state.working?'info':'offline';
+ const globalTone=state.working?'info':state.tone==='error'?'error':state.tone==='warn'?'warn':ready?'good':'offline';
+ byId('kitGlobalState',state.working?'CONNECTING':state.tone==='error'?'LINK ERROR':ready?'CONNECTED':'DISCONNECTED');
+ const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
+ const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
  byId('kitSelectedBoard',ready?state.board:'—');byId('kitSelectedVersion',ready?state.version:'—');
  byId('kitSelectedTransport',ready?state.transport.toUpperCase():'OFFLINE');
@@ -49,13 +51,14 @@ function render(){
  if($('kitAdminApply'))$('kitAdminApply').disabled=!ready||state.transport!=='usb'||state.owner||state.working;
  if($('kitAdminRead'))$('kitAdminRead').disabled=!ready||state.transport!=='usb'||state.working;
  for(const id of ['kitRotateKey','kitFactoryReset'])if($(id))$(id).disabled=!ready||state.transport!=='usb'||state.owner||state.working;
- for(const id of ['kitModeApply','kitWifiSave'])if($(id))$(id).disabled=!ready||state.working;
+ for(const id of ['kitModeApply','kitWifiSave','kitWifiScan'])if($(id))$(id).disabled=!ready||state.working||state.owner||wifiTesting;
  const status=$('kitAdminAccess');if(status)status.textContent=ready&&state.transport==='usb'?'Physical USB provisioning available':'Admin edits require selected kit on USB';
  const readOnly=$('kitHwId');if(readOnly)readOnly.value=state.kitId||'Not verified';
  const selected=$('kitActiveCode');if(selected)selected.textContent=code;
  const target=$('kitTargetLabel');if(target)target.textContent=ready?state.kitName+' • '+code:'Connect a kit in MY KITS';
  const hint=$('kitPidMonitor');if(hint)hint.textContent=ready?'RC '+(rc.active?'LIVE':'IDLE')+' • '+(rc.source||'NONE')+' • T '+(rc.throttle??1000)+' R '+(rc.roll??1500)+' P '+(rc.pitch??1500)+' Y '+(rc.yaw??1500):'No hardware connected • simulator available';
  const targetHardware=$('kitHardwareTarget');if(targetHardware)targetHardware.disabled=!ready;
+ if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Connect the board over USB, then Scan Wi-Fi → Test & Save → Apply Mode.';
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
@@ -119,7 +122,7 @@ async function connectUSB(code){
  };
  root.addEventListener('dronelab:serial-line',listener);
  try{
-  await usbWrite('ZJKIT,GET');await usbWrite('ZJINFO,GET');
+  await usbWrite('ZJKIT,GET');await usbWrite('ZJINFO,GET');await usbWrite('ZJNET,GET');
   for(let i=0;i<18&&(!identity.kitId||!identity.kitCode);i++)await sleep(140);
  }finally{root.removeEventListener('dronelab:serial-line',listener);}
  Object.assign(state,checkIdentity(identity,'usb',code));
@@ -158,7 +161,8 @@ async function connectNetwork(code,mode){
  const verified=checkIdentity(d,transport,code,state.kitId||'');
  Object.assign(state,verified,{ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
- if(mode!=='android-relay')state.transport=ip==='192.168.4.1'?'ap':'sta';
+ if(mode!=='android-relay')state.transport=String(d.requestTransport||'').toLowerCase()==='ap'?'ap':ip==='192.168.4.1'?'ap':'sta';
+ state.physicalLink=String(d.requestTransport||'').toLowerCase()||state.physicalLink;
 }
 async function findSaved(){
  const code=selectedCode();if(!codePattern.test(code))throw Error('Enter a 6-digit code first');
@@ -215,6 +219,10 @@ async function read(){
 async function claim(source='WEB'){
  if(!state.connected)throw Error('Connect a verified kit first');
  if(state.owner&&state.rcSource===source)return;
+ if(source==='WEB'){
+  if(!$('kitHardwareTarget')?.checked)throw Error('Enable Send to selected kit under PID Tuning first');
+  if(!$('tab-pid')?.classList.contains('active'))document.querySelector('[data-tab="pid"]')?.click();
+ }
  if(state.owner)await releaseRc();
  if(source!=='WEB'&&source!=='ANDROID')throw Error('Invalid RC source');
  if(source==='ANDROID'&&(state.transport==='ap'||state.transport==='android-relay'&&state.physicalLink==='ap'))throw Error('Android direct AP owns this path; do not relay via WebApp');
@@ -230,6 +238,8 @@ async function claim(source='WEB'){
   state.rcSession=data.session;
  }
  state.owner=true;state.rcSource=source;state.seq=0;state.frameAt=0;audit('RC claimed by '+source+' • motors OFF','success');render();
+ // Immediately send a safe neutral diagnostic frame so ownership does not idle-expire.
+ await sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},source);
 }
 async function releaseRc(){
  const had=state.owner,session=state.rcSession;
@@ -277,8 +287,9 @@ function ingestAndroid(frame){
  // AP direct belongs to Android native, never forward its WebRTC echo via WebApp.
  if(state.transport==='ap'||state.transport==='none'||(state.transport==='android-relay'&&state.physicalLink==='ap')||!$('kitHardwareTarget')?.checked)return;
  if(!state.owner||state.rcSource!=='ANDROID')return;
- if(!frame||frame.armed===true)return;
- void sendFrame(frame,'ANDROID');
+ if(!frame)return;
+ // Virtual ARM is ignored for hardware. The firmware only accepts armed=false.
+ void sendFrame({...frame,armed:false},'ANDROID');
 }
 function webControls(){
  if(!$('tab-pid')?.classList.contains('active')||!$('kitHardwareTarget')?.checked||
