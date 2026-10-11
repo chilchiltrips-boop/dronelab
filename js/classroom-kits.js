@@ -40,10 +40,12 @@ function render(){
  byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'warn':'info';
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
+ const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
  if($('kitReleaseControl'))$('kitReleaseControl').disabled=!ready||!state.owner||state.working;
  if($('kitAdminApply'))$('kitAdminApply').disabled=!ready||state.transport!=='usb'||state.owner||state.working;
+ if($('kitAdminRead'))$('kitAdminRead').disabled=!ready||state.transport!=='usb'||state.working;
  for(const id of ['kitRotateKey','kitFactoryReset'])if($(id))$(id).disabled=!ready||state.transport!=='usb'||state.owner||state.working;
  for(const id of ['kitModeApply','kitWifiSave'])if($(id))$(id).disabled=!ready||state.working;
  const status=$('kitAdminAccess');if(status)status.textContent=ready&&state.transport==='usb'?'Physical USB provisioning available':'Admin edits require selected kit on USB';
@@ -327,7 +329,7 @@ function init(){
  guardAction('kitTakeControl',()=>claim($('kitSourceSelect')?.value||'WEB'));guardAction('kitReleaseControl',releaseRc);guardAction('kitStop',stop);
  guardAction('kitModeApply',applyMode);guardAction('kitWifiSave',wifiSave);
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
- $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
+ $('kitTopConnect')?.addEventListener('click',goKits);$('kitTopMode')?.addEventListener('click',()=>{goKits();$('kitWifiMode')?.focus()});$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
