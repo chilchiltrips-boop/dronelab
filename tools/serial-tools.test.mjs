@@ -92,10 +92,10 @@ test('USB Flash button explains disabled state and validates loaded board/type b
  ctx.busy=true;ctx.refresh();assert.equal(els.get('#fwUsbFlashBtn').disabled,true);
 });
 
-test('both public firmware pages brand FlightCore and show generic Flash over USB',()=>{
- for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('ZEBJUS FlightCore Firmware Center'));assert.ok(html.includes('>Flash over USB</button>'));assert.ok(!html.includes('Flash I²C over USB'));}
+test('both public firmware pages show AERION 1.3.5 branding and USB flashing',()=>{
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('ZEBJUS AERION Firmware Center'));assert.ok(html.includes('>Flash over USB</button>'));assert.ok(!html.includes('Flash I²C over USB'));}
  const cat=JSON.parse(readFileSync(new URL('../firmware-catalog.json',import.meta.url),'utf8'));
- assert.deepEqual(cat.boards.map(b=>b.name),['ZEBJUS FlightCore A1 SuperMini','ZEBJUS FlightCore A2 C6']);
+ assert.deepEqual(cat.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
  assert.equal(cat.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  assert.ok(cat.boards.every(b=>b.latest.app.file.startsWith('ZEBJUS_FLIGHTCORE_')));
 });
