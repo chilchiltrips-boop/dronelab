@@ -2,8 +2,10 @@
 // ZEBJUS AERION classroom diagnostics • NO MOTOR OUTPUTS.
 // An identifying six-digit code is NOT a password or an authorization secret.
 #include <Preferences.h>
+#include <mbedtls/sha256.h>
 
 static Preferences zjKitPrefs;
+static bool zjAdminUnlocked=false;static uint32_t zjAdminUnlockAt=0,zjAdminCooldownAt=0;static uint8_t zjAdminFailures=0;
 static String zjKitId,zjKitCode,zjKitName;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="";
@@ -107,15 +109,61 @@ static bool zjAdminValue(const char* value,size_t minLen,size_t maxLen,bool spac
   if(!(c>='a'&&c<='z')&&!(c>='A'&&c<='Z')&&!(c>='0'&&c<='9')&&c!='-'&&c!='_'&&!(spaces&&c==' '))return false;
  }return true;
 }
+// USB maintenance commands require a teacher-provisioned passphrase; this is software authorization,
+// NOT secure boot / flash encryption and cannot defend against an attacker reflashing the board.
+static String zjAdminDigest(const String& pass){
+ const String salted=zjKitId+"|zj-teacher|"+pass;
+ unsigned char hash[32]={0};if(mbedtls_sha256((const unsigned char*)salted.c_str(),salted.length(),hash,0)!=0)return "";
+ const char digits[]="0123456789abcdef";String out;out.reserve(64);
+ for(const uint8_t v:hash){out+=digits[v>>4];out+=digits[v&15];}return out;
+}
+static bool zjAdminPassValid(const String& pass){
+ if(pass.length()<12||pass.length()>64)return false;
+ for(size_t i=0;i<pass.length();++i){const unsigned char v=pass[i];if(v<33||v>126||v==',')return false;}
+ return true;
+}
+static bool zjAdminAuthorized(){
+ return zjAdminUnlocked&&millis()-zjAdminUnlockAt<60000UL;
+}
+static bool zjAdminProtectedCommand(char* line){
+ if(!strncmp(line,"ZJADMIN,ENROLL,",15)){
+  if(zjKitPrefs.getString("adminHash","").length()){Serial.println("ZJADMIN,ERR,ALREADY_ENROLLED");return true;}
+  const String pass=line+15;if(!zjAdminPassValid(pass)){Serial.println("ZJADMIN,ERR,PASSPHRASE_MIN_12");return true;}
+  const String digest=zjAdminDigest(pass);if(digest.length()!=64){Serial.println("ZJADMIN,ERR,HASH_ERROR");return true;}
+  zjKitPrefs.putString("adminHash",digest);zjAdminUnlocked=true;zjAdminUnlockAt=millis();
+  Serial.println("ZJADMIN,ACK,ENROLLED");return true;
+ }
+ if(!strncmp(line,"ZJADMIN,UNLOCK,",15)){
+  const String stored=zjKitPrefs.getString("adminHash","");
+  if(stored.length()!=64){Serial.println("ZJADMIN,ERR,ENROLL_FIRST");return true;}
+  if(zjAdminCooldownAt&&int32_t(millis()-zjAdminCooldownAt)<0){Serial.println("ZJADMIN,ERR,WAIT_BEFORE_RETRY");return true;}
+  const String digest=zjAdminDigest(String(line+15));
+  uint8_t mismatch=0;for(size_t i=0;i<64;++i)mismatch|=uint8_t(digest[i]^stored[i]);
+  if(mismatch){zjAdminUnlocked=false;if(++zjAdminFailures>=3){zjAdminCooldownAt=millis()+30000;zjAdminFailures=0;}
+   Serial.println("ZJADMIN,ERR,INVALID_ADMIN_PASSPHRASE");return true;}
+  zjAdminUnlocked=true;zjAdminUnlockAt=millis();zjAdminFailures=0;zjAdminCooldownAt=0;
+  Serial.println("ZJADMIN,ACK,UNLOCKED_60S");return true;
+ }
+ if(!strcmp(line,"ZJADMIN,LOCK")){zjAdminUnlocked=false;Serial.println("ZJADMIN,ACK,LOCKED");return true;}
+ if(!strncmp(line,"ZJADMIN,CHANGEPASS,",19)){
+  if(!zjAdminAuthorized()){Serial.println("ZJADMIN,ERR,ADMIN_LOCKED");return true;}
+  const String pass=line+19;if(!zjAdminPassValid(pass)){Serial.println("ZJADMIN,ERR,PASSPHRASE_MIN_12");return true;}
+  zjKitPrefs.putString("adminHash",zjAdminDigest(pass));zjAdminUnlocked=false;
+  Serial.println("ZJADMIN,ACK,PASSPHRASE_CHANGED_LOCKED");return true;
+ }
+ return false;
+}
 static void zjAdminInfo(){
  Serial.print("ZJADMIN,NAME,");Serial.println(zjKitName);
  Serial.print("ZJADMIN,APNAME,");Serial.println(zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+String(FC_BOARD).substring(4)));
  Serial.println("ZJADMIN,APPASS,SET");
- Serial.println("ZJADMIN,AUTH,USB_PHYSICAL_ONLY");
+ Serial.print("ZJADMIN,AUTH,");Serial.println(zjKitPrefs.getString("adminHash","").length()==64?(zjAdminAuthorized()?"UNLOCKED":"LOCKED"):"ENROLL_REQUIRED");
 }
 static bool zjAdminSerialCommand(char* line){
  if(!strcmp(line,"ZJADMIN,GET")){zjAdminInfo();return true;}
  if(strncmp(line,"ZJADMIN,",8))return false;
+ if(zjAdminProtectedCommand(line))return true;
+ if(!zjAdminAuthorized()){Serial.println("ZJADMIN,ERR,ADMIN_LOCKED");return true;}
  if(zjRcOwned){Serial.println("ZJADMIN,ERR,CONTROLLER_ACTIVE");return true;}
  if(!strncmp(line,"ZJADMIN,NAME,",13)){
   const char* name=line+13;if(!zjAdminValue(name,3,31)){Serial.println("ZJADMIN,ERR,INVALID_NAME");return true;}
@@ -151,6 +199,7 @@ static bool zjRcSerialCommand(char* line){
   const char* code=line+11;bool valid=strlen(code)==6;
   for(int i=0;valid&&i<6;i++)valid=code[i]>='0'&&code[i]<='9';
   if(!valid||zjRcOwned){Serial.println("ZJKIT,ERR,CODE_INVALID_OR_LOCKED");return true;}
+  if(!zjAdminAuthorized()){Serial.println("ZJKIT,ERR,ADMIN_LOCKED");return true;}
   zjKitCode=code;zjKitPrefs.putString("code",zjKitCode);
   Serial.print("ZJKIT,ACK,CODE,");Serial.println(zjKitCode);
   Serial.println("ZJKIT,INFO,VERIFY_NO_DUPLICATE_IN_CLASSROOM_REBOOT_TO_REFRESH_AP");return true;
