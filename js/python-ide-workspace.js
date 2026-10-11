@@ -99,7 +99,7 @@ export function createPythonIDEShell(api){
  // Right side: one tool window at a time, with a persistent slim tool stripe.
  const rail=node('div','py-tool-rail');rail.setAttribute('aria-label','Python tool windows');
  const panels=[
-  ['camera','Camera','camera'],['plotter','Plotter','chart'],['usb','USB Hardware','usb'],['assets','Assets','image']
+  ['camera','Camera','camera'],['plotter','Plotter','chart'],['usb','USB Hardware','usb-connect'],['assets','Assets','image']
  ];
  const railHelp={camera:'Open Camera and MediaPipe preview',plotter:'Open live USB gyro charts and Python plots',usb:'Connect USB FlightCore A1 / A2 and read sensors',assets:'Preview imported project images and files'};
  for(const [id,label,svg] of panels){const b=button('',svg,()=>openRight(right===id?'closed':id),'py-rail-button');hint(b,railHelp[id]);b.dataset.pyRail=id;rail.append(b)}
@@ -143,7 +143,7 @@ export function createPythonIDEShell(api){
   runPythonBtn:['play','Run the Python file currently open in the editor (Ctrl/⌘ + Enter)'],
   stopPythonBtn:['stop','Stop the running Python script and release resources'],
   rerunPythonBtn:['rerun','Stop and run the currently selected Python file again'],
-  pyConnectUsbBtn:['usb','Connect FlightCore A1/A2 via Web Serial at 115200 baud'],
+  pyConnectUsbBtn:['usb-connect','Connect FlightCore A1/A2 via Web Serial at 115200 baud'],
   pythonCameraStart:['camera','Request camera permission and open the live preview'],
   pythonCameraStop:['stop','Stop the camera and release its stream'],
   pythonOutputOpen:['chart','Open the latest Python Matplotlib plot window'],
@@ -208,6 +208,23 @@ export function createPythonIDEShell(api){
  hint(dockMin,'Minimize Run / Terminal to give the editor more space');
  hint(dockMax,'Expand the Run / Terminal panel');
  const row=$('pythonRowResizer'),terminal=$('pythonTerminal')?.closest('.python-terminal-card');
+ // Share a single compact header across Run/Terminal, live status and actions.
+ // Keep the original status IDs: the Worker and regression checks update them.
+ const terminalHeading=terminal?.querySelector('.python-terminal-heading');
+ const terminalStatus=terminalHeading?.querySelector('#pyStatus');
+ const runtimeStatus=terminalHeading?.querySelector('#pyRuntimeState');
+ const terminalActions=terminalHeading?.querySelector('.python-terminal-actions');
+ const terminalFooter=terminal?.querySelector('.py-terminal-status');
+ const runState=terminalFooter?.querySelector('#pyLastRun');
+ const lineCount=terminalFooter?.querySelector('#pyLineCount');
+ const dockStatus=node('div','py-dock-live-status');
+ if(terminalStatus)dockStatus.append(terminalStatus);
+ if(runState)dockStatus.append(runState);
+ if(runtimeStatus){runtimeStatus.classList.add('py-sr-only');dockStatus.append(runtimeStatus)}
+ dockHead.insertBefore(dockStatus,dockMax);
+ if(terminalActions){dockHead.insertBefore(terminalActions,dockMax)}
+ if(lineCount){lineCount.classList.add('py-dock-line-count');dockHead.insertBefore(lineCount,dockMax)}
+ terminalHeading?.remove();terminalFooter?.remove();
  dock.append(dockHead);if(row)dock.append(row);if(terminal)dock.append(terminal);
  layout.insertAdjacentElement('afterend',dock);
  // Asset database stores binary Blobs outside localStorage quotas.
