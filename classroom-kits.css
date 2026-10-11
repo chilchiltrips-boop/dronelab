@@ -71,3 +71,10 @@
   height:max(210px,var(--py-work-height))!important;min-height:210px!important;
  }
 }
+
+/* Firmware flashing: normal verified APP = blue, FACTORY (overwrites
+ * configuration) = amber warning, no verified target = disabled gray. */
+.firmware-page #fwUsbFlashBtn{min-height:46px;font-weight:850;letter-spacing:.01em;background:#1266c3;color:#fff;border-color:#509ad6}
+.firmware-page #fwUsbFlashBtn.factory-risk:not(:disabled){background:#804b1b;border-color:#eeb465;color:#fff6e6}
+.firmware-page #fwUsbFlashBtn:disabled{background:#27394a;color:#a9b6c4;border-color:#41566a;cursor:not-allowed;opacity:.65}
+.firmware-page #fwUsbFlashBtn:focus-visible{outline:3px solid #77f2c9;outline-offset:3px}
