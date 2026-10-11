@@ -1,11 +1,11 @@
-# ZEBJUS FlightCore 1.3.3 — AP / STA / USB network-lab preview
+# ZEBJUS FlightCore 1.3.4 — AP / STA / USB network-lab preview
 
 This is a **lab diagnostics release**, not production flight-control firmware. No motor output is connected to Android joystick packets. Test without propellers and without ESC/motor power.
 
 ## Current connection architecture
 
 - **USB:** Chrome/Edge Web Serial connects directly. First factory flash, ROM recovery and bootloader/partition replacement remain USB-only.
-- **AP:** FlightCore exposes its own WPA2 Wi-Fi, `ZEBJUS_ZFC-A1_<suffix>` or `ZEBJUS_ZFC-A2_<suffix>`, at `192.168.4.1`. Phone must join that AP in Android Settings.
+- **AP:** FlightCore exposes its own WPA2 Wi-Fi, `ZEBJUS-AERION-A1-<code>` or `ZEBJUS-AERION-A2-<code>`, at `192.168.4.1`. Phone must join that AP in Android Settings.
 - **STA:** FlightCore joins the configured router; phone must join a reachable Wi-Fi network. Internet is **not needed** for local AP/STA operations. This is not cloud control.
 - **AUTO:** Firmware tries the saved SSID, falls back to its AP when missing or failing, and periodically retries. Manually switching mode drops old sessions; pair again.
 
@@ -15,8 +15,8 @@ This is a **lab diagnostics release**, not production flight-control firmware. N
 
 ## First setup
 
-1. Flash the **matching** FlightCore A1 or A2 **Factory** image over USB. Verify actual running `ZJINFO,FW,...,1.3.3` on Serial (115200). Binary catalog version alone is not proof that the board updated.
-2. Read the *unique* `ZJNET,ACCESS,<AP SSID>,<AP WPA2 password>,<32-character key>` line on USB Serial. Treat the final two fields as secrets. They are not committed to GitHub. The key and AP password are persisted in ESP32 preferences; if reset/erased, read the new ones over USB. Never publicly share the line.
+1. Flash the **matching** FlightCore A1 or A2 **Factory** image over USB. Verify actual running `ZJINFO,FW,...,1.3.4` on Serial (115200). Binary catalog version alone is not proof that the board updated.
+2. Read `ZJKIT,ID,...`, `ZJKIT,CODE,...`, `ZJKIT,NAME,...` and `ZJNET,ACCESS,<AP SSID>,<AP WPA2 password>,<32-character key>` on USB Serial. AP WPA2 password is intentionally `12345678` for classroom convenience and is NOT a control credential. Keep the per-device 32-character key secret. They are not committed to GitHub. The key and AP password are persisted in ESP32 preferences; if reset/erased, read the new ones over USB. Never publicly share the line.
 3. Open the Android companion 1.6.4 or newer and its **FlightCore Connection** panel. Tap **Open Wi-Fi Settings**, join the FlightCore AP with its password, enter kit IP `192.168.4.1` and access key, **Connect / Refresh**. Alternatively enter the kit STA LAN IP when already connected to router.
 4. **Scan Nearby Wi-Fi**, pick an SSID, enter the password and choose **Test Wi-Fi & Save on Success**. The ESP32 saves credentials **only after joining** the router successfully (does not test Internet). Once STA is active, rejoin the same router on the phone, update the address, reconnect.
 5. Choose **AUTO / AP / STA** and **Apply Mode**. Switching modes can change device IP and invalidate the current WebRTC pairing. Stop joystick and re-pair before resuming.
@@ -29,7 +29,7 @@ Python Lab `Python execution target` now offers **Python 3 / Simulator**, **USB 
 
 ## Android joystick
 
-Check **Receive Android joystick at FlightCore (preview only, motors disabled)**. Frames are transmitted to `POST /api/rc/preview` with owner exclusivity and sequence/range checks. A 350 ms timeout resets throttle/axes. This validates packet reception **only**. No flight arming, ESC mixing, PWM/DShot motor outputs, flight stabilization, live PID writing, or actual drone flight is implemented through this path. Flight deployment must include a reviewed, independently tested failsafe and operator authorization before enabling motors.
+**Firmware 1.3.4 requires a controller claim before preview.** Authenticated clients POST `/api/rc/claim` (`source=WEB|ANDROID`, `kitCode=<6 digits>`), retain the returned `session`, then POST `/api/rc/preview` with `armed=false`, `source`, `session`, monotonically increasing `seq`, and `throttle`, `roll`, `pitch`, `yaw` (1000–2000). Call `/api/rc/release` with the session. A 350 ms input timeout resets throttle/axes; control lease expires after 1.8 s. Earlier Android 1.6.4 preview senders need updates to this protocol. This validates packet reception **only**. No flight arming, ESC mixing, PWM/DShot motor outputs, flight stabilization, live PID writing, or actual drone flight is implemented through this path. Flight deployment must include a reviewed, independently tested failsafe and operator authorization before enabling motors.
 
 ## Firmware update policy
 
