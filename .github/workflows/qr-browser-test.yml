@@ -30,6 +30,8 @@ on:
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
       - 'tools/qr-pairing-browser.mjs'
+      - 'tools/network-browser.mjs'
+      - 'python-lab-worker.js'
       - 'tools/audit-browser.mjs'
       - 'tools/controls-browser.mjs'
       - 'tools/offline-browser.mjs'
