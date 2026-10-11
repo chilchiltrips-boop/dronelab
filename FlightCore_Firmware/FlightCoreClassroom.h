@@ -85,11 +85,11 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
- if(zjRcHasFrame&&now-zjRcLast>ZJ_RC_DEADMAN_MS){
+ if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   zjRcNeutral();
   if(Serial.availableForWrite()>60)Serial.println("ZJRC,FAILSAFE,INPUT_TIMEOUT");
  }
- if(zjRcOwned&&now-zjRcLeaseAt>ZJ_RC_LEASE_MS)zjRcRelease("LEASE_TIMEOUT");
+ if(zjRcOwned&&int32_t(now-zjRcLeaseAt)>=0&&uint32_t(now-zjRcLeaseAt)>ZJ_RC_LEASE_MS)zjRcRelease("LEASE_TIMEOUT");
 }
 static String zjRcState(){
  const uint32_t age=zjRcHasFrame?millis()-zjRcLast:0;

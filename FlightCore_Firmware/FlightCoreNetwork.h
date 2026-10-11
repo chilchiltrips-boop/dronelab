@@ -298,7 +298,7 @@ static void zjNetworkLoop(uint32_t now){
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="saved";zjLastStaFailureReason=0;zjPhase="sta_test_pass_saved";Serial.println("ZJNET,TEST,SAVED");
    if(zjMode=="sta")zjNetApOffAt=now+10000;
    else{WiFi.disconnect();zjEnsureAP();zjPhase="ap_ready_credentials_saved";}
-  }else if(now-zjNetAttempt>ZJ_NET_TEST_TIMEOUT_MS){
+  }else if(int32_t(now-zjNetAttempt)>int32_t(ZJ_NET_TEST_TIMEOUT_MS)){
    // Record the last genuine association reason before our own disconnect can emit STA_LEAVING (36).
    if(zjLastStaFailureReason==0&&zjStaDisconnectReason!=36)zjLastStaFailureReason=zjStaDisconnectReason;
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="failed";zjPhase="sta_test_failed_not_saved";
@@ -308,7 +308,7 @@ static void zjNetworkLoop(uint32_t now){
  }else if(zjMode!="ap"){
   if(WiFi.status()==WL_CONNECTED){
    if(zjPhase=="sta_connecting"){zjPhase="sta_connected";if(zjMode=="sta")zjNetApOffAt=now+10000;}
-  }else if(zjPhase=="sta_connecting"&&now-zjNetAttempt>12000){
+  }else if(zjPhase=="sta_connecting"&&int32_t(now-zjNetAttempt)>12000){
    zjEnsureAP();zjPhase="sta_failed_ap_fallback";zjNetNextRetry=now+30000;
   }else if(zjSavedSsid.length()&&zjPhase!="sta_connecting"&&int32_t(now-zjNetNextRetry)>=0){
    zjConnectSaved();
