@@ -109,7 +109,7 @@ static bool zjAdminValue(const char* value,size_t minLen,size_t maxLen,bool spac
 }
 static void zjAdminInfo(){
  Serial.print("ZJADMIN,NAME,");Serial.println(zjKitName);
- Serial.print("ZJADMIN,APNAME,");Serial.println(zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+GYRO_BOARD));
+ Serial.print("ZJADMIN,APNAME,");Serial.println(zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+String(FC_BOARD).substring(4)));
  Serial.println("ZJADMIN,APPASS,SET");
  Serial.println("ZJADMIN,AUTH,USB_PHYSICAL_ONLY");
 }
