@@ -51,3 +51,7 @@ Representative output (not actual hardware data):
 ## Acceptance
 
 Compile both A1 and A2; verify matching Factory and APP firmware images, checksums, and USB runtime identity. With motors disconnected, test I2C/LED/gyro, NVS persistence, STA saved Wi-Fi, AP password, three kits concurrently, code collision detection, two clients contending, USB/STA/AP RC logging and watchdog. Physical hardware tests are not performed by GitHub Actions.
+
+## CI release check
+
+The GitHub Actions firmware builder compiles A1 and A2 separately with Arduino-ESP32 3.3.12, verifies 4MB factory/APP images, SHA-256 and dual OTA partitions, and republishes firmware catalogs. The hardwareFlashingTested flag remains false until physical boards are exercised.
