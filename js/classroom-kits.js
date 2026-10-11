@@ -315,8 +315,13 @@ function ingestAndroid(frame){
  void sendFrame({...frame,armed:false},'ANDROID');
 }
 function webControls(){
- if(!$('tab-pid')?.classList.contains('active')||!$('kitHardwareTarget')?.checked||
+ const pidActive=$('tab-pid')?.classList.contains('active');
+ const pythonActive=$('tab-python')?.classList.contains('active')&&root.ZebjusPythonHardwareActive===true;
+ if((!pidActive&&!pythonActive)||!$('kitHardwareTarget')?.checked||
    !state.connected||!state.owner||state.rcSource!=='WEB'||document.hidden)return;
+ // Keep the 1.8 s diagnostic lease alive on Python Lab with neutral frames only.
+ // No motors/arming; pausing/backgrounding or STOP still releases the lease.
+ if(pythonActive){void sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},'WEB');return}
  const f=$('pidFrame')?.contentWindow?.ZebjusTraining?.hardwareInput?.();
  if(f)void sendFrame(f,'WEB');
 }
@@ -331,6 +336,9 @@ async function identify(){
 function wifiNote(message,tone='info'){
  const e=$('kitWifiStatus');if(e){e.textContent=message;e.dataset.tone=tone}
  audit(message,tone);render();
+ // A network transition is independent of the USB flash writer; forward sanitized
+ // diagnostics to Firmware Log without claiming firmware write failure or success.
+ root.dispatchEvent(new CustomEvent('dronelab:kit-network-event',{detail:{message:String(message).slice(0,220),level:tone}}));
 }
 async function scanWifi(){
  if(!state.connected||state.owner)throw Error('Connect an unlocked kit first');
@@ -356,7 +364,7 @@ async function applyMode(){
   await usbWrite('ZJNET,MODE,'+mode);
   const line=await ack;
   if(!line.startsWith('ZJNET,ACK,MODE,'))throw Error('Firmware rejected mode change: '+line);
-  state.mode=mode;wifiNote('Mode changed to '+mode.toUpperCase()+' over USB. You can still use Serial.','good');
+  state.mode=mode;wifiNote('ESP32 Wi-Fi mode set to '+mode.toUpperCase()+'; WebApp connection remains USB until you separately Connect '+mode.toUpperCase()+' with verified STA/AP IP and device key.','good');
   await usbWrite('ZJNET,GET');render();
  }else{
   await deviceRequest('/api/wifi/mode','POST',{mode});
@@ -476,7 +484,7 @@ function onSerial(e){
    if(match&&$('kitWifiNetworks'))$('kitWifiNetworks').add(new Option(match[1]+' • '+match[2]+' dBm'+(match[3]==='SECURE'?' 🔒':''),match[1]));
   }else if(text==='ZJNET,SCAN,END')wifiNote('Router scan complete • select SSID and enter password','good');
   else if(text==='ZJNET,TEST,SAVED'){wifiTesting=false;wifiNote('STA router connected and credentials saved in kit NVS','good')}
-  else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched','error')}
+  else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched. Check 2.4 GHz router SSID/password, signal and security; keep AUTO/AP for recovery.','error');void usbWrite('ZJNET,GET').catch(()=>{})}
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
   else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
