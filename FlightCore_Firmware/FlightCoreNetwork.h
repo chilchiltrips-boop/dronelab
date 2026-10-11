@@ -13,6 +13,7 @@ static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjNetApOffAt=0,zjRcLast=0,zjRcSe
 static IPAddress zjRcOwner;
 static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
 static int zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500,zjRcThrottle=1000;
+static bool zjPreviousScanActive=false;
 
 // Escapes all user-provided Wi-Fi identifiers before emitting JSON.
 static String zjJson(const String& src){
@@ -33,8 +34,8 @@ static bool zjAuthenticated(){
 static bool zjAllow(){if(zjAuthenticated())return true;zjHttp.send(401,"application/json","{\"error\":\"access_key_required\"}");return false;}
 static void zjReply(int status,const String& body){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send(status,"application/json",body);}
 static void zjEnsureAP(){
+ if((WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
  WiFi.mode(WIFI_AP_STA);
- if(WiFi.softAPIP()!=IPAddress(192,168,4,1)||!WiFi.softAPgetStationNum()){ /* AP might already be active. */ }
  WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
  WiFi.softAP(zjApSsid.c_str(),zjApPass.c_str(),1,false,4);
 }
@@ -155,6 +156,8 @@ static void zjNetworkSetup(){
 }
 static void zjNetworkLoop(uint32_t now){
  zjHttp.handleClient();
+ if(zjPreviousScanActive&&!scanActive)zjLastScanSeq++;
+ zjPreviousScanActive=scanActive;
  if(zjOtaRebootAt&&int32_t(now-zjOtaRebootAt)>=0){ESP.restart();return;}
  if(zjNetTesting){
   if(WiFi.status()==WL_CONNECTED){
