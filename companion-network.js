@@ -19,6 +19,7 @@ function request(route,method='GET',args={},timeout=5500){
   native.request(id,ip,key,method,route,method==='POST'?form(args):'');
  });
 }
+window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;el('kitRcPreview').checked=false;}};
 window.zebjusNativeResult=data=>{
  const item=pending.get(data?.id);if(!item)return;
  clearTimeout(item.timer);pending.delete(data.id);
@@ -89,6 +90,11 @@ function bind(){
  action('kitRead',async()=>{const data=await pollTelemetry();el('kitTelemetry').textContent=JSON.stringify(data,null,2)});
  action('kitI2cScan',async()=>{await command('ZJI2C,SCAN');show('I²C scan requested; refresh telemetry for device addresses','good')});
  action('kitLedOff',()=>command('ZJLED,1,STOP'));
+ action('kitAppOta',()=>{
+  if(!online||!native?.pickAppFirmware)throw Error('Connect FlightCore first');
+  if(!confirm('APP OTA BENCH UPDATE ONLY. Propellers removed and ESC power disconnected? Use matching A1/A2 APP .bin only. Continue?'))return;
+  native.pickAppFirmware(ip,key);show('Select matching FlightCore APP .bin using Android Files');
+ });
  setInterval(()=>{if(!online)return;status().catch(()=>{online=false;show('Kit disconnected. Check phone Wi-Fi and IP.','warn')})},3500);
 }
 window.ZebjusNetwork={request,status,scan,command,previewControls,onWebRequest,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
