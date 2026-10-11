@@ -227,3 +227,48 @@
  }
  #app #tab-assembly.active #componentShelf .product-card{flex:0 0 min(215px,75vw)!important;max-width:min(215px,75vw)}
 }
+
+
+/* Unified firmware discovery + compact, non-overlapping one-row toolbar.
+   Keep fixed 82px header; narrow devices scroll horizontally rather than stack. */
+.kit-discovery-card{margin:12px 0 14px}
+.kit-discovery-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,275px),1fr));gap:8px;padding:7px 0}
+.kit-discovery-results .kit-known-item{min-width:0;max-width:100%;width:100%;text-align:left}
+.kit-discovery-results .kit-known-item b,.kit-discovery-results .kit-known-item small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.firmware-discovery-card{margin:0 0 15px}
+.firmware-discovery-card .firmware-target-actions{margin-top:10px}
+#app .topbar-main{gap:4px!important}
+#app .topbar-main>.brand{min-width:0!important;margin-right:2px!important}
+#app .topbar-main>.brand b{font-size:12px!important;max-width:132px!important}
+#app .topbar-main>.brand span{font-size:8px!important;max-width:132px!important}
+#app .topbar-main>.kit-top-status{min-width:0!important;flex:1 1 350px!important;max-width:480px!important;gap:3px!important;padding:3px 4px!important}
+#app .topbar .kit-top-detail{min-width:0!important;flex:1 1 86px!important;max-width:134px!important;overflow:hidden}
+#app .topbar .kit-top-detail b,#app .topbar .kit-top-detail small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#app .topbar #kitGlobalState{max-width:76px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:8px!important}
+#app .topbar .kit-top-status .btn{padding:5px 5px!important;font-size:9px!important;min-width:0!important}
+#app .topbar .qr-header-controls{gap:3px!important}
+#app .topbar .topbar-edit .btn{padding:4px 6px!important;font-size:9px!important}
+#app .topbar #mobileHeaderStatus{max-width:93px!important;overflow:hidden;text-overflow:ellipsis}
+#app .topbar .top-grant-control{max-width:117px}
+#app .topbar .grant-control-text{max-width:73px!important;overflow:hidden;text-overflow:ellipsis}
+.kit-top-switch[data-link=offline]{opacity:.62}
+.kit-top-switch[data-link=sta]{border-color:#72c5f1}
+.kit-top-switch[data-link=ap]{border-color:#55e6a8}
+@media(max-width:1320px){
+ #app .topbar-main>.brand span{display:none!important}
+ #app .topbar #webappVersion{display:none!important}
+ #app .topbar .kit-top-detail small{display:none!important}
+ #app .topbar-main>.kit-top-status{flex:1 1 315px!important}
+ #app .topbar .topbar-edit{gap:2px!important}
+}
+@media(max-width:1100px){
+ #app .topbar-main>.brand b{max-width:94px!important;font-size:11px!important}
+ #app .topbar-main>.kit-top-status{flex:0 0 auto!important;min-width:325px!important;max-width:365px!important}
+ #app .topbar .qr-header-controls{flex:0 0 auto!important}
+ #app .topbar .topbar-edit{flex:0 0 auto!important}
+}
+@media(max-width:820px){
+ #app .topbar-main>.kit-top-status{min-width:315px!important}
+ #app .topbar-main>.brand{flex:0 0 auto!important}
+ #app .topbar-main{overflow-x:auto!important;overflow-y:hidden!important}
+}
