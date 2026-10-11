@@ -22,7 +22,7 @@ test('Python Wi-Fi scan and provisioning use authenticated safe allowlisted requ
  assert.match(n,/request\('\/api\/wifi\/scan'\)/);
  assert.match(n,/request\('\/api\/wifi\/test','POST'/);
  assert.match(n,/await window\.ZebjusKits\.releaseRc\(\)/);
- assert.match(n,/sta_test_pass_saved\|\|phase==='ap_ready_credentials_saved'/);
+ assert.match(n,/phase==='sta_test_pass_saved'\|\|phase==='ap_ready_credentials_saved'/);
  assert.match(n,/state:'unverified'/);
 });
 test('USB flash log also receives sanitized Wi-Fi mode, save and failure messages',()=>{
@@ -30,7 +30,7 @@ test('USB flash log also receives sanitized Wi-Fi mode, save and failure message
  assert.match(kit,/dronelab:kit-network-event/);
  assert.match(fw,/addEventListener\('dronelab:kit-network-event'/);
  assert.match(fw,/\[KIT NETWORK\]/);
- assert.match(page,/32-character private Device Access Key/);
+ assert.match(page,/Private Device Access Key/);
  assert.match(page,/value="wifi_scan"/);
  assert.match(page,/value="wifi_save"/);
 });

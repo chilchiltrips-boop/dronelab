@@ -499,6 +499,7 @@ function onSerial(e){
    audit('USB firmware handshake verified • '+kit.kitId,'success');
    void usbWrite('ZJNET,GET').catch(()=>{});
    void usbWrite('ZJADMIN,GET').catch(()=>{});
+   void pairUsb().catch(e=>audit('Automatic USB pairing unavailable: '+e.message,'warn'));
   }catch(err){audit('USB identity not verified: '+err.message,'warn')}
  }
  if(state.connected&&state.transport==='usb'&&line.startsWith('ZJNET,')){

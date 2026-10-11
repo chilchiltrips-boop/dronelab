@@ -7,12 +7,12 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
  try{
   const [manifest,catalog]=await Promise.all([fetch('./ASSET_MANIFEST.json'),fetch('./firmware-catalog.json')]);
   if(manifest.ok)urls.push(...Object.keys((await manifest.json()).sha256||{}).map(x=>'./'+x));
-  if(catalog.ok)for(const board of (await catalog.json()).boards){
+  if(catalog.ok){const available=await catalog.json();urls.push('./FlightCore_Firmware/catalog.json?v='+encodeURIComponent(available.version));for(const board of available.boards){
    for(const kind of ['app','factory']){
     const image=board.latest[kind];
     if(image?.available)urls.push('./FlightCore_Firmware/'+image.file+'?v='+encodeURIComponent(board.latest.version));
    }
-  }
+  }}
  }catch{/* Existing shell stays active if essential assets cannot be downloaded. */}
  urls.push(...['app','catalog','config','model-assets','project-state','sound-power','shared-ui','assembly-scene','wiring-renderer','wiring-validation','ui-controls'].map(x=>'./js/'+x+'.js'));
  const unique=[...new Set(urls)],results=await Promise.allSettled(unique.map(async url=>{
