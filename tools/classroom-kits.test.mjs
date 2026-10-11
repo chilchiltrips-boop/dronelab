@@ -39,5 +39,5 @@ test('Network/session changes cannot silently reassign firmware control',()=>{
 });
 test('Offline bundle includes new UI so an AP-only classroom can reuse the cached shell',()=>{
  const sw=read('sw.js');
- for(const u of ['./classroom-kits.css?v=1.3.6-ota1','./js/classroom-kits.js?v=1.3.6-ota1'])assert.ok(sw.includes(u),u);
+ for(const u of ['./classroom-kits.css?v=1.3.7-discovery1','./js/classroom-kits.js?v=1.3.7-discovery1'])assert.ok(sw.includes(u),u);
 });
