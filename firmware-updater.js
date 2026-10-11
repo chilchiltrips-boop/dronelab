@@ -56,7 +56,10 @@ function syncFirmwareControls(){
  const flash=usbFlashReadiness();
  for(const [id,ready] of [['#fwReadRunningBtn',serialSupported],['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
  const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');
- if(flashButton)flashButton.title=flash.message;
+ if(flashButton){flashButton.title=flash.message;
+  flashButton.classList.toggle('factory-risk',!!fw&&fw.type==='factory'&&flash.ready);
+  flashButton.setAttribute('aria-label',flash.ready?(fw?.type==='factory'?'Flash verified FACTORY firmware over USB; existing settings may be erased':'Flash verified APP firmware over USB'):'USB flash unavailable: '+flash.message);
+ }
  if(flashHelp){flashHelp.textContent=flash.message;flashHelp.classList.toggle('ready',flash.ready)}
  for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=busy||!school();e.title=school()?'':'Unavailable: this scanner firmware has no Wi-Fi/AP service.'}}
  const erase=$('#fwEraseUsb');if(erase){erase.disabled=busy||($('#fwImageType')?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}
