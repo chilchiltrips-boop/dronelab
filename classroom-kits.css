@@ -95,3 +95,135 @@
 .kit-center button:disabled{opacity:.48;cursor:not-allowed}
 @media(prefers-reduced-motion:reduce){.kit-center *,.kit-top-status *{animation:none!important;transition:none!important}}
 @media(max-width:1000px){.kit-top-status{flex-wrap:wrap;max-width:100%;gap:6px}.kit-top-detail{flex:1 1 160px}}
+
+
+/* AERION single-row desktop/mobile header • never add a wrapped control row.
+   Compact small buttons preserve the original toolbar height; narrow screens
+   may horizontally swipe the controls, instead of stacking and hiding STOP. */
+#app .topbar{
+ --topbar-height:82px;display:flex!important;flex-direction:column!important;
+ align-items:stretch!important;justify-content:center!important;gap:3px!important;
+ height:82px!important;min-height:82px!important;max-height:82px!important;
+ padding:4px clamp(7px,1vw,16px)!important;overflow:visible
+}
+#app .topbar-main{
+ display:flex!important;flex-wrap:nowrap!important;align-items:center!important;
+ gap:5px!important;width:100%;height:49px;min-height:49px!important;
+ min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;
+ scrollbar-width:none;white-space:nowrap
+}
+#app .topbar-main::-webkit-scrollbar{display:none}
+#app .topbar-main>*{grid-area:auto!important;min-width:0}
+#app .topbar-main>.brand{flex:0 0 auto!important;margin:0 5px 0 0!important;gap:7px}
+#app .topbar-main>.brand .logo{height:32px!important;width:32px!important;flex:0 0 32px;border-radius:9px}
+#app .topbar-main>.brand b{font-size:14px!important;line-height:17px;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+#app .topbar-main>.brand span{font-size:9px!important;line-height:12px;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+#app .topbar-main>.zebjus-top-shop{display:none!important}
+#app .topbar-main>.kit-top-status{
+ display:flex!important;flex:1 1 510px!important;max-width:none!important;min-width:430px!important;
+ gap:5px!important;flex-wrap:nowrap!important;padding:3px 6px;height:44px;border-radius:10px;
+ overflow:hidden;align-items:center
+}
+#app .topbar .kit-top-detail{flex:1 1 110px;min-width:67px;max-width:185px}
+#app .topbar .kit-top-detail b{font-size:10px}
+#app .topbar .kit-top-detail small{font-size:8px}
+#app .topbar #kitGlobalState{font-size:9px;flex:0 0 auto}
+#app .topbar .btn.small{padding:5px 7px!important;font-size:10px!important;
+ line-height:1.15;min-height:31px!important;white-space:nowrap;border-radius:8px}
+#app .topbar .kit-top-status .btn{min-height:31px!important}
+#app .topbar .qr-header-controls{display:flex!important;flex:0 1 auto!important;
+ margin:0!important;min-width:0;flex-wrap:nowrap!important;gap:5px!important}
+#app .topbar #webappVersion{font-size:9px;padding:6px 6px}
+#app .topbar #mobileHeaderStatus{font-size:9px;padding:6px 7px;max-width:122px}
+#app .topbar .top-grant-control{padding:5px 7px!important;gap:6px!important;white-space:nowrap}
+#app .topbar .grant-control-text{font-size:10px!important}
+#app .topbar .topbar-edit{display:flex!important;flex:0 0 auto!important;width:auto!important;
+ margin:0!important;flex-wrap:nowrap!important;gap:4px!important}
+#app .topbar .topbar-edit .btn{padding:5px 8px!important;font-size:10px!important;
+ min-height:31px!important;white-space:nowrap;border-radius:8px}
+#app .topbar .topbar-status{
+ display:flex!important;flex:0 0 16px!important;min-height:16px!important;height:16px!important;
+ align-items:center!important;gap:8px!important;padding:0 1px!important;
+ margin:0!important;border:0!important;white-space:nowrap;overflow:hidden
+}
+#app .topbar-status .status{font-size:9px!important;line-height:13px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap!important}
+#app .topbar-status #assetStatus{min-width:0!important;flex:1 1 auto!important}
+#app .topbar-status #saveState{flex:0 0 auto}
+#app .topbar .adaptive-layout-badge{font-size:8px!important}
+#app .tabs{top:82px!important}
+.kit-top-network{display:flex;flex:0 0 auto;align-items:center;gap:3px;font-size:9px;
+ font-weight:800;color:#c6deed;white-space:nowrap}
+.kit-top-switch{height:25px;width:44px;padding:0;border:1px solid #476c84;border-radius:20px;
+ background:#274458;position:relative;flex:0 0 44px;cursor:pointer}
+.kit-top-switch i{position:absolute;width:17px;height:17px;left:3px;top:3px;
+ background:#eaf9ff;border-radius:50%;transition:transform .16s ease}
+.kit-top-switch[aria-checked=true]{background:#16745b;border-color:#44dcaa}
+.kit-top-switch[aria-checked=true] i{transform:translateX(18px)}
+.kit-top-switch:disabled{opacity:.48;cursor:not-allowed}
+.kit-top-switch:focus-visible{outline:2px solid #5cf4c4;outline-offset:2px}
+#kitTopControl.kit-control-active{background:#145b45;color:#adffe0;border-color:#3bd09e}
+#kitTopControl:disabled{opacity:.45}
+.firmware-page #fwNetworkFlashBtn{min-height:44px;font-weight:800;background:#175641;
+ border:1px solid #4cb68b;color:#edfff8;flex:1 1 260px}
+.firmware-page #fwNetworkFlashBtn:disabled{background:#213645;color:#a0b4c2;
+ border-color:#405364;cursor:not-allowed}
+.firmware-page #fwNetworkFlashBtn:focus-visible{outline:3px solid #77f2c9;outline-offset:3px}
+.firmware-page #fwNetworkFlashHelp{font-size:11px;line-height:1.4;margin:5px 0 0}
+@media(max-width:1450px){
+ #app .topbar-main>.brand b{max-width:132px}
+ #app .topbar-main>.brand span{max-width:132px}
+ #app .topbar .grant-control-text{max-width:85px;overflow:hidden;text-overflow:ellipsis}
+ #app .topbar-main>.kit-top-status{flex:1 1 495px!important}
+}
+@media(max-width:820px){
+ #app .topbar{height:74px!important;min-height:74px!important;max-height:74px!important;--topbar-height:74px}
+ #app .topbar-main{height:43px;min-height:43px!important}
+ #app .topbar-main>.kit-top-status{flex:0 0 auto!important;min-width:485px!important}
+ #app .topbar-main>.brand{flex:0 0 auto!important}
+ #app .topbar-main>.qr-header-controls{flex:0 0 auto!important}
+ #app .tabs{top:74px!important}
+}
+@media(prefers-reduced-motion:reduce){.kit-top-switch i{transition:none}}
+
+/* Prevent the assembly catalog's long horizontal product shelf from widening
+   the whole document on a 390px phone. The shelf itself stays independently
+   swipeable; do not clip USB/network dialogs or the entire app. */
+@media(max-width:760px){
+ #app #tab-assembly.assembly-grid.active{
+  grid-template-columns:minmax(0,1fr)!important;min-width:0!important;
+  width:100%!important;max-width:100%!important;overflow-x:clip
+ }
+ #app #tab-assembly .left-panel,#app #tab-assembly .component-shelf{
+  min-width:0!important;max-width:100%!important
+ }
+ #app #tab-assembly .component-shelf{
+  width:100%!important;overflow-x:auto!important;overflow-y:hidden;
+  overscroll-behavior-x:contain;scrollbar-width:thin
+ }
+}
+
+/* Guard the viewport against pre-existing wide assembly product flex items.
+   overflow:clip avoids creating a scroll container, preserving sticky tabs.
+   The product shelf and topbar still provide their own horizontal scrolling. */
+@media(max-width:760px){
+ html,body{width:100%;max-width:100%;overflow-x:clip!important}
+ #app{max-width:100%!important;overflow-x:clip!important}
+}
+
+/* Narrow hardware classroom screen: prevent the right-hand parts shelf's
+   grid auto-columns from establishing a multi-thousand-pixel scroll width.
+   Keep the 3D stage and the rest of the assembly workbench unaffected. */
+@media(max-width:760px){
+ #app #tab-assembly.active .right-panel.right-workbench,
+ #app #tab-assembly.active .right-shelf-section{
+  display:block!important;box-sizing:border-box!important;min-width:0!important;
+  width:100%!important;max-width:100%!important;overflow:hidden!important
+ }
+ #app #tab-assembly.active #componentShelf.vertical-shelf{
+  display:flex!important;flex-flow:row nowrap!important;grid-template-columns:none!important;
+  grid-auto-flow:unset!important;width:100%!important;max-width:100%!important;
+  min-width:0!important;overflow-x:auto!important;overflow-y:hidden!important;
+  scrollbar-width:thin!important;contain:layout paint
+ }
+ #app #tab-assembly.active #componentShelf .product-card{flex:0 0 min(215px,75vw)!important;max-width:min(215px,75vw)}
+}

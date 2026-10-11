@@ -29,7 +29,12 @@ try{
   for(const tab of ['assembly','wiring','python','settings','firmware']){
    await page.locator('[data-tab='+tab+']').click();await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
    const metric=await page.evaluate(({tab,width,height})=>({tab,width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight,panelHeight:document.querySelector('#tab-'+tab).getBoundingClientRect().height}),{tab,width,height});
-   metrics.push(metric);check(metric.scrollWidth<=width,'Horizontal overflow '+tab+' '+width);
+   metrics.push(metric);
+   if(metric.scrollWidth>width){
+    const leaked=await page.evaluate(w=>[...document.querySelectorAll('body *')].map(e=>({tag:e.tagName,id:e.id,className:typeof e.className==='string'?e.className.slice(0,55):'',left:Math.round(e.getBoundingClientRect().left),right:Math.round(e.getBoundingClientRect().right)})).filter(e=>e.right>w+3||e.left< -50).sort((a,b)=>b.right-a.right).slice(0,20),width);
+    console.error('HORIZONTAL OVERFLOW DEBUG',tab,width,JSON.stringify(leaked));
+   }
+   check(metric.scrollWidth<=width,'Horizontal overflow '+tab+' '+width);
    if(tab==='wiring')check(await page.evaluate(()=>[...document.querySelectorAll('.wiring-card .toolbar-row button')].every(b=>{const r=b.getBoundingClientRect(),p=b.parentElement.getBoundingClientRect();return r.right<=p.right+1})), 'Clipped wiring toolbar '+width);
    if(tab==='firmware'&&width===390)check(await page.locator('#fwReconnectBtn').evaluate(b=>b.getBoundingClientRect().height<80),'Oversized firmware recovery button');
    if(width===1366)await inventory(tab);

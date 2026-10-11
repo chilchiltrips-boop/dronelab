@@ -13,6 +13,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
+let headerNetworkChoice='sta',headerModePending=false;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
  logs.push(line);if(logs.length>EVENTS_MAX)logs.shift();
@@ -43,7 +44,14 @@ function render(){
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
- const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
+ const switcher=$('kitTopNetworkSwitch');
+ if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.title='Wi-Fi '+headerNetworkChoice.toUpperCase()+' • AUTO stays in MY KITS';}
+ const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():'Connect '+headerNetworkChoice.toUpperCase();}
+ const controlButton=$('kitTopControl');
+ if(controlButton){controlButton.disabled=!ready||!['ap','sta'].includes(state.transport)||state.working;
+ controlButton.textContent=state.owner?'Release Control':state.rc?.claimed?'Kit Locked':'Take Control';
+ controlButton.classList.toggle('kit-control-active',!!state.owner);
+ controlButton.setAttribute('aria-pressed',String(!!state.owner));}
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
  if($('kitTopStop'))$('kitTopStop').disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
@@ -202,7 +210,8 @@ async function connect(){
  try{
   if(mode==='usb')await connectUSB(code);else await connectNetwork(code,mode);
   state.connected=true;state.since=Date.now();state.rc=null;state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
-  state.working=false;audit('Device verified • '+state.kitId+' • '+state.transport,'success');
+  state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
+ audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
   if(mode!=='usb')await read().catch(e=>audit(e.message,'warn'));
  }catch(e){state.working=false;state.connected=false;state.key='';audit(e.message,'error');tone(e.message,'error')}
@@ -341,7 +350,7 @@ async function applyMode(){
  if(state.owner)throw Error('Release controller before changing Wi-Fi modes');
  const mode=$('kitWifiMode')?.value||'auto';
  if(!['auto','ap','sta'].includes(mode))throw Error('Invalid Wi-Fi mode');
- if(!confirm('Switch kit to '+mode.toUpperCase()+'? STA-only can hide AP. AUTO keeps AP visible. Proceed?'))return;
+ if(!confirm('Switch kit to '+mode.toUpperCase()+'? STA-only can hide AP. AUTO keeps AP visible. Proceed?'))return false;
  if(state.transport==='usb'){
   const ack=waitSerial(/^ZJNET,(?:ACK,MODE|ERR,)/,3200);
   await usbWrite('ZJNET,MODE,'+mode);
@@ -354,6 +363,7 @@ async function applyMode(){
   wifiNote('Switching to '+mode.toUpperCase()+'. Reconnect via matching AP or STA IP.','warn');
   await disconnect('Wi-Fi mode changed • reconnect using Device ID');
  }
+ return true;
 }
 async function wifiSave(){
  if(!state.connected)throw Error('Connect a kit by USB, AP or STA first');
@@ -469,7 +479,7 @@ function onSerial(e){
   else if(text==='ZJNET,TEST,FAILED_NOT_SAVED'){wifiTesting=false;wifiNote('STA test failed • old saved Wi-Fi untouched','error')}
   else if(text.startsWith('ZJNET,ERR,')){wifiTesting=false;wifiNote(text.replace('ZJNET,ERR,','Wi-Fi error: '),'error')}
   else if(text.startsWith('ZJNET,ACK,MODE,')){state.mode=text.slice(15).toLowerCase();wifiNote('Network mode: '+state.mode.toUpperCase(),'good')}
-  else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
+  else if(text.startsWith('ZJNET,MODE,')){state.mode=text.slice(11).toLowerCase();if(['ap','sta'].includes(state.mode))headerNetworkChoice=state.mode;if($('kitWifiMode')&&['auto','ap','sta'].includes(state.mode))$('kitWifiMode').value=state.mode;render()}
   else if(text.startsWith('ZJNET,AP,')){wifiNote('AP '+text.slice(9)+' • Password is configured in Device Admin','info')}
  }
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
@@ -492,6 +502,43 @@ function onSerial(e){
 }
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{const locked=/locked|occupied|not_controller_owner/i.test(e.message);tone(e.message,locked?'locked':'error');audit(e.message,locked?'warn':'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
+async function toggleHeaderNetwork(){
+ if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before switching AP/STA');
+ const previous=headerNetworkChoice,next=previous==='ap'?'sta':'ap';
+ headerNetworkChoice=next;headerModePending=true;
+ if($('kitWifiMode'))$('kitWifiMode').value=next;
+ render();
+ try{
+  if(state.connected){const changed=await applyMode();if(changed===false){headerNetworkChoice=previous;if($('kitWifiMode'))$('kitWifiMode').value=state.mode||previous;}}
+  else tone('Selected '+next.toUpperCase()+'. Use Connect '+next.toUpperCase()+' to verify hardware identity.','info');
+ }catch(e){headerNetworkChoice=previous;throw e}
+ finally{headerModePending=false;render()}
+}
+async function connectHeaderNetwork(mode=headerNetworkChoice){
+ if(!['sta','ap'].includes(mode))throw Error('Choose STA or AP first');
+ headerNetworkChoice=mode;
+ if($('kitTransport'))$('kitTransport').value=mode;
+ if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
+ if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
+ if(state.connected&&state.kitCode&&$('kitCodeInput'))$('kitCodeInput').value=state.kitCode;
+ const code=selectedCode(),key=($('kitKeyInput')?.value||'').trim();
+ const ip=($('kitIpInput')?.value||'').trim();
+ if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!privateIPv4(ip)){
+  goKits();tone(mode==='ap'?'Join your ZEBJUS-AERION kit Wi-Fi in device settings (initial password 12345678), then enter 6-digit Kit Code and private device access key.':'Connect to the classroom router, then enter 6-digit Kit Code, verified STA IP and private device access key.','warn');
+  $('kitKeyInput')?.focus();render();return;
+ }
+ await connect();
+}
+async function toggleHeaderControl(){
+ if(!state.connected||!['sta','ap'].includes(state.transport))throw Error('Connect the verified kit over STA or AP first');
+ if(state.owner){await releaseRc();return}
+ if(state.rc?.claimed)throw Error('Kit already locked by a controller');
+ // Hardware target is BENCH RC diagnostics only. Firmware does not drive motors.
+ if($('kitHardwareTarget'))$('kitHardwareTarget').checked=true;
+ if($('kitSourceSelect'))$('kitSourceSelect').value='WEB';
+ await claim('WEB');render();
+}
+
 function init(){
  if(!$('kitCenter'))return;
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
@@ -505,7 +552,9 @@ function init(){
  guardAction('kitAdminEnroll',()=>adminAccess('ENROLL'));guardAction('kitAdminUnlock',()=>adminAccess('UNLOCK'));guardAction('kitAdminLock',()=>adminAccess('LOCK'));
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('fwOpenKitNetwork')?.addEventListener('click',()=>{goKits();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
- $('kitTopConnect')?.addEventListener('click',goKits);$('kitTopMode')?.addEventListener('click',()=>{goKits();$('kitWifiMode')?.focus()});$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
+ guardAction('kitTopNetworkSwitch',toggleHeaderNetwork);guardAction('kitTopWifiConnect',()=>connectHeaderNetwork());guardAction('kitTopControl',toggleHeaderControl);
+ guardAction('fwConnectStaBtn',()=>connectHeaderNetwork('sta'));guardAction('fwConnectApBtn',()=>connectHeaderNetwork('ap'));
+ $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
@@ -517,10 +566,74 @@ function init(){
  rcTimer=setInterval(webControls,RC_INTERVAL);
  audit('MY KITS loaded • no hardware connected');
 }
+// Verified APP-only OTA via the already authenticated direct STA/AP session.
+// No binary relay through WebRTC JSON messages. Browser Local Network Access may
+// block HTTPS→ESP32 HTTP; never claim flashing succeeded without a firmware ACK.
+async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}={}){
+ if(!state.connected||!['sta','ap'].includes(state.transport)||state.working)
+  throw Error('Connect one verified AERION kit over direct STA or AP in MY KITS first');
+ if(state.owner||state.rc?.claimed)throw Error('Release all RC diagnostic controllers before firmware OTA');
+ if(!(bytes instanceof Uint8Array)||bytes.length<32768||bytes[0]!==0xe9)
+  throw Error('Only a verified application firmware image can be flashed via Wi-Fi');
+ if(!/\.bin$/i.test(name||'')||!/^(ZFC-A1|ZFC-A2)$/.test(boardId||'')||!state.kitId.startsWith(boardId+'-'))
+  throw Error('Firmware board or image name does not match the selected physical kit');
+ const expectedChip=boardId==='ZFC-A2'?13:5;
+ if((bytes[12]|bytes[13]<<8)!==expectedChip)throw Error('ESP chip ID mismatch. Image was NOT uploaded.');
+ const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
+ const pre=await wifiDirect(ip,key,'/api/status');
+ if(pre.kitId!==deviceId||pre.kitCode!==kitCode||pre.board!==boardId)
+  throw Error('OTA blocked: network target Device ID/Kit Code/board mismatch');
+ if(pre.rc?.claimed||pre.motorsArmed!==false||pre.firmwareControl!==false||pre.otaAppOnly!==true)
+  throw Error('OTA blocked: controller busy or firmware cannot guarantee motors are disabled');
+ if(!/^\d+\.\d+\.\d+$/.test(pre.version||''))
+  throw Error('Unable to verify running firmware and OTA partition compatibility');
+ state.working=true;render();
+ try{
+  onProgress({phase:'upload',percent:4,message:'Uploading authenticated APP image to '+transport.toUpperCase()});
+  const response=await new Promise((resolve,reject)=>{
+   const req=new XMLHttpRequest();
+   req.open('POST','http://'+ip+'/api/ota',true);
+   req.timeout=120000;req.responseType='text';
+   req.setRequestHeader('X-ZJ-Key',key);
+   req.upload.onprogress=e=>{if(e.lengthComputable)onProgress({phase:'upload',percent:Math.min(87,4+Math.round(e.loaded/e.total*82)),message:'Uploading firmware '+Math.round(100*e.loaded/e.total)+'%'})};
+   req.onerror=()=>reject(Error('Wi-Fi OTA browser/network request blocked or disconnected. Do not retry until firmware version is checked via USB/STA/AP.'));
+   req.ontimeout=()=>reject(Error('OTA timed out. Check firmware version before retrying.'));
+   req.onload=()=>{let data={};try{data=JSON.parse(req.responseText||'{}')}catch{}
+    if(req.status!==200||data.updated!==true)return reject(Error(data.error||'OTA rejected • HTTP '+req.status));
+    resolve(data);
+   };
+   const body=new FormData();
+   body.append('firmware',new Blob([bytes],{type:'application/octet-stream'}),name);
+   req.send(body);
+  });
+  if(!response.updated)throw Error('No firmware write acknowledgement');
+  onProgress({phase:'reboot',percent:89,message:'OTA written • rebooting selected '+transport.toUpperCase()+' kit'});
+  await sleep(2300);
+  const deadline=Date.now()+120000;let latest=null;
+  while(Date.now()<deadline){
+   try{
+    const d=await wifiDirect(ip,key,'/api/status');
+    if(d.kitId!==deviceId||d.kitCode!==kitCode||d.board!==boardId)
+      throw Error('Different physical kit answered at the saved IP • connection aborted');
+    if(version&&d.version!==version){latest=d.version;throw Error('Reconnected but running version is '+d.version+' (expected '+version+')');}
+    Object.assign(state,{connected:true,version:d.version,mode:d.mode||state.mode,rc:d.rc||null});
+    recordKnown();tone('OTA verified on '+deviceId+' • firmware '+d.version,'good');
+    onProgress({phase:'verified',percent:100,message:'Firmware running and Device ID verified • '+d.version});
+    return {written:true,verified:true,version:d.version,kitId:deviceId};
+   }catch(e){if(/Different physical kit/.test(e.message))throw e}
+   const elapsed=120000-(deadline-Date.now());
+   onProgress({phase:'reconnect',percent:Math.min(98,90+Math.floor(elapsed/16000)),message:'Waiting for '+transport.toUpperCase()+' kit reboot / same IP • '+Math.floor(elapsed/1000)+'s'});
+   await sleep(2100);
+  }
+  audit('OTA acknowledged but kit runtime not yet independently verified','warn');
+  onProgress({phase:'reconnect',percent:99,message:'OTA write acknowledged • reconnect and verify firmware using Serial'});
+  return {written:true,verified:false,expectedVersion:version,kitId:deviceId};
+ }finally{state.working=false;render();}
+}
 root.ZebjusKits={
- connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,
+ connect,disconnect,read,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,
  getState:()=>({connected:state.connected,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
-  kitName:state.kitName,owner:state.owner,rcSource:state.rcSource,rc:state.rc,version:state.version}),
+  kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:()=>state.connected,isConnected:()=>state.connected,view:goKits
 };
