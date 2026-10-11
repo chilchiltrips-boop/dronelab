@@ -13,6 +13,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
+let headerNetworkChoice='sta',headerModePending=false;
 function audit(s,kind='info'){
  const line=new Date().toLocaleTimeString()+'  '+kind.toUpperCase()+'  '+String(s).slice(0,160);
  logs.push(line);if(logs.length>EVENTS_MAX)logs.shift();
@@ -43,7 +44,14 @@ function render(){
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Manage Kit':'＋ Connect Kit';
- const modeButton=$('kitTopMode');if(modeButton)modeButton.textContent=ready?'MODE '+(state.mode||state.transport).toUpperCase():'USB / STA / AP';
+ const switcher=$('kitTopNetworkSwitch');
+ if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.title='Wi-Fi '+headerNetworkChoice.toUpperCase()+' • AUTO stays in MY KITS';}
+ const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():'Connect '+headerNetworkChoice.toUpperCase();}
+ const controlButton=$('kitTopControl');
+ if(controlButton){controlButton.disabled=!ready||!['ap','sta'].includes(state.transport)||state.working;
+ controlButton.textContent=state.owner?'Release Control':state.rc?.claimed?'Kit Locked':'Take Control';
+ controlButton.classList.toggle('kit-control-active',!!state.owner);
+ controlButton.setAttribute('aria-pressed',String(!!state.owner));}
  for(const id of ['kitDisconnect','kitIdentify','kitReadInfo','kitTakeControl','kitReleaseControl','kitStop'])if($(id))$(id).disabled=!ready||state.working;
  if($('kitTopStop'))$('kitTopStop').disabled=!ready||state.working;
  if($('kitTakeControl'))$('kitTakeControl').disabled=!ready||state.owner||state.working;
@@ -202,7 +210,8 @@ async function connect(){
  try{
   if(mode==='usb')await connectUSB(code);else await connectNetwork(code,mode);
   state.connected=true;state.since=Date.now();state.rc=null;state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
-  state.working=false;audit('Device verified • '+state.kitId+' • '+state.transport,'success');
+  state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
+ audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
   if(mode!=='usb')await read().catch(e=>audit(e.message,'warn'));
  }catch(e){state.working=false;state.connected=false;state.key='';audit(e.message,'error');tone(e.message,'error')}
@@ -341,7 +350,7 @@ async function applyMode(){
  if(state.owner)throw Error('Release controller before changing Wi-Fi modes');
  const mode=$('kitWifiMode')?.value||'auto';
  if(!['auto','ap','sta'].includes(mode))throw Error('Invalid Wi-Fi mode');
- if(!confirm('Switch kit to '+mode.toUpperCase()+'? STA-only can hide AP. AUTO keeps AP visible. Proceed?'))return;
+ if(!confirm('Switch kit to '+mode.toUpperCase()+'? STA-only can hide AP. AUTO keeps AP visible. Proceed?'))return false;
  if(state.transport==='usb'){
   const ack=waitSerial(/^ZJNET,(?:ACK,MODE|ERR,)/,3200);
   await usbWrite('ZJNET,MODE,'+mode);
@@ -354,6 +363,7 @@ async function applyMode(){
   wifiNote('Switching to '+mode.toUpperCase()+'. Reconnect via matching AP or STA IP.','warn');
   await disconnect('Wi-Fi mode changed • reconnect using Device ID');
  }
+ return true;
 }
 async function wifiSave(){
  if(!state.connected)throw Error('Connect a kit by USB, AP or STA first');
@@ -492,6 +502,43 @@ function onSerial(e){
 }
 function guardAction(id,fn){$(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>{const locked=/locked|occupied|not_controller_owner/i.test(e.message);tone(e.message,locked?'locked':'error');audit(e.message,locked?'warn':'error')}))}
 function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
+async function toggleHeaderNetwork(){
+ if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before switching AP/STA');
+ const previous=headerNetworkChoice,next=previous==='ap'?'sta':'ap';
+ headerNetworkChoice=next;headerModePending=true;
+ if($('kitWifiMode'))$('kitWifiMode').value=next;
+ render();
+ try{
+  if(state.connected){const changed=await applyMode();if(changed===false){headerNetworkChoice=previous;if($('kitWifiMode'))$('kitWifiMode').value=state.mode||previous;}}
+  else tone('Selected '+next.toUpperCase()+'. Use Connect '+next.toUpperCase()+' to verify hardware identity.','info');
+ }catch(e){headerNetworkChoice=previous;throw e}
+ finally{headerModePending=false;render()}
+}
+async function connectHeaderNetwork(mode=headerNetworkChoice){
+ if(!['sta','ap'].includes(mode))throw Error('Choose STA or AP first');
+ headerNetworkChoice=mode;
+ if($('kitTransport'))$('kitTransport').value=mode;
+ if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
+ if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
+ if(state.connected&&state.kitCode&&$('kitCodeInput'))$('kitCodeInput').value=state.kitCode;
+ const code=selectedCode(),key=($('kitKeyInput')?.value||'').trim();
+ const ip=($('kitIpInput')?.value||'').trim();
+ if(!codePattern.test(code)||key.length!==32||mode==='sta'&&!privateIPv4(ip)){
+  goKits();tone('Enter the 6-digit Kit Code, verified STA IP (if STA) and private access key to connect over '+mode.toUpperCase(),'warn');
+  $('kitKeyInput')?.focus();render();return;
+ }
+ await connect();
+}
+async function toggleHeaderControl(){
+ if(!state.connected||!['sta','ap'].includes(state.transport))throw Error('Connect the verified kit over STA or AP first');
+ if(state.owner){await releaseRc();return}
+ if(state.rc?.claimed)throw Error('Kit already locked by a controller');
+ // Hardware target is BENCH RC diagnostics only. Firmware does not drive motors.
+ if($('kitHardwareTarget'))$('kitHardwareTarget').checked=true;
+ if($('kitSourceSelect'))$('kitSourceSelect').value='WEB';
+ await claim('WEB');render();
+}
+
 function init(){
  if(!$('kitCenter'))return;
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
@@ -505,7 +552,9 @@ function init(){
  guardAction('kitAdminEnroll',()=>adminAccess('ENROLL'));guardAction('kitAdminUnlock',()=>adminAccess('UNLOCK'));guardAction('kitAdminLock',()=>adminAccess('LOCK'));
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('fwOpenKitNetwork')?.addEventListener('click',()=>{goKits();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
- $('kitTopConnect')?.addEventListener('click',goKits);$('kitTopMode')?.addEventListener('click',()=>{goKits();$('kitWifiMode')?.focus()});$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
+ guardAction('kitTopNetworkSwitch',toggleHeaderNetwork);guardAction('kitTopWifiConnect',()=>connectHeaderNetwork());guardAction('kitTopControl',toggleHeaderControl);
+ guardAction('fwConnectStaBtn',()=>connectHeaderNetwork('sta'));guardAction('fwConnectApBtn',()=>connectHeaderNetwork('ap'));
+ $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
