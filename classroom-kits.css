@@ -209,3 +209,21 @@
  html,body{width:100%;max-width:100%;overflow-x:clip!important}
  #app{max-width:100%!important;overflow-x:clip!important}
 }
+
+/* Narrow hardware classroom screen: prevent the right-hand parts shelf's
+   grid auto-columns from establishing a multi-thousand-pixel scroll width.
+   Keep the 3D stage and the rest of the assembly workbench unaffected. */
+@media(max-width:760px){
+ #app #tab-assembly.active .right-panel.right-workbench,
+ #app #tab-assembly.active .right-shelf-section{
+  display:block!important;box-sizing:border-box!important;min-width:0!important;
+  width:100%!important;max-width:100%!important;overflow:hidden!important
+ }
+ #app #tab-assembly.active #componentShelf.vertical-shelf{
+  display:flex!important;flex-flow:row nowrap!important;grid-template-columns:none!important;
+  grid-auto-flow:unset!important;width:100%!important;max-width:100%!important;
+  min-width:0!important;overflow-x:auto!important;overflow-y:hidden!important;
+  scrollbar-width:thin!important;contain:layout paint
+ }
+ #app #tab-assembly.active #componentShelf .product-card{flex:0 0 min(215px,75vw)!important;max-width:min(215px,75vw)}
+}
