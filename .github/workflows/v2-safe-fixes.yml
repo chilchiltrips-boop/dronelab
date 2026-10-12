@@ -1,0 +1,34 @@
+name: DroneLab V2 Safe Fixes — Nonhardware Regression
+
+on:
+  push:
+    branches:
+      - feature/unified-connection-admin-v2-safe-fixes-20261013
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-regression:
+    name: Nonhardware source and regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check changed source syntax
+        run: |
+          node --check js/network-lab.js
+          node --check js/classroom-kits.js
+          node --check tools/network-transport.test.mjs
+      - name: Run Node regressions
+        run: npm test
+      - name: Validate offline bundle and project
+        run: npm run check
+      - name: Verify existing firmware catalog and binary release
+        run: npm run verify:firmware
