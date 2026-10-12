@@ -43,3 +43,7 @@ The Android native OTA flow in `FlightCoreNativeBridge.onFirmwareFile` previousl
 ## Preservation / release policy
 
 Work mode may have uncommitted/unpushed V2 changes outside GitHub. This audit/patch uses a **separate branch** instead of overwriting `feature/unified-connection-admin-v2`. Do not force push or merge into `main` without passing scoped tests and completing the broader acceptance gates. Keep physical motor outputs/ARM disabled.
+
+## 2026-10-13 continuation checkpoint
+
+PR #25 now exists and its six commits were integrated without rewriting. Accessible prior V2 worktree was clean at main. `V2_RECOVERY_AND_PROGRESS_REPORT.md` supersedes the earlier no-PR observation. New browser monitoring and header work is partial V2, not a security/School Mode completion claim.

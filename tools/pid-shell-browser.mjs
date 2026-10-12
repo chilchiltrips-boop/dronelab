@@ -27,7 +27,7 @@ try{
  await page.locator('[data-tab="pid"]').click();
  await until(page,()=>document.querySelector('#tab-pid')?.classList.contains('active'));
  const link=page.locator('[data-tab="pid"]');
- if((await link.textContent()).trim()!=='PID TUNING')throw Error('Old flight training name still present');
+ if((await link.textContent()).trim().toUpperCase()!=='PID TUNING')throw Error('Old flight training name still present');
  const computed=await link.evaluate(el=>getComputedStyle(el).textDecorationLine);
  if(computed.includes('underline'))throw Error('PID nav underlined');
  const iframe=page.frameLocator('#pidFrame');

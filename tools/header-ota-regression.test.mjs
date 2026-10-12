@@ -11,7 +11,8 @@ test('header is one horizontal row with real STA/AP network toggle and controlle
   assert.ok(kit.includes(handler),handler);
  assert.match(css,/#app \.topbar-main\{[\s\S]*?flex-wrap:nowrap!important/);
  assert.match(css,/height:82px!important/);
- assert.match(css,/overflow-x:auto/);
+ assert.match(read('v2-header.css'),/grid-template-columns/);
+ assert.ok(html.includes('id="kitTopRefresh"'));
 });
 
 test('network OTA is APP-only, verified for exact physical A1/A2 kit and never unlocks motor control',()=>{
