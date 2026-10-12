@@ -11,14 +11,14 @@ async function request(route,method='GET',args={}){
  const selected=kits?.getState?.();
  if(!selected?.connected||selected.transport==='usb')throw Error('Connect a verified STA/AP kit in MY KITS.');
  const data=await kits.request(route,method,args);
- if(data.kitId&&data.kitId!==selected.kitId)throw Error('Device ID mismatch: network sample rejected.');
- if(data?.board&&route==='/api/status'){netReady=true;netMode=data.mode;lastSeen=Date.now();}
+ if((route==='/api/status'&&data.kitId!==selected.kitId)||(data.kitId&&data.kitId!==selected.kitId))throw Error('Device ID mismatch or absent: network sample rejected.');
+ if(data?.board&&route==='/api/status'){netReady=true;const live=String(data.requestTransport||'').toLowerCase();netMode=['ap','sta'].includes(live)?live:selected.transport;lastSeen=Date.now();}
  return data;
 }
 async function read(){
  const d=await request('/api/status'),e=$('netRuntime');
  if(e)e.textContent=(d.board||'FlightCore')+' • '+d.version+' • '+d.phase+' • STA '+(d.ip||'offline')+' • AP '+(d.apIp||'offline');
- output('FlightCore connected • '+(d.kitName||d.board)+' • '+(d.staConnected?'STA':'AP'),'good');return d;
+ output('FlightCore connected • '+(d.kitName||d.board)+' • '+String(d.requestTransport||window.ZebjusKits?.getState?.().transport||'unknown').toUpperCase(),'good');return d;
 }
 async function scan(){
  output('Scanning nearby 2.4 GHz routers…');const networks=await pythonWifiScan(),d={networks};
@@ -108,6 +108,6 @@ function init(){
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
 window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
- isConnected:()=>!!(window.ZebjusKits?.getState?.().connected&&window.ZebjusKits?.getState?.().transport!=='usb')||(netReady&&Date.now()-lastSeen<15000),mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
+ isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&['ap','sta'].includes(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
