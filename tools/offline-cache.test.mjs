@@ -45,3 +45,10 @@ test('failed essential installation retains previous worker; activation preserve
  const failed=runtime();failed.setFailure('python-lab-worker.js');await assert.rejects(failed.install(),/Essential offline assets/);assert.equal(failed.skipped(),false);
  const r=runtime();await r.install();await r.activate();assert.deepEqual(r.ctx.deleted,['dronelab-qr-pairing-v1.4.4-smart-pair']);
 });
+
+test('reachability probe bypasses Service Worker even when version metadata is cached',()=>{
+ const handlers={};
+ vm.runInNewContext(source,{URL,self:{location:{origin:'https://example.test'},addEventListener:(kind,fn)=>handlers[kind]=fn}});
+ let intercepted=false;handlers.fetch({request:{method:'GET',url:'https://example.test/dronelab/app-version.json?connectivity_probe=123'},respondWith(){intercepted=true}});
+ assert.equal(intercepted,false,'Cached version must never report live Web reachability');
+});

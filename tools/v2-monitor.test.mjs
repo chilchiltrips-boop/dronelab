@@ -35,3 +35,9 @@ test('disconnect invalidates late responses instead of restoring status or owner
 test('missing request transport is rejected at initial authenticated connection',async()=>{
  const f=fixture();f.setTransport('');await f.api.connect();assert.equal(f.api.isConnected(),false);
 });
+
+test('user disconnect during a connection cannot be undone by the late authenticated response',async()=>{
+ const f=fixture();let done;f.block(new Promise(r=>done=r));const pending=f.api.connect();
+ await new Promise(r=>setImmediate(r));await f.api.disconnect();done();await pending;
+ assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().kitId,'');
+});

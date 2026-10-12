@@ -70,7 +70,7 @@ for(const p of [web,phone])p.on('pageerror',e=>errors.push(e.message));
 const wait=(p,fn)=>p.waitForFunction(fn,null,{timeout:45000});
 mkdirSync('test-output/network',{recursive:true});
 try{
- await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits);
+ await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits&&document.getElementById('app')?.dataset.ready==='true');
  await web.locator('#kitNewSetup').click();await web.locator('#kitLabelInput').fill(id+':'+secret);await web.locator('#kitEnrollLabel').click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
@@ -108,5 +108,5 @@ try{
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
  console.log('PASS simulated network integration: private label → encrypted Test & Save → same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
-}catch(e){console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
+}catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}
