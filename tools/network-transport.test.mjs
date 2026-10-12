@@ -57,3 +57,14 @@ test('AERION 1.4.0 USB-only provisioning and browser origin restrictions remain 
  for(const k of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM'])assert.ok(c.includes(k),k);
  assert.ok(!net.includes('/api/admin/'),'remote admin and key changes must not be exposed');
 });
+
+test('Android APP OTA never falls back to default cellular/system network',()=>{
+ const n=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
+ const body=n.slice(n.indexOf('void onFirmwareFile(Uri file)'),n.indexOf('void shutdown()'));
+ assert.ok(body.includes('Network wifi=wifiNetwork();'), 'resolve intended Wi-Fi network for upload');
+ assert.match(body,/if\(wifi==null\)throw new IllegalStateException\(/,'missing Wi-Fi must block before sending bytes');
+ assert.ok(body.includes('connection=(HttpURLConnection)wifi.openConnection(target);'),'upload must bind to Wi-Fi');
+ assert.ok(!body.includes('target.openConnection()'),'no default-network/cellular fallback for firmware bytes');
+ const firmware=read('FlightCore_Firmware/FlightCoreNetwork.h');
+ assert.ok(firmware.includes('String(zjClientTransport())=="STA"'), 'firmware STA-only OTA rule remains');
+});
