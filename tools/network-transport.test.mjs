@@ -68,3 +68,23 @@ test('Android APP OTA never falls back to default cellular/system network',()=>{
  const firmware=read('FlightCore_Firmware/FlightCoreNetwork.h');
  assert.ok(firmware.includes('String(zjClientTransport())=="STA"'), 'firmware STA-only OTA rule remains');
 });
+
+test('Python Network Lab reports actual authenticated AP request even while STA is online',async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const id='ZFC-A1-012345ABCDEF',state={connected:true,transport:'ap',kitId:id};
+ const response={kitId:id,board:'ZFC-A1',version:'1.4.0',phase:'sta_connected',mode:'auto',requestTransport:'AP',staConnected:true,ip:'192.168.0.11',apIp:'192.168.4.1'};
+ const els={netResult:{textContent:'',dataset:{}},netRuntime:{textContent:''}};
+ const window={ZebjusKits:{getState:()=>state,request:async()=>response},addEventListener(){},dispatchEvent(){}};
+ const document={readyState:'loading',addEventListener(){},getElementById:id=>els[id]||null};
+ runInNewContext(read('js/network-lab.js'),{window,document,Date,performance:{now:()=>1},setTimeout,clearTimeout,setInterval,clearInterval,CustomEvent:class {}});
+ await window.DroneLabNetwork.read();
+ assert.match(els.netResult.textContent,/AP$/,'AP request must not be relabelled STA merely because STA interface is connected');
+ assert.equal(window.DroneLabNetwork.mode(),'ap');
+ assert.equal(window.DroneLabNetwork.isConnected(),true);
+ state.connected=false;
+ assert.equal(window.DroneLabNetwork.isConnected(),false,'old Network Lab timestamp cannot override loss of verified kit');
+ state.connected=true;response.kitId='ZFC-A2-FFFFFFFFFFFF';
+ await assert.rejects(window.DroneLabNetwork.read(),/Device ID mismatch/);
+ response.kitId=undefined;
+ await assert.rejects(window.DroneLabNetwork.read(),/Device ID mismatch/);
+});
