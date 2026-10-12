@@ -7,3 +7,5 @@ Chromium file-route screenshots and assertions passed at 320, 360, 390, 768, 102
 File-route browser tests do not validate HTTP/Service Worker behavior. Full-page control/form regression and Android native landscape acceptance remain separate gates. The compact labels and connection popover remain subject to user review; a complete icon-system redesign is not claimed.
 
 Full-page form audit: 45 rendered page/viewport combinations, 36 placeholder measurements, zero clipping failures. The seven header widths also passed real HTTP in GitHub CI.
+
+Workspace Mobile Control is now explicitly covered in its expanded state: 33 width/state combinations pass, including text/track separation and the 40 px toggle track. Existing header regression entry point delegates to the V2 seven-width runner.

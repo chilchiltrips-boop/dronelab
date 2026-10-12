@@ -24,9 +24,9 @@
 | Admin | Existing protected USB teacher enrollment/unlock retained | Network admin, password change, assignment/revocation/audit UI |
 | Single controller | Existing firmware 350 ms deadman / 1800 ms lease retained, host tests pass | Scoped teacher takeover and cross-client physical acceptance |
 | Home Mode | Remembered local diagnostics retained | Per-student expiry/revocation policy and separate Home STA profile |
-| Android | PR #25 Wi-Fi-only OTA fix integrated; code 17 review build configured | New kit dashboard, role permissions; signed upgrade CI result pending |
-| Firmware | Existing 1.4.0 APP/FACTORY validation passes | Fresh A1/A2 CI builds; role implementation not delivered |
-| Regression | Baseline 192 passed; new monitor behavior and browser layouts tested | CI offline/native acceptance |
+| Android | PR #25 Wi-Fi-only OTA fix integrated; code 17 review build configured | New kit dashboard, role permissions; signed upgrade/native-touch CI passes for review source 302b903 |
+| Firmware | Existing 1.4.0 APP/FACTORY validation passes | Fresh A1/A2 CI builds pass; role implementation not delivered |
+| Regression | Baseline 192 passed; new monitor behavior and browser layouts tested | Latest extended CI and remaining unimplemented-feature coverage |
 | Release | Development review only | Mandatory V2 feature/security gates block merge |
 
 No physical motors, ESC outputs or hardware ARM added. **PHYSICAL PENDING** for all real-device checks.

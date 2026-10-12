@@ -13,14 +13,14 @@ const collides=(a,b)=>a.right>b.x+.25&&b.right>a.x+.25&&a.bottom>b.y+.25&&b.bott
 let checks=0;
 try{
  await page.goto('http://127.0.0.1:8765/index.html#assembly',{waitUntil:'domcontentloaded'});
+ await page.locator('.v2-workspace-tools>summary').click();
  await page.waitForSelector('#topGrantMobileSwitch');
  for(const width of [320,360,390,480,670,768,1024,1100,1294,1440,1920]){
   await page.setViewportSize({width,height:850});
   // Test disabled, enabled and checked states; no live connection/armed flight is affected.
   for(const state of ['disabled','enabled','checked']){
    await page.locator('#topGrantMobileSwitch').evaluate((el,state)=>{el.disabled=state==='disabled';el.checked=state==='checked'},state);
-   // The intentionally single-row mobile header is horizontally scrollable.
-   // Require this control to become visible by normal scrolling, then retain all geometry checks.
+   // The workspace controls are explicitly expanded above. Preserve keyboard/touch grant geometry.
    await page.locator('.top-grant-control').scrollIntoViewIfNeeded();
    const layout=await page.locator('.top-grant-control').evaluate(label=>{
     const text=label.querySelector('.grant-control-text'),track=label.querySelector('.qr-switch-track');

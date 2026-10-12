@@ -49,3 +49,50 @@
 #app .topbar-main>.tabs{position:static!important;top:auto!important;height:auto!important;min-height:0!important;flex-wrap:nowrap!important}
 #app .topbar .tabs .tab{height:auto!important;min-height:28px!important;letter-spacing:0!important;line-height:16px!important;font-weight:600!important}
 @media(max-width:600px){#app .topbar .tabs .tab{padding:5px 2px!important;font-size:9px!important}#app .topbar-main>.tabs{gap:1px!important}}
+
+/* Keep the mobile grant accessible after moving workspace controls. */
+#app .v2-tools-content .top-grant-control{
+ display:inline-grid!important;
+ grid-template-columns:minmax(0,1fr) 40px;
+ align-items:center;
+ column-gap:9px;
+ width:150px;
+ min-width:150px!important;
+ max-width:150px;
+ flex:none;
+ white-space:normal;
+ padding:6px 9px;
+ line-height:1.25;
+ box-sizing:border-box;
+}
+#app .v2-tools-content .top-grant-control>.grant-control-text{
+ display:block;
+ grid-column:1;
+ grid-row:1;
+ width:100%;
+ min-width:0;
+ max-width:none!important;
+ overflow-wrap:normal;
+ white-space:normal;
+ line-height:1.28;
+ text-align:left;
+}
+#app .v2-tools-content .top-grant-control>.qr-switch-track{
+ display:block;
+ grid-column:2;
+ grid-row:1;
+ width:40px;
+ min-width:40px;
+ max-width:40px;
+ height:22px;
+ margin:0;
+ justify-self:end;
+ align-self:center;
+ box-sizing:border-box;
+}
+#app .v2-tools-content .top-grant-control>input[type="checkbox"]{
+ position:absolute;
+ width:1px;
+ height:1px;
+ opacity:0;
+}
