@@ -163,7 +163,9 @@ final class FlightCoreNativeBridge {
                 String suffix="\r\n--"+boundary+"--\r\n";
                 byte[] start=prefix.getBytes(StandardCharsets.UTF_8),end=suffix.getBytes(StandardCharsets.UTF_8);
                 URL target=new URL("http://"+ip+"/api/ota");Network wifi=wifiNetwork();
-                connection=(HttpURLConnection)(wifi!=null?wifi.openConnection(target):target.openConnection());
+                if(wifi==null)throw new IllegalStateException("Connect Android Wi-Fi to the verified kit before OTA; cellular fallback is blocked");
+                // Always bind the entire firmware upload to a verified Wi-Fi transport.
+                connection=(HttpURLConnection)wifi.openConnection(target);
                 connection.setInstanceFollowRedirects(false);
                 connection.setConnectTimeout(5000);connection.setReadTimeout(20000);
                 connection.setRequestMethod("POST");connection.setRequestProperty("X-ZJ-Key",token);
