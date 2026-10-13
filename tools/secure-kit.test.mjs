@@ -8,7 +8,7 @@ const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16),nonce
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 function protocol(){
  const ctx={TextEncoder,TextDecoder,Uint8Array,Array,crypto:webcrypto,URLSearchParams,Date,Promise};vm.createContext(ctx);
- vm.runInContext(read('vendor/crypto/zfc-crypto.js'),ctx);vm.runInContext(read('js/kit-auth.js'),ctx);
+ vm.runInContext(read('vendor/crypto/zfc-crypto.js'),ctx);vm.runInContext(read('js/kit-auth.js'),ctx);vm.runInContext(read('js/kit-local-auth.js'),ctx);
  return ctx.ZebjusKitAuth;
 }
 function controller({wrongId=false,tamper=false}={}){
