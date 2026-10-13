@@ -33,6 +33,7 @@ test('USB teacher unlock gates student provisioning and revocation destroys sess
  assert.match(net,/if\(zjStudentUsbCommand\(line\)\)return true;/);
  assert.match(policy,/if\(!zjAdminAuthorized\(\)\)/);
  assert.match(policy,/session=ZjSession\(\)/);
+ assert.match(policy,/j!=i&&zjStudents\[j\]\.id\.length\(\)&&zjEqual\(zjStudents\[j\]\.key,key\)/);
  assert.match(policy,/minutes<1\|\|minutes>30/);
  assert.match(policy,/zjRcRelease\("STUDENT_PERMISSION_REVOKED"\)/);
  assert.match(policy,/s=ZjStudent\(\)/); // reboot starts with no live grants
