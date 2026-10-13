@@ -33,3 +33,9 @@ The review workflow compiles both FlightCore 1.4.4 profiles and synchronizes the
 ## Unique Kit Names and mDNS
 
 FlightCore 1.4.4 keeps the deterministic `zebjus-a1-<code>.local` / `zebjus-a2-<code>.local` address until a custom Kit Name is saved through AP Setup. Custom names such as `zebjus_drone_7` are advertised as DNS-safe `zebjus-drone-7.local`. Rename or reset causes the STA mDNS service to restart without rebooting the controller; the firmware's immutable Kit ID does not change. Avoid duplicate names across the classroom. The website validates the full Device ID again before using any candidate IP, and a hosted browser still cannot multicast-enumerate every LAN device without the optional local discovery helper.
+
+## Firmware & Connect reference dashboard
+
+The Firmware tab follows the earlier zebjus-drone-simulator-lab's discovery-first layout. Enter the classroom Wi-Fi, open Firmware & Connect, select the live Kit Name or enter a known name, then click **Connect Selected Kit**. The browser tries cached verified addresses, `zebjus_drone_N.local` / `zebjus-drone-N.local` candidates, modern A1/A2 deterministic names, and the optional localhost mDNS bridge. Candidate IPs are **not** trusted without a second Device ID check and a signed status response.
+
+The Connected Kit Details panel shows heartbeat freshness and current gyroscope/RC reports. Barometer and LIDAR are labelled **NOT REPORTED** by the current scanner firmware and never fabricated. Demo mode is a display-only offline preview and does not change flight controls. Kit Name save/reset requires a signed local AP setup session on FlightCore 1.4.4; STA observers cannot rename or flash firmware without separate privileged authorization. Existing USB/STA firmware update and Serial Monitor tools remain available below the connection dashboard.
