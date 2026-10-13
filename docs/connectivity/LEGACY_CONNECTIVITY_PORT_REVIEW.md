@@ -164,7 +164,26 @@ Status adds control authorization, advertised hostname, actual build time, layou
 
 ## Validation evidence and limits
 
-Final run links and results are recorded below after the final Actions run. Initial implementation passed 225 Node tests locally and in CI. Header checks passed at 320, 360, 390, 768, 1024, 1366 and 1920 pixels.
+Final validation:
+- **227 Node regressions passed**, with zero failures/cancellations.
+- **A1 and A2 APP + FACTORY builds passed** on Arduino-ESP32 3.3.12.
+- Release checks passed: chip IDs, hashes/sizes, both OTA slots, byte-identical embedded APP, source/catalog agreement and all **8 firmware-input hashes**.
+- Project/syntax/model checks passed: 33 modules, 35 asset references and all 15 GLB models.
+- Chromium header checks passed at **320 / 360 / 390 / 768 / 1024 / 1366 / 1920 px**.
+- Actual connection-page interactions passed at **360 / 768 / 1366 px**, plus **lab.html at 1366 px**, using device doubles.
+- Compiled source: `f796f23f5d857be19e5e1963ac4af6bf1affdec2`.
+- Verified binary commit: `0f28d77bb886d82f17e983b3dd78591bf60efe8a`.
+- [Firmware build + 227 tests + release verification](https://github.com/chilchiltrips-boop/dronelab/actions/runs/38444407741)
+- [Chromium layout and connection checks](https://github.com/chilchiltrips-boop/dronelab/actions/runs/38444407445)
+
+The earlier source-only validation job correctly rejected the previous build report before the new binary/provenance build completed. The completed build job ran the release gate against the newly compiled matching artifacts.
+
+| Published package | Bytes | SHA-256 |
+|---|---:|---|
+| ZEBJUS_FLIGHTCORE_A1_APP.bin | 1173216 | `010e6efc3277a326cf18f9e9b10ae0c06d7c571197f5afdab452c9c14d36733a` |
+| ZEBJUS_FLIGHTCORE_A1_FACTORY.bin | 4194304 | `0d1bc86d12ff940f04e2d6769584d7fad6e15a5435acbcaa995b4d7b0a3c1133` |
+| ZEBJUS_FLIGHTCORE_A2_APP.bin | 1180768 | `efd3079e800ca67aa7c6e385e5f9dfca265b968b1eb28d72a8e90e53b0c2e07d` |
+| ZEBJUS_FLIGHTCORE_A2_FACTORY.bin | 4194304 | `1fa45135f39b17a4bafe14247cfa23165e01d40db1751000b7ea6bd42c417da9` |
 
 Added regressions exercise actual Connect/Disconnect bindings, observer/admin separation, explicit AP authorization, shared control actions, late grants, late USB handshakes, remembered STA addresses, wrong identity, DHCP address reuse, encrypted chunk order/digest, actual firmware profile/OTA handlers and AP-only cache URLs.
 
