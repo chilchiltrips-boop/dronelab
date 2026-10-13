@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastWasOnline=false,telemetry=null,telemetryTime=0;
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastWasOnline=false,telemetry=null,telemetryTime=0;
 const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -108,8 +108,8 @@ async function changeName(reset){
 }
 function render(){
  const s=state(),demo=!!$('fwKitDemoMode')?.checked,live=!!s.connected&&!demo;
- const changed=s.kitId!==lastConnectedId||live!==lastWasOnline;
- if(changed){lastConnectedId=s.kitId||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
+ const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||live!==lastWasOnline;
+ if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
  set('fwConnectBadge',demo?'DEMO PREVIEW':live?'CONNECTED':'Not connected');
  $('fwConnectBadge')?.classList.toggle('offline',!live);
  set('fwSelectedKitName',live?s.kitName:demo?'Offline Simulation':'No kit selected');
@@ -132,7 +132,7 @@ function render(){
  set('fwDetailAccess',live?(s.otaAuthorized?'USB-paired control / updates':s.setupAuthorized?'AP Setup':'STA observer'):'--');
  set('fwDetailMode',live?s.mode||s.transport:'--');
  set('fwDetailWifi',live?s.staConnected?'STA connected':s.apActive?'AP available':'Offline':'--');
- set('fwDetailRssi',live&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
+ set('fwDetailRssi',live&&s.staConnected&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
  set('fwDetailFirmware',live?s.version||'Not reported':'--');
  set('fwDetailBuild',live?s.firmwareBuiltAt||'Not reported by Kit':'--');
  set('fwDetailIp',live?s.transport==='ap'?'192.168.4.1':s.staIp||'Unknown':'--');
@@ -141,11 +141,12 @@ function render(){
  set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized?'Take Control reserves this Kit; Release Control neutralizes input. Motor outputs remain disabled.':'STA observer: pair this browser once over USB, then reconnect to authorize diagnostic control and updates.':'Select a live Kit. No commands are sent while offline.');
  set('fwApIndicator',live?s.apActive?'ACTIVE':'OFF':'--');
  set('fwStaIndicator',live?s.staConnected?'CONNECTED':'OFF':'--');
- if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning;
+ if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning||s.working;
  if($('fwKitDisconnect'))$('fwKitDisconnect').disabled=requesting||!s.connected;
  if($('fwKitPing'))$('fwKitPing').disabled=requesting||!live;
- if($('fwKitTakeControl')){$('fwKitTakeControl').disabled=requesting||!live||!s.controlAuthorized&&s.transport!=='usb'||!!s.rc?.claimed&&!s.owner;$('fwKitTakeControl').textContent=s.owner?'Release Control':'Take Control'}
- for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||!live||!['ap','sta'].includes(s.transport)||!s.setupAuthorized||s.owner||!!s.rc?.claimed;
+ if($('fwKitTakeControl')){$('fwKitTakeControl').disabled=requesting||s.working||!live||!s.controlAuthorized&&s.transport!=='usb'||!!s.rc?.claimed&&!s.owner;$('fwKitTakeControl').textContent=s.owner?'Release Control':'Take Control'}
+ for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||s.working||!live||!['ap','sta'].includes(s.transport)||!s.setupAuthorized||s.owner||!!s.rc?.claimed;
+ for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed;
  set('fwWifiName',live?s.ssid||'Router not connected':'--');
  set('fwWifiApName',live?s.apSsid||'Not reported':'--');
  set('fwWifiState',live?s.networkState||s.mode||'Connected':'Kit offline');
@@ -194,6 +195,6 @@ function init(){
  setInterval(render,1200);setInterval(()=>{if($('tab-firmware')?.classList.contains('active')&&Date.now()-lastScanAt>65000)void scan()},18000);
  setInterval(()=>void sampleHealth(),4200);
 }
-root.ZebjusFirmwareConnect={renderAvailable,scan,select};
+root.ZebjusFirmwareConnect={renderAvailable,scan,select,selected:()=>discovered.find(k=>k.kitId===selectedId)||null};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(window);

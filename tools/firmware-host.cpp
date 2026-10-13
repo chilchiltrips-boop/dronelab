@@ -3,6 +3,7 @@
 #include "host-stubs/ArduinoShim.h"
 #include <cassert>
 #include <iostream>
+#include <vector>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 const int HTTP_GET=1,HTTP_POST=2;static IPAddress requestIP(192,168,4,2);
 struct FakeHttp {
@@ -22,6 +23,16 @@ static void zjReply(int status,const String& body){replyStatus=status;replyBody=
 static bool zjAllow();
 #include "../FlightCore_Firmware/FlightCoreEnrollment.h"
 static bool zjAllow(){return zjSessionAuthenticated();}
+static bool zjNetTesting=false,zjOtaAuthorized=false,zjUsbScanning=false;
+static uint32_t zjOtaRebootAt=0;
+static constexpr int U_FLASH=0;
+struct OtaFlash {
+ std::vector<uint8_t> written;bool activated=false,failWrite=false;
+ bool begin(size_t n,int){written.clear();activated=false;return n<=0x1e0000;}
+ size_t write(const uint8_t* p,size_t n){if(failWrite)return 0;written.insert(written.end(),p,p+n);return n;}
+ void abort(){written.clear();activated=false;}bool end(bool){activated=true;return true;}
+} Update;
+#include "../FlightCore_Firmware/FlightCoreOta.h"
 static void prepare(String route,int method=HTTP_POST){zjAuthResetRequest();zjHttp.args.clear();zjHttp.headers.clear();zjHttp.path=route;zjHttp.verb=method;}
 static String enroll(String kind,String credential,uint32_t delay=0){
  prepare("/api/auth/challenge");zjHttp.args["kind"]=kind;zjHttp.args["client"]=String(std::string(32,kind=="setup"?'a':'b'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==200);
@@ -117,5 +128,26 @@ int main(){
  clockMs=local.at+1800001;assert(!localRequest("/api/status",HTTP_GET,3));
  // AP-local traffic cannot exhaust every privileged session slot.
  zjEnrollmentInit();for(int i=0;i<5;i++){prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'a'+i));zjHttp.handlers[zjHttp.path]();assert(replyStatus==(i<4?200:429));}assert(zjSessions[4].id.isEmpty());
+ // Execute actual OTA handlers after a simulated auth layer (enrollment/proof
+ // verification above). Diagnostic/observer scopes cannot begin a write.
+ zjSetupSecureOtaHttp();
+ auto ota=[&](String route,String body,bool admin=true){
+  prepare(route);zjAuthChecked=true;zjRequestSession=0;zjAuthAdmin=admin;zjSessions[0].admin=admin;
+  zjSessions[0].id="test-ota-admin";zjAuthBody=body;zjHttp.handlers[route]();
+ };
+ std::vector<uint8_t> app(32768,0x11);app[0]=0xe9;app[1]=2;app[12]=5;app[13]=0;
+ app[32]=0x32;app[33]=0x54;app[34]=0xcd;app[35]=0xab;
+ uint8_t digest[32];mbedtls_sha256(app.data(),app.size(),digest,0);
+ const String hash=zjHexBytes(digest,32),begin="boardId=ZFC-A1&size=32768&sha256="+hash;
+ ota("/api/firmware/begin",begin,false);assert(replyStatus==403&&!zjSecureOtaActive&&Update.written.empty());
+ zjRcOwned=true;ota("/api/firmware/begin",begin);assert(replyStatus==409);zjRcOwned=false;
+ ota("/api/firmware/begin",begin);assert(replyStatus==200&&zjSecureOtaActive);
+ ota("/api/firmware/chunk","offset=1&data=00");assert(replyStatus==409&&Update.written.empty());
+ for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));assert(replyStatus==200);}
+ assert(!Update.activated);ota("/api/firmware/end","");assert(replyStatus==200&&Update.activated&&!zjSecureOtaActive&&zjOtaRebootAt);
+ zjOtaRebootAt=0;ota("/api/firmware/begin","boardId=ZFC-A1&size=32768&sha256="+String(std::string(64,'0')));assert(replyStatus==200);
+ for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));}
+ ota("/api/firmware/end","");assert(replyStatus==400&&!Update.activated&&!zjSecureOtaActive);
+ ota("/api/firmware/begin",begin);clockMs+=30001;zjSecureOtaLoop(clockMs);assert(!zjSecureOtaActive&&!Update.activated);
  std::cout<<"PASS actual firmware headers: RC first frame, exclusivity, replay, bounds, IP binding, deadman, lease, rollover; enrollment scope, counter replay, expiry, reboot revocation\n";
 }

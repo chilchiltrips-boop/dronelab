@@ -33,5 +33,5 @@ jobs:
         if: always()
         with:
           name: legacy-connectivity-browser-evidence
-          path: test-output/legacy-connectivity
+          path: test-output/
           if-no-files-found: warn

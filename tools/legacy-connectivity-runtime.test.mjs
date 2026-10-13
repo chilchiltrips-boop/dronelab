@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 const code=readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8');
 const id='ZFC-A1-012345ABCDEF',other='ZFC-A1-FFFFFFFFFFFF',key='a1'.repeat(16);
-function fixture({mode='sta',paired=false,initialize=false}={}){
+function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
  const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map();let ready;
  const element=()=>({value:'',checked:false,textContent:'',dataset:{},style:{},disabled:false,listeners:{},children:[],
   classList:{contains:()=>true,toggle(){},add(){},remove(){}},setAttribute(){},replaceChildren(...children){this.children=children},add(item){this.children.push(item)},append(){},focus(){},
@@ -12,11 +13,11 @@ function fixture({mode='sta',paired=false,initialize=false}={}){
  for(const name of [...readFileSync(new URL('../index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]))elements.set(name,element());
  const ip=mode==='ap'?'192.168.4.1':'192.168.1.20';
  for(const [name,value] of Object.entries({kitCodeInput:'123456',kitTransport:mode,kitIpInput:ip,kitKeyInput:''}))elements.get(name).value=value;
- let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:'1.4.5',bootId:'b1'.repeat(16),
+ let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,
   requestTransport:mode.toUpperCase(),mode:'auto',apActive:true,staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
- let uploaded=false,claimGate=null,identityOverride=null;
+ let uploaded=false,claimGate=null,identityOverride=null,offset=0,digest='';
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
@@ -27,15 +28,22 @@ function fixture({mode='sta',paired=false,initialize=false}={}){
   }
   if(route==='/api/rc/preview')return {kitId:id,received:true};
   if(route==='/api/rc/release'){status.rc={claimed:false};return {released:true};}
+  if(route==='/api/firmware/begin'){offset=0;digest=args.sha256;return {kitId:id,offset};}
+  if(route==='/api/firmware/chunk'){assert.equal(args.offset,offset);assert.ok(args.data.length<=768);offset+=args.data.length/2;return {kitId:id,offset};}
+  if(route==='/api/firmware/end'){uploaded=true;status={...status,version:'1.4.6',bootId:'c2'.repeat(16)};return {kitId:id,updated:true,sha256:digest};}
   throw Error('Unexpected request '+route);
  };
  const window={addEventListener(){},dispatchEvent:e=>events.push(e),ZebjusKitPairingStore:{fromSession:()=>paired?key:'',restore:async()=>paired?key:'',saveSession(){}},
-  ZebjusKitAuth:{http:base=>base,openLocal:async()=>({expiresAt:Date.now()+600000,request:route=>handler(route)})}};
+  ZfcCrypto:{sha256:bytes=>createHash('sha256').update(bytes).digest()},
+  ZebjusKitAuth:{http:base=>base,openLocal:async()=>({expiresAt:Date.now()+600000,request:route=>handler(route)}),open:async(_host,_id,_key,kind)=>{
+   assert.equal(kind,'admin');status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
+   return {expiresAt:Date.now()+600000,request:(route,_method,args)=>handler(route,args)};
+  }}};
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
   if(u.pathname==='/api/identify'){
    const mismatch=identityOverride||(uploaded&&u.hostname===ip?other:id);
-   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true})};
+   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true,adminSessions:encrypted})};
   }
   if(opts.headers?.['X-ZJ-Key']===key)status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
   return {ok:true,json:()=>handler(u.pathname,Object.fromEntries(new URLSearchParams(opts.body||'')))};
@@ -47,7 +55,7 @@ function fixture({mode='sta',paired=false,initialize=false}={}){
  const document={readyState:'loading',hidden:false,addEventListener:(type,fn)=>{if(type==='DOMContentLoaded')ready=fn},getElementById:name=>elements.get(name)||null,
   querySelectorAll:()=>[],querySelector:()=>({click(){}}),createElement:element};
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
- const timeout=(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();timers.add(t);return t};
+ const timeout=(fn,ms)=>{const t=setTimeout(fn,ms);timers.add(t);return t};
  vm.runInNewContext(code,{window,document,localStorage,fetch,URL,URLSearchParams,AbortController,XMLHttpRequest:XHR,Uint8Array,Blob,FormData,TextEncoder,Option:class{constructor(text,value){this.text=text;this.value=value}},
   setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
@@ -112,5 +120,15 @@ test('selection rejects changed hardware before trusting discovery or sending a 
   f.identity(other);
   await assert.rejects(f.api.connectDiscoveredKit({kitId:id,kitCode:'123456',ip:'192.168.1.20'}),/identity changed/);
   assert.equal(f.api.getState().connected,false);assert.ok(!f.requests.some(r=>r.headers?.['X-ZJ-Key']));
+ }finally{f.dispose()}
+});
+test('new firmware uses ordered encrypted OTA commands and verifies full SHA-256 before reconnect',async()=>{
+ const f=fixture({paired:true,encrypted:true});try{
+  await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=5;
+  const result=await f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A1',version:'1.4.6'});
+  assert.equal(result.verified,true);
+  assert.equal(f.requests.filter(r=>r.route==='/api/firmware/chunk').length,Math.ceil(bytes.length/384));
+  assert.equal(f.requests.find(r=>r.route==='/api/firmware/begin').args.sha256,createHash('sha256').update(bytes).digest('hex'));
+  assert.ok(!f.requests.some(r=>r.headers?.['X-ZJ-Key']),'new firmware does not send its private USB pairing key in an HTTP header');
  }finally{f.dispose()}
 });

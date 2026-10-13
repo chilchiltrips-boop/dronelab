@@ -388,6 +388,7 @@ async function readStatus(){
  state.heartbeatAt=Date.now();state.linkState='connected';
  if(state.transport!=='android-relay')state.transport=actualTransport;
  state.physicalLink=actualTransport;state.apIp=d.apIp||'';
+ const priorName=state.kitName,priorAddress=state.staIp;
  if(state.owner&&(!d.rc?.claimed||ownOwnerId&&d.rc.ownerId!==ownOwnerId||d.rc?.source!==state.rcSource)){state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId=''}
  state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
  const wasSetupAuthorized=state.setupAuthorized;
@@ -397,6 +398,10 @@ async function readStatus(){
  if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
  adoptNetworkStatus(d);
+ if(priorName!==state.kitName||priorAddress!==state.staIp){
+  for(const kit of discoveredKits)if(kit.kitId===state.kitId){kit.kitName=state.kitName;kit.hostname=state.hostname;}
+  recordKnown();root.dispatchEvent(new CustomEvent('dronelab:kit-name',{detail:{kitId:state.kitId,name:state.kitName}}));
+ }
  const monitor=$('kitNetworkMonitor');
  if(monitor){
   const rc=state.rc||{},ts=new Date().toLocaleTimeString();
@@ -964,6 +969,18 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  if($('kitTransport'))$('kitTransport').value=mode;
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
  if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
+ if(state.owner||state.rc?.claimed)throw Error('Release diagnostic control before switching AP/STA connections');
+ const selected=root.ZebjusFirmwareConnect?.selected?.(),preferred=state.kitId||selected?.kitId;
+ const candidates=discoveredKits.filter(k=>k.transport===mode&&(!preferred||k.kitId===preferred));
+ if(candidates.length===1)return connectDiscoveredKit(candidates[0]);
+ if(preferred){
+  const target=state.kitId?connectionTarget():selected;
+  for(const host of mode==='ap'?['192.168.4.1']:identityHosts(target)){
+   if(mode==='sta'&&host==='192.168.4.1')continue;
+   const found=await probeIdentity(host,1800);
+   if(found?.kitId===preferred&&found.transport===mode)return connectDiscoveredKit(found);
+  }
+ }
  if(state.connected&&state.kitCode&&$('kitCodeInput'))$('kitCodeInput').value=state.kitCode;
  if(mode==='sta'&&state.staIp&&privateIPv4(state.staIp)&&$('kitIpInput'))$('kitIpInput').value=state.staIp;
  let code=selectedCode(),ip=($('kitIpInput')?.value||'').trim();
@@ -973,8 +990,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  }
  if(!codePattern.test(code)){goKits();tone('Join your AERION AP Wi-Fi, select the discovered kit or enter its 6-digit Kit Code.','warn');return}
  if(!safeKitHost(ip)){goKits();tone('Choose a reachable AP/STA address. AP is 192.168.4.1.','warn');return}
- await resolveKitAccess(code,ip);
- await connect();
+ await connect(preferred||'');
 }
 async function toggleHeaderControl(){
  if(!state.connected||!['usb','sta','ap'].includes(state.transport))throw Error('Connect a verified kit over USB, STA or AP first');
@@ -1162,7 +1178,23 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  state.working=true;render();
  try{
   onProgress({phase:'upload',percent:4,message:'Uploading authenticated APP image to '+transport.toUpperCase()});
-  const response=await new Promise((resolve,reject)=>{
+  let response;
+  if(pre.encryptedOta===true){
+   const hex=data=>Array.from(data,b=>b.toString(16).padStart(2,'0')).join('');
+   const digest=hex(root.ZfcCrypto.sha256(bytes));
+   try{
+    const begin=await wifiDirect(ip,key,'/api/firmware/begin','POST',{size:bytes.length,sha256:digest,boardId});
+    if(begin.kitId!==deviceId||begin.offset!==0)throw Error('Encrypted OTA target did not confirm the selected Device ID');
+    for(let offset=0;offset<bytes.length;offset+=384){
+     if(ticket!==reconnectTicket)throw Error('Firmware update cancelled by kit selection change');
+     const chunk=bytes.slice(offset,offset+384),ack=await wifiDirect(ip,key,'/api/firmware/chunk','POST',{offset,data:hex(chunk)});
+     if(ack.kitId!==deviceId||ack.offset!==offset+chunk.length)throw Error('Encrypted firmware chunk offset was not confirmed');
+     onProgress({phase:'upload',percent:Math.min(87,4+Math.round(ack.offset/bytes.length*82)),message:'Encrypted '+transport.toUpperCase()+' APP upload • '+Math.round(ack.offset/bytes.length*100)+'%'});
+    }
+    response=await wifiDirect(ip,key,'/api/firmware/end','POST');
+    if(response.kitId!==deviceId||response.sha256!==digest)throw Error('Firmware SHA-256 acknowledgement did not match the submitted APP');
+   }catch(e){if(ticket===reconnectTicket)await wifiDirect(ip,key,'/api/firmware/abort','POST').catch(()=>{});throw e}
+  }else response=await new Promise((resolve,reject)=>{
    const req=new XMLHttpRequest();
    req.open('POST','http://'+ip+'/api/ota',true);
    req.timeout=120000;req.responseType='text';
