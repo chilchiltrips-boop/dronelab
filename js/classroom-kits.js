@@ -103,7 +103,7 @@ function render(){
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
 function safeKitHost(host){
- return privateIPv4(host)||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.local$/i.test(String(host||''));
+ return privateIPv4(host)||/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.local$/i.test(String(host||''))||/^zebjus_drone_\d{1,2}\.local$/i.test(String(host||''));
 }
 function privateIPv4(host){
  const parts=String(host).split('.').map(Number);
@@ -739,7 +739,11 @@ async function probeIdentity(ip,timeoutMs=1550){
 }
 function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
-  const target=$(id);if(!target)continue;target.replaceChildren();
+  const target=$(id);if(!target)continue;
+  if(id==='fwDiscoveryResults'&&root.ZebjusFirmwareConnect?.renderAvailable){
+   root.ZebjusFirmwareConnect.renderAvailable(discoveredKits,discovering);continue;
+  }
+  target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
    empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
   for(const k of discoveredKits){
@@ -786,7 +790,10 @@ async function discoverKits(){
   }
   if(usbCandidate.staIp&&privateIPv4(usbCandidate.staIp))candidates.add(usbCandidate.staIp);
   for(const ip of await discoverBridgeHosts())candidates.add(ip);
-  for(let n=1;n<=20;n++)candidates.add('zebjus-drone-'+n+'.local');
+  for(let n=1;n<=30;n++){
+   candidates.add('zebjus-drone-'+n+'.local');
+   candidates.add('zebjus_drone_'+n+'.local'); // legacy firmware hostname pattern
+  }
   const codes=new Set([selectedCode(),usbCandidate.kitCode,...known.map(v=>v.code)].filter(v=>/^\d{6}$/.test(String(v||''))));
   for(const code of codes)for(const board of ['a1','a2'])candidates.add('zebjus-'+board+'-'+code+'.local');
   const addresses=[...candidates];let cursor=0;const found=new Map();
@@ -1050,8 +1057,52 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
   return {written:true,verified:false,expectedVersion:version,kitId:deviceId};
  }finally{state.working=false;render();}
 }
+async function connectDiscoveredKit(kit){
+ if(!kit?.kitId||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified Kit from discovery.');
+ const found=await probeIdentity(kit.ip,2800);
+ if(!found||found.kitId!==kit.kitId||found.kitCode!==kit.kitCode)
+  throw Error('Kit identity changed since discovery. Rescan the Device ID.');
+ if(state.owner)throw Error('Release diagnostic control before switching kits.');
+ if(state.connected&&state.kitId!==found.kitId)await disconnect('Switching selected Kit');
+ $('kitCodeInput').value=found.kitCode;$('kitTransport').value=found.transport;$('kitIpInput').value=found.ip;
+ headerNetworkChoice=found.transport;await connect();
+ if(!linkFresh()||state.kitId!==found.kitId)throw Error(state.lastError||'Authenticated Kit identity mismatch');
+ return found;
+}
+async function connectNamedKit(name){
+ const requested=String(name||'').trim().toLowerCase();
+ if(!/^[a-z0-9][a-z0-9_-]{2,30}$/.test(requested))throw Error('Enter a Kit Name (3–31 letters, numbers, _ or -).');
+ const matches=discoveredKits.filter(k=>k.kitName.toLowerCase()===requested);
+ if(matches.length>1)throw Error('Duplicate Kit Names. Select the matching Device ID from Available Kits.');
+ if(matches.length===1)return connectDiscoveredKit(matches[0]);
+ let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+ const candidates=new Set(known.filter(k=>String(k.name||'').toLowerCase()===requested).map(k=>k.ip).filter(safeKitHost));
+ candidates.add(requested.replace(/_/g,'-')+'.local');
+ if(/^zebjus_drone_\d{1,2}$/.test(requested))candidates.add(requested+'.local');
+ const results=[];
+ for(const ip of candidates){const live=await probeIdentity(ip,1700);if(live&&live.kitName.toLowerCase()===requested)results.push(live)}
+ const distinct=[...new Map(results.map(k=>[k.kitId,k])).values()];
+ if(distinct.length!==1)throw Error(distinct.length>1?'Duplicate live Kit Name; select a Device ID':'Kit Name not reachable. Rescan or allow LAN mDNS.');
+ return connectDiscoveredKit(distinct[0]);
+}
+async function renameConnectedKit(name='',reset=false){
+ if(!linkFresh()||state.transport!=='ap'||!state.setupAuthorized)throw Error('Kit Name change requires AP Setup and FlightCore 1.4.4; STA monitoring is read-only.');
+ if(state.owner||state.rc?.claimed)throw Error('Release diagnostic control before renaming.');
+ const normalized=String(name||'').trim();
+ if(!reset&&!/^[a-zA-Z0-9][a-zA-Z0-9_-]{2,30}$/.test(normalized))throw Error('Name must be 3–31 letters, numbers, _ or -.');
+ if(!reset&&discoveredKits.some(k=>k.kitId!==state.kitId&&k.kitName.toLowerCase()===normalized.toLowerCase()))
+  throw Error('Another discovered Kit already uses that name.');
+ const response=await deviceRequest(reset?'/api/kit/name/reset':'/api/kit/name','POST',reset?{}:{name:normalized});
+ if(response.kitId!==state.kitId||!response.kitName)throw Error('Kit did not confirm the new name.');
+ state.kitName=response.kitName;state.heartbeatAt=Date.now();
+ for(const k of discoveredKits)if(k.kitId===state.kitId)k.kitName=response.kitName;
+ recordKnown();showDiscovered();render();
+ root.dispatchEvent(new CustomEvent('dronelab:kit-name',{detail:{kitId:state.kitId,name:response.kitName}}));
+ return response.kitName;
+}
 root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
+ getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),linkState:state.connected&&!linkFresh()?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working,apActive:!!state.apActive,staConnected:!!state.staConnected,staIp:state.staIp||'',rssi:state.rssi,setupAuthorized:!!state.setupAuthorized,otaAuthorized:!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
