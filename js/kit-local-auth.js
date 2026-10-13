@@ -32,13 +32,14 @@ function sessionAPI(transport,deviceId,bootId,sessionId,key,r){
  };
  return api;
 }
-async function openLocal(transport,deviceId){
+async function openLocal(transport,deviceId,mode='ap'){
+ if(mode!=='ap'&&mode!=='sta')throw Error('Unsupported local diagnostic transport');
  if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId))throw Error('Invalid kit identity');
  let client;try{client=root.sessionStorage?.getItem('zebjus.auth.local:'+deviceId)}catch{}
  if(!/^[a-f0-9]{32}$/.test(client||'')){client=hex(root.crypto.getRandomValues(new Uint8Array(16)));try{root.sessionStorage?.setItem('zebjus.auth.local:'+deviceId,client)}catch{}}
  const r=decoded(await transport('/api/auth/local','POST',{deviceId,client},{}));
- if(r.kitId!==deviceId||r.scope!=='ap_diagnostics'||!/^[a-f0-9]{32}$/.test(r.bootId)||!/^[a-f0-9]{32}$/.test(r.session)||!/^[a-f0-9]{64}$/.test(r.key)||r.setupExpiresMs!==0)throw Error('Invalid AP diagnostic session');
- const api=sessionAPI(transport,deviceId,r.bootId,r.session,r.key,r);api.local=true;return api;
+ if(r.kitId!==deviceId||r.scope!==(mode==='ap'?'ap_diagnostics':'sta_observer')||!/^[a-f0-9]{32}$/.test(r.bootId)||!/^[a-f0-9]{32}$/.test(r.session)||!/^[a-f0-9]{64}$/.test(r.key)||r.setupExpiresMs!==0)throw Error('Invalid AP diagnostic session');
+ const api=sessionAPI(transport,deviceId,r.bootId,r.session,r.key,r);api.local=true;api.localMode=mode;return api;
 }
 
 root.ZebjusKitAuth.openLocal=openLocal;
