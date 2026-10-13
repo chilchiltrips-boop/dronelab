@@ -161,6 +161,13 @@ function init(){
  bind('fwRenameSave',()=>changeName(false));bind('fwRenameReset',()=>changeName(true));
  $('fwDiscoverKits')?.addEventListener('click',()=>void scan());
  $('fwKitSelect')?.addEventListener('change',e=>{const d=discovered.find(k=>k.kitId===e.target.value);if(d)select(d);else selectedId=''});
+ $('fwKitNameInput')?.addEventListener('input',()=>{
+  const chosen=discovered.find(k=>k.kitId===selectedId);
+  if(chosen&&$('fwKitNameInput').value!==chosen.kitName){
+   selectedId='';if($('fwKitSelect'))$('fwKitSelect').value='';
+   if($('fwKitCachedIp'))$('fwKitCachedIp').value='';
+  }
+ });
  $('fwKitDemoMode')?.addEventListener('change',()=>{line($('fwKitDemoMode').checked?'Demo preview enabled; physical commands unchanged':'Live connected-kit mode enabled');render()});
  $('fwRenameInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void guarded(()=>changeName(false))}});
  root.addEventListener('dronelab:kit-link',render);
