@@ -88,7 +88,23 @@ try{
  await web.locator('#kitReadInfo').click();
  await web.screenshot({path:'test-output/network/simple-ap-connected.png'});
  // A protected maintenance fixture represents USB-authorized settings access.
- await web.locator('#kitDisconnect').click();await web.locator('#kitKeyInput').evaluate((e,key)=>{e.value=key},maintenanceKey);await web.locator('#kitConnect').click();
+ await web.locator('#kitDisconnect').click();
+ await web.evaluate(({id,maintenanceKey})=>{
+  const send=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line}}));
+  window.DroneLabSerial={
+   isOpen:()=>true,isFlashing:()=>false,connect:async()=>true,
+   writeLine:async line=>{
+    const cmd=String(line).trim();
+    if(cmd==='ZJKIT,GET')for(const msg of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJKIT,NAME,Test fixture A1'])send(msg);
+    else if(cmd==='ZJINFO,GET')send('ZJINFO,FW,ZFC-A1,1.4.1');
+    else if(cmd==='ZJNET,PAIR')send('ZJNET,PAIR,'+id+','+maintenanceKey);
+    else if(cmd==='ZJNET,GET'){send('ZJNET,AP,ON,ZEBJUS-AERION-A1');send('ZJNET,STA,CONNECTED,192.168.1.42,Mock classroom');}
+   }
+  };
+ },{id,maintenanceKey});
+ await web.locator('#kitPairFirst').click();
+ await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='usb');
+ await web.locator('#kitFindAp').click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
