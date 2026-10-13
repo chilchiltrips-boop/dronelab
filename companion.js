@@ -180,6 +180,7 @@ function reset(reason='Disconnected • scan a new Web QR'){
  initPeer();status('Disconnected');
 }
 window.zebjusNetworkChanged=()=>{
+ window.ZebjusNetwork?.networkChanged?.();
  reset('Wi-Fi/network changed • new QR needed');
  $('networkState').textContent='Network changed. Rejoin laptop Wi-Fi and scan a NEW Web QR, then request control again.';
  message('Network switch cleared old WebRTC, session and controller rights');

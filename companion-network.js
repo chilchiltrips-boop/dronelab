@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitAp=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null;
+const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
@@ -33,10 +33,10 @@ async function connectKit(){
   const value=el('kitKey').value.trim();
   if(value){
    const p=window.ZebjusKitAuth.label(value),raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
-   if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this AP.');
+   if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this kit.');
    if(rcSession)await releaseRc();
    verifiedKitId=p.deviceId;diagnosticKey=window.ZebjusKitAuth.diagnosticKey(p.secret,p.deviceId);
-   auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,ip==='192.168.4.1'?p.secret:diagnosticKey,ip==='192.168.4.1'?'setup':'diagnostic');
+   auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,link==='ap'?p.secret:diagnosticKey,link==='ap'?'setup':'diagnostic');
    el('kitKey').value='';
   }
   await status();reconnectEnabled=true;
@@ -55,12 +55,14 @@ async function status(){
  const data=await request('/api/status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
  verifiedKitId=data.kitId||'';online=true;mode=data.mode||mode;lastStatus=Date.now();
- // AUTO can run AP + STA simultaneously. STA being connected does NOT imply AP request.
- onKitAp=data.requestTransport==='AP'&&data.apActive===true;
+ // AUTO can run AP + STA simultaneously; only the verified request interface may own input.
+ onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
+ if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
  if(el('kitAppOta'))el('kitAppOta').disabled=true;
+ if(data.ip&&validHost(data.ip))staIp=data.ip;
  show('Phone → '+data.requestTransport+' VERIFIED • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
  return data;
 }
@@ -84,10 +86,10 @@ async function testSave(){
  throw Error('Save not verified. Reconnect the kit and inspect status before retrying.');
 }
 async function setMode(){
- if(rcSession){await request('/api/rc/release','POST',{session:rcSession}).catch(()=>{});rcSession='';}
+ if(rcSession)await releaseRc();
  const v=el('kitMode').value;
  if(!['ap','sta','auto'].includes(v))throw Error('Invalid Wi-Fi mode');
- await request('/api/wifi/mode','POST',{mode:v});show('Switching to '+v.toUpperCase()+'; reconnect your phone to the new network.');
+ await request('/api/wifi/mode','POST',{mode:v});dropInput('Wi-Fi mode changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;show('Switching to '+v.toUpperCase()+'; reconnect your phone to the new network.');
 }
 async function command(line){
  if(typeof line!=='string'||line.length>160||!/^(ZJI2C,SCAN|ZJINFO,GET|ZJLED,[0-9]+,(?:STOP|KEEP|SET|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Command is not allowed on the network bridge');
@@ -110,7 +112,7 @@ async function releaseRc(){
  if(session&&online)await request('/api/rc/release','POST',{session}).catch(()=>{});
 }
 async function claimRc(){
- if(!online||!onKitAp)throw Error('Connect and verify the phone on the kit AP first.');
+ if(!online||!onKitLink)throw Error('Connect and verify the phone on the selected kit '+link.toUpperCase()+' network first.');
  rcClaiming=true;
  try{
   const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode});
@@ -121,7 +123,7 @@ async function claimRc(){
  }finally{rcClaiming=false}
 }
 function previewControls(m){
- if(!online||!onKitAp||!rcSession||!el('kitRcPreview')?.checked||previewBusy||rcClaiming||document.hidden||Date.now()-lastPreview<100)return;
+ if(!online||!onKitLink||!rcSession||!el('kitRcPreview')?.checked||previewBusy||rcClaiming||document.hidden||Date.now()-lastPreview<100)return;
  if(!m?.axes||![m.axes.roll,m.axes.pitch,m.axes.yaw,m.throttle].every(Number.isFinite))return;
  lastPreview=Date.now();previewBusy=true;const at=performance.now(),session=rcSession;
  const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
@@ -136,7 +138,13 @@ function bind(){
  if(!el('kitNetStatus'))return;
  if(!native?.request){show('Install updated Android APK for Wi-Fi connection');return;}
  el('kitIp').value=ip;
- el('kitIp').addEventListener('change',()=>{void releaseRc();ip=el('kitIp').value.trim();online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitAp=false});
+ el('kitLink').addEventListener('change',()=>{
+  void releaseRc();if(link==='sta'&&validHost(ip))staIp=ip;
+  link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
+  el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
+  show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
+ });
+ el('kitIp').addEventListener('change',()=>{void releaseRc();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
@@ -155,6 +163,7 @@ function bind(){
  });
  setInterval(()=>{if(!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
-window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,hasControl:()=>!!rcSession&&online,feedback:()=>firmwareAck,isConnected:()=>online&&Date.now()-lastStatus<12000,mode:()=>mode};
+function networkChanged(){dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
+window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

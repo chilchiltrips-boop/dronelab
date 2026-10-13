@@ -492,7 +492,7 @@ async function waitNetworkWifiTest(nonce){
    const phase=String(d.wifiTestState||d.phase||'');
    if(phase==='saved'||phase==='sta_test_pass_saved'||phase==='ap_ready_credentials_saved'){
     wifiTesting=false;lastWifiTestState='saved';state.staConnected=!!d.staConnected;state.staIp=d.ip||'';
-    setupStep=4;recordKnown();render();wifiNote('Wi-Fi VERIFIED and saved. Switch your laptop to the router, then Connect STA. Android can stay on kit AP.','good');return true;
+    setupStep=4;recordKnown();render();wifiNote('Wi-Fi VERIFIED and saved. Switch your laptop to the router, then Connect STA. Android can stay on the kit AP or join the same router for STA.','good');return true;
    }
    if(phase==='failed'||phase==='sta_test_failed_not_saved'){
     wifiTesting=false;lastWifiTestState='failed';wifiNote('STA association failed; password NOT saved. ESP Wi-Fi reason '+(d.lastStaFailureReason||'unknown')+'. Check router 2.4 GHz/WPA2 and selected SSID.','error');return false;

@@ -48,12 +48,13 @@
 <div class="section-title"><strong>FlightCore Connection • AP / STA</strong><span>Direct Android input • motors OFF</span></div>
 <p class="hint">Join the controller AP in Android Wi-Fi settings or join the same router as the controller. Use the private manufacturer label to verify this exact kit without USB. Wi-Fi cannot ARM motors in this firmware.</p>
 <div class="kit-net-grid">
+<label>Android connection<select id="kitLink"><option value="ap">AP • kit Wi-Fi</option><option value="sta">STA • same router</option></select></label>
 <label>Device IP<input id="kitIp" inputmode="decimal" value="192.168.4.1" autocomplete="off" spellcheck="false"/></label>
 <label>Private kit label<input id="kitKey" type="password" autocomplete="off" placeholder="Device ID:private label secret"/></label>
 <label>Operating mode<select id="kitMode"><option value="auto">AUTO • STA then AP fallback</option><option value="ap">AP • direct FlightCore Wi-Fi</option><option value="sta">STA • router network</option></select></label>
 </div>
 <div class="actions"><button id="kitWifiSettings">Open Wi-Fi Settings</button><button class="primary" id="kitConnect">Connect / Refresh</button><button id="kitSwitch">Apply Mode</button></div>
-<p id="kitNetStatus" class="hint" role="status">Not connected to FlightCore</p>
+<p id="kitNetStatus" class="hint" role="status">Select AP or STA, join that Wi-Fi, then connect to the verified kit.</p>
 <div class="status-grid"><div><small>FLIGHTCORE</small><b id="kitDevice">—</b></div><div><small>IP ADDRESSES</small><b id="kitAddresses">—</b></div></div>
 <div class="kit-net-grid">
 <label>Detected networks<select id="kitNetworks"><option value="">Scan Wi-Fi first</option></select></label>

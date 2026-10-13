@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart TD
-    A[Signed Android app] -->|Authenticated AP input| B[FlightCore RC receiver]
+    A[Signed Android app] -->|Authenticated AP or STA input| B[FlightCore RC receiver]
     B -->|Read-only STA snapshot| C[Verified MY KITS session]
     C --> D[Pyodide Python on laptop]
     A <-->|Separate QR and WebRTC| E[Virtual flight simulator]
@@ -22,7 +22,7 @@ A1 (ESP32-C3 Super Mini) and A2 (XIAO ESP32-C6) use one Wi-Fi radio. Normal `aut
 4. Enter the private label only in the official HTTPS WebApp or signed Android app. Full Device ID and a cryptographic device proof must both match. The local HTTP help portal deliberately has no secret/password fields: a page served over unauthenticated HTTP cannot securely deliver credential-entry JavaScript against an active LAN attacker.
 5. AP setup authority lasts 5 minutes. Scan a 2.4 GHz router, select it, and Test & Save. Only new association + DHCP to that SSID and successful atomic NVS readback produce `saved`. HTTP 202 means pending. On failure, previous saved credentials survive.
 6. Switch the laptop to the router and select **Connect STA / Resume**. Probe the returned STA IP and known mDNS name; match the full immutable Device ID before binding. mDNS/DHCP/router isolation can require entering the IP manually.
-7. Keep Android on AP; enter the same private label in the signed app and explicitly enable diagnostic input. Laptop Python reads `/api/rc/snapshot` through its independently authenticated STA session. No USB or WebRTC relay is required for this path.
+7. Android can stay on AP or join the same STA router. Select the matching Android AP/STA connection, verify the immutable Device ID and actual request transport, enter the private label in the signed app and explicitly enable diagnostic input. Laptop Python reads `/api/rc/snapshot` through its independently authenticated STA session. No USB or WebRTC relay is required for this path.
 
 ## Trust, persistence and recovery
 

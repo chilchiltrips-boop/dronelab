@@ -31,8 +31,10 @@ test('First-time STA onboarding can be done over verified USB, with asynchronous
  assert.match(read('firmware-updater.js'),/ZJKIT,GET/);
  assert.match(read('firmware-updater.js'),/ZJNET,GET/);
 });
-test('Controller preview keeps separate direct AP and WebRTC counters and drops virtual ARM',()=>{
- assert.match(native,/requestTransport==='AP'/);
+test('Controller preview accepts verified AP or STA transport, separately from WebRTC, and drops virtual ARM',()=>{
+ assert.match(native,/data\.requestTransport===link\.toUpperCase\(\)/);
+ assert.match(native,/link==='ap'\?data\.apActive===true:data\.staConnected===true/);
+ assert.match(native,/onKitLink/);
  assert.doesNotMatch(native,/onKitAp=!data\.staConnected/);
  assert.match(native,/seq:\+\+rcSeq/);
  assert.match(cockpit,/previewControls\?\.\(diagnosticInput\(\)\)/);
