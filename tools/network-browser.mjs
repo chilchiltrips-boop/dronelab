@@ -75,8 +75,27 @@ const wait=(p,fn)=>p.waitForFunction(fn,null,{timeout:45000});
 mkdirSync('test-output/network',{recursive:true});
 try{
  await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits&&document.getElementById('app')?.dataset.ready==='true');
- await web.locator('#kitNewSetup').click();await web.locator('#kitLabelInput').fill(id+':'+secret);await web.locator('#kitEnrollLabel').click();
- await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
+ await web.evaluate(({id,teacherKey})=>{
+  const send=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line}}));
+  window.DroneLabSerial={
+   isOpen:()=>true,isFlashing:()=>false,connect:async()=>true,
+   writeLine:async line=>{
+    const cmd=String(line).trim();
+    if(cmd==='ZJKIT,GET')for(const msg of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJKIT,NAME,Test fixture A1'])send(msg);
+    else if(cmd==='ZJINFO,GET')send('ZJINFO,FW,ZFC-A1,1.4.0');
+    else if(cmd==='ZJNET,PAIR')send('ZJNET,PAIR,'+id+','+teacherKey);
+    else if(cmd==='ZJNET,GET'){send('ZJNET,AP,ON,ZEBJUS-AERION-A1');send('ZJNET,STA,CONNECTED,192.168.1.42,Mock classroom');}
+   }
+  };
+ },{id,teacherKey});
+ await web.locator('#kitNewSetup').click();
+ await web.locator('#kitFindAp').click();
+ await wait(web,()=>document.getElementById('kitCodeInput')?.value==='123456');
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().connected),false,'Public AP discovery cannot authorize a device');
+ await web.locator('#kitPairFirst').click();
+ await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='usb');
+ await web.locator('#kitFindAp').click();
+ await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='ap'&&window.ZebjusKits.getState().setupAuthorized);
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
@@ -114,6 +133,6 @@ try{
  assert.equal(errors.length,0,errors.join('\n'));
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
- console.log('PASS simulated network integration: private label → encrypted Test & Save → same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
+ console.log('PASS simulated network integration: AP discovery → USB-once pairing → AP Test & Save → same-ID STA handover; Android touch → Python read_joystick; STOP neutral');
 }catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}
