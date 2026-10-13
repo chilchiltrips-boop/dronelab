@@ -121,14 +121,17 @@ async function resolveKitAccess(code,ip){
  if(!found)throw Error('Kit not reachable at '+ip+'. First join its AP hotspot (or the same STA router); allow browser Local Network Access.');
  if(found.kitCode!==code)throw Error('Kit Code does not match the live controller at '+ip);
  if(state.connected&&state.kitId&&state.kitId!==found.kitId)throw Error('A different physical Device ID is responding. Connection blocked.');
- const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(found.kitId)||
+ // Simple AP/STA sessions take precedence over obsolete browser pairing keys.
+ // An explicitly entered legacy key remains available for maintenance/old firmware.
+ const manualKey=($('kitKeyInput')?.value||'').trim();
+ if(found.simpleConnection&&['ap','sta'].includes(found.transport)&&!manualKey){
+  const session=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),found.kitId,found.transport);
+  localKitHosts.set(ip,found.kitId);authSessions.set(found.kitId+'@'+ip,session);return {kitId:found.kitId,key:''};
+ }
+ const key=manualKey||pairedKeys.get(found.kitId)||
   pairing()?.fromSession?.(found.kitId)||await pairing()?.restore?.(found.kitId)||'';
  if(!/^[a-fA-F0-9]{32}$/.test(key)){
-  if(found.simpleConnection&&['ap','sta'].includes(found.transport)){
-   const session=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),found.kitId,found.transport);
-   localKitHosts.set(ip,found.kitId);authSessions.set(found.kitId+'@'+ip,session);return {kitId:found.kitId,key:''};
-  }
-  throw Error('Kit '+code+' is reachable. Install FlightCore 1.4.2 for protected BOOT-based AP setup and STA read-only monitoring.');
+  throw Error('Kit '+code+' is reachable, but the running firmware does not support simple sessions. Install FlightCore 1.4.3 for direct AP setup.');
  }
  if(localKitHosts.has(ip)){localKitHosts.delete(ip);authSessions.delete(found.kitId+'@'+ip);}
  if(($('kitKeyInput')?.value||'').trim()){secureIds.delete(found.kitId);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));}
@@ -221,7 +224,19 @@ async function wifiDirect(ip,key,route,method='GET',args={}){
  if(local||secureIds.has(expected)){
   const slot=expected+'@'+ip;let session=authSessions.get(slot);
   if(!session||Date.now()>session.expiresAt-5000){session=local?await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),expected,ip==='192.168.4.1'?'ap':'sta'):await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),expected,key);authSessions.set(slot,session)}
-  try{return await session.request(route,method,args)}catch(e){if(e.status===401)authSessions.delete(slot);throw e}
+  try{return await session.request(route,method,args)}
+  catch(e){
+   if(e.status===401)authSessions.delete(slot);
+   if(e.status!==401||!local)throw e;
+   // The kit may have rebooted (or its local session may have been replaced).
+   // Retry ONCE only after rechecking the full hardware Device ID.
+   const fresh=await probeIdentity(ip,2800);
+   if(!fresh||fresh.kitId!==expected)throw Error('Kit session rejected and Device ID could not be reverified. Connection blocked.');
+   const mode=ip==='192.168.4.1'?'ap':'sta';
+   const renewed=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),expected,mode);
+   authSessions.set(slot,renewed);
+   return renewed.request(route,method,args);
+  }
  }
  if(!safeKitHost(ip))throw Error('Use a verified private IP or safe .local host for your kit');
  if(!/^[a-fA-F0-9]{32}$/.test(key))throw Error('Use the separate 32-character kit access key enrolled over USB');
@@ -844,7 +859,10 @@ async function findKitAp(){
   tone('Kit '+found.kitCode+' detected • Protected settings access requires physical USB on this older firmware.','warn');return found;
  }
  await connect();
- if(!linkFresh()||state.kitId!==found.kitId)throw Error('Discovered AP but authenticated Device ID verification failed.');
+ if(!linkFresh()||state.kitId!==found.kitId){
+  const detail=state.lastError||'No authenticated status was received';
+  throw Error('Kit AP is discoverable, but authenticated connection failed: '+detail+'. Check that FlightCore 1.4.3 is actually running; restart the kit and retry.');
+ }
  if(!state.setupAuthorized){
   setupHint('AP connected. Running firmware does not support direct Wi-Fi setup. Install FlightCore 1.4.3 to enable Scan Wi-Fi → Test & Save without USB.');
   tone('AP connected • install FlightCore 1.4.3 for direct Wi-Fi setup','warn');return found;

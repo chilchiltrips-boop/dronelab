@@ -57,5 +57,67 @@ test('No unsafe 6-digit key, Wi-Fi password, or AP discovery shortcut was added 
  assert.doesNotMatch(fw,/zjPhysicalSetup|ZJ_SETUP_BUTTON_PIN/);
  assert.match(auth,/s\.local&&!s\.localSta&&String\(zjClientTransport\(\)\)=="AP"/);
  assert.match(auth,/X-ZJ-Session/);
- assert.match(read('js/classroom-kits.js'),/authenticated Device ID verification failed/);
+ assert.match(read('js/classroom-kits.js'),/authenticated connection failed:/);
+ assert.match(read('js/classroom-kits.js'),/state\.lastError\|\|'No authenticated status was received'/);
+});
+
+test('stale remembered key cannot override an available direct AP local session',async()=>{
+ const kitId='ZFC-A1-012345ABCDEF',code='432198',ip='192.168.4.1';
+ const elements={kitCodeInput:{value:''},kitTransport:{value:'sta'},kitIpInput:{value:''},kitKeyInput:{value:''}};
+ let opened=0,signedRequests=0,identifies=0;
+ const status={kitId,kitCode:code,kitName:'AERION A1',board:'ZFC-A1',version:'1.4.3',
+  requestTransport:'AP',mode:'auto',setupAuthorized:true,otaAuthorized:false,apActive:true,
+  staConnected:false,ip:'',rc:{claimed:false,motorsDisabled:true}};
+ const window={
+  ZebjusKitPairingStore:{fromSession:()=> 'e'.repeat(32),restore:async()=> 'e'.repeat(32)},
+  ZebjusKitAuth:{http:base=>({base}),openLocal:async(_transport,id,mode)=>{
+   assert.equal(id,kitId);assert.equal(mode,'ap');opened++;
+   return {expiresAt:Date.now()+600000,request:async route=>{
+    assert.equal(route,'/api/status');signedRequests++;return status;
+   }};
+  }},
+  addEventListener(){},dispatchEvent(){}
+ };
+ const fetch=async url=>{assert.equal(url,'http://192.168.4.1/api/identify');identifies++;
+  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A1',name:'AERION A1',simpleConnection:true})};
+ };
+ const doc={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
+ const storage={getItem:()=> '[]',setItem(){}};
+ vm.runInNewContext(read('js/classroom-kits.js'),{window,document:doc,localStorage:storage,fetch,
+  setTimeout,clearTimeout,AbortController,URLSearchParams,console,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail}}});
+ const found=await window.ZebjusKits.findKitAp();
+ assert.equal(found.kitId,kitId);assert.equal(opened,1,'only a local session opens, not obsolete saved key auth');
+ assert.ok(signedRequests>=1);assert.ok(identifies>=2);
+ assert.equal(window.ZebjusKits.getState().connected,true);
+ assert.equal(window.ZebjusKits.getState().setupAuthorized,true);
+ assert.equal(window.ZebjusKits.getState().transport,'ap');
+});
+
+test('one signed 401 can reverify kit identity and renew the local AP session',async()=>{
+ const kitId='ZFC-A1-012345ABCDEF',code='432198';
+ const elements={kitCodeInput:{value:''},kitTransport:{value:'sta'},kitIpInput:{value:''},kitKeyInput:{value:''}};
+ let opened=0,identifies=0;
+ const status={kitId,kitCode:code,kitName:'AERION A1',board:'ZFC-A1',version:'1.4.3',
+  requestTransport:'AP',mode:'auto',setupAuthorized:true,otaAuthorized:false,apActive:true,staConnected:false,
+  ip:'',rc:{claimed:false,motorsDisabled:true}};
+ const window={
+  ZebjusKitPairingStore:{fromSession:()=>'',restore:async()=>''},
+  ZebjusKitAuth:{http:base=>({base}),openLocal:async()=>{opened++;
+   const first=opened===1;
+   return {expiresAt:Date.now()+600000,request:async()=>{
+    if(first){const e=Error('session_required_or_expired');e.status=401;throw e}
+    return status;
+   }};
+  }},addEventListener(){},dispatchEvent(){}
+ };
+ const fetch=async url=>{assert.equal(url,'http://192.168.4.1/api/identify');identifies++;
+  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A1',simpleConnection:true})};
+ };
+ const doc={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
+ vm.runInNewContext(read('js/classroom-kits.js'),{window,document:doc,localStorage:{getItem:()=> '[]',setItem(){}},fetch,
+  setTimeout,clearTimeout,AbortController,URLSearchParams,console,CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail}}});
+ await window.ZebjusKits.findKitAp();
+ assert.equal(opened,2,'one and only one renewed session');
+ assert.ok(identifies>=3,'full Device ID reverified before renewing');
+ assert.equal(window.ZebjusKits.getState().connected,true);
 });
