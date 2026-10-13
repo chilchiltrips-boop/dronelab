@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('MY KITS provides AP BOOT setup and Wi-Fi Kit discovery with no USB pairing UI',()=>{
+test('MY KITS provides direct AP Wi-Fi setup and discovery without BOOT or USB pairing',()=>{
  const html=read('index.html'),source=read('js/classroom-kits.js');
  for(const id of ['kitSimpleSetup','kitSimpleHelp','kitFindAp','kitDiscover','kitWifiScan','kitWifiSave','kitHandover','kitRememberBrowser'])
   assert.ok(html.includes('id="'+id+'"'),id);
@@ -54,6 +54,8 @@ test('No unsafe 6-digit key, Wi-Fi password, or AP discovery shortcut was added 
  assert.match(fw,/zjSessionAuthenticated\(\)/);
  assert.match(fw,/if\(code!=zjKitCode\)/);
  assert.match(fw,/if\(!zjAllowSetup\(\)\)return;/);
+ assert.doesNotMatch(fw,/zjPhysicalSetup|ZJ_SETUP_BUTTON_PIN/);
+ assert.match(auth,/s\.local&&!s\.localSta&&String\(zjClientTransport\(\)\)=="AP"/);
  assert.match(auth,/X-ZJ-Session/);
  assert.match(read('js/classroom-kits.js'),/authenticated Device ID verification failed/);
 });

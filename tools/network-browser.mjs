@@ -10,7 +10,7 @@ const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16);
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map(),calls=[];
 const maintenanceKey='f1'.repeat(16);
-let owner='',frame=null,accepted=0,tested=false,physicalSetupOpen=false;
+let owner='',frame=null,accepted=0,tested=false;
 function snapshot(){
  const age=frame?Date.now()-frame.at:null,valid=!!owner&&age!==null&&age<=350;
  return {kitId:id,claimed:!!owner,active:valid,source:owner?'ANDROID':'NONE',ownerId:owner?'public-owner':'',seq:frame?.seq||0,
@@ -45,14 +45,14 @@ function handle(host,path,method,args={},headers={}){
  if(!legacy)assert.equal(h['x-zj-proof'],mac(s.key,[method,path,id,boot,h['x-zj-session'],seq,payload].join('|')));s.seq=Number(seq);
  if(payload){const b=Buffer.from(payload,'hex'),dec=createDecipheriv('aes-256-gcm',Buffer.from(s.key,'hex'),b.subarray(0,12));dec.setAuthTag(b.subarray(-16));args=Object.fromEntries(new URLSearchParams(Buffer.concat([dec.update(b.subarray(12,-16)),dec.final()]).toString()))}
  calls.push({host,path,method,source:args.source});
- if(s.local&&path.startsWith('/api/wifi/')&&(!physicalSetupOpen||s.localSta))
+ if(s.local&&path.startsWith('/api/wifi/')&&s.localSta)
   return result({error:'setup_authorization_required'},403,s.key,seq);
  if(s.localSta&&!['/api/status','/api/telemetry','/api/rc/snapshot'].includes(path))
   return result({error:'sta_observer_read_only'},403,s.key,seq);
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.2',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta&&physicalSetupOpen),otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.3',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
- else if(path==='/api/wifi/test'){assert.ok(s.setup||physicalSetupOpen&&!s.localSta);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
+ else if(path==='/api/wifi/test'){assert.ok(s.setup||s.local&&!s.localSta);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
  else if(path==='/api/rc/preview'){
   assert.equal(args.session,owner);assert.equal(args.armed,'false');assert.ok(Number(args.seq)>(frame?.seq||0));
@@ -87,16 +87,10 @@ try{
  assert.equal(await web.locator('#kitLabelInput').count(),0);assert.equal(await web.locator('#kitEnrollment').count(),0);
  await web.locator('#kitNewSetup').click();await wait(web,()=>window.ZebjusKits.getState().connected);
  assert.equal(await web.locator('#kitCodeInput').inputValue(),'123456');
- assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().setupAuthorized),false);
- assert.equal(await web.locator('#kitWifiScan').isDisabled(),true);
- const denied=await web.evaluate(async()=>{try{await window.ZebjusKits.request('/api/wifi/scan');return false}catch{return true}});assert.equal(denied,true);
- await web.locator('#kitReadInfo').click();
- await web.screenshot({path:'test-output/network/simple-ap-connected.png'});
- // Pressing BOOT on the already-running kit opens a 5-minute Wi-Fi setup lease.
- physicalSetupOpen=true;
- await web.locator('#kitReadInfo').click();
- await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().setupAuthorized),true);
  assert.equal(await web.locator('#kitWifiScan').isDisabled(),false);
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().owner),false);
+ await web.screenshot({path:'test-output/network/simple-ap-connected.png'});
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
@@ -142,6 +136,6 @@ try{
  assert.equal(errors.length,0,errors.join('\n'));
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
- console.log('PASS simulated network integration: USB-free AP physical setup → Test & Save → read-only same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
+ console.log('PASS simulated network integration: USB-free direct AP Wi-Fi setup → Test & Save → read-only same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
 }catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}
