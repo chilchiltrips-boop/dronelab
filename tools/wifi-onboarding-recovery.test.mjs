@@ -10,7 +10,7 @@ const page=read('index.html');
 const native=read('companion-network.js');
 const cockpit=read('companion-flight.js');
 test('AUTO retains AP; STA-only explicitly disables hotspot',()=>{
- assert.match(ino,/FW_VERSION="1\.4\.0"/);
+ assert.ok(ino.includes('FW_VERSION="'+read("VERSION.txt").trim()+'"'));
  assert.match(fw,/if\(zjMode=="sta"&&WiFi\.status\(\)==WL_CONNECTED\)/);
  assert.match(fw,/zjMode="auto";zjPrefs\.putString\("mode","auto"\);zjNetApOffAt=0;zjEnsureAP\(\)/);
  assert.match(fw,/zjNetApOffAt=mode=="sta"/);
