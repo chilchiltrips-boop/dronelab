@@ -80,7 +80,7 @@ int main(){
  const auto staSession=zjSessions[1];assert(!staSession.setup);
  prepare("/api/wifi/scan",HTTP_GET);assert(!zjLocalDiagnosticRoute());
  transport="AP";
- transport="AP";requestIP=IPAddress(192,168,4,3);assert(!localRequest("/api/status",HTTP_GET,2));requestIP=IPAddress(192,168,4,2);assert(localRequest("/api/telemetry",HTTP_GET,2));
+ transport="AP";requestIP=IPAddress(192,168,4,3);assert(!localRequest("/api/status",HTTP_GET,2));requestIP=IPAddress(192,168,4,2);assert(localRequest("/api/telemetry",HTTP_GET,3));
  clockMs=local.at+1800001;assert(!localRequest("/api/status",HTTP_GET,3));
  // AP-local traffic cannot exhaust every privileged session slot.
  zjEnrollmentInit();for(int i=0;i<5;i++){prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'a'+i));zjHttp.handlers[zjHttp.path]();assert(replyStatus==(i<4?200:429));}assert(zjSessions[4].id.isEmpty());
