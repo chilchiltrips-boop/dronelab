@@ -16,7 +16,7 @@ function decoded(r){let d;try{d=JSON.parse(r.text)}catch{throw Error('Invalid Fl
  if(r.status<200||r.status>=300){const e=Error(d.error||'HTTP '+r.status);e.status=r.status;throw e}return d;
 }
 async function open(transport,deviceId,credential,kind='diagnostic'){
- if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId)||!['setup','diagnostic'].includes(kind))throw Error('Invalid enrollment identity or scope');
+ if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId)||!['setup','diagnostic','admin'].includes(kind))throw Error('Invalid enrollment identity or scope');
  let client;try{client=root.sessionStorage?.getItem('zebjus.auth.client:'+deviceId)}catch{}
  if(!/^[a-f0-9]{32}$/.test(client||'')){client=hex(root.crypto.getRandomValues(new Uint8Array(16)));try{root.sessionStorage?.setItem('zebjus.auth.client:'+deviceId,client)}catch{}}
  const c=decoded(await transport('/api/auth/challenge','POST',{kind,client},{}));

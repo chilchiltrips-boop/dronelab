@@ -6,7 +6,7 @@
 
 static String zjLabelSecret,zjDiagnosticKey,zjBootId,zjAuthBody;
 struct ZjChallenge {String nonce,kind,client;IPAddress ip;uint32_t at=0;};
-struct ZjSession {String id,key,client;uint32_t at=0,seq=0;bool setup=false,local=false,localSta=false;IPAddress ip;};
+struct ZjSession {String id,key,client;uint32_t at=0,seq=0;bool setup=false,admin=false,local=false,localSta=false;IPAddress ip;};
 static ZjChallenge zjChallenges[4];static ZjSession zjSessions[8];
 static uint32_t zjAuthCooldown=0,zjChallengeAt=0;static uint8_t zjAuthFailures=0;
 static int zjRequestSession=-1;static bool zjAuthChecked=false,zjAuthAdmin=false;
@@ -34,11 +34,11 @@ static bool zjLocalDiagnosticRoute(){
  const String path=zjHttp.uri();const bool get=zjHttp.method()==HTTP_GET;
  const bool ap=String(zjClientTransport())=="AP";
  if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot")||
-   (ap&&path=="/api/wifi/scan");
+   (ap&&(path=="/api/wifi/scan"||path=="/api/wifi/saved"));
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/command"||path=="/api/rc/claim"||path=="/api/rc/preview"||
    path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/auth/close")||
-   (path=="/api/wifi/test"||path=="/api/wifi/mode"||path=="/api/kit/name"||path=="/api/kit/name/reset");
+   (path=="/api/wifi/test"||path=="/api/wifi/mode"||path=="/api/wifi/use"||path=="/api/wifi/forget"||path=="/api/kit/name"||path=="/api/kit/name/reset");
 }
 static bool zjSessionAuthenticated(){
  if(zjAuthChecked)return zjAuthAdmin||zjRequestSession>=0;zjAuthChecked=true;
@@ -54,6 +54,7 @@ static bool zjSessionAuthenticated(){
  const uint64_t wide=strtoull(counter.c_str(),nullptr,10);if(!wide||wide>0xffffffffULL)return false;
  for(int i=0;i<8;i++){
   auto& s=zjSessions[i];if(s.id!=id||id.isEmpty())continue;
+  if(s.admin&&s.ip!=zjHttp.client().remoteIP())return false;
   if(s.local&&(s.ip!=zjHttp.client().remoteIP()||(s.localSta?String(zjClientTransport())!="STA":String(zjClientTransport())!="AP")||!zjLocalDiagnosticRoute()))return false;
   if(uint32_t(millis()-s.at)>1800000||wide<=s.seq)return false;
   const String method=zjHttp.method()==HTTP_GET?"GET":"POST";
@@ -67,7 +68,7 @@ static bool zjSessionAuthenticated(){
    if(!err)err=mbedtls_gcm_auth_decrypt(&ctx,n,bytes,12,(const uint8_t*)msg.c_str(),0,bytes+12+n,16,bytes+12,plain);
    mbedtls_gcm_free(&ctx);if(err)return false;plain[n]=0;zjAuthBody=String((const char*)plain);
   }
-  s.seq=uint32_t(wide);zjRequestSession=i;return true;
+  s.seq=uint32_t(wide);zjRequestSession=i;zjAuthAdmin=s.admin;return true;
  }return false;
 }
 static bool zjSetupAuthorized(){
@@ -92,8 +93,8 @@ static void zjSetupEnrollmentHttp(){
  zjHttp.on("/api/auth/challenge",HTTP_POST,[](){
   const uint32_t now=millis();const String kind=zjHttp.arg("kind"),client=zjHttp.arg("client");
   if(!zjHex(client,32)){zjReply(400,"{\"error\":\"invalid_client_id\"}");return;}
-  if(!zjLabelSecret.length()){zjReply(409,"{\"error\":\"manufacturer_label_not_installed\"}");return;}
-  if((kind!="setup"&&kind!="diagnostic")||(kind=="setup"&&String(zjClientTransport())!="AP")){zjReply(403,"{\"error\":\"setup_requires_kit_ap\"}");return;}
+  if(kind!="admin"&&!zjLabelSecret.length()){zjReply(409,"{\"error\":\"manufacturer_label_not_installed\"}");return;}
+  if((kind!="setup"&&kind!="diagnostic"&&kind!="admin")||(kind=="setup"&&String(zjClientTransport())!="AP")){zjReply(403,"{\"error\":\"setup_requires_kit_ap\"}");return;}
   if((zjAuthCooldown&&int32_t(now-zjAuthCooldown)<0)||(zjChallengeAt&&uint32_t(now-zjChallengeAt)<300)){zjReply(429,"{\"error\":\"enrollment_rate_limited\"}");return;}
   int slot=-1;for(int i=0;i<4;i++)if(zjChallenges[i].nonce.isEmpty()||uint32_t(now-zjChallenges[i].at)>30000){slot=i;break;}
   if(slot<0){zjReply(429,"{\"error\":\"challenge_busy\"}");return;}
@@ -106,14 +107,14 @@ static void zjSetupEnrollmentHttp(){
    if(c.nonce.isEmpty()||c.nonce!=zjHttp.arg("nonce")||c.ip!=zjHttp.client().remoteIP())continue;
    const String nonce=c.nonce,kind=c.kind,client=c.client;c.nonce=""; // consume before verification: no replay
    const String msg="enroll|"+zjKitId+"|"+zjBootId+"|"+nonce+"|"+kind+"|"+client;
-   const String credential=kind=="setup"?zjLabelSecret:zjDiagnosticKey;
+   const String credential=kind=="admin"?zjNetKey:kind=="setup"?zjLabelSecret:zjDiagnosticKey;
    if(uint32_t(now-c.at)>30000||zjHttp.arg("deviceId")!=zjKitId||!zjEqual(zjHmac(credential,msg),zjHttp.arg("proof"))){
     if(++zjAuthFailures>=3){zjAuthCooldown=now+30000;zjAuthFailures=0;}zjReply(401,"{\"error\":\"enrollment_proof_invalid_or_expired\"}");return;
    }
    int slot=-1;for(int i=0;i<8;i++)if(zjSessions[i].client==client&&!client.isEmpty()){slot=i;break;}
    if(slot<0)for(int i=0;i<8;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
    if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
-   auto& s=zjSessions[slot];s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";s.local=false;
+   auto& s=zjSessions[slot];s=ZjSession();s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";s.admin=kind=="admin";s.ip=c.ip;s.local=false;
    s.key=zjHmac(credential,"session|"+msg+"|"+s.id);zjAuthFailures=0;
    zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"session\":"+zjJson(s.id)+",\"proof\":"+zjJson(zjHmac(s.key,"server|"+msg))+",\"expiresMs\":1800000,\"setupExpiresMs\":"+String(s.setup?300000:0)+"}");return;
   }zjReply(401,"{\"error\":\"challenge_invalid_or_consumed\"}");

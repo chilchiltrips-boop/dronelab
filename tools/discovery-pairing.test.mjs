@@ -36,7 +36,7 @@ test('physical USB pairing and real radio status never leak credentials into cac
  assert.match(firmware,/zjStaDisconnectReason/);
  assert.match(firmware,/MDNS\.begin\(host\.c_str\(\)\)/);
  assert.match(kit,/pairedKeys=new Map/);
- assert.match(kit,/async function resolveKitAccess\(code,ip\)/);
+ assert.match(kit,/async function resolveKitAccess\(code,ip,expectedId=/);
  assert.match(kit,/await pairing\(\)\?\.restore\?\.\(found\.kitId\)/);
  assert.match(kit,/if\(access&&access\.kitId!==verified\.kitId\)/);
  assert.match(page,/id="kitRememberBrowser"/);
@@ -54,8 +54,8 @@ test('physical USB pairing and real radio status never leak credentials into cac
 test('firmware release metadata and Service Worker cache version are aligned with source',()=>{
  const sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
- assert.equal(version,'1.4.4');
- assert.ok(sketch.includes('FW_VERSION="1.4.4"'));
+ assert.equal(version,'1.4.5');
+ assert.ok(sketch.includes('FW_VERSION="1.4.5"'));
  assert.ok(sw.includes('classroom-kits.css?v=brand-stack2'));
  assert.ok(page.includes('classroom-kits.css?v=brand-stack2'));
 });

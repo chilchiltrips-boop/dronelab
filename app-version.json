@@ -1,13 +1,11 @@
 {
-  "version": "1.7.0+203",
-  "channel": "release",
+  "version": "1.7.1+204",
+  "channel": "review",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
-    "Legacy-inspired Firmware & Connect center with automatic same-Wi-Fi discovery",
-    "Verified saved IP, default kit names and mDNS discovery with named selection",
-    "Authenticated AP Kit Name save/reset and immutable Device ID (FlightCore 1.4.4)",
-    "Command freshness, IMU/RC telemetry, firmware updates and USB recovery"
-  ],
-  "publishedAt": "2026-10-13T05:24:07.471639+00:00",
-  "buildCommit": "2d377fe3941a"
+    "Legacy-style same-Wi-Fi discovery, verified Kit Name and remembered reconnect",
+    "Visible STA/AP and Take Control header switches using shared verified state",
+    "AP/STA Wi-Fi management with five tested saved profiles and idle recovery",
+    "USB-paired APP OTA on AP/STA, boot identity verification and USB FACTORY recovery"
+  ]
 }

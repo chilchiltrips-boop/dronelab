@@ -62,3 +62,9 @@ test('disconnect clears USB discovery identity so subsequent telemetry cannot re
  const f=fixture();f.serial('ZJKIT,ID,ZFC-A1-012345ABCDEF');f.serial('ZJKIT,CODE,123456');
  await f.api.disconnect();f.serial('ZJINFO,FW,ZFC-A1,1.4.0');assert.equal(f.api.isConnected(),false);
 });
+
+test('manual disconnect suppresses a complete late USB handshake',async()=>{
+ const f=fixture();await f.api.disconnect();
+ f.serial('ZJKIT,ID,ZFC-A1-012345ABCDEF');f.serial('ZJKIT,CODE,123456');f.serial('ZJINFO,FW,ZFC-A1,1.4.5');
+ assert.equal(f.api.isConnected(),false,'Late serial responses cannot undo an explicit Disconnect');
+});

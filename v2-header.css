@@ -1,6 +1,6 @@
 /* V2 shell: primary navigation, independent link observations, explicit controls. */
 #app .topbar{height:auto!important;min-height:0!important;padding:10px 16px!important;background:#0b1521!important;border-bottom:1px solid #263a4a;overflow:visible!important}
-#app .topbar-main{display:grid!important;grid-template-columns:150px minmax(360px,1fr) minmax(340px,460px)!important;gap:12px!important;align-items:center!important;min-height:46px!important;height:auto!important;overflow:visible!important;padding:0!important}
+#app .topbar-main{display:grid!important;grid-template-columns:150px minmax(350px,1fr) minmax(440px,560px)!important;gap:12px!important;align-items:center!important;min-height:46px!important;height:auto!important;overflow:visible!important;padding:0!important}
 #app .topbar-main>.brand{grid-area:auto!important;min-width:0!important;max-width:none!important;width:auto!important;gap:8px!important}
 #app .topbar-main>.brand .logo{width:30px!important;height:30px!important;flex:0 0 30px!important}
 #app .topbar-main>.brand .brand-copy b{font-size:12px!important;max-width:none!important}
@@ -24,13 +24,35 @@
 .v2-tools-content{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:10px 0}
 .v2-tools-content .top-actions,.v2-tools-content .qr-header-controls{display:flex!important;gap:8px;flex-wrap:wrap;align-items:center}
 .v2-tools-content .zebjus-top-shop{display:flex!important;margin-left:auto}
-@media(max-width:1150px){
+@media(max-width:1250px){
  #app .topbar-main{grid-template-columns:150px minmax(0,1fr)!important;gap:5px 10px!important}
  #app .topbar-main>.tabs{grid-column:1/-1!important;grid-row:2!important;justify-content:flex-start}
  #app .topbar-main>.kit-top-status{justify-content:flex-end}
  #app .topbar .kit-top-detail{flex:0 1 150px!important}
  #app .topbar{padding:6px 12px!important}
  #app .topbar .tabs .tab{padding:5px 8px!important}
+}
+#app .topbar .kit-top-network{display:inline-flex!important;align-items:center;gap:4px;font-size:10px;flex:none}
+#app .topbar .kit-control-switch{display:inline-flex!important;align-items:center;gap:5px;padding:6px!important;min-width:0!important;flex:none;font-size:10px!important;white-space:nowrap}
+#app .topbar .kit-top-switch{width:30px!important;height:18px!important;min-width:30px!important;flex:none}
+#app .topbar .kit-top-switch i{width:12px!important;height:12px!important}
+#app .topbar .kit-top-switch[aria-checked="true"] i{transform:translateX(12px)!important}
+.compact-tab-label{display:none}
+@media(max-width:600px){
+ .wide-tab-label{display:none}
+ .compact-tab-label{display:inline}
+ #app .topbar-main{grid-template-columns:92px minmax(0,1fr)!important}
+ #kitInternetStatus,#app .topbar #kitTopRefresh{display:none!important}
+ #app .topbar-main>.kit-top-status{gap:3px!important}
+ #app .topbar .kit-top-network{gap:3px;font-size:9px}
+ #app .topbar .kit-control-switch{gap:2px;padding:4px 2px!important;font-size:9px!important}
+ #app .topbar .kit-control-switch>span{font-size:8px!important}
+ #app .topbar .kit-control-switch>b{min-width:18px!important}
+ #app .topbar .kit-control-switch i{width:24px!important;min-width:24px!important;flex:0 0 24px!important}
+ #app .topbar .kit-control-switch i:after{width:10px!important;height:10px!important;top:3px!important}
+ #app .topbar .kit-control-switch[aria-checked=true]>i:after{transform:translateX(10px)!important}
+ .v2-connection-details>summary{font-size:0!important;padding:5px!important}
+ .v2-connection-details>summary:after{content:'⋯';font-size:14px}
 }
 @media(max-width:600px){
  #app .topbar-main{grid-template-columns:110px minmax(0,1fr)!important;gap:4px!important}

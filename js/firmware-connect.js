@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastWasOnline=false,telemetry=null,telemetryTime=0;
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastWasOnline=false,telemetry=null,telemetryTime=0;
 const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -20,13 +20,18 @@ function select(device){
  if(!device?.kitId)return;
  selectedId=device.kitId;
  if($('fwKitNameInput'))$('fwKitNameInput').value=device.kitName;
- if($('fwKitCachedIp')){$('fwKitCachedIp').value=device.ip;$('fwKitCachedIp').title='Public identity candidate; signed status must verify before IP is trusted'}
+ if($('fwKitCachedIp')){$('fwKitCachedIp').value=state().connected&&state().kitId===device.kitId?state().ip||state().staIp||'':'';$('fwKitCachedIp').title='Filled only after the selected Device ID returns a verified status'}
  if($('fwKitSelect'))$('fwKitSelect').value=device.kitId;
  renderAvailable(discovered,false);
  note('Selected '+device.kitName+' • '+device.kitId+'. Press Connect Selected Kit to authenticate.');
 }
 function renderAvailable(kits=[],inProgress=false){
  discovered=Array.isArray(kits)?kits.map(k=>({...k})):[];
+ if(!selectedId&&discovered.length){
+  let remembered;try{remembered=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
+  const auto=discovered.find(k=>k.kitId===remembered?.id)||discovered[0];
+  selectedId=auto.kitId;if($('fwKitNameInput'))$('fwKitNameInput').value=auto.kitName;
+ }
  const dropdown=$('fwKitSelect'),list=$('fwDiscoveryResults');
  if(dropdown){
   dropdown.replaceChildren();
@@ -44,7 +49,7 @@ function renderAvailable(kits=[],inProgress=false){
   const row=document.createElement('button');row.type='button';row.className='kit-known-item';
   row.dataset.kitId=d.kitId;row.setAttribute('aria-pressed',String(d.kitId===selectedId));
   const name=document.createElement('b');name.textContent=d.kitName;
-  const summary=document.createElement('small');summary.textContent=d.board+' • '+d.transport.toUpperCase()+' • '+d.kitCode+' • '+d.kitId;
+  const summary=document.createElement('small');summary.textContent=(discovered.some(k=>k.kitId!==d.kitId&&k.kitName.toLowerCase()===d.kitName.toLowerCase())?'DUPLICATE NAME • ':'')+d.board+' • '+d.transport.toUpperCase()+' • '+d.kitCode+' • '+d.kitId;
   row.append(name,summary);row.onclick=()=>select(d);list.append(row);
  }
 }
@@ -86,13 +91,13 @@ async function connectSelected(){
 }
 async function ping(){
  const s=state();if(!s.connected)throw Error('Select and connect a Kit first.');
- const d=await kit().request('/api/status');
+ const d=await kit().refreshConnection();
  if(d.kitId!==s.kitId)throw Error('Ping rejected: Device ID changed.');
  healthAt=Date.now();line('Ping OK • '+d.kitId+' • AP '+(d.apActive?'ON':'OFF')+' • STA '+(d.staConnected?'CONNECTED':'OFFLINE'));
 }
 async function changeName(reset){
  const s=state();
- if(!s.connected||s.transport!=='ap'||!s.setupAuthorized)throw Error('Connect the physical Kit through AP Setup before changing its name. STA is read-only.');
+ if(!s.connected||!['ap','sta'].includes(s.transport)||!s.setupAuthorized)throw Error('Use AP Setup or authorize this USB-paired STA connection before changing its name.');
  const newName=reset?'':String($('fwRenameInput')?.value||'').trim();
  const result=await kit().renameConnectedKit(newName,reset);
  if($('fwKitNameInput'))$('fwKitNameInput').value=result;
@@ -103,8 +108,8 @@ async function changeName(reset){
 }
 function render(){
  const s=state(),demo=!!$('fwKitDemoMode')?.checked,live=!!s.connected&&!demo;
- const changed=s.kitId!==lastConnectedId||live!==lastWasOnline;
- if(changed){lastConnectedId=s.kitId||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
+ const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||live!==lastWasOnline;
+ if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
  set('fwConnectBadge',demo?'DEMO PREVIEW':live?'CONNECTED':'Not connected');
  $('fwConnectBadge')?.classList.toggle('offline',!live);
  set('fwSelectedKitName',live?s.kitName:demo?'Offline Simulation':'No kit selected');
@@ -123,23 +128,31 @@ function render(){
  set('fwHealthReceiver',t?(t.rcAlive||t.rc?.inputValid?'RC LIVE':'NO LIVE RC'):'NOT REPORTED');
  for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthCommand'&&current||id==='fwHealthImu'&&t?.gyroReady||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)?'live':'lost'}
  set('fwDetailName',live?s.kitName:'--');
- set('fwDetailAccess',live?(s.setupAuthorized?'AP Setup':'Read-only / diagnostic'):'--');
+ set('fwDetailId',live?s.kitId:'--');
+ set('fwDetailAccess',live?(s.otaAuthorized?'USB-paired control / updates':s.setupAuthorized?'AP Setup':'STA observer'):'--');
  set('fwDetailMode',live?s.mode||s.transport:'--');
  set('fwDetailWifi',live?s.staConnected?'STA connected':s.apActive?'AP available':'Offline':'--');
- set('fwDetailRssi',live&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
+ set('fwDetailRssi',live&&s.staConnected&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
  set('fwDetailFirmware',live?s.version||'Not reported':'--');
- set('fwDetailBuild',live?'Not reported by Kit':'--');
+ set('fwDetailBuild',live?s.firmwareBuiltAt||'Not reported by Kit':'--');
  set('fwDetailIp',live?s.transport==='ap'?'192.168.4.1':s.staIp||'Unknown':'--');
  set('fwDetailControl',live?s.owner?'Owned here':s.rc?.claimed?'Owned elsewhere':'Released':'--');
  set('fwDetailLastSeen',live&&s.heartbeatAt?new Date(s.heartbeatAt).toLocaleTimeString():'--');
- set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.transport==='sta'?'STA observer is read-only without separate control authorization.':'Bench diagnostic control only; motor outputs disabled.':'Select a live Kit. No commands are sent while offline.');
+ set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized?'Take Control reserves this Kit; Release Control neutralizes input. Motor outputs remain disabled.':'STA observer: pair this browser once over USB, then reconnect to authorize diagnostic control and updates.':'Select a live Kit. No commands are sent while offline.');
  set('fwApIndicator',live?s.apActive?'ACTIVE':'OFF':'--');
  set('fwStaIndicator',live?s.staConnected?'CONNECTED':'OFF':'--');
- if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning;
+ if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning||s.working;
  if($('fwKitDisconnect'))$('fwKitDisconnect').disabled=requesting||!s.connected;
  if($('fwKitPing'))$('fwKitPing').disabled=requesting||!live;
- if($('fwKitTakeControl')){$('fwKitTakeControl').disabled=requesting||!live||s.transport==='sta'&&!s.owner;$('fwKitTakeControl').textContent=s.owner?'Release Control':'Take Control'}
- for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||!live||s.transport!=='ap'||!s.setupAuthorized;
+ if($('fwKitTakeControl')){$('fwKitTakeControl').disabled=requesting||s.working||!live||!s.controlAuthorized&&s.transport!=='usb'||!!s.rc?.claimed&&!s.owner;$('fwKitTakeControl').textContent=s.owner?'Release Control':'Take Control'}
+ for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||s.working||!live||!['ap','sta'].includes(s.transport)||!s.setupAuthorized||s.owner||!!s.rc?.claimed;
+ for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed;
+ set('fwWifiName',live?s.ssid||'Router not connected':'--');
+ set('fwWifiApName',live?s.apSsid||'Not reported':'--');
+ set('fwWifiState',live?s.networkState||s.mode||'Connected':'Kit offline');
+ set('fwWifiAddress',live?(s.staIp||'STA offline')+' / '+(s.apActive?s.apIp||'192.168.4.1':'AP off'):'--');
+ set('fwWifiAccess',live?s.otaAuthorized?'Control, settings & APP OTA authorized':s.setupAuthorized?'AP setup available • USB pairing required for APP OTA':'STA monitoring • USB pairing required for settings/control/OTA':'Connect a kit to manage its Wi-Fi');
+ if($('fwAuthorizeUpdates'))$('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized;
  if(changed&&live){if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}
 }
@@ -157,7 +170,11 @@ function init(){
  bind('fwKitConnectSelected',connectSelected);
  bind('fwKitDisconnect',()=>kit().disconnect('Firmware page disconnected'));
  bind('fwKitPing',ping);
- bind('fwKitTakeControl',async()=>{if(state().owner)await kit().releaseRc();else await kit().claim('WEB')});
+ bind('fwKitTakeControl',()=>kit().toggleControl());
+ bind('fwAuthorizeUpdates',()=>kit().authorizeNetwork());
+ bind('fwWifiConnectAp',()=>kit().connectTransport('ap'));
+ bind('fwWifiConnectSta',()=>kit().connectTransport('sta'));
+ $('fwWifiSettingsBtn')?.addEventListener('click',()=>{kit().view();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
  bind('fwRenameSave',()=>changeName(false));bind('fwRenameReset',()=>changeName(true));
  $('fwDiscoverKits')?.addEventListener('click',()=>void scan());
  $('fwKitSelect')?.addEventListener('change',e=>{const d=discovered.find(k=>k.kitId===e.target.value);if(d)select(d);else selectedId=''});
@@ -178,6 +195,6 @@ function init(){
  setInterval(render,1200);setInterval(()=>{if($('tab-firmware')?.classList.contains('active')&&Date.now()-lastScanAt>65000)void scan()},18000);
  setInterval(()=>void sampleHealth(),4200);
 }
-root.ZebjusFirmwareConnect={renderAvailable,scan,select};
+root.ZebjusFirmwareConnect={renderAvailable,scan,select,selected:()=>discovered.find(k=>k.kitId===selectedId)||null};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(window);

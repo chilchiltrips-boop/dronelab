@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {webcrypto,createHmac,createDecipheriv} from 'node:crypto';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16),nonce='c9'.repeat(16),sid='d0'.repeat(16);
+const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),usbKey='f2'.repeat(16),boot='b8'.repeat(16),nonce='c9'.repeat(16),sid='d0'.repeat(16);
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 function protocol(){
  const ctx={TextEncoder,TextDecoder,Uint8Array,Array,crypto:webcrypto,URLSearchParams,Date,Promise};vm.createContext(ctx);
@@ -19,7 +19,7 @@ function controller({wrongId=false,tamper=false}={}){
   if(route==='/api/auth/local'){sessionKey='e1'.repeat(32);assert.equal(args.deviceId,id);return result(200,{kitId:wrongId?'ZFC-A2-FFFFFFFFFFFF':id,bootId:boot,session:sid,key:sessionKey,scope:'ap_diagnostics',expiresMs:1800000,setupExpiresMs:0})}
   if(route==='/api/auth/challenge'){scope=args.kind;client=args.client;return result(200,{kitId:wrongId?'ZFC-A2-FFFFFFFFFFFF':id,nonce,bootId:boot})}
   if(route==='/api/auth/enroll'){
-   const msg=['enroll',id,boot,nonce,scope,client].join('|'),credential=scope==='setup'?secret:mac(secret,'diagnostic|'+id).slice(0,32);
+   const msg=['enroll',id,boot,nonce,scope,client].join('|'),credential=scope==='admin'?usbKey:scope==='setup'?secret:mac(secret,'diagnostic|'+id).slice(0,32);
    assert.equal(args.proof,mac(credential,msg));assert.equal(args.deviceId,id);assert.equal(challengeUsed,false);challengeUsed=true;
    sessionKey=mac(credential,'session|'+msg+'|'+sid);
    return result(200,{kitId:id,session:sid,proof:mac(sessionKey,'server|'+msg),expiresMs:1800000,setupExpiresMs:scope==='setup'?300000:0});
@@ -50,6 +50,12 @@ test('STA credentials are AES-GCM encrypted; signed counters serialize concurren
  assert.ok(!JSON.stringify(c.seen).includes('not-a-real-password'));
  assert.deepEqual(c.seen.slice(2).map(r=>r.headers['X-ZJ-Seq']),['1','2']);
 });
+test('USB-paired admin proves its secret without sending it and encrypts STA router credentials',async()=>{
+ const a=protocol(),c=controller(),s=await a.open(c.transport,id,usbKey,'admin');
+ const result=await s.request('/api/wifi/test','POST',{ssid:'New classroom router',password:'private-router-password'});
+ assert.equal(result.parsed.ssid,'New classroom router');
+ assert.ok(!JSON.stringify(c.seen).includes(usbKey));assert.ok(!JSON.stringify(c.seen).includes('private-router-password'));
+});
 test('diagnostic credential cannot assert setup scope and tampered responses fail closed',async()=>{
  const a=protocol(),c=controller({tamper:true}),key=a.diagnosticKey(secret,id),s=await a.open(c.transport,id,key);
  assert.ok(s.setupUntil<=Date.now());await assert.rejects(s.request('/api/status'),/unsigned device response/);
@@ -65,14 +71,14 @@ test('Python reads actual identity-bound firmware snapshots without claiming RC 
  rc={...rc,kitId:'ZFC-A2-FFFFFFFFFFFF'};await assert.rejects(win.DroneLabNetwork.readJoystick(),/identity|Device ID/i);
  assert.ok(calls.every(route=>route==='/api/rc/snapshot'));
 });
-test('firmware scopes OTA to idle teacher-authorized STA; setup labels never grant OTA',()=>{
+test('firmware scopes OTA to idle USB-paired AP/STA; setup labels never grant OTA',()=>{
  const source=read('FlightCore_Firmware/FlightCoreNetwork.h'),auth=read('FlightCore_Firmware/FlightCoreEnrollment.h');
- assert.match(source,/zjOtaAuthorized=zjAuthenticated\(\)&&zjAuthAdmin&&String\(zjClientTransport\(\)\)=="STA"&&!zjRcOwned&&!zjNetTesting/);
+ assert.match(source,/zjOtaAuthorized=zjAuthenticated\(\)&&zjAuthAdmin&&\(String\(zjClientTransport\(\)\)=="STA"\|\|String\(zjClientTransport\(\)\)=="AP"\)&&!zjRcOwned&&!zjNetTesting/);
  assert.match(auth,/c\.nonce=""; \/\/ consume before verification/);
  assert.match(auth,/wide<=s\.seq/);assert.match(auth,/zjAuthFailures>=3/);
  assert.doesNotMatch(source,/Serial\.print\(zjApPass\)/);
  assert.match(source,/WiFi\.persistent\(false\)/);
- assert.match(source,/zjPrefs\.putString\("staConfig",record\)!=record\.length\(\)/);
+ assert.match(source,/!zjRememberProfile\(zjPendingSsid,zjPendingPass\)/);
  assert.match(source,/zjAssociationEpoch!=zjTestAssociationEpoch/);
 });
 

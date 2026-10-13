@@ -1,6 +1,17 @@
 {
-  "version": "1.4.4",
-  "builtAt": "2026-10-13T05:24:12Z",
+  "version": "1.4.5",
+  "builtAt": "2026-10-13T18:09:13Z",
+  "sourceCommit": "f796f23f5d857be19e5e1963ac4af6bf1affdec2",
+  "sourceSha256": {
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "865ba7b09f9c6b45edd74bb1cbf27f68d1348f385ee9f9d9e5a1fac37a5734ad",
+    "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
+    "FlightCore_Firmware/FlightCoreClassroom.h": "e6d723770a660a0921301bd75035126dcbc47419aa2dfd135ad38822ff6b660f",
+    "FlightCore_Firmware/FlightCoreEnrollment.h": "0f2e7a4a02e820a7d9532dd965af1d8ebb1ddb6cf379a48ba383b44b0d65918c",
+    "FlightCore_Firmware/FlightCoreNetwork.h": "23c40fdb9f64896b0a4b41d7e27fb572bab81b99748a80b66d55c511bf27495d",
+    "FlightCore_Firmware/FlightCoreOta.h": "ab35efe5f62571d76f43cd02c890f201b9c85eaa9ace6ff05d270485b6d29173",
+    "FlightCore_Firmware/FlightCoreSetupPortal.h": "7070a7e77e018c97ea84fc2f23766b8ef8df4f361d25e4b40beae9f64e1a16e4",
+    "FlightCore_Firmware/FlightCoreWifiProfiles.h": "8a6b796c56945f24014a33c68371f8cff77d8b30e5daea938958b6c3960c528c"
+  },
   "arduinoEsp32": "3.3.12",
   "hardwareFlashingTested": false,
   "boards": [
@@ -8,7 +19,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc",
       "chipId": 5,
-      "appBytes": 1156224,
+      "appBytes": 1173216,
       "otaSlots": [
         {
           "address": 65536,
@@ -34,7 +45,7 @@
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1163744,
+      "appBytes": 1180768,
       "otaSlots": [
         {
           "address": 65536,

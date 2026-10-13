@@ -3,6 +3,7 @@
 #include "host-stubs/ArduinoShim.h"
 #include <cassert>
 #include <iostream>
+#include <vector>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 const int HTTP_GET=1,HTTP_POST=2;static IPAddress requestIP(192,168,4,2);
 struct FakeHttp {
@@ -13,6 +14,8 @@ struct FakeHttp {
 } zjHttp;
 static Preferences zjPrefs;static String zjNetKey="ff112233445566778899aabbccddeeff0";
 static String zjJson(const String& v){return String("\"")+v+"\"";}
+static String zjSavedSsid,zjSavedPass;
+#include "../FlightCore_Firmware/FlightCoreWifiProfiles.h"
 static String zjNewSecret(size_t n){String out;for(size_t i=0;i<n;i++){char b[3];snprintf(b,3,"%02x",esp_random()%256);out+=b;}return out;}
 static String transport="AP",replyBody;static int replyStatus=0;
 static const char* zjClientTransport(){return transport.c_str();}
@@ -20,6 +23,16 @@ static void zjReply(int status,const String& body){replyStatus=status;replyBody=
 static bool zjAllow();
 #include "../FlightCore_Firmware/FlightCoreEnrollment.h"
 static bool zjAllow(){return zjSessionAuthenticated();}
+static bool zjNetTesting=false,zjOtaAuthorized=false,zjUsbScanning=false;
+static uint32_t zjOtaRebootAt=0;
+static constexpr int U_FLASH=0;
+struct OtaFlash {
+ std::vector<uint8_t> written;bool activated=false,failWrite=false;
+ bool begin(size_t n,int){written.clear();activated=false;return n<=0x1e0000;}
+ size_t write(const uint8_t* p,size_t n){if(failWrite)return 0;written.insert(written.end(),p,p+n);return n;}
+ void abort(){written.clear();activated=false;}bool end(bool){activated=true;return true;}
+} Update;
+#include "../FlightCore_Firmware/FlightCoreOta.h"
 static void prepare(String route,int method=HTTP_POST){zjAuthResetRequest();zjHttp.args.clear();zjHttp.headers.clear();zjHttp.path=route;zjHttp.verb=method;}
 static String enroll(String kind,String credential,uint32_t delay=0){
  prepare("/api/auth/challenge");zjHttp.args["kind"]=kind;zjHttp.args["client"]=String(std::string(32,kind=="setup"?'a':'b'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==200);
@@ -27,6 +40,18 @@ static String enroll(String kind,String credential,uint32_t delay=0){
  clockMs+=delay;prepare("/api/auth/enroll");zjHttp.args["nonce"]=nonce;zjHttp.args["deviceId"]=zjKitId;zjHttp.args["proof"]=zjHmac(credential,msg);zjHttp.handlers[zjHttp.path]();return nonce;
 }
 int main(){
+ // Exercise the production profile codec, five-entry bound, preference, removal,
+ // legacy migration and failure preservation using an NVS double.
+ zjSavedSsid="Legacy";zjSavedPass="password0";zjLoadProfiles();assert(zjWifiCount==1);
+ for(int i=1;i<=6;i++)assert(zjRememberProfile(String("Router")+String(i),"password1"));
+ assert(zjWifiCount==5&&zjSavedSsid=="Router6"&&zjWifiProfiles[4].ssid=="Router2");
+ assert(zjSelectProfile("Router3")&&zjSavedSsid=="Router3");assert(!zjSelectProfile("Missing"));
+ const String previous=zjPrefs.getString("profiles","");zjPrefs.failNextWrite=true;
+ assert(!zjRememberProfile("Failed","password2"));assert(zjPrefs.getString("profiles","")==previous&&zjSavedSsid=="Router3");
+ assert(zjForgetProfile("Router3")&&zjWifiCount==4&&zjSavedSsid=="Router6");
+ const String publicProfiles=zjProfilesStatus();assert(std::string(publicProfiles.c_str()).find("password")==std::string::npos);
+ zjSavedSsid="";zjSavedPass="";zjWifiCount=0;zjLoadProfiles();assert(zjWifiCount==4&&zjSavedSsid=="Router6");
+ assert(zjRememberProfile("Open router",""));zjWifiCount=0;zjLoadProfiles();assert(zjSavedSsid=="Open router"&&zjSavedPass.isEmpty());
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";
  clockMs=1000;assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));const String rcToken=zjRcSession;
  // A freshly claimed session accepts its FIRST frame, even though no RC timestamp exists.
@@ -59,6 +84,16 @@ int main(){
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(diag.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+diag.id+"|1|");assert(!zjAllow());
  clockMs+=400;transport="STA";prepare("/api/auth/challenge");zjHttp.args["kind"]="setup";zjHttp.args["client"]=String(std::string(32,'a'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==403);
  const String previousBoot=zjBootId;zjEnrollmentInit();assert(previousBoot!=zjBootId&&zjSessions[0].id.isEmpty());
+ // Physical USB pairing can establish an encrypted admin session on STA even
+ // without a manufacturer label. Public/local credentials cannot do so.
+ zjPrefs.putString("label","");zjEnrollmentInit();clockMs+=1000;
+ enroll("admin","wrong-private-key");assert(replyStatus==401);
+ clockMs+=400;enroll("admin",zjNetKey);assert(replyStatus==200&&zjSessions[0].admin);
+ const auto admin=zjSessions[0];prepare("/api/status",HTTP_GET);
+ zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=admin.id;zjHttp.headers["X-ZJ-Seq"]="1";
+ zjHttp.headers["X-ZJ-Proof"]=zjHmac(admin.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+admin.id+"|1|");
+ assert(zjAllow()&&zjAuthAdmin&&zjSetupAuthorized());
+ zjAuthResetRequest();requestIP=IPAddress(192,168,4,99);assert(!zjAllow());requestIP=IPAddress(192,168,4,2);
 
  // Simple AP Wi-Fi setup works without BOOT, USB or manufacturer labels.
  zjPrefs.putString("label","");zjEnrollmentInit();transport="AP";clockMs+=1000;
@@ -93,5 +128,26 @@ int main(){
  clockMs=local.at+1800001;assert(!localRequest("/api/status",HTTP_GET,3));
  // AP-local traffic cannot exhaust every privileged session slot.
  zjEnrollmentInit();for(int i=0;i<5;i++){prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'a'+i));zjHttp.handlers[zjHttp.path]();assert(replyStatus==(i<4?200:429));}assert(zjSessions[4].id.isEmpty());
+ // Execute actual OTA handlers after a simulated auth layer (enrollment/proof
+ // verification above). Diagnostic/observer scopes cannot begin a write.
+ zjSetupSecureOtaHttp();
+ auto ota=[&](String route,String body,bool admin=true){
+  prepare(route);zjAuthChecked=true;zjRequestSession=0;zjAuthAdmin=admin;zjSessions[0].admin=admin;
+  zjSessions[0].id="test-ota-admin";zjAuthBody=body;zjHttp.handlers[route]();
+ };
+ std::vector<uint8_t> app(32768,0x11);app[0]=0xe9;app[1]=2;app[12]=5;app[13]=0;
+ app[32]=0x32;app[33]=0x54;app[34]=0xcd;app[35]=0xab;
+ uint8_t digest[32];mbedtls_sha256(app.data(),app.size(),digest,0);
+ const String hash=zjHexBytes(digest,32),begin="boardId=ZFC-A1&size=32768&sha256="+hash;
+ ota("/api/firmware/begin",begin,false);assert(replyStatus==403&&!zjSecureOtaActive&&Update.written.empty());
+ zjRcOwned=true;ota("/api/firmware/begin",begin);assert(replyStatus==409);zjRcOwned=false;
+ ota("/api/firmware/begin",begin);assert(replyStatus==200&&zjSecureOtaActive);
+ ota("/api/firmware/chunk","offset=1&data=00");assert(replyStatus==409&&Update.written.empty());
+ for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));assert(replyStatus==200);}
+ assert(!Update.activated);ota("/api/firmware/end","");assert(replyStatus==200&&Update.activated&&!zjSecureOtaActive&&zjOtaRebootAt);
+ zjOtaRebootAt=0;ota("/api/firmware/begin","boardId=ZFC-A1&size=32768&sha256="+String(std::string(64,'0')));assert(replyStatus==200);
+ for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));}
+ ota("/api/firmware/end","");assert(replyStatus==400&&!Update.activated&&!zjSecureOtaActive);
+ ota("/api/firmware/begin",begin);clockMs+=30001;zjSecureOtaLoop(clockMs);assert(!zjSecureOtaActive&&!Update.activated);
  std::cout<<"PASS actual firmware headers: RC first frame, exclusivity, replay, bounds, IP binding, deadman, lease, rollover; enrollment scope, counter replay, expiry, reboot revocation\n";
 }

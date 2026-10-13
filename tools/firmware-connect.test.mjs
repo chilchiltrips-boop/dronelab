@@ -11,9 +11,9 @@ test('Firmware & Connect reference panel retains existing flashing controls',()=
   'fwHealthBaro','fwHealthLidar','fwHealthReceiver','fwKitTakeControl','fwKitPing','fwRenameInput','fwRenameSave',
   'fwRenameReset','fwKitDemoMode','fwUsbFlashBtn','fwNetworkFlashBtn','fwSourceBadge','fwSerialOutput'])
   assert.ok(html.includes('id="'+id+'"'),id);
- assert.ok(html.includes('js/firmware-connect.js?v=fw-connect-reference1'));
+ assert.ok(html.includes('js/firmware-connect.js?v=legacy-port-20261013'));
  assert.ok(css.includes('.fw-connection-workspace'));
- assert.ok(read('sw.js').includes('./js/firmware-connect.js?v=fw-connect-reference1'));
+ assert.ok(read('sw.js').includes('./js/firmware-connect.js?v=legacy-port-20261013'));
 });
 test('Firmware connection JS is valid and exposes kit-select-only controls',()=>{
  const code=read('js/firmware-connect.js'),kit=read('js/classroom-kits.js');
@@ -39,7 +39,7 @@ test('Kit Name change uses scoped signed AP firmware route and keeps immutable D
  assert.match(fw,/zjKitPrefs\.putString\("name",name\)/);
  assert.match(fw,/zjKitPrefs\.putString\("name",autoName\)/);
  assert.match(auth,/path=="\/api\/kit\/name\/reset"/);
- assert.match(kit,/if\(!linkFresh\(\)\|\|state\.transport!=='ap'\|\|!state\.setupAuthorized\)/);
+ assert.match(kit,/if\(!linkFresh\(\)\|\|!\['ap','sta'\]\.includes\(state\.transport\)\|\|!state\.setupAuthorized\)/);
  assert.match(fw,/zjMdnsKitHostname\(\)/);
  assert.match(fw,/host\.replace\("_","-"\)/);
  assert.match(fw,/if\(zjMdnsReady\)\{MDNS\.end\(\);zjMdnsReady=false;\}/);
