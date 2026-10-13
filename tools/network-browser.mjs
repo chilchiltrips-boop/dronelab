@@ -6,7 +6,7 @@ import {createHmac,createDecipheriv,randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 
-const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16);
+const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16),teacherKey='c9'.repeat(16);
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map(),calls=[];
 let owner='',frame=null,accepted=0,tested=false;
@@ -31,13 +31,17 @@ function handle(host,path,method,args={},headers={}){
   sessions.set(session,{key,seq:0,setup:challenge.kind==='setup'});
   return result({kitId:id,session,proof:mac(key,'server|'+msg),expiresMs:1800000,setupExpiresMs:challenge.kind==='setup'?300000:0});
  }
- const s=sessions.get(h['x-zj-session']);assert.ok(s,'authenticated request required');
- const seq=h['x-zj-seq'],payload=args.payload||'';assert.equal(h['x-zj-device'],id);assert.ok(Number(seq)>s.seq);
- assert.equal(h['x-zj-proof'],mac(s.key,[method,path,id,boot,h['x-zj-session'],seq,payload].join('|')));s.seq=Number(seq);
- if(payload){const b=Buffer.from(payload,'hex'),dec=createDecipheriv('aes-256-gcm',Buffer.from(s.key,'hex'),b.subarray(0,12));dec.setAuthTag(b.subarray(-16));args=Object.fromEntries(new URLSearchParams(Buffer.concat([dec.update(b.subarray(12,-16)),dec.final()]).toString()))}
+ const legacy=h['x-zj-key']===teacherKey;
+ const s=legacy?{setup:true}:sessions.get(h['x-zj-session']);assert.ok(s,'authenticated request required');
+ const seq=h['x-zj-seq'],payload=args.payload||'';assert.equal(h['x-zj-device'],id);
+ if(!legacy){
+  assert.ok(Number(seq)>s.seq);
+  assert.equal(h['x-zj-proof'],mac(s.key,[method,path,id,boot,h['x-zj-session'],seq,payload].join('|')));s.seq=Number(seq);
+  if(payload){const b=Buffer.from(payload,'hex'),dec=createDecipheriv('aes-256-gcm',Buffer.from(s.key,'hex'),b.subarray(0,12));dec.setAuthTag(b.subarray(-16));args=Object.fromEntries(new URLSearchParams(Buffer.concat([dec.update(b.subarray(12,-16)),dec.final()]).toString()))}
+ }
  calls.push({host,path,method,source:args.source});
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.0',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup,otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.0',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup,otaAuthorized:legacy,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
  else if(path==='/api/wifi/test'){assert.ok(s.setup);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
@@ -51,7 +55,7 @@ function handle(host,path,method,args={},headers={}){
  else if(path==='/api/telemetry')body={kitId:id,board:'ZFC-A1',millis:Date.now(),gyroReady:true,address:0x6a,roll:0,pitch:0,yaw:0,scanner:[],scannerRunning:false,scanSequence:1,rc:snapshot()};
  else if(path==='/api/command')body={ok:true};
  else throw Error('Unexpected route '+path);
- return result(body,200,s.key,seq);
+ return result(body,200,legacy?'':s.key,seq);
 }
 const browser=await chromium.launch(browserOptions),errors=[];
 const laptop=await browser.newContext({viewport:{width:1366,height:768},serviceWorkers:'block'});
