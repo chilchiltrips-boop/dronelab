@@ -23,7 +23,6 @@ function select(device){
  if($('fwKitCachedIp')){$('fwKitCachedIp').value=device.ip;$('fwKitCachedIp').title='Public identity candidate; signed status must verify before IP is trusted'}
  if($('fwKitSelect'))$('fwKitSelect').value=device.kitId;
  renderAvailable(discovered,false);
- set('fwRenameInput',undefined); // input is managed independently
  note('Selected '+device.kitName+' • '+device.kitId+'. Press Connect Selected Kit to authenticate.');
 }
 function renderAvailable(kits=[],inProgress=false){
@@ -146,7 +145,7 @@ function render(){
 }
 async function sampleHealth(){
  const s=state();
- if(!s.connected||$('fwKitDemoMode')?.checked||!$('#tab-firmware')?.classList.contains('active'))return;
+ if(!s.connected||$('fwKitDemoMode')?.checked||!$('tab-firmware')?.classList.contains('active'))return;
  try{
   const t=await kit().request('/api/telemetry');
   if(t.kitId===s.kitId){telemetry=t;telemetryTime=Date.now();healthAt=telemetryTime}
@@ -168,8 +167,8 @@ function init(){
  root.addEventListener('dronelab:kit-name',render);
  document.querySelector('[data-tab="firmware"]')?.addEventListener('click',()=>{if(Date.now()-lastScanAt>20000)void scan()});
  renderAvailable(kit().getDiscovered?.()||[],false);render();
- if($('#tab-firmware')?.classList.contains('active'))void scan();
- setInterval(render,1200);setInterval(()=>{if($('#tab-firmware')?.classList.contains('active')&&Date.now()-lastScanAt>65000)void scan()},18000);
+ if($('tab-firmware')?.classList.contains('active'))void scan();
+ setInterval(render,1200);setInterval(()=>{if($('tab-firmware')?.classList.contains('active')&&Date.now()-lastScanAt>65000)void scan()},18000);
  setInterval(()=>void sampleHealth(),4200);
 }
 root.ZebjusFirmwareConnect={renderAvailable,scan,select};
