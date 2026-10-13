@@ -163,6 +163,8 @@ static bool zjAdminSerialCommand(char* line){
  if(!strcmp(line,"ZJADMIN,GET")){zjAdminInfo();return true;}
  if(strncmp(line,"ZJADMIN,",8))return false;
  if(zjAdminProtectedCommand(line))return true;
+ // Classroom student commands are routed to the V2 permission handler by the network module.
+ if(!strncmp(line,"ZJADMIN,STUDENT,",16))return false;
  if(!zjAdminAuthorized()){Serial.println("ZJADMIN,ERR,ADMIN_LOCKED");return true;}
  if(zjRcOwned){Serial.println("ZJADMIN,ERR,CONTROLLER_ACTIVE");return true;}
  if(!strncmp(line,"ZJADMIN,NAME,",13)){

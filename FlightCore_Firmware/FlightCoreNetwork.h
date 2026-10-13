@@ -57,6 +57,10 @@ static bool zjAllow();static const char* zjClientTransport();
 static bool zjAuthenticated(){return zjSessionAuthenticated();}
 static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
 static bool zjAllowSetup(){if(!zjAllow())return false;if(zjSetupAuthorized())return true;zjReply(403,"{\"error\":\"setup_authorization_required\"}");return false;}
+static bool zjAllowObserve(){if(!zjAllow())return false;if(zjAuthAdmin||(zjRequestSession>=0&&!zjSessions[zjRequestSession].setup))return true;zjReply(403,"{\"error\":\"observer_required\"}");return false;}
+static bool zjAllowControl(){if(!zjAllow())return false;if(zjAuthAdmin)return true;
+ if(zjRequestSession>=0){const auto& s=zjSessions[zjRequestSession];if(s.student&&zjStudentAllowed(s.studentId,s.epoch,true))return true;}
+ zjReply(403,"{\"error\":\"student_control_grant_required\"}");return false;}
 static void zjReply(int status,const String& body){
  zjCorsHeaders();zjHttp.sendHeader("Cache-Control","no-store");
  if(zjRequestSession>=0){const auto& s=zjSessions[zjRequestSession];zjHttp.sendHeader("X-ZJ-Response",zjHmac(s.key,"response|"+String(s.seq)+"|"+String(status)+"|"+body));}
@@ -88,6 +92,9 @@ static String zjStatus(){
  const bool ap=WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA;
  const String networkState=zjNetTesting?"STA_TESTING":sta?(ap?"AP_STA_COEXISTENCE":"STA_CONNECTED"):zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState);
+ const String role=zjAuthAdmin?"teacher":zjRequestSession>=0?(zjSessions[zjRequestSession].setup?"setup":zjSessions[zjRequestSession].student?"student":"diagnostic"):"none";
+ const bool canControl=zjAuthAdmin||(zjRequestSession>=0&&zjSessions[zjRequestSession].student&&zjStudentAllowed(zjSessions[zjRequestSession].studentId,zjSessions[zjRequestSession].epoch,true));
+ out+=",\"role\":"+zjJson(role)+",\"canControl\":"+(canControl?String("true"):String("false"));
  out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
@@ -131,7 +138,7 @@ static void zjSetupHttp(){
   else zjConnectSaved();
  });
  zjHttp.on("/api/telemetry",HTTP_GET,[](){
-  if(!zjAllow())return;
+  if(!zjAllowObserve())return;
   String out="{\"kitId\":"+zjJson(zjKitId)+",\"board\":"+zjJson(GYRO_BOARD)+",\"millis\":"+String(millis())+",\"gyroReady\":"+(gyroReady?String("true"):String("false"));
   out+=",\"address\":"+String(GYRO_ADDR)+",\"roll\":"+String(RateRoll,3)+",\"pitch\":"+String(RatePitch,3)+",\"yaw\":"+String(RateYaw,3);
   out+=",\"scanner\":[";
@@ -141,7 +148,7 @@ static void zjSetupHttp(){
   zjReply(200,out);
  });
  zjHttp.on("/api/command",HTTP_POST,[](){
-  if(!zjAllow())return;const String cmd=zjArg("line");
+  if(!zjAllowObserve())return;const String cmd=zjArg("line");
   if(cmd.length()<5||cmd.length()>=sizeof(serialLine)||cmd.indexOf('\n')>=0||cmd.indexOf('\r')>=0){zjReply(400,"{\"error\":\"invalid_command\"}");return;}
   if(cmd!="ZJI2C,SCAN"&&cmd!="ZJINFO,GET"&&!cmd.startsWith("ZJLED,")&&!cmd.startsWith("ZJTEL,RATE,")){zjReply(403,"{\"error\":\"command_not_allowed\"}");return;}
   char line[sizeof(serialLine)];cmd.toCharArray(line,sizeof(line));serialCommand(line);
@@ -149,23 +156,24 @@ static void zjSetupHttp(){
  });
  // RC diagnostics only: motors always disarmed. Kit code selects; access key authorizes.
  zjHttp.on("/api/rc/claim",HTTP_POST,[](){
-  if(!zjAllow())return;
+  if(!zjAllowControl())return;
   if(zjNetTesting||zjOtaAuthorized||zjOtaRebootAt){zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;}
   const String source=zjArg("source"),code=zjArg("kitCode");
   if(code!=zjKitCode){zjReply(404,"{\"error\":\"kit_code_mismatch\"}");return;}
   if(!zjRcClaim(source,code,true,zjHttp.client().remoteIP(),zjClientTransport())){
    zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
   }
+  zjRcStudent=zjRequestSession>=0&&zjSessions[zjRequestSession].student?zjSessions[zjRequestSession].studentId:String("");
   zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
-  if(!zjAllow())return;
+  if(!zjAllowControl())return;
   if(!zjRcOwned||!zjRcNetwork||zjArg("session")!=zjRcSession||
      zjHttp.client().remoteIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
   zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
  });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
-  if(!zjAllow())return;
+  if(!zjAllowControl())return;
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
   long seq=0,t=0,r=0,p=0,y=0;
   const String response=zjArg("responseMode");
@@ -178,9 +186,34 @@ static void zjSetupHttp(){
   zjRcResponse=response.length()?response:String("Medium");
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsArmed\":false}");
  });
- zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
- zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjRcLoop(millis());zjReply(200,zjRcState());});
+ zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllowObserve())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllowObserve())return;zjRcLoop(millis());zjReply(200,zjRcState());});
 
+ // Teacher manages live student capability grants; secrets provision over physical USB only.
+ zjHttp.on("/api/classroom/students",HTTP_GET,[](){
+  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(403,"{\"error\":\"teacher_required\"}");return;}
+  zjReply(200,zjStudentInventory());
+ });
+ zjHttp.on("/api/classroom/grant",HTTP_POST,[](){
+  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(403,"{\"error\":\"teacher_required\"}");return;}
+  const String minutes=zjArg("minutes");bool valid=!minutes.isEmpty()&&minutes.length()<=2;
+  for(size_t i=0;i<minutes.length();i++)valid=valid&&minutes[i]>='0'&&minutes[i]<='9';
+  if(zjRcOwned||!zjStudentGrant(zjArg("studentId"),valid?minutes.toInt():0,zjArg("scope"))){
+   zjReply(409,"{\"error\":\"invalid_grant_or_controller_busy\"}");return;
+  }
+  zjReply(200,"{\"granted\":true,\"motorsDisabled\":true}");
+ });
+ zjHttp.on("/api/classroom/revoke",HTTP_POST,[](){
+  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(403,"{\"error\":\"teacher_required\"}");return;}
+  const String id=zjArg("studentId");
+  if(zjStudentIndex(id)<0){zjReply(404,"{\"error\":\"unknown_student\"}");return;}
+  zjStudentRevoke(id);zjReply(200,"{\"revoked\":true,\"motorsDisabled\":true}");
+ });
+ zjHttp.on("/api/classroom/takeover",HTTP_POST,[](){
+  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(403,"{\"error\":\"teacher_required\"}");return;}
+  zjRcRelease("TEACHER_TAKEOVER");zjRcStudent="";
+  zjReply(200,"{\"released\":true,\"motorsDisabled\":true}");
+ });
  // Secure-by-default factory flashing remains USB-only. OTA is APP-only with per-device key,
  // ESP chip header check and Update partition guard. Production requires signed-image policy.
  zjHttp.on("/api/ota",HTTP_POST,[](){
@@ -254,6 +287,7 @@ static void zjNetUsbStatus(){
  Serial.print("ZJNET,TEST_STATE,");Serial.println(zjWifiTestState);
 }
 static bool zjNetSerialCommand(char* line){
+ if(zjStudentUsbCommand(line))return true;
  if(!strncmp(line,"ZJNET,LABEL,",12)||!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM")){
   if(!zjAdminAuthorized()||zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,ADMIN_LOCKED_OR_BUSY");return true;}
   const bool revoke=!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM");const String label=revoke?String(""):String(line+12);
@@ -306,7 +340,7 @@ static bool zjNetSerialCommand(char* line){
 }
 static void zjNetworkLoop(uint32_t now){
  zjAuthResetRequest();zjHttp.handleClient();now=millis();
- zjRcLoop(now);
+ zjStudentWatchdog();zjRcLoop(now);
  if(zjUsbScanning&&Serial.availableForWrite()>128){
   const int n=WiFi.scanComplete();
   if(n>=0&&zjUsbScanCount==0){zjUsbScanCount=n+1;Serial.print("ZJNET,SCAN,COUNT,");Serial.println(n);}
