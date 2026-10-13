@@ -30,7 +30,10 @@ static bool zjStudentProvision(const String& id,const String& privateKey){
  if(!zjAdminValue(id.c_str(),3,24,false)||!zjHex(privateKey,64))return false;
  int i=zjStudentIndex(id);if(i<0)for(int j=0;j<4;j++)if(zjStudents[j].id.isEmpty()){i=j;break;}
  if(i<0)return false;
- String key=privateKey;key.toLowerCase();zjStudentRevoke(id);
+ String key=privateKey;key.toLowerCase();
+ // Never let two classroom identities share a bearer secret, even by accident.
+ for(int j=0;j<4;j++)if(j!=i&&zjStudents[j].id.length()&&zjEqual(zjStudents[j].key,key))return false;
+ zjStudentRevoke(id);
  if(zjPrefs.putString((String("stKey")+i).c_str(),key)!=key.length())return false;
  if(zjPrefs.putString((String("stId")+i).c_str(),id)!=id.length())return false;
  auto& s=zjStudents[i];s.id=id;s.key=key;s.control=false;s.expires=0;s.epoch++;
