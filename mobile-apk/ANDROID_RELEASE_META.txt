@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.7.0
-VersionCode: 16
+Version: 1.7.1-v2-review
+VersionCode: 17
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: 436744baf7c6966edc9e6a630b4174d8d095fc3b
+Source commit: 26d07b96a669d0ea758d2754e4fdbbec3bfbcc1d
