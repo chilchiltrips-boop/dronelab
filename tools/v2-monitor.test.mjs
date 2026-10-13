@@ -14,8 +14,8 @@ function fixture(){
   calls++;if(gate)await gate;
   return {ok:true,json:async()=>({kitId:identity,kitCode:'123456',board:'ZFC-A1',version:'1.4.0',requestTransport:transport,staConnected:true,apActive:true,rc:{claimed:false}})};
  };
- vm.runInNewContext(readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8').replace('function read(){',"root.testUSB=()=>{state.transport='usb'};root.testSerial=line=>{for(const p of serialClaims.slice())if(p.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==p);p.resolve(line)}};function read(){"),{window,document,fetch,localStorage:{getItem:()=>null,setItem(){}},AbortController,URLSearchParams,setTimeout,clearTimeout,CustomEvent:class{},Date:class extends Date{static now(){return now}}});
- return {usb:window.testUSB,closeUSB:()=>usbOpen=false,usbIdentity:id=>usbIdentity=id,api:window.ZebjusKits,advance:n=>now+=n,setTransport:t=>transport=t,setIdentity:id=>identity=id,block:p=>gate=p,calls:()=>calls};
+ vm.runInNewContext(readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8').replace('function read(){',"root.testOnSerial=onSerial;root.testUSB=()=>{state.transport='usb'};root.testSerial=line=>{for(const p of serialClaims.slice())if(p.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==p);p.resolve(line)}};function read(){"),{window,document,fetch,localStorage:{getItem:()=>null,setItem(){}},AbortController,URLSearchParams,setTimeout,clearTimeout,CustomEvent:class{},Date:class extends Date{static now(){return now}}});
+ return {serial:line=>window.testOnSerial({detail:{line,transport:'usb'}}),usb:window.testUSB,closeUSB:()=>usbOpen=false,usbIdentity:id=>usbIdentity=id,api:window.ZebjusKits,advance:n=>now+=n,setTransport:t=>transport=t,setIdentity:id=>identity=id,block:p=>gate=p,calls:()=>calls};
 }
 test('authenticated AP request remains AP while STA interface is active; refresh observes changed request transport',async()=>{
  const f=fixture();await f.api.connect();assert.equal(f.api.getState().connected,true);assert.equal(f.api.getState().transport,'ap');
@@ -52,4 +52,13 @@ test('open USB port cannot keep an expired identity heartbeat connected; verifie
 test('USB refresh refuses a different device identity and cannot renew expired heartbeat',async()=>{
  const f=fixture();await f.api.connect();f.usb();f.advance(6501);f.usbIdentity('ZFC-OTHER');
  await assert.rejects(f.api.read(),/USB identity changed/);assert.equal(f.api.isConnected(),false);
+});
+
+test('automatic USB discovery cannot combine an old identity with later board telemetry',()=>{
+ const f=fixture();f.serial('ZJKIT,ID,ZFC-A1-012345ABCDEF');f.serial('ZJKIT,CODE,123456');
+ f.advance(6501);f.serial('ZJINFO,FW,ZFC-A1,1.4.0');assert.equal(f.api.isConnected(),false);
+});
+test('disconnect clears USB discovery identity so subsequent telemetry cannot reconnect cached hardware',async()=>{
+ const f=fixture();f.serial('ZJKIT,ID,ZFC-A1-012345ABCDEF');f.serial('ZJKIT,CODE,123456');
+ await f.api.disconnect();f.serial('ZJINFO,FW,ZFC-A1,1.4.0');assert.equal(f.api.isConnected(),false);
 });

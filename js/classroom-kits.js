@@ -176,7 +176,7 @@ function showKnown(){
  }
 }
 async function disconnect(reason='Disconnected'){
- ++reconnectTicket;recoveryTarget=null;state.heartbeatAt=0;state.linkState='disconnected';
+ ++reconnectTicket;recoveryTarget=null;for(const key of Object.keys(usbCandidate))delete usbCandidate[key];state.heartbeatAt=0;state.linkState='disconnected';
  if(state.rcSession||state.owner)await releaseRc().catch(()=>{});
  state.connected=false;state.rc=null;state.key='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
@@ -579,7 +579,7 @@ function onSerial(e){
  // Network telemetry is a remote readout; it must never impersonate a physical USB kit.
  if(e.detail?.transport&&e.detail.transport!=='usb')return;
  const line=String(e.detail?.line||'').trim();
- if(line.startsWith('ZJKIT,ID,'))usbCandidate.kitId=line.slice(9);
+ if(line.startsWith('ZJKIT,ID,')){if(usbCandidate.kitId!==line.slice(9))for(const key of Object.keys(usbCandidate))delete usbCandidate[key];usbCandidate.kitId=line.slice(9);usbCandidate.identityAt=Date.now();}
  if(line.startsWith('ZJNET,PAIR,')){
   const f=line.split(',');if(/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
     (f[2]===state.kitId||f[2]===usbCandidate.kitId)){
@@ -600,10 +600,10 @@ function onSerial(e){
    }
   }
  }
- if(!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board){
+ if(!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board&&Date.now()-usbCandidate.identityAt<=HEARTBEAT_MAX_AGE){
   try{
    const kit=checkIdentity(usbCandidate,'usb',usbCandidate.kitCode);
-   Object.assign(state,kit,{connected:true,transport:'usb',mode:'usb',key:'',ip:'',usbInfo:{...usbCandidate},rc:null,owner:false,since:Date.now()});
+   Object.assign(state,kit,{connected:true,heartbeatAt:usbCandidate.identityAt,linkState:'connected',transport:'usb',mode:'usb',key:'',ip:'',usbInfo:{...usbCandidate},rc:null,owner:false,since:Date.now()});
    if($('kitCodeInput'))$('kitCodeInput').value=kit.kitCode;
    if($('kitTransport'))$('kitTransport').value='usb';
    recordKnown();tone('USB kit auto-verified • '+kit.kitName+' • '+kit.kitCode,'good');
