@@ -4,16 +4,17 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('MY KITS has a simple AP and one-time USB wizard, never a private label input',()=>{
+test('MY KITS provides AP BOOT setup and Wi-Fi Kit discovery with no USB pairing UI',()=>{
  const html=read('index.html'),source=read('js/classroom-kits.js');
- for(const id of ['kitSimpleSetup','kitSimpleHelp','kitFindAp','kitPairFirst','kitWifiScan','kitWifiSave','kitHandover','kitRememberBrowser'])
+ for(const id of ['kitSimpleSetup','kitSimpleHelp','kitFindAp','kitDiscover','kitWifiScan','kitWifiSave','kitHandover','kitRememberBrowser'])
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const obsolete of ['id="kitLabelInput"','id="kitEnrollLabel"','id="kitEnrollment"','New Kit • private label enrollment / renew setup'])
   assert.equal(html.includes(obsolete),false,obsolete);
  assert.doesNotMatch(source,/kitLabelInput|kitEnrollment|kitEnrollLabel|enrollLabel|private kit label/i);
  assert.match(source,/guardAction\('kitFindAp',findKitAp\)/);
- assert.match(source,/guardAction\('kitPairFirst',pairNewKitUsb\)/);
- assert.match(source,/if\(!pairedKeys\.has\(state\.kitId\)\)await pairUsb\(\)/);
+ assert.doesNotMatch(html,/id="kitPairFirst"/);
+ assert.match(source,/async function discoverBridgeHosts\(/);
+ assert.match(source,/await connect\(\)/);
 });
 
 test('AP Find Kit discovers public code but never treats discovery as authorization',async()=>{
