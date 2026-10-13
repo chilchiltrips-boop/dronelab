@@ -3,10 +3,10 @@
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
-    "AP Wi-Fi Scan, Test & Save without BOOT, USB pairing or Private Label",
-    "Same-Wi-Fi STA Kit name discovery and click-to-connect monitoring",
-    "STA-first AP fallback and verified saved Wi-Fi recovery",
-    "Authenticated identity-bound diagnostics with motor, OTA and admin separation"
+    "Legacy-inspired Firmware & Connect center with automatic same-Wi-Fi discovery",
+    "Verified saved IP, default kit names and mDNS discovery with named selection",
+    "Authenticated AP Kit Name save/reset and immutable Device ID (FlightCore 1.4.4)",
+    "Command freshness, IMU/RC telemetry, firmware updates and USB recovery"
   ],
   "publishedAt": "2026-10-13T04:53:01.989045+00:00",
   "buildCommit": "213a9c571908"

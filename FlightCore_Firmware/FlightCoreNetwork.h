@@ -95,6 +95,20 @@ static String zjStatus(){
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
+static String zjMdnsKitHostname(){
+ // Keep the original deterministic address until a custom Kit Name is saved.
+ // User-friendly "zebjus_drone_7" becomes DNS-safe "zebjus-drone-7.local".
+ String host=zjKitName;host.toLowerCase();host.replace("_","-");
+ if(zjKitName!=FC_LABEL&&host.length()>=3&&host.length()<=31){
+  bool valid=true;for(size_t i=0;i<host.length();i++){
+   const char c=host[i];
+   if(!(c>='a'&&c<='z')&&!(c>='0'&&c<='9')&&c!='-')valid=false;
+  }
+  if(host[0]=='-'||host[host.length()-1]=='-')valid=false;
+  if(valid)return host;
+ }
+ return String("zebjus-")+GYRO_BOARD+"-"+zjKitCode;
+}
 static void zjSetupHttp(){
  const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7);
  zjSetupEnrollmentHttp();
@@ -102,6 +116,35 @@ static void zjSetupHttp(){
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"simpleConnection\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"board\":"+zjJson(FC_BOARD)+"}");});
+ // AP-local Kit identity maintenance; full immutable Device ID is never changed.
+ zjHttp.on("/api/kit/name",HTTP_POST,[](){
+  if(!zjAllowSetup())return;
+  if(String(zjClientTransport())!="AP"||zjRcOwned||zjNetTesting||zjOtaAuthorized){
+   zjReply(403,"{\"error\":\"rename_requires_idle_kit_ap\"}");return;
+  }
+  String name=zjArg("name");name.trim();
+  if(name.length()<3||name.length()>31){zjReply(400,"{\"error\":\"invalid_kit_name\"}");return;}
+  for(size_t i=0;i<name.length();i++){const char c=name[i];
+   if(!(c>='A'&&c<='Z')&&!(c>='a'&&c<='z')&&!(c>='0'&&c<='9')&&c!='-'&&c!='_'){
+    zjReply(400,"{\"error\":\"invalid_kit_name\"}");return;
+   }
+  }
+  if(zjKitPrefs.putString("name",name)!=name.length()){zjReply(500,"{\"error\":\"name_save_failed\"}");return;}
+  zjKitName=name;
+  if(zjMdnsReady){MDNS.end();zjMdnsReady=false;}
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitName\":"+zjJson(zjKitName)+",\"saved\":true}");
+ });
+ zjHttp.on("/api/kit/name/reset",HTTP_POST,[](){
+  if(!zjAllowSetup())return;
+  if(String(zjClientTransport())!="AP"||zjRcOwned||zjNetTesting||zjOtaAuthorized){
+   zjReply(403,"{\"error\":\"rename_requires_idle_kit_ap\"}");return;
+  }
+  const String autoName=String("AERION-")+GYRO_BOARD+"-"+zjKitId.substring(zjKitId.length()-6);
+  if(zjKitPrefs.putString("name",autoName)!=autoName.length()){zjReply(500,"{\"error\":\"name_reset_failed\"}");return;}
+  zjKitName=autoName;
+  if(zjMdnsReady){MDNS.end();zjMdnsReady=false;}
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitName\":"+zjJson(zjKitName)+",\"reset\":true}");
+ });
  zjHttp.on("/api/wifi/scan",HTTP_GET,[](){
   if(!zjAllowSetup())return;
   if(zjRcOwned||zjNetTesting||zjUsbScanning){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
@@ -355,9 +398,9 @@ static void zjNetworkLoop(uint32_t now){
  // Advertise device ID and six-digit selector over STA mDNS, never the access key.
  const bool staUp=WiFi.status()==WL_CONNECTED;
  if(staUp&&!zjMdnsReady){
-  // Human-selectable code provides a deterministic same-router hostname;
-  // immutable Device ID is still verified separately on every connection.
-  const String host=String("zebjus-")+GYRO_BOARD+"-"+zjKitCode;
+  // A saved Kit Name is a DNS-safe .local hostname; otherwise use board+code.
+  // Immutable Device ID is verified separately on every connection.
+  const String host=zjMdnsKitHostname();
   if(MDNS.begin(host.c_str())){
    MDNS.addService("zebjus","tcp",80);
    MDNS.addServiceTxt("zebjus","tcp","code",zjKitCode);

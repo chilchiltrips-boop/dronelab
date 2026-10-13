@@ -50,7 +50,7 @@ function handle(host,path,method,args={},headers={}){
  if(s.localSta&&!['/api/status','/api/telemetry','/api/rc/snapshot'].includes(path))
   return result({error:'sta_observer_read_only'},403,s.key,seq);
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.3',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.4',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
  else if(path==='/api/wifi/test'){assert.ok(s.setup||s.local&&!s.localSta);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
