@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0+200",
+  "version": "1.7.0+201",
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
@@ -8,6 +8,6 @@
     "STA-first AP fallback and verified saved Wi-Fi recovery",
     "Authenticated identity-bound diagnostics with motor, OTA and admin separation"
   ],
-  "publishedAt": "2026-10-13T03:20:09.539655+00:00",
-  "buildCommit": "190a873ef736"
+  "publishedAt": "2026-10-13T04:28:15.017878+00:00",
+  "buildCommit": "33d909363b83"
 }
