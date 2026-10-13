@@ -95,6 +95,20 @@ static String zjStatus(){
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
+static String zjMdnsKitHostname(){
+ // Keep the original deterministic address until a custom Kit Name is saved.
+ // User-friendly "zebjus_drone_7" becomes DNS-safe "zebjus-drone-7.local".
+ String host=zjKitName;host.toLowerCase();host.replace("_","-");
+ if(zjKitName!=FC_LABEL&&host.length()>=3&&host.length()<=31){
+  bool valid=true;for(size_t i=0;i<host.length();i++){
+   const char c=host[i];
+   if(!(c>='a'&&c<='z')&&!(c>='0'&&c<='9')&&c!='-')valid=false;
+  }
+  if(host[0]=='-'||host[host.length()-1]=='-')valid=false;
+  if(valid)return host;
+ }
+ return String("zebjus-")+GYRO_BOARD+"-"+zjKitCode;
+}
 static void zjSetupHttp(){
  const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7);
  zjSetupEnrollmentHttp();
@@ -117,6 +131,7 @@ static void zjSetupHttp(){
   }
   if(zjKitPrefs.putString("name",name)!=name.length()){zjReply(500,"{\"error\":\"name_save_failed\"}");return;}
   zjKitName=name;
+  if(zjMdnsReady){MDNS.end();zjMdnsReady=false;}
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitName\":"+zjJson(zjKitName)+",\"saved\":true}");
  });
  zjHttp.on("/api/kit/name/reset",HTTP_POST,[](){
@@ -127,6 +142,7 @@ static void zjSetupHttp(){
   const String autoName=String("AERION-")+GYRO_BOARD+"-"+zjKitId.substring(zjKitId.length()-6);
   if(zjKitPrefs.putString("name",autoName)!=autoName.length()){zjReply(500,"{\"error\":\"name_reset_failed\"}");return;}
   zjKitName=autoName;
+  if(zjMdnsReady){MDNS.end();zjMdnsReady=false;}
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitName\":"+zjJson(zjKitName)+",\"reset\":true}");
  });
  zjHttp.on("/api/wifi/scan",HTTP_GET,[](){
@@ -384,7 +400,7 @@ static void zjNetworkLoop(uint32_t now){
  if(staUp&&!zjMdnsReady){
   // Human-selectable code provides a deterministic same-router hostname;
   // immutable Device ID is still verified separately on every connection.
-  const String host=String("zebjus-")+GYRO_BOARD+"-"+zjKitCode;
+  const String host=zjMdnsKitHostname();
   if(MDNS.begin(host.c_str())){
    MDNS.addService("zebjus","tcp",80);
    MDNS.addServiceTxt("zebjus","tcp","code",zjKitCode);
