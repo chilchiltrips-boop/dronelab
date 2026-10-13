@@ -154,7 +154,8 @@ function render(){
  set('fwWifiAccess',live?s.otaAuthorized?'Control, settings & APP OTA authorized':s.setupAuthorized?'AP setup available • USB pairing required for APP OTA':'STA monitoring • USB pairing required for settings/control/OTA':'Connect a kit to manage its Wi-Fi');
  const router=s.ssid?'router Wi-Fi "'+s.ssid+'"':'the saved router Wi-Fi';
  set('fwWifiRouteHint',live?s.transport==='ap'?(s.staConnected?'The kit has connected to '+router+'. This browser still uses the kit AP. Join that router in computer Wi-Fi settings, then click Connect STA. AUTO keeps the AP hotspot available.':'This browser uses the kit AP; router STA is offline. Open Wi-Fi settings, run Test & Save STA and wait for VERIFIED before joining the router.'):
-  s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'The kit AP hotspot remains available in AUTO mode.':'The kit AP hotspot is off.'):'USB is connected. Test & Save the router, join its Wi-Fi on this computer, then Connect STA.':'First setup: join the kit AP, connect the kit, then Scan Wi-Fi → Test & Save STA.');
+  s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'The kit AP hotspot remains available in AUTO mode.':'The kit AP hotspot is off.'):
+  s.transport==='usb'?'USB is connected. Test & Save the router, join its Wi-Fi on this computer, then Connect STA.':'The kit is connected through the Android relay. Manage its router/AP settings through the verified kit connection.':'First setup: join the kit AP, connect the kit, then Scan Wi-Fi → Test & Save STA.');
  if($('fwAuthorizeUpdates'))$('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized;
  if(changed&&live){if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}
