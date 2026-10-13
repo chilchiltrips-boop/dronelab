@@ -78,7 +78,19 @@ int main(){
  prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'d'));zjHttp.handlers[zjHttp.path]();
  assert(replyStatus==200&&zjSessions[1].localSta);
  const auto staSession=zjSessions[1];assert(!staSession.setup);
- prepare("/api/wifi/scan",HTTP_GET);assert(!zjLocalDiagnosticRoute());
+ auto staRequest=[&](String path,int verb,uint32_t counter){
+  prepare(path,verb);
+  zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=staSession.id;
+  zjHttp.headers["X-ZJ-Seq"]=String(counter);
+  zjHttp.headers["X-ZJ-Proof"]=zjHmac(staSession.key,String(verb==HTTP_GET?"GET":"POST")+"|"+path+"|"+zjKitId+"|"+zjBootId+"|"+staSession.id+"|"+String(counter)+"|");
+  return zjAllow();
+ };
+ assert(staRequest("/api/status",HTTP_GET,1)&&!zjSetupAuthorized());
+ assert(!staRequest("/api/rc/claim",HTTP_POST,2));
+ assert(!staRequest("/api/wifi/test",HTTP_POST,2));
+ assert(!staRequest("/api/ota",HTTP_POST,2));
+ physicalSetupOpen=true;assert(staRequest("/api/telemetry",HTTP_GET,2)&&!zjSetupAuthorized());
+ physicalSetupOpen=false;
  transport="AP";
  transport="AP";requestIP=IPAddress(192,168,4,3);assert(!localRequest("/api/status",HTTP_GET,2));requestIP=IPAddress(192,168,4,2);assert(localRequest("/api/telemetry",HTTP_GET,3));
  clockMs=local.at+1800001;assert(!localRequest("/api/status",HTTP_GET,3));

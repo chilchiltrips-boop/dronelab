@@ -102,6 +102,14 @@ try{
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
  await wait(web,()=>document.getElementById('kitWifiResult')?.textContent.includes('saved')||window.ZebjusKits.getState().staIp==='192.168.1.42');
  await web.locator('#kitHandover').click();await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
+ // Same-router discovery lists live Kit Names. Clicking the row must connect
+ // immediately with verified STA observer scope, without an access-key dialog.
+ await web.locator('#kitDisconnect').click();
+ await web.locator('#kitDiscover').click();
+ const staRow=web.locator('#kitDiscoveryResults .kit-known-item').filter({hasText:'STA'}).first();
+ await staRow.waitFor({timeout:45000});await staRow.click();
+ await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),false);
  await web.locator('[data-tab=python]').click();await web.locator('#pythonMonaco .monaco-editor').waitFor({timeout:45000});
  await web.locator('#pythonTarget').selectOption('sta');
  await phone.goto('http://127.0.0.1:8765/companion.html');await phone.locator('#flightSettings').click();
