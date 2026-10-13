@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0+196",
+  "version": "1.7.0+197",
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
@@ -8,6 +8,6 @@
     "Android direct AP diagnostic input to firmware to browser Python",
     "Scoped encrypted requests and signed device responses; motors disabled"
   ],
-  "publishedAt": "2026-10-13T01:51:59.420080+00:00",
-  "buildCommit": "5509ff1703db"
+  "publishedAt": "2026-10-13T01:53:13.348874+00:00",
+  "buildCommit": "906ca6b07845"
 }
