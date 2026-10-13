@@ -49,5 +49,5 @@ test('AP is identity-verified before authenticated access and never treats the A
  assert.match(main,/await pairing\(\)\?\.restore\?\.\(found\.kitId\)/);
  assert.match(main,/if\(!\/\^\[a-fA-F0-9\]\{32\}\$\/\.test\(key\)\)/);
  assert.match(main,/if\(access&&access\.kitId!==verified\.kitId\)/);
- assert.ok(main.includes('Use updated firmware for simple AP diagnostics'));assert.ok(main.includes('ZebjusKitAuth.openLocal'));
+ assert.ok(main.includes('Install FlightCore 1.4.2 for protected BOOT-based AP setup and STA read-only monitoring.'));assert.ok(main.includes('ZebjusKitAuth.openLocal'));
 });
