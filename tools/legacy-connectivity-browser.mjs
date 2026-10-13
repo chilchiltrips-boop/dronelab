@@ -50,6 +50,7 @@ try{
   assert.equal(await page.locator('#fwDetailId').textContent(),'ZFC-A1-012345ABCDEF');
   assert.equal(await page.locator('#fwApIndicator').textContent(),'ACTIVE');assert.equal(await page.locator('#fwStaIndicator').textContent(),'CONNECTED');
   assert.equal(await page.locator('#fwNetworkSimple').textContent(),'AP');assert.equal(await page.locator('#fwWifiState').textContent(),'STA + AP');
+  assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.4.1');
   assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser still uses the kit AP.*computer Wi-Fi settings/);
   assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'AP setup does not authorize OTA');
@@ -66,6 +67,7 @@ try{
   await page.evaluate(()=>window.__testJoinRouter());await page.locator('#fwWifiConnectSta').click();
   await page.waitForFunction(()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
   assert.equal(await page.locator('#fwNetworkSimple').textContent(),'STA');assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'false');
+  assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.1.20','The connection card must replace its AP address after a verified STA handover');
   assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser is connected through router Wi-Fi "Classroom"/);
   assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),true,'STA monitoring does not grant control');
   await page.screenshot({path:`${output}/${entry.replace('.html','')}-sta-${width}.png`,fullPage:true});

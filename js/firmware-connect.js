@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastWasOnline=false,telemetry=null,telemetryTime=0;
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0;
 const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -108,8 +108,8 @@ async function changeName(reset){
 }
 function render(){
  const s=state(),demo=!!$('fwKitDemoMode')?.checked,live=!!s.connected&&!demo;
- const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||live!==lastWasOnline;
- if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
+ const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||s.transport!==lastConnectedTransport||live!==lastWasOnline;
+ if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastConnectedTransport=s.transport||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
  set('fwConnectBadge',demo?'DEMO PREVIEW':live?'CONNECTED':'Not connected');
  $('fwConnectBadge')?.classList.toggle('offline',!live);
  set('fwSelectedKitName',live?s.kitName:demo?'Offline Simulation':'No kit selected');

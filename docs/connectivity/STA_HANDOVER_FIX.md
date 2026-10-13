@@ -8,6 +8,7 @@ WebApp: 1.7.2+205. Compatible firmware: FlightCore 1.4.5 A1/A2.
 - Network connection verification checked hardware identity but accepted an authenticated AP reply for a requested STA connection.
 - The onboarding handover searched the last router IP and the older board/code hostname. It missed the current advertised Kit Name when DHCP changed the address.
 - A verified Wi-Fi save updated the router address without immediately adopting the complete router status, including the SSID.
+- The same kit could verify over STA while the connection card retained its previous AP address. Interface changes now refresh that card and renew its telemetry sample.
 
 The regression cases failed on the preceding source and passed after the correction.
 
