@@ -40,6 +40,8 @@ jobs:
           git add FlightCore_Firmware/catalog.json FlightCore_Firmware/latest.json FlightCore_Firmware/build-report.json firmware-catalog.json firmware-latest.json FlightCore_Firmware/FlightCoreSetupPortal.h
           if git diff --cached --quiet; then echo "No new build artifacts"; exit 0; fi
           git commit -m "build: verified A1/A2 FlightCore 1.4.2 firmware images"
+          git fetch origin feature/usb-free-ap-sta-classroom-discovery-20261013
+          git rebase origin/feature/usb-free-ap-sta-classroom-discovery-20261013
           git push origin HEAD:feature/usb-free-ap-sta-classroom-discovery-20261013
       - uses: actions/upload-artifact@v4
         if: always()
