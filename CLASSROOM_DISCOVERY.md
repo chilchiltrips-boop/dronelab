@@ -29,3 +29,7 @@ Software builds and browser integration are checked automatically; real 2.4 GHz 
 ## Verified build artifacts
 
 The review workflow compiles both FlightCore 1.4.4 profiles and synchronizes the matching APP/FACTORY binary images plus SHA256 metadata to this development branch. These are software build checks, **not physical A1/A2 validation**. Production flight readiness is not claimed.
+
+## Unique Kit Names and mDNS
+
+FlightCore 1.4.4 keeps the deterministic `zebjus-a1-<code>.local` / `zebjus-a2-<code>.local` address until a custom Kit Name is saved through AP Setup. Custom names such as `zebjus_drone_7` are advertised as DNS-safe `zebjus-drone-7.local`. Rename or reset causes the STA mDNS service to restart without rebooting the controller; the firmware's immutable Kit ID does not change. Avoid duplicate names across the classroom. The website validates the full Device ID again before using any candidate IP, and a hosted browser still cannot multicast-enumerate every LAN device without the optional local discovery helper.

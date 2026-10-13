@@ -398,8 +398,8 @@ static void zjNetworkLoop(uint32_t now){
  // Advertise device ID and six-digit selector over STA mDNS, never the access key.
  const bool staUp=WiFi.status()==WL_CONNECTED;
  if(staUp&&!zjMdnsReady){
-  // Human-selectable code provides a deterministic same-router hostname;
-  // immutable Device ID is still verified separately on every connection.
+  // A saved Kit Name is a DNS-safe .local hostname; otherwise use board+code.
+  // Immutable Device ID is verified separately on every connection.
   const String host=zjMdnsKitHostname();
   if(MDNS.begin(host.c_str())){
    MDNS.addService("zebjus","tcp",80);

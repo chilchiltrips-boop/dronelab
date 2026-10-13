@@ -40,5 +40,8 @@ test('Kit Name change uses scoped signed AP firmware route and keeps immutable D
  assert.match(fw,/zjKitPrefs\.putString\("name",autoName\)/);
  assert.match(auth,/path=="\/api\/kit\/name\/reset"/);
  assert.match(kit,/if\(!linkFresh\(\)\|\|state\.transport!=='ap'\|\|!state\.setupAuthorized\)/);
+ assert.match(fw,/zjMdnsKitHostname\(\)/);
+ assert.match(fw,/host\.replace\("_","-"\)/);
+ assert.match(fw,/if\(zjMdnsReady\)\{MDNS\.end\(\);zjMdnsReady=false;\}/);
  assert.ok(!fw.includes('zjKitId=name;'));
 });
