@@ -87,7 +87,7 @@ static void zjSetupEnrollmentHttp(){
   if(slot<0)for(int i=0;i<4;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
   if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
   auto& session=zjSessions[slot];session=ZjSession();session.local=true;session.localSta=sta;session.ip=ip;session.client=client;session.id=zjNewSecret(16);session.key=zjNewSecret(32);session.at=now;
-  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"session\":"+zjJson(session.id)+",\"key\":"+zjJson(session.key)+",\"scope\":+zjJson(ap?"ap_diagnostics":"sta_observer")+",\"expiresMs\":1800000,\"setupExpiresMs\":0}");
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"session\":"+zjJson(session.id)+",\"key\":"+zjJson(session.key)+",\"scope\":"+zjJson(ap?"ap_diagnostics":"sta_observer")+",\"expiresMs\":1800000,\"setupExpiresMs\":0}");
  });
  zjHttp.on("/api/auth/challenge",HTTP_POST,[](){
   const uint32_t now=millis();const String kind=zjHttp.arg("kind"),client=zjHttp.arg("client");
