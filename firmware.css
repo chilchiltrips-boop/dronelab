@@ -136,7 +136,7 @@
 .firmware-page .fw-simple-steps strong{font-size:12px}.firmware-page .fw-simple-steps span{font-size:10px;line-height:1.45;color:var(--muted)}
 .firmware-page .fw-demo-line{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:9px 11px;border:1px solid #244454;border-radius:9px}
 .firmware-page .fw-demo-line small,.firmware-page .fw-name-row small,.firmware-page .fw-found-select small{display:block;font-size:10px;font-weight:400;line-height:1.4;color:var(--muted);margin:3px 0 6px}
-.firmware-page .fw-demo-line input{width:19px;height:19px;flex-shrink:0}
+.firmware-page .fw-demo-line input{width:19px;height:19px;min-height:19px;flex-shrink:0}
 .firmware-page .fw-name-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .firmware-page .fw-name-row label,.firmware-page .fw-found-select{font-size:12px;font-weight:700;display:block;min-width:0}
 .firmware-page .fw-name-row input,.firmware-page .fw-found-select select{width:100%;margin-top:2px}

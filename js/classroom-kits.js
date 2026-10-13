@@ -1071,13 +1071,13 @@ async function connectDiscoveredKit(kit){
 }
 async function connectNamedKit(name){
  const requested=String(name||'').trim().toLowerCase();
- if(!/^[a-z0-9][a-z0-9_-]{2,30}$/.test(requested))throw Error('Enter a Kit Name (3–31 letters, numbers, _ or -).');
+ if(requested.length<3||requested.length>36||!/^[a-z0-9][a-z0-9 _-]*$/.test(requested))throw Error('Enter a known Kit Name using letters, numbers, spaces, _ or -.');
  const matches=discoveredKits.filter(k=>k.kitName.toLowerCase()===requested);
  if(matches.length>1)throw Error('Duplicate Kit Names. Select the matching Device ID from Available Kits.');
  if(matches.length===1)return connectDiscoveredKit(matches[0]);
  let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
  const candidates=new Set(known.filter(k=>String(k.name||'').toLowerCase()===requested).map(k=>k.ip).filter(safeKitHost));
- candidates.add(requested.replace(/_/g,'-')+'.local');
+ candidates.add(requested.replace(/[ _]+/g,'-')+'.local');
  if(/^zebjus_drone_\d{1,2}$/.test(requested))candidates.add(requested+'.local');
  const results=[];
  for(const ip of candidates){const live=await probeIdentity(ip,1700);if(live&&live.kitName.toLowerCase()===requested)results.push(live)}
