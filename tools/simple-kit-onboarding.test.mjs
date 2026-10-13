@@ -57,7 +57,8 @@ test('No unsafe 6-digit key, Wi-Fi password, or AP discovery shortcut was added 
  assert.doesNotMatch(fw,/zjPhysicalSetup|ZJ_SETUP_BUTTON_PIN/);
  assert.match(auth,/s\.local&&!s\.localSta&&String\(zjClientTransport\(\)\)=="AP"/);
  assert.match(auth,/X-ZJ-Session/);
- assert.match(read('js/classroom-kits.js'),/authenticated Device ID verification failed/);
+ assert.match(read('js/classroom-kits.js'),/authenticated connection failed:/);
+ assert.match(read('js/classroom-kits.js'),/state\.lastError\|\|'No authenticated status was received'/);
 });
 
 test('stale remembered key cannot override an available direct AP local session',async()=>{
