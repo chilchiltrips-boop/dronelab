@@ -6,7 +6,7 @@
 
 static String zjLabelSecret,zjDiagnosticKey,zjBootId,zjAuthBody;
 struct ZjChallenge {String nonce,kind,client;IPAddress ip;uint32_t at=0;};
-struct ZjSession {String id,key,client;uint32_t at=0,seq=0;bool setup=false;};
+struct ZjSession {String id,key,client;uint32_t at=0,seq=0;bool setup=false,local=false;IPAddress ip;};
 static ZjChallenge zjChallenges[4];static ZjSession zjSessions[8];
 static uint32_t zjAuthCooldown=0,zjChallengeAt=0;static uint8_t zjAuthFailures=0;
 static int zjRequestSession=-1;static bool zjAuthChecked=false,zjAuthAdmin=false;
@@ -29,6 +29,12 @@ static String zjArg(const String& name){
  if(zjRequestSession<0)return zjHttp.arg(name);
  size_t at=0;while(at<zjAuthBody.length()){int end=zjAuthBody.indexOf('&',at);if(end<0)end=zjAuthBody.length();String pair=zjAuthBody.substring(at,end);int eq=pair.indexOf('=');if(eq>=0&&zjUrlDecode(pair.substring(0,eq))==name)return zjUrlDecode(pair.substring(eq+1));at=end+1;}return "";
 }
+// AP-local bench sessions authorize diagnostics only; no owner/setup/OTA access.
+static bool zjLocalDiagnosticRoute(){
+ const String path=zjHttp.uri();const bool get=zjHttp.method()==HTTP_GET;
+ return get?(path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot"):
+  (path=="/api/command"||path=="/api/rc/claim"||path=="/api/rc/preview"||path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/auth/close");
+}
 static bool zjSessionAuthenticated(){
  if(zjAuthChecked)return zjAuthAdmin||zjRequestSession>=0;zjAuthChecked=true;
  const String provided=zjHttp.header("X-ZJ-Key");
@@ -43,6 +49,7 @@ static bool zjSessionAuthenticated(){
  const uint64_t wide=strtoull(counter.c_str(),nullptr,10);if(!wide||wide>0xffffffffULL)return false;
  for(int i=0;i<8;i++){
   auto& s=zjSessions[i];if(s.id!=id||id.isEmpty())continue;
+  if(s.local&&(String(zjClientTransport())!="AP"||s.ip!=zjHttp.client().remoteIP()||!zjLocalDiagnosticRoute()))return false;
   if(uint32_t(millis()-s.at)>1800000||wide<=s.seq)return false;
   const String method=zjHttp.method()==HTTP_GET?"GET":"POST";
   const String msg=method+"|"+zjHttp.uri()+"|"+zjKitId+"|"+zjBootId+"|"+id+"|"+counter+"|"+payload;
@@ -60,6 +67,16 @@ static bool zjSessionAuthenticated(){
 }
 static bool zjSetupAuthorized(){return zjAuthAdmin||(zjRequestSession>=0&&zjSessions[zjRequestSession].setup&&uint32_t(millis()-zjSessions[zjRequestSession].at)<300000);}
 static void zjSetupEnrollmentHttp(){
+ zjHttp.on("/api/auth/local",HTTP_POST,[](){
+  if(String(zjClientTransport())!="AP"){zjReply(403,"{\"error\":\"local_diagnostics_require_ap\"}");return;}
+  const String client=zjHttp.arg("client");if(!zjHex(client,32)||zjHttp.arg("deviceId")!=zjKitId){zjReply(400,"{\"error\":\"invalid_local_identity\"}");return;}
+  const uint32_t now=millis();const IPAddress ip=zjHttp.client().remoteIP();int slot=-1;
+  for(int i=0;i<4;i++)if(zjSessions[i].local&&zjSessions[i].client==client&&zjSessions[i].ip==ip){slot=i;break;}
+  if(slot<0)for(int i=0;i<4;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
+  if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
+  auto& session=zjSessions[slot];session=ZjSession();session.local=true;session.ip=ip;session.client=client;session.id=zjNewSecret(16);session.key=zjNewSecret(32);session.at=now;
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"session\":"+zjJson(session.id)+",\"key\":"+zjJson(session.key)+",\"scope\":\"ap_diagnostics\",\"expiresMs\":1800000,\"setupExpiresMs\":0}");
+ });
  zjHttp.on("/api/auth/challenge",HTTP_POST,[](){
   const uint32_t now=millis();const String kind=zjHttp.arg("kind"),client=zjHttp.arg("client");
   if(!zjHex(client,32)){zjReply(400,"{\"error\":\"invalid_client_id\"}");return;}
@@ -84,7 +101,7 @@ static void zjSetupEnrollmentHttp(){
    int slot=-1;for(int i=0;i<8;i++)if(zjSessions[i].client==client&&!client.isEmpty()){slot=i;break;}
    if(slot<0)for(int i=0;i<8;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
    if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
-   auto& s=zjSessions[slot];s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";
+   auto& s=zjSessions[slot];s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";s.local=false;
    s.key=zjHmac(credential,"session|"+msg+"|"+s.id);zjAuthFailures=0;
    zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"session\":"+zjJson(s.id)+",\"proof\":"+zjJson(zjHmac(s.key,"server|"+msg))+",\"expiresMs\":1800000,\"setupExpiresMs\":"+String(s.setup?300000:0)+"}");return;
   }zjReply(401,"{\"error\":\"challenge_invalid_or_consumed\"}");

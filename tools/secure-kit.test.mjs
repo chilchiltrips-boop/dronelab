@@ -16,6 +16,7 @@ function controller({wrongId=false,tamper=false}={}){
  return {seen,async transport(route,method,args,headers){
   seen.push({route,method,args,headers});
   const result=(status,body,proof='')=>({status,text:JSON.stringify(body),proof});
+  if(route==='/api/auth/local'){sessionKey='e1'.repeat(32);assert.equal(args.deviceId,id);return result(200,{kitId:wrongId?'ZFC-A2-FFFFFFFFFFFF':id,bootId:boot,session:sid,key:sessionKey,scope:'ap_diagnostics',expiresMs:1800000,setupExpiresMs:0})}
   if(route==='/api/auth/challenge'){scope=args.kind;client=args.client;return result(200,{kitId:wrongId?'ZFC-A2-FFFFFFFFFFFF':id,nonce,bootId:boot})}
   if(route==='/api/auth/enroll'){
    const msg=['enroll',id,boot,nonce,scope,client].join('|'),credential=scope==='setup'?secret:mac(secret,'diagnostic|'+id).slice(0,32);
@@ -81,4 +82,12 @@ test('WebRTC reset stops only hardware owned by this WebApp, never a separate An
  const context={window:{ZebjusKits:{getState:()=>({owner}),stop:()=>stops++}},training:()=>({stop:()=>virtual++}),$:()=>({})};
  vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,1);
  owner=true;vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,1);assert.equal(virtual,2);
+});
+
+test('simple AP session needs no label, sends signed/encrypted diagnostic requests and rejects identity changes',async()=>{
+ const a=protocol(),c=controller();const s=await a.openLocal(c.transport,id);
+ assert.equal(s.local,true);assert.ok(s.setupUntil<=Date.now());assert.ok(!JSON.stringify(c.seen).includes(secret));
+ const result=await s.request('/api/rc/claim','POST',{source:'WEB',kitCode:'123456'});assert.equal(result.parsed.source,'WEB');
+ await assert.rejects(a.openLocal(controller({wrongId:true}).transport,id),/Invalid AP/);
+ const tampered=await a.openLocal(controller({tamper:true}).transport,id);await assert.rejects(tampered.request('/api/status'),/unsigned/);
 });

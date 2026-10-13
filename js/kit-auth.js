@@ -26,6 +26,9 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  if(r.kitId!==deviceId||!/^[a-f0-9]{32}$/.test(r.session))throw Error('Enrollment identity mismatch');
  const key=mac(credential,'session|'+msg+'|'+r.session);
  if(!equal(mac(key,'server|'+msg),r.proof))throw Error('Controller identity proof failed');
+ return sessionAPI(transport,deviceId,c.bootId,r.session,key,r);
+}
+function sessionAPI(transport,deviceId,bootId,sessionId,key,r){
  let seq=0,tail=Promise.resolve();const created=Date.now();
  const api={deviceId,created,setupUntil:created+(Number(r.setupExpiresMs)||0),expiresAt:created+Math.min(Number(r.expiresMs)||0,1800000),
   request(route,method='GET',args={}){
@@ -37,8 +40,8 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
      const cipher=root.ZfcCrypto.encryptGCM(unhex(key),iv,utf8(new URLSearchParams(args).toString()));
      payload=hex(iv)+hex(cipher);
     }
-    const msg=[method,route,deviceId,c.bootId,r.session,counter,payload].join('|');
-    const result=await transport(route,method,method==='POST'?{payload}:{},{'X-ZJ-Device':deviceId,'X-ZJ-Session':r.session,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,msg)});
+    const msg=[method,route,deviceId,bootId,sessionId,counter,payload].join('|');
+    const result=await transport(route,method,method==='POST'?{payload}:{},{'X-ZJ-Device':deviceId,'X-ZJ-Session':sessionId,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,msg)});
     if(!equal(mac(key,['response',counter,result.status,result.text].join('|')),result.proof)){
      const e=Error('Session expired or unsigned device response; reconnect the verified kit.');e.status=401;throw e;
     }
@@ -49,6 +52,15 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  };
  return api;
 }
+async function openLocal(transport,deviceId){
+ if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId))throw Error('Invalid kit identity');
+ let client;try{client=root.sessionStorage?.getItem('zebjus.auth.local:'+deviceId)}catch{}
+ if(!/^[a-f0-9]{32}$/.test(client||'')){client=hex(root.crypto.getRandomValues(new Uint8Array(16)));try{root.sessionStorage?.setItem('zebjus.auth.local:'+deviceId,client)}catch{}}
+ const r=decoded(await transport('/api/auth/local','POST',{deviceId,client},{}));
+ if(r.kitId!==deviceId||r.scope!=='ap_diagnostics'||!/^[a-f0-9]{32}$/.test(r.bootId)||!/^[a-f0-9]{32}$/.test(r.session)||!/^[a-f0-9]{64}$/.test(r.key)||r.setupExpiresMs!==0)throw Error('Invalid AP diagnostic session');
+ const api=sessionAPI(transport,deviceId,r.bootId,r.session,r.key,r);api.local=true;return api;
+}
+
 function http(host){return async(route,method='GET',args={},headers={})=>{
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
  const control=new AbortController(),timer=setTimeout(()=>control.abort(),4200);
@@ -58,5 +70,5 @@ function http(host){return async(route,method='GET',args={},headers={})=>{
   return {status:response.status,text:await response.text(),proof:response.headers.get('X-ZJ-Response')||''};
  }finally{clearTimeout(timer)}
 };}
-root.ZebjusKitAuth={label,diagnosticKey,open,http,mac};
+root.ZebjusKitAuth={label,diagnosticKey,open,openLocal,http,mac};
 })(globalThis);

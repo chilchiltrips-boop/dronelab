@@ -4,11 +4,11 @@
 #include <cassert>
 #include <iostream>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
-const int HTTP_GET=1,HTTP_POST=2;
+const int HTTP_GET=1,HTTP_POST=2;static IPAddress requestIP(192,168,4,2);
 struct FakeHttp {
  std::map<String,String> headers,args;std::map<String,std::function<void()>> handlers;String path;int verb=HTTP_GET;
  String arg(String n){return args[n];}String header(String n){return headers[n];}String uri(){return path;}int method(){return verb;}
- struct Client {IPAddress remoteIP(){return IPAddress(192,168,4,2);}};Client client(){return {};}
+ struct Client {IPAddress remoteIP(){return requestIP;}};Client client(){return {};}
  template<class F>void on(String p,int,F f){handlers[p]=f;}
 } zjHttp;
 static Preferences zjPrefs;static String zjNetKey="ff112233445566778899aabbccddeeff0";
@@ -59,5 +59,20 @@ int main(){
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(diag.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+diag.id+"|1|");assert(!zjAllow());
  clockMs+=400;transport="STA";prepare("/api/auth/challenge");zjHttp.args["kind"]="setup";zjHttp.args["client"]=String(std::string(32,'a'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==403);
  const String previousBoot=zjBootId;zjEnrollmentInit();assert(previousBoot!=zjBootId&&zjSessions[0].id.isEmpty());
+
+ // Simple AP connection works without a manufacturer label and never grants setup.
+ zjPrefs.putString("label","");zjEnrollmentInit();transport="AP";clockMs+=1000;
+ prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'c'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==200);
+ const auto local=zjSessions[0];assert(local.local&&!local.setup&&local.key.length()==64);
+ auto localRequest=[&](String path,int verb,uint32_t counter){prepare(path,verb);zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=local.id;zjHttp.headers["X-ZJ-Seq"]=String(counter);zjHttp.headers["X-ZJ-Proof"]=zjHmac(local.key,String(verb==HTTP_GET?"GET":"POST")+"|"+path+"|"+zjKitId+"|"+zjBootId+"|"+local.id+"|"+String(counter)+"|");return zjAllow();};
+ assert(localRequest("/api/status",HTTP_GET,1));assert(!zjSetupAuthorized()&&!zjAuthAdmin);
+ assert(!localRequest("/api/status",HTTP_GET,1)); // replay
+ assert(!localRequest("/api/wifi/test",HTTP_POST,2));assert(!localRequest("/api/ota",HTTP_POST,2));assert(!localRequest("/api/admin",HTTP_GET,2));
+ transport="STA";assert(!localRequest("/api/status",HTTP_GET,2));
+ prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'c'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==403);
+ transport="AP";requestIP=IPAddress(192,168,4,3);assert(!localRequest("/api/status",HTTP_GET,2));requestIP=IPAddress(192,168,4,2);assert(localRequest("/api/telemetry",HTTP_GET,2));
+ clockMs=local.at+1800001;assert(!localRequest("/api/status",HTTP_GET,3));
+ // AP-local traffic cannot exhaust every privileged session slot.
+ zjEnrollmentInit();for(int i=0;i<5;i++){prepare("/api/auth/local");zjHttp.args["deviceId"]=zjKitId;zjHttp.args["client"]=String(std::string(32,'a'+i));zjHttp.handlers[zjHttp.path]();assert(replyStatus==(i<4?200:429));}assert(zjSessions[4].id.isEmpty());
  std::cout<<"PASS actual firmware headers: RC first frame, exclusivity, replay, bounds, IP binding, deadman, lease, rollover; enrollment scope, counter replay, expiry, reboot revocation\n";
 }

@@ -1,3 +1,7 @@
+## 1.4.1 simple connection update
+
+The New Kit private-label form is removed. Join kit AP → Connect Kit automatically verifies Device ID/Code for local bench diagnostics. Router setup/STA authorization remains protected through physical USB or existing trusted credentials. No credential-storage schema migration or motor output change. See SIMPLE_CONNECTION_RELEASE.md for the exact access boundary and update instructions.
+
 # Review build migration and recovery
 
 No credential or firmware-storage migration in this checkpoint. Existing private-label enrollment and USB recovery remain intact. Service Worker gets a new cache name and includes the new header stylesheet. Pending owner/student schema changes must include explicit migration and rollback tests.
