@@ -18,26 +18,7 @@ static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
 static String zjWifiTestState="idle";
 static bool zjPreviousScanActive=false,zjMdnsReady=false,zjUsbScanning=false;
 static int zjUsbScanIndex=0,zjUsbScanCount=0;
-// BOOT/GPIO9 on A1 and A2; hold AFTER normal startup (never at reset).
-// Physical permission is setup-only and never grants RC, ARM or OTA.
-static constexpr uint8_t ZJ_SETUP_BUTTON_PIN=9;
-static constexpr uint32_t ZJ_SETUP_HOLD_MS=3000,ZJ_SETUP_LEASE_MS=300000;
-static uint32_t zjSetupHoldAt=0,zjPhysicalSetupUntil=0;
-static bool zjSetupButtonLatched=false;
-static bool zjPhysicalSetupWindowActive(){return zjPhysicalSetupUntil&&int32_t(zjPhysicalSetupUntil-millis())>0;}
-static void zjPhysicalSetupTick(){
- const uint32_t now=millis();
- if(digitalRead(ZJ_SETUP_BUTTON_PIN)==LOW){
-  if(!zjSetupHoldAt)zjSetupHoldAt=now?now:1;
-  if(!zjSetupButtonLatched&&uint32_t(now-zjSetupHoldAt)>=ZJ_SETUP_HOLD_MS){
-   zjSetupButtonLatched=true;
-   if(!zjRcOwned&&!zjNetTesting){
-    zjPhysicalSetupUntil=now+ZJ_SETUP_LEASE_MS;
-    Serial.println("ZJNET,SETUP,AUTHORIZED_300S");
-   }else Serial.println("ZJNET,SETUP,DENIED_BUSY");
-  }
- }else{zjSetupHoldAt=0;zjSetupButtonLatched=false;}
-}
+// Kit AP router setup is available to AP-local signed sessions; RC and OTA remain separate.
 
 
 // Escapes all user-provided Wi-Fi identifiers before emitting JSON.
@@ -109,7 +90,7 @@ static String zjStatus(){
  const bool ap=WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA;
  const String networkState=zjNetTesting?"STA_TESTING":sta?(ap?"AP_STA_COEXISTENCE":"STA_CONNECTED"):zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState);
- out+=",\"setupWindowMs\":"+String((String(zjClientTransport())=="AP"&&zjPhysicalSetupWindowActive())?uint32_t(zjPhysicalSetupUntil-millis()):0)+",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
+ out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
@@ -241,7 +222,6 @@ static void zjNetworkSetup(){
   }
  });
  zjPrefs.begin("zj-network",false);
- pinMode(ZJ_SETUP_BUTTON_PIN,INPUT_PULLUP);zjPhysicalSetupUntil=0;zjSetupHoldAt=0;zjSetupButtonLatched=false;
  WiFi.persistent(false);WiFi.setAutoReconnect(false);zjEnrollmentInit();
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");
  const String saved=zjPrefs.getString("staConfig","");if(saved.length()>2){const int n=saved.substring(0,2).toInt();if(n>0&&n<=32&&saved.length()>=size_t(n+2)){zjSavedSsid=saved.substring(2,n+2);zjSavedPass=saved.substring(n+2);}}zjMode=zjPrefs.getString("mode","auto");
@@ -260,7 +240,7 @@ static void zjNetworkSetup(){
  zjSetupHttp();
  Serial.print("ZJNET,AP_NAME,");Serial.println(zjApSsid);
  Serial.println(zjLabelSecret.length()?"ZJNET,LABEL,INSTALLED":"ZJNET,LABEL,MANUFACTURER_SETUP_REQUIRED");
- Serial.println("ZJNET,HELP,AUTO keeps AP visible; use USB ZJNET,SCAN / TEST / MODE; motors disabled");
+ Serial.println("ZJNET,HELP,JOIN_AP_SCAN_WIFI_TEST_SAVE_THEN_CONNECT_STA; motors disabled");
  Serial.print("ZJNET,MODE,");Serial.println(zjMode);
 }
 // USB bench provisioning remains available even if saved STA mode has disabled the AP.
@@ -327,7 +307,7 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
- zjPhysicalSetupTick();zjAuthResetRequest();zjHttp.handleClient();now=millis();
+ zjAuthResetRequest();zjHttp.handleClient();now=millis();
  zjRcLoop(now);
  if(zjUsbScanning&&Serial.availableForWrite()>128){
   const int n=WiFi.scanComplete();

@@ -29,16 +29,16 @@ static String zjArg(const String& name){
  if(zjRequestSession<0)return zjHttp.arg(name);
  size_t at=0;while(at<zjAuthBody.length()){int end=zjAuthBody.indexOf('&',at);if(end<0)end=zjAuthBody.length();String pair=zjAuthBody.substring(at,end);int eq=pair.indexOf('=');if(eq>=0&&zjUrlDecode(pair.substring(0,eq))==name)return zjUrlDecode(pair.substring(eq+1));at=end+1;}return "";
 }
-// AP-local bench sessions authorize diagnostics only; no owner/setup/OTA access.
+// AP signed sessions allow direct Wi-Fi setup; STA observer sessions stay read-only. Neither grants admin or OTA.
 static bool zjLocalDiagnosticRoute(){
  const String path=zjHttp.uri();const bool get=zjHttp.method()==HTTP_GET;
  const bool ap=String(zjClientTransport())=="AP";
  if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot")||
-   (ap&&zjPhysicalSetupWindowActive()&&path=="/api/wifi/scan");
+   (ap&&path=="/api/wifi/scan");
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/command"||path=="/api/rc/claim"||path=="/api/rc/preview"||
    path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/auth/close")||
-   (zjPhysicalSetupWindowActive()&&(path=="/api/wifi/test"||path=="/api/wifi/mode"));
+   (path=="/api/wifi/test"||path=="/api/wifi/mode");
 }
 static bool zjSessionAuthenticated(){
  if(zjAuthChecked)return zjAuthAdmin||zjRequestSession>=0;zjAuthChecked=true;
@@ -75,7 +75,7 @@ static bool zjSetupAuthorized(){
  if(zjRequestSession<0)return false;
  const auto& s=zjSessions[zjRequestSession];
  return (s.setup&&uint32_t(millis()-s.at)<300000)||
-   (s.local&&!s.localSta&&String(zjClientTransport())=="AP"&&zjPhysicalSetupWindowActive());
+   (s.local&&!s.localSta&&String(zjClientTransport())=="AP");
 }
 static void zjSetupEnrollmentHttp(){
  zjHttp.on("/api/auth/local",HTTP_POST,[](){
