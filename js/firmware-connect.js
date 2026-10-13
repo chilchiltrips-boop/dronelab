@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastWasOnline=false,telemetry=null,telemetryTime=0;
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0;
 const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -108,8 +108,8 @@ async function changeName(reset){
 }
 function render(){
  const s=state(),demo=!!$('fwKitDemoMode')?.checked,live=!!s.connected&&!demo;
- const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||live!==lastWasOnline;
- if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
+ const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||s.transport!==lastConnectedTransport||live!==lastWasOnline;
+ if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastConnectedTransport=s.transport||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
  set('fwConnectBadge',demo?'DEMO PREVIEW':live?'CONNECTED':'Not connected');
  $('fwConnectBadge')?.classList.toggle('offline',!live);
  set('fwSelectedKitName',live?s.kitName:demo?'Offline Simulation':'No kit selected');
@@ -149,9 +149,13 @@ function render(){
  for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed;
  set('fwWifiName',live?s.ssid||'Router not connected':'--');
  set('fwWifiApName',live?s.apSsid||'Not reported':'--');
- set('fwWifiState',live?s.networkState||s.mode||'Connected':'Kit offline');
+ set('fwWifiState',live?s.staConnected?(s.apActive?'STA + AP':'STA CONNECTED'):s.apActive?'AP • STA OFF':'Router offline':'Kit offline');
  set('fwWifiAddress',live?(s.staIp||'STA offline')+' / '+(s.apActive?s.apIp||'192.168.4.1':'AP off'):'--');
  set('fwWifiAccess',live?s.otaAuthorized?'Control, settings & APP OTA authorized':s.setupAuthorized?'AP setup available • USB pairing required for APP OTA':'STA monitoring • USB pairing required for settings/control/OTA':'Connect a kit to manage its Wi-Fi');
+ const router=s.ssid?'router Wi-Fi "'+s.ssid+'"':'the saved router Wi-Fi';
+ set('fwWifiRouteHint',live?s.transport==='ap'?(s.staConnected?'The kit has connected to '+router+'. This browser still uses the kit AP. Join that router in computer Wi-Fi settings, then click Connect STA. AUTO keeps the AP hotspot available.':'This browser uses the kit AP; router STA is offline. Open Wi-Fi settings, run Test & Save STA and wait for VERIFIED before joining the router.'):
+  s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'The kit AP hotspot remains available in AUTO mode.':'The kit AP hotspot is off.'):
+  s.transport==='usb'?'USB is connected. Test & Save the router, join its Wi-Fi on this computer, then Connect STA.':'The kit is connected through the Android relay. Manage its router/AP settings through the verified kit connection.':'First setup: join the kit AP, connect the kit, then Scan Wi-Fi → Test & Save STA.');
  if($('fwAuthorizeUpdates'))$('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized;
  if(changed&&live){if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}

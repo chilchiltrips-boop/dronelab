@@ -17,10 +17,14 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
   requestTransport:mode.toUpperCase(),mode:'auto',apActive:true,staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
- let uploaded=false,claimGate=null,identityOverride=null,offset=0,digest='';
+ let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
+  if(route==='/api/wifi/test'){
+   status={...status,staConnected:true,ip:'192.168.1.41',ssid:args.ssid,wifiTestState:'saved',networkState:'AP_STA_COEXISTENCE'};
+   return {state:'testing',saved:false};
+  }
   if(route==='/api/rc/claim'){
    if(claimGate)await claimGate;
    status.rc={claimed:true,active:false,source:'WEB',ownerId:'owner-1'};
@@ -35,13 +39,15 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
  };
  const window={addEventListener(){},dispatchEvent:e=>events.push(e),ZebjusKitPairingStore:{fromSession:()=>paired?key:'',restore:async()=>paired?key:'',saveSession(){}},
   ZfcCrypto:{sha256:bytes=>createHash('sha256').update(bytes).digest()},
-  ZebjusKitAuth:{http:base=>base,openLocal:async()=>({expiresAt:Date.now()+600000,request:route=>handler(route)}),open:async(_host,_id,_key,kind)=>{
+  ZebjusKitAuth:{http:base=>base,openLocal:async()=>({expiresAt:Date.now()+600000,request:(route,_method,args)=>handler(route,args)}),open:async(_host,_id,_key,kind)=>{
    assert.equal(kind,'admin');status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
    return {expiresAt:Date.now()+600000,request:(route,_method,args)=>handler(route,args)};
   }}};
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
   if(u.pathname==='/api/identify'){
+   if(reachableHosts&&!reachableHosts.has(u.hostname))throw Error('Device is not reachable on this network');
+   if(identityGate)await identityGate;
    const mismatch=identityOverride||(uploaded&&u.hostname===ip?other:id);
    return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true,adminSessions:encrypted})};
   }
@@ -60,7 +66,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
   setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
  return {api:window.ZebjusKits,elements,requests,events,storage,blockClaim:p=>claimGate=p,identity:value=>identityOverride=value,
-  status:patch=>status={...status,...patch},dispose:()=>{for(const t of timers)clearTimeout(t)}};
+  reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{for(const t of timers)clearTimeout(t)}};
 }
 test('My Kits Connect and Disconnect buttons execute actual identity-bound client actions',async()=>{
  const f=fixture({initialize:true});try{
@@ -103,6 +109,53 @@ test('cached metadata retains the verified STA address while AP is the live requ
   const saved=JSON.parse(f.storage.get('zebjus.classroom.last.v1'));assert.equal(saved.ip,'192.168.1.41');assert.equal(saved.id,id);
   assert.ok(!JSON.stringify(saved).includes(key));assert.equal(f.api.getState().transport,'ap');
  }finally{f.dispose()}
+});
+test('Connect STA never falls back to the AP gateway when the computer has not joined the router',async()=>{
+ const f=fixture({mode:'ap'});try{
+  f.reachable(['192.168.4.1']);await f.api.connect();
+  const before=f.requests.filter(r=>r.route==='/api/status').length;
+  await assert.rejects(f.api.connectTransport('sta'),/STA.*not reachable|join.*router/i);
+  assert.equal(f.api.getState().transport,'ap');assert.equal(f.api.getState().connected,true,'The working AP setup link remains available');
+  assert.equal(f.requests.filter(r=>r.route==='/api/status').length,before,'STA selection does not reconnect through AP');
+  assert.equal(f.elements.get('kitTransport').value,'sta');
+ }finally{f.dispose()}
+});
+test('authenticated AP status cannot satisfy a requested STA connection',async()=>{
+ const f=fixture({paired:true});try{
+  f.status({requestTransport:'AP'});await f.api.connect();
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().owner,false);
+  assert.match(f.elements.get('kitMessage').textContent,/requested STA.*AP|STA.*AP/i);
+  assert.equal(f.storage.has('zebjus.classroom.last.v1'),false,'Wrong-interface responses are not remembered as verified connections');
+ }finally{f.dispose()}
+});
+test('AP-to-STA handover rediscovers the selected Kit Name after its router address changes',async()=>{
+ const f=fixture({mode:'ap'});try{
+  f.reachable(['192.168.4.1']);f.status({staConnected:true,ip:'192.168.1.41',ssid:'Classroom'});await f.api.connect();
+  f.reachable(['zebjus-drone-2.local']);f.status({requestTransport:'STA',ip:'192.168.1.56',setupAuthorized:false,controlAuthorized:false});
+  await f.api.handoverSta();
+  const s=f.api.getState();assert.equal(s.kitId,id);assert.equal(s.transport,'sta');assert.equal(s.connected,true);assert.equal(s.owner,false);
+  assert.equal(JSON.parse(f.storage.get('zebjus.classroom.last.v1')).ip,'192.168.1.56');
+ }finally{f.dispose()}
+});
+test('verified router save adopts its router state while the browser remains on AP',async()=>{
+ const f=fixture({mode:'ap'});try{
+  await f.api.connect();f.elements.get('kitRouterSsid').value='Classroom';f.elements.get('kitRouterPass').value='router-password';
+  await f.api.wifiSave();await new Promise(resolve=>setTimeout(resolve,1350));
+  const s=f.api.getState();assert.equal(s.staConnected,true);assert.equal(s.ssid,'Classroom');assert.equal(s.staIp,'192.168.1.41');
+  assert.equal(s.transport,'ap');assert.equal(s.mode,'auto');assert.equal(s.owner,false);
+  assert.match(f.elements.get('kitWifiStatus').textContent,/browser still uses AP.*computer Wi-Fi settings/);
+  assert.equal(JSON.parse(f.storage.get('zebjus.classroom.last.v1')).ip,'192.168.1.41');
+  assert.ok(!JSON.stringify([...f.storage.values()]).includes('router-password'));
+ }finally{f.dispose()}
+});
+test('Disconnect cancels late STA handover and header discovery replies',async()=>{
+ for(const action of ['handoverSta','connectTransport']){const f=fixture({mode:'ap'});try{
+  f.status({staConnected:true,ip:'192.168.1.41'});await f.api.connect();
+  let finish;f.blockIdentity(new Promise(resolve=>finish=resolve));
+  const pending=f.api[action]('sta');await new Promise(resolve=>setImmediate(resolve));
+  await f.api.disconnect();finish();await assert.rejects(pending,/cancelled/);
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().owner,false);
+ }finally{f.dispose()}}
 });
 test('OTA verifies changed boot ID and same Device ID through Kit Name when DHCP reuses the old IP',async()=>{
  const f=fixture({paired:true});try{
