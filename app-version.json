@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0+202",
+  "version": "1.7.0+203",
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
@@ -8,6 +8,6 @@
     "Authenticated AP Kit Name save/reset and immutable Device ID (FlightCore 1.4.4)",
     "Command freshness, IMU/RC telemetry, firmware updates and USB recovery"
   ],
-  "publishedAt": "2026-10-13T04:53:01.989045+00:00",
-  "buildCommit": "213a9c571908"
+  "publishedAt": "2026-10-13T05:24:07.471639+00:00",
+  "buildCommit": "2d377fe3941a"
 }
