@@ -123,7 +123,7 @@ async function resolveKitAccess(code,ip){
  const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(found.kitId)||
   pairing()?.fromSession?.(found.kitId)||await pairing()?.restore?.(found.kitId)||'';
  if(!/^[a-fA-F0-9]{32}$/.test(key)){
-  throw Error('Kit '+code+' found. This browser is not paired yet: select Pair Once with USB. Kit Code and AP password do not authorize settings.');
+  throw Error('Kit '+code+' found. This browser is not paired yet: select Pair Once with USB. Kit Code and the AP Wi-Fi password do not authorize access.');
  }
  if(($('kitKeyInput')?.value||'').trim()){secureIds.delete(found.kitId);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));}
  pairedKeys.set(found.kitId,key);pairing()?.saveSession?.(found.kitId,key);
