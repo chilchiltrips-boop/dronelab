@@ -5,8 +5,8 @@
 #include <mbedtls/gcm.h>
 
 static String zjLabelSecret,zjDiagnosticKey,zjBootId,zjAuthBody;
-struct ZjChallenge {String nonce,kind,client;IPAddress ip;uint32_t at=0;};
-struct ZjSession {String id,key,client;uint32_t at=0,seq=0;bool setup=false;};
+struct ZjChallenge {String nonce,kind,client,studentId;IPAddress ip;uint32_t at=0;};
+struct ZjSession {String id,key,client,studentId;uint32_t at=0,seq=0,epoch=0;bool setup=false,student=false;};
 static ZjChallenge zjChallenges[4];static ZjSession zjSessions[8];
 static uint32_t zjAuthCooldown=0,zjChallengeAt=0;static uint8_t zjAuthFailures=0;
 static int zjRequestSession=-1;static bool zjAuthChecked=false,zjAuthAdmin=false;
@@ -18,10 +18,11 @@ static String zjHmac(const String& key,const String& message){
  uint8_t digest[32];if(mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256),(const uint8_t*)key.c_str(),key.length(),(const uint8_t*)message.c_str(),message.length(),digest))return "";
  return zjHexBytes(digest,32);
 }
+#include "FlightCorePermissions.h"
 static void zjEnrollmentInit(){
  zjLabelSecret=zjPrefs.getString("label","");zjLabelSecret.toLowerCase();zjBootId=zjNewSecret(16);
  zjDiagnosticKey=zjHex(zjLabelSecret,64)?zjHmac(zjLabelSecret,"diagnostic|"+zjKitId).substring(0,32):String("");
- for(auto& s:zjSessions)s=ZjSession();for(auto& c:zjChallenges)c=ZjChallenge();
+ for(auto& s:zjSessions)s=ZjSession();for(auto& c:zjChallenges)c=ZjChallenge();zjStudentInit();
 }
 static void zjAuthResetRequest(){zjAuthChecked=false;zjAuthAdmin=false;zjRequestSession=-1;zjAuthBody="";}
 static String zjUrlDecode(const String& in){String out;for(size_t i=0;i<in.length();i++){if(in[i]=='+')out+=' ';else if(in[i]=='%'&&i+2<in.length()&&zjHex(in.substring(i+1,i+3),2)){out+=char(strtoul(in.substring(i+1,i+3).c_str(),nullptr,16));i+=2;}else out+=in[i];}return out;}
@@ -43,7 +44,7 @@ static bool zjSessionAuthenticated(){
  const uint64_t wide=strtoull(counter.c_str(),nullptr,10);if(!wide||wide>0xffffffffULL)return false;
  for(int i=0;i<8;i++){
   auto& s=zjSessions[i];if(s.id!=id||id.isEmpty())continue;
-  if(uint32_t(millis()-s.at)>1800000||wide<=s.seq)return false;
+  if(uint32_t(millis()-s.at)>1800000||wide<=s.seq||(s.student&&!zjStudentAllowed(s.studentId,s.epoch)))return false;
   const String method=zjHttp.method()==HTTP_GET?"GET":"POST";
   const String msg=method+"|"+zjHttp.uri()+"|"+zjKitId+"|"+zjBootId+"|"+id+"|"+counter+"|"+payload;
   if(!zjEqual(zjHmac(s.key,msg),zjHttp.header("X-ZJ-Proof")))return false;
@@ -64,27 +65,30 @@ static void zjSetupEnrollmentHttp(){
   const uint32_t now=millis();const String kind=zjHttp.arg("kind"),client=zjHttp.arg("client");
   if(!zjHex(client,32)){zjReply(400,"{\"error\":\"invalid_client_id\"}");return;}
   if(!zjLabelSecret.length()){zjReply(409,"{\"error\":\"manufacturer_label_not_installed\"}");return;}
-  if((kind!="setup"&&kind!="diagnostic")||(kind=="setup"&&String(zjClientTransport())!="AP")){zjReply(403,"{\"error\":\"setup_requires_kit_ap\"}");return;}
+  if((kind!="setup"&&kind!="diagnostic"&&kind!="student")||(kind=="setup"&&String(zjClientTransport())!="AP")){zjReply(403,"{\"error\":\"setup_requires_kit_ap\"}");return;}
+  const String studentId=zjHttp.arg("studentId");
+  if(kind=="student"){const int i=zjStudentIndex(studentId);if(i<0||!zjStudentAllowed(studentId,zjStudents[i].epoch)){zjReply(403,"{\"error\":\"student_not_granted\"}");return;}}
   if((zjAuthCooldown&&int32_t(now-zjAuthCooldown)<0)||(zjChallengeAt&&uint32_t(now-zjChallengeAt)<300)){zjReply(429,"{\"error\":\"enrollment_rate_limited\"}");return;}
   int slot=-1;for(int i=0;i<4;i++)if(zjChallenges[i].nonce.isEmpty()||uint32_t(now-zjChallenges[i].at)>30000){slot=i;break;}
   if(slot<0){zjReply(429,"{\"error\":\"challenge_busy\"}");return;}
-  auto& c=zjChallenges[slot];c.nonce=zjNewSecret(16);c.at=now;c.ip=zjHttp.client().remoteIP();c.kind=kind;c.client=client;zjChallengeAt=now;
+  auto& c=zjChallenges[slot];c.nonce=zjNewSecret(16);c.at=now;c.ip=zjHttp.client().remoteIP();c.kind=kind;c.client=client;c.studentId=kind=="student"?studentId:String("");zjChallengeAt=now;
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"nonce\":"+zjJson(c.nonce)+",\"bootId\":"+zjJson(zjBootId)+",\"expiresMs\":30000}");
  });
  zjHttp.on("/api/auth/enroll",HTTP_POST,[](){
   const uint32_t now=millis();if(zjAuthCooldown&&int32_t(now-zjAuthCooldown)<0){zjReply(429,"{\"error\":\"enrollment_rate_limited\"}");return;}
   for(auto& c:zjChallenges){
    if(c.nonce.isEmpty()||c.nonce!=zjHttp.arg("nonce")||c.ip!=zjHttp.client().remoteIP())continue;
-   const String nonce=c.nonce,kind=c.kind,client=c.client;c.nonce=""; // consume before verification: no replay
+   const String nonce=c.nonce,kind=c.kind,client=c.client,studentId=c.studentId;c.nonce=""; // consume before verification: no replay
    const String msg="enroll|"+zjKitId+"|"+zjBootId+"|"+nonce+"|"+kind+"|"+client;
-   const String credential=kind=="setup"?zjLabelSecret:zjDiagnosticKey;
-   if(uint32_t(now-c.at)>30000||zjHttp.arg("deviceId")!=zjKitId||!zjEqual(zjHmac(credential,msg),zjHttp.arg("proof"))){
+   const int slotId=kind=="student"?zjStudentIndex(studentId):-1;
+   const String credential=kind=="setup"?zjLabelSecret:kind=="student"&&slotId>=0?zjStudents[slotId].key:zjDiagnosticKey;
+   if(uint32_t(now-c.at)>30000||zjHttp.arg("deviceId")!=zjKitId||(kind=="student"&&(slotId<0||zjHttp.arg("studentId")!=studentId||!zjStudentAllowed(studentId,zjStudents[slotId].epoch)))||!zjEqual(zjHmac(credential,msg),zjHttp.arg("proof"))){
     if(++zjAuthFailures>=3){zjAuthCooldown=now+30000;zjAuthFailures=0;}zjReply(401,"{\"error\":\"enrollment_proof_invalid_or_expired\"}");return;
    }
    int slot=-1;for(int i=0;i<8;i++)if(zjSessions[i].client==client&&!client.isEmpty()){slot=i;break;}
    if(slot<0)for(int i=0;i<8;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
    if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
-   auto& s=zjSessions[slot];s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";
+   auto& s=zjSessions[slot];s.client=client;s.id=zjNewSecret(16);s.at=now;s.seq=0;s.setup=kind=="setup";s.student=kind=="student";s.studentId=s.student?studentId:String("");s.epoch=s.student?zjStudents[slotId].epoch:0;
    s.key=zjHmac(credential,"session|"+msg+"|"+s.id);zjAuthFailures=0;
    zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"session\":"+zjJson(s.id)+",\"proof\":"+zjJson(zjHmac(s.key,"server|"+msg))+",\"expiresMs\":1800000,\"setupExpiresMs\":"+String(s.setup?300000:0)+"}");return;
   }zjReply(401,"{\"error\":\"challenge_invalid_or_consumed\"}");
