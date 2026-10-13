@@ -390,7 +390,7 @@ export function createPythonIDEShell(api){
  window.addEventListener('dronelab:tab',e=>{if(e.detail?.name==='python')fit()});
  const obs=typeof ResizeObserver!=='undefined'?new ResizeObserver(fit):null;
  if(obs){
-  const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');
+  const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app .tabs');
   for(const node of [header,nav,toolbar,root.querySelector('.python-status-footer')])if(node)obs.observe(node);
  }
  const visibility=new MutationObserver(()=>{if(root.classList.contains('active'))requestAnimationFrame(fit)});

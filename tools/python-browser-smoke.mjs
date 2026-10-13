@@ -138,7 +138,7 @@ try{
   },scroll);
   await page.waitForFunction(()=>document.querySelector('#tab-python .python-project-bar')?.classList.contains('is-stuck'),null,{timeout:6000});
   const result=await page.evaluate(()=>{
-   const bar=document.querySelector('#tab-python .python-project-bar'),nav=document.querySelector('#app>.tabs'),header=document.querySelector('#app>.topbar');
+   const bar=document.querySelector('#tab-python .python-project-bar'),nav=document.querySelector('#app .tabs'),header=document.querySelector('#app>.topbar');
    const rect=bar.getBoundingClientRect(),stickyTop=Number.parseFloat(getComputedStyle(document.querySelector('#tab-python')).getPropertyValue('--py-sticky-top'));
    const run=document.querySelector('#runPythonBtn').getBoundingClientRect(),stop=document.querySelector('#stopPythonBtn').getBoundingClientRect();
    return {pageY:window.scrollY,top:rect.top,stickyTop,headerBottom:header.getBoundingClientRect().bottom,navBottom:nav.getBoundingClientRect().bottom,run,stop,

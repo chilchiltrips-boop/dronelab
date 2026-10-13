@@ -470,7 +470,7 @@ let pythonStickyFrame=0;
 function updatePythonStickyToolbar(){
  const tab=$('tab-python'),sentinel=$('pythonToolbarSentinel'),bar=tab?.querySelector('.python-project-bar');
  if(!tab||!sentinel||!bar)return;
- const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app>.tabs');
+ const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app .tabs');
  const stickyTop=Math.ceil(Math.max(0,header?.getBoundingClientRect().bottom||0,nav?.getBoundingClientRect().bottom||0));
  tab.style.setProperty('--py-sticky-top',stickyTop+'px');
  if(!tab.classList.contains('active')){bar.classList.remove('is-stuck');sentinel.style.height='1px';return}
@@ -496,7 +496,7 @@ function initPythonStickyToolbar(){
  window.addEventListener('orientationchange',schedulePythonStickyToolbar);
  if(typeof ResizeObserver!=='undefined'){
   const resize=new ResizeObserver(schedulePythonStickyToolbar);
-  for(const el of [document.querySelector('#app>.topbar'),document.querySelector('#app>.tabs')])if(el)resize.observe(el);
+  for(const el of [document.querySelector('#app>.topbar'),document.querySelector('#app .tabs')])if(el)resize.observe(el);
  }
  schedulePythonStickyToolbar();
 }
