@@ -7,6 +7,7 @@
 static Preferences zjKitPrefs;
 static bool zjAdminUnlocked=false;static uint32_t zjAdminUnlockAt=0,zjAdminCooldownAt=0;static uint8_t zjAdminFailures=0;
 static String zjKitId,zjKitCode,zjKitName;
+static bool zjKitAutoName=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
@@ -26,8 +27,10 @@ static void zjKitSetup(){
  zjKitId=String(FC_BOARD)+"-"+id;
  zjKitName=FC_LABEL;
  zjKitPrefs.begin("zj-classroom",false);
- zjKitName=zjKitPrefs.getString("name",FC_LABEL);
- if(zjKitName.length()<3||zjKitName.length()>31)zjKitName=FC_LABEL;
+ zjKitName=zjKitPrefs.getString("name","");
+ zjKitAutoName=zjKitPrefs.getString("autoName","")=="1"||zjKitName.isEmpty()||zjKitName==FC_LABEL;
+ if(zjKitName.length()<3||zjKitName.length()>31){zjKitName="zebjus_drone_1";zjKitAutoName=true;}
+ if(zjKitAutoName&&zjKitName==FC_LABEL)zjKitName="zebjus_drone_1";
  zjKitCode=zjKitPrefs.getString("code","");
  if(zjKitCode.length()!=6||zjKitCode.indexOf('-')>=0){
   char code[7];snprintf(code,sizeof(code),"%06lu",(unsigned long)(100000+(esp_random()%900000)));
@@ -167,7 +170,7 @@ static bool zjAdminSerialCommand(char* line){
  if(zjRcOwned){Serial.println("ZJADMIN,ERR,CONTROLLER_ACTIVE");return true;}
  if(!strncmp(line,"ZJADMIN,NAME,",13)){
   const char* name=line+13;if(!zjAdminValue(name,3,31)){Serial.println("ZJADMIN,ERR,INVALID_NAME");return true;}
-  zjKitName=name;zjKitPrefs.putString("name",zjKitName);Serial.println("ZJADMIN,ACK,NAME");return true;
+  zjKitName=name;zjKitAutoName=false;zjKitPrefs.putString("name",zjKitName);zjKitPrefs.putString("autoName","0");Serial.println("ZJADMIN,ACK,NAME");return true;
  }
  if(!strncmp(line,"ZJADMIN,APNAME,",15)){
   const char* name=line+15;if(!zjAdminValue(name,3,24,false)){Serial.println("ZJADMIN,ERR,INVALID_AP_NAME");return true;}

@@ -13,7 +13,7 @@ test('MY KITS script is parseable and exposes a single verified device session A
 });
 test('MY KITS navigation, pairing and admin controls appear without removing existing tabs',()=>{
  for(const id of ['kitTopStatus','kitTopConnect','kitTopNetworkSwitch','kitCenter','kitCodeInput','kitTransport','kitIpInput','kitKeyInput','kitSelectedId','kitTakeControl','kitReleaseControl','kitStop','kitAdmin','kitAdminRead','kitAdminApply','kitFactoryReset','kitHardwareTarget','kitPidMonitor','kitMobilePairDetails','connectionDialog','fwUsbFlashBtn','pythonTarget'])assert.ok(html.includes('id="'+id+'"'),id);
- for(const n of ['ASSEMBLY LAB','2D WIRING','PYTHON LAB','PID TUNING','MY KITS','FIRMWARE &amp; USB'])assert.ok(html.includes(n),n);
+ for(const n of ['ASSEMBLY LAB','2D WIRING','PYTHON LAB','PID TUNING','MY KITS','FIRMWARE &amp; CONNECT'])assert.ok(html.includes(n),n);
  const css=read('classroom-kits.css');
  for(const t of ['.kit-top-status','.kit-center','.kit-connect-grid','@media(max-width:520px)','prefers-reduced-motion',':focus-visible'])assert.ok(css.includes(t),t);
 });
@@ -39,5 +39,5 @@ test('Network/session changes cannot silently reassign firmware control',()=>{
 });
 test('Offline bundle includes new UI so an AP-only classroom can reuse the cached shell',()=>{
  const sw=read('sw.js');
- for(const u of ['./classroom-kits.css?v=brand-stack2','./js/classroom-kits.js?v=ap-session-fix-20261013'])assert.ok(sw.includes(u),u);
+ for(const u of ['./classroom-kits.css?v=brand-stack2','./js/classroom-kits.js?v=legacy-port-20261013'])assert.ok(sw.includes(u),u);
 });

@@ -1,0 +1,37 @@
+name: Verify legacy connectivity port in Chromium
+on:
+  push:
+    branches: [feature/legacy-connectivity-port-20261013]
+    paths:
+      - 'index.html'
+      - '*.css'
+      - 'firmware-updater.js'
+      - 'js/**'
+      - 'tools/legacy-connectivity-browser.mjs'
+      - 'tools/v2-layout-browser.mjs'
+      - '.github/workflows/legacy-connectivity-browser.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Verify responsive header and connection interactions
+        run: |
+          node server.cjs --port 8765 > /tmp/dronelab-server.log 2>&1 &
+          node tools/v2-layout-browser.mjs
+          node tools/legacy-connectivity-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: legacy-connectivity-browser-evidence
+          path: test-output/legacy-connectivity
+          if-no-files-found: warn

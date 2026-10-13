@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.4.4";
+constexpr const char* FW_VERSION="1.4.5";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS AERION A2";

@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only after association',()=>{
  const f=read('FlightCore_Firmware/FlightCoreNetwork.h'),ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
- for(const expected of ['#include <WiFi.h>','#include <Preferences.h>','WiFi.scanNetworks(true,false)','WiFi.begin(','zjPrefs.putString("staConfig"','sta_test_pass_saved','sta_failed_ap_fallback','sta_connecting','/api/wifi/test','/api/wifi/mode','/api/telemetry','/api/command','/api/status'])assert.ok(f.includes(expected),expected);
+ for(const expected of ['#include <WiFi.h>','#include <Preferences.h>','WiFi.scanNetworks(true,false)','WiFi.begin(','zjRememberProfile(','sta_test_pass_saved','sta_failed_ap_fallback','sta_connecting','/api/wifi/test','/api/wifi/mode','/api/telemetry','/api/command','/api/status'])assert.ok(f.includes(expected),expected);
  assert.ok(ino.includes('#include "FlightCoreNetwork.h"'));
  assert.ok(ino.includes('zjNetworkSetup();')&&ino.includes('zjNetworkLoop(now);'));
  assert.ok(!f.includes('WiFi.begin("')&&!f.includes('SSID="'),'No hard-coded router credentials');
@@ -66,7 +66,7 @@ test('Android APP OTA never falls back to default cellular/system network',()=>{
  assert.ok(body.includes('connection=(HttpURLConnection)wifi.openConnection(target);'),'upload must bind to Wi-Fi');
  assert.ok(!body.includes('target.openConnection()'),'no default-network/cellular fallback for firmware bytes');
  const firmware=read('FlightCore_Firmware/FlightCoreNetwork.h');
- assert.ok(firmware.includes('String(zjClientTransport())=="STA"'), 'firmware STA-only OTA rule remains');
+ assert.ok(firmware.includes('String(zjClientTransport())=="STA"'), 'STA is an explicitly supported OTA interface');
 });
 
 test('Python Network Lab reports actual authenticated AP request even while STA is online',async()=>{

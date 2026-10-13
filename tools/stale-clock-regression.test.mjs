@@ -9,7 +9,7 @@ test('STA test cannot instantly time out when USB command executes after loop ti
  assert.ok(((now-commandAt)|0)<0,'Signed elapsed correctly recognizes a timestamp in the future');
  const fw=read('FlightCore_Firmware/FlightCoreNetwork.h');
  assert.match(fw,/int32_t\(now-zjNetAttempt\)>int32_t\(ZJ_NET_TEST_TIMEOUT_MS\)/);
- assert.match(fw,/int32_t\(now-zjNetAttempt\)>12000/);
+ assert.match(fw,/int32_t\(now-zjNetAttempt\)>int32_t\(ZJ_NET_TEST_TIMEOUT_MS\)/);
  assert.doesNotMatch(fw,/else if\(now-zjNetAttempt>/);
 });
 test('RC bench lease and deadman must not expire immediately after the claim / frame command',()=>{
@@ -23,7 +23,7 @@ test('intentional STA_LEAVING 36 is not treated as password error and firmware r
  const kit=read('js/classroom-kits.js');
  assert.match(fw,/zjLastStaFailureReason/);
  assert.match(fw,/WiFi\.status\(\)==WL_CONNECTED&&WiFi\.SSID\(\)==zjPendingSsid/);
- assert.match(fw,/zjPrefs\.putString\("staConfig",record\)/);
+ assert.match(fw,/zjRememberProfile\(zjPendingSsid,zjPendingPass\)/);
  assert.match(kit,/n===36\?'36 \(STA_LEAVING, not password proof\)'/);
  assert.match(kit,/waitNetworkWifiTest\(\+\+wifiTestNonce\)/);
 });

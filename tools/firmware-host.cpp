@@ -13,6 +13,8 @@ struct FakeHttp {
 } zjHttp;
 static Preferences zjPrefs;static String zjNetKey="ff112233445566778899aabbccddeeff0";
 static String zjJson(const String& v){return String("\"")+v+"\"";}
+static String zjSavedSsid,zjSavedPass;
+#include "../FlightCore_Firmware/FlightCoreWifiProfiles.h"
 static String zjNewSecret(size_t n){String out;for(size_t i=0;i<n;i++){char b[3];snprintf(b,3,"%02x",esp_random()%256);out+=b;}return out;}
 static String transport="AP",replyBody;static int replyStatus=0;
 static const char* zjClientTransport(){return transport.c_str();}
@@ -27,6 +29,18 @@ static String enroll(String kind,String credential,uint32_t delay=0){
  clockMs+=delay;prepare("/api/auth/enroll");zjHttp.args["nonce"]=nonce;zjHttp.args["deviceId"]=zjKitId;zjHttp.args["proof"]=zjHmac(credential,msg);zjHttp.handlers[zjHttp.path]();return nonce;
 }
 int main(){
+ // Exercise the production profile codec, five-entry bound, preference, removal,
+ // legacy migration and failure preservation using an NVS double.
+ zjSavedSsid="Legacy";zjSavedPass="password0";zjLoadProfiles();assert(zjWifiCount==1);
+ for(int i=1;i<=6;i++)assert(zjRememberProfile(String("Router")+String(i),"password1"));
+ assert(zjWifiCount==5&&zjSavedSsid=="Router6"&&zjWifiProfiles[4].ssid=="Router2");
+ assert(zjSelectProfile("Router3")&&zjSavedSsid=="Router3");assert(!zjSelectProfile("Missing"));
+ const String previous=zjPrefs.getString("profiles","");zjPrefs.failNextWrite=true;
+ assert(!zjRememberProfile("Failed","password2"));assert(zjPrefs.getString("profiles","")==previous&&zjSavedSsid=="Router3");
+ assert(zjForgetProfile("Router3")&&zjWifiCount==4&&zjSavedSsid=="Router6");
+ const String publicProfiles=zjProfilesStatus();assert(std::string(publicProfiles.c_str()).find("password")==std::string::npos);
+ zjSavedSsid="";zjSavedPass="";zjWifiCount=0;zjLoadProfiles();assert(zjWifiCount==4&&zjSavedSsid=="Router6");
+ assert(zjRememberProfile("Open router",""));zjWifiCount=0;zjLoadProfiles();assert(zjSavedSsid=="Open router"&&zjSavedPass.isEmpty());
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";
  clockMs=1000;assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));const String rcToken=zjRcSession;
  // A freshly claimed session accepts its FIRST frame, even though no RC timestamp exists.
@@ -59,6 +73,16 @@ int main(){
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(diag.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+diag.id+"|1|");assert(!zjAllow());
  clockMs+=400;transport="STA";prepare("/api/auth/challenge");zjHttp.args["kind"]="setup";zjHttp.args["client"]=String(std::string(32,'a'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==403);
  const String previousBoot=zjBootId;zjEnrollmentInit();assert(previousBoot!=zjBootId&&zjSessions[0].id.isEmpty());
+ // Physical USB pairing can establish an encrypted admin session on STA even
+ // without a manufacturer label. Public/local credentials cannot do so.
+ zjPrefs.putString("label","");zjEnrollmentInit();clockMs+=1000;
+ enroll("admin","wrong-private-key");assert(replyStatus==401);
+ clockMs+=400;enroll("admin",zjNetKey);assert(replyStatus==200&&zjSessions[0].admin);
+ const auto admin=zjSessions[0];prepare("/api/status",HTTP_GET);
+ zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=admin.id;zjHttp.headers["X-ZJ-Seq"]="1";
+ zjHttp.headers["X-ZJ-Proof"]=zjHmac(admin.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+admin.id+"|1|");
+ assert(zjAllow()&&zjAuthAdmin&&zjSetupAuthorized());
+ zjAuthResetRequest();requestIP=IPAddress(192,168,4,99);assert(!zjAllow());requestIP=IPAddress(192,168,4,2);
 
  // Simple AP Wi-Fi setup works without BOOT, USB or manufacturer labels.
  zjPrefs.putString("label","");zjEnrollmentInit();transport="AP";clockMs+=1000;
