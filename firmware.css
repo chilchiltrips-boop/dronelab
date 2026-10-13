@@ -121,3 +121,56 @@
 #fwSerialOutput.fw-raw-lines{white-space:pre;overflow-x:auto;overflow-y:auto;overscroll-behavior:contain;tab-size:2;line-height:1.65;min-height:230px;max-height:410px;padding:12px 15px;font:12px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 #fwSerialOutput.fw-raw-lines::-webkit-scrollbar{width:11px;height:11px}
 #fwSerialOutput.fw-raw-lines::-webkit-scrollbar-thumb{background:#486879;border-radius:7px}
+
+
+/* Reference-style Firmware & Connect center; scoped to the Firmware tab. */
+.firmware-page .fw-connection-workspace{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:12px;margin:0 0 12px}
+.firmware-page .fw-connection-workspace>.form-card{min-width:0;padding:15px;border-radius:13px}
+.firmware-page .fw-connection-hero{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.firmware-page .fw-connection-hero h2{margin:5px 0 7px;font-size:20px;line-height:1.2}
+.firmware-page .fw-connection-hero p{font-size:12px;line-height:1.5;color:var(--muted);max-width:660px}
+.firmware-page .fw-connection-hero .firmware-badge{white-space:nowrap;flex-shrink:0}
+.firmware-page .fw-simple-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:13px 0}
+.firmware-page .fw-simple-steps>div{display:grid;grid-template-columns:28px 1fr;align-content:start;gap:3px 7px;border:1px solid #2c4956;border-radius:9px;padding:9px;min-width:0}
+.firmware-page .fw-simple-steps b{grid-row:span 2;border-radius:50%;background:#0c786a;color:#fff;width:26px;height:26px;display:grid;place-items:center;font-size:13px}
+.firmware-page .fw-simple-steps strong{font-size:12px}.firmware-page .fw-simple-steps span{font-size:10px;line-height:1.45;color:var(--muted)}
+.firmware-page .fw-demo-line{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:9px 11px;border:1px solid #244454;border-radius:9px}
+.firmware-page .fw-demo-line small,.firmware-page .fw-name-row small,.firmware-page .fw-found-select small{display:block;font-size:10px;font-weight:400;line-height:1.4;color:var(--muted);margin:3px 0 6px}
+.firmware-page .fw-demo-line input{width:19px;height:19px;flex-shrink:0}
+.firmware-page .fw-name-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.firmware-page .fw-name-row label,.firmware-page .fw-found-select{font-size:12px;font-weight:700;display:block;min-width:0}
+.firmware-page .fw-name-row input,.firmware-page .fw-found-select select{width:100%;margin-top:2px}
+.firmware-page .fw-name-row input[readonly]{opacity:.87;cursor:default}
+.firmware-page .fw-connect-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.firmware-page .fw-connect-actions .btn{flex:1 1 auto;min-width:0;white-space:normal}
+.firmware-page .fw-connection-hint{font-size:11px;color:var(--muted);margin:10px 0;line-height:1.5}
+.firmware-page .fw-connection-log summary{font-size:11px;cursor:pointer}
+.firmware-page .fw-connection-log pre{max-height:125px;overflow:auto;white-space:pre-wrap;font:11px/1.5 ui-monospace,monospace;background:#061923;padding:9px;border-radius:8px}
+.firmware-page .fw-kit-status-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;margin:10px 0}
+.firmware-page .fw-kit-status-strip div{border-radius:8px;background:#102631;padding:9px 7px;min-width:0}
+.firmware-page .fw-kit-status-strip small,.firmware-page .fw-detail-grid small{font-size:9px;color:var(--muted);display:block}
+.firmware-page .fw-kit-status-strip strong{display:block;font-size:11px;overflow-wrap:anywhere}
+.firmware-page .fw-health{border-radius:9px;border:1px solid #305265;padding:10px;margin:9px 0}
+.firmware-page .fw-health-title small{display:block;font-size:9px;color:#74d6c2;letter-spacing:.08em}
+.firmware-page .fw-health-title strong{font-size:14px}
+.firmware-page .fw-health-title p{font-size:10px;color:var(--muted);margin:4px 0 8px}
+.firmware-page .fw-health-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.firmware-page .fw-health-grid>div{background:#102733;border-radius:7px;padding:8px 6px;min-width:0}
+.firmware-page .fw-health-grid span,.firmware-page .fw-health-grid small{display:block;font-size:9px;color:var(--muted)}
+.firmware-page .fw-health-grid b{display:block;font-size:10px;margin:4px 0;overflow-wrap:anywhere}
+.firmware-page .fw-health-grid b[data-state="live"]{color:#65dbb3}
+.firmware-page .fw-health-grid b[data-state="lost"]{color:#f4a87c}
+.firmware-page .fw-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.firmware-page .fw-detail-grid>div{border:1px solid #274352;border-radius:7px;padding:7px;min-width:0}
+.firmware-page .fw-detail-grid b{display:block;font-size:11px;overflow-wrap:anywhere;line-height:1.4}
+.firmware-page .fw-network-strip{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;font-size:11px;padding:7px 0}
+.firmware-page .fw-network-strip b{margin-left:6px}
+.firmware-page .fw-available-card .kit-discovery-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-height:92px;max-height:290px;overflow:auto}
+.firmware-page .fw-available-card .kit-known-item{text-align:left;min-width:0}
+.firmware-page .fw-rename-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:8px 0}
+.firmware-page .fw-rename-actions input{flex:1 1 180px;min-width:0}
+.firmware-page .fw-rename-actions button{flex:0 1 auto}
+.firmware-page .fw-rename-card #fwOpenDiscovery{margin-top:7px}
+@media(max-width:1020px){.firmware-page .fw-connection-workspace{grid-template-columns:1fr}.firmware-page .fw-health-grid{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:620px){.firmware-page .fw-simple-steps{grid-template-columns:1fr 1fr}.firmware-page .fw-name-row{grid-template-columns:1fr}.firmware-page .fw-health-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.firmware-page .fw-kit-status-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.firmware-page .fw-available-card .kit-discovery-results{grid-template-columns:1fr}.firmware-page .fw-connection-hero{flex-wrap:wrap}}
+@media(max-width:390px){.firmware-page .fw-simple-steps{grid-template-columns:1fr}}
