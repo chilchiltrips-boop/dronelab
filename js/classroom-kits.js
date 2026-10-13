@@ -43,6 +43,10 @@ function identityHosts(kit){
 }
 function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
+function staConnectionHint(){
+ const router=state.ssid?'router Wi-Fi "'+state.ssid+'"':'the saved router Wi-Fi';
+ return 'STA is not reachable. '+(state.staConnected?'Join '+router+' on this computer, allow Local Network Access, then retry Connect STA.':'Keep the AP connection, run Test & Save STA and wait for VERIFIED, then join '+router+' on this computer and retry Connect STA.')+' AUTO keeps the kit AP hotspot available.';
+}
 let lastWifiTestState='',wifiTestNonce=0;const recentWifiMessages=new Map();
 const pairing=()=>root.ZebjusKitPairingStore;
 const pairedKeys=new Map();let discoveredKits=[],discovering=false,lastDiscoverAt=0,reconnectTicket=0,pollErrors=0,pollBusy=false;
@@ -308,6 +312,8 @@ async function connectNetwork(code,mode,ticket=reconnectTicket,expectedId=''){
  const d=mode==='android-relay'?await relay().request('/api/status'):await wifiDirect(ip,key,'/api/status');
  const verified=checkIdentity(d,transport,code,expectedId||access?.kitId||state.kitId||'');
  if(access&&access.kitId!==verified.kitId)throw Error('Public discovery Device ID differs from authenticated hardware. Blocked.');
+ if(mode!=='android-relay'&&verifiedTransport(d)!==mode)
+  throw Error('Requested '+mode.toUpperCase()+' connection but the controller replied over '+verifiedTransport(d).toUpperCase()+'. '+(mode==='sta'?staConnectionHint():'Join the kit hotspot on this computer, then retry Connect AP.'));
  if(access&&key){pairing()?.saveSession?.(access.kitId,key);
   if($('kitRememberBrowser')?.checked)try{await pairing()?.remember?.(access.kitId,key)}catch(e){audit('Trusted browser storage not available: '+e.message,'warn')}
  }
@@ -601,8 +607,8 @@ async function waitNetworkWifiTest(nonce){
    if(d.kitId!==state.kitId)throw Error('Device ID changed');
    const phase=String(d.wifiTestState||d.phase||'');
    if(phase==='saved'||phase==='sta_test_pass_saved'||phase==='ap_ready_credentials_saved'){
-    wifiTesting=false;lastWifiTestState='saved';state.staConnected=!!d.staConnected;state.staIp=d.ip||'';
-    setupStep=4;recordKnown();render();wifiNote('Wi-Fi VERIFIED and saved. Switch your laptop to the router, then Connect STA. Android can stay on the kit AP or join the same router for STA.','good');return true;
+    wifiTesting=false;lastWifiTestState='saved';adoptNetworkStatus(d);state.heartbeatAt=Date.now();
+    setupStep=4;recordKnown();render();wifiNote('Wi-Fi VERIFIED and saved. Router STA '+(state.staConnected?'connected':'not currently connected')+'. This browser still uses '+state.transport.toUpperCase()+'. Join the router in computer Wi-Fi settings, then Connect STA. AUTO keeps the kit AP available.','good');return true;
    }
    if(phase==='failed'||phase==='sta_test_failed_not_saved'){
     wifiTesting=false;lastWifiTestState='failed';wifiNote('STA association failed; password NOT saved. ESP Wi-Fi reason '+(d.lastStaFailureReason||'unknown')+'. Check router 2.4 GHz/WPA2 and selected SSID.','error');return false;
@@ -963,10 +969,11 @@ function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('ki
 async function toggleHeaderNetwork(){
  if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before selecting a connection');
  headerNetworkChoice=headerNetworkChoice==='ap'?'sta':'ap';render();
- tone('Selected '+headerNetworkChoice.toUpperCase()+' transport (not a firmware mode change). Press Connect; configure STA after successful Test & Save.','info');
+ tone('Selected '+headerNetworkChoice.toUpperCase()+' transport (not a firmware mode change). '+(headerNetworkChoice==='sta'?'Join the saved router Wi-Fi in computer settings, then press STA Connect. AUTO keeps the kit AP available.':'Join the kit hotspot in computer Wi-Fi settings, then press AP Connect.'),'info');
 }
 async function connectHeaderNetwork(mode=headerNetworkChoice){
  if(!['sta','ap'].includes(mode))throw Error('Choose STA or AP first');
+ const ticket=reconnectTicket;
  headerNetworkChoice=mode;
  if($('kitTransport'))$('kitTransport').value=mode;
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
@@ -980,6 +987,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
   for(const host of mode==='ap'?['192.168.4.1']:identityHosts(target)){
    if(mode==='sta'&&host==='192.168.4.1')continue;
    const found=await probeIdentity(host,1800);
+   if(ticket!==reconnectTicket)throw Error('Connection selection cancelled by Disconnect or a newer kit selection.');
    if(found?.kitId===preferred&&found.transport===mode)return connectDiscoveredKit(found);
   }
  }
@@ -991,6 +999,14 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
   if(found){$('kitCodeInput').value=found.kitCode;code=found.kitCode;}
  }
  if(!codePattern.test(code)){goKits();tone('Join your AERION AP Wi-Fi, select the discovered kit or enter its 6-digit Kit Code.','warn');return}
+ if(mode==='sta'){
+  if(ip==='192.168.4.1'||!safeKitHost(ip))throw Error(staConnectionHint());
+  const live=await probeIdentity(ip,2000);
+  if(ticket!==reconnectTicket)throw Error('Connection selection cancelled by Disconnect or a newer kit selection.');
+  if(!live||live.transport!=='sta')throw Error(staConnectionHint());
+  if(live.kitCode!==code||preferred&&live.kitId!==preferred)throw Error('Different kit answered at the STA address. Rescan and select the correct Device ID.');
+  return connectDiscoveredKit(live);
+ }
  if(!safeKitHost(ip)){goKits();tone('Choose a reachable AP/STA address. AP is 192.168.4.1.','warn');return}
  await connect(preferred||'');
 }
@@ -1052,16 +1068,22 @@ async function pairNewKitUsb(){
  tone('USB settings access authorized • join kit AP Wi-Fi and Find Kit on AP to configure the router.','good');
 }
 async function handoverSta(){
- const id=state.kitId,code=state.kitCode,ip=state.staIp;
+ const id=state.kitId,code=state.kitCode,ticket=reconnectTicket;
  if(!id||!code)throw Error('Connect the kit and finish authorized Test & Save first');
  if(state.rc?.claimed)throw Error('Release diagnostic control before handover');
  setupStep=4;render();tone('Switch laptop Wi-Fi to your router. Checking the same Device ID over STA…','info');
- const hosts=[ip,'zebjus-'+state.board.replace('ZFC-','')+'-'+code+'.local'].filter(safeKitHost);
- for(let attempt=0;attempt<12;attempt++){
-  for(const host of hosts){const d=await probeIdentity(host,1500);if(d&&d.kitId!==id)throw Error('Another kit is using that address. Handover blocked.');if(d?.kitId===id){$('kitTransport').value='sta';$('kitIpInput').value=host;await connect();if(state.connected){setupStep=5;render();return}}}
+ const hosts=identityHosts(connectionTarget()).filter(host=>host!=='192.168.4.1'),deadline=Date.now()+30000;
+ for(let attempt=0;attempt<12&&Date.now()<deadline;attempt++){
+  for(const host of hosts){
+   if(Date.now()>=deadline)break;
+   const d=await probeIdentity(host,1500);
+   if(ticket!==reconnectTicket)throw Error('STA handover cancelled by Disconnect or a newer kit selection.');
+   if(d&&d.kitId!==id)throw Error('Another kit is using that address. Handover blocked.');
+   if(d?.kitId===id&&d.transport==='sta'){await connectDiscoveredKit(d);setupStep=5;render();return;}
+  }
   await sleep(1000);
  }
- throw Error('STA kit not reachable yet. Join the same 2.4 GHz router, allow Local Network Access, and retry Connect STA.');
+ throw Error(staConnectionHint());
 }
 let internetPending=null;
 function checkWebReachability(){
@@ -1253,14 +1275,16 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
 }
 async function connectDiscoveredKit(kit){
  if(!kit?.kitId||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified Kit from discovery.');
+ const ticket=reconnectTicket;
  const found=await probeIdentity(kit.ip,2800);
+ if(ticket!==reconnectTicket)throw Error('Connection selection cancelled by Disconnect or a newer kit selection.');
  if(!found||found.kitId!==kit.kitId||found.kitCode!==kit.kitCode)
   throw Error('Kit identity changed since discovery. Rescan the Device ID.');
  if(state.owner)throw Error('Release diagnostic control before switching kits.');
  if(state.connected&&state.kitId!==found.kitId)await disconnect('Switching selected Kit');
  $('kitCodeInput').value=found.kitCode;$('kitTransport').value=found.transport;$('kitIpInput').value=found.ip;
  headerNetworkChoice=found.transport;await connect(found.kitId);
- if(!linkFresh()||state.kitId!==found.kitId)throw Error(state.lastError||'Authenticated Kit identity mismatch');
+ if(!linkFresh()||state.kitId!==found.kitId||state.transport!==found.transport)throw Error(state.lastError||'Authenticated Kit identity or connection transport mismatch');
  return found;
 }
 async function connectNamedKit(name){
