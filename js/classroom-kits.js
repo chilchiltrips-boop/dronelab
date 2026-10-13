@@ -20,7 +20,7 @@ let statusPending=null,recoveryTarget=null;
 const HEARTBEAT_MAX_AGE=6500;
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
 state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
-let discoveryPending=null,ownOwnerId='',controlTicket=0;
+let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
 let savedNetworks=[];
 function adoptNetworkStatus(d){
  Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
@@ -212,7 +212,8 @@ function showKnown(){
   box.append(row);
  }
 }
-async function disconnect(reason='Disconnected'){
+async function disconnect(reason='Disconnected',{automatic=false}={}){
+ autoReconnectAllowed=automatic;
  const priorId=state.kitId;
  ++controlTicket;ownOwnerId='';++wifiTestNonce;wifiTesting=false;
  ++reconnectTicket;recoveryTarget=null;for(const key of Object.keys(usbCandidate))delete usbCandidate[key];state.heartbeatAt=0;state.linkState='disconnected';
@@ -343,6 +344,7 @@ async function findSaved(){
  }finally{state.working=false;render()}
 }
 async function connect(expectedId=''){
+ autoReconnectAllowed=true;
  if(state.working)return;const ticket=++reconnectTicket,mode=selectedMode();let code=selectedCode();
  state.working=true;render();
  if(!codePattern.test(code)&&mode!=='android-relay'){
@@ -708,7 +710,7 @@ function onSerial(e){
    }
   }
  }
- if(!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board&&Date.now()-usbCandidate.identityAt<=HEARTBEAT_MAX_AGE){
+ if(autoReconnectAllowed&&!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board&&Date.now()-usbCandidate.identityAt<=HEARTBEAT_MAX_AGE){
   try{
    const kit=checkIdentity(usbCandidate,'usb',usbCandidate.kitCode);
    Object.assign(state,kit,{connected:true,heartbeatAt:usbCandidate.identityAt,linkState:'connected',transport:'usb',mode:'usb',key:'',ip:'',usbInfo:{...usbCandidate},rc:null,owner:false,since:Date.now()});
@@ -918,7 +920,7 @@ async function reconnectSelected(){
  return recoverVerifiedLink(target);
 }
 async function restoreLastKit(){
- if(state.connected||state.working||recoveryTarget)return;
+ if(!autoReconnectAllowed||state.connected||state.working||recoveryTarget)return;
  let known;try{known=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
  if(!known?.id||!known.code||!known.board)return;
  const ticket=reconnectTicket;
@@ -1122,7 +1124,7 @@ function init(){
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
- document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden)void refreshConnection().catch(()=>{})});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden&&autoReconnectAllowed)void refreshConnection().catch(()=>{})});
  root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{
   if(!state.connected||state.working||wifiTesting||pollBusy)return;
@@ -1135,7 +1137,7 @@ function init(){
    else{
     const old=connectionTarget();
     audit('3 missed '+(usb?'USB':'Wi-Fi')+' checks • releasing diagnostic control','warn');
-    await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect');
+    await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect',{automatic:true});
     if(!usb&&!document.hidden)void recoverVerifiedLink(old);
    }
   }finally{pollBusy=false}
@@ -1143,7 +1145,7 @@ function init(){
  rcTimer=setInterval(webControls,RC_INTERVAL);
  // Recheck verified LAN hostnames and AP once per minute only when page is visible.
  setTimeout(()=>{if(!document.hidden){void discoverKits().catch(()=>{});void restoreLastKit().catch(e=>audit('Saved kit reconnect: '+e.message,'warn'))}},600);
- root.addEventListener('online',()=>{if(!document.hidden)void refreshConnection().catch(()=>{})});
+ root.addEventListener('online',()=>{if(!document.hidden&&autoReconnectAllowed)void refreshConnection().catch(()=>{});else void checkWebReachability()});
  root.addEventListener('offline',()=>{state.internet='offline';render()});
  void checkWebReachability();setInterval(()=>{if(!document.hidden)void checkWebReachability();render()},30000);
  setInterval(()=>{if(!document.hidden&&!discovering&&Date.now()-lastDiscoverAt>60000)void discoverKits().catch(()=>{})},45000);
@@ -1164,6 +1166,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  const expectedChip=boardId==='ZFC-A2'?13:5;
  if((bytes[12]|bytes[13]<<8)!==expectedChip)throw Error('ESP chip ID mismatch. Image was NOT uploaded.');
  const target=connectionTarget(),ticket=reconnectTicket;
+ const expectedBuild=Array.from(bytes.slice(176,208),b=>b.toString(16).padStart(2,'0')).join('');
  const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
  const pre=await wifiDirect(ip,key,'/api/status');
  if(pre.kitId!==deviceId||pre.kitCode!==kitCode||pre.board!==boardId)
@@ -1230,6 +1233,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
     if(!d.bootId||d.bootId===pre.bootId)throw Error('Waiting for controller reboot');
     if(verifiedTransport(d)!==transport)throw Error('Waiting for the selected AP/STA transport');
     if(!version||d.version!==version){latest=d.version;throw Error('Reconnected but running version is '+d.version+' (expected '+version+')');}
+    if(!/^[a-fA-F0-9]{64}$/.test(d.appElfSha256||'')||d.appElfSha256.toLowerCase()!==expectedBuild)throw Error('Running firmware build fingerprint does not match the uploaded APP; readback remains pending');
     if(ticket!==reconnectTicket)throw Error('OTA reconnect cancelled');
     Object.assign(state,checkIdentity(d,transport,kitCode,deviceId),{connected:true,ip:host,key,version:d.version,mode:d.mode||state.mode,rc:d.rc||null,heartbeatAt:Date.now(),linkState:'connected',owner:false,rcSession:'',rcSource:''});
     adoptNetworkStatus(d);
@@ -1267,6 +1271,7 @@ async function connectNamedKit(name){
  if(matches.length===1)return connectDiscoveredKit(matches[0]);
  let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
  const candidates=new Set(known.filter(k=>String(k.name||'').toLowerCase()===requested).map(k=>k.ip).filter(safeKitHost));
+ candidates.add('192.168.4.1'); // AP has no mDNS; still verify name and full Device ID.
  candidates.add(requested.replace(/[ _]+/g,'-')+'.local');
  if(/^zebjus_drone_\d{1,2}$/.test(requested))candidates.add(requested+'.local');
  const results=[];

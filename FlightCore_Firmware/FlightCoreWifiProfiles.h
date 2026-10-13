@@ -14,6 +14,7 @@ static bool zjSaveProfiles(const ZjWifiProfile* profiles,int count){
  }
  const String previous=zjPrefs.getString("profiles","");
  if(zjPrefs.putString("profiles",record)!=record.length()||zjPrefs.getString("profiles","")!=record){zjPrefs.putString("profiles",previous);return false;}
+ zjPrefs.remove("ssid");zjPrefs.remove("pass");zjPrefs.remove("staConfig"); // migrated credentials have one authoritative record
  zjWifiCount=count;for(int i=0;i<ZJ_WIFI_PROFILES;i++)zjWifiProfiles[i]=i<count?profiles[i]:ZjWifiProfile();
  zjSavedSsid=count?profiles[0].ssid:String("");zjSavedPass=count?profiles[0].pass:String("");return true;
 }

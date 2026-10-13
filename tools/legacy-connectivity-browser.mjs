@@ -7,10 +7,19 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 const output='test-output/legacy-connectivity';mkdirSync(output,{recursive:true});
 const browser=await chromium.launch(browserOptions),results=[];
 try{
- for(const width of [360,768,1366]){
+ for(const {width,entry} of [{width:360,entry:'index.html'},{width:768,entry:'index.html'},{width:1366,entry:'index.html'},{width:1366,entry:'lab.html'}]){
   const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});await configureContext(context);
+  // Install the device response before the startup AP probe is launched.
+  await context.addInitScript(()=>{
+   const native=window.fetch.bind(window);
+   window.fetch=async(url,options)=>{
+    if(String(url)==='http://192.168.4.1/api/identify')return new Response(JSON.stringify({kitId:'ZFC-A1-012345ABCDEF',kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true}));
+    if(/^http:\/\/(?:zebjus|192\.168\.|127\.0\.0\.1:8766)/.test(String(url)))return new Response('',{status:404});
+    return native(url,options);
+   };
+  });
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:8765/');await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusFirmwareConnect);
+  await page.goto('http://127.0.0.1:8765/'+entry);await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusFirmwareConnect);
   await page.evaluate(()=>{
    const id='ZFC-A1-012345ABCDEF',baseFetch=window.fetch;
    let owned=false;
@@ -40,7 +49,7 @@ try{
   assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'AP setup does not authorize OTA');
   assert.equal(await page.locator('#kitTopControl').isVisible(),true);assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),false);
-  await page.screenshot({path:`${output}/firmware-${width}.png`,fullPage:true});
+  await page.screenshot({path:`${output}/${entry.replace('.html','')}-firmware-${width}.png`,fullPage:true});
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
   assert.equal(await page.locator('#kitTopControl').getAttribute('aria-checked'),'true');
   await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
@@ -48,7 +57,7 @@ try{
   await page.waitForFunction(()=>!window.ZebjusKits.getState().connected);
   assert.equal(await page.locator('#fwSelectedKitName').textContent(),'No kit selected');
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,`${width}px horizontal overflow`);
-  assert.deepEqual(errors,[]);results.push({width,verified:true,controlReleased:true,disconnected:true,overflow});
+  assert.deepEqual(errors,[]);results.push({width,entry,verified:true,controlReleased:true,disconnected:true,overflow});
   await context.close();console.log('PASS legacy connection UI',width);
  }
 }finally{writeFileSync(`${output}/results.json`,JSON.stringify(results,null,2));await browser.close()}

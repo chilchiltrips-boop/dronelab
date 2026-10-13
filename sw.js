@@ -34,14 +34,20 @@ self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET'||url.origin!==self.location.origin||url.pathname.startsWith('/__pairing/'))return;
  event.respondWith((async()=>{
   const cache=await caches.open(CACHE);
+  const cachedResponse=async()=>{
+   const exact=await cache.match(event.request);if(exact)return exact;
+   // Static cache-busting parameters do not alter script/style resources.
+   // Firmware BIN URLs keep exact version keys and SHA-256 validation.
+   if(/\.(?:html|js|mjs|css)$/.test(url.pathname)){const canonical=new URL(url);canonical.search='';return cache.match(canonical.href)}
+  };
   const fresh=url.pathname.endsWith('/')||/\.(?:html|js|mjs|css)$/.test(url.pathname)||/(?:firmware-(?:catalog|latest)|app-version|catalog)\.json$/.test(url.pathname);
   if(fresh){
    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),2500);
-   try{const response=await fetch(event.request,{signal:ctrl.signal});if(response.ok){await cache.put(event.request,response.clone());return response}return await cache.match(event.request)||response}
-   catch{return await cache.match(event.request)||Response.error()}
+   try{const response=await fetch(event.request,{signal:ctrl.signal});if(response.ok){await cache.put(event.request,response.clone());return response}return await cachedResponse()||response}
+   catch{return await cachedResponse()||Response.error()}
    finally{clearTimeout(timer)}
   }
-  const cached=await cache.match(event.request);if(cached)return cached;
+  const cached=await cachedResponse();if(cached)return cached;
   try{const response=await fetch(event.request);if(response.ok)await cache.put(event.request,response.clone());return response}catch{return Response.error()}
  })());
 });

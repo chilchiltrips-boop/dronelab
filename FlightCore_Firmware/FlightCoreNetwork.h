@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <Update.h>
 #include <ESPmDNS.h>
+#include <esp_app_desc.h>
 
 static WebServer zjHttp(80);
 static Preferences zjPrefs;
@@ -24,6 +25,7 @@ static int zjWifiAttemptIndex=0;
 static String zjAdvertisedName;
 static uint32_t zjNameVerifyAt=0;
 static bool zjNameVerified=false;
+static volatile bool zjApStarted=false;
 // Kit AP router setup is available to AP-local signed sessions; RC and OTA remain separate.
 
 
@@ -45,7 +47,8 @@ static bool zjCorsAllowed(){
  const String origin=zjHttp.header("Origin");
  return origin=="https://chilchiltrips-boop.github.io"||
   origin=="http://localhost:8765"||origin=="http://127.0.0.1:8765"||
-  origin=="http://localhost:8000"||origin=="http://127.0.0.1:8000";
+  origin=="http://localhost:8000"||origin=="http://127.0.0.1:8000"||
+  origin=="http://localhost:4173"||origin=="http://127.0.0.1:4173";
 }
 static void zjCorsHeaders(){
  if(zjCorsAllowed()){
@@ -73,10 +76,11 @@ static void zjReply(int status,const String& body){
  zjHttp.send(status,"application/json",body);
 }
 static void zjEnsureAP(){
- if((WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
+ if(zjApStarted&&(WiFi.getMode()==WIFI_AP_STA||WiFi.getMode()==WIFI_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1))return;
  WiFi.mode(WIFI_AP_STA);
  WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
  const bool started=WiFi.softAP(zjApSsid.c_str(),zjApPass.c_str(),1,false,4);
+ zjApStarted=started;
  if(Serial.availableForWrite()>90){Serial.print("ZJNET,AP,");Serial.print(started?"READY,":"ERROR,");Serial.println(zjApSsid);}
 }
 static void zjConnectSaved(){
@@ -94,16 +98,17 @@ static String zjStatus(){
  out+=",\"phase\":"+zjJson(zjPhase)+",\"staConnected\":"+(sta?String("true"):String("false"));
  out+=",\"ssid\":"+zjJson(sta?WiFi.SSID():String(""))+",\"ip\":"+zjJson(sta?WiFi.localIP().toString():String(""));
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
- out+=",\"apActive\":"+(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA?String("true"):String("false"));
+ out+=",\"apActive\":"+(zjApStarted&&(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?String("true"):String("false"));
  out+=",\"scanActive\":"+(WiFi.scanComplete()==WIFI_SCAN_RUNNING?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
- const bool ap=WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA;
+ const bool ap=zjApStarted&&(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA);
  const String networkState=zjNetTesting?"STA_TESTING":sta?(ap?"AP_STA_COEXISTENCE":"STA_CONNECTED"):zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState);
  out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
  out+=",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"firmwareBuiltAt\":"+zjJson(String(__DATE__)+" "+__TIME__)+",\"partitionLayout\":\"ZFC_DUAL_1E0000\",\"otaMaxBytes\":1966080,\"encryptedOta\":true";
+ out+=",\"appElfSha256\":"+zjJson(zjHexBytes(esp_app_get_description()->app_elf_sha256,32));
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
@@ -320,6 +325,8 @@ static void zjSetupHttp(){
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
+  if(event==ARDUINO_EVENT_WIFI_AP_START)zjApStarted=true;
+  if(event==ARDUINO_EVENT_WIFI_AP_STOP)zjApStarted=false;
   if(event==ARDUINO_EVENT_WIFI_STA_GOT_IP){zjAssociationEpoch=zjAssociationEpoch+1;zjStaDisconnectReason=0;}
   if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
    zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
@@ -353,7 +360,7 @@ static void zjNetworkSetup(){
 // The physical USB terminal MUST NOT echo the Wi-Fi password or access key.
 static void zjNetUsbStatus(){
  Serial.print("ZJNET,MODE,");Serial.println(zjMode);
- Serial.print("ZJNET,AP,");Serial.print((WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?"ON,":"OFF,");Serial.println(zjApSsid);
+ Serial.print("ZJNET,AP,");Serial.print(zjApStarted&&(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?"ON,":"OFF,");Serial.println(zjApSsid);
  Serial.print("ZJNET,STA,");Serial.print(WiFi.status()==WL_CONNECTED?"CONNECTED,":"DISCONNECTED,");
  Serial.print(WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():String("0.0.0.0"));Serial.print(",");
  Serial.println(WiFi.status()==WL_CONNECTED?WiFi.SSID():String("NONE"));
@@ -475,7 +482,7 @@ static void zjNetworkLoop(uint32_t now){
  }
  if(zjNetApOffAt&&int32_t(now-zjNetApOffAt)>=0){
   zjNetApOffAt=0;
-  if(zjMode=="sta"&&WiFi.status()==WL_CONNECTED){WiFi.softAPdisconnect(true);WiFi.mode(WIFI_STA);zjPhase="sta_connected";}
+  if(zjMode=="sta"&&WiFi.status()==WL_CONNECTED){WiFi.softAPdisconnect(true);zjApStarted=false;WiFi.mode(WIFI_STA);zjPhase="sta_connected";}
  }
  // Advertise device ID and six-digit selector over STA mDNS, never the access key.
  const bool staUp=WiFi.status()==WL_CONNECTED;

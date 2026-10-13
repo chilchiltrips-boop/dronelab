@@ -118,7 +118,12 @@ def main():
         print(f'Arduino-ESP32 {CORE_VERSION} setup complete; no firmware files changed.')
         return
     targets=[b for b in catalog['boards'] if b['id'] in ids and (args.board=='all' or b['id']==args.board)]
-    report={'version':version,'builtAt':built_at,'arduinoEsp32':CORE_VERSION,'hardwareFlashingTested':False,'boards':[]}
+    try: source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+    except (OSError,subprocess.CalledProcessError): source_commit=None
+    sources=[SRC,OUT/'partitions.csv',*sorted(OUT.glob('*.h'))]
+    report={'version':version,'builtAt':built_at,'sourceCommit':source_commit,
+            'sourceSha256':{str(p.relative_to(ROOT)):sha(p) for p in sources},
+            'arduinoEsp32':CORE_VERSION,'hardwareFlashingTested':False,'boards':[]}
     for b in targets:
         cfg=b['build']; pkg=b['latest']['app']; filename=pkg['file']
         with tempfile.TemporaryDirectory(prefix='zfc-build-') as td:

@@ -8,7 +8,7 @@ test('single PID Tuning tab uses permanent shell, inline Settings and one header
  assert.equal((index.match(/id="topGrantMobileSwitch"/g)||[]).length,1);
  assert.doesNotMatch(index,/tab-led|tab-simcontrol|simRemoteFrame|ANDROID FLIGHT/);
  for(const id of ['tab-assembly','tab-wiring','tab-python','tab-firmware'])assert.ok(index.includes(id));
- assert.ok(legacy.includes('href="./tripod.html"')); // historic standalone bookmark maintained
+ assert.ok(legacy.includes('data-tab="pid"')&&legacy.includes('id="pidFrame"')); // both desktop entries use the same PID shell
  assert.ok(sim.includes('id="connectionDialog"')&&sim.includes('pid-embedded'));
  assert.ok(bridge.includes('ZebjusTraining')&&bridge.includes('ensureSimulator'));
  assert.doesNotMatch(read('js/ui-controls.js'),/location\.replace\('\.\/tripod\.html/);

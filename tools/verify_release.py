@@ -8,11 +8,18 @@ LATEST=json.loads((ROOT/'firmware-latest.json').read_text())
 OUT=ROOT/'FlightCore_Firmware'
 assert CAT['schema']==2 and CAT['product']=='ZEBJUS_FLIGHTCORE'
 assert LATEST['version']==CAT['version']
+assert CAT['version']==(ROOT/'VERSION.txt').read_text().strip(), 'Source/catalog version mismatch: rebuild both profiles'
 assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2
 assert [b['name'] for b in CAT['boards']]==['ZEBJUS AERION A1','ZEBJUS AERION A2']
 assert CAT['boards'][0]['build']['fqbn']=='esp32:esp32:esp32c3:CDCOnBoot=cdc'
 sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
+assert f'FW_VERSION="{CAT["version"]}"' in sketch, 'Sketch/catalog version mismatch'
+report=json.loads((OUT/'build-report.json').read_text())
+assert report['version']==CAT['version'], 'Build report/catalog version mismatch'
+assert report.get('sourceCommit') and report.get('sourceSha256'), 'Compile provenance required; rebuild both profiles'
+for name,digest in report['sourceSha256'].items():
+ assert hashlib.sha256((ROOT/name).read_bytes()).hexdigest()==digest, 'Compiled source differs: '+name
 assert '#include <Wire.h>' in sketch and 'Wire.begin(BUS_SDA,BUS_SCL);' in sketch and 'if(!scanRequested)return;' in sketch and 'readLedCommands();' in sketch and 'updateLedEffect(now);' in sketch and 'updateGyro(now);' in sketch
 def sha(b):return hashlib.sha256(b).hexdigest()
 def chip(b,at=0):
