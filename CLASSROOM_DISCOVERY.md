@@ -25,3 +25,7 @@ The bridge listens for the firmware's `_zebjus._tcp.local` mDNS advertisements a
 * Privileged USB/admin/OTA paths remain separate, with factory USB flash for recovery.
 
 Both board builds, browser integration and real 2.4 GHz router/hardware acceptance must pass before claiming production readiness.
+
+## Verified build artifacts
+
+The review workflow compiles both FlightCore 1.4.2 profiles and synchronizes the matching APP/FACTORY binary images plus SHA256 metadata to this development branch. These are software build checks, **not physical A1/A2 validation**. Production flight readiness is not claimed.
