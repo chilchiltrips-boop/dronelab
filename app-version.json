@@ -3,10 +3,10 @@
   "channel": "release",
   "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
   "features": [
-    "Label-free AP diagnostics with protected USB/STA setup",
-    "STA-first AP coexistence with verified save and recovery",
-    "Android direct AP diagnostic input to firmware to browser Python",
-    "Scoped encrypted requests and signed device responses; motors disabled"
+    "AP Wi-Fi Scan, Test & Save without BOOT, USB pairing or Private Label",
+    "Same-Wi-Fi STA Kit name discovery and click-to-connect monitoring",
+    "STA-first AP fallback and verified saved Wi-Fi recovery",
+    "Authenticated identity-bound diagnostics with motor, OTA and admin separation"
   ],
   "publishedAt": "2026-10-13T03:20:09.539655+00:00",
   "buildCommit": "190a873ef736"
