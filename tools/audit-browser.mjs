@@ -40,7 +40,7 @@ try{
    if(width===1366)await inventory(tab);
   }
  }
- await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html',{waitUntil:'domcontentloaded'});await page.locator('#topPairMobileBtn').click();
+ await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html',{waitUntil:'domcontentloaded'});await page.locator('.v2-workspace-tools>summary').click();await page.locator('#topPairMobileBtn').click();
  check((await page.locator('#pairStep1').getAttribute('open'))!==null,'Step 1 must be open');
  check((await page.locator('#pairStep2').getAttribute('open'))===null,'Step 2 opens prematurely');
  check(await page.locator('#pairStep1NextBtn').isDisabled(),'Next enabled before offer');
