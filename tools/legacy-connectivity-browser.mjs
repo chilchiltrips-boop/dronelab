@@ -58,9 +58,11 @@ try{
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
   assert.equal(await page.locator('#kitTopControl').getAttribute('aria-checked'),'true');
   await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
+  await page.locator('[data-tab="firmware"]').click();
   await page.locator('#fwWifiConnectSta').click();
   await page.waitForFunction(()=>document.querySelector('#fwConnectLog').textContent.includes('STA is not reachable'));
   assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap','Unreachable STA leaves the AP setup link intact');
+  assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'false','The requested STA selection remains separate from the active AP link');
   await page.evaluate(()=>window.__testJoinRouter());await page.locator('#fwWifiConnectSta').click();
   await page.waitForFunction(()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
   assert.equal(await page.locator('#fwNetworkSimple').textContent(),'STA');assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'false');

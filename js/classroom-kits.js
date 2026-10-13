@@ -979,6 +979,7 @@ async function connectHeaderNetwork(mode=headerNetworkChoice){
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';
  if(state.connected&&state.transport===mode){tone('Kit already connected over '+mode.toUpperCase(),'good');goKits();return}
  if(state.owner||state.rc?.claimed)throw Error('Release diagnostic control before switching AP/STA connections');
+ render();
  const selected=root.ZebjusFirmwareConnect?.selected?.(),preferred=state.kitId||selected?.kitId;
  const candidates=discoveredKits.filter(k=>k.transport===mode&&(!preferred||k.kitId===preferred));
  if(candidates.length===1)return connectDiscoveredKit(candidates[0]);
