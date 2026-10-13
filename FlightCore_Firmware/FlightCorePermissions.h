@@ -10,6 +10,9 @@ static bool zjStudentAllowed(const String& id,uint32_t epoch,bool control=false)
 static void zjStudentRevoke(const String& id){
  const int i=zjStudentIndex(id);if(i<0)return;
  auto& s=zjStudents[i];s.expires=0;s.control=false;++s.epoch;
+ // Invalidate actual HMAC session objects, not only revision counters. A removed ID
+ // may later be reprovisioned in the same slot with a new secret.
+ for(auto& session:zjSessions)if(session.student&&session.studentId==id)session=ZjSession();
  if(zjRcStudent==id){zjRcRelease("STUDENT_PERMISSION_REVOKED");zjRcStudent="";}
 }
 static void zjStudentInit(){
