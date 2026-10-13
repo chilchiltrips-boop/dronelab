@@ -13,7 +13,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const EVENTS_MAX=70;
-const authSessions=new Map(),secureIds=new Set();try{for(const id of JSON.parse(localStorage.getItem('zebjus.kit.v2.ids')||'[]'))secureIds.add(id)}catch{}let setupStep=0;
+const localKitHosts=new Map(),authSessions=new Map(),secureIds=new Set();try{for(const id of JSON.parse(localStorage.getItem('zebjus.kit.v2.ids')||'[]'))secureIds.add(id)}catch{}let setupStep=0;
 let headerNetworkChoice='sta',headerModePending=false;
 let statusPending=null,recoveryTarget=null;
 const HEARTBEAT_MAX_AGE=6500;
@@ -33,7 +33,7 @@ function tone(s,t='offline'){state.tone=t;state.lastError=t==='error'?s:'';byId(
 function render(){
  if($('kitCenter'))$('kitCenter').dataset.connected=String(state.connected);
  (document.querySelectorAll?.('#kitSetupSteps li')||[]).forEach((el,i)=>{el.dataset.state=i<setupStep?'done':i===setupStep?'active':'pending';if(i===setupStep)el.setAttribute('aria-current','step');else el.removeAttribute('aria-current')});
- byId('kitTopology',state.connected?'Laptop '+state.transport.toUpperCase()+' → '+state.kitCode+' • Android AP '+(state.apActive?'ready':'offline')+' • '+(state.rc?.active?'input live':'input idle'):'Power kit → join its AP Wi-Fi → Find Kit on AP (USB pair once if needed)');
+ byId('kitTopology',state.connected?'Laptop '+state.transport.toUpperCase()+' → '+state.kitCode+' • Android AP '+(state.apActive?'ready':'offline')+' • '+(state.rc?.active?'input live':'input idle'):'Power kit → join kit Wi-Fi → Connect Kit');
  const ready=linkFresh(),code=state.kitCode||'------';
  // Keep selected target independent of the currently verified transport.
  const label=ready?(state.kitName||'AERION')+' • '+code:'NO KIT CONNECTED';
@@ -71,6 +71,7 @@ function render(){
  byId('kitRcOrigin',rc.source||state.rcSource||'NONE');
  byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
+ if($('kitRememberBrowser'))$('kitRememberBrowser').disabled=ready&&state.transport!=='usb'&&!state.key;
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Kit':'＋ Kit';
  const switcher=$('kitTopNetworkSwitch');
@@ -97,7 +98,7 @@ function render(){
  const target=$('kitTargetLabel');if(target)target.textContent=ready?state.kitName+' • '+code:'Connect a kit in MY KITS';
  const hint=$('kitPidMonitor');if(hint)hint.textContent=ready?'RC '+(rc.active?'LIVE':'IDLE')+' • '+(rc.source||'NONE')+' • T '+(rc.throttle??1000)+' R '+(rc.roll??1500)+' P '+(rc.pitch??1500)+' Y '+(rc.yaw??1500):'No hardware connected • simulator available';
  const targetHardware=$('kitHardwareTarget');if(targetHardware)targetHardware.disabled=!ready;
- if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='New kit: join its AP Wi-Fi, Find Kit on AP, Pair Once with USB if needed, then Scan → Test & Save → Connect STA.';
+ if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Join kit AP Wi-Fi and press Connect Kit. Router setup requires protected USB/settings access.';
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
@@ -123,8 +124,13 @@ async function resolveKitAccess(code,ip){
  const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(found.kitId)||
   pairing()?.fromSession?.(found.kitId)||await pairing()?.restore?.(found.kitId)||'';
  if(!/^[a-fA-F0-9]{32}$/.test(key)){
-  throw Error('Kit '+code+' found. This browser is not paired yet: select Pair Once with USB. Kit Code and the AP Wi-Fi password do not authorize access.');
+  if(found.simpleConnection&&ip==='192.168.4.1'){
+   const session=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),found.kitId);
+   localKitHosts.set(ip,found.kitId);authSessions.set(found.kitId+'@'+ip,session);return {kitId:found.kitId,key:''};
+  }
+  throw Error('Kit '+code+' is reachable. Use updated firmware for simple AP diagnostics, or connect physical USB once for protected STA/settings access.');
  }
+ if(localKitHosts.has(ip)){localKitHosts.delete(ip);authSessions.delete(found.kitId+'@'+ip);}
  if(($('kitKeyInput')?.value||'').trim()){secureIds.delete(found.kitId);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));}
  pairedKeys.set(found.kitId,key);pairing()?.saveSession?.(found.kitId,key);
  return {kitId:found.kitId,key};
@@ -132,7 +138,7 @@ async function resolveKitAccess(code,ip){
 async function rememberBrowserPairing(){
  const id=state.kitId||usbCandidate.kitId;
  const secret=id&&(pairedKeys.get(id)||pairing()?.fromSession?.(id));
- if(!id||!secret)throw Error('Pair the kit once through physical USB, then select Remember this browser.');
+ if(!id||!secret)throw Error('Connect physical USB once to authorize remembered STA/settings access. Simple AP diagnostics needs no saved credential.');
  await pairing()?.remember?.(id,secret);
  tone('This personal browser now remembers '+id+' for AP/STA without USB. Clear site data or Forget this browser to revoke the saved local copy.','good');
  audit('Trusted browser pairing saved for '+id+' (no credential printed)','success');
@@ -144,7 +150,7 @@ async function forgetBrowserPairing(){
  if(state.connected&&state.kitId===id&&state.transport!=='usb')await disconnect('Pairing revoked on this browser');
  pairedKeys.delete(id);await pairing()?.forget?.(id);
  if($('kitRememberBrowser'))$('kitRememberBrowser').checked=false;
- tone('Pairing forgotten for '+id+'. Pair once by USB again on this browser, or use another previously authorized session.','warn');
+ tone('Pairing forgotten for '+id+'. Simple AP diagnostics remains available; use USB to authorize protected STA access again.','warn');
 }
 
 function checkIdentity(d,transport,code,expected=''){
@@ -205,15 +211,16 @@ async function connectUSB(code,ticket=reconnectTicket){
   for(let i=0;i<18&&(!identity.kitId||!identity.kitCode);i++)await sleep(140);
  }finally{root.removeEventListener('dronelab:serial-line',listener);}
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before USB identity verification');
- Object.assign(state,checkIdentity(identity,'usb',code));
+ Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode));
  state.usbInfo=identity;state.key='';state.ip='';
 }
 const form=args=>new URLSearchParams(args||{});
 async function wifiDirect(ip,key,route,method='GET',args={}){
- const expected=state.kitId||discoveredKits.find(k=>k.ip===ip)?.kitId||[...pairedKeys].find(([id,k])=>k===key)?.[0];
- if(secureIds.has(expected)){
+ const expected=state.kitId||localKitHosts.get(ip)||discoveredKits.find(k=>k.ip===ip)?.kitId||[...pairedKeys].find(([id,k])=>k===key)?.[0];
+ const local=localKitHosts.get(ip)===expected;
+ if(local||secureIds.has(expected)){
   const slot=expected+'@'+ip;let session=authSessions.get(slot);
-  if(!session||Date.now()>session.expiresAt-5000){session=await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),expected,key);authSessions.set(slot,session)}
+  if(!session||Date.now()>session.expiresAt-5000){session=local?await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),expected):await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),expected,key);authSessions.set(slot,session)}
   try{return await session.request(route,method,args)}catch(e){if(e.status===401)authSessions.delete(slot);throw e}
  }
  if(!safeKitHost(ip))throw Error('Use a verified private IP or safe .local host for your kit');
@@ -250,7 +257,7 @@ async function connectNetwork(code,mode,ticket=reconnectTicket){
  const d=mode==='android-relay'?await relay().request('/api/status'):await wifiDirect(ip,key,'/api/status');
  const verified=checkIdentity(d,transport,code,access?.kitId||state.kitId||'');
  if(access&&access.kitId!==verified.kitId)throw Error('Public discovery Device ID differs from authenticated hardware. Blocked.');
- if(access){pairing()?.saveSession?.(access.kitId,key);
+ if(access&&key){pairing()?.saveSession?.(access.kitId,key);
   if($('kitRememberBrowser')?.checked)try{await pairing()?.remember?.(access.kitId,key)}catch(e){audit('Trusted browser storage not available: '+e.message,'warn')}
  }
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before network verification');
@@ -264,7 +271,7 @@ async function findSaved(){
  if(state.working)return;
  let list=[];try{list=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
  const known=list.filter(k=>k.code===code&&safeKitHost(k.ip)).slice(0,10);
- if(!known.length)throw Error('No saved IP for this code; join the kit AP and use Find Kit on AP, or enter its STA IP');
+ if(!known.length)throw Error('No saved IP for this code; join the kit AP and choose Connect Kit, or enter its STA IP');
  const seen=new Set(known.map(k=>k.id));if(seen.size>1)throw Error('Duplicate six-digit kit code in saved devices; teacher must resolve via USB');
  state.working=true;render();tone('Checking previously verified kit IP(s)…','info');
  try{
@@ -281,15 +288,19 @@ async function findSaved(){
   if(online.length!==1)throw Error(online.length?'Multiple online matches; verify each physical kit':'Saved IP not reachable; check browser local-network permission, Wi-Fi or Android relay');
   $('kitIpInput').value=online[0].ip;$('kitTransport').value=online[0].ip==='192.168.4.1'?'ap':'sta';
   audit('Saved IP verified by code and full hardware Device ID • '+online[0].id,'success');
-  tone('Matching kit IP identified • Connect & Verify with saved access, or Pair Once with USB','good');
+  tone('Matching kit IP verified • Connect & Verify with saved access, or connect over physical USB','good');
  }finally{state.working=false;render()}
 }
 async function connect(){
- if(state.working)return;const ticket=++reconnectTicket,code=selectedCode(),mode=selectedMode();
+ if(state.working)return;const ticket=++reconnectTicket,mode=selectedMode();let code=selectedCode();
+ if(!codePattern.test(code)&&mode!=='android-relay'){
+  if(mode==='usb'&&usbCandidate.kitCode)code=usbCandidate.kitCode;
+  else if(mode!=='usb'){const live=await probeIdentity(($('kitIpInput')?.value||'').trim()||'192.168.4.1',3000);if(ticket!==reconnectTicket)return;if(live){code=live.kitCode;if($('kitCodeInput'))$('kitCodeInput').value=code;}}
+ }
  if(mode!=='usb'){try{const known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]');
   if(new Set(known.filter(k=>k.code===code).map(k=>k.id)).size>1){tone('Duplicate Kit Code detected in known classroom kits • use physical USB admin to assign a unique code','error');return;}
  }catch{}}
- if(!codePattern.test(code)){tone('Enter your 6-digit Kit Code','warn');return}
+ if(mode!=='usb'&&!codePattern.test(code)){tone('Kit not detected. Join its Wi-Fi or enter its address, then Connect Kit.','warn');return}
  if(state.owner)await releaseRc().catch(()=>{});
  state.working=true;state.connected=false;render();tone('Verifying hardware identity…','info');
  try{
@@ -298,7 +309,7 @@ async function connect(){
   state.connected=true;state.heartbeatAt=Date.now();state.linkState='connected';recoveryTarget=null;pollErrors=0;state.since=Date.now();state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
   state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
  audit('Device verified • '+state.kitId+' • '+state.transport,'success');
-  if(state.transport==='sta')setupStep=5;else if(state.transport==='ap'&&state.setupAuthorized)setupStep=2;recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
+  if(state.transport==='sta')setupStep=5;recordKnown();tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled','good');
   root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,transport:state.transport,kitId:state.kitId}}));
   if(state.transport==='usb')void pairUsb().catch(e=>audit('USB pairing unavailable on older firmware: '+e.message,'warn'));
   if(mode!=='usb')await read().catch(e=>audit(e.message,'warn'));
@@ -654,7 +665,7 @@ function onSerial(e){
 
 // Read-only reconnect to exactly the same kit; RC ownership is NEVER resumed.
 async function recoverVerifiedLink(old){
- if(!old||!['sta','ap'].includes(old.transport)||!old.key||!safeKitHost(old.ip))return false;
+ if(!old||!['sta','ap'].includes(old.transport)||(!old.key&&localKitHosts.get(old.ip)!==old.kitId)||!safeKitHost(old.ip))return false;
  const ticket=++reconnectTicket;recoveryTarget=old;state.linkState='reconnecting';render();
  for(const delay of [400,1100,2400,5000,8000]){
   await sleep(delay);
@@ -704,7 +715,7 @@ async function probeIdentity(ip,timeoutMs=1550){
   if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(String(d.kitId||''))||!/^\d{6}$/.test(String(d.kitCode||''))||
      !String(d.kitId).startsWith(String(d.board||'')+'-'))return null;
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
-   board:d.board,ip:ip==='192.168.4.1'?ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
+   simpleConnection:!!d.simpleConnection,board:d.board,ip:ip==='192.168.4.1'?ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
  }catch{return null}finally{clearTimeout(timer)}
 }
 function showDiscovered(){
@@ -713,12 +724,12 @@ function showDiscovered(){
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
    empty.textContent=discovering?'Scanning named kits and saved addresses…':'No reachable kits in the attempted local addresses. Check 2.4 GHz router, AP or Local Network Access permission.';target.append(empty);continue}
   for(const k of discoveredKits){
-   const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; control still requires pairing';
+   const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
    const small=document.createElement('small');small.textContent=k.board+' • '+k.transport.toUpperCase()+' • '+k.ip+' • '+k.kitId;
    btn.append(label,small);btn.onclick=()=>{
     $('kitCodeInput').value=k.kitCode;$('kitIpInput').value=k.ip;$('kitTransport').value=k.transport;
-    headerNetworkChoice=k.transport;render();tone('Discovered '+k.kitName+' • identity shown; use Connect & Verify / paired USB session','info');
+    headerNetworkChoice=k.transport;render();tone('Discovered '+k.kitName+' • identity shown; press Connect Kit','info');
     if(id==='fwDiscoveryResults')goKits();
    };
    target.append(btn);
@@ -793,10 +804,11 @@ async function toggleHeaderControl(){
 }
 
 function setupHint(message){const el=$('kitSimpleHelp');if(el)el.textContent=message;}
-function startSetup(){
- goKits();setupStep=1;$('kitTransport').value='ap';$('kitIpInput').value='192.168.4.1';
- setupHint('Power the kit, then join its ZEBJUS-AERION hotspot in the computer Wi-Fi settings (default AP password 12345678, unless changed). Press Find Kit on AP. First connection on a new browser requires one physical USB pairing.');
- render();tone('Join kit AP Wi-Fi, then Find Kit on AP. The public six-digit code will be detected automatically.','info');
+async function startSetup(){
+ const ticket=++reconnectTicket;goKits();setupStep=1;$('kitTransport').value='ap';$('kitIpInput').value='192.168.4.1';
+ tone('Join the kit Wi-Fi in OS settings, allow Local Network Access, then Connect Kit. No private label required.','info');
+ const live=await probeIdentity('192.168.4.1',3000);if(ticket!==reconnectTicket)return;if(!live)throw Error('Kit not reachable. Join its Wi-Fi, then press Connect Kit.');
+ $('kitCodeInput').value=live.kitCode;await connect();
 }
 async function findKitAp(){
  if(state.owner)throw Error('Release controller before switching kits');
@@ -806,15 +818,15 @@ async function findKitAp(){
  $('kitCodeInput').value=found.kitCode;$('kitTransport').value='ap';$('kitIpInput').value='192.168.4.1';
  headerNetworkChoice='ap';setupStep=1;render();
  const key=pairedKeys.get(found.kitId)||pairing()?.fromSession?.(found.kitId)||await pairing()?.restore?.(found.kitId)||($('kitKeyInput')?.value||'').trim();
- if(!/^[a-fA-F0-9]{32}$/.test(key)){
-  setupHint('Kit detected: '+found.kitCode+' • '+found.kitId+'. This browser is not paired. Connect the kit over physical USB once, press Pair Once with USB, then join this AP again and retry Find Kit on AP.');
-  tone('Kit '+found.kitCode+' detected • Pair Once with USB required for first-time authorization.','warn');return found;
+ if(!/^[a-fA-F0-9]{32}$/.test(key)&&!found.simpleConnection){
+  setupHint('Kit detected: '+found.kitCode+' • '+found.kitId+'. Update firmware for simple AP diagnostics, or connect physical USB for protected settings access.');
+  tone('Kit '+found.kitCode+' detected • Protected settings access requires physical USB on this older firmware.','warn');return found;
  }
  await connect();
  if(!linkFresh()||state.kitId!==found.kitId)throw Error('Discovered AP but authenticated Device ID verification failed.');
  if(!state.setupAuthorized){
-  setupHint('Kit identity verified but the saved credential is diagnostic-only. For router setup use Pair Once with USB on this kit; read-only monitoring stays available.');
-  tone('Read-only kit linked • one-time USB pairing required to configure Wi-Fi.','warn');return found;
+  setupHint('AP diagnostics connected without a label or pairing code. Router settings require Authorize Settings over USB or existing protected access.');
+  tone('AP diagnostics connected • settings protected.','warn');return found;
  }
  setupStep=2;setupHint('Kit '+found.kitCode+' securely connected over AP. Scroll to Classroom Network → Scan Wi-Fi → Test & Save.');render();
  tone('Kit '+found.kitCode+' connected over AP • Scan Wi-Fi to continue.','good');return found;
@@ -832,12 +844,12 @@ async function pairNewKitUsb(){
  if(!pairedKeys.has(state.kitId))await pairUsb();
  if(!pairedKeys.has(state.kitId))throw Error('USB connected but secure pairing was not acknowledged.');
  if($('kitRememberBrowser')?.checked)await rememberBrowserPairing();
- setupHint('USB paired: '+state.kitCode+'. You may unplug USB and join the kit AP Wi-Fi, then press Find Kit on AP. Remember this browser is optional and recommended only on a personal device.');
- tone('USB paired successfully • join kit AP Wi-Fi and Find Kit on AP to configure the router.','good');
+ setupHint('USB authorized: '+state.kitCode+'. You may unplug USB and join the kit AP Wi-Fi, then press Find Kit on AP. Remember this browser is optional and recommended only on a personal device.');
+ tone('USB settings access authorized • join kit AP Wi-Fi and Find Kit on AP to configure the router.','good');
 }
 async function handoverSta(){
  const id=state.kitId,code=state.kitCode,ip=state.staIp;
- if(!id||!code)throw Error('Connect AP and finish Test & Save first');
+ if(!id||!code)throw Error('Connect the kit and finish authorized Test & Save first');
  if(state.rc?.claimed)throw Error('Release diagnostic control before handover');
  setupStep=4;render();tone('Switch laptop Wi-Fi to your router. Checking the same Device ID over STA…','info');
  const hosts=[ip,'zebjus-'+state.board.replace('ZFC-','')+'-'+code+'.local'].filter(safeKitHost);
@@ -887,7 +899,7 @@ function init(){
  $('kitRememberBrowser')?.addEventListener('change',e=>{
   if(!e.target.checked)return;
   const id=state.kitId||usbCandidate.kitId;
-  if(!id||!pairedKeys.get(id)){tone('Pair Once with USB first; this personal browser can then remember its authorized connection.','info');return}
+  if(!id||!pairedKeys.get(id)){tone('Simple AP diagnostics needs no saved pairing. Authorize Settings over USB to remember protected STA/settings access on this personal browser.','info');return}
   void rememberBrowserPairing().catch(err=>{e.target.checked=false;tone(err.message,'warn')});
  });guardAction('kitDiscover',discoverKits);guardAction('fwDiscoverKits',discoverKits);$('fwOpenDiscovery')?.addEventListener('click',goKits);guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',refreshConnection);guardAction('kitTopRefresh',refreshConnection);
@@ -1000,7 +1012,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  }finally{state.working=false;render();}
 }
 root.ZebjusKits={
- connect,disconnect,read,refreshConnection,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
+ connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  getState:()=>({connected:linkFresh(),linkState:state.connected&&!linkFresh()?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   kitName:state.kitName,board:state.board,owner:state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working,apActive:!!state.apActive,staConnected:!!state.staConnected,staIp:state.staIp||'',rssi:state.rssi,setupAuthorized:!!state.setupAuthorized,otaAuthorized:!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,

@@ -57,6 +57,7 @@ def find_factory_bin(build):
 def verify_build(build, board, version):
     app=find_app_bin(build).read_bytes()
     if len(app)<24 or app[0]!=0xE9: raise RuntimeError('Invalid ESP application header')
+    if (version+'\0').encode() not in app: raise RuntimeError('Compiled APP does not contain the requested firmware version')
     chip=struct.unpack_from('<H',app,12)[0]
     if chip not in board['imageChipIds']: raise RuntimeError(f'Wrong image chip ID: {chip}')
     table=next(build.glob('*.partitions.bin')).read_bytes()

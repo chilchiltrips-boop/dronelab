@@ -6,9 +6,10 @@ import {createHmac,createDecipheriv,randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 
-const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16),teacherKey='c9'.repeat(16);
+const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16);
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map(),calls=[];
+const maintenanceKey='f1'.repeat(16);
 let owner='',frame=null,accepted=0,tested=false;
 function snapshot(){
  const age=frame?Date.now()-frame.at:null,valid=!!owner&&age!==null&&age<=350;
@@ -19,7 +20,12 @@ function snapshot(){
 function handle(host,path,method,args={},headers={}){
  const h=Object.fromEntries(Object.entries(headers).map(([k,v])=>[k.toLowerCase(),v]));
  const result=(body,status=200,key='',seq='')=>{const text=JSON.stringify(body);return {status,text,proof:key?mac(key,`response|${seq}|${status}|${text}`):''}};
- if(path==='/api/identify')return result({kitId:id,kitCode:'123456',name:'Test fixture A1',board:'ZFC-A1',authVersion:2,labelInstalled:true});
+ if(path==='/api/identify')return result({kitId:id,kitCode:'123456',name:'Test fixture A1',board:'ZFC-A1',authVersion:2,labelInstalled:true,simpleConnection:true});
+ if(path==='/api/auth/local'){
+  assert.equal(host,'192.168.4.1');assert.equal(args.deviceId,id);assert.match(args.client,/^[0-9a-f]{32}$/);
+  const session=randomBytes(16).toString('hex'),key=randomBytes(32).toString('hex');sessions.set(session,{key,seq:0,setup:false,local:true});
+  return result({kitId:id,bootId:boot,session,key,scope:'ap_diagnostics',expiresMs:1800000,setupExpiresMs:0});
+ }
  if(path==='/api/auth/challenge'){
   const nonce=randomBytes(16).toString('hex');challenges.set(nonce,args);return result({kitId:id,nonce,bootId:boot});
  }
@@ -31,17 +37,15 @@ function handle(host,path,method,args={},headers={}){
   sessions.set(session,{key,seq:0,setup:challenge.kind==='setup'});
   return result({kitId:id,session,proof:mac(key,'server|'+msg),expiresMs:1800000,setupExpiresMs:challenge.kind==='setup'?300000:0});
  }
- const legacy=h['x-zj-key']===teacherKey;
- const s=legacy?{setup:true}:sessions.get(h['x-zj-session']);assert.ok(s,'authenticated request required');
- const seq=h['x-zj-seq'],payload=args.payload||'';assert.equal(h['x-zj-device'],id);
- if(!legacy){
-  assert.ok(Number(seq)>s.seq);
-  assert.equal(h['x-zj-proof'],mac(s.key,[method,path,id,boot,h['x-zj-session'],seq,payload].join('|')));s.seq=Number(seq);
-  if(payload){const b=Buffer.from(payload,'hex'),dec=createDecipheriv('aes-256-gcm',Buffer.from(s.key,'hex'),b.subarray(0,12));dec.setAuthTag(b.subarray(-16));args=Object.fromEntries(new URLSearchParams(Buffer.concat([dec.update(b.subarray(12,-16)),dec.final()]).toString()))}
- }
+ const legacy=h['x-zj-key']===maintenanceKey;
+ const s=legacy?{key:'',seq:0,setup:true}:sessions.get(h['x-zj-session']);assert.ok(s,'authenticated request required');
+ const seq=h['x-zj-seq'],payload=args.payload||'';assert.equal(h['x-zj-device'],id);if(!legacy)assert.ok(Number(seq)>s.seq);
+ if(!legacy)assert.equal(h['x-zj-proof'],mac(s.key,[method,path,id,boot,h['x-zj-session'],seq,payload].join('|')));s.seq=Number(seq);
+ if(payload){const b=Buffer.from(payload,'hex'),dec=createDecipheriv('aes-256-gcm',Buffer.from(s.key,'hex'),b.subarray(0,12));dec.setAuthTag(b.subarray(-16));args=Object.fromEntries(new URLSearchParams(Buffer.concat([dec.update(b.subarray(12,-16)),dec.final()]).toString()))}
  calls.push({host,path,method,source:args.source});
+ if(s.local&&path.startsWith('/api/wifi/'))return result({error:'setup_authorization_required'},403,s.key,seq);
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.0',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup,otaAuthorized:legacy,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.1',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup,otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
  else if(path==='/api/wifi/test'){assert.ok(s.setup);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
@@ -55,7 +59,7 @@ function handle(host,path,method,args={},headers={}){
  else if(path==='/api/telemetry')body={kitId:id,board:'ZFC-A1',millis:Date.now(),gyroReady:true,address:0x6a,roll:0,pitch:0,yaw:0,scanner:[],scannerRunning:false,scanSequence:1,rc:snapshot()};
  else if(path==='/api/command')body={ok:true};
  else throw Error('Unexpected route '+path);
- return result(body,200,legacy?'':s.key,seq);
+ return result(body,200,s.key,seq);
 }
 const browser=await chromium.launch(browserOptions),errors=[];
 const laptop=await browser.newContext({viewport:{width:1366,height:768},serviceWorkers:'block'});
@@ -75,27 +79,33 @@ const wait=(p,fn)=>p.waitForFunction(fn,null,{timeout:45000});
 mkdirSync('test-output/network',{recursive:true});
 try{
  await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits&&document.getElementById('app')?.dataset.ready==='true');
- await web.evaluate(({id,teacherKey})=>{
+ assert.equal(await web.locator('#kitLabelInput').count(),0);assert.equal(await web.locator('#kitEnrollment').count(),0);
+ await web.locator('#kitNewSetup').click();await wait(web,()=>window.ZebjusKits.getState().connected);
+ assert.equal(await web.locator('#kitCodeInput').inputValue(),'123456');
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().setupAuthorized),false);
+ assert.equal(await web.locator('#kitWifiScan').isDisabled(),true);
+ const denied=await web.evaluate(async()=>{try{await window.ZebjusKits.request('/api/wifi/scan');return false}catch{return true}});assert.equal(denied,true);
+ await web.locator('#kitReadInfo').click();
+ await web.screenshot({path:'test-output/network/simple-ap-connected.png'});
+ // A protected maintenance fixture represents USB-authorized settings access.
+ await web.locator('#kitDisconnect').click();
+ await web.evaluate(({id,maintenanceKey})=>{
   const send=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line}}));
   window.DroneLabSerial={
    isOpen:()=>true,isFlashing:()=>false,connect:async()=>true,
    writeLine:async line=>{
     const cmd=String(line).trim();
     if(cmd==='ZJKIT,GET')for(const msg of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJKIT,NAME,Test fixture A1'])send(msg);
-    else if(cmd==='ZJINFO,GET')send('ZJINFO,FW,ZFC-A1,1.4.0');
-    else if(cmd==='ZJNET,PAIR')send('ZJNET,PAIR,'+id+','+teacherKey);
+    else if(cmd==='ZJINFO,GET')send('ZJINFO,FW,ZFC-A1,1.4.1');
+    else if(cmd==='ZJNET,PAIR')send('ZJNET,PAIR,'+id+','+maintenanceKey);
     else if(cmd==='ZJNET,GET'){send('ZJNET,AP,ON,ZEBJUS-AERION-A1');send('ZJNET,STA,CONNECTED,192.168.1.42,Mock classroom');}
    }
   };
- },{id,teacherKey});
- await web.locator('#kitNewSetup').click();
- await web.locator('#kitFindAp').click();
- await wait(web,()=>document.getElementById('kitCodeInput')?.value==='123456');
- assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().connected),false,'Public AP discovery cannot authorize a device');
+ },{id,maintenanceKey});
  await web.locator('#kitPairFirst').click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='usb');
  await web.locator('#kitFindAp').click();
- await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='ap'&&window.ZebjusKits.getState().setupAuthorized);
+ await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
@@ -133,6 +143,6 @@ try{
  assert.equal(errors.length,0,errors.join('\n'));
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
- console.log('PASS simulated network integration: AP discovery → USB-once pairing → AP Test & Save → same-ID STA handover; Android touch → Python read_joystick; STOP neutral');
+ console.log('PASS simulated network integration: label-free AP diagnostics → protected Test & Save → same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
 }catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}

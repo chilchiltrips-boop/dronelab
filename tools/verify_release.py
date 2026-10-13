@@ -34,6 +34,7 @@ for board in CAT['boards']:
   print('BUILD PENDING',board['id'],'No legacy FlightCore image advertised')
   continue
  app=(OUT/a['file']).read_bytes();factory=(OUT/f['file']).read_bytes()
+ assert (CAT['version']+'\0').encode() in app, 'Catalog firmware version differs from APP'
  assert len(app)==a['size'] and len(factory)==f['size']==4*1024*1024
  assert sha(app)==a['sha256'] and sha(factory)==f['sha256']
  assert chip(app)==chip(factory)==board['imageChipIds'][0]

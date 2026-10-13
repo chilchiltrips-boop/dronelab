@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/unified-connection-admin-v2
+      - feature/simple-kit-connection-v1-4-1
       - feature/unified-connection-admin-v2-safe-fixes-20261013
   pull_request:
     branches:
