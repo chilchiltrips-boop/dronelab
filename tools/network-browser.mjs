@@ -84,12 +84,15 @@ try{
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
  await phone.locator('#kitRcPreview').check();await wait(phone,()=>window.ZebjusNetwork.hasControl());await phone.locator('#flightBack').click();
  // Real touch-follow handlers and response mapping, with DOM pointer events.
- await phone.evaluate(()=>{
+ const beforeTouch=await phone.evaluate(()=>{
+  const previous=window.ZebjusNetwork.feedback()?.seq||0;
   const pad=document.getElementById('flightRightZone'),r=pad.getBoundingClientRect();pad.setPointerCapture=()=>{};
   pad.dispatchEvent(new PointerEvent('pointerdown',{pointerId:71,pointerType:'touch',clientX:r.x+r.width/2,clientY:r.y+r.height/2,bubbles:true}));
   pad.dispatchEvent(new PointerEvent('pointermove',{pointerId:71,pointerType:'touch',clientX:r.x+r.width/2+35,clientY:r.y+r.height/2-25,bubbles:true}));
+  return previous;
  });
- await wait(phone,()=>window.ZebjusNetwork.feedback()?.seq>2);assert.ok(frame.roll>1500);assert.ok(frame.pitch!==1500);
+ // Ignore neutral ACKs from before the touch, including one already in flight.
+ await phone.waitForFunction(seq=>(window.ZebjusNetwork.feedback()?.seq||0)>seq+1,beforeTouch,{timeout:45000});assert.ok(frame.roll>1500);assert.ok(frame.pitch!==1500);
  // Real simulator/peer reset must not send an emergency stop from a read-only STA observer.
  await wait(web,()=>window.ZebjusTraining?.isReady?.());
  await web.evaluate(()=>window.ZebjusTraining.stop('Observer simulator reset regression'));
