@@ -98,7 +98,7 @@ function render(){
  const target=$('kitTargetLabel');if(target)target.textContent=ready?state.kitName+' • '+code:'Connect a kit in MY KITS';
  const hint=$('kitPidMonitor');if(hint)hint.textContent=ready?'RC '+(rc.active?'LIVE':'IDLE')+' • '+(rc.source||'NONE')+' • T '+(rc.throttle??1000)+' R '+(rc.roll??1500)+' P '+(rc.pitch??1500)+' Y '+(rc.yaw??1500):'No hardware connected • simulator available';
  const targetHardware=$('kitHardwareTarget');if(targetHardware)targetHardware.disabled=!ready;
- if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Join Kit AP, Connect Kit and hold BOOT 3 seconds after startup. Wi-Fi setup access lasts five minutes.';
+ if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Join Kit AP → Connect Kit → Scan Wi-Fi → Test & Save → return to classroom Wi-Fi.';
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
@@ -339,8 +339,8 @@ async function readStatus(){
  state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
  const wasSetupAuthorized=state.setupAuthorized;
  state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
- if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Wi-Fi setup authorized. Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
- if(wasSetupAuthorized&&!state.setupAuthorized&&state.transport==='ap')setupHint('Setup window expired. Hold BOOT for 3 seconds on the running kit to reauthorize.');
+ if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Ready: Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
+ if(wasSetupAuthorized&&!state.setupAuthorized&&state.transport==='ap')setupHint('AP setup access lost. Reconnect the Kit AP and retry.');
  if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
  const monitor=$('kitNetworkMonitor');
@@ -846,8 +846,8 @@ async function findKitAp(){
  await connect();
  if(!linkFresh()||state.kitId!==found.kitId)throw Error('Discovered AP but authenticated Device ID verification failed.');
  if(!state.setupAuthorized){
-  setupHint('Kit connected. Hold BOOT on the running kit for 3 seconds, release it, then Refresh Status. Router Scan/Test & Save is enabled for 5 minutes. Do not hold BOOT while powering on.');
-  tone('AP connected • hold BOOT 3 seconds for Wi-Fi setup','warn');return found;
+  setupHint('AP connected. Running firmware does not support direct Wi-Fi setup. Install FlightCore 1.4.3 to enable Scan Wi-Fi → Test & Save without USB.');
+  tone('AP connected • install FlightCore 1.4.3 for direct Wi-Fi setup','warn');return found;
  }
  setupStep=2;setupHint('Kit '+found.kitCode+' securely connected over AP. Scroll to Classroom Network → Scan Wi-Fi → Test & Save.');render();
  tone('Kit '+found.kitCode+' connected over AP • Scan Wi-Fi to continue.','good');return found;
