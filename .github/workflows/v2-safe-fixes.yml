@@ -1,0 +1,85 @@
+name: DroneLab V2 Safe Fixes — Nonhardware Regression
+
+on:
+  push:
+    branches:
+      - feature/unified-connection-admin-v2
+      - feature/unified-connection-admin-v2-safe-fixes-20261013
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: v2-validation-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-regression:
+    name: Nonhardware source and regression tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check changed source syntax
+        run: |
+          node --check js/network-lab.js
+          node --check js/classroom-kits.js
+          node --check tools/network-transport.test.mjs
+      - name: Run Node regressions
+        run: npm test
+      - name: Validate offline bundle and project
+        run: npm run check
+      - name: Verify existing firmware catalog and binary release
+        run: npm run verify:firmware
+
+  browser-v2:
+    name: V2 layout and authenticated network integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Browser, Python and offline regression
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/v2-http.log 2>&1 &
+          node tools/v2-layout-browser.mjs
+          node tools/grant-toggle-layout-browser.mjs
+          node tools/full-page-input-fit-browser.mjs
+          node tools/pid-shell-browser.mjs
+          node tools/network-browser.mjs
+          node tools/offline-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v2-browser-evidence
+          path: test-output/
+
+  firmware-build:
+    name: Compile A1 and A2 review firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - run: python3 tools/embed_setup_portal.py
+      - run: python3 tools/build_scanner.py
+      - run: python3 tools/verify_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2-review-a1-a2-firmware
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
+            FlightCore_Firmware/catalog.json
+          if-no-files-found: error

@@ -1,0 +1,98 @@
+/* V2 shell: primary navigation, independent link observations, explicit controls. */
+#app .topbar{height:auto!important;min-height:0!important;padding:10px 16px!important;background:#0b1521!important;border-bottom:1px solid #263a4a;overflow:visible!important}
+#app .topbar-main{display:grid!important;grid-template-columns:150px minmax(360px,1fr) minmax(340px,460px)!important;gap:12px!important;align-items:center!important;min-height:46px!important;height:auto!important;overflow:visible!important;padding:0!important}
+#app .topbar-main>.brand{grid-area:auto!important;min-width:0!important;max-width:none!important;width:auto!important;gap:8px!important}
+#app .topbar-main>.brand .logo{width:30px!important;height:30px!important;flex:0 0 30px!important}
+#app .topbar-main>.brand .brand-copy b{font-size:12px!important;max-width:none!important}
+#app .topbar-main>.tabs{display:flex!important;grid-area:auto!important;align-items:center;justify-content:center;gap:3px;margin:0!important;padding:0!important;border:0!important;background:transparent!important;overflow:visible!important;min-width:0}
+#app .topbar .tabs .tab{flex:0 1 auto!important;min-width:0!important;margin:0!important;padding:9px 8px!important;font-size:11px!important;white-space:nowrap;border-radius:7px!important;border:1px solid transparent!important;color:#aabccf;background:transparent}
+#app .topbar .tabs .tab.active{color:#8de7dc!important;background:#153438!important;border-color:#285754!important}
+#app .topbar-main>.kit-top-status{display:flex!important;grid-area:auto!important;flex:none!important;width:auto!important;min-width:0!important;max-width:none!important;gap:6px!important;padding:0!important;border:0!important;background:none!important;overflow:visible!important}
+#app .topbar .kit-top-detail{flex:1 1 80px!important;max-width:150px!important;min-width:0!important}
+#app .topbar .kit-top-detail small{display:block!important;font-size:10px!important;color:#95a9bb}
+#app .topbar #kitGlobalState{font-size:8px!important;max-width:85px;padding:5px;border-radius:5px;background:#172a38}
+#kitInternetStatus{color:#a7bacb;font-size:10px;white-space:nowrap}
+#app .topbar-status{display:none!important}
+.v2-connection-details{position:relative;flex:0 0 auto}
+.v2-connection-details>summary{font-size:11px;color:#d3e5ee;cursor:pointer;padding:8px;border:1px solid #365364;border-radius:7px;list-style:none}
+.v2-connection-popover{position:absolute;right:0;top:calc(100% + 12px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 28px);padding:16px;border:1px solid #3a596a;border-radius:12px;background:#102230;box-shadow:0 16px 50px #0009}
+.v2-connection-details:not([open])>.v2-connection-popover{display:none}
+.v2-diagnostic{display:grid;grid-template-columns:120px minmax(0,1fr);width:100%;gap:9px;font-size:11px;line-height:1.4;color:#9fb5c8}
+.v2-diagnostic b{color:#e2eff6;overflow-wrap:anywhere}
+.v2-workspace-tools{margin:0 16px;border-bottom:1px solid #233a49;color:#95b1c4;font-size:11px}
+.v2-workspace-tools>summary{cursor:pointer;padding:6px 0;width:max-content}
+.v2-tools-content{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:10px 0}
+.v2-tools-content .top-actions,.v2-tools-content .qr-header-controls{display:flex!important;gap:8px;flex-wrap:wrap;align-items:center}
+.v2-tools-content .zebjus-top-shop{display:flex!important;margin-left:auto}
+@media(max-width:1150px){
+ #app .topbar-main{grid-template-columns:150px minmax(0,1fr)!important;gap:5px 10px!important}
+ #app .topbar-main>.tabs{grid-column:1/-1!important;grid-row:2!important;justify-content:flex-start}
+ #app .topbar-main>.kit-top-status{justify-content:flex-end}
+ #app .topbar .kit-top-detail{flex:0 1 150px!important}
+ #app .topbar{padding:6px 12px!important}
+ #app .topbar .tabs .tab{padding:5px 8px!important}
+}
+@media(max-width:600px){
+ #app .topbar-main{grid-template-columns:110px minmax(0,1fr)!important;gap:4px!important}
+ #app .topbar-main>.brand .brand-copy b{font-size:10px!important}
+ #app .topbar-main>.brand .logo{width:22px!important;height:22px!important;flex-basis:22px!important}
+ #app .topbar .kit-top-detail,#app .topbar #kitGlobalState{display:none!important}
+ #app .topbar .tabs .tab{font-size:9px!important;padding:6px 4px!important;flex:1 1 auto!important}
+ #app .topbar-main>.kit-top-status{gap:4px!important}
+ #kitInternetStatus{font-size:9px}
+ .v2-connection-details>summary{font-size:10px;padding:6px}
+ #app .topbar{padding:6px 8px!important}
+ .v2-workspace-tools{margin:0 8px}
+}
+#app .topbar .topbar-status{display:none!important}
+#app .topbar-main{grid-template-areas:none!important;max-height:none!important;width:100%!important}
+#app .topbar-main>.tabs{position:static!important;top:auto!important;height:auto!important;min-height:0!important;flex-wrap:nowrap!important}
+#app .topbar .tabs .tab{height:auto!important;min-height:28px!important;letter-spacing:0!important;line-height:16px!important;font-weight:600!important}
+@media(max-width:600px){#app .topbar .tabs .tab{padding:5px 2px!important;font-size:9px!important}#app .topbar-main>.tabs{gap:1px!important}}
+
+/* Keep the mobile grant accessible after moving workspace controls. */
+#app .v2-tools-content .top-grant-control{
+ display:inline-grid!important;
+ grid-template-columns:minmax(0,1fr) 40px;
+ align-items:center;
+ column-gap:9px;
+ width:150px;
+ min-width:150px!important;
+ max-width:150px;
+ flex:none;
+ white-space:normal;
+ padding:6px 9px;
+ line-height:1.25;
+ box-sizing:border-box;
+}
+#app .v2-tools-content .top-grant-control>.grant-control-text{
+ display:block;
+ grid-column:1;
+ grid-row:1;
+ width:100%;
+ min-width:0;
+ max-width:none!important;
+ overflow-wrap:normal;
+ white-space:normal;
+ line-height:1.28;
+ text-align:left;
+}
+#app .v2-tools-content .top-grant-control>.qr-switch-track{
+ display:block;
+ grid-column:2;
+ grid-row:1;
+ width:40px;
+ min-width:40px;
+ max-width:40px;
+ height:22px;
+ margin:0;
+ justify-self:end;
+ align-self:center;
+ box-sizing:border-box;
+}
+#app .v2-tools-content .top-grant-control>input[type="checkbox"]{
+ position:absolute;
+ width:1px;
+ height:1px;
+ opacity:0;
+}

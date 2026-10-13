@@ -19,7 +19,7 @@ try{
  await legacy.goto('http://127.0.0.1:8765/tripod.html');
  await until(legacy,()=>location.hash==='#pid'&&location.pathname.endsWith('index.html'));
  await legacy.close();
- const navBefore=await page.locator('.topbar').evaluate(el=>el.outerHTML);
+ await page.locator('.topbar').evaluate(el=>{window.__testHeader=el});
  if(!(await page.locator('#tab-settings').isVisible()))throw Error('Settings must be a real panel, not a redirect');
  if(!(await page.locator('#connectionFlow').isVisible()))throw Error('Inline QR/code form missing from Settings');
  if(await page.locator('#connectionDialog').evaluate(el=>el.tagName)!=='SECTION')throw Error('Connection settings must not be a blocking dialog');
@@ -27,7 +27,7 @@ try{
  await page.locator('[data-tab="pid"]').click();
  await until(page,()=>document.querySelector('#tab-pid')?.classList.contains('active'));
  const link=page.locator('[data-tab="pid"]');
- if((await link.textContent()).trim()!=='PID TUNING')throw Error('Old flight training name still present');
+ if((await link.textContent()).trim().toUpperCase()!=='PID TUNING')throw Error('Old flight training name still present');
  const computed=await link.evaluate(el=>getComputedStyle(el).textDecorationLine);
  if(computed.includes('underline'))throw Error('PID nav underlined');
  const iframe=page.frameLocator('#pidFrame');
@@ -36,7 +36,7 @@ try{
  if(await iframe.locator('.tp-header').isVisible())throw Error('Duplicate topbar inside embedded simulator');
  await page.locator('[data-tab="settings"]').click();
  await until(page,()=>document.querySelector('#tab-settings')?.classList.contains('active'));
- if(await page.locator('.topbar').evaluate(el=>el.outerHTML)!==navBefore)throw Error('Topbar changed across tabs');
+ if(!await page.locator('.topbar').evaluate(el=>el===window.__testHeader))throw Error('Header was replaced across tabs');
  await page.locator('#pairCreateBtn').click();
  await until(page,()=>document.getElementById('pairOfferText')?.value.startsWith('zj1:'),23000);
  await phone.locator('#flightSettings').click();
@@ -52,7 +52,8 @@ try{
  await page.locator('#pairConfirmBtn').click();
  await until(phone,()=>!document.getElementById('requestControlBtn').disabled);
  await phone.locator('#requestControlBtn').click();
- await page.locator('#topGrantMobileSwitch').evaluate(e=>e.closest('label').click());
+ await page.locator('.v2-workspace-tools>summary').click();
+ await page.locator('.top-grant-control').click();
  await until(phone,()=>!document.getElementById('flightArm').disabled,14000);
  const before=await page.evaluate(()=>window.__testPeer.status());
  if(!before.connected||before.controller!=='mobile')throw Error('Host not connected/owned before Settings navigation');

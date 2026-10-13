@@ -70,7 +70,7 @@ for(const p of [web,phone])p.on('pageerror',e=>errors.push(e.message));
 const wait=(p,fn)=>p.waitForFunction(fn,null,{timeout:45000});
 mkdirSync('test-output/network',{recursive:true});
 try{
- await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits);
+ await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits&&document.getElementById('app')?.dataset.ready==='true');
  await web.locator('#kitNewSetup').click();await web.locator('#kitLabelInput').fill(id+':'+secret);await web.locator('#kitEnrollLabel').click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().setupAuthorized);
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
@@ -84,12 +84,15 @@ try{
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
  await phone.locator('#kitRcPreview').check();await wait(phone,()=>window.ZebjusNetwork.hasControl());await phone.locator('#flightBack').click();
  // Real touch-follow handlers and response mapping, with DOM pointer events.
- await phone.evaluate(()=>{
+ const beforeTouch=await phone.evaluate(()=>{
+  const previous=window.ZebjusNetwork.feedback()?.seq||0;
   const pad=document.getElementById('flightRightZone'),r=pad.getBoundingClientRect();pad.setPointerCapture=()=>{};
   pad.dispatchEvent(new PointerEvent('pointerdown',{pointerId:71,pointerType:'touch',clientX:r.x+r.width/2,clientY:r.y+r.height/2,bubbles:true}));
   pad.dispatchEvent(new PointerEvent('pointermove',{pointerId:71,pointerType:'touch',clientX:r.x+r.width/2+35,clientY:r.y+r.height/2-25,bubbles:true}));
+  return previous;
  });
- await wait(phone,()=>window.ZebjusNetwork.feedback()?.seq>2);assert.ok(frame.roll>1500);assert.ok(frame.pitch!==1500);
+ // Ignore neutral ACKs from before the touch, including one already in flight.
+ await phone.waitForFunction(seq=>(window.ZebjusNetwork.feedback()?.seq||0)>seq+1,beforeTouch,{timeout:45000});assert.ok(frame.roll>1500);assert.ok(frame.pitch!==1500);
  // Real simulator/peer reset must not send an emergency stop from a read-only STA observer.
  await wait(web,()=>window.ZebjusTraining?.isReady?.());
  await web.evaluate(()=>window.ZebjusTraining.stop('Observer simulator reset regression'));
@@ -108,5 +111,5 @@ try{
  await web.screenshot({path:'test-output/network/python-sta-receive.png'});await phone.screenshot({path:'test-output/network/android-diagnostic-stop.png'});
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
  console.log('PASS simulated network integration: private label → encrypted Test & Save → same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
-}catch(e){console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
+}catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
 finally{await browser.close()}

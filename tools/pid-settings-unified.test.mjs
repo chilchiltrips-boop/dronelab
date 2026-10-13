@@ -4,14 +4,14 @@ import {readFileSync} from 'node:fs';
 const get=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('PID TUNING uses one persistent DroneLab header and button navigation',()=>{
  const html=get('index.html'),ui=get('js/ui-controls.js'),pid=get('tripod.html');
- assert.match(html,/<button class="tab" data-tab="pid"[^>]*>PID TUNING<\/button>/);
+ assert.match(html,/<button class="tab" data-tab="pid"[^>]*>PID TUNING<\/button>/i);
  assert.match(html,/id="pidFrame"[^>]*data-src="\.\/tripod\.html\?embedded=1"/);
  assert.match(pid,/pid-embedded/);
  assert.match(ui,/\$\$\('\.tab-panel'\)\.forEach\(p=>p\.classList\.toggle\('active'/);
  assert.doesNotMatch(html,/<a[^>]*>FLIGHT TRAINING<\/a>/i);
  assert.match(get('styles.css'),/#app \.tabs \.tab\[data-tab="pid"\]\.active/);
 });
-test('Mobile grant switch and WebRTC status remain in the shared top header',()=>{
+test('Mobile grant switch and WebRTC status remain in the shared workspace controls',()=>{
  const html=get('index.html'),pair=get('pairing-web.js');
  assert.equal((html.match(/id="topGrantMobileSwitch"/g)||[]).length,1);
  assert.equal((html.match(/id="mobileHeaderStatus"/g)||[]).length,1);
