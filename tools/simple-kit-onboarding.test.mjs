@@ -13,6 +13,7 @@ test('MY KITS provides AP BOOT setup and Wi-Fi Kit discovery with no USB pairing
  assert.doesNotMatch(source,/kitLabelInput|kitEnrollment|kitEnrollLabel|enrollLabel|private kit label/i);
  assert.match(source,/guardAction\('kitFindAp',findKitAp\)/);
  assert.doesNotMatch(html,/id="kitPairFirst"/);
+ assert.doesNotMatch(html,/id="kitPairUsb"/);
  assert.match(source,/async function discoverBridgeHosts\(/);
  assert.match(source,/await connect\(\)/);
 });
