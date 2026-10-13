@@ -1,6 +1,6 @@
 {
   "version": "1.4.4",
-  "builtAt": "2026-10-13T05:12:29Z",
+  "builtAt": "2026-10-13T05:24:12Z",
   "arduinoEsp32": "3.3.12",
   "hardwareFlashingTested": false,
   "boards": [
