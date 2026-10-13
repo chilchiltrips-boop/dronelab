@@ -1,7 +1,7 @@
 {
   "version": "1.4.5",
-  "builtAt": "2026-10-13T18:09:13Z",
-  "sourceCommit": "f796f23f5d857be19e5e1963ac4af6bf1affdec2",
+  "builtAt": "2026-10-13T19:53:32Z",
+  "sourceCommit": "dbce17eb57ebacc2635dd357412741e04472b9f1",
   "sourceSha256": {
     "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "865ba7b09f9c6b45edd74bb1cbf27f68d1348f385ee9f9d9e5a1fac37a5734ad",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
