@@ -1,0 +1,55 @@
+name: Assemble A1/A2 Classroom Firmware Review
+on:
+  push:
+    branches:
+      - feature/usb-free-ap-sta-classroom-discovery-20261013
+    paths:
+      - '.github/workflows/assemble-classroom-firmware.yml'
+      - 'FlightCore_Firmware/*.h'
+      - 'FlightCore_Firmware/*.ino'
+      - 'VERSION.txt'
+      - 'tools/build_scanner.py'
+      - 'tools/embed_setup_portal.py'
+permissions:
+  contents: write
+concurrency:
+  group: assemble-classroom-firmware
+  cancel-in-progress: false
+jobs:
+  build-and-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/usb-free-ap-sta-classroom-discovery-20261013
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Embed reviewed offline setup instructions
+        run: python3 tools/embed_setup_portal.py
+      - name: Compile matching APP and FACTORY images
+        run: python3 tools/build_scanner.py
+      - name: Verify binary magic, board chip, SHA256 and catalog
+        run: python3 tools/verify_release.py
+      - name: Commit reviewed binary artifacts only to development branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
+          git add FlightCore_Firmware/catalog.json FlightCore_Firmware/latest.json FlightCore_Firmware/build-report.json firmware-catalog.json firmware-latest.json FlightCore_Firmware/FlightCoreSetupPortal.h
+          if git diff --cached --quiet; then echo "No new build artifacts"; exit 0; fi
+          git commit -m "build: verified A1/A2 FlightCore 1.4.3 firmware images"
+          git fetch origin feature/usb-free-ap-sta-classroom-discovery-20261013
+          git rebase origin/feature/usb-free-ap-sta-classroom-discovery-20261013
+          git push origin HEAD:feature/usb-free-ap-sta-classroom-discovery-20261013
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: classroom-review-a1-a2-142
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
+            FlightCore_Firmware/catalog.json
+          if-no-files-found: error

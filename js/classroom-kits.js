@@ -98,7 +98,7 @@ function render(){
  const target=$('kitTargetLabel');if(target)target.textContent=ready?state.kitName+' • '+code:'Connect a kit in MY KITS';
  const hint=$('kitPidMonitor');if(hint)hint.textContent=ready?'RC '+(rc.active?'LIVE':'IDLE')+' • '+(rc.source||'NONE')+' • T '+(rc.throttle??1000)+' R '+(rc.roll??1500)+' P '+(rc.pitch??1500)+' Y '+(rc.yaw??1500):'No hardware connected • simulator available';
  const targetHardware=$('kitHardwareTarget');if(targetHardware)targetHardware.disabled=!ready;
- if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Join kit AP Wi-Fi and press Connect Kit. Router setup requires protected USB/settings access.';
+ if($('kitWifiStatus')&&!ready)$('kitWifiStatus').textContent='Join Kit AP → Connect Kit → Scan Wi-Fi → Test & Save → return to classroom Wi-Fi.';
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
@@ -124,11 +124,11 @@ async function resolveKitAccess(code,ip){
  const key=($('kitKeyInput')?.value||'').trim()||pairedKeys.get(found.kitId)||
   pairing()?.fromSession?.(found.kitId)||await pairing()?.restore?.(found.kitId)||'';
  if(!/^[a-fA-F0-9]{32}$/.test(key)){
-  if(found.simpleConnection&&ip==='192.168.4.1'){
-   const session=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),found.kitId);
+  if(found.simpleConnection&&['ap','sta'].includes(found.transport)){
+   const session=await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),found.kitId,found.transport);
    localKitHosts.set(ip,found.kitId);authSessions.set(found.kitId+'@'+ip,session);return {kitId:found.kitId,key:''};
   }
-  throw Error('Kit '+code+' is reachable. Use updated firmware for simple AP diagnostics, or connect physical USB once for protected STA/settings access.');
+  throw Error('Kit '+code+' is reachable. Install FlightCore 1.4.2 for protected BOOT-based AP setup and STA read-only monitoring.');
  }
  if(localKitHosts.has(ip)){localKitHosts.delete(ip);authSessions.delete(found.kitId+'@'+ip);}
  if(($('kitKeyInput')?.value||'').trim()){secureIds.delete(found.kitId);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));}
@@ -220,7 +220,7 @@ async function wifiDirect(ip,key,route,method='GET',args={}){
  const local=localKitHosts.get(ip)===expected;
  if(local||secureIds.has(expected)){
   const slot=expected+'@'+ip;let session=authSessions.get(slot);
-  if(!session||Date.now()>session.expiresAt-5000){session=local?await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),expected):await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),expected,key);authSessions.set(slot,session)}
+  if(!session||Date.now()>session.expiresAt-5000){session=local?await root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),expected,ip==='192.168.4.1'?'ap':'sta'):await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),expected,key);authSessions.set(slot,session)}
   try{return await session.request(route,method,args)}catch(e){if(e.status===401)authSessions.delete(slot);throw e}
  }
  if(!safeKitHost(ip))throw Error('Use a verified private IP or safe .local host for your kit');
@@ -336,7 +336,11 @@ async function readStatus(){
  if(state.transport!=='android-relay')state.transport=actualTransport;
  state.physicalLink=actualTransport;state.apIp=d.apIp||'';
  if(state.owner&&!d.rc?.claimed){state.owner=false;state.rcSession='';state.rcSource=''}
- state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
+ state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ const wasSetupAuthorized=state.setupAuthorized;
+ state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
+ if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Ready: Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
+ if(wasSetupAuthorized&&!state.setupAuthorized&&state.transport==='ap')setupHint('AP setup access lost. Reconnect the Kit AP and retry.');
  if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
  const monitor=$('kitNetworkMonitor');
@@ -722,20 +726,36 @@ function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
   const target=$(id);if(!target)continue;target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning named kits and saved addresses…':'No reachable kits in the attempted local addresses. Check 2.4 GHz router, AP or Local Network Access permission.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
    const small=document.createElement('small');small.textContent=k.board+' • '+k.transport.toUpperCase()+' • '+k.ip+' • '+k.kitId;
    btn.append(label,small);btn.onclick=()=>{
-    $('kitCodeInput').value=k.kitCode;$('kitIpInput').value=k.ip;$('kitTransport').value=k.transport;
-    headerNetworkChoice=k.transport;render();tone('Discovered '+k.kitName+' • identity shown; press Connect Kit','info');
     if(id==='fwDiscoveryResults')goKits();
+    void (async()=>{
+     if(state.owner)throw Error('Release diagnostic control before switching kits');
+     if(state.connected&&state.kitId!==k.kitId)await disconnect('Switching selected classroom kit');
+     $('kitCodeInput').value=k.kitCode;$('kitIpInput').value=k.ip;$('kitTransport').value=k.transport;
+     headerNetworkChoice=k.transport;render();tone('Connecting '+k.kitName+' over '+k.transport.toUpperCase()+'…','info');
+     await connect();
+    })().catch(e=>tone(e.message,'error'));
    };
    target.append(btn);
   }
  }
  render();
+}
+async function discoverBridgeHosts(){
+ // A hosted browser cannot multicast-query mDNS; optional localhost helper gives
+ // candidate IPs only. Every candidate is reverified against /api/identify.
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),1400);
+ try{
+  const response=await fetch('http://127.0.0.1:8766/kits',{mode:'cors',credentials:'omit',cache:'no-store',
+   redirect:'error',targetAddressSpace:'loopback',signal:ctrl.signal});
+  if(!response.ok)return [];
+  const data=await response.json();return Array.isArray(data.kits)?data.kits.filter(v=>privateIPv4(v.ip)).slice(0,64).map(v=>v.ip):[];
+ }catch{return []}finally{clearTimeout(timer)}
 }
 async function discoverKits(){
  if(discovering)return discoveredKits;
@@ -750,6 +770,7 @@ async function discoverKits(){
    if(k.name&&/^[a-zA-Z0-9_-]{3,31}$/.test(k.name))candidates.add(k.name.toLowerCase().replace(/_/g,'-')+'.local');
   }
   if(usbCandidate.staIp&&privateIPv4(usbCandidate.staIp))candidates.add(usbCandidate.staIp);
+  for(const ip of await discoverBridgeHosts())candidates.add(ip);
   for(let n=1;n<=20;n++)candidates.add('zebjus-drone-'+n+'.local');
   const codes=new Set([selectedCode(),usbCandidate.kitCode,...known.map(v=>v.code)].filter(v=>/^\d{6}$/.test(String(v||''))));
   for(const code of codes)for(const board of ['a1','a2'])candidates.add('zebjus-'+board+'-'+code+'.local');
@@ -825,8 +846,8 @@ async function findKitAp(){
  await connect();
  if(!linkFresh()||state.kitId!==found.kitId)throw Error('Discovered AP but authenticated Device ID verification failed.');
  if(!state.setupAuthorized){
-  setupHint('AP diagnostics connected without a label or pairing code. Router settings require Authorize Settings over USB or existing protected access.');
-  tone('AP diagnostics connected • settings protected.','warn');return found;
+  setupHint('AP connected. Running firmware does not support direct Wi-Fi setup. Install FlightCore 1.4.3 to enable Scan Wi-Fi → Test & Save without USB.');
+  tone('AP connected • install FlightCore 1.4.3 for direct Wi-Fi setup','warn');return found;
  }
  setupStep=2;setupHint('Kit '+found.kitCode+' securely connected over AP. Scroll to Classroom Network → Scan Wi-Fi → Test & Save.');render();
  tone('Kit '+found.kitCode+' connected over AP • Scan Wi-Fi to continue.','good');return found;
@@ -887,11 +908,11 @@ async function refreshConnection(){
  if(authorized.length===1){
   const kit=authorized[0];$('kitCodeInput').value=kit.kitCode;$('kitIpInput').value=kit.ip;$('kitTransport').value=kit.transport;
   await connect();
- }else tone(authorized.length?'Multiple authorized kits • select a Device ID in My Kits':'No authorized kit found • join kit Wi-Fi or use USB','info');
+ }else tone(authorized.length?'Multiple authorized kits • select a Device ID in My Kits':'Scan Kits on the same classroom Wi-Fi, then click a Kit Name. Start the optional LAN helper for brand-new STA kits.','info');
 }
 function init(){
  if(!$('kitCenter'))return;
- guardAction('kitNewSetup',startSetup);guardAction('kitFindAp',findKitAp);guardAction('kitPairFirst',pairNewKitUsb);guardAction('kitHandover',handoverSta);
+ guardAction('kitNewSetup',startSetup);guardAction('kitFindAp',findKitAp);guardAction('kitHandover',handoverSta);
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
  guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);

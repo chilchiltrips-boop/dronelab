@@ -4,16 +4,18 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 
-test('MY KITS has a simple AP and one-time USB wizard, never a private label input',()=>{
+test('MY KITS provides direct AP Wi-Fi setup and discovery without BOOT or USB pairing',()=>{
  const html=read('index.html'),source=read('js/classroom-kits.js');
- for(const id of ['kitSimpleSetup','kitSimpleHelp','kitFindAp','kitPairFirst','kitWifiScan','kitWifiSave','kitHandover','kitRememberBrowser'])
+ for(const id of ['kitSimpleSetup','kitSimpleHelp','kitFindAp','kitDiscover','kitWifiScan','kitWifiSave','kitHandover','kitRememberBrowser'])
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const obsolete of ['id="kitLabelInput"','id="kitEnrollLabel"','id="kitEnrollment"','New Kit • private label enrollment / renew setup'])
   assert.equal(html.includes(obsolete),false,obsolete);
  assert.doesNotMatch(source,/kitLabelInput|kitEnrollment|kitEnrollLabel|enrollLabel|private kit label/i);
  assert.match(source,/guardAction\('kitFindAp',findKitAp\)/);
- assert.match(source,/guardAction\('kitPairFirst',pairNewKitUsb\)/);
- assert.match(source,/if\(!pairedKeys\.has\(state\.kitId\)\)await pairUsb\(\)/);
+ assert.doesNotMatch(html,/id="kitPairFirst"/);
+ assert.doesNotMatch(html,/id="kitPairUsb"/);
+ assert.match(source,/async function discoverBridgeHosts\(/);
+ assert.match(source,/await connect\(\)/);
 });
 
 test('AP Find Kit discovers public code but never treats discovery as authorization',async()=>{
@@ -52,6 +54,8 @@ test('No unsafe 6-digit key, Wi-Fi password, or AP discovery shortcut was added 
  assert.match(fw,/zjSessionAuthenticated\(\)/);
  assert.match(fw,/if\(code!=zjKitCode\)/);
  assert.match(fw,/if\(!zjAllowSetup\(\)\)return;/);
+ assert.doesNotMatch(fw,/zjPhysicalSetup|ZJ_SETUP_BUTTON_PIN/);
+ assert.match(auth,/s\.local&&!s\.localSta&&String\(zjClientTransport\(\)\)=="AP"/);
  assert.match(auth,/X-ZJ-Session/);
  assert.match(read('js/classroom-kits.js'),/authenticated Device ID verification failed/);
 });

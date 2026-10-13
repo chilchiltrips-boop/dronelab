@@ -18,6 +18,8 @@ static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
 static String zjWifiTestState="idle";
 static bool zjPreviousScanActive=false,zjMdnsReady=false,zjUsbScanning=false;
 static int zjUsbScanIndex=0,zjUsbScanCount=0;
+// Kit AP router setup is available to AP-local signed sessions; RC and OTA remain separate.
+
 
 // Escapes all user-provided Wi-Fi identifiers before emitting JSON.
 static String zjJson(const String& src){
@@ -238,7 +240,7 @@ static void zjNetworkSetup(){
  zjSetupHttp();
  Serial.print("ZJNET,AP_NAME,");Serial.println(zjApSsid);
  Serial.println(zjLabelSecret.length()?"ZJNET,LABEL,INSTALLED":"ZJNET,LABEL,MANUFACTURER_SETUP_REQUIRED");
- Serial.println("ZJNET,HELP,AUTO keeps AP visible; use USB ZJNET,SCAN / TEST / MODE; motors disabled");
+ Serial.println("ZJNET,HELP,JOIN_AP_SCAN_WIFI_TEST_SAVE_THEN_CONNECT_STA; motors disabled");
  Serial.print("ZJNET,MODE,");Serial.println(zjMode);
 }
 // USB bench provisioning remains available even if saved STA mode has disabled the AP.
