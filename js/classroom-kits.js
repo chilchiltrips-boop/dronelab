@@ -18,7 +18,7 @@ let headerNetworkChoice='sta',headerModePending=false;
 let statusPending=null,recoveryTarget=null;
 const HEARTBEAT_MAX_AGE=6500;
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
-function linkFresh(){return state.connected&&(state.transport==='usb'?!!serial()?.isOpen?.():state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE)}
+function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
 let lastWifiTestState='',wifiTestNonce=0;const recentWifiMessages=new Map();
 const pairing=()=>root.ZebjusKitPairingStore;
@@ -878,18 +878,19 @@ function init(){
  document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden)void refreshConnection().catch(()=>{})});
  root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{
-  if(!state.connected||state.working||wifiTesting||state.transport==='usb'||pollBusy)return;
-  pollBusy=true;
-  try{await read();pollErrors=0}
+  if(!state.connected||state.working||wifiTesting||pollBusy)return;
+  pollBusy=true;const ticket=reconnectTicket,usb=state.transport==='usb';
+  try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
+   if(ticket!==reconnectTicket)return;
    state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
-   if(++pollErrors<3){audit('Wi-Fi check '+pollErrors+'/3 missed • '+e.message,'warn')}
+   if(++pollErrors<3){audit((usb?'USB':'Wi-Fi')+' check '+pollErrors+'/3 missed • '+e.message,'warn')}
    else{
     const old={kitId:state.kitId,kitCode:state.kitCode,transport:state.transport,ip:state.ip,
      key:state.key,board:state.board};
-    audit('3 missed Wi-Fi checks • releasing diagnostic control and reconnecting same hardware','warn');
-    await disconnect('Wi-Fi link lost • automatic identity-checked reconnect');
-    if(!document.hidden)void recoverVerifiedLink(old);
+    audit('3 missed '+(usb?'USB':'Wi-Fi')+' checks • releasing diagnostic control','warn');
+    await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect');
+    if(!usb&&!document.hidden)void recoverVerifiedLink(old);
    }
   }finally{pollBusy=false}
  },2200);
