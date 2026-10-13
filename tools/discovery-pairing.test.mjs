@@ -24,7 +24,8 @@ test('reference-inspired discovery probes bounded kit names and AP, deduplicates
  assert.equal(items.find(x=>x.kitCode==='526624').transport,'ap');
  assert.equal(items.find(x=>x.kitCode==='136625').transport,'sta');
  assert.ok(calls.some(url=>url.includes('zebjus-drone-1.local')));
- assert.ok(calls.length<=60,'No unbounded LAN scan');
+ assert.ok(calls.some(url=>url.includes('zebjus_drone_1.local')));
+ assert.ok(calls.length<=110,'No unbounded LAN scan');
  assert.equal(win.ZebjusKits.getState().connected,false,'Discovery never grants control');
 });
 test('physical USB pairing and real radio status never leak credentials into cached metadata',()=>{
@@ -53,8 +54,8 @@ test('physical USB pairing and real radio status never leak credentials into cac
 test('firmware release metadata and Service Worker cache version are aligned with source',()=>{
  const sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
- assert.equal(version,'1.4.3');
- assert.ok(sketch.includes('FW_VERSION="1.4.3"'));
+ assert.equal(version,'1.4.4');
+ assert.ok(sketch.includes('FW_VERSION="1.4.4"'));
  assert.ok(sw.includes('classroom-kits.css?v=brand-stack2'));
  assert.ok(page.includes('classroom-kits.css?v=brand-stack2'));
 });
