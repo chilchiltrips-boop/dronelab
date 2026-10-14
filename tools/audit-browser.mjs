@@ -23,10 +23,11 @@ async function inventory(screen){
 }
 try{
  await page.goto(base+'#settings',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
- check(await page.locator('[data-tab=settings]').getAttribute('class').then(x=>x.includes('active')),'Settings deep link ignored');
+ check(await page.locator('[data-tab=firmware]').getAttribute('class').then(x=>x.includes('active')),'Legacy Settings deep link did not reach Devices & Firmware');
+ check(await page.locator('#dw-panel-wifi').isVisible(),'Legacy Settings URL must open Wi-Fi & Network');
  for(const [width,height] of [[1920,1080],[1366,768],[1280,720],[768,1024],[360,800],[1024,768],[390,844],[844,390],[915,412]]){
   await page.setViewportSize({width,height});
-  for(const tab of ['assembly','wiring','python','settings','firmware']){
+  for(const tab of ['assembly','wiring','python','pid','firmware']){
    await page.locator('[data-tab='+tab+']').click({noWaitAfter:true});await page.waitForFunction(name=>document.getElementById('tab-'+name)?.classList.contains('active'),tab);await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/${tab}-${width}x${height}.png`,fullPage:true});
    const metric=await page.evaluate(({tab,width,height})=>({tab,width,height,scrollWidth:document.documentElement.scrollWidth,bodyHeight:document.documentElement.scrollHeight,panelHeight:document.querySelector('#tab-'+tab).getBoundingClientRect().height}),{tab,width,height});
    metrics.push(metric);
@@ -38,6 +39,15 @@ try{
    if(tab==='wiring')check(await page.evaluate(()=>[...document.querySelectorAll('.wiring-card .toolbar-row button')].every(b=>{const r=b.getBoundingClientRect(),p=b.parentElement.getBoundingClientRect();return r.right<=p.right+1})), 'Clipped wiring toolbar '+width);
    if(tab==='firmware'&&width===390)check(await page.locator('#fwReconnectBtn').evaluate(b=>b.getBoundingClientRect().height<80),'Oversized firmware recovery button');
    if(width===1366)await inventory(tab);
+   if(tab==='firmware'){
+    for(const view of ['overview','connection','wifi','firmware','mobile','diagnostics','security']){
+     await page.locator('[data-dw-view="'+view+'"]').click();
+     check(await page.locator('#dw-panel-'+view).isVisible(),'Devices '+view+' view did not open');
+     if(width===1366)await inventory('devices:'+view);
+     if(view==='mobile'&&[390,1366].includes(width))
+      await page.screenshot({mask:[page.locator('#pairOfferCanvas,#pairCode,#pairVerifyPin,#pairOfferText,#pairAnswerText')],path:`${dir}/devices-mobile-${width}x${height}.png`,fullPage:true});
+    }
+   }
   }
  }
  await page.setViewportSize({width:1366,height:768});await page.goto(base+'tripod.html',{waitUntil:'domcontentloaded'});await page.locator('.v2-workspace-tools>summary').click();await page.locator('#topPairMobileBtn').click();
@@ -64,8 +74,8 @@ try{
  await page.locator('#connectionClose').click();await page.waitForFunction(()=>window.__reopenStream.getTracks().every(t=>t.readyState==='ended'));
  await page.locator('#topPairMobileBtn').click();await page.locator('#pairStep2BackBtn').click();await page.locator('#pairCancelBtn').click();check(await page.locator('#pairStep1NextBtn').isDisabled(),'Cancel retains old offer');
  await page.goto(base+'#firmware',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
- await page.locator('[data-tab=firmware]').click();check(await page.locator('#fwUsbFlashBtn').isDisabled(),'Flash enabled before USB connection');check(await page.locator('#fwReconnectBtn').isDisabled(),'Unavailable kit reconnect enabled');
- await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
+ await page.locator('[data-tab=firmware]').click();await page.locator('[data-dw-view="firmware"]').click();check(await page.locator('#fwUsbFlashBtn').isDisabled(),'Flash enabled before USB connection');check(await page.locator('#fwReconnectBtn').isDisabled(),'Unavailable kit reconnect enabled');
+ await page.locator('[data-dw-view="diagnostics"]').click();await page.locator('#fwSerialTabPlotter').click();check(await page.locator('#fwSerialPlotterPane').isVisible(),'Plotter tab failed');await page.locator('#fwPlotClearBtn').click();await page.locator('#fwSerialTabMonitor').click();await page.locator('#fwSerialClearBtn').click();
  await page.evaluate(()=>{location.hash='wiring'});await page.locator('#tab-wiring.active').waitFor();
  for(const hash of ['simcontrol','flight','led']){
   await page.goto(base+'#'+hash,{waitUntil:'domcontentloaded'});
