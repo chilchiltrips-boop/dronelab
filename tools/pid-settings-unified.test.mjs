@@ -26,7 +26,7 @@ test('Settings embeds QR/code/PIN controls, no external redirect and stage layou
  for(const id of ['pairOfferCanvas','pairPhoneCode','pairConnectCodeBtn','pairScanAnswerBtn','pairVerifyPin','pairConfirmBtn','connectionClose'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.match(css,/\.settings-workspace #connectionFlow \.qr-step-one \.qr-step1-layout\{display:grid/);
  assert.match(pair,/const inlineSettings=\(\)=>/);
- assert.match(pair,/ZebjusDevicesWorkspace\\?\\.open\\('mobile'/);
+ assert.ok(pair.includes("window.ZebjusDevicesWorkspace?.open('mobile'"));
  assert.doesNotMatch(pair.slice(pair.indexOf('function openSettings()'),pair.indexOf('function openStep(')),/host\.close\(|host\.releaseControl\(|disconnect\(/);
 });
 test('Tab switching is UI-only and does not close P2P session or disable controls',()=>{
