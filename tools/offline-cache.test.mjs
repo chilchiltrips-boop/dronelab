@@ -59,3 +59,12 @@ test('reachability probe bypasses Service Worker even when version metadata is c
  let intercepted=false;handlers.fetch({request:{method:'GET',url:'https://example.test/dronelab/app-version.json?connectivity_probe=123'},respondWith(){intercepted=true}});
  assert.equal(intercepted,false,'Cached version must never report live Web reachability');
 });
+
+test('unified Devices & Firmware sidebar loads offline with its exact versioned script and CSS',async()=>{
+ const r=runtime();await r.install();r.setOffline();
+ for(const path of ['./devices-workspace.css?v=unified-devices-20261015','./js/devices-workspace.js?v=unified-devices-20261015']){
+  const response=await r.request(path);
+  assert.equal(response.ok,true,path);
+  assert.ok((await response.text()).length>100,path);
+ }
+});
