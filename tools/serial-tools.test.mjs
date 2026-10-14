@@ -37,6 +37,19 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  assert.ok(!code.includes('── USB Serial connected'));
  assert.ok(code.includes("nl:'\\n',cr:'\\r',crlf:'\\r\\n'"));
 });
+test('Read Running Firmware refreshes the physical pairing even while an AP session is selected',async()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=source.indexOf('async function openSerialMonitor('),end=source.indexOf('async function toggleSerialMonitor(',start);
+ const commands=[],selected={connected:true,transport:'ap',kitId:'ZFC-A1-012345ABCDEF'};
+ const port={open:async()=>{},setSignals:async()=>{},readable:{getReader:()=>({read:()=>new Promise(()=>{}),releaseLock(){}})}};
+ const context={monitorStarting:false,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
+  window:{ZebjusKits:{getState:()=>selected}},usbPortInfo:()=>({}),serialBaud:()=>115200,serialUi(){},kitStatus(){},TextDecoder,
+  serialIdleWatch(){},setUsbTelemetryRate:async()=>{},$:()=>({value:20}),writePythonSerialLine:async line=>{commands.push(line)}};
+ vm.runInNewContext(source.slice(start,end)+';globalThis.open=openSerialMonitor;',context);
+ await context.open({port});
+ for(const command of ['ZJINFO,GET\n','ZJKIT,GET\n','ZJNET,GET\n','ZJNET,PAIR\n'])assert.ok(commands.includes(command),command);
+ assert.equal(selected.transport,'ap');assert.equal(selected.connected,true);
+});
 
 test('native ESP32-C3 Web Serial selects guarded ROM recovery plans',()=>{
  const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');

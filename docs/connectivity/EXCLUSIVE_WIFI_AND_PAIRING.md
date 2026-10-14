@@ -28,6 +28,8 @@ The reported logs showed public discovery succeeding, followed by `enrollment_pr
 
 Regression tests reproduced two client defects: rejected saved credentials were retained and reused, and concurrent status/telemetry renewal could open competing enrollment sessions. The client now serializes requests/session creation per physical kit, removes a rejected saved pairing, and retains AP setup or verified STA observer monitoring. Rejected proofs are not automatically replayed. Rate limiting alone retains the pairing, pauses enrollment for 31 seconds, and leaves scoped monitoring available. Explicit authorization waits for an existing observer poll before verifying admin scope.
 
+Read Running Firmware explicitly requests the physical USB pairing even when an AP/STA session is still selected. Previously the USB auto-pair path only ran after selecting USB, so this recovery action could leave the rejected network pairing unchanged. Late USB status lines also cannot bypass a pending wireless Connect/Later decision.
+
 If an existing browser reports the error after upgrading, wait out the cooldown, read the physical kit once over USB to replace its stale pairing, rejoin its Wi-Fi, approve Connect, then authorize control and updates. Firmware still enforces nonce consumption, proof verification, identity, scope, counters and rate limits.
 
 ## Validation

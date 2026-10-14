@@ -79,6 +79,8 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
+  enableUsb:()=>{window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,writeLine:async()=>{}}},
+  serialLine:line=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line}}),
   reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{disposed=true;for(const t of timers)clearTimeout(t)}};
 }
 test('rejected saved pairing falls back to verified STA monitoring and never replays that credential',async()=>{
@@ -139,6 +141,13 @@ test('exclusive Test & Save clears the old AP link and waits for verified redisc
   assert.equal(f.elements.get('kitRouterPass').value,'');
   assert.equal(f.requests.filter(r=>r.route==='/api/status').length,before);
   assert.ok(!JSON.stringify([...f.storage.values()]).includes('private-router-pass'));
+ }finally{f.dispose()}
+});
+test('late physical USB telemetry cannot bypass the pending Wi-Fi reconnect permission',async()=>{
+ const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true,initialize:true});try{
+  f.reachable(['192.168.4.1']);await f.api.connect();await f.api.switchNetworkMode('sta');f.enableUsb();
+  for(const line of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJINFO,FW,ZFC-A1,1.4.6'])f.serialLine(line);
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().pendingNetworkMode,'sta');
  }finally{f.dispose()}
 });
 test('one physical USB pairing is remembered automatically when the default saved-access option is enabled',async()=>{

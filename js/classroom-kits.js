@@ -799,7 +799,7 @@ function onSerial(e){
    }
   }
  }
- if(autoReconnectAllowed&&!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board&&Date.now()-usbCandidate.identityAt<=HEARTBEAT_MAX_AGE){
+ if(autoReconnectAllowed&&!pendingNetworkTarget&&!reconnectOffer&&!state.connected&&!state.working&&serial()?.isOpen?.()&&usbCandidate.kitId&&usbCandidate.kitCode&&usbCandidate.board&&Date.now()-usbCandidate.identityAt<=HEARTBEAT_MAX_AGE){
   try{
    const kit=checkIdentity(usbCandidate,'usb',usbCandidate.kitCode);
    Object.assign(state,kit,{connected:true,heartbeatAt:usbCandidate.identityAt,linkState:'connected',transport:'usb',mode:'usb',key:'',ip:'',usbInfo:{...usbCandidate},rc:null,owner:false,since:Date.now()});

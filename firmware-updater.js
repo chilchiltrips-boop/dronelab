@@ -729,6 +729,9 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   // Same physical USB connection is shared with MY KITS: request kit code and AP/STA status.
   void writePythonSerialLine('ZJKIT,GET\n').catch(()=>{});
   void writePythonSerialLine('ZJNET,GET\n').catch(()=>{});
+  // Read Running Firmware must refresh physical pairing even when MY KITS
+  // still has an AP/STA connection and therefore does not auto-select USB.
+  void writePythonSerialLine('ZJNET,PAIR\n').catch(()=>{});
   telRxSeq=null;telMissed=0;telDeviceDrops=0;telRateActual=0;
   void setUsbTelemetryRate($('#fwTelRate')?.value||20);
  }finally{monitorStarting=false}
