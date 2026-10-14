@@ -9,7 +9,7 @@
 .dw-icon{width:23px;height:23px;flex:0 0 23px;fill:none;stroke:currentColor;stroke-width:1.9}
 .dw-sidebar-title .dw-icon{width:19px;height:19px;flex-basis:19px}
 .dw-nav-list{display:grid;gap:4px}
-.dw-nav{display:flex;align-items:center;gap:13px;text-align:left;min-height:46px;width:100%;padding:9px 11px;border:1px solid transparent;border-left:3px solid transparent;border-radius:10px;background:none;color:#b8ccdc;cursor:pointer;font:700 12px/1.3 inherit}
+.dw-nav{display:flex;align-items:center;gap:13px;text-align:left;min-height:46px;width:100%;padding:9px 11px;border:1px solid transparent;border-left:3px solid transparent;border-radius:10px;background:none;color:#b8ccdc;cursor:pointer;font:inherit;font-size:12px;font-weight:700;line-height:1.3}
 .dw-nav:hover{background:#132e40;color:#fff}
 .dw-nav[aria-selected="true"]{background:#153747;border-color:#255568;border-left-color:#40d7ad;color:#e8fff8}
 .dw-nav:focus-visible{outline:3px solid #50edc0;outline-offset:2px}
@@ -94,3 +94,6 @@
  .dw-topline b{font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){.dw-nav{transition:none}}
+
+/* Legacy MY KITS is an inert DOM source for preserved handlers; no second tab. */
+#tab-settings[hidden],#tab-settings[hidden].active{display:none!important}
