@@ -49,7 +49,7 @@ try{
   if([320,390,768,1294].includes(width))await page.screenshot({path:'test-output/grant-mobile-'+width+'.png'});
  }
  await page.setViewportSize({width:1294,height:801});
- for(const tab of ['pid','settings','python','assembly']){
+ for(const tab of ['pid','firmware','python','assembly']){
   await page.locator('[data-tab="'+tab+'"]').click();
   const t=await page.locator('.top-grant-control .grant-control-text').textContent();
   if(t.trim()!=='Mobile Ctrl'||await page.locator('#topGrantMobileSwitch').getAttribute('aria-label')!=='Grant Mobile Control')throw Error('Grant switch disappeared on '+tab);

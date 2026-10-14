@@ -44,7 +44,7 @@ try{
     throw Error('Unexpected mock route '+route);
    }}};
   });
-  await page.locator('[data-tab="firmware"]').click();await page.locator('#fwDiscoverKits').click();
+  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="connection"]').click();await page.locator('#fwDiscoverKits').click();
   await page.waitForFunction(()=>document.querySelector('#fwKitNameInput').value==='zebjus_drone_2');
   await page.locator('#fwKitConnectSelected').click();await page.waitForFunction(()=>window.ZebjusKits.getState().connected);
   assert.equal(await page.locator('#fwDetailId').textContent(),'ZFC-A1-012345ABCDEF');
@@ -59,7 +59,7 @@ try{
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
   assert.equal(await page.locator('#kitTopControl').getAttribute('aria-checked'),'true');
   await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
-  await page.locator('[data-tab="firmware"]').click();
+  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();
   await page.locator('#fwWifiConnectSta').click();
   await page.waitForFunction(()=>document.querySelector('#fwConnectLog').textContent.includes('STA is not reachable'));
   assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap','Unreachable STA leaves the AP setup link intact');
@@ -71,7 +71,7 @@ try{
   assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser is connected through router Wi-Fi "Classroom"/);
   assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),true,'STA monitoring does not grant control');
   await page.screenshot({path:`${output}/${entry.replace('.html','')}-sta-${width}.png`,fullPage:true});
-  await page.locator('[data-tab="firmware"]').click();await page.locator('#fwKitDisconnect').click();
+  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="connection"]').click();await page.locator('#fwKitDisconnect').click();
   await page.waitForFunction(()=>!window.ZebjusKits.getState().connected);
   assert.equal(await page.locator('#fwSelectedKitName').textContent(),'No kit selected');
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false,`${width}px horizontal overflow`);

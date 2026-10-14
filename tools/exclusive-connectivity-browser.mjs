@@ -70,7 +70,7 @@ let page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
 const wait=fn=>page.waitForFunction(fn,null,{timeout:45000});
 try{
  await page.goto('http://127.0.0.1:8765/');await wait(()=>!!window.ZebjusKits&&!!window.ZebjusFirmwareConnect);
- await page.locator('[data-tab="firmware"]').click();
+ await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();
  await page.evaluate(async({id,oldKey})=>{
   await window.ZebjusKitPairingStore.remember(id,oldKey);
   await window.ZebjusKits.connectDiscoveredKit({kitId:id,kitCode:'123456',ip:'192.168.4.1',transport:'ap'});
@@ -102,7 +102,7 @@ try{
  computer='ap';await page.evaluate(()=>window.ZebjusKits.discoverKits());await page.locator('#kitReconnectDialog').waitFor({state:'visible'});
  await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap');assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().staConnected),false);
- await page.locator('[data-tab="firmware"]').click();await page.locator('#fwAuthorizeUpdates').click();await wait(()=>window.ZebjusKits.getState().otaAuthorized);
+ await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();await page.locator('#fwAuthorizeUpdates').click();await wait(()=>window.ZebjusKits.getState().otaAuthorized);
  assert.equal(proofFailures,1,'The rejected saved key must never be replayed');
  await page.setViewportSize({width:360,height:900});await page.screenshot({path:output+'/ap-only-360.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);

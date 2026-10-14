@@ -51,18 +51,27 @@ function record(result){
  for(const b of result.buttons)if(b.ratio>1.06)hardFailures.push(result.tag+' '+result.width+'px: control #'+b.id+' clipped ('+b.text+', ratio='+b.ratio+')');
 }
 try{
- await page.goto(base+'index.html#settings',{waitUntil:'domcontentloaded',timeout:30000});
+ await page.goto(base+'index.html#firmware',{waitUntil:'domcontentloaded',timeout:30000});
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.ready==='true',null,{timeout:40000});
  await page.evaluate(()=>{const d=document.getElementById('pairStep2');if(d)d.open=true});
  for(const width of widths){
   await page.setViewportSize({width,height:840});
-  for(const tab of ['settings','assembly','wiring','python','pid','firmware']){
+  for(const tab of ['firmware','assembly','wiring','python','pid']){
    await page.locator('[data-tab="'+tab+'"]').click();
    await page.waitForTimeout(70);
    const r=await inspect('main:'+tab,width);record(r);
-   if(tab==='settings'){
-    if(!r.inputs.find(x=>x.id==='pairPhoneCode'))hardFailures.push('Main Settings '+width+'px Step 2 code input hidden');
-    if(width===390||width===1294)await page.screenshot({path:'test-output/form-fit/settings-'+width+'.png',fullPage:true});
+   if(tab==='firmware'){
+    // Audit the new icon sidebar's active mobile pairing view and the other
+    // hardware sections, without opening any physical flash operation.
+    await page.locator('[data-dw-view="mobile"]').click();
+    await page.evaluate(()=>{document.getElementById('pairStep2').open=true});
+    const mobile=await inspect('devices:mobile',width);record(mobile);
+    if(!mobile.inputs.find(x=>x.id==='pairPhoneCode'))hardFailures.push('Devices Mobile Controller '+width+'px Step 2 code input hidden');
+    if(width===390||width===1294)await page.screenshot({path:'test-output/form-fit/devices-mobile-'+width+'.png',fullPage:true});
+    for(const section of ['overview','connection','wifi','firmware','diagnostics','security']){
+     await page.locator('[data-dw-view="'+section+'"]').click();
+     record(await inspect('devices:'+section,width));
+    }
    }
   }
  }

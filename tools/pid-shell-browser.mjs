@@ -12,7 +12,7 @@ const page=await context.newPage(),phone=await context.newPage(),errors=[];
 for(const p of [page,phone])p.on('pageerror',e=>errors.push(e.message));
 const until=(p,fn,timeout=19000)=>p.waitForFunction(fn,null,{timeout});
 try{
- await Promise.all([page.goto('http://127.0.0.1:8765/index.html#settings',{waitUntil:'domcontentloaded'}),
+ await Promise.all([page.goto('http://127.0.0.1:8765/index.html#firmware',{waitUntil:'domcontentloaded'}),
                     phone.goto('http://127.0.0.1:8765/companion.html',{waitUntil:'domcontentloaded'})]);
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining&&window.__testPeer,30000);
  const legacy=await context.newPage();
@@ -20,7 +20,8 @@ try{
  await until(legacy,()=>location.hash==='#pid'&&location.pathname.endsWith('index.html'));
  await legacy.close();
  await page.locator('.topbar').evaluate(el=>{window.__testHeader=el});
- if(!(await page.locator('#tab-settings').isVisible()))throw Error('Settings must be a real panel, not a redirect');
+ await page.locator('[data-dw-view="mobile"]').click();
+ if(!(await page.locator('#dw-panel-mobile').isVisible()))throw Error('Mobile Controller must be a real Devices panel');
  if(!(await page.locator('#connectionFlow').isVisible()))throw Error('Inline QR/code form missing from Settings');
  if(await page.locator('#connectionDialog').evaluate(el=>el.tagName)!=='SECTION')throw Error('Connection settings must not be a blocking dialog');
  if(!(await page.locator('#topGrantMobileSwitch').isDisabled()))throw Error('Grant cannot be available before pairing');
@@ -34,8 +35,8 @@ try{
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpRun'));
  if(!(await iframe.locator('#tpRun').isVisible()))throw Error('PID Tuning cockpit not visible');
  if(await iframe.locator('.tp-header').isVisible())throw Error('Duplicate topbar inside embedded simulator');
- await page.locator('[data-tab="settings"]').click();
- await until(page,()=>document.querySelector('#tab-settings')?.classList.contains('active'));
+ await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="mobile"]').click();
+ await until(page,()=>document.querySelector('#tab-firmware')?.classList.contains('active')&&!document.querySelector('#dw-panel-mobile')?.hidden);
  if(!await page.locator('.topbar').evaluate(el=>el===window.__testHeader))throw Error('Header was replaced across tabs');
  await page.locator('#pairCreateBtn').click();
  await until(page,()=>document.getElementById('pairOfferText')?.value.startsWith('zj1:'),23000);
@@ -56,12 +57,12 @@ try{
  await page.locator('.top-grant-control').click();
  await until(phone,()=>!document.getElementById('flightArm').disabled,14000);
  const before=await page.evaluate(()=>window.__testPeer.status());
- if(!before.connected||before.controller!=='mobile')throw Error('Host not connected/owned before Settings navigation');
+ if(!before.connected||before.controller!=='mobile')throw Error('Host not connected/owned before Devices Mobile navigation');
  await page.locator('[data-tab="pid"]').click();
  await until(page,()=>document.querySelector('#tab-pid')?.classList.contains('active'));
- await page.locator('[data-tab="settings"]').click();
+ await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="mobile"]').click();
  const after=await page.evaluate(()=>window.__testPeer.status());
- if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile')throw Error('Settings nav discarded WebRTC session/control lease');
+ if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile')throw Error('Mobile nav discarded WebRTC session/control lease');
  await phone.locator('#flightBack').click();
  await phone.locator('#flightArm').click();
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining?.snapshot()?.armed);
@@ -70,7 +71,7 @@ try{
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining?.snapshot()?.source==='mobile');
  await phone.locator('#flightStop').click();
  await until(page,()=>!document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining?.snapshot()?.armed);
- await page.locator('[data-tab="settings"]').click();
+ await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="mobile"]').click();
  const final=await page.evaluate(()=>window.__testPeer.status());
  if(!final.connected||final.sessionId!==before.sessionId)throw Error('STOP or tab navigation incorrectly disconnected WebRTC');
  await page.screenshot({path:'test-output/pid-shell-settings-desktop.png',fullPage:true});
@@ -79,7 +80,7 @@ try{
  await page.setViewportSize({width:390,height:844});
  await page.screenshot({path:'test-output/pid-shell-mobile-shell.png',fullPage:true});
  if(errors.length)throw Error('Uncaught JavaScript errors: '+errors.join(' | '));
- console.log('PASS unified PID shell: one header, no underline, embedded simulator, inline QR/code, top Grant switch, WebRTC session survives PID/Settings, applied ARM/STOP');
+ console.log('PASS unified PID shell: one header, no underline, embedded simulator, inline QR/code, top Grant switch, WebRTC session survives PID/Devices Mobile, applied ARM/STOP');
 }catch(e){console.error(e.stack||e);console.error('Browser errors',errors);
  await page.screenshot({path:'test-output/pid-shell-error-web.png',fullPage:true}).catch(()=>{});
  await phone.screenshot({path:'test-output/pid-shell-error-phone.png',fullPage:true}).catch(()=>{});
