@@ -1309,14 +1309,14 @@ function init(){
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
- document.addEventListener('visibilitychange',()=>{if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden&&autoReconnectAllowed)void refreshConnection().catch(()=>{})});
+ document.addEventListener('visibilitychange',()=>{if(state.working)return;if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden&&autoReconnectAllowed)void refreshConnection().catch(()=>{})});
  root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{
   if(!state.connected||state.working||wifiTesting||pollBusy)return;
   pollBusy=true;const ticket=reconnectTicket,usb=state.transport==='usb';
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
-   if(ticket!==reconnectTicket)return;
+   if(ticket!==reconnectTicket||state.working)return;
    state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
    if(++pollErrors<3){audit((usb?'USB':'Wi-Fi')+' check '+pollErrors+'/3 missed • '+e.message,'warn')}
    else{
@@ -1353,7 +1353,13 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  const target=connectionTarget(),ticket=reconnectTicket;
  const expectedBuild=Array.from(bytes.slice(176,208),b=>b.toString(16).padStart(2,'0')).join('');
  const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
- const pre=await wifiDirect(ip,key,'/api/status');
+ // Pause competing heartbeats BEFORE the first OTA request. Otherwise
+ // a background status failure can discard the selected kit during a write.
+ state.working=true;render();
+ try{
+  if(statusPending)await statusPending.catch(()=>{});
+  if(ticket!==reconnectTicket)throw Error('Kit selection changed before OTA preflight');
+  const pre=await wifiDirect(ip,key,'/api/status');
  if(pre.kitId!==deviceId||pre.kitCode!==kitCode||pre.board!==boardId)
   throw Error('OTA blocked: network target Device ID/Kit Code/board mismatch');
  if(ticket!==reconnectTicket||pre.otaAuthorized!==true||verifiedTransport(pre)!==transport)throw Error('Selected kit or OTA authorization changed. Reconnect and authorize updates.');
@@ -1363,8 +1369,6 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
   throw Error('Unable to verify running firmware and OTA partition compatibility');
  if(!/^[a-fA-F0-9]{32}$/.test(pre.bootId||''))throw Error('Firmware must report a boot ID before an OTA reboot can be verified');
  if(bytes.length>(pre.otaMaxBytes||0x1e0000)||pre.partitionLayout&&pre.partitionLayout!=='ZFC_DUAL_1E0000')throw Error('APP does not fit the active OTA layout. Use USB FACTORY recovery.');
- state.working=true;render();
- try{
   onProgress({phase:'upload',percent:4,message:'Uploading authenticated APP image to '+transport.toUpperCase()});
   let response;
   if(pre.encryptedOta===true){
@@ -1399,14 +1403,14 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
    req.send(body);
   });
   if(!response.updated)throw Error('No firmware write acknowledgement');
-  if(ticket!==reconnectTicket)throw Error('OTA write acknowledged but selection changed; verify the original physical kit before retrying');
+  if(ticket!==reconnectTicket)return {written:true,verified:false,expectedVersion:version,kitId:deviceId,reason:'Selection changed after OTA write acknowledgement'};
   state.connected=false;state.heartbeatAt=0;state.linkState='reconnecting';state.owner=false;state.rcSession='';state.rcSource='';render();
   root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport,kitId:deviceId}}));
   onProgress({phase:'reboot',percent:89,message:'OTA written • rebooting selected '+transport.toUpperCase()+' kit'});
   await sleep(2300);
   const deadline=Date.now()+120000;let latest=null;
   while(Date.now()<deadline){
-   if(ticket!==reconnectTicket)throw Error('OTA reconnect cancelled; firmware runtime remains unverified');
+   if(ticket!==reconnectTicket)return {written:true,verified:false,expectedVersion:version,kitId:deviceId,reason:'Reconnect interrupted after OTA acknowledgement'};
    for(const host of identityHosts(target))try{
     const live=await probeIdentity(host,1700);
     if(!live||live.kitId!==deviceId||live.kitCode!==kitCode)continue;
@@ -1434,7 +1438,10 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
   audit('OTA acknowledged but kit runtime not yet independently verified','warn');
   onProgress({phase:'reconnect',percent:99,message:'OTA write acknowledged • reconnect and verify firmware using Serial'});
   return {written:true,verified:false,expectedVersion:version,kitId:deviceId};
- }finally{if(ticket===reconnectTicket)state.working=false;render();}
+ }finally{
+  if(ticket===reconnectTicket)state.working=false;
+  render();
+ }
 }
 async function connectDiscoveredKit(kit){
  if(!kit?.kitId||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified Kit from discovery.');

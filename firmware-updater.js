@@ -241,8 +241,8 @@ async function flashNetworkApp(){
    }
   });
   if(result.verified){progress(100,'Firmware '+result.version+' verified from live '+kit.transport.toUpperCase()+' status');badge('#fwOverallBadge','OTA VERIFIED','good');log('Network APP OTA verified • '+result.kitId+' firmware '+result.version);}
-  else{progress(99,'Firmware write ACK received • runtime not yet verified');badge('#fwOverallBadge','OTA ACK • RECONNECT PENDING','warn');log('OTA write acknowledged, but kit did not reconnect before timeout. Verify running ZJINFO over USB.');}
- }catch(e){stage('Flash','error');badge('#fwOverallBadge','NETWORK OTA FAILED / UNCONFIRMED','danger');log('Network flash not verified: '+String(e.message||e));}
+  else{progress(99,'Firmware write ACK received • runtime not yet verified');badge('#fwOverallBadge','OTA ACK • RECONNECT PENDING','warn');log('OTA write acknowledged but runtime remains unverified. Reconnect the same kit and verify its version/build before retrying. '+(result.reason||''));}
+ }catch(e){stage('Flash','error');badge('#fwOverallBadge','NETWORK OTA INTERRUPTED / UNCONFIRMED','warn');log('Network OTA interrupted; no confirmed write ACK: '+String(e.message||e)+'. Check the running firmware version before retrying.');}
  finally{setBusy(false);kitStatus()}
 }
 async function wifiFlash(){

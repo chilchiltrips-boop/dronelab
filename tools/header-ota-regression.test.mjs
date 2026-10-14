@@ -37,7 +37,7 @@ test('network OTA UI excludes USB/relay and does not claim success without runti
  assert.match(kit,/while\(Date\.now\(\)<deadline\)/);
  assert.match(kit,/written:true,verified:false/);
  assert.match(updater,/OTA ACK • RECONNECT PENDING/);
- assert.match(updater,/NETWORK OTA FAILED \/ UNCONFIRMED/);
+ assert.match(updater,/NETWORK OTA INTERRUPTED \/ UNCONFIRMED/);
 });
 
 test('header network switch changes physical Wi-Fi mode and never claims physical motor arming',()=>{
@@ -51,4 +51,16 @@ test('header network switch changes physical Wi-Fi mode and never claims physica
  assert.match(kit,/if\(\$\('kitHardwareTarget'\)\)\$\('kitHardwareTarget'\)\.checked=true/);
  assert.match(kit,/APP-only OTA/);
  assert.doesNotMatch(kit,/ledcWrite\(/);
+});
+
+test('OTA locks polling before its first request and tolerates longer flash writes',()=>{
+ const auth=read('js/kit-auth.js');
+ assert.match(auth,/firmwareWrite\?20000:4200/);
+ assert.match(auth,/timedOut=true;control.abort\(\)/);
+ const begin=kit.indexOf('async function uploadAppFirmware');
+ const pre=kit.indexOf("const pre=await wifiDirect(ip,key,'/api/status')",begin);
+ const lock=kit.indexOf('state.working=true;render();',begin);
+ assert.ok(begin>=0&&lock>begin&&lock<pre,'prevent background status polling before preflight');
+ assert.match(kit,/if\(ticket!==reconnectTicket\|\|state.working\)return/);
+ assert.match(updater,/no confirmed write ACK/);
 });

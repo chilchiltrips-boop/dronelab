@@ -51,11 +51,17 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
 }
 function http(host){return async(route,method='GET',args={},headers={})=>{
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
- const control=new AbortController(),timer=setTimeout(()=>control.abort(),4200);
+ const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
+ const timeoutMs=firmwareWrite?20000:4200;
+ const control=new AbortController();let timedOut=false;
+ const timer=setTimeout(()=>{timedOut=true;control.abort()},timeoutMs);
  try{
   const response=await fetch(host+route,{method,mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',targetAddressSpace:'local',signal:control.signal,
    headers:{...headers,...(method==='POST'?{'Content-Type':'application/x-www-form-urlencoded'}:{})},...(method==='POST'?{body:new URLSearchParams(args)}:{})});
   return {status:response.status,text:await response.text(),proof:response.headers.get('X-ZJ-Response')||''};
+ }catch(e){
+  if(timedOut)throw Error((firmwareWrite?'Encrypted OTA request':'Kit request')+' timed out at '+route+' after '+(timeoutMs/1000)+'s. Verify kit reachability before retrying.');
+  throw e;
  }finally{clearTimeout(timer)}
 };}
 root.ZebjusKitAuth={label,diagnosticKey,open,http,mac};
