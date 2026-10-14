@@ -1,6 +1,6 @@
 {
   "version": "1.8.0+206",
-  "channel": "review",
+  "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
     "Exclusive AP or STA: saved-router failure restores AP, manual AP stays selected",
@@ -8,5 +8,7 @@
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
     "FlightCore 1.4.6 APP and FACTORY firmware for A1 and A2"
-  ]
+  ],
+  "buildCommit": "63ff0c04a26e",
+  "publishedAt": "2026-10-14T11:32:36.580697+00:00"
 }
