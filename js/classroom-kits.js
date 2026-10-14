@@ -1294,6 +1294,7 @@ function init(){
  });guardAction('kitDiscover',discoverKits);
  // Firmware tab owns its discovery results; My Kits keeps independent actions.
  $('fwOpenDiscovery')?.addEventListener('click',goKits);
+ $('kitOpenFirmwareCenter')?.addEventListener('click',()=>document.querySelector('button.tab[data-tab="firmware"]')?.click());
  guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',refreshConnection);guardAction('kitTopRefresh',refreshConnection);
  guardAction('kitTopStop',stop);
