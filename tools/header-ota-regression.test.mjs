@@ -78,3 +78,11 @@ test('firmware target matches safe screenshot-style OTA/USB workflow',()=>{
  assert.match(updater,/if\(erase&&type!=='factory'\)/);
  assert.match(updater,/fwCheckKitBtn.*refreshKit/);
 });
+
+test('during a real OTA, kit status reports updating instead of false offline or online',()=>{
+ assert.match(kit,/otaActive\?\(state.connected\?'OTA UPLOADING':'OTA RECONNECTING'\)/);
+ assert.match(kit,/otaActive\?'Firmware update/);
+ assert.match(kit,/if\(otaActive\)return discoveredKits/);
+ assert.match(kit,/otaInProgress:otaActive/);
+ assert.match(kit,/state.working=true;otaActive=true;render\(\)/);
+});

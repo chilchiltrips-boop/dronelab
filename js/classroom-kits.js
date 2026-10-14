@@ -19,7 +19,7 @@ const networkTails=new Map(),rejectedPairings=new Map(),enrollmentCooldowns=new 
 const rememberedWrites=new Map(),offeredConnections=new Set();
 let reconnectOffer=null,pendingNetworkTarget=null,offerPending=null;
 let headerNetworkChoice='sta',headerModePending=false;
-let statusPending=null,recoveryTarget=null,authorizationPending=null;
+let statusPending=null,recoveryTarget=null,authorizationPending=null,otaActive=false;
 const HEARTBEAT_MAX_AGE=6500;
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
 state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
@@ -66,8 +66,8 @@ function render(){
  byId('kitTopology',state.connected?'Laptop '+state.transport.toUpperCase()+' → '+state.kitCode+' • Android AP '+(state.apActive?'ready':'offline')+' • '+(state.rc?.active?'input live':'input idle'):'Power kit → join kit Wi-Fi → Connect Kit');
  const ready=linkFresh(),code=state.kitCode||'------';
  // Keep selected target independent of the currently verified transport.
- const label=ready?(state.kitName||'AERION')+' • '+code:pendingNetworkTarget?'FINDING '+pendingNetworkTarget.transport.toUpperCase():'NO KIT';
- byId('kitGlobalName',label);byId('kitGlobalDetail',ready?state.transport.toUpperCase()+' • '+(state.owner?'YOU CONTROL':state.rc?.claimed?'VIEW ONLY':'CONNECTED'):pendingNetworkTarget?'Join matching Wi-Fi • approve Connect':'Connect the kit on router Wi-Fi or AP');
+ const label=ready?(state.kitName||'AERION')+' • '+code:otaActive?(state.kitName||'AERION')+' • '+code:pendingNetworkTarget?'FINDING '+pendingNetworkTarget.transport.toUpperCase():'NO KIT';
+ byId('kitGlobalName',label);byId('kitGlobalDetail',otaActive?'Firmware update • '+state.transport.toUpperCase()+' • diagnostic controls disabled':ready?state.transport.toUpperCase()+' • '+(state.owner?'YOU CONTROL':state.rc?.claimed?'VIEW ONLY':'CONNECTED'):pendingNetworkTarget?'Join matching Wi-Fi • approve Connect':'Connect the kit on router Wi-Fi or AP');
  byId('kitWifiModeLive',ready?'Wi-Fi '+String(state.mode||'unknown').toUpperCase()+' • Link '+state.transport.toUpperCase():'Not connected');
  byId('kitDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
  byId('fwDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
@@ -79,7 +79,7 @@ function render(){
  byId('kitDiagnosticOwner',!ready?'Unverified':state.owner?'This browser':state.rc?.claimed?state.rc.source||'Other controller':'Available');
  byId('kitInternetStatus','Web '+state.internet);
  byId('kitHeartbeat',state.heartbeatAt?Math.max(0,Math.round((Date.now()-state.heartbeatAt)/1000))+' s ago':'Unverified');
- byId('kitGlobalState',state.linkState==='stale'?'LINK STALE':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':globalTone==='locked'?'KIT IN USE':ready?'KIT CONNECTED':'KIT OFFLINE');
+ byId('kitGlobalState',otaActive?(state.connected?'OTA UPLOADING':'OTA RECONNECTING'):state.linkState==='stale'?'LINK STALE':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':globalTone==='locked'?'KIT IN USE':ready?'KIT CONNECTED':'KIT OFFLINE');
  const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
  const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
@@ -92,7 +92,7 @@ function render(){
  byId('kitSelectedRssi',ready&&Number.isFinite(state.rssi)?state.rssi+' dBm':'—');
  byId('kitSelectedReason',ready?(state.staDisconnectReason||0)+' (ESP reason)':'—');
  byId('kitController',!ready?'OFFLINE':state.rc?.claimed?(state.rc.source+' • '+(state.rc.active?'ACTIVE':'IDLE')):state.owner?'SESSION RESERVED':'AVAILABLE');
- byId('kitLinkState',ready?(state.rc?.active?'RC INPUT LIVE':'TELEMETRY READY'):'NO KIT');
+ byId('kitLinkState',otaActive?'OTA IN PROGRESS':ready?(state.rc?.active?'RC INPUT LIVE':'TELEMETRY READY'):'NO KIT');
  const rc=ready?state.rc||{}:{};
  for(const field of ['throttle','roll','pitch','yaw'])byId('kitVal'+field[0].toUpperCase()+field.slice(1),Number.isInteger(rc[field])?rc[field]:'—');
  byId('kitRcPacket',Number.isFinite(rc.seq)?String(rc.seq):String(state.seq||'—'));
@@ -288,7 +288,7 @@ function showKnown(){
  }
 }
 async function disconnect(reason='Disconnected',{automatic=false}={}){
- autoReconnectAllowed=automatic;
+ autoReconnectAllowed=automatic;otaActive=false;
  const priorId=state.kitId;pendingNetworkTarget=null;closeReconnectOffer();
  ++controlTicket;ownOwnerId='';++wifiTestNonce;wifiTesting=false;
  ++reconnectTicket;recoveryTarget=null;for(const key of Object.keys(usbCandidate))delete usbCandidate[key];state.heartbeatAt=0;state.linkState='disconnected';
@@ -959,6 +959,7 @@ async function discoverBridgeHosts(){
  }catch{return []}finally{clearTimeout(timer)}
 }
 async function discoverKits(){
+ if(otaActive)return discoveredKits;
  if(discoveryPending)return discoveryPending;
  discoveryPending=scanKitCandidates().finally(()=>{discoveryPending=null});return discoveryPending;
 }
@@ -1312,7 +1313,7 @@ function init(){
  document.addEventListener('visibilitychange',()=>{if(state.working)return;if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden&&autoReconnectAllowed)void refreshConnection().catch(()=>{})});
  root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
  pollTimer=setInterval(async()=>{
-  if(!state.connected||state.working||wifiTesting||pollBusy)return;
+  if(!state.connected||state.working||otaActive||wifiTesting||pollBusy)return;
   pollBusy=true;const ticket=reconnectTicket,usb=state.transport==='usb';
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
@@ -1355,7 +1356,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
  // Pause competing heartbeats BEFORE the first OTA request. Otherwise
  // a background status failure can discard the selected kit during a write.
- state.working=true;render();
+ state.working=true;otaActive=true;render();
  try{
   if(statusPending)await statusPending.catch(()=>{});
   if(ticket!==reconnectTicket)throw Error('Kit selection changed before OTA preflight');
@@ -1439,7 +1440,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
   onProgress({phase:'reconnect',percent:99,message:'OTA write acknowledged • reconnect and verify firmware using Serial'});
   return {written:true,verified:false,expectedVersion:version,kitId:deviceId};
  }finally{
-  if(ticket===reconnectTicket)state.working=false;
+  if(ticket===reconnectTicket){state.working=false;otaActive=false}
   render();
  }
 }
@@ -1494,7 +1495,7 @@ root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
- getState:()=>({connected:linkFresh(),linkState:state.connected&&!linkFresh()?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
+ getState:()=>({connected:linkFresh(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
