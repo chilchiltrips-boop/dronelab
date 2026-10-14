@@ -33,12 +33,14 @@ export function initControls(ctx){
     $('#wireRunBtn').textContent='RUN MOTOR TEST';ctx.updateMotorTestUI();};
   ctx.setActiveTab=name=>{
     if(['simcontrol','flight','led','tripod'].includes(name))name='pid';
-    if(!['assembly','wiring','python','firmware','settings','pid'].includes(name))return;
+    // Preserve existing old My Kits links.
+    if(name==='settings'){name='firmware';window.ZebjusDevicesWorkspace?.open('wifi',{activateTab:false})}
+    if(!['assembly','wiring','python','firmware','pid'].includes(name))return;
     if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
     if(name==='assembly')requestAnimationFrame(ctx.resize3D);else if(name==='wiring')ctx.render2D();
-    if(name==='pid'||name==='settings')window.ZebjusPairingBridge?.ensureSimulator();
+    if(name==='pid'||name==='firmware'&&window.ZebjusDevicesWorkspace?.active?.()==='mobile')window.ZebjusPairingBridge?.ensureSimulator();
     history.replaceState(null,'','#'+name);window.dispatchEvent(new CustomEvent('dronelab:tab',{detail:{name}}));
   };
   $$('.tab').forEach(b=>b.onclick=()=>ctx.setActiveTab(b.dataset.tab));

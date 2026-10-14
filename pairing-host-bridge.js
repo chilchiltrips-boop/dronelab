@@ -34,11 +34,12 @@
   }
  });
  root.addEventListener('dronelab:tab',event=>{
-  if(['settings','pid'].includes(event.detail?.name))ensureSimulator();
+  if(event.detail?.name==='pid'||event.detail?.name==='firmware'&&root.ZebjusDevicesWorkspace?.active?.()==='mobile')ensureSimulator();
   if(event.detail?.name==='pid'){
    root.requestAnimationFrame(()=>{try{frame.contentWindow?.dispatchEvent(new Event('resize'))}catch{}});
   }
  });
+ root.addEventListener('dronelab:devices-view',event=>{if(event.detail?.name==='mobile')ensureSimulator()});
  root.ZebjusTraining={
   isReady,
   apply:message=>target()?.apply(message)||{accepted:false,reason:'PID simulator receiver not ready'},
@@ -50,5 +51,5 @@
   diagnostics(){return target()?.diagnostics()||null}
  };
  root.ZebjusPairingBridge={ensureSimulator,isReady};
- if(['#pid','#settings'].includes(location.hash))ensureSimulator();
+ if(['#pid','#settings'].includes(location.hash)||location.hash==='#firmware'&&root.ZebjusDevicesWorkspace?.active?.()==='mobile')ensureSimulator();
 })(window);

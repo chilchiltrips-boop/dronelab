@@ -1128,7 +1128,7 @@ async function authorizeNetworkAccess(){
   throw Error('Authorization failed: '+e.message);
  }finally{if(ticket===reconnectTicket){state.working=false;render()}}
 }
-function goKits(){document.querySelector('[data-tab="settings"]')?.click();$('kitCodeInput')?.focus()}
+function goKits(){window.ZebjusDevicesWorkspace?.open('connection',{scroll:true})}
 async function toggleHeaderNetwork(){
  if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before selecting a connection');
  const mode=headerNetworkChoice==='ap'?'sta':'ap';
@@ -1293,7 +1293,7 @@ function init(){
   void rememberBrowserPairing().catch(err=>{e.target.checked=false;tone(err.message,'warn')});
  });guardAction('kitDiscover',discoverKits);
  // Firmware tab owns its discovery results; My Kits keeps independent actions.
- $('fwOpenDiscovery')?.addEventListener('click',goKits);
+ $('fwOpenDiscovery')?.addEventListener('click',()=>window.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));
  $('kitOpenFirmwareCenter')?.addEventListener('click',()=>document.querySelector('button.tab[data-tab="firmware"]')?.click());
  guardAction('kitConnect',connect);guardAction('kitDisconnect',()=>disconnect('Student disconnected'));
  guardAction('kitIdentify',identify);guardAction('kitReadInfo',refreshConnection);guardAction('kitTopRefresh',refreshConnection);
@@ -1304,10 +1304,10 @@ function init(){
  $('kitWifiNetworks')?.addEventListener('change',e=>{if(e.target.value)$('kitRouterSsid').value=e.target.value});
  guardAction('kitAdminEnroll',()=>adminAccess('ENROLL'));guardAction('kitAdminUnlock',()=>adminAccess('UNLOCK'));guardAction('kitAdminLock',()=>adminAccess('LOCK'));
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
- $('fwOpenKitNetwork')?.addEventListener('click',()=>{goKits();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
+ $('fwOpenKitNetwork')?.addEventListener('click',()=>window.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));
  guardAction('kitTopNetworkSwitch',toggleHeaderNetwork);guardAction('kitTopWifiConnect',()=>connectHeaderNetwork());guardAction('kitTopControl',toggleHeaderControl);
  guardAction('fwConnectStaBtn',()=>connectHeaderNetwork('sta'));guardAction('fwConnectApBtn',()=>connectHeaderNetwork('ap'));
- $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>document.querySelector('[data-tab="settings"]')?.click());
+ $('kitTopConnect')?.addEventListener('click',goKits);$('kitOpenMobile')?.addEventListener('click',()=>window.ZebjusDevicesWorkspace?.open('mobile',{scroll:true}));
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});

@@ -181,7 +181,7 @@ function init(){
  bind('fwAuthorizeUpdates',()=>kit().authorizeNetwork());
  bind('fwWifiConnectAp',()=>kit().connectTransport('ap'));
  bind('fwWifiConnectSta',()=>kit().connectTransport('sta'));
- $('fwWifiSettingsBtn')?.addEventListener('click',()=>{kit().view();$('kitNetworkSettings')?.scrollIntoView({behavior:'smooth',block:'center'})});
+ $('fwWifiSettingsBtn')?.addEventListener('click',()=>root.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));
  bind('fwRenameSave',()=>changeName(false));bind('fwRenameReset',()=>changeName(true));
  $('fwDiscoverKits')?.addEventListener('click',()=>void scan());
  $('fwKitSelect')?.addEventListener('change',e=>{const d=discovered.find(k=>k.kitId===e.target.value);if(d)select(d);else selectedId=''});

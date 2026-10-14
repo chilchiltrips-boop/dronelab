@@ -13,7 +13,8 @@ test('MY KITS script is parseable and exposes a single verified device session A
 });
 test('MY KITS navigation, pairing and admin controls appear without removing existing tabs',()=>{
  for(const id of ['kitTopStatus','kitTopConnect','kitTopNetworkSwitch','kitCenter','kitCodeInput','kitTransport','kitIpInput','kitKeyInput','kitSelectedId','kitTakeControl','kitReleaseControl','kitStop','kitAdmin','kitAdminRead','kitAdminApply','kitFactoryReset','kitHardwareTarget','kitPidMonitor','kitMobilePairDetails','connectionDialog','fwUsbFlashBtn','pythonTarget'])assert.ok(html.includes('id="'+id+'"'),id);
- for(const n of ['ASSEMBLY LAB','2D WIRING','PYTHON LAB','PID TUNING','MY KITS','FIRMWARE &amp; CONNECT'])assert.ok(html.includes(n),n);
+ for(const n of ['ASSEMBLY LAB','2D WIRING','PYTHON LAB','PID TUNING','DEVICES &amp; FIRMWARE'])assert.ok(html.includes(n),n);
+  assert.ok(!html.includes('data-tab="settings" title="MY KITS"'));
  const css=read('classroom-kits.css');
  for(const t of ['.kit-top-status','.kit-center','.kit-connect-grid','@media(max-width:520px)','prefers-reduced-motion',':focus-visible'])assert.ok(css.includes(t),t);
 });

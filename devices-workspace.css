@@ -1,0 +1,96 @@
+/* Devices & Firmware: one workspace, 7 accessible SVG-icon views. */
+.firmware-page{max-width:1800px!important;width:100%;box-sizing:border-box}
+.firmware-page .firmware-hero{margin-bottom:12px}
+.dw-svg-defs{position:absolute;width:0;height:0;overflow:hidden}
+.dw-shell{display:grid;grid-template-columns:210px minmax(0,1fr);align-items:start;gap:13px;min-width:0}
+.dw-shell[hidden],.dw-view[hidden]{display:none!important}
+.dw-sidebar{position:sticky;top:10px;border-radius:14px;background:#091c2a;border:1px solid #27465a;min-width:0;padding:10px;display:grid;gap:14px}
+.dw-sidebar-title{display:flex;align-items:center;gap:9px;padding:10px 8px;color:#62e3bd;font-size:11px;font-weight:850;letter-spacing:.07em}
+.dw-icon{width:23px;height:23px;flex:0 0 23px;fill:none;stroke:currentColor;stroke-width:1.9}
+.dw-sidebar-title .dw-icon{width:19px;height:19px;flex-basis:19px}
+.dw-nav-list{display:grid;gap:4px}
+.dw-nav{display:flex;align-items:center;gap:13px;text-align:left;min-height:46px;width:100%;padding:9px 11px;border:1px solid transparent;border-left:3px solid transparent;border-radius:10px;background:none;color:#b8ccdc;cursor:pointer;font:700 12px/1.3 inherit}
+.dw-nav:hover{background:#132e40;color:#fff}
+.dw-nav[aria-selected="true"]{background:#153747;border-color:#255568;border-left-color:#40d7ad;color:#e8fff8}
+.dw-nav:focus-visible{outline:3px solid #50edc0;outline-offset:2px}
+.dw-sidebar-foot{display:flex;align-items:center;gap:9px;padding:11px 7px;border-top:1px solid #29485a;min-width:0}
+.dw-sidebar-foot>div{min-width:0}
+.dw-sidebar-foot b,.dw-sidebar-foot small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dw-sidebar-foot b{font-size:11px;color:#e7f3fa}
+.dw-sidebar-foot small{font-size:10px;color:#a6c2d0;margin-top:4px}
+.dw-connection-dot{display:inline-block;width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:#8a93a2}
+.dw-connection-dot[data-state="online"]{background:#3ce0a3}
+.dw-connection-dot[data-state="busy"]{background:#e6ae58}
+.dw-content{min-width:0;display:grid;gap:12px}
+.dw-topline{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid #285568;border-radius:11px;background:#0c2836;padding:12px 15px}
+.dw-topline>div{min-width:0}
+.dw-topline b,.dw-topline span:not(.status){display:block;overflow-wrap:anywhere}
+.dw-topline b{font-size:14px;color:#edfaff}
+.dw-topline span:not(.status){font-size:11px;color:#a8c5d3;margin-top:3px}
+.dw-workspace-notice{padding:11px;border:1px solid #8d673a;border-radius:9px;background:#302619;color:#ffe2b9;font-size:12px}
+.dw-workspace-notice[hidden]{display:none}
+.dw-view{min-width:0;display:grid;gap:12px}
+.dw-view-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dw-view-header small{font-size:10px;letter-spacing:.12em;color:#54dcbc;font-weight:850}
+.dw-view-header h2{font-size:21px;color:#eef9ff;margin:4px 0}
+.dw-view-header p{font-size:12px;line-height:1.45;color:#acc7d7;margin:0}
+.dw-view-content{display:grid;gap:12px;min-width:0}
+.dw-view-content>*{min-width:0}
+.dw-view .fw-kit-detail-card,.dw-view .fw-connect-card,.dw-view .fw-available-card,.dw-view .fw-network-card,.dw-view .fw-rename-card{margin:0}
+.dw-view .kit-center{max-width:none;margin:0}
+.dw-view-content.kit-center{max-width:none;margin:0}
+.dw-view .kit-firmware-shortcut,.dw-view .kit-section-heading{display:none!important}
+.dw-legacy-kit{border:1px solid #28495d;border-radius:12px;background:#0b202e}
+.dw-legacy-kit>summary{padding:14px;font-size:13px;font-weight:750;color:#b3dae7;cursor:pointer}
+.dw-legacy-kit[open]{padding:0 12px 12px}
+.dw-legacy-kit #kitCenter{max-width:none;margin:0;gap:12px}
+.dw-view .kit-accordion{min-width:0}
+.dw-view .kit-card{min-width:0}
+.dw-view .kit-connect-grid{margin:0}
+.dw-view .kit-network-focus{margin:0}
+.dw-view.settings-workspace{padding:0!important;max-width:none;margin:0}
+.dw-view.settings-workspace .dw-view-content{gap:10px}
+.dw-view .settings-heading{margin:0}
+.dw-view .settings-heading h2{font-size:16px}
+.dw-view .kit-mobile-pairing{margin:0}
+.dw-view .fw-serial-console{max-height:310px}
+.dw-view .firmware-grid{margin:0}
+.dw-view .firmware-target-v2{min-width:0}
+.dw-view .firmware-safety-strip{margin-top:2px}
+.dw-view .firmware-hero{display:none}
+#dw-body-diagnostics>.fw-serial-head{margin:8px 0 0}
+#dw-body-diagnostics>.fw-serial-toolbar{margin:0}
+#dw-body-diagnostics>#fwSerialMonitorBtn,#dw-body-diagnostics>#fwSerialClearBtn{justify-self:start;min-height:37px}
+#dw-body-security .kit-browser-access{display:flex;gap:10px;flex-wrap:wrap}
+#dw-body-security .kit-trust-option{flex-direction:row;align-items:center}
+#dw-body-mobile #kitMobilePairDetails{width:100%}
+#tab-settings[hidden],#fwConnectionWorkspace[hidden]{display:none!important}
+@media(max-width:1290px){
+ .dw-shell{grid-template-columns:76px minmax(0,1fr)}
+ .dw-sidebar{padding:9px 7px}
+ .dw-sidebar-title{justify-content:center;padding:10px 0}
+ .dw-sidebar-title span,.dw-nav-label,.dw-sidebar-foot>div{display:none}
+ .dw-nav{justify-content:center;gap:0;padding:10px;min-height:52px}
+ .dw-sidebar-foot{justify-content:center}
+}
+@media(max-width:780px){
+ .dw-shell{grid-template-columns:minmax(0,1fr)}
+ .dw-sidebar{position:relative;top:auto;padding:7px;gap:5px}
+ .dw-sidebar-title{display:none}
+ .dw-nav-list{display:flex;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin;gap:6px;padding-bottom:4px}
+ .dw-nav{width:auto;min-width:115px;min-height:45px;padding:8px 9px;gap:6px;border-left:1px solid transparent;border-bottom:3px solid transparent;flex:0 0 auto}
+ .dw-nav[aria-selected="true"]{border-left-color:#255568;border-bottom-color:#40d7ad}
+ .dw-nav-label{display:inline;font-size:11px}
+ .dw-nav .dw-icon{width:18px;height:18px;flex-basis:18px}
+ .dw-sidebar-foot{display:none}
+ .dw-view-header h2{font-size:18px}
+ .dw-topline{padding:10px}
+}
+@media(max-width:480px){
+ .dw-nav{min-width:104px}
+ .dw-view .firmware-file-info{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dw-view-header h2{font-size:17px}
+ .dw-view-header p{font-size:11px}
+ .dw-topline b{font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){.dw-nav{transition:none}}

@@ -33,7 +33,7 @@ function forwardSimulatorControl(m){
   'Control denied: '+result.reason;
  return result;
 }
-function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){document.querySelector('[data-tab="settings"]')?.click();const details=$('kitMobilePairDetails');if(details)details.open=true;return}if(!dialog.open)dialog.showModal()}
+function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){window.ZebjusDevicesWorkspace?.open('mobile',{scroll:true});const details=$('kitMobilePairDetails');if(details)details.open=true;return}if(!dialog.open)dialog.showModal()}
 function closeSettings(){stopCamera();if(inlineSettings()){document.querySelector('[data-tab="pid"]')?.click();return}$('connectionDialog').close();$('topPairMobileBtn').focus()}
 function openStep(number){
  const s=host.status();
