@@ -97,3 +97,10 @@
 
 /* Legacy MY KITS is an inert DOM source for preserved handlers; no second tab. */
 #tab-settings[hidden],#tab-settings[hidden].active{display:none!important}
+
+/* On mid-width desktops the WebRTC three-column cards leave too little room
+   for the temporary CONNECT-code placeholder beside its action button. */
+@media(min-width:1060px) and (max-width:1500px){
+ .dw-view.settings-workspace #connectionFlow .qr-code-entry{grid-template-columns:minmax(0,1fr)}
+ .dw-view.settings-workspace #connectionFlow .qr-code-entry>#pairConnectCodeBtn{width:100%}
+}
