@@ -28,7 +28,7 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  for(const page of [html,lab]){
   for(const id of ['fwSerialOutput','fwSerialMonitorBtn','fwSerialReconnectBtn','fwSerialResetBtn','fwSerialTabMonitor','fwSerialTabPlotter','fwSerialPlotCanvas','fwSerialBaud','fwSerialInput','fwSerialSendBtn','fwSerialLineEnding','fwSerialClearBtn','fwPlotClearBtn'])assert.ok(page.includes('id="'+id+'"'),id);
   assert.ok(page.includes('USB SERIAL TOOLS'));
-  assert.ok(page.includes('Flash over USB'));
+  assert.ok(page.includes('Flash Connected FlightCore over USB'));
   for(const ending of ['value="nl"','value="cr"','value="crlf"'])assert.ok(page.includes(ending),ending);
   assert.ok(!page.includes('LIVE I²C SCANNER OUTPUT'));
   assert.ok(!page.includes('Scans repeat every 5 seconds.'));
@@ -106,7 +106,7 @@ test('USB Flash button explains disabled state and validates loaded board/type b
 });
 
 test('both public firmware pages show AERION 1.3.5 branding and USB flashing',()=>{
- for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('<h2>ZEBJUS FlightCore Firmware Center</h2>'));assert.ok(html.includes('>Flash over USB</button>'));assert.ok(!html.includes('Flash I²C over USB'));}
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('<h2>ZEBJUS FlightCore Firmware Center</h2>'));assert.ok(html.includes('>Flash Connected FlightCore over USB</button>'));assert.ok(!html.includes('Flash I²C over USB'));}
  const cat=JSON.parse(readFileSync(new URL('../firmware-catalog.json',import.meta.url),'utf8'));
  assert.deepEqual(cat.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
  assert.equal(cat.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
@@ -184,7 +184,7 @@ test('Downloaded firmware is not counted as flashed and both pages expose USB ch
 test('Serial monitor shows dedicated A1 I2C and A2 XIAO wiring labels',()=>{
  const updater=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  for(const token of ['ZJI2C,MODE,','Dedicated SDA4/SCL5','XIAO D4/D5','fwUsbMode'])assert.ok(updater.includes(token),token);
- for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('GPIO8 is reserved for the onboard LED'));}
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('LED GPIO8'));}
 });
 
 
@@ -237,7 +237,7 @@ test('both Firmware pages have structured raw serial and no obsolete View select
   for(const id of ['fwReadRunningBtn','fwPublishedVersion','fwPreviouslyVerified','fwDiagnosticState','fwSerialOutput','fwSerialPauseScrollBtn','fwSerialCopyBtn'])assert.ok(h.includes('id="'+id+'"'),p+' '+id);
   assert.ok(!h.includes('id="fwSerialViewMode"'),p+' obsolete View selector');
   assert.ok(!h.includes('id="fwLiveDiagnosticLine"'),p+' obsolete live-line mode');
-  assert.ok(h.includes('Connect USB / Flash Mode'));
+  assert.ok(h.includes('id="fwConnectUsbBtn"')&&h.includes('>Connect USB</button>'));
  }
  for(const x of ['lastVerifiedRuntime','readUnifiedTelemetry','renderLiveDiagnosticLine','configureDiagnosticTick','serialVisibleLine','usb-live-diagnostic.js'])assert.ok(source.includes(x),x);
 });
