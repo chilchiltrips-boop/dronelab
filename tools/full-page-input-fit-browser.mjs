@@ -47,6 +47,8 @@ function inspect(tag,width){
 }
 function record(result){
  reports.push(result);
+ if(result.documentWidth>result.width+1)
+  hardFailures.push(result.tag+' '+result.width+'px: horizontal document overflow '+result.documentWidth+'px');
  for(const inp of result.inputs)if(!inp.fit)hardFailures.push(result.tag+' '+result.width+'px: placeholder #'+inp.id+' "'+inp.placeholder+'" requires '+inp.textPixels+'px, available '+inp.availablePixels+'px');
  for(const b of result.buttons)if(b.ratio>1.06)hardFailures.push(result.tag+' '+result.width+'px: control #'+b.id+' clipped ('+b.text+', ratio='+b.ratio+')');
 }
