@@ -1,4 +1,4 @@
-import {createI2CBridge,createGyroBridge} from './usb-i2c-bridge.js';
+import {createI2CBridge,createGyroBridge,parseNetworkGyroTelemetry} from './usb-i2c-bridge.js?v=gyro-sta-20261014';
 import {createPythonIDEShell} from './python-ide-workspace.js?v=compact-run-20261011';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
 const EXAMPLES={"joystick":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\n# Values below come from the ESP32 receiver, not WebRTC or frontend sticks.\n# Android owns input; this browser only reads it over STA.\nwhile True:\n    rc = await drone.read_joystick()\n    print(rc[\"source\"], \"T\", rc[\"throttle\"], \"R\", rc[\"roll\"], \"P\", rc[\"pitch\"], \"Y\", rc[\"yaw\"], \"frame\", rc[\"seq\"], \"age\", rc[\"age_ms\"], \"valid\", rc[\"input_valid\"])\n    await asyncio.sleep(0.1)\n","wifi_scan":"from zebjus_simple import Drone\n\ndrone = Drone()\nnetworks = await drone.wifi_scan()\nfor router in networks:\n    print(router[\"ssid\"], router[\"rssi\"], \"dBm\", \"Secure\" if router[\"secure\"] else \"Open\")\nprint(\"Found\", len(networks), \"2.4 GHz networks\")\n","wifi_save":"from zebjus_simple import Drone\n\ndrone = Drone()\n# Keep credentials private: this file is autosaved in your browser.\nssid = \"REPLACE_WITH_2_4GHZ_WIFI\"\npassword = \"REPLACE_WITH_WIFI_PASSWORD\"\nresult = await drone.wifi_test_save(ssid, password)\nprint(result)\nif result[\"saved\"]:\n    print(\"Wi-Fi saved in FlightCore NVS; reconnect and Take Control.\")\nelse:\n    print(\"Not saved/verified. Check status via USB before retry.\")\n","scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
@@ -259,9 +259,29 @@ async function onRpc(w,m){
       window.ZebjusPythonHardwareActive=false; // provisioning released the RC ownership lock
     }
   }else if(m.method==='read_gyro'){
-    if(wifiPythonSelected()&&!wifiPythonReady())throw Error('NetworkDisconnectedError: FlightCore Wi-Fi relay unavailable.');
-    if(!wifiPythonSelected()&&!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
-    result=await gyroBridge.readGyro(m.args?.timeout||3000);
+    if(wifiPythonSelected()){
+     // AP/STA uses the authenticated kit telemetry API, never the USB gyro bridge.
+     if(!wifiPythonReady())throw Error('NetworkDisconnectedError: FlightCore AP/STA kit is not verified.');
+     const before=window.ZebjusKits?.getState?.();
+     if(!before?.kitId||before.transport!==$('pythonTarget')?.value)
+      throw Error('NetworkDisconnectedError: Select a verified AP/STA kit before reading gyro.');
+     const timeout=Math.max(200,Math.min(10000,Number(m.args?.timeout)||3000));
+     let timer;
+     let telemetry;
+     try{
+      telemetry=await Promise.race([
+       window.DroneLabNetwork.getTelemetry(),
+       new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('GyroTimeoutError: No STA/AP telemetry response within '+timeout+' ms. Check the kit connection.')),timeout)})
+      ]);
+     }finally{clearTimeout(timer)}
+     const after=window.ZebjusKits?.getState?.();
+     if(!after?.connected||after.kitId!==before.kitId||after.transport!==before.transport||after.transport!==$('pythonTarget')?.value)
+      throw Error('NetworkDisconnectedError: Connected kit or AP/STA transport changed during gyro read.');
+     result=parseNetworkGyroTelemetry(telemetry,before.kitId);
+    }else{
+     if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
+     result=await gyroBridge.readGyro(m.args?.timeout||3000);
+    }
    }else if(m.method==='latest_scan')result=bridge.getLatest();
   else throw Error('Unsupported Python hardware command: '+m.method);
   if(worker===w)w.postMessage({type:'rpc-result',id:m.id,ok:true,value:JSON.stringify(result)});

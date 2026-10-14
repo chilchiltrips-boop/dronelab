@@ -62,6 +62,30 @@ export const FLIGHTCORE_GYROS=Object.freeze({
  A1:Object.freeze({sensor:'LSM6DS3',address:'0x6B'}),
  A2:Object.freeze({sensor:'MPU6050',address:'0x68'})
 });
+// The authenticated AP/STA telemetry endpoint is independent of Web Serial.
+// Never accept a cached frontend joystick preview or a response from another kit.
+export function parseNetworkGyroTelemetry(data, expectedKitId){
+ if(!expectedKitId||!data||data.kitId!==expectedKitId)
+  throw new Error('NetworkDisconnectedError: Gyro telemetry Device ID does not match the connected kit.');
+ const board=String(data.board||'').replace(/^ZFC-/,'');
+ const spec=FLIGHTCORE_GYROS[board];
+ if(!spec)throw new Error('SensorNotFoundError: Unsupported FlightCore gyro board '+board);
+ const numericAddress=Number(data.address);
+ if(!Number.isSafeInteger(numericAddress)||('0x'+numericAddress.toString(16).toUpperCase())!==spec.address)
+  throw new Error('SensorNotFoundError: '+board+' expected '+spec.sensor+' at '+spec.address+'; reported address '+String(data.address));
+ if(data.gyroReady!==true)
+  throw new Error('SensorNotFoundError: '+spec.sensor+' '+spec.address+' on '+board+' is NOT_READY. Check power and I2C SDA/SCL wiring.');
+ const rates=[data.roll,data.pitch,data.yaw];
+ if(!rates.every(v=>typeof v==='number'&&Number.isFinite(v)))
+  throw new Error('SensorNotFoundError: '+spec.sensor+' returned invalid angular-rate data.');
+ if(!Number.isSafeInteger(data.millis)||data.millis<0)
+  throw new Error('GyroTelemetryError: Invalid device uptime in authenticated telemetry.');
+ return {board,boardId:'ZFC-'+board,sensor:spec.sensor,address:spec.address,
+  RateRoll:rates[0],RatePitch:rates[1],RateYaw:rates[2],
+  units:'deg/s',status:'READY',source:'NETWORK',sequence:null,boardMs:data.millis,
+  deviceDrops:null,timestamp:new Date().toISOString(),kitId:data.kitId};
+}
+
 export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
  let last=null,unifiedSeen=false,latestError='';
  const fail=(message)=>{

@@ -2,9 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vmBridge from 'node:vm';
-import {createI2CParser,createI2CBridge,createGyroParser,createGyroBridge} from '../js/usb-i2c-bridge.js';
+import {createI2CParser,createI2CBridge,createGyroParser,createGyroBridge,parseNetworkGyroTelemetry} from '../js/usb-i2c-bridge.js';
 const root=new URL('../',import.meta.url);
 const file=name=>readFileSync(new URL(name,root),'utf8');
+test('authenticated STA/AP gyro telemetry works without USB and rejects wrong or unhealthy boards',()=>{
+ const a={kitId:'KIT-ONE',board:'A1',address:107,gyroReady:true,roll:-1.25,pitch:0.32,yaw:2.44,millis:902};
+ const b={...a,board:'A2',address:104,roll:0.11,pitch:-0.22,yaw:0.33};
+ assert.deepEqual([parseNetworkGyroTelemetry(a,'KIT-ONE').RateRoll,parseNetworkGyroTelemetry(a,'KIT-ONE').RatePitch,parseNetworkGyroTelemetry(a,'KIT-ONE').RateYaw],[-1.25,0.32,2.44]);
+ assert.equal(parseNetworkGyroTelemetry(a,'KIT-ONE').sensor,'LSM6DS3');
+ assert.equal(parseNetworkGyroTelemetry(b,'KIT-ONE').sensor,'MPU6050');
+ assert.equal(parseNetworkGyroTelemetry(b,'KIT-ONE').address,'0x68');
+ assert.equal(parseNetworkGyroTelemetry(b,'KIT-ONE').source,'NETWORK');
+ assert.throws(()=>parseNetworkGyroTelemetry(a,'KIT-TWO'),/Device ID/);
+ assert.throws(()=>parseNetworkGyroTelemetry({...a,kitId:''},'KIT-ONE'),/Device ID/);
+ assert.throws(()=>parseNetworkGyroTelemetry({...a,gyroReady:false},'KIT-ONE'),/NOT_READY/);
+ assert.throws(()=>parseNetworkGyroTelemetry({...a,address:104},'KIT-ONE'),/expected LSM6DS3/);
+ assert.throws(()=>parseNetworkGyroTelemetry({...a,roll:null},'KIT-ONE'),/invalid angular-rate/);
+ assert.throws(()=>parseNetworkGyroTelemetry({...a,millis:-1},'KIT-ONE'),/uptime/);
+});
+test('Python gyro RPC selects authenticated AP/STA telemetry rather than USB bridge',()=>{
+ const page=file('js/python-lab.js');
+ const gyro=page.slice(page.indexOf("}else if(m.method==='read_gyro')"),page.indexOf("}else if(m.method==='latest_scan')"));
+ assert.ok(gyro.includes('window.DroneLabNetwork.getTelemetry()'));
+ assert.ok(gyro.includes('parseNetworkGyroTelemetry(telemetry,before.kitId)'));
+ assert.ok(gyro.includes('after.kitId!==before.kitId'));
+ assert.ok(gyro.includes('result=await gyroBridge.readGyro'));
+ assert.ok(gyro.indexOf('window.DroneLabNetwork.getTelemetry()')<gyro.indexOf('result=await gyroBridge.readGyro'));
+});
 test('I2C scanner serial payloads become structured Python results',()=>{
  const results=[],p=createI2CParser(result=>results.push(result));
  p.acceptLine('=== I2C Address Scanner ===');
