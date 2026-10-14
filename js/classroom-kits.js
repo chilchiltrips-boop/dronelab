@@ -1137,7 +1137,7 @@ async function toggleHeaderNetwork(){
 async function connectHeaderNetwork(mode=headerNetworkChoice){
  if(!['sta','ap'].includes(mode))throw Error('Choose STA or AP first');
  const ticket=reconnectTicket;
- if(linkFresh()&&state.exclusiveWifi&&state.transport!==mode&&!(state.transport==='usb'&&state.mode===mode))return switchKitNetworkMode(mode);
+ if(linkFresh()&&state.exclusiveWifi&&(state.transport!==mode||state.mode!==mode)&&!(state.transport==='usb'&&state.mode===mode))return switchKitNetworkMode(mode);
  headerNetworkChoice=mode;
  if($('kitTransport'))$('kitTransport').value=mode;
  if($('kitIpInput')&&mode==='ap')$('kitIpInput').value='192.168.4.1';

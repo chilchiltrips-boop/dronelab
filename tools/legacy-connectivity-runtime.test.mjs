@@ -123,6 +123,14 @@ test('STA-to-AP applies AP-only mode and reconnects the same saved kit with STA 
   await f.api.authorizeNetwork();assert.equal(f.api.getState().otaAuthorized,true,'The same saved pairing also authorizes AP');
  }finally{f.dispose()}
 });
+test('selecting AP while connected to a STA-failure hotspot persists manual AP instead of leaving automatic retries enabled',async()=>{
+ const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true});try{
+  f.reachable(['192.168.4.1']);f.status({mode:'sta'});await f.api.connect();
+  await f.api.connectTransport('ap');
+  assert.ok(f.requests.some(r=>r.route==='/api/wifi/mode'&&r.args.mode==='ap'));
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().pendingNetworkMode,'ap');
+ }finally{f.dispose()}
+});
 test('exclusive Test & Save clears the old AP link and waits for verified rediscovery without claiming the password was saved',async()=>{
  const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true});try{
   f.reachable(['192.168.4.1']);await f.api.connect();f.elements.get('kitRouterSsid').value='Classroom';f.elements.get('kitRouterPass').value='private-router-pass';
