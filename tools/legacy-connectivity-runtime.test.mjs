@@ -156,6 +156,12 @@ test('one physical USB pairing is remembered automatically when the default save
   assert.equal(f.savedKey(),key);assert.ok(f.requests.some(r=>r.route==='vault:remember'));
  }finally{f.dispose()}
 });
+test('repeated physical acknowledgement of the same pairing preserves an already verified admin session',async()=>{
+ const f=fixture({paired:true,encrypted:true,initialize:true});try{
+  await f.api.connect();assert.equal(f.authAttempts(),1);f.usbPair(key);f.usbPair(key);await f.api.read();
+  assert.equal(f.authAttempts(),1,'Repeated Read Running Firmware responses must not force another enrollment');
+ }finally{f.dispose()}
+});
 test('failed AP authorization preserves setup monitoring; fresh physical USB pairing authorizes again',async()=>{
  const f=fixture({mode:'ap',paired:true,encrypted:true,initialize:true});try{
   await f.api.connect();f.enrollmentError('enrollment_proof_invalid_or_expired');

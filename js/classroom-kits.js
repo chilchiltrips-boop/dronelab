@@ -203,10 +203,11 @@ async function networkStatusWithFallback(access,ip){
  }
 }
 function acceptUsbPairing(id,key){
+ const changed=(pairedKeys.get(id)||pairing()?.fromSession?.(id)||'')!==key||rejectedPairings.has(id);
  secureIds.delete(id);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));
  pairedKeys.set(id,key);pairing()?.saveSession?.(id,key);rejectedPairings.delete(id);
  if((enrollmentCooldowns.get(id)||0)<=Date.now())authorizationNotices.delete(id);
- for(const slot of authSessions.keys())if(slot.startsWith(id+'@'))authSessions.delete(slot);
+ if(changed)for(const slot of authSessions.keys())if(slot.startsWith(id+'@'))authSessions.delete(slot);
  if($('kitRememberBrowser')?.checked){
   const pending=Promise.resolve().then(()=>pairing()?.remember?.(id,key)).catch(e=>audit('Pairing is available in this tab; browser could not remember it: '+e.message,'warn'));
   rememberedWrites.set(id,pending);void pending.finally(()=>{if(rememberedWrites.get(id)===pending)rememberedWrites.delete(id)});
