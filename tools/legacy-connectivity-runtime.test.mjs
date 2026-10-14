@@ -5,26 +5,31 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 const code=readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8');
 const id='ZFC-A1-012345ABCDEF',other='ZFC-A1-FFFFFFFFFFFF',key='a1'.repeat(16);
-function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
- const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map();let ready;
+function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclusive=false}={}){
+ const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[];let ready;
+ let savedKey=paired?key:'',enrollmentError='',enrollmentGate=null,authAttempts=0,now=Date.now();
+ class Clock extends Date{static now(){return now}}
  const element=()=>({value:'',checked:false,textContent:'',dataset:{},style:{},disabled:false,listeners:{},children:[],
   classList:{contains:()=>true,toggle(){},add(){},remove(){}},setAttribute(){},replaceChildren(...children){this.children=children},add(item){this.children.push(item)},append(){},focus(){},
   addEventListener(type,fn){this.listeners[type]=fn},click(){this.listeners.click?.({target:this})}});
  for(const name of [...readFileSync(new URL('../index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]))elements.set(name,element());
+ elements.get('kitRememberBrowser').checked=true;
  const ip=mode==='ap'?'192.168.4.1':'192.168.1.20';
  for(const [name,value] of Object.entries({kitCodeInput:'123456',kitTransport:mode,kitIpInput:ip,kitKeyInput:''}))elements.get(name).value=value;
  let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
-  requestTransport:mode.toUpperCase(),mode:'auto',apActive:true,staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
+  requestTransport:mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
  let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
+  if(route==='/api/telemetry')return {kitId:id,gyroReady:true};
   if(route==='/api/wifi/test'){
    status={...status,staConnected:true,ip:'192.168.1.41',ssid:args.ssid,wifiTestState:'saved',networkState:'AP_STA_COEXISTENCE'};
    return {state:'testing',saved:false};
   }
+  if(route==='/api/wifi/mode')return {kitId:id,mode:args.mode,state:'switching'};
   if(route==='/api/rc/claim'){
    if(claimGate)await claimGate;
    status.rc={claimed:true,active:false,source:'WEB',ownerId:'owner-1'};
@@ -37,11 +42,16 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
   if(route==='/api/firmware/end'){uploaded=true;status={...status,version:'1.4.6',bootId:'c2'.repeat(16)};return {kitId:id,updated:true,sha256:digest};}
   throw Error('Unexpected request '+route);
  };
- const window={addEventListener(){},dispatchEvent:e=>events.push(e),ZebjusKitPairingStore:{fromSession:()=>paired?key:'',restore:async()=>paired?key:'',saveSession(){}},
+ const window={addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent:e=>events.push(e),ZebjusKitPairingStore:{fromSession:()=>savedKey,restore:async()=>savedKey,saveSession:(_id,k)=>{savedKey=k},remember:async(_id,k)=>{savedKey=k;requests.push({route:'vault:remember'})},forget:async()=>{savedKey=''}},
   ZfcCrypto:{sha256:bytes=>createHash('sha256').update(bytes).digest()},
-  ZebjusKitAuth:{http:base=>base,openLocal:async()=>({expiresAt:Date.now()+600000,request:(route,_method,args)=>handler(route,args)}),open:async(_host,_id,_key,kind)=>{
+  ZebjusKitAuth:{http:base=>base,openLocal:async()=>{
+   status={...status,setupAuthorized:status.requestTransport==='AP',otaAuthorized:false,controlAuthorized:status.requestTransport==='AP'};
+   const session={expiresAt:now+600000,request:(route,_method,args)=>handler(route,args)};sessions.push(session);return session;
+  },open:async(_host,_id,_key,kind)=>{
+   authAttempts++;if(enrollmentGate)await enrollmentGate;
+   if(enrollmentError){const e=Error(enrollmentError);e.status=enrollmentError==='enrollment_rate_limited'?429:401;throw e}
    assert.equal(kind,'admin');status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
-   return {expiresAt:Date.now()+600000,request:(route,_method,args)=>handler(route,args)};
+   const session={expiresAt:now+600000,request:(route,_method,args)=>handler(route,args)};sessions.push(session);return session;
   }}};
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
@@ -49,7 +59,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
    if(reachableHosts&&!reachableHosts.has(u.hostname))throw Error('Device is not reachable on this network');
    if(identityGate)await identityGate;
    const mismatch=identityOverride||(uploaded&&u.hostname===ip?other:id);
-   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true,adminSessions:encrypted})};
+   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true,adminSessions:encrypted,exclusiveWifi:exclusive})};
   }
   if(opts.headers?.['X-ZJ-Key']===key)status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
   return {ok:true,json:()=>handler(u.pathname,Object.fromEntries(new URLSearchParams(opts.body||'')))};
@@ -63,11 +73,79 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false}={}){
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
  const timeout=(fn,ms)=>{const t=setTimeout(fn,ms);timers.add(t);return t};
  vm.runInNewContext(code,{window,document,localStorage,fetch,URL,URLSearchParams,AbortController,XMLHttpRequest:XHR,Uint8Array,Blob,FormData,TextEncoder,Option:class{constructor(text,value){this.text=text;this.value=value}},
-  setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
+  setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},Date:Clock,confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
  return {api:window.ZebjusKits,elements,requests,events,storage,blockClaim:p=>claimGate=p,identity:value=>identityOverride=value,
+  enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
+  expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
+  usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
   reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{for(const t of timers)clearTimeout(t)}};
 }
+test('rejected saved pairing falls back to verified STA monitoring and never replays that credential',async()=>{
+ const f=fixture({paired:true,encrypted:true});try{
+  f.enrollmentError('enrollment_proof_invalid_or_expired');await f.api.connect();
+  assert.equal(f.api.getState().connected,true,'A rejected admin credential must not block STA monitoring');
+  assert.equal(f.api.getState().transport,'sta');assert.equal(f.api.getState().otaAuthorized,false);assert.equal(f.api.getState().controlAuthorized,false);
+  assert.equal(f.savedKey(),'');assert.match(f.api.getState().authorizationNotice,/USB|pairing/i);
+  await f.api.read();await f.api.connect();
+  await assert.rejects(f.api.authorizeNetwork(),/USB/);assert.equal(f.authAttempts(),1);
+ }finally{f.dispose()}
+});
+test('new firmware header handover changes the physical mode and waits for discovery permission before STA connects',async()=>{
+ const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true});try{
+  f.reachable(['192.168.4.1']);await f.api.connect();await f.api.connectTransport('sta');
+  assert.ok(f.requests.some(r=>r.route==='/api/wifi/mode'&&r.args.mode==='sta'));
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().pendingNetworkMode,'sta');
+  f.reachable(['zebjus-drone-2.local']);f.status({requestTransport:'STA',mode:'sta',apActive:false,staConnected:true,ip:'192.168.1.20'});
+  await f.api.discoverKits();assert.equal(f.api.getState().connected,false);
+  assert.ok(f.events.some(e=>e.type==='dronelab:reconnect-offer'));
+  await f.api.acceptReconnectOffer();assert.equal(f.api.getState().connected,true);assert.equal(f.api.getState().transport,'sta');
+  assert.equal(f.api.getState().apActive,false);assert.equal(f.api.getState().owner,false);
+ }finally{f.dispose()}
+});
+test('a remembered kit scan asks once and Later leaves the kit offline without sending authenticated requests',async()=>{
+ const f=fixture({paired:true,encrypted:true,exclusive:true});try{
+  f.reachable(['zebjus-drone-2.local']);await f.api.discoverKits();
+  assert.equal(f.api.getState().connected,false);assert.equal(f.authAttempts(),0);
+  assert.equal(f.events.filter(e=>e.type==='dronelab:reconnect-offer').length,1);
+  f.api.declineReconnectOffer();await f.api.discoverKits();
+  assert.equal(f.events.filter(e=>e.type==='dronelab:reconnect-offer').length,1);assert.equal(f.authAttempts(),0);
+ }finally{f.dispose()}
+});
+test('one physical USB pairing is remembered automatically when the default saved-access option is enabled',async()=>{
+ const f=fixture({mode:'ap',initialize:true});try{
+  await f.api.connect();f.usbPair(key);await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.savedKey(),key);assert.ok(f.requests.some(r=>r.route==='vault:remember'));
+ }finally{f.dispose()}
+});
+test('failed AP authorization preserves setup monitoring; fresh physical USB pairing authorizes again',async()=>{
+ const f=fixture({mode:'ap',paired:true,encrypted:true,initialize:true});try{
+  await f.api.connect();f.enrollmentError('enrollment_proof_invalid_or_expired');
+  await assert.rejects(f.api.authorizeNetwork(),/USB/);await f.api.read();
+  assert.equal(f.api.getState().connected,true);assert.equal(f.api.getState().setupAuthorized,true);assert.equal(f.api.getState().otaAuthorized,false);
+  await assert.rejects(f.api.authorizeNetwork(),/USB/);assert.equal(f.authAttempts(),1);
+  f.usbPair('b2'.repeat(16));f.enrollmentError('');await f.api.authorizeNetwork();
+  assert.equal(f.api.getState().otaAuthorized,true);assert.equal(f.api.getState().owner,false);assert.equal(f.authAttempts(),2);
+ }finally{f.dispose()}
+});
+test('status and telemetry share one session renewal instead of parallel enrollment challenges',async()=>{
+ const f=fixture({paired:true,encrypted:true});try{
+  await f.api.connect();f.expireSessions();let finish;f.blockEnrollment(new Promise(resolve=>finish=resolve));
+  const pending=Promise.all([f.api.read(),f.api.request('/api/telemetry')]);
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(f.authAttempts(),2,'Only one renewal should start');
+  finish();await pending;assert.equal(f.authAttempts(),2);
+ }finally{f.dispose()}
+});
+test('enrollment cooldown retains STA monitoring and blocks repeated authorization until it expires',async()=>{
+ const f=fixture({paired:true,encrypted:true});try{
+  f.enrollmentError('enrollment_rate_limited');await f.api.connect();
+  assert.equal(f.api.getState().connected,true);assert.equal(f.api.getState().otaAuthorized,false);
+  await assert.rejects(f.api.authorizeNetwork(),/wait|cooldown/i);assert.equal(f.authAttempts(),1);
+  assert.equal(f.savedKey(),key,'Rate limiting alone must not erase a valid physical pairing');
+  f.advance(31000);f.enrollmentError('');await f.api.read();await f.api.authorizeNetwork();
+  assert.equal(f.api.getState().otaAuthorized,true);assert.equal(f.authAttempts(),2);
+ }finally{f.dispose()}
+});
 test('My Kits Connect and Disconnect buttons execute actual identity-bound client actions',async()=>{
  const f=fixture({initialize:true});try{
   f.elements.get('kitConnect').click();for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));

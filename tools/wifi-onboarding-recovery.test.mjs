@@ -9,14 +9,14 @@ const kits=read('js/classroom-kits.js');
 const page=read('index.html');
 const native=read('companion-network.js');
 const cockpit=read('companion-flight.js');
-test('AUTO retains AP; STA-only explicitly disables hotspot',()=>{
- assert.match(ino,/FW_VERSION="1\.4\.5"/);
- assert.match(fw,/if\(zjMode=="sta"&&WiFi\.status\(\)==WL_CONNECTED\)/);
- assert.match(fw,/zjMode="auto";zjPrefs\.putString\("mode","auto"\);zjNetApOffAt=0;zjEnsureAP\(\)/);
- assert.match(fw,/zjNetApOffAt=mode=="sta"/);
- assert.match(fw,/ZJNET,AP,/);
- assert.match(fw,/apActive/);
- assert.match(fw,/requestTransport/);
+test('exclusive Wi-Fi policy is advertised; manual AP and saved-router fallback replace coexistence',()=>{
+ assert.match(ino,/FW_VERSION="1\.4\.6"/);
+ assert.ok(fw.includes('FlightCoreWifiPolicy.h'));
+ assert.ok(fw.includes('exclusiveWifi'));
+ assert.ok(!fw.includes('AP_STA_COEXISTENCE'));
+ assert.match(fw,/zjScheduleMode\(mode\)/);
+ assert.match(fw,/successful test stays STA-only/);
+ assert.match(fw,/ZJNET,AP,/);assert.match(fw,/apActive/);assert.match(fw,/requestTransport/);
 });
 test('First-time STA onboarding can be done over verified USB, with asynchronous scan and save on success',()=>{
  for(const cmd of ['ZJNET,GET','ZJNET,SCAN','ZJNET,TEST,','ZJNET,MODE,','ZJNET,TEST,SAVED','ZJNET,SCAN,COUNT','ZJNET,SCAN,ITEM','ZJNET,SCAN,END'])

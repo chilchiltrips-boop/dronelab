@@ -332,3 +332,5 @@
 
 /* Short visible label + full accessible name; reserve the 40px switch column. */
 #app .topbar-main .qr-header-controls .top-grant-control{width:126px!important;min-width:126px!important;max-width:126px!important;column-gap:8px!important;grid-template-columns:minmax(0,1fr) 40px}
+
+.kit-reconnect-dialog{width:min(460px,calc(100% - 28px));max-height:calc(100dvh - 40px);overflow:auto;border:1px solid #3b5871;border-radius:18px;background:#0b1b2a;color:#edf6ff;padding:0;box-shadow:0 22px 80px #0009}.kit-reconnect-dialog::backdrop{background:#020a14bc}.kit-reconnect-body{padding:24px}.kit-reconnect-body small{color:#74d3fb;letter-spacing:.08em}.kit-reconnect-body h2{margin:10px 0 16px}.kit-reconnect-body strong,.kit-reconnect-body p{overflow-wrap:anywhere}.kit-reconnect-body p{line-height:1.55;color:#bfd0df}.kit-reconnect-body .kit-actions{margin-top:22px}

@@ -40,9 +40,9 @@ test('network OTA UI excludes USB/relay and does not claim success without runti
  assert.match(updater,/NETWORK OTA FAILED \/ UNCONFIRMED/);
 });
 
-test('header network switch preserves AUTO setup separately and never claims physical motor arming',()=>{
+test('header network switch changes physical Wi-Fi mode and never claims physical motor arming',()=>{
  assert.match(kit,/headerNetworkChoice==='ap'/);
- assert.match(kit,/Selected .*transport \(not a firmware mode change\)/);
+ assert.match(kit,/return switchKitNetworkMode\(mode\)/);
  assert.match(html,/id="kitTopControl"[^>]*role="switch"/);
  assert.match(html,/id="kitTopControlLabel"/);
  assert.ok(html.indexOf('id="kitTopStop"')>html.indexOf('id="tab-settings"'),'Emergency stop is not occupying the header');

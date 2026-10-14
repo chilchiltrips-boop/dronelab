@@ -27,7 +27,7 @@ test('expired heartbeat disables connection and hardware claim without cached st
 });
 test('manual and timer reads share one pending authenticated status request',async()=>{
  const f=fixture();await f.api.connect();let done;f.block(new Promise(r=>done=r));const count=f.calls();
- const a=f.api.read(),b=f.api.read();assert.equal(a,b);assert.equal(f.calls(),count+1);done();await a;
+ const a=f.api.read(),b=f.api.read();assert.equal(a,b);await new Promise(r=>setImmediate(r));assert.equal(f.calls(),count+1);done();await a;
 });
 test('disconnect invalidates late responses instead of restoring status or ownership',async()=>{
  const f=fixture();await f.api.connect();let done;f.block(new Promise(r=>done=r));const pending=f.api.read();

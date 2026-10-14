@@ -51,7 +51,7 @@ try{
   assert.equal(await page.locator('#fwApIndicator').textContent(),'ACTIVE');assert.equal(await page.locator('#fwStaIndicator').textContent(),'CONNECTED');
   assert.equal(await page.locator('#fwNetworkSimple').textContent(),'AP');assert.equal(await page.locator('#fwWifiState').textContent(),'STA + AP');
   assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.4.1');
-  assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser still uses the kit AP.*computer Wi-Fi settings/);
+  assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser still uses the kit AP.*Update to FlightCore/);
   assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'AP setup does not authorize OTA');
   assert.equal(await page.locator('#kitTopControl').isVisible(),true);assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),false);

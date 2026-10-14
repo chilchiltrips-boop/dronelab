@@ -54,8 +54,8 @@ test('physical USB pairing and real radio status never leak credentials into cac
 test('firmware release metadata and Service Worker cache version are aligned with source',()=>{
  const sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
- assert.equal(version,'1.4.5');
- assert.ok(sketch.includes('FW_VERSION="1.4.5"'));
- assert.ok(sw.includes('classroom-kits.css?v=brand-stack2'));
- assert.ok(page.includes('classroom-kits.css?v=brand-stack2'));
+ assert.equal(version,'1.4.6');
+ assert.ok(sketch.includes('FW_VERSION="1.4.6"'));
+ assert.ok(sw.includes('classroom-kits.css?v=exclusive-wifi-20261014'));
+ assert.ok(page.includes('classroom-kits.css?v=exclusive-wifi-20261014'));
 });

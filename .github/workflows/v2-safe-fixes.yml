@@ -59,6 +59,7 @@ jobs:
           node tools/pid-shell-browser.mjs
           node tools/network-browser.mjs
           node tools/legacy-connectivity-browser.mjs
+          node tools/exclusive-connectivity-browser.mjs
           node tools/offline-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
