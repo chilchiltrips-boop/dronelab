@@ -14,6 +14,9 @@ const until=(p,fn,timeout=19000)=>p.waitForFunction(fn,null,{timeout});
 try{
  await Promise.all([page.goto('http://127.0.0.1:8765/index.html#firmware',{waitUntil:'domcontentloaded'}),
                     phone.goto('http://127.0.0.1:8765/companion.html',{waitUntil:'domcontentloaded'})]);
+ // The simulator is initialized when Mobile Controller is opened, not on every
+ // Hardware Center view; navigate there before waiting for its iframe.
+ await page.locator('[data-dw-view="mobile"]').click();
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining&&window.__testPeer,30000);
  const legacy=await context.newPage();
  await legacy.goto('http://127.0.0.1:8765/tripod.html');
