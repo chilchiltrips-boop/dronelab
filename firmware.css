@@ -227,3 +227,10 @@
  .firmware-page .firmware-target-v2 .firmware-check{font-size:13px}
  .firmware-page .fw-target-advanced .firmware-usb-info:not(.firmware-id-info){grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Full-width firmware steps: reference target card should not be squeezed into
+   the right half of a two-column source/target grid. */
+.firmware-page .firmware-grid{grid-template-columns:minmax(0,1fr)}
+.firmware-page .firmware-grid>.firmware-source-card,
+.firmware-page .firmware-grid>.firmware-target-v2,
+.firmware-page .firmware-grid>.firmware-control-card{grid-column:1/-1;min-width:0}
