@@ -28,12 +28,12 @@ async function scan(){
 async function save(){
  const ssid=$('netSsid').value.trim(),password=$('netPass').value;if(!ssid)throw Error('Enter or select a Wi-Fi SSID');
  $('netPass').value='';output('Testing router association • not saved yet.');const result=await pythonWifiTestSave(ssid,password);
- output(result.saved?'Verified & saved • STA '+result.staIp:'Not saved: '+(result.message||result.reason||result.state),result.saved?'good':'warn');
+ output(result.saved?'Verified & saved • STA '+result.staIp:result.state==='handover'?result.message:'Not saved: '+(result.message||result.reason||result.state),result.saved?'good':'warn');
 }
 async function switchMode(){
  const mode=$('netMode').value;if(!['auto','ap','sta'].includes(mode))throw Error('Invalid mode');
- await request('/api/wifi/mode','POST',{mode});netReady=false;lastSeen=0;
- output('Mode change to '+mode.toUpperCase()+' requested. Pair Android again after it joins the selected network.');
+ await window.ZebjusKits.switchNetworkMode(mode);netReady=false;lastSeen=0;
+ output('Kit changing to '+mode.toUpperCase()+'. Join its Wi-Fi, scan and approve Connect. Saved USB pairing is reused.');
 }
 function telemetryLine(d){
  const addr='0x'+Number(d.address||0).toString(16).toUpperCase();
@@ -68,7 +68,8 @@ async function pythonWifiTestSave(ssid,password){
  const kit=window.ZebjusKits?.getState?.();
  if(!kit?.connected||!['sta','ap'].includes(kit.transport))throw Error('Connect a verified kit first.');
  if(kit.rc?.claimed)throw Error('Controller busy: release Android/WEB diagnostic control before network setup.');
- if(!kit.setupAuthorized)throw Error('Renew the 5-minute setup authorization with your private label on the kit AP.');
+ if(!kit.setupAuthorized)throw Error('Connect Kit AP setup or authorize this USB-paired STA kit before changing router settings.');
+ if(kit.exclusiveWifi)return window.ZebjusKits.testWifi(ssid,password);
  await request('/api/wifi/test','POST',{ssid:String(ssid),password:String(password)});
  for(let attempt=0;attempt<30;attempt++){
   await new Promise(resolve=>setTimeout(resolve,1000));let state;

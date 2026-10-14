@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only after association',()=>{
- const f=read('FlightCore_Firmware/FlightCoreNetwork.h'),ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
+ const f=read('FlightCore_Firmware/FlightCoreNetwork.h')+read('FlightCore_Firmware/FlightCoreWifiPolicy.h'),ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  for(const expected of ['#include <WiFi.h>','#include <Preferences.h>','WiFi.scanNetworks(true,false)','WiFi.begin(','zjRememberProfile(','sta_test_pass_saved','sta_failed_ap_fallback','sta_connecting','/api/wifi/test','/api/wifi/mode','/api/telemetry','/api/command','/api/status'])assert.ok(f.includes(expected),expected);
  assert.ok(ino.includes('#include "FlightCoreNetwork.h"'));
  assert.ok(ino.includes('zjNetworkSetup();')&&ino.includes('zjNetworkLoop(now);'));

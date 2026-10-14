@@ -151,12 +151,15 @@ function render(){
  set('fwWifiApName',live?s.apSsid||'Not reported':'--');
  set('fwWifiState',live?s.staConnected?(s.apActive?'STA + AP':'STA CONNECTED'):s.apActive?'AP • STA OFF':'Router offline':'Kit offline');
  set('fwWifiAddress',live?(s.staIp||'STA offline')+' / '+(s.apActive?s.apIp||'192.168.4.1':'AP off'):'--');
- set('fwWifiAccess',live?s.otaAuthorized?'Control, settings & APP OTA authorized':s.setupAuthorized?'AP setup available • USB pairing required for APP OTA':'STA monitoring • USB pairing required for settings/control/OTA':'Connect a kit to manage its Wi-Fi');
+ set('fwWifiAccess',(live?s.otaAuthorized?'Control, settings & APP OTA authorized':s.setupAuthorized?'AP setup available • USB pairing required for APP OTA':'STA monitoring • USB pairing required for settings/control/OTA':s.pendingNetworkMode?'Waiting for '+s.pendingNetworkMode.toUpperCase()+' • join matching Wi-Fi and approve Connect':'Connect a kit to manage its Wi-Fi')+(live&&s.authorizationNotice?' • '+s.authorizationNotice:''));
  const router=s.ssid?'router Wi-Fi "'+s.ssid+'"':'the saved router Wi-Fi';
- set('fwWifiRouteHint',live?s.transport==='ap'?(s.staConnected?'The kit has connected to '+router+'. This browser still uses the kit AP. Join that router in computer Wi-Fi settings, then click Connect STA. AUTO keeps the AP hotspot available.':'This browser uses the kit AP; router STA is offline. Open Wi-Fi settings, run Test & Save STA and wait for VERIFIED before joining the router.'):
-  s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'The kit AP hotspot remains available in AUTO mode.':'The kit AP hotspot is off.'):
+ set('fwWifiRouteHint',live?s.transport==='ap'?(s.exclusiveWifi?'AP only: saved routers are not connected. Select STA in the header to turn AP off and try saved routers; failed routers restore AP.':s.staConnected?'The kit has connected to '+router+'. This browser still uses the kit AP. Update to FlightCore 1.4.6 for exclusive AP/STA modes.':'This browser uses the kit AP; router STA is offline. Configure Wi-Fi, then switch to STA and join the router.'):
+  s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'Update to FlightCore 1.4.6 to disable AP while STA is connected.':'The kit AP hotspot is off.'):
   s.transport==='usb'?'USB is connected. Test & Save the router, join its Wi-Fi on this computer, then Connect STA.':'The kit is connected through the Android relay. Manage its router/AP settings through the verified kit connection.':'First setup: join the kit AP, connect the kit, then Scan Wi-Fi → Test & Save STA.');
- if($('fwAuthorizeUpdates'))$('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized;
+ if($('fwAuthorizeUpdates')){
+  $('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized||s.authorizationRetryAt>Date.now();
+  $('fwAuthorizeUpdates').title=s.authorizationNotice||'Verify the pairing saved from this physical USB kit';
+ }
  if(changed&&live){if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}
 }

@@ -1,13 +1,12 @@
 {
-  "version": "1.7.2+205",
-  "channel": "release",
-  "previousStable": "80bd3376c2b2201e77d9480b8affde149f3b2165",
+  "version": "1.8.0+206",
+  "channel": "review",
+  "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
-    "STA connection requires a verified STA reply and never reconnects through the AP gateway",
-    "AP-to-STA handover rediscovers the physical Kit Name after DHCP changes",
-    "Router connectivity and the computer's actual AP/STA link are displayed separately",
-    "FlightCore 1.4.5 A1/A2 firmware remains compatible with this WebApp fix"
-  ],
-  "buildCommit": "f1c012faadbf",
-  "publishedAt": "2026-10-13T22:36:04.782716+00:00"
+    "Exclusive AP or STA: saved-router failure restores AP, manual AP stays selected",
+    "Header switch changes the physical kit Wi-Fi mode before rediscovery",
+    "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
+    "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
+    "FlightCore 1.4.6 APP and FACTORY firmware for A1 and A2"
+  ]
 }

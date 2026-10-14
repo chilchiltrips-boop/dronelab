@@ -3,7 +3,7 @@
 function confirmInLab(message){return window.AerionDialogs?.confirm(message)??Promise.resolve(confirm(message))}
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const VERSION='1.4.5',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
+const VERSION='1.4.6',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
 let lastVerifiedRuntime=null,lastVerifiedAt=0,liveDiagnostic=null;
@@ -729,6 +729,9 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   // Same physical USB connection is shared with MY KITS: request kit code and AP/STA status.
   void writePythonSerialLine('ZJKIT,GET\n').catch(()=>{});
   void writePythonSerialLine('ZJNET,GET\n').catch(()=>{});
+  // Read Running Firmware must refresh physical pairing even when MY KITS
+  // still has an AP/STA connection and therefore does not auto-select USB.
+  void writePythonSerialLine('ZJNET,PAIR\n').catch(()=>{});
   telRxSeq=null;telMissed=0;telDeviceDrops=0;telRateActual=0;
   void setUsbTelemetryRate($('#fwTelRate')?.value||20);
  }finally{monitorStarting=false}
