@@ -232,18 +232,64 @@
 <div class="firmware-config-row"><label>Image type<select id="fwImageType"><option value="app">Application image (existing layout)</option><option value="factory">Factory image (first flash)</option></select></label><label>Board profile<select id="fwBoardProfile"><option value="auto">Auto detect connected board</option></select></label></div><div class="firmware-board-detect"><div><span>TARGET BOARD</span><b id="fwDetectedBoard">ZEBJUS FlightCore A1 SuperMini</b></div><div><span>DETECTION</span><b id="fwBoardSource">Default profile</b></div><div><span>LATEST PACKAGE</span><b id="fwPackageState">Checking…</b></div></div>
 <p class="micro-note" id="fwSourceMessage">Connect USB for automatic board detection. Without USB, select a board profile to load the matching firmware.</p>
 </div>
-<div class="form-card firmware-target-card">
+<div class="form-card firmware-target-card firmware-target-v2">
 <div class="panel-head"><div><small>STEP 2 • TARGET</small><h2>Connect controller</h2></div></div>
-<div class="firmware-target-option usb"><div class="firmware-target-icon">USB</div><div><b>USB Web Serial</b><span>Detect FlightCore A1 SuperMini / A2 C6 and flash the correct firmware. Desktop Chrome or Edge on HTTPS / localhost.</span></div><div class="firmware-connect-buttons"><button class="btn primary small" id="fwConnectUsbBtn">Connect USB / Flash Mode</button><button class="btn ghost small" id="fwReadRunningBtn" type="button" title="Open USB Serial to read running firmware ZJINFO">Read Running Firmware</button><button class="btn ghost small" id="fwOpenKitNetwork" type="button" title="Configure exclusive AP / STA through the selected USB kit">⚙ Configure Kit Wi-Fi</button><button class="btn ghost small" id="fwConnectStaBtn" type="button" title="Select STA classroom router connection in MY KITS">Connect STA</button><button class="btn ghost small" id="fwConnectApBtn" type="button" title="Select AP hotspot connection in MY KITS">Connect AP</button></div></div>
-<div class="firmware-usb-info"><div><span>Detected board</span><b id="fwUsbChip">--</b></div><div><span>USB status</span><b id="fwUsbState">Not connected</b></div><div><span>Baud</span><select id="fwUsbBaud"><option selected="" value="115200">115200</option><option value="460800">460800</option><option value="921600">921600</option></select></div></div>
-<div class="firmware-usb-info firmware-id-info"><div><span>Latest published package</span><b id="fwPublishedVersion">--</b></div><div><span>Last verified firmware (same session)</span><b id="fwPreviouslyVerified">None</b></div></div>
-<div class="firmware-usb-info"><div><span>USB sensor</span><b id="fwUsbSensor">--</b></div><div><span>I²C wiring mode</span><b id="fwUsbMode">--</b></div><div><span>Sensor pins</span><b id="fwUsbPins">--</b></div><div><span>Onboard LED</span><b id="fwUsbLed">--</b></div></div>
-<div class="firmware-target-actions"><button class="btn ghost small" type="button" id="fwI2cScanBtn">Scan sensors</button><button class="btn ghost small" type="button" id="fwLedTestBtn">Test onboard LED</button></div>
-<p class="micro-note">A1 SuperMini: connect LSM6DS3 SDA GPIO4, SCL GPIO5, 3V3 and GND. GPIO8 is reserved for the onboard LED, GPIO9 for BOOT. A2 C6: MPU6050 SDA GPIO22, SCL GPIO23. Gyro samples at 50 Hz, telemetry defaults to 20 Hz (10/20/50 selectable), and the full I²C scan runs every 5 seconds or on request.</p>
-<label class="firmware-check"><input id="fwUsbManualBoot" type="checkbox"/> Already in BOOT mode <small>For recovery: USB power only, hold BOOT, tap RESET, release BOOT, then connect the USB port. Close Arduino Serial Monitor first. Pairing grants port access; USB READY confirms the bootloader and flash chip.</small></label>
-<label class="firmware-check"><input id="fwEraseUsb" type="checkbox"/> Erase entire flash before USB factory flash <small>Only available for Factory/Merged images. Never erase when flashing an app-only image.</small></label>
-<div class="firmware-target-actions"><button class="btn primary full" id="fwUsbFlashBtn">Flash over USB</button><button class="btn ghost" id="fwNetworkFlashBtn" type="button" disabled>Update via STA / AP</button></div><p id="fwNetworkFlashHelp" class="firmware-flash-help" role="status">For APP OTA, connect the same Kit over STA or AP and authorize this USB-paired browser. Release control before updating. FACTORY images require USB.</p>
-<p id="fwUsbFlashHelp" class="firmware-flash-help" role="status" aria-live="polite">Click Connect USB and load a matching Factory image to enable flashing.</p>
+<div class="fw-target-choices">
+<div class="firmware-target-option wifi">
+<div class="firmware-target-icon">Wi-Fi</div>
+<div class="fw-target-copy"><b>Online Kit OTA</b><span>Fast update over the selected same-Wi-Fi kit. Requires USB-paired OTA authorization, released diagnostic control, and a matching application .bin.</span></div>
+<button class="btn ghost small" id="fwCheckKitBtn" type="button">Check Kit</button>
+</div>
+<div class="firmware-target-option usb">
+<div class="firmware-target-icon">USB</div>
+<div class="fw-target-copy"><b>USB Web Serial</b><span>First flash / recovery / factory image. Chrome or Edge on HTTPS/localhost. Select the FlightCore USB port.</span></div>
+<button class="btn primary small" id="fwConnectUsbBtn" type="button">Connect USB</button>
+</div>
+</div>
+<div class="firmware-usb-info fw-target-quick-status">
+<div><span>Detected board</span><b id="fwUsbChip">--</b></div>
+<div><span>USB status</span><b id="fwUsbState">Not connected</b></div>
+<div><span>Baud</span><select id="fwUsbBaud" aria-label="USB flash baud"><option selected value="115200">115200</option><option value="460800">460800</option><option value="921600">921600</option></select></div>
+</div>
+<label class="firmware-check"><input id="fwUsbManualBoot" type="checkbox"/> Already in BOOT mode <small>For USB recovery: power the board, hold BOOT, tap RESET, release BOOT, then select its USB port. Close Arduino Serial Monitor first. USB READY confirms the flash chip.</small></label>
+<label class="firmware-check"><input id="fwEraseUsb" type="checkbox"/> Erase entire flash before USB factory flash <small>Only available for Factory/Merged images. Full erase removes saved Wi-Fi, pairing, settings and calibration. Never erase for APP-only updates.</small></label>
+<div class="fw-upgrade-chooser" role="group" aria-label="Firmware upgrade options">
+<div class="fw-upgrade-chooser-buttons">
+<button class="btn primary" type="button" id="fwUpgradeModeBtn" aria-pressed="true">Upgrade</button>
+<button class="btn ghost fw-erase-mode" type="button" id="fwUpgradeEraseModeBtn" aria-pressed="false">Upgrade &amp; Erase</button>
+</div>
+<p id="fwUpgradeModeHelp" role="status">Upgrade selects APP firmware. Upgrade &amp; Erase selects USB-only Factory firmware. Neither choice starts flashing.</p>
+</div>
+<div class="fw-target-flash-actions">
+<button class="btn primary full" id="fwNetworkFlashBtn" type="button" disabled>Flash Selected Kit over Wi-Fi</button>
+<p id="fwNetworkFlashHelp" class="firmware-flash-help" role="status" aria-live="polite">Connect your authorized STA/AP kit and release control for APP OTA.</p>
+<button class="btn ghost full" id="fwUsbFlashBtn" type="button">Flash Connected FlightCore over USB</button>
+<p id="fwUsbFlashHelp" class="firmware-flash-help" role="status" aria-live="polite">Connect USB and load a matching image to enable flashing.</p>
+</div>
+<details class="fw-target-advanced">
+<summary>Advanced connections, firmware identity &amp; USB diagnostics</summary>
+<div class="firmware-connect-buttons">
+<button class="btn ghost small" id="fwReadRunningBtn" type="button">Read Running Firmware</button>
+<button class="btn ghost small" id="fwOpenKitNetwork" type="button">Configure Kit Wi-Fi</button>
+<button class="btn ghost small" id="fwConnectStaBtn" type="button">Connect STA</button>
+<button class="btn ghost small" id="fwConnectApBtn" type="button">Connect AP</button>
+</div>
+<div class="firmware-usb-info firmware-id-info">
+<div><span>Latest published package</span><b id="fwPublishedVersion">--</b></div>
+<div><span>Last verified firmware (same session)</span><b id="fwPreviouslyVerified">None</b></div>
+</div>
+<div class="firmware-usb-info">
+<div><span>USB sensor</span><b id="fwUsbSensor">--</b></div>
+<div><span>I²C wiring mode</span><b id="fwUsbMode">--</b></div>
+<div><span>Sensor pins</span><b id="fwUsbPins">--</b></div>
+<div><span>Onboard LED</span><b id="fwUsbLed">--</b></div>
+</div>
+<div class="firmware-target-actions">
+<button class="btn ghost small" type="button" id="fwI2cScanBtn">Scan sensors</button>
+<button class="btn ghost small" type="button" id="fwLedTestBtn">Test onboard LED</button>
+</div>
+<p class="micro-note">A1: LSM6DS3 SDA GPIO4 / SCL GPIO5, LED GPIO8. A2: MPU6050 SDA GPIO22 / SCL GPIO23. Gyro sampling 50 Hz; USB telemetry 20 Hz default.</p>
+</details>
 </div>
 <div class="form-card firmware-control-card">
 <div class="panel-head"><div><small>STEP 3 • UPDATE MONITOR</small><h2>Flash, verify, reboot &amp; reconnect</h2></div><span class="status" id="fwOverallBadge">READY</span></div>

@@ -70,7 +70,7 @@ function syncFirmwareControls(){
  const serialSupported=!!navigator.serial&&globalThis.isSecureContext;
  const flash=usbFlashReadiness(),network=networkFlashReadiness();
  const netButton=$('#fwNetworkFlashBtn'),netHelp=$('#fwNetworkFlashHelp');
- if(netButton){netButton.disabled=busy||!network.ready;netButton.textContent=network.ready?'Flash APP via '+globalThis.ZebjusKits.getState().transport.toUpperCase()+' OTA':'Flash APP via Wi-Fi';netButton.title=network.message;}
+ if(netButton){netButton.disabled=busy||!network.ready;netButton.textContent='Flash Selected Kit over Wi-Fi';netButton.title=network.message;}
  if(netHelp){netHelp.textContent=network.message;netHelp.classList.toggle('ready',network.ready)}
  for(const [id,ready] of [['#fwReadRunningBtn',serialSupported],['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
  const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');
@@ -82,6 +82,13 @@ function syncFirmwareControls(){
  const kit=globalThis.ZebjusKits?.getState?.();
  for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=busy||!globalThis.ZebjusKits&&!school()||id==='#fwRebootBtn'&&(!kit?.connected||!kit.otaAuthorized||kit.owner||kit.rc?.claimed);e.title=id==='#fwRebootBtn'?'Reboot the authorized, idle AP/STA kit':'Refresh or reconnect the selected immutable Device ID'}}
  const erase=$('#fwEraseUsb');if(erase){erase.disabled=busy||($('#fwImageType')?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}
+ const factory=$('#fwImageType')?.value==='factory';
+ for(const [id,active] of [['#fwUpgradeModeBtn',!factory],['#fwUpgradeEraseModeBtn',factory]]){
+  const button=$(id);if(button){button.disabled=busy;button.setAttribute('aria-pressed',String(active))}
+ }
+ const hint=$('#fwUpgradeModeHelp');
+ if(hint)hint.textContent=factory?'USB Factory mode. Erase is USB-only and clears saved Wi-Fi/pairing. Final target and image verification are required before writing.':'APP upgrade mode. Wi-Fi/pairing is preserved when partitions are compatible. STA/AP OTA requires an authorized idle kit.';
+ const check=$('#fwCheckKitBtn');if(check)check.disabled=busy;
 }
 function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){const hashes=await import('./js/firmware-hashes.js');return hashes.sha256(bytes)}
@@ -843,7 +850,17 @@ async function reconnectKit(){
  catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}
 }
 function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
-function bind(){window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+async function selectUpgradeMode(factory){
+ if(busy)return;
+ const kind=factory?'factory':'app',select=$('#fwImageType');
+ if(!select)return;
+ if(select.value!==kind||!fw||fw.type!==kind){
+  select.value=kind;fw=null;renderFirmware();await autoLoad();
+ }
+ const erase=$('#fwEraseUsb');if(erase&&!erase.disabled)erase.checked=factory;
+ syncFirmwareControls();
+}
+function bind(){window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}await autoLoad()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();

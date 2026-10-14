@@ -64,3 +64,17 @@ test('OTA locks polling before its first request and tolerates longer flash writ
  assert.match(kit,/if\(ticket!==reconnectTicket\|\|state.working\)return/);
  assert.match(updater,/no confirmed write ACK/);
 });
+
+test('firmware target matches safe screenshot-style OTA/USB workflow',()=>{
+ for(const p of ['index.html','lab.html']){
+  const h=read(p);
+  for(const id of ['fwCheckKitBtn','fwConnectUsbBtn','fwUpgradeModeBtn','fwUpgradeEraseModeBtn','fwUsbManualBoot','fwEraseUsb','fwNetworkFlashBtn','fwUsbFlashBtn'])
+   assert.ok(h.includes('id="'+id+'"'),p+' '+id);
+  assert.ok(h.indexOf('id="fwNetworkFlashBtn"')<h.indexOf('id="fwUsbFlashBtn"'));
+  assert.match(h,/Online Kit OTA/);assert.match(h,/USB Web Serial/);
+ }
+ assert.match(read('firmware.css'),/fw-target-choices/);
+ assert.match(updater,/function selectUpgradeMode\(factory\)/);
+ assert.match(updater,/if\(erase&&type!=='factory'\)/);
+ assert.match(updater,/fwCheckKitBtn.*refreshKit/);
+});
