@@ -59,7 +59,7 @@ test('OTA locks polling before its first request and tolerates longer flash writ
  assert.match(auth,/timedOut=true;control.abort\(\)/);
  const begin=kit.indexOf('async function uploadAppFirmware');
  const pre=kit.indexOf("const pre=await wifiDirect(ip,key,'/api/status')",begin);
- const lock=kit.indexOf('state.working=true;render();',begin);
+ const lock=kit.indexOf('state.working=true;otaActive=true;render();',begin);
  assert.ok(begin>=0&&lock>begin&&lock<pre,'prevent background status polling before preflight');
  assert.match(kit,/if\(ticket!==reconnectTicket\|\|state.working\)return/);
  assert.match(updater,/no confirmed write ACK/);
