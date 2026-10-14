@@ -86,3 +86,19 @@ test('during a real OTA, kit status reports updating instead of false offline or
  assert.match(kit,/otaInProgress:otaActive/);
  assert.match(kit,/state.working=true;otaActive=true;render\(\)/);
 });
+
+test('firmware source and target are side by side on desktop and monitor remains full width',()=>{
+ for(const page of ['index.html','lab.html']){
+  const html=read(page);
+  const source=html.indexOf('class="form-card firmware-source-card"');
+  const target=html.indexOf('class="form-card firmware-target-card firmware-target-v2"');
+  const monitor=html.indexOf('class="form-card firmware-control-card"');
+  assert.ok(source>=0&&source<target&&target<monitor,'preserve three firmware steps in desktop reading order');
+ }
+ const css=read('firmware.css');
+ assert.match(css,/@media\(min-width:1180px\)\{\s*\.firmware-page \.firmware-grid\{grid-template-columns:minmax\(0,1\.16fr\) minmax\(0,\.84fr\)\}/);
+ assert.match(css,/\.firmware-page \.firmware-grid>\.firmware-control-card\{grid-column:1\/-1/);
+ assert.match(css,/@media\(max-width:1179px\)/);
+ assert.match(css,/\.firmware-page \.firmware-target-v2 \.firmware-target-option\{[\s\S]*?min-height:57px/);
+ assert.doesNotMatch(css,/Full-width firmware steps:/);
+});
