@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 const code=readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8');
 const id='ZFC-A1-012345ABCDEF',other='ZFC-A1-FFFFFFFFFFFF',key='a1'.repeat(16);
 function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclusive=false}={}){
- const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[];let ready;
+ const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[];let ready,disposed=false;
  let savedKey=paired?key:'',enrollmentError='',enrollmentGate=null,authAttempts=0,now=Date.now();
  class Clock extends Date{static now(){return now}}
  const element=()=>({value:'',checked:false,textContent:'',dataset:{},style:{},disabled:false,listeners:{},children:[],
@@ -71,7 +71,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  const document={readyState:'loading',hidden:false,addEventListener:(type,fn)=>{if(type==='DOMContentLoaded')ready=fn},getElementById:name=>elements.get(name)||null,
   querySelectorAll:()=>[],querySelector:()=>({click(){}}),createElement:element};
  const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)};
- const timeout=(fn,ms)=>{const t=setTimeout(fn,ms);timers.add(t);return t};
+ const timeout=(fn,ms)=>{if(disposed)return 0;const t=setTimeout(fn,ms);timers.add(t);return t};
  vm.runInNewContext(code,{window,document,localStorage,fetch,URL,URLSearchParams,AbortController,XMLHttpRequest:XHR,Uint8Array,Blob,FormData,TextEncoder,Option:class{constructor(text,value){this.text=text;this.value=value}},
   setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},Date:Clock,confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
@@ -79,7 +79,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
-  reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{for(const t of timers)clearTimeout(t)}};
+  reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{disposed=true;for(const t of timers)clearTimeout(t)}};
 }
 test('rejected saved pairing falls back to verified STA monitoring and never replays that credential',async()=>{
  const f=fixture({paired:true,encrypted:true});try{
@@ -110,6 +110,27 @@ test('a remembered kit scan asks once and Later leaves the kit offline without s
   assert.equal(f.events.filter(e=>e.type==='dronelab:reconnect-offer').length,1);
   f.api.declineReconnectOffer();await f.api.discoverKits();
   assert.equal(f.events.filter(e=>e.type==='dronelab:reconnect-offer').length,1);assert.equal(f.authAttempts(),0);
+ }finally{f.dispose()}
+});
+test('STA-to-AP applies AP-only mode and reconnects the same saved kit with STA offline',async()=>{
+ const f=fixture({paired:true,encrypted:true,exclusive:true});try{
+  f.reachable(['192.168.1.20']);await f.api.connect();await f.api.switchNetworkMode('ap');
+  assert.ok(f.requests.some(r=>r.route==='/api/wifi/mode'&&r.args.mode==='ap'));
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().pendingNetworkMode,'ap');
+  f.reachable(['192.168.4.1']);f.status({requestTransport:'AP',mode:'ap',apActive:true,staConnected:false,ip:''});
+  await f.api.discoverKits();await f.api.acceptReconnectOffer();
+  assert.equal(f.api.getState().transport,'ap');assert.equal(f.api.getState().staConnected,false);assert.equal(f.api.getState().owner,false);
+  await f.api.authorizeNetwork();assert.equal(f.api.getState().otaAuthorized,true,'The same saved pairing also authorizes AP');
+ }finally{f.dispose()}
+});
+test('exclusive Test & Save clears the old AP link and waits for verified rediscovery without claiming the password was saved',async()=>{
+ const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true});try{
+  f.reachable(['192.168.4.1']);await f.api.connect();f.elements.get('kitRouterSsid').value='Classroom';f.elements.get('kitRouterPass').value='private-router-pass';
+  const before=f.requests.filter(r=>r.route==='/api/status').length,result=await f.api.wifiSave();
+  assert.equal(result.state,'handover');assert.equal(result.saved,false);assert.equal(f.api.getState().connected,false);
+  assert.equal(f.elements.get('kitRouterPass').value,'');
+  assert.equal(f.requests.filter(r=>r.route==='/api/status').length,before);
+  assert.ok(!JSON.stringify([...f.storage.values()]).includes('private-router-pass'));
  }finally{f.dispose()}
 });
 test('one physical USB pairing is remembered automatically when the default saved-access option is enabled',async()=>{
