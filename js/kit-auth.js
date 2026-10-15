@@ -52,7 +52,7 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
 function http(host){return async(route,method='GET',args={},headers={})=>{
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
  const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
- const timeoutMs=firmwareWrite?20000:4200;
+ const timeoutMs=root.ZebjusKitNetworkPolicy?.requestTimeout(route,method,host.includes('192.168.4.1')?'ap':'sta')||(firmwareWrite?20000:4200);
  const control=new AbortController();let timedOut=false;
  const timer=setTimeout(()=>{timedOut=true;control.abort()},timeoutMs);
  try{

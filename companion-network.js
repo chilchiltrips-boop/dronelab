@@ -177,7 +177,7 @@ async function uploadAdminApp(file){
    throw Error('Existing OTA partition is incompatible. Use physical USB recovery; do NOT erase saved Wi-Fi.');
   if(pre.encryptedOta!==true||!/^[a-fA-F0-9]{32}$/.test(pre.bootId||''))
    throw Error('Kit does not support encrypted, independently verifiable APP OTA.');
-  const chunkSize=Number(pre.otaChunkMaxBytes)>=1024?1024:384;
+  const chunkSize=Number(pre.otaChunkMaxBytes)>=2048?2048:Number(pre.otaChunkMaxBytes)>=1024?1024:384;
   show('Encrypted '+chunkSize+'-byte APP OTA • verified '+id);
   const begin=await admin.request('/api/firmware/begin','POST',{size:bytes.length,sha256:hash,boardId:board});
   begun=true;

@@ -68,7 +68,7 @@ function supportedOtaChunkSize(status){
  // Legacy encrypted-OTA firmware has no advertised chunk limit.
  // Capability comes from the authenticated live status, never a version guess.
  const limit=Number(status?.otaChunkMaxBytes);
- return Number.isSafeInteger(limit)&&limit>=1024?1024:384;
+ return Number.isSafeInteger(limit)&&limit>=2048?2048:Number.isSafeInteger(limit)&&limit>=1024?1024:384;
 }
 function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
@@ -930,7 +930,7 @@ function onSerial(e){
 async function recoverVerifiedLink(old){
  if(!old||!['sta','ap'].includes(old.transport)||!identityHosts(old).length)return false;
  const ticket=++reconnectTicket;recoveryTarget=old;state.linkState='reconnecting';render();
- for(const delay of [250,600,1100,1900,3500]){
+ for(const delay of [250,700,1600,3000,5000]){
   await sleep(delay);
   if(reconnectTicket!==ticket||document.hidden||state.connected)return false;
   try{
@@ -958,7 +958,12 @@ async function recoverVerifiedLink(old){
    adoptNetworkStatus(d);recoveryTarget=null;pollErrors=0;headerNetworkChoice=old.transport;recordKnown();tone('Wi-Fi recovered • same Device ID verified • Take Control again','good');
    root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,transport:old.transport,kitId:old.kitId}}));
    return true;
-  }catch(e){audit('Verified reconnect attempt: '+String(e.message||e).slice(0,100),'warn')}
+   }catch(e){
+    const rule=root.ZebjusKitNetworkPolicy?.retryDisposition(e)||{retry:true,delayMs:2500};
+    audit('Verified reconnect ('+(rule.reason||'connection')+'): '+String(e.message||e).slice(0,100),'warn');
+    if(!rule.retry){tone('Reconnect stopped: identity/authorization needs manual verification','warn');return false}
+    if(rule.delayMs>=10000)await sleep(rule.delayMs);
+   }
  }
  if(reconnectTicket===ticket){tone('Kit offline • monitoring will retry; use Rescan Kits or Network Recovery','warn');setTimeout(()=>{if(reconnectTicket===ticket&&!document.hidden&&!state.connected&&autoReconnectAllowed)void recoverVerifiedLink(old)},12000)}
  return false;

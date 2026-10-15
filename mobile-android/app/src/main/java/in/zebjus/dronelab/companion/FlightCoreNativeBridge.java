@@ -97,7 +97,7 @@ final class FlightCoreNativeBridge {
         }catch(Exception e){reply(id,false,0,"{}","Invalid signed request",null);}
     }
     private void submit(String id,String ip,String method,String route,String form,JSONObject headers){
-        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||(form!=null&&form.length()>(route.startsWith("/api/firmware/")?4800:2500))){
+        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||(form!=null&&form.length()>(route.startsWith("/api/firmware/")?8800:2500))){
             if(id!=null&&id.matches("[a-zA-Z0-9_-]{1,32}"))reply(id,false,0,"{}","Invalid device or operation",null);return;
         }
         final long queuedAt=android.os.SystemClock.elapsedRealtime();
@@ -108,7 +108,7 @@ final class FlightCoreNativeBridge {
                 Network wifi=wifiNetwork();if(wifi==null)throw new IllegalStateException("Connect Android Wi-Fi to the kit first");
                 connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
                 connection.setInstanceFollowRedirects(false);
-                connection.setConnectTimeout(1500);connection.setReadTimeout(route.startsWith("/api/firmware/")?20000:1800);
+                connection.setConnectTimeout(1500);connection.setReadTimeout(route.startsWith("/api/firmware/")?30000:3000);
                 java.util.Iterator<String> names=headers.keys();while(names.hasNext()){String n=names.next();connection.setRequestProperty(n,headers.getString(n));}
                 connection.setRequestProperty("Accept","application/json");connection.setUseCaches(false);connection.setRequestMethod(method);
                 if(method.equals("POST")){

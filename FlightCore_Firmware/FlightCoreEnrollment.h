@@ -8,7 +8,8 @@
 // A 1024-byte OTA chunk expands to ~2068 form-encoded plaintext bytes.
 // AES-GCM adds a nonce and tag; the encrypted envelope is transmitted as hex.
 // Bound the payload and allocate on the heap, not the ESP32 HTTP task stack.
-static constexpr size_t ZJ_AUTH_PAYLOAD_HEX_MAX=4352;
+static constexpr size_t ZJ_AUTH_PAYLOAD_HEX_MAX=8704; // hard max for verified OTA chunk only
+static constexpr size_t ZJ_AUTH_STANDARD_PAYLOAD_HEX_MAX=4352;
 
 static String zjLabelSecret,zjDiagnosticKey,zjBootId,zjAuthBody;
 struct ZjChallenge {String nonce,kind,client;IPAddress ip;uint32_t at=0;};
@@ -62,6 +63,10 @@ static bool zjSessionAuthenticated(){
  for(int i=0;i<8;i++){
   auto& s=zjSessions[i];if(s.id!=id||id.isEmpty())continue;
   if(s.admin&&s.ip!=zjHttp.client().remoteIP())return false;
+   // Larger heap-backed encrypted envelopes are permitted only for an
+   // authenticated OWNER session writing a firmware chunk, not generic APIs.
+   const bool otaChunk=s.admin&&zjHttp.method()==HTTP_POST&&zjHttp.uri()=="/api/firmware/chunk";
+   if(!otaChunk&&payload.length()>ZJ_AUTH_STANDARD_PAYLOAD_HEX_MAX)return false;
   if(s.local&&(s.ip!=zjHttp.client().remoteIP()||(s.localSta?String(zjClientTransport())!="STA":String(zjClientTransport())!="AP")||!zjLocalDiagnosticRoute()))return false;
   if(uint32_t(millis()-s.at)>1800000||wide<=s.seq)return false;
   const String method=zjHttp.method()==HTTP_GET?"GET":"POST";

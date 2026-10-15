@@ -1,7 +1,7 @@
 #pragma once
 // Encrypted, session-bound APP OTA. SHA-256 validates submitted bytes; publisher
 // signing/secure boot is a separate production provisioning requirement.
-static constexpr size_t ZJ_OTA_CHUNK_MAX_BYTES=1024;
+static constexpr size_t ZJ_OTA_CHUNK_MAX_BYTES=2048;
 static bool zjSecureOtaActive=false;
 static uint32_t zjSecureOtaSize=0,zjSecureOtaOffset=0,zjSecureOtaAt=0;
 static String zjSecureOtaSession,zjSecureOtaHash;

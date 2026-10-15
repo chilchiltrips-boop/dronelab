@@ -17,22 +17,29 @@ function runtime(){
  activate:()=>new Promise((resolve,reject)=>events.activate({waitUntil:p=>p.then(resolve,reject)})),
  request:url=>new Promise((resolve,reject)=>events.fetch({request:new Request(key(url)),respondWith:p=>p.then(resolve,reject)}))};
 }
-test('first offline visit can load the exact active flasher catalog and binary URLs',async()=>{
+test('APP binaries precached, FACTORY images fetched only when explicitly needed',async()=>{
  const r=runtime();await r.install();r.setOffline();
  const catalog=JSON.parse(readFileSync(new URL('FlightCore_Firmware/catalog.json',root),'utf8'));
- const required=['./FlightCore_Firmware/catalog.json?v='+catalog.version];
- for(const board of catalog.boards)for(const kind of ['app','factory']){
-  const pkg=board.latest[kind];
-  if(pkg.available)required.push('./FlightCore_Firmware/'+pkg.file+'?v='+board.latest.version);
- }
- for(const path of required){
-  const response=await r.request(path);assert.equal(response.ok,true,path);assert.ok((await response.arrayBuffer()).byteLength>100);
+ assert.equal((await r.request('./FlightCore_Firmware/catalog.json?v='+catalog.version)).ok,true);
+ for(const board of catalog.boards){
+  const app=board.latest.app;
+  if(app.available)assert.equal((await r.request('./FlightCore_Firmware/'+app.file+'?v='+board.latest.version)).ok,true);
+  const factory=board.latest.factory;
+  if(factory.available)await assert.rejects(r.request('./FlightCore_Firmware/'+factory.file+'?v='+board.latest.version),'Not preloaded');
  }
 });
-test('Matplotlib and OpenCV wheels and validation dependencies are cached without first running a plot',async()=>{
- const r=runtime();await r.install();r.setOffline();
- for(const path of ['./vendor/pyodide/matplotlib-3.8.4-cp312-cp312-pyodide_2024_0_wasm32.whl','./js/firmware-image.js','./js/firmware-hashes.js','./vendor/crypto/zfc-crypto.js'])assert.equal((await r.request(path)).ok,true,path);
- for(const wheel of readdirSync(new URL('vendor/pyodide/',root)).filter(x=>x.endsWith('.whl')))assert.equal((await r.request('./vendor/pyodide/'+wheel)).ok,true,wheel);
+test('large Python plotting wheels and Factory images cache on first demand and remain usable offline',async()=>{
+ const r=runtime();await r.install();
+ const wheel='./vendor/pyodide/matplotlib-3.8.4-cp312-cp312-pyodide_2024_0_wasm32.whl';
+ const factory='./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin?v=1.4.8';
+ const key=x=>new URL(x,'https://example.test/dronelab/').href;
+ assert.equal(r.store.has(key(wheel)),false,'no eager Python wheel');
+ assert.equal(r.store.has(key(factory)),false,'no eager Factory image');
+ assert.equal((await r.request(wheel)).ok,true);
+ assert.equal((await r.request(factory)).ok,true);
+ r.setOffline();
+ assert.equal((await r.request(wheel)).ok,true);
+ assert.equal((await r.request(factory)).ok,true);
 });
 test('AP-only cache-busted scripts/styles load while firmware version keys stay exact',async()=>{
  const r=runtime();await r.install();r.setOffline();

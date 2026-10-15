@@ -5,7 +5,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const client=read('companion-network.js'),bridge=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java'),activity=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java'),html=read('companion.html'),network=read('FlightCore_Firmware/FlightCoreNetwork.h'),kit=read('js/classroom-kits.js');
 test('Android teacher OTA is signed AES-GCM/HMAC admin session with exact published SHA-256 APP and physical board',()=>{
  for(const token of ["ZebjusKitAuth.open(nativeTransport,id,credential,'admin')","/api/firmware/begin","/api/firmware/chunk","/api/firmware/end","/api/firmware/abort","firmware-catalog.json","ZfcCrypto.sha256(bytes)","pre.rc?.claimed","pre.bootId","appElfSha256","expectedBuild","kitOtaAdminKey"])assert.ok(client.includes(token),token);
- assert.match(client,/const chunkSize=Number\(pre\.otaChunkMaxBytes\)>=1024\?1024:384/);
+ assert.match(client,/const chunkSize=Number\(pre\.otaChunkMaxBytes\)>=2048\?2048:/);
  assert.match(client,/ack\.kitId!==id\|\|ack\.offset!==offset\+chunk\.length/);
  assert.match(client,/result\.version/);
  assert.doesNotMatch(client,/native\.pickAppFirmware\(/);
@@ -35,7 +35,7 @@ test('old privileged bearer header cannot bypass scoped encrypted sessions',()=>
  assert.match(ota,/zjRequestSession<0\|\|!zjSessions\[zjRequestSession\]\.admin/);
  assert.match(bridge,/if\(publicRoute&&headers\.length\(\)!=0\)/);
  assert.match(bridge,/!headers\.has\("X-ZJ-Proof"\)/);
- assert.match(bridge,/form\.matches\("payload=\[a-fA-F0-9\]\{56,4352\}"\)/);
+ assert.match(bridge,/form\.matches\("payload=\[a-fA-F0-9\]\{56,8704\}"\)/);
  assert.doesNotMatch(bridge,/connection\.setRequestProperty\("X-ZJ-Key"/);
 });
 test('legacy raw-key multipart firmware endpoint cannot write flash on new FlightCore',()=>{
