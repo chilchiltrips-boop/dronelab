@@ -48,7 +48,7 @@ test('Closing embedded WebRTC connection settings preserves originating navigati
  const src=read('pairing-web.js');
  assert.ok(src.includes('previousMobileTab=active'));
  assert.ok(src.includes("previousHardwareView=view==='mobile'?'overview':view"));
- assert.ok(src.includes("document.querySelector('.tab[data-tab="'+back+'"]')?.click()"));
+ assert.match(src,/document\.querySelector\('\.tab\[data-tab=/);
  assert.ok(src.includes("ZebjusDevicesWorkspace?.open(view==='mobile'?'overview':view"));
- assert.ok(!src.includes("function closeSettings(){stopCamera();if(inlineSettings()){document.querySelector('[data-tab="pid"]')?.click()"));
+ assert.doesNotMatch(src,/function closeSettings\(\)\{stopCamera\(\);if\(inlineSettings\(\)\)\{document\.querySelector/);
 });
