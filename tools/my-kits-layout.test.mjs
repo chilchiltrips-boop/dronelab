@@ -53,3 +53,27 @@ test('Overview control buttons are kept outside the scrollable identity card',()
  assert.match(css,/#dw-panel-overview>\.dw-overview-actions/);
  assert.match(read('js/firmware-connect.js'),/bind\('fwKitTakeControl',\(\)=>kit\(\)\.toggleControl\(\)\)/);
 });
+
+test('Kit Connection and Firmware Flash use intrinsic-height scrollable rows',()=>{
+ const css=read('devices-workspace.css');
+ for(const section of ['connection','firmware']){
+  assert.ok(css.includes('#tab-firmware #dw-panel-'+section+'>.dw-view-content'));
+ }
+ assert.match(css,/grid-auto-rows:max-content/);
+ assert.match(css,/#tab-firmware #dw-body-connection \.fw-simple-steps>div\{[\s\S]*?height:auto/);
+ assert.match(css,/#tab-firmware #dw-body-firmware \.firmware-drop-zone\{/);
+ assert.match(css,/#tab-firmware #dw-body-firmware \.firmware-progress-wrap\{/);
+ for(const file of ['index.html','lab.html']){
+  const html=read(file);
+  for(const name of ['Same Wi-Fi','Auto Discover','Verified Connect'])
+   assert.ok(html.includes('<strong>'+name+'</strong>'),file+' '+name);
+ }
+});
+test('USB Serial monitor buttons remain in one grouped responsive toolbar',()=>{
+ const s=read('js/devices-workspace.js'),css=read('devices-workspace.css');
+ assert.match(s,/serialToolbar\.prepend\(serialHeader\)/);
+ assert.match(s,/serialAccess\.append\(openSerial,clearSerial\)/);
+ assert.match(s,/serialToolbar\.append\(serialAccess\)/);
+ assert.match(css,/\.dw-serial-access\{[\s\S]*?display:flex/);
+ assert.match(css,/@media\(min-width:1510px\)/);
+});

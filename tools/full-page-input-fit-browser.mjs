@@ -121,6 +121,66 @@ try{
     Math.abs(ovAfter.barY-ovBefore.barY)>2||!ovAfter.hitTest)
   hardFailures.push('Overview wheel must scroll details without moving/click-blocking Take Control');
  await page.screenshot({path:'test-output/form-fit/hardware-overview-controls-desktop.png'});
+ // The three onboarding cards must stay full height above the real Connect
+ // controls; scrolling must reveal the form rather than clip the first card.
+ await page.setViewportSize({width:1480,height:640});
+ await page.locator('[data-dw-view="connection"]').click();
+ await page.waitForTimeout(180);
+ const connBefore=await page.evaluate(()=>{
+  const root=document.querySelector('#dw-body-connection'),card=root.querySelector('.fw-connect-card');
+  const steps=[...root.querySelectorAll('.fw-simple-steps>div')],rc=card.getBoundingClientRect();
+  const connect=card.querySelector('#fwKitConnectSelected').getBoundingClientRect();
+  return {scroll:root.scrollTop,hasOverflow:root.scrollHeight>root.clientHeight+15,
+   naturalCard:card.scrollHeight<=rc.height+5,
+   stepsFit:steps.length===3&&steps.every(n=>{const span=n.querySelector('span').getBoundingClientRect(),r=n.getBoundingClientRect();return span.bottom<=r.bottom+2&&r.bottom<=rc.bottom}),
+   formAfterSteps:connect.top>steps[2].getBoundingClientRect().bottom};
+ });
+ if(!connBefore.hasOverflow||!connBefore.naturalCard||!connBefore.stepsFit||!connBefore.formAfterSteps)
+  hardFailures.push('Kit Connection 1/2/3 content or Connect form clipped inside its panel');
+ await page.locator('#dw-body-connection').hover();
+ await page.mouse.wheel(0,430);
+ await page.waitForTimeout(150);
+ if(await page.evaluate(()=>document.querySelector('#dw-body-connection').scrollTop)<=connBefore.scroll+10)
+  hardFailures.push('Kit Connection right-side scrolling did not reveal the form');
+ // Firmware source/monitor cards must not shrink when placed in the same
+ // independently scrolling workspace.
+ await page.locator('[data-dw-view="firmware"]').click();
+ const firmwareFit=await page.evaluate(()=>{
+  const root=document.querySelector('#dw-body-firmware'),cards=[...root.querySelectorAll('.firmware-grid>.form-card')];
+  return {hasOverflow:root.scrollHeight>root.clientHeight+15,
+   cardsFit:cards.length>=3&&cards.every(n=>n.scrollHeight<=n.getBoundingClientRect().height+5)};
+ });
+ if(!firmwareFit.hasOverflow||!firmwareFit.cardsFit)
+  hardFailures.push('Firmware Flash contains truncated Step 1/2/3 cards');
+ // Wide desktops should show the USB Serial controls on one line, with
+ // Open Serial Port and Clear Output next to one another at every width.
+ await page.setViewportSize({width:1680,height:840});
+ await page.locator('[data-dw-view="diagnostics"]').click();
+ await page.waitForTimeout(160);
+ const serialWide=await page.evaluate(()=>{
+  const toolbar=document.querySelector('#dw-body-diagnostics .fw-serial-toolbar');
+  const head=toolbar.querySelector('.fw-serial-head');
+  const items=[head,toolbar.querySelector('.fw-serial-tabs'),...toolbar.querySelectorAll('.fw-serial-baud'),
+   toolbar.querySelector('#fwSerialReconnectBtn'),toolbar.querySelector('#fwSerialResetBtn'),
+   toolbar.querySelector('.dw-serial-access')].filter(Boolean);
+  const ys=items.map(n=>Math.round(n.getBoundingClientRect().top));
+  const ports=[document.getElementById('fwSerialMonitorBtn'),document.getElementById('fwSerialClearBtn')];
+  const first=ports[0].getBoundingClientRect(),second=ports[1].getBoundingClientRect();
+  return {oneRow:ys.every(y=>Math.abs(y-ys[0])<=9),grouped:ports.every(n=>n.closest('.dw-serial-access')),
+   portInline:Math.abs(first.top-second.top)<=2};
+ });
+ if(!serialWide.oneRow||!serialWide.grouped||!serialWide.portInline)
+  hardFailures.push('Desktop USB Serial tools should fit in one row with Open/Clear grouped');
+ await page.setViewportSize({width:390,height:760});
+ await page.waitForTimeout(160);
+ const serialMobile=await page.evaluate(()=>{
+  const group=document.querySelector('.dw-serial-access'),buttons=[...group.querySelectorAll('button')];
+  const rects=buttons.map(b=>b.getBoundingClientRect());
+  return {sameRow:Math.abs(rects[0].top-rects[1].top)<3,
+   inside:rects.every(r=>r.left>=-1&&r.right<=innerWidth+1)};
+ });
+ if(!serialMobile.sameRow||!serialMobile.inside)
+  hardFailures.push('Mobile Open Serial Port and Clear Output should remain side-by-side without clipping');
  // A short desktop screen must scroll the middle menu while header/status stay frozen.
  await page.setViewportSize({width:1480,height:410});
  await page.waitForTimeout(230);

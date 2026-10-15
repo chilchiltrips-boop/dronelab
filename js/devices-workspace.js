@@ -131,6 +131,19 @@
    relocate('.fw-serial-toolbar','diagnostics');
    relocate('#fwSerialMonitorBtn','diagnostics');
    relocate('#fwSerialClearBtn','diagnostics');
+   // Preserve original serial/USB event handlers by MOVING existing nodes.
+   // Group Open Serial Port and Clear Output so they never stack separately.
+   const serialToolbar=document.querySelector('#dw-body-diagnostics>.fw-serial-toolbar');
+   const serialHeader=document.querySelector('#dw-body-diagnostics>.fw-serial-head');
+   const openSerial=$('fwSerialMonitorBtn'),clearSerial=$('fwSerialClearBtn');
+   if(!serialToolbar||!serialHeader||!openSerial||!clearSerial)throw Error('Serial toolbar controls unavailable');
+   serialToolbar.prepend(serialHeader);
+   const serialAccess=document.createElement('div');
+   serialAccess.className='dw-serial-access';
+   serialAccess.setAttribute('role','group');
+   serialAccess.setAttribute('aria-label','Serial port access and output');
+   serialAccess.append(openSerial,clearSerial);
+   serialToolbar.append(serialAccess);
    relocate('#fwSerialMonitorPane','diagnostics');
    relocate('#fwSerialPlotterPane','diagnostics');
    const legacy=document.createElement('details');
