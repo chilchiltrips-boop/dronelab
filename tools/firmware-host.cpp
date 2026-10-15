@@ -89,6 +89,15 @@ int main(){
  zjPrefs.putString("label","");zjEnrollmentInit();clockMs+=1000;
  enroll("admin","wrong-private-key");assert(replyStatus==401);
  clockMs+=400;enroll("admin",zjNetKey);assert(replyStatus==200&&zjSessions[0].admin);
+ // A stolen legacy raw bearer key must not grant ANY HTTP admin scope.
+ // Only the proof derived through challenge/enroll can authorize OTA or reboot.
+ for(const String path:{String("/api/status"),String("/api/reboot"),String("/api/firmware/begin")}){
+  prepare(path,path=="/api/status"?HTTP_GET:HTTP_POST);
+  zjHttp.headers["X-ZJ-Key"]=zjNetKey;
+  zjHttp.headers["X-ZJ-Device"]=zjKitId;
+  assert(!zjAllow()&&!zjAuthAdmin&&zjRequestSession<0);
+  assert(!zjSetupAuthorized());
+ }
  const auto admin=zjSessions[0];prepare("/api/status",HTTP_GET);
  zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=admin.id;zjHttp.headers["X-ZJ-Seq"]="1";
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(admin.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+admin.id+"|1|");

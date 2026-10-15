@@ -48,11 +48,12 @@ static bool zjLocalDiagnosticRoute(){
 }
 static bool zjSessionAuthenticated(){
  if(zjAuthChecked)return zjAuthAdmin||zjRequestSession>=0;zjAuthChecked=true;
- const String provided=zjHttp.header("X-ZJ-Key");
- if(provided.length()==32&&zjEqual(provided,zjNetKey)){
-  const String id=zjHttp.header("X-ZJ-Device");if(id.length()&&id!=zjKitId)return false;
-  zjAuthAdmin=true;return true; // existing manufacturing/admin clients
- }
+ // Legacy raw X-ZJ-Key grants were formerly broad admin authority on every
+ // HTTP endpoint. Retired: ALL authenticated routes need a verified, scoped
+ // challenge/enroll session, monotonic proof and AES-GCM for POST requests.
+ // The same device-specific secret may be used ONLY to derive a signed admin
+ // session during /api/auth/enroll. It is never accepted as a bearer header.
+ if(zjHttp.header("X-ZJ-Key").length())return false;
  if(zjHttp.header("X-ZJ-Device")!=zjKitId)return false;
  const String id=zjHttp.header("X-ZJ-Session"),counter=zjHttp.header("X-ZJ-Seq"),payload=zjHttp.arg("payload");
  if(counter.length()>10||!counter.length()||payload.length()>ZJ_AUTH_PAYLOAD_HEX_MAX)return false;

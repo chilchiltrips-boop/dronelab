@@ -42,7 +42,7 @@ static String zjNewSecret(size_t bytes){
  String s;for(size_t n=0;n<bytes;n++){const uint8_t b=uint8_t(esp_random());if(b<16)s+='0';s+=String(b,HEX);}return s;
 }
 // CORS enables supported Chromium Local Network Access only for this trusted WebApp
-// and the local development harness. Authentication still requires X-ZJ-Key.
+// and the local development harness. Privileged routes require signed sessions.
 static bool zjCorsAllowed(){
  const String origin=zjHttp.header("Origin");
  return origin=="https://chilchiltrips-boop.github.io"||
@@ -55,7 +55,7 @@ static void zjCorsHeaders(){
   zjHttp.sendHeader("Access-Control-Allow-Origin",zjHttp.header("Origin"));
   zjHttp.sendHeader("Vary","Origin");
   zjHttp.sendHeader("Access-Control-Expose-Headers","X-ZJ-Response");
-  zjHttp.sendHeader("Access-Control-Allow-Headers","X-ZJ-Key, X-ZJ-Device, X-ZJ-Session, X-ZJ-Seq, X-ZJ-Proof, Content-Type");
+  zjHttp.sendHeader("Access-Control-Allow-Headers","X-ZJ-Device, X-ZJ-Session, X-ZJ-Seq, X-ZJ-Proof, Content-Type");
   zjHttp.sendHeader("Access-Control-Allow-Methods","GET, POST, OPTIONS");
   zjHttp.sendHeader("Access-Control-Max-Age","300");
   if(zjHttp.header("Access-Control-Request-Private-Network")=="true")
@@ -136,7 +136,7 @@ static void zjChooseNetworkName(bool verification=false){
  }
 }
 static void zjSetupHttp(){
- const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7);
+ const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7); // raw-key header is collected only to reject it
  zjSetupEnrollmentHttp();
  zjSetupSecureOtaHttp();
  zjHttp.on("/",HTTP_GET,[](){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send_P(200,"text/html",ZJ_SETUP_PORTAL);});
@@ -267,8 +267,9 @@ static void zjSetupHttp(){
  zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjRcLoop(millis());zjReply(200,zjRcState());});
 
- // Secure-by-default factory flashing remains USB-only. OTA is APP-only with per-device key,
- // ESP chip header check and Update partition guard. Production requires signed-image policy.
+ // Factory flashing remains USB-only. APP OTA requires an encrypted, signed
+ // admin session and an exact, board-matched SHA-256 image. Publisher
+ // signature verification / Secure Boot is a separate production requirement.
  // Raw-key multipart OTA is retired: authenticated encrypted chunk OTA only.
  zjHttp.on("/api/ota",HTTP_POST,[](){zjReply(410,"{\"error\":\"legacy_ota_disabled_use_encrypted_session\"}");},[](){
   if(zjHttp.upload().status==UPLOAD_FILE_START)zjOtaFailed=true;

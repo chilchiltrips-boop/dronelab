@@ -22,6 +22,22 @@ test('native Android blocks raw-key methods and only allows explicit encrypted c
  assert.match(activity,/pendingFirmwareFilePicker/);
  assert.match(activity,/SECURE_OTA_FILE_PICKER/);
 });
+test('old privileged bearer header cannot bypass scoped encrypted sessions',()=>{
+ const enrollment=read('FlightCore_Firmware/FlightCoreEnrollment.h');
+ const ota=read('FlightCore_Firmware/FlightCoreOta.h');
+ assert.match(enrollment,/if\(zjHttp\.header\("X-ZJ-Key"\)\.length\(\)\)return false/);
+ assert.doesNotMatch(enrollment,/zjEqual\(provided,zjNetKey\)/);
+ assert.match(enrollment,/zjHttp\.header\("X-ZJ-Session"\)/);
+ assert.match(enrollment,/zjHttp\.header\("X-ZJ-Proof"\)/);
+ assert.match(enrollment,/mbedtls_gcm_auth_decrypt/);
+ assert.match(network,/Access-Control-Allow-Headers","X-ZJ-Device,/);
+ assert.doesNotMatch(network,/Access-Control-Allow-Headers","X-ZJ-Key,/);
+ assert.match(ota,/zjRequestSession<0\|\|!zjSessions\[zjRequestSession\]\.admin/);
+ assert.match(bridge,/if\(publicRoute&&headers\.length\(\)!=0\)/);
+ assert.match(bridge,/!headers\.has\("X-ZJ-Proof"\)/);
+ assert.match(bridge,/form\.matches\("payload=\[a-fA-F0-9\]\{56,4352\}"\)/);
+ assert.doesNotMatch(bridge,/connection\.setRequestProperty\("X-ZJ-Key"/);
+});
 test('legacy raw-key multipart firmware endpoint cannot write flash on new FlightCore',()=>{
  assert.match(network,/legacy_ota_disabled_use_encrypted_session/);
  const segment=network.slice(network.indexOf('zjHttp.on("/api/ota"'),network.indexOf('zjHttp.on("/api/reboot"'));
