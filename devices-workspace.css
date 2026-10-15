@@ -558,3 +558,32 @@
  margin:0;
 }
 #tab-firmware #dwLegacyConnection #kitAdvancedHardware.dw-unwrapped-advanced>summary{display:none!important}
+
+/* Firmware Step 2: compact segmented Wi-Fi OTA vs. USB Serial panels. */
+.firmware-page .fw-method-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:4px;margin:0 0 9px;border:1px solid #315569;background:#071c2a;border-radius:11px}
+.firmware-page .fw-method-tab{display:flex;align-items:center;justify-content:center;gap:9px;min-width:0;background:transparent;color:#b3cbd9;border:1px solid transparent;border-radius:8px;text-align:left;padding:8px 10px;min-height:45px;cursor:pointer;font:inherit;font-size:12px;font-weight:750;line-height:1.3}
+.firmware-page .fw-method-tab>span:last-child{display:block;min-width:0}
+.firmware-page .fw-method-tab small{display:block;font-size:10px;font-weight:500;color:#9fbdc9;margin-top:2px}
+.firmware-page .fw-method-tab[aria-selected="true"]{background:#123b4a;color:#edfff9;border-color:#43c9a7;box-shadow:inset 3px 0 0 #48dbb5}
+.firmware-page .fw-method-tab:focus-visible{outline:2px solid #62efd4;outline-offset:2px}
+.firmware-page .fw-method-tab:disabled{opacity:.62;cursor:wait}
+.firmware-page .fw-method-symbol{display:grid;place-items:center;flex:0 0 42px;min-height:29px;border:1px solid #2d6075;border-radius:7px;background:#0e293b;color:#d5f7f1;font-size:10px;font-weight:800}
+.firmware-page .fw-method-panel{display:grid;gap:8px;min-width:0}
+.firmware-page .fw-method-panel[hidden]{display:none!important}
+.firmware-page .fw-method-intro{display:flex;flex-wrap:wrap;align-items:baseline;gap:5px 9px;color:#acc5d5;font-size:11px;line-height:1.45}
+.firmware-page .fw-method-intro b{color:#f3fffc;font-size:12px}
+.firmware-page .fw-method-intro span{flex:1 1 200px}
+.firmware-page .fw-method-cta{display:flex;align-items:center;gap:7px;min-width:0}
+.firmware-page .fw-method-cta .btn{flex:0 0 auto;min-height:36px;padding:6px 12px;font-size:11px}
+.firmware-page #fwTargetWifiPanel .fw-method-cta #fwNetworkFlashBtn{flex:1 1 auto;min-width:0}
+.firmware-page .fw-method-hint{color:var(--muted);font-size:11px}
+.firmware-page .fw-method-panel>.firmware-flash-help,.firmware-page .fw-method-flash>.firmware-flash-help{margin:0;color:var(--muted);font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.firmware-page .fw-method-flash{display:grid;gap:5px}
+.firmware-page .fw-method-flash>.btn{min-height:37px;font-size:12px}
+.firmware-page .fw-usb-recovery{margin:0;border:1px solid rgba(203,145,75,.3);border-radius:9px;padding:7px 9px;background:#162531;min-width:0}
+.firmware-page .fw-usb-recovery>summary{cursor:pointer;color:#f0c999;font-size:11px;font-weight:750}
+.firmware-page .fw-usb-recovery>.firmware-check{margin:7px 0 0}
+.firmware-page #fwTargetUsbPanel .fw-target-quick-status{margin:0}
+.firmware-page #fwTargetUsbPanel .fw-upgrade-chooser{margin:0}
+.firmware-page .firmware-grid>.firmware-control-card{grid-column:1/-1}
+@media(max-width:500px){.firmware-page .fw-method-tab{gap:5px;padding:9px 7px}.firmware-page .fw-method-symbol{flex-basis:34px}.firmware-page .fw-method-tab small{font-size:9px}.firmware-page .fw-method-cta{flex-wrap:wrap}.firmware-page #fwTargetWifiPanel .fw-method-cta .btn{flex:1 1 130px;min-height:43px}.firmware-page .fw-method-flash>.btn{min-height:43px}}

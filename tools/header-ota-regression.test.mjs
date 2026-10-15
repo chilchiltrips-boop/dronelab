@@ -102,3 +102,27 @@ test('firmware source and target are side by side on desktop and monitor remains
  assert.match(css,/\.firmware-page \.firmware-target-v2 \.firmware-target-option\{[\s\S]*?min-height:57px/);
  assert.doesNotMatch(css,/Full-width firmware steps:/);
 });
+
+test('OTA and USB target modes use accessible, mutually exclusive panels',()=>{
+ for(const path of ['index.html','lab.html']){
+  const html=read(path);
+  for(const id of ['fwTargetWifiTab','fwTargetUsbTab','fwTargetWifiPanel','fwTargetUsbPanel'])
+   assert.equal(html.split('id="'+id+'"').length-1,1,path+' '+id);
+  assert.match(html,/id="fwTargetWifiTab"[^>]*aria-selected="true"[^>]*aria-controls="fwTargetWifiPanel"/);
+  assert.match(html,/id="fwTargetUsbTab"[^>]*aria-selected="false"[^>]*aria-controls="fwTargetUsbPanel"/);
+  assert.match(html,/id="fwTargetUsbPanel"[^>]*hidden/);
+  const wifi=html.slice(html.indexOf('id="fwTargetWifiPanel"'),html.indexOf('id="fwTargetUsbPanel"'));
+  const usb=html.slice(html.indexOf('id="fwTargetUsbPanel"'),html.indexOf('class="fw-target-advanced"'));
+  for(const id of ['fwCheckKitBtn','fwNetworkFlashBtn'])assert.ok(wifi.includes('id="'+id+'"'));
+  for(const id of ['fwConnectUsbBtn','fwUsbManualBoot','fwEraseUsb','fwUpgradeModeBtn','fwUpgradeEraseModeBtn','fwUsbFlashBtn'])
+   assert.ok(usb.includes('id="'+id+'"'));
+  assert.ok(!wifi.includes('id="fwEraseUsb"'));
+  assert.ok(html.indexOf('class="firmware-source-card"')<html.indexOf('id="fwTargetWifiPanel"'));
+  assert.ok(html.indexOf('class="form-card firmware-control-card"')>html.indexOf('id="fwTargetUsbPanel"'));
+ }
+ assert.match(read('devices-workspace.css'),/\.fw-method-panel\[hidden\]\{display:none!important\}/);
+ assert.match(read('devices-workspace.css'),/\.firmware-grid>\.firmware-control-card\{grid-column:1\/-1\}/);
+ assert.match(updater,/function setFirmwareTargetMethod\(method,focus=false\)/);
+ assert.match(updater,/tab\.addEventListener\('keydown'/);
+ assert.match(updater,/if\(factory&&\$\('\.fw-usb-recovery'\)\)/);
+});

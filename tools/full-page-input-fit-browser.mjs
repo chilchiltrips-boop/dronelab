@@ -152,7 +152,35 @@ try{
  });
  if(!firmwareFit.hasOverflow||!firmwareFit.cardsFit)
   hardFailures.push('Firmware Flash contains truncated Step 1/2/3 cards');
- // Wide desktops should show the USB Serial controls on one line, with
+ // Verify contextual Step 2 panels and full-width Step 3 for both methods.
+  const stepWifi=await page.evaluate(()=>{
+   const ota=document.querySelector('#fwTargetWifiPanel'),usb=document.querySelector('#fwTargetUsbPanel');
+   const monitor=document.querySelector('.firmware-grid>.firmware-control-card');
+   const grid=document.querySelector('.firmware-grid');
+   return {otaVisible:!!ota.getClientRects().length,usbHidden:usb.hidden&&!usb.getClientRects().length,
+    monitorFull:Math.abs(monitor.getBoundingClientRect().width-grid.getBoundingClientRect().width)<6};
+  });
+  if(!stepWifi.otaVisible||!stepWifi.usbHidden||!stepWifi.monitorFull)
+   hardFailures.push('Firmware default Wi-Fi OTA mode must hide USB and keep monitor full-width');
+  await page.locator('#fwTargetUsbTab').click();
+  const stepUsb=await page.evaluate(()=>{
+   const ota=document.querySelector('#fwTargetWifiPanel'),usb=document.querySelector('#fwTargetUsbPanel');
+   const monitor=document.querySelector('.firmware-grid>.firmware-control-card'),grid=document.querySelector('.firmware-grid');
+   return {wifiHidden:ota.hidden&&!ota.getClientRects().length,usbVisible:!!usb.getClientRects().length,
+    usbFlashVisible:!!document.getElementById('fwUsbFlashBtn').getClientRects().length,
+    bootOptionsClosed:!usb.querySelector('.fw-usb-recovery').open,
+    monitorFull:Math.abs(monitor.getBoundingClientRect().width-grid.getBoundingClientRect().width)<6};
+  });
+  if(!stepUsb.wifiHidden||!stepUsb.usbVisible||!stepUsb.usbFlashVisible||
+     !stepUsb.bootOptionsClosed||!stepUsb.monitorFull)
+   hardFailures.push('USB mode should show USB flashing, collapsed recovery, full-width monitor');
+  await page.locator('#fwTargetWifiTab').focus();
+  await page.keyboard.press('ArrowRight');
+  if(!await page.evaluate(()=>document.activeElement?.id==='fwTargetUsbTab'&&
+   document.querySelector('#fwTargetUsbTab').getAttribute('aria-selected')==='true'))
+   hardFailures.push('Firmware method arrow keyboard navigation failed');
+  await page.locator('#fwTargetWifiTab').click();
+  // Wide desktops should show the USB Serial controls on one line, with
  // Open Serial Port and Clear Output next to one another at every width.
  await page.setViewportSize({width:1680,height:840});
  await page.locator('[data-dw-view="diagnostics"]').click();

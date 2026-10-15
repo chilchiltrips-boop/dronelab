@@ -62,7 +62,7 @@ test('reachability probe bypasses Service Worker even when version metadata is c
 
 test('unified Devices & Firmware sidebar loads offline with its exact versioned script and CSS',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./devices-workspace.css?v=unified-devices-advanced-20261015','./js/devices-workspace.js?v=unified-devices-advanced-20261015']){
+ for(const path of ['./devices-workspace.css?v=unified-devices-firmware-method-20261015','./js/devices-workspace.js?v=unified-devices-firmware-method-20261015']){
   const response=await r.request(path);
   assert.equal(response.ok,true,path);
   assert.ok((await response.text()).length>100,path);
@@ -71,7 +71,7 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
 
 test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
  const page=readFileSync(new URL('index.html',root),'utf8'),sw=source;
- const versions=[['pairing-web.js','connectivity-audit-20261015'],['firmware-updater.js','connectivity-audit-20261015'],['js/firmware-connect.js','kit-selection-20261015']];
+ const versions=[['pairing-web.js','connectivity-audit-20261015'],['firmware-updater.js','firmware-method-20261015'],['js/firmware-connect.js','kit-selection-20261015']];
  for(const [asset,version] of versions){
   assert.ok(page.includes(asset+'?v='+version),asset+' page source');
   assert.ok(sw.includes(asset+'?v='+version),asset+' offline precache');
