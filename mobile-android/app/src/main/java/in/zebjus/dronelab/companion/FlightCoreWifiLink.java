@@ -29,6 +29,7 @@ final class FlightCoreWifiLink {
     private String pinnedIp,pinnedId,pinnedSsid,pinnedBssid;
     private ConnectivityManager.NetworkCallback callback;
     private NsdManager.DiscoveryListener discovery;
+    private WifiManager.MulticastLock multicastLock;
     private final AtomicBoolean discoveryFinished=new AtomicBoolean(true);
 
     FlightCoreWifiLink(Activity activity,Listener listener){
@@ -120,16 +121,31 @@ final class FlightCoreWifiLink {
         connectivity.registerNetworkCallback(new NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),callback);
     }
+    private synchronized void releaseMulticast(){
+        if(multicastLock!=null){
+            try{if(multicastLock.isHeld())multicastLock.release();}catch(Exception ignored){}
+            multicastLock=null;
+        }
+    }
     void discover(String kitId){
         if(nsd==null||kitId==null||!kitId.matches("ZFC-A[12]-[0-9A-F]{12}")){
             listener.discovery(kitId,"","A verified Device ID is required");return;
         }
         if(!discoveryFinished.compareAndSet(true,false)){listener.discovery(kitId,"","Discovery already running");return;}
         final AtomicBoolean delivered=new AtomicBoolean(false);
+        try{
+            if(wifi!=null){
+                releaseMulticast();
+                multicastLock=wifi.createMulticastLock("zebjus-kit-nsd");
+                multicastLock.setReferenceCounted(false);
+                multicastLock.acquire();
+            }
+        }catch(SecurityException e){releaseMulticast();}
         discovery=new NsdManager.DiscoveryListener(){
             private void stop(){
                 if(discoveryFinished.compareAndSet(false,true)){
                     try{nsd.stopServiceDiscovery(this);}catch(Exception ignored){}
+                    releaseMulticast();
                 }
             }
             @Override public void onDiscoveryStarted(String type){}
@@ -153,17 +169,18 @@ final class FlightCoreWifiLink {
             }
         };
         try{nsd.discoverServices("_zebjus._tcp.",NsdManager.PROTOCOL_DNS_SD,discovery);}
-        catch(Exception e){discoveryFinished.set(true);listener.discovery(kitId,"","NSD unavailable");}
+        catch(Exception e){discoveryFinished.set(true);releaseMulticast();listener.discovery(kitId,"","NSD unavailable");}
         // NSD candidates are never trusted until signed Device-ID/status checks.
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
             if(!delivered.get()&&discoveryFinished.compareAndSet(false,true)){
                 try{nsd.stopServiceDiscovery(discovery);}catch(Exception ignored){}
+                releaseMulticast();
                 listener.discovery(kitId,"","No matching NSD kit; try cached verified IP");
             }
         },6000);
     }
     void shutdown(){
-        clear();
+        clear();releaseMulticast();
         if(connectivity!=null&&callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}}
         if(nsd!=null&&discovery!=null&&discoveryFinished.compareAndSet(false,true)){
             try{nsd.stopServiceDiscovery(discovery);}catch(Exception ignored){}
