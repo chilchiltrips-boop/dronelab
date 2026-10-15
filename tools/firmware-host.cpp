@@ -188,7 +188,7 @@ int main(){
  for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));}
  ota("/api/firmware/end","");assert(replyStatus==400&&!Update.activated&&!zjSecureOtaActive);
  ota("/api/firmware/begin",begin);
- ota("/api/firmware/chunk","offset=0&data="+String(std::string(2050,'a')));
+ ota("/api/firmware/chunk","offset=0&data="+String(std::string(4100,'a')));
  assert(replyStatus==409&&Update.written.empty()); // oversized OTA never reaches the flash writer
  clockMs+=30001;zjSecureOtaLoop(clockMs);assert(!zjSecureOtaActive&&!Update.activated);
  std::cout<<"PASS actual firmware headers: RC first frame, exclusivity, replay, bounds, IP binding, deadman, lease, rollover; enrollment scope, counter replay, expiry, reboot revocation\n";
