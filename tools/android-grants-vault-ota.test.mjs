@@ -75,7 +75,7 @@ test('mDNS temporary multicast lock and signed same-Kit cached fallback',()=>{
  assert.match(manifest,/CHANGE_WIFI_MULTICAST_STATE/);
  assert.match(nativeNsd,/createMulticastLock\("zebjus-kit-nsd"\)/);
  assert.match(nativeNsd,/releaseMulticast\(\)/);
- assert.match(client,/discoveredId===?p\.deviceId/);
+ assert.match(client,/discoveredId!==p\.deviceId/);
  assert.match(client,/ip=cachedFallbackIp/);
  assert.match(client,/const live=JSON\.parse\(raw\.text\)/);
 });
