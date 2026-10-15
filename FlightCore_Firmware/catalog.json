@@ -16,20 +16,20 @@
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
-          "sha256": "6c57ef5ddd5ba860c70e82187a48ba9959b2b98451f947a7a81f53850ca43b00",
+          "sha256": "8737b9af05356103eb1348876a9f9ca5900aaaa22dfd9584fbc916cc128005cc",
           "size": 1173488,
-          "builtAt": "2026-10-15T07:13:36Z",
-          "buildId": "1.4.6-ZFC-A1-6c57ef5ddd5b"
+          "builtAt": "2026-10-15T07:40:19Z",
+          "buildId": "1.4.6-ZFC-A1-8737b9af0535"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
-          "sha256": "9196ecaaf6a514f757af9bf07a45b15e0e3dfdd5bba925a473778aba9d05243e",
+          "sha256": "d95307cba9d07ed7c73ba3ea79b02cf1eb965fc1237a8b22615cb17b9c7b83d4",
           "size": 4194304,
-          "builtAt": "2026-10-15T07:13:36Z",
-          "buildId": "1.4.6-ZFC-A1-FACTORY-9196ecaaf6a5"
+          "builtAt": "2026-10-15T07:40:19Z",
+          "buildId": "1.4.6-ZFC-A1-FACTORY-d95307cba9d0"
         },
-        "builtAt": "2026-10-15T07:13:36Z"
+        "builtAt": "2026-10-15T07:40:19Z"
       },
       "usbMatch": [
         "ESP32-C3",
@@ -61,20 +61,20 @@
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
-          "sha256": "372de617a4cc87ea1612a90431e80ec6af15af4eb050a3038e35d995a02a13cf",
+          "sha256": "b2addd4f38610ced705b46813169612d50b838a65949d83c3df68e1b87b7bb2a",
           "size": 1181040,
-          "builtAt": "2026-10-15T07:13:36Z",
-          "buildId": "1.4.6-ZFC-A2-372de617a4cc"
+          "builtAt": "2026-10-15T07:40:19Z",
+          "buildId": "1.4.6-ZFC-A2-b2addd4f3861"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
-          "sha256": "694c8c165f3957fc65c4b488b736b8b8a8e9f70e352e4d05f79a5adf7ac7e067",
+          "sha256": "efd27430f3eabb0f843c972a8980a714a63e8b737fe09cef51202933081d7427",
           "size": 4194304,
-          "builtAt": "2026-10-15T07:13:36Z",
-          "buildId": "1.4.6-ZFC-A2-FACTORY-694c8c165f39"
+          "builtAt": "2026-10-15T07:40:19Z",
+          "buildId": "1.4.6-ZFC-A2-FACTORY-efd27430f3ea"
         },
-        "builtAt": "2026-10-15T07:13:36Z"
+        "builtAt": "2026-10-15T07:40:19Z"
       },
       "usbMatch": [
         "ZEBJUS Aerion F1",
@@ -95,5 +95,5 @@
       "recommendedSensor": "MPU6050"
     }
   ],
-  "builtAt": "2026-10-15T07:13:36Z"
+  "builtAt": "2026-10-15T07:40:19Z"
 }
