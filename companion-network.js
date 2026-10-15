@@ -115,7 +115,14 @@ async function connectKit(){
   try{native?.requestWifiPermission?.()}catch{}
   const value=el('kitKey').value.trim();
   if(value){
-   const p=window.ZebjusKitAuth.label(value),raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
+   const p=window.ZebjusKitAuth.label(value);
+   // A cached address is a candidate only; identify + HMAC enrollment + signed
+   // status are always repeated. Never carry permissions from the old link.
+   if(link==='sta'&&!validHost(ip)){
+    const fallback=cachedIp(p.deviceId);
+    if(fallback){ip=fallback;staIp=fallback;el('kitIp').value=fallback;}
+   }
+   const raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
    if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this kit.');
    if(rcSession)await releaseRc();
    verifiedKitId=p.deviceId;diagnosticKey=window.ZebjusKitAuth.diagnosticKey(p.secret,p.deviceId);
@@ -138,14 +145,13 @@ async function status(){
  const data=await request('/api/status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
  verifiedKitId=data.kitId||'';mode=data.mode||mode;
- // Do not advertise ONLINE or enable OTA/control until Android pins this
- // physical Wi-Fi network to the verified device and signed SSID.
+ // Reject the wrong interface BEFORE pinning Wi-Fi or advertising ONLINE.
+ onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
+ if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
+ // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  online=true;lastStatus=Date.now();
  saveVerifiedIp(verifiedKitId,ip,link==='ap'?data.apSsid:data.ssid);
- // AUTO can run AP + STA simultaneously; only the verified request interface may own input.
- onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
- if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
