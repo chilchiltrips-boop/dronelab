@@ -27,10 +27,14 @@ function select(device){
 }
 function renderAvailable(kits=[],inProgress=false){
  discovered=Array.isArray(kits)?kits.map(k=>({...k})):[];
- if(!selectedId&&discovered.length){
+ // Never carry an absent Device ID or its last AP address into a fresh
+ // AP/STA discovery. Selecting a list item is NOT authorization to connect.
+ if(discovered.length&&!discovered.some(k=>k.kitId===selectedId)){
   let remembered;try{remembered=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
   const auto=discovered.find(k=>k.kitId===remembered?.id)||discovered[0];
-  selectedId=auto.kitId;if($('fwKitNameInput'))$('fwKitNameInput').value=auto.kitName;
+  selectedId=auto.kitId;
+  if($('fwKitNameInput'))$('fwKitNameInput').value=auto.kitName;
+  if($('fwKitCachedIp'))$('fwKitCachedIp').value='';
  }
  const dropdown=$('fwKitSelect'),list=$('fwDiscoveryResults');
  if(dropdown){
