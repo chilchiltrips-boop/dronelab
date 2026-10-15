@@ -62,7 +62,7 @@ test('reachability probe bypasses Service Worker even when version metadata is c
 
 test('unified Devices & Firmware sidebar loads offline with its exact versioned script and CSS',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./devices-workspace.css?v=unified-devices-20261015','./js/devices-workspace.js?v=unified-devices-20261015']){
+ for(const path of ['./devices-workspace.css?v=unified-devices-scroll-20261015','./js/devices-workspace.js?v=unified-devices-scroll-20261015']){
   const response=await r.request(path);
   assert.equal(response.ok,true,path);
   assert.ok((await response.text()).length>100,path);
