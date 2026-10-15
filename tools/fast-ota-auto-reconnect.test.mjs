@@ -16,7 +16,7 @@ test('fast reconnect remains explicitly approved, authenticated and identity-che
  assert.match(kit,/AUTO_CONNECT_APPROVALS/);
  assert.match(kit,/autoConnectApproved\(last\.id\)/);
  assert.match(kit,/pairedKeys\.get\(last\.id\)/);
- assert.match(kit,/found\.kitId!==last\.id\|\|found\.kitCode!==last\.code/);
+ assert.match(kit,/found\?\.kitId!==last\.id\|\|found\.kitCode!==last\.code/);
  assert.match(kit,/return connectDiscoveredKit\(kit\)/);
  assert.match(kit,/if\(state\.owner\)throw Error\('Release diagnostic control/);
  assert.match(kit,/for\(const delay of \[250,600,1100,1900,3500\]\)/);

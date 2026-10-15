@@ -1034,7 +1034,7 @@ async function offerRememberedConnection(){
    if(!key&&!pendingNetworkTarget)continue;
    const fresh=await probeIdentity(kit.ip,1550);
    if(ticket!==reconnectTicket||!autoReconnectAllowed||!fresh||fresh.kitId!==kit.kitId||fresh.transport!==kit.transport)continue;
-   if(autoConnectApproved(kit.kitId)&&!autoConnectPending&&!state.connected&&!state.working){
+   if(!pendingNetworkTarget&&autoConnectApproved(kit.kitId)&&!autoConnectPending&&!state.connected&&!state.working){ // explicit AP↔STA handover still asks once
     autoConnectPending=true;
     try{await connectDiscoveredKit(fresh);audit('Approved kit auto-connected by verified Device ID • '+kit.kitId,'success');return}
     catch(e){audit('Auto-connect postponed: '+String(e.message||e).slice(0,100),'warn')}
