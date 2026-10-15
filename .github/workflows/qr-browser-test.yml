@@ -82,6 +82,7 @@ jobs:
           npm run check
           npm test
           npm run verify:firmware
+          node tools/accordion-browser.mjs
           node tools/qr-pairing-browser.mjs
           node tools/audit-browser.mjs
           node tools/network-browser.mjs

@@ -59,9 +59,10 @@ function reveal(){
  $('cloudAdminDashboard').hidden=!logged;
  $('cloudAdminDeveloper').hidden=!(logged?.role==='developer');
  if(logged)$('cloudAdminIdentity').textContent='Signed in: '+logged.username+' • '+(logged.role==='developer'?'Developer / account owner':'School Staff Admin');
- // UI visibility is convenience only. Firmware still enforces its USB admin checks.
- const localKit=document.getElementById('kitAdmin');
- if(localKit)localKit.style.display=serverAvailable&&!logged?'none':'';
+ // Cloud account login and physical USB Teacher Admin are distinct security
+ // boundaries. Never hide the hardware maintenance accordion merely because
+ // a cloud login session is unavailable (e.g. offline, unconfigured, or signed out).
+ // The Kit firmware performs its own USB/teacher authorization checks.
 }
 async function api(path,method='GET',data){
  const headers={'Accept':'application/json'};

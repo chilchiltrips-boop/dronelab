@@ -12,7 +12,7 @@
   firmware:'Firmware Flash',mobile:'Mobile Controller',
   diagnostics:'Diagnostics',security:'Security & Admin'
  };
- let selected='overview',ready=false;
+ let selected='overview',ready=false,securityVisited=false;
  const viewScroll=new Map();
  let layoutFrame=0;
  const body=name=>$('dw-body-'+name);
@@ -76,6 +76,14 @@
    if(tab){tab.setAttribute('aria-selected',String(key===name));tab.tabIndex=key===name?0:-1}
   }
   if(name==='mobile'){$('kitMobilePairDetails').open=true;root.ZebjusPairingBridge?.ensureSimulator?.()}
+  // The Security workspace owns the physical USB maintenance disclosure.
+  // Expand it on first entry so teacher controls are actually visible after
+  // moving the original <details> into this tab. Later preserve user toggles
+  // across navigation instead of forcing the accordion open each time.
+  if(name==='security'&&!securityVisited){
+   const admin=$('kitAdmin');
+   if(admin){admin.open=true;securityVisited=true}
+  }
   if(body(name))body(name).scrollTop=viewScroll.get(name)||0;
   scheduleLayout();
   if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>{
