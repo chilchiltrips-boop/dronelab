@@ -81,6 +81,8 @@ test('USB Serial monitor buttons remain in one grouped responsive toolbar',()=>{
 test('unified Kit Connection opens the preserved legacy manual setup within one Advanced disclosure',()=>{
  const js=read('js/devices-workspace.js'),css=read('devices-workspace.css');
  assert.match(js,/const innerManual=\$\('kitAdvancedHardware'\)/);
- assert.match(js,/innerManual\.open=true;innerManual\.classList\.add\('dw-unwrapped-advanced'\)/);
+ assert.match(js,/legacy\.addEventListener\('toggle',exposeAdvanced\)/);
+ assert.match(js,/if\(!legacy\.open\)return/);
+ assert.match(js,/inner\.open=true;inner\.classList\.add\('dw-unwrapped-advanced'\)/);
  assert.match(css,/#dwLegacyConnection #kitAdvancedHardware\.dw-unwrapped-advanced>summary\{display:none!important\}/);
 });
