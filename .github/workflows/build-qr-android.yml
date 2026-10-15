@@ -22,6 +22,7 @@ on:
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
       - 'js/kit-auth.js'
+      - 'firmware-catalog.json'
       - 'vendor/crypto/**'
   # Web-only PID changes do not produce a duplicate signed APK. Existing APK
   # releases are immutable; Android UI/package changes require incrementing

@@ -14,6 +14,7 @@ on:
       - 'FlightCore_Firmware/partitions.csv'
       - 'tools/build_scanner.py'
       - 'tools/flightcore.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
       - 'tools/serial-tools.test.mjs'
       - 'js/serial-plotter.js'
       - 'js/python-lab.js'
