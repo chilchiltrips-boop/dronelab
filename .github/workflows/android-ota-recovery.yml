@@ -1,0 +1,37 @@
+name: Android OTA Recovery Regression
+on:
+  push:
+    paths:
+      - 'companion-network.js'
+      - 'companion.html'
+      - 'FlightCore_Firmware/FlightCoreNetwork.h'
+      - 'mobile-android/**'
+      - 'tools/android-ota-recovery.test.mjs'
+      - 'tools/android-secure-ota.test.mjs'
+      - 'tools/android-ap-sta-control.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/release-signing.test.mjs'
+      - '.github/workflows/android-ota-recovery.yml'
+  pull_request:
+    paths:
+      - 'companion-network.js'
+      - 'companion.html'
+      - 'FlightCore_Firmware/FlightCoreNetwork.h'
+      - 'mobile-android/**'
+      - 'tools/android-ota-recovery.test.mjs'
+      - 'tools/android-secure-ota.test.mjs'
+      - 'tools/android-ap-sta-control.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/release-signing.test.mjs'
+      - '.github/workflows/android-ota-recovery.yml'
+permissions:
+  contents: read
+jobs:
+  ota-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tools/android-ota-recovery.test.mjs tools/android-secure-ota.test.mjs tools/android-ap-sta-control.test.mjs tools/android-camera-permission.test.mjs tools/release-signing.test.mjs

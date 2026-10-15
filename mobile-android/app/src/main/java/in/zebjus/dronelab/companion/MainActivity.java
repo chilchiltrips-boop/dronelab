@@ -117,6 +117,7 @@ public class MainActivity extends Activity {
         }
     }
     private void signalNetworkChange() {
+        if (nativeFlightCore != null) nativeFlightCore.cancelOutstanding();
         if (view != null) view.post(() -> {
             if (view != null) view.evaluateJavascript(
                 "window.zebjusNetworkChanged && window.zebjusNetworkChanged()", null);
@@ -251,8 +252,9 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
         // pending getUserMedia request finish rather than cancelling the prompt.
+        if (nativeFlightCore != null && pendingVideoRequest == null) nativeFlightCore.cancelOutstanding();
         if (view != null && pendingVideoRequest == null) {
-            view.evaluateJavascript("window.zebjusAppPaused && window.zebjusAppPaused()", null);
+            view.evaluateJavascript("window.zebjusNativeAppPaused && window.zebjusNativeAppPaused();window.zebjusAppPaused && window.zebjusAppPaused()", null);
             view.onPause();
         }
         super.onPause();

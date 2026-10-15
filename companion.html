@@ -64,7 +64,7 @@
 <div class="actions"><button id="kitRead">Read Telemetry</button><button id="kitI2cScan">Scan I²C</button><button id="kitLedOff">LED OFF</button></div>
 <div class="kit-net-grid"><label>Teacher USB-paired OWNER code (32 hexadecimal characters)<input type="password" id="kitOtaAdminKey" autocomplete="off" spellcheck="false" placeholder="Enter once for this OTA • never stored"/></label></div>
 <input id="kitOtaFile" type="file" accept=".bin,application/octet-stream" hidden aria-label="Select official FlightCore APP firmware"/>
-<div class="actions"><button id="kitAppOta" type="button" disabled>Secure APP OTA • teacher authorized</button></div>
+<div class="actions"><button id="kitAppOta" type="button" disabled>Secure APP OTA • teacher authorized</button><button id="kitOtaCancel" type="button" disabled>Cancel OTA safely</button></div><p class="hint">If a write times out, Android checks signed Kit offset before continuing. Do not power off or retry an unverified flash.</p>
 <p class="hint">Connect a verified idle AP/STA Kit, release Take Control, then enter the OWNER code obtained through physical USB pairing. The selected APP image must match the official bundled SHA-256 catalog. Encrypted upload preserves saved Wi-Fi; FACTORY/Erase is not available on Android.</p><pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
 <label class="kit-net-toggle"><input id="kitAllowWeb" type="checkbox"/> Allow paired WebApp to access this FlightCore</label>
 <label class="kit-net-toggle"><input id="kitRcPreview" type="checkbox"/> Take / release Android diagnostic input (motors disabled)</label>

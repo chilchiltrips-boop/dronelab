@@ -94,6 +94,16 @@ static String zjStatus(){
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
  out+=",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"firmwareBuiltAt\":"+zjJson(String(__DATE__)+" "+__TIME__)+",\"partitionLayout\":\"ZFC_DUAL_1E0000\",\"otaMaxBytes\":1966080,\"encryptedOta\":true,\"otaChunkMaxBytes\":2048";
  out+=",\"appElfSha256\":"+zjJson(zjHexBytes(esp_app_get_description()->app_elf_sha256,32));
+ // Signed admin-only status makes timed-out OTA writes recoverable without
+ // repeating a flash write blindly. This is scoped to the current enrollment.
+ if(zjAuthAdmin&&zjRequestSession>=0&&zjSessions[zjRequestSession].admin){
+  const bool owned=zjSecureOtaActive&&zjSecureOtaSession==zjSessions[zjRequestSession].id;
+  out+=",\"ota\":{\"active\":"+(zjSecureOtaActive?String("true"):String("false"));
+  out+=",\"owned\":"+(owned?String("true"):String("false"));
+  out+=",\"offset\":"+String(zjSecureOtaOffset)+",\"size\":"+String(zjSecureOtaSize);
+  out+=",\"sha256\":"+zjJson(zjSecureOtaHash);
+  out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
+ }
  out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }

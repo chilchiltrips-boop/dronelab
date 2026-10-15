@@ -15,8 +15,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 19
-    versionName '1.7.3-secure-ota'
+    versionCode 20
+    versionName '1.7.4-ota-recovery'
   }
   testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {

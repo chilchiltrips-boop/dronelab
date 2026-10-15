@@ -21,6 +21,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.net.SocketTimeoutException;
 import org.json.JSONObject;
 
 /**
@@ -34,6 +36,11 @@ final class FlightCoreNativeBridge {
     private final WebView view;
     private final ExecutorService worker = new java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,new java.util.concurrent.ArrayBlockingQueue<>(6));
     private final ConnectivityManager connectivity;
+    private static final class RequestState {
+        volatile boolean cancelled;
+        volatile HttpURLConnection connection;
+    }
+    private final ConcurrentHashMap<String,RequestState> outstanding=new ConcurrentHashMap<>();
     FlightCoreNativeBridge(Activity activity, WebView view) {
         this.activity=activity;this.view=view;
         this.connectivity=(ConnectivityManager)activity.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -96,32 +103,79 @@ final class FlightCoreNativeBridge {
             submit(id,ip,method,route,form,headers);
         }catch(Exception e){reply(id,false,0,"{}","Invalid signed request",null);}
     }
-    private void submit(String id,String ip,String method,String route,String form,JSONObject headers){
-        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||(form!=null&&form.length()>(route.startsWith("/api/firmware/")?8800:2500))){
-            if(id!=null&&id.matches("[a-zA-Z0-9_-]{1,32}"))reply(id,false,0,"{}","Invalid device or operation",null);return;
+    // Called when the JS watchdog fires or Android leaves the foreground.
+    // Disconnect is best-effort: after POST bytes leave the phone, the outcome
+    // is UNKNOWN until the same device reports a signed OTA progress offset.
+    @JavascriptInterface public void cancelRequest(String id) {
+        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}"))return;
+        RequestState state=outstanding.get(id);
+        if(state!=null){
+            state.cancelled=true;
+            HttpURLConnection connection=state.connection;
+            if(connection!=null)connection.disconnect();
         }
+    }
+    void cancelOutstanding(){
+        for(String id:outstanding.keySet())cancelRequest(id);
+    }
+    private void submit(String id,String ip,String method,String route,String form,JSONObject headers){
+        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||
+           (form!=null&&form.length()>(route.startsWith("/api/firmware/")?8800:2500))){
+            if(id!=null&&id.matches("[a-zA-Z0-9_-]{1,32}"))reply(id,false,0,"{}","Invalid device or operation",null);
+            return;
+        }
+        final boolean firmwareWrite=route.startsWith("/api/firmware/");
+        final RequestState state=new RequestState();
+        if(outstanding.putIfAbsent(id,state)!=null)return;
         final long queuedAt=android.os.SystemClock.elapsedRealtime();
         try{worker.execute(()->{
             HttpURLConnection connection=null;
             try{
-                if(route.equals("/api/rc/preview")&&android.os.SystemClock.elapsedRealtime()-queuedAt>250)throw new IllegalStateException("Stale input dropped");
+                if(state.cancelled)return;
+                final long elapsed=android.os.SystemClock.elapsedRealtime()-queuedAt;
+                // Never run a queued firmware write after its JS caller gave up.
+                if(elapsed>(firmwareWrite?1500:750))throw new IllegalStateException("Stale native request dropped");
+                if(route.equals("/api/rc/preview")&&elapsed>250)throw new IllegalStateException("Stale input dropped");
                 Network wifi=wifiNetwork();if(wifi==null)throw new IllegalStateException("Connect Android Wi-Fi to the kit first");
+                if(state.cancelled)return;
                 connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
+                state.connection=connection;
+                if(state.cancelled)return;
                 connection.setInstanceFollowRedirects(false);
-                connection.setConnectTimeout(1500);connection.setReadTimeout(route.startsWith("/api/firmware/")?30000:3000);
-                java.util.Iterator<String> names=headers.keys();while(names.hasNext()){String n=names.next();connection.setRequestProperty(n,headers.getString(n));}
-                connection.setRequestProperty("Accept","application/json");connection.setUseCaches(false);connection.setRequestMethod(method);
+                // JS watchdogs: OTA 18s, diagnostics 6s. Native always finishes
+                // earlier (queue + connect + read) so no orphaned timeout writes.
+                connection.setConnectTimeout(firmwareWrite?2000:1200);
+                connection.setReadTimeout(firmwareWrite?12000:3000);
+                java.util.Iterator<String> names=headers.keys();
+                while(names.hasNext()){String n=names.next();connection.setRequestProperty(n,headers.getString(n));}
+                connection.setRequestProperty("Accept","application/json");
+                connection.setUseCaches(false);connection.setRequestMethod(method);
                 if(method.equals("POST")){
                     byte[] data=(form==null?"":form).getBytes(StandardCharsets.UTF_8);
-                    connection.setDoOutput(true);connection.setRequestProperty("Content-Type","application/x-www-form-urlencoded");connection.setFixedLengthStreamingMode(data.length);
+                    connection.setDoOutput(true);
+                    connection.setRequestProperty("Content-Type","application/x-www-form-urlencoded");
+                    connection.setFixedLengthStreamingMode(data.length);
+                    if(state.cancelled)return;
                     try(OutputStream out=connection.getOutputStream()){out.write(data);}
                 }
-                int status=connection.getResponseCode();InputStream source=status<400?connection.getInputStream():connection.getErrorStream();
-                byte[] data=source==null?new byte[0]:source.readNBytes(16000);if(source!=null)source.close();
-                reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"));
-            }catch(Exception error){reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null);}
-            finally{if(connection!=null)connection.disconnect();}
-        });}catch(java.util.concurrent.RejectedExecutionException busy){reply(id,false,0,"{}","Native Wi-Fi queue busy; input dropped",null);}
+                if(state.cancelled)return;
+                int status=connection.getResponseCode();
+                InputStream source=status<400?connection.getInputStream():connection.getErrorStream();
+                byte[] data=source==null?new byte[0]:source.readNBytes(16000);
+                if(source!=null)source.close();
+                if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"));
+            }catch(SocketTimeoutException timeout){
+                if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null);
+            }catch(Exception error){
+                if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null);
+            }finally{
+                if(connection!=null)connection.disconnect();
+                outstanding.remove(id,state);
+            }
+        });}catch(java.util.concurrent.RejectedExecutionException busy){
+            outstanding.remove(id,state);
+            reply(id,false,0,"{}","Native Wi-Fi queue busy; input dropped",null);
+        }
     }
     @JavascriptInterface public void openWifiSettings(){
         activity.runOnUiThread(()->{
@@ -131,5 +185,5 @@ final class FlightCoreNativeBridge {
             }catch(Exception ignored){}
         });
     }
-    void shutdown(){worker.shutdownNow();}
+    void shutdown(){cancelOutstanding();worker.shutdownNow();}
 }
