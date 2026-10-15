@@ -12,6 +12,7 @@ on:
       - 'tools/android-origin-wifi-nsd.test.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
+      - '.github/workflows/build-qr-android.yml'
       - 'companion.html'
       - 'companion.css'
       - 'companion.js'
