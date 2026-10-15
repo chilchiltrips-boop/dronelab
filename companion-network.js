@@ -152,6 +152,7 @@ async function connectKit(){
    const raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
    if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this kit.');
    if(rcSession)await releaseRc();
+   if(verifiedKitId&&verifiedKitId!==p.deviceId)forgetGrants();
    verifiedKitId=p.deviceId;diagnosticKey=window.ZebjusKitAuth.diagnosticKey(p.secret,p.deviceId);
    auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,link==='ap'?p.secret:diagnosticKey,link==='ap'?'setup':'diagnostic');
    el('kitKey').value='';
@@ -179,6 +180,7 @@ async function connectSavedKit(){
   const raw=await nativeTransport('/api/identify'),identified=JSON.parse(raw.text);
   if(raw.status!==200||identified.kitId!==id)throw Error('Saved IP belongs to a different Kit');
   auth=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'diagnostic');
+  if(verifiedKitId&&verifiedKitId!==id)forgetGrants();
   verifiedKitId=id;diagnosticKey=credential;
   await status();reconnectEnabled=true;
   show('Saved diagnostic key re-enrolled; read/Wi-Fi/control grants remain OFF','good');
@@ -486,12 +488,12 @@ function bind(){
  if(!native?.requestSecure){show('Install updated Android APK for signed Wi-Fi sessions');return;}
  el('kitIp').value=ip;
  el('kitLink').addEventListener('change',()=>{
-  void releaseRc();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
+  void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
   link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
   show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
  });
- el('kitIp').addEventListener('change',()=>{void releaseRc();forgetNativePin();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
+ el('kitIp').addEventListener('change',()=>{void releaseRc();forgetGrants();forgetNativePin();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
@@ -527,7 +529,7 @@ window.zebjusNativeAppPaused=()=>{
  else forgetNativePin();
 };
 window.zebjusNativeAppResumed=()=>{
- if(otaBusy){otaPaused=false;show('App resumed • signed OTA offset must be verified before next write','warn')}
+ if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
 };
  window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
