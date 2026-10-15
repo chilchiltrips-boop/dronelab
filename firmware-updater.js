@@ -80,7 +80,7 @@ function syncFirmwareControls(){
  }
  if(flashHelp){flashHelp.textContent=flash.message;flashHelp.classList.toggle('ready',flash.ready)}
  const kit=globalThis.ZebjusKits?.getState?.();
- for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=busy||!globalThis.ZebjusKits&&!school()||id==='#fwRebootBtn'&&(!kit?.connected||!kit.otaAuthorized||kit.owner||kit.rc?.claimed)||id==='#fwReconnectBtn'&&(!globalThis.ZebjusKits?.reconnect||!kit?.kitId||kit.owner||kit.working||kit.otaInProgress);e.title=id==='#fwRebootBtn'?'Reboot the authorized, idle AP/STA kit':'Refresh or reconnect the selected immutable Device ID'}}
+ for(const id of ['#fwRebootBtn','#fwReconnectBtn','#fwRefreshKitBtn']){const e=$(id);if(e){e.disabled=!!(busy||!globalThis.ZebjusKits&&!school()||id==='#fwRebootBtn'&&(!kit?.connected||!kit.otaAuthorized||kit.owner||kit.rc?.claimed)||id==='#fwReconnectBtn'&&(!globalThis.ZebjusKits?.reconnect||!kit?.kitId||kit.owner||kit.working||kit.otaInProgress));e.title=id==='#fwRebootBtn'?'Reboot the authorized, idle AP/STA kit':'Refresh or reconnect the selected immutable Device ID'}}
  const erase=$('#fwEraseUsb');if(erase){erase.disabled=busy||($('#fwImageType')?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}
  const factory=$('#fwImageType')?.value==='factory';
  for(const [id,active] of [['#fwUpgradeModeBtn',!factory],['#fwUpgradeEraseModeBtn',factory]]){
