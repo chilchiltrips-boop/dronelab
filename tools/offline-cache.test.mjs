@@ -68,3 +68,16 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
   assert.ok((await response.text()).length>100,path);
  }
 });
+
+test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
+ const page=read('index.html'),sw=source;
+ for(const asset of ['pairing-web.js','firmware-updater.js','js/firmware-connect.js']){
+  assert.ok(page.includes(asset+'?v=connectivity-audit-20261015'),asset+' page source');
+  assert.ok(sw.includes(asset+'?v=connectivity-audit-20261015'),asset+' offline precache');
+ }
+ const r=runtime();await r.install();r.setOffline();
+ for(const path of ['./pairing-web.js','./firmware-updater.js','./js/firmware-connect.js']){
+  const response=await r.request(path+'?v=connectivity-audit-20261015');
+  assert.equal(response.ok,true,path+' offline');
+ }
+});
