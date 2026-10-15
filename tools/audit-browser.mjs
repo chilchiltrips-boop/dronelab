@@ -15,7 +15,14 @@ if(process.env.DRONELAB_TEST_SIMULATED_ICE==='1')await context.addInitScript(()=
  window.RTCPeerConnection=function(options){const pc=new Native(options);Object.defineProperty(pc,'iceGatheringState',{get:()=> 'complete'});return pc};
 });
 const page=await context.newPage(),errors=[],failed=[],metrics=[],controls=[];
-page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400&&r.url().includes('127.0.0.1'))failed.push({url:r.url(),status:r.status()})});
+page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{
+ if(r.status()<400||!r.url().includes('127.0.0.1'))return;
+ // The static GitHub Pages variant intentionally has no /api/admin/session
+ // backend. Its 404 is an expected capability probe, not a missing static
+ // asset. Every other failed local request remains a regression.
+ if(r.status()===404&&new URL(r.url()).pathname==='/api/admin/session')return;
+ failed.push({url:r.url(),status:r.status()});
+});
 const base='http://127.0.0.1:8765/';
 function check(value,message){if(!value)throw Error(message)}
 async function inventory(screen){
