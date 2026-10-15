@@ -125,12 +125,12 @@ int main(){
   zjHttp.headers["X-ZJ-Proof"]=tamper?"invalid":zjHmac(s.key,proofMsg);
   return zjAllow();
  };
- const String largeChunkBody="offset=0&data="+String(std::string(2048,'a'));
+ const String largeChunkBody="offset=0&data="+String(std::string(4096,'a'));
  assert(signedOtaPost(admin,"/api/firmware/chunk",2,largeChunkBody)&&zjAuthAdmin);
- assert(zjArg("data").length()==2048&&zjArg("offset")=="0"); // 1024 bytes decoded intact
+ assert(zjArg("data").length()==4096&&zjArg("offset")=="0"); // 2048 bytes decoded intact
  assert(!signedOtaPost(admin,"/api/firmware/chunk",2,largeChunkBody)); // no replay
  assert(!signedOtaPost(admin,"/api/firmware/chunk",3,largeChunkBody,true)); // bad proof
- assert(!signedOtaPost(admin,"/api/firmware/chunk",3,"offset=0&data="+String(std::string(2500,'a')))); // bounded payload
+ assert(!signedOtaPost(admin,"/api/firmware/chunk",3,"offset=0&data="+String(std::string(4500,'a')))); // bounded payload
 
 
  // Simple AP Wi-Fi setup works without BOOT, USB or manufacturer labels.

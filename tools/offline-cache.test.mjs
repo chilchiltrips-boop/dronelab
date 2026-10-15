@@ -25,7 +25,7 @@ test('APP binaries precached, FACTORY images fetched only when explicitly needed
   const app=board.latest.app;
   if(app.available)assert.equal((await r.request('./FlightCore_Firmware/'+app.file+'?v='+board.latest.version)).ok,true);
   const factory=board.latest.factory;
-  if(factory.available)await assert.rejects(r.request('./FlightCore_Firmware/'+factory.file+'?v='+board.latest.version),'Not preloaded');
+  if(factory.available)assert.equal((await r.request('./FlightCore_Firmware/'+factory.file+'?v='+board.latest.version)).ok,false,'Factory requires an explicit online download');
  }
 });
 test('large Python plotting wheels and Factory images cache on first demand and remain usable offline',async()=>{

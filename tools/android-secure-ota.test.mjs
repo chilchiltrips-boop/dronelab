@@ -15,7 +15,7 @@ test('Android teacher OTA is signed AES-GCM/HMAC admin session with exact publis
 test('native Android blocks raw-key methods and only allows explicit encrypted chunk routes',()=>{
  for(const path of ['/api/firmware/begin','/api/firmware/chunk','/api/firmware/end','/api/firmware/abort'])assert.ok(bridge.includes('route.equals("'+path+'")'));
  assert.match(bridge,/Legacy raw-key requests are disabled/);
- assert.match(bridge,/route\.startsWith\("\/api\/firmware\/"\)\?4800:2500/);
+ assert.match(bridge,/route\.startsWith\("\/api\/firmware\/"\)\?8800:2500/);
  assert.doesNotMatch(bridge,/multipart\/form-data/);
  assert.doesNotMatch(bridge,/pickAppFirmware/);
  assert.match(activity,/onShowFileChooser/);

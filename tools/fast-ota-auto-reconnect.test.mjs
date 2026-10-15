@@ -19,7 +19,7 @@ test('fast reconnect remains explicitly approved, authenticated and identity-che
  assert.match(kit,/found\?\.kitId!==last\.id\|\|found\.kitCode!==last\.code/);
  assert.match(kit,/return connectDiscoveredKit\(kit\)/);
  assert.match(kit,/if\(state\.owner\)throw Error\('Release diagnostic control/);
- assert.match(kit,/for\(const delay of \[250,600,1100,1900,3500\]\)/);
+ assert.match(kit,/for\(const delay of \[250,700,1600,3000,5000\]\)/);
 });
 test('OTA security and proof remain mandatory while repaint and restart wait reduce',()=>{
  assert.match(kit,/pre\.rc\?\.claimed\|\|pre\.motorsArmed!==false/);

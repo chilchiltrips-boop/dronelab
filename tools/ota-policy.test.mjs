@@ -33,7 +33,7 @@ test('OTA authenticated envelope expansion is scoped and Android native has matc
  assert.match(enroll,/!otaChunk&&payload\.length\(\)>ZJ_AUTH_STANDARD_PAYLOAD_HEX_MAX/);
  assert.match(ota,/ZJ_OTA_CHUNK_MAX_BYTES=2048/);
  assert.match(status,/otaChunkMaxBytes\\":2048/);
- assert.match(android,/payload=\[a-fA-F0-9\]\{56,8704\}/);
+ assert.ok(android.includes('payload=[a-fA-F0-9]{56,8704}'));
  assert.match(android,/\?8800:2500/);
 });
 test('Preferred saved Wi-Fi first with bounded reason-aware STA retries',()=>{
