@@ -23,7 +23,8 @@ function retryDisposition(error){
   return{retry:true,delayMs:Math.min(15000,(/timeout|timed out/.test(msg)?5000:2500)),reason:'transient_link'};
  return{retry:false,delayMs:0,reason:'non_retryable'};
 }
-function requestTimeout(route,method='GET',transport='sta'){
+function requestTimeout(route,method='GET',transport='sta',client='web'){
+ if(client==='android')return /^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route)?18000:6000;
  const firmware=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
  // AP radio quality can be lower during classroom scanning. Never silently
  // retry a signed POST: sequence counters and OTA offsets are not idempotent.
