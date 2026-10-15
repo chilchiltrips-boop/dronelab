@@ -8,6 +8,8 @@ on:
       - 'tools/native-flight-acceptance.sh'
       - 'tools/configure-native-avd.py'
       - 'tools/release-signing.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
       - 'companion.html'
