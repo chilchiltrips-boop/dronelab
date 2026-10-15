@@ -99,6 +99,7 @@ final class FlightCoreWifiLink {
         selected=n;pinnedId=id;pinnedIp=ip;pinnedSsid=actual;pinnedBssid=bssid;
     }
     synchronized boolean isPinned(){return selected!=null;}
+    synchronized boolean isPinnedTo(String id){return selected!=null&&id!=null&&id.equals(pinnedId);}
     synchronized void clear(){selected=null;pinnedId=null;pinnedIp=null;pinnedSsid=null;pinnedBssid=null;}
     synchronized boolean matches(Network n){
         return selected!=null&&selected.equals(n);
