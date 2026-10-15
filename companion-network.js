@@ -4,8 +4,13 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
+const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
+const policy=window.ZebjusKitNetworkPolicy;
+const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
+const wifiRoutes=new Set(['GET /api/wifi/scan','POST /api/wifi/test','POST /api/wifi/mode']);
+const diagnosticRoutes=new Set(['POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
 function form(v){return new URLSearchParams(v||{}).toString()}
@@ -29,7 +34,7 @@ function nativeTransport(route,method='GET',args={},headers={}){
    try{native.cancelRequest?.(id)}catch{}
    const error=Error((write?'Encrypted firmware write':'Device request')+' timed out at '+route+'; delivery is unconfirmed');
    error.uncertain=write;reject(error);
-  },write?18000:6000);
+  },policy?.requestTimeout?.(route,method,link,'android')||(write?18000:6000));
   pending.set(id,{resolve,reject,timer,raw:true,write});
   try{native.requestSecure(id,ip,method,route,method==='POST'?form(args):'',JSON.stringify(headers));}
   catch(e){clearTimeout(timer);pending.delete(id);const error=Error('Native request failed: '+e.message);error.uncertain=write;reject(error);}
@@ -47,6 +52,28 @@ function cachedIp(id){
 function saveVerifiedIp(id,host,ssid){
  try{localStorage.setItem(verifiedCacheKey(id),JSON.stringify({ip:host,ssid,at:Date.now()}))}catch{}
 }
+const vaultWaiters=new Map();
+window.zebjusNativeVaultResult=data=>{
+ const waiter=vaultWaiters.get(data?.id);if(!waiter)return;
+ clearTimeout(waiter.timer);vaultWaiters.delete(data.id);
+ data.ok?waiter.resolve(data.credential||''):waiter.reject(Error(data.error||'Saved diagnostic credential unavailable'));
+};
+function vaultCall(op,id,credential){
+ if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(id)||typeof native?.[op]!=='function')
+  return Promise.reject(Error('Android Keystore enrollment not available on this APK'));
+ return new Promise((resolve,reject)=>{
+  const rid='vault'+(++requestId);
+  const timer=setTimeout(()=>{vaultWaiters.delete(rid);reject(Error('Android Keystore request timed out'))},5000);
+  vaultWaiters.set(rid,{timer,resolve,reject});
+  try{op==='saveDiagnostic'?native[op](rid,id,credential):native[op](rid,id)}
+  catch(error){clearTimeout(timer);vaultWaiters.delete(rid);reject(error)}
+ });
+}
+window.zebjusNativeVersionResult=data=>{
+ const v=el('androidInstalledVersion');if(v)v.textContent=data?.versionName&&Number.isSafeInteger(Number(data?.versionCode))
+  ?data.versionName+' (code '+data.versionCode+')':'Installed APK version unavailable';
+};
+function forgetGrants(){for(const id of ['kitAllowWeb','kitGrantWifi','kitGrantDiagnostic'])if(el(id))el(id).checked=false;}
 function forgetNativePin(){
  pinIdentity='';
  try{native?.clearSelectedNetwork?.()}catch{}
@@ -77,9 +104,9 @@ window.zebjusNativeDiscoveryResult=data=>{
  if(data.ip&&validHost(data.ip))lookup.resolve(data.ip);
  else lookup.resolve('');
 };
-async function discoverKit(){
+async function discoverKit(idOverride=''){
  const labelText=el('kitKey')?.value.trim()||'';
- let id=verifiedKitId;
+ let id=typeof idOverride==='string'&&/^ZFC-A[12]-[0-9A-F]{12}$/.test(idOverride)?idOverride:verifiedKitId;
  if(labelText)id=window.ZebjusKitAuth.label(labelText).deviceId;
  if(!id)throw Error('Enter the private Kit label once before mDNS discovery.');
  if(link!=='sta')throw Error('mDNS discovery requires the Android phone and Kit on the same router (STA).');
@@ -91,7 +118,8 @@ async function discoverKit(){
    native.discoverKit(id);
   });
  }
- const candidate=found||cachedIp(id);
+ const known=cachedIp(id),candidate=found||known;
+ discoveredId=found?id:'';cachedFallbackIp=found&&known!==found?known:'';
  if(!candidate)throw Error('mDNS found no matching Device ID and no cached verified STA IP. Enter IP manually or check router client isolation.');
  ip=candidate;staIp=candidate;el('kitIp').value=candidate;
  forgetNativePin();online=false;auth=null;
@@ -122,15 +150,60 @@ async function connectKit(){
     const fallback=cachedIp(p.deviceId);
     if(fallback){ip=fallback;staIp=fallback;el('kitIp').value=fallback;}
    }
-   const raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
+   let raw;
+   try{raw=await nativeTransport('/api/identify')}
+   catch(error){
+    // An mDNS TXT candidate is untrusted. Fall back only on transient link
+    // failure, and perform a fresh identify/enroll/signed status on cached IP.
+    const retryable=policy?.retryDisposition?.(error)?.retry!==false;
+    if(link!=='sta'||discoveredId!==p.deviceId||!cachedFallbackIp||!retryable)throw error;
+    ip=cachedFallbackIp;staIp=ip;el('kitIp').value=ip;
+    discoveredId='';cachedFallbackIp='';
+    show('mDNS address unreachable • checking last verified IP with fresh signed identity','warn');
+    raw=await nativeTransport('/api/identify');
+   }
+   const live=JSON.parse(raw.text);
    if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this kit.');
    if(rcSession)await releaseRc();
+   if(verifiedKitId&&verifiedKitId!==p.deviceId)forgetGrants();
    verifiedKitId=p.deviceId;diagnosticKey=window.ZebjusKitAuth.diagnosticKey(p.secret,p.deviceId);
    auth=await window.ZebjusKitAuth.open(nativeTransport,verifiedKitId,link==='ap'?p.secret:diagnosticKey,link==='ap'?'setup':'diagnostic');
    el('kitKey').value='';
   }
   await status();reconnectEnabled=true;
+  if(value&&link==='sta'&&el('kitRememberDiagnostic')?.checked&&diagnosticKey){
+   try{await vaultCall('saveDiagnostic',verifiedKitId,diagnosticKey);show('Diagnostic key encrypted in Android Keystore; OWNER not stored','good')}
+   catch(error){show('Connected but key not saved: '+error.message,'warn')}
+   el('kitRememberDiagnostic').checked=false;
+  }
  }finally{connecting=false}
+}
+async function connectSavedKit(){
+ if(link!=='sta')throw Error('Saved diagnostic credentials work only on STA; AP setup requires private label.');
+ const id=(el('kitSavedId')?.value||'').trim().toUpperCase();
+ if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(id))throw Error('Enter exact saved Kit Device ID');
+ if(otaBusy||connecting)throw Error('Another Kit operation is in progress');
+ connecting=true;
+ try{
+  const credential=await vaultCall('loadDiagnostic',id);
+  if(!/^[a-f0-9]{32}$/.test(credential))throw Error('No saved diagnostic credential for Kit');
+  let candidate=validHost(el('kitIp')?.value||'')?el('kitIp').value:cachedIp(id);
+  if(!validHost(candidate))throw Error('Discover Kit or enter its private STA IP first');
+  ip=candidate;staIp=candidate;el('kitIp').value=candidate;
+  const raw=await nativeTransport('/api/identify'),identified=JSON.parse(raw.text);
+  if(raw.status!==200||identified.kitId!==id)throw Error('Saved IP belongs to a different Kit');
+  auth=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'diagnostic');
+  if(verifiedKitId&&verifiedKitId!==id)forgetGrants();
+  verifiedKitId=id;diagnosticKey=credential;
+  await status();reconnectEnabled=true;
+  show('Saved diagnostic key re-enrolled; read/Wi-Fi/control grants remain OFF','good');
+ }finally{connecting=false}
+}
+async function forgetSavedKit(){
+ const id=(el('kitSavedId')?.value||'').trim().toUpperCase();
+ await vaultCall('forgetDiagnostic',id);
+ if(verifiedKitId===id){diagnosticKey='';auth=null;online=false;forgetNativePin()}
+ show('Saved diagnostic enrollment deleted; OWNER code was never stored');
 }
 function dropInput(message){rcSession='';firmwareAck=null;if(el('kitRcPreview'))el('kitRcPreview').checked=false;window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');}
 window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;el('kitRcPreview').checked=false;}};
@@ -193,9 +266,12 @@ async function pollTelemetry(){const data=await request('/api/telemetry');const 
  window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:mode,device:'android-native'}}));return data;
 }
 async function onWebRequest(req,peer){
- if(!el('kitAllowWeb')?.checked||!peer?.status()?.paired)return peer?.sendNetworkResponse?.({id:req?.id,ok:false,error:'Enable Allow paired WebApp on Android first'});
+ if(!peer?.status()?.paired)return peer?.sendNetworkResponse?.({id:req?.id,ok:false,error:'Pair WebApp with Android first'});
  const method=req?.method,route=req?.route,id=req?.id;
  if(!Number.isInteger(id)||id<1||id>1e9||!allowed.has(method+' '+route))return;
+ const grant=grantFor(route,method);
+ if(!grant||!el(grant)?.checked)return peer.sendNetworkResponse({id,ok:false,error:'Android has not granted '+(grant||'this operation')});
+ if(!online||!onKitLink)return peer.sendNetworkResponse({id,ok:false,error:'Selected Kit Wi-Fi is not verified'});
  try{
   const data=await request(route,method,req.args||{});
   peer.sendNetworkResponse({id,ok:true,data});
@@ -242,7 +318,8 @@ async function uploadAdminApp(file){
  if(el('kitOtaAdminKey'))el('kitOtaAdminKey').value='';
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
  if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
- otaBusy=true;otaCancelRequested=false;reconnectEnabled=false;
+ otaBusy=true;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;reconnectEnabled=false;
+ try{native?.setOtaKeepAwake?.(true)}catch{}
  const id=verifiedKitId,host=ip,transport=link;
  let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,board='',result=null;
  const checkTarget=(allowCancellation=false)=>{
@@ -261,6 +338,20 @@ async function uploadAdminApp(file){
    throw Error('Controller cannot report signed OTA offset; do NOT retry the flash write. Update firmware over USB if required.');
   return {state,ota};
  };
+ const waitResume=async (offset,allowNext=offset)=>{
+  if(!otaPaused&&!otaNeedsRecheck)return;
+  show('OTA paused • waiting for foreground and signed offset verification','warn');
+  const deadline=Date.now()+45000;
+  while(otaPaused&&Date.now()<deadline){
+   if(otaCancelRequested)throw Error('OTA cancelled while backgrounded');
+   await otaSleep(250);
+  }
+  if(otaPaused)throw Error('OTA paused too long; safe recovery requires a new verified session');
+  otaNeedsRecheck=false;
+  const {ota}=await signedProgress();
+  if(!owned(ota,offset)&&!owned(ota,allowNext))throw Error('OTA resume unsafe: signed session/hash/offset changed; no further writes');
+  show('OTA resumed • signed offset '+offset+' verified','good');
+ };
  const owned=(ota,offset)=>ota.active===true&&ota.owned===true&&ota.size===bytes.length&&
   String(ota.sha256).toLowerCase()===hash&&ota.offset===offset;
  if(el('kitAppOta'))el('kitAppOta').disabled=true;
@@ -270,10 +361,27 @@ async function uploadAdminApp(file){
   const catalogResponse=await fetch('./firmware-catalog.json',{cache:'no-store'});
   if(!catalogResponse.ok)throw Error('Official firmware catalog is unavailable in this Android release.');
   const catalog=await catalogResponse.json();
-  board=id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1';
+  const target=policy?.otaTarget?.({method:'wifi',kit:{connected:online&&onKitLink,transport:link,kitId:id,board:id.slice(0,6)}});
+  board=target?.boardId||(id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1');
+  if(target&&target.kitId!==id)throw Error('Selected Wi-Fi Kit is not verified for OTA');
   const entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
   if(!release?.available||!release.sha256||file.name!==release.file)throw Error('Choose the official '+board+' APP firmware from the currently bundled release.');
-  bytes=new Uint8Array(await file.arrayBuffer());
+  // Reject oversized, wrong type and board image before allocating whole firmware.
+  const advertisedSize=Number(file.size);
+  if(!Number.isSafeInteger(advertisedSize)||advertisedSize!==release.size||
+     advertisedSize<32768||advertisedSize>0x1e0000)
+   throw Error('Firmware size does not match official APP catalog; nothing allocated/flashed');
+  if(file.type&&file.type!=='application/octet-stream'&&file.type!=='application/x-binary')
+   throw Error('Firmware MIME type unsupported; choose the official APP .bin');
+  if(typeof file.slice!=='function')throw Error('Firmware picker does not support header verification');
+  const header=new Uint8Array(await file.slice(0,208).arrayBuffer());
+  const hChip=header[12]|(header[13]<<8),hDescriptor=(header[32]|header[33]<<8|header[34]<<16|header[35]<<24)>>>0;
+  if(header.length!==208||header[0]!==0xe9||header[1]<1||header[1]>16||
+     hChip!==(board==='ZFC-A2'?13:5)||hDescriptor!==0xabcd5432)
+   throw Error('ESP header or physical board mismatch; full image not allocated');
+  const buffer=await file.arrayBuffer();
+  if(buffer.byteLength!==advertisedSize)throw Error('Firmware file changed size during read');
+  bytes=new Uint8Array(buffer);
   checkTarget();
   hash=firmwareHex(window.ZfcCrypto.sha256(bytes));
   if(bytes.length!==release.size||hash!==String(release.sha256).toLowerCase())throw Error('Official APP image size/SHA-256 mismatch. Nothing was flashed.');
@@ -307,6 +415,7 @@ async function uploadAdminApp(file){
   let offset=0,lastPct=-1;
   while(offset<bytes.length){
    checkTarget();
+   await waitResume(offset);
    const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
    const next=offset+chunk.length;
    let completed=false;
@@ -318,11 +427,11 @@ async function uploadAdminApp(file){
      completed=true;
     }catch(error){
      let progress;
-     try{progress=(await signedProgress()).ota}
+     try{if(otaPaused)await waitResume(offset,next);progress=(await signedProgress()).ota}
      catch(e){throw Error('WRITE UNCONFIRMED at '+offset+': '+e.message+'. Do not restart OTA without checking the Kit.');}
      if(owned(progress,next)){
       completed=true;show('Recovered lost chunk ACK at byte '+next,'warn');
-     }else if(owned(progress,offset)&&attempt===0){
+     }else if(owned(progress,offset)&&attempt===0&&policy?.retryDisposition?.(error)?.retry!==false){
       show('Signed offset unchanged at '+offset+'; retrying this chunk once','warn');
      }else{
       throw Error('WRITE UNCONFIRMED at '+offset+': offset/session mismatch ('+progress.offset+'). Do not retry automatically.');
@@ -335,6 +444,7 @@ async function uploadAdminApp(file){
    if(pct!==lastPct){lastPct=pct;show('Encrypted APP upload '+pct+'% • '+chunkSize+' B chunks');}
   }
   checkTarget();
+  await waitResume(offset);
   endAttempted=true; // An uncertain END could already have selected a new boot partition.
   try{
    const done=await admin.request('/api/firmware/end','POST');
@@ -377,7 +487,8 @@ async function uploadAdminApp(file){
   show('Secure APP OTA stopped: '+String(error?.message||error)+abortMessage+' • no blind retries','warn');
   throw error;
  }finally{
-  otaBusy=false;otaCancelRequested=false;auth=null;
+  otaBusy=false;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;auth=null;
+  try{native?.setOtaKeepAwake?.(false)}catch{}
   for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=false;
   if(el('kitAppOta'))el('kitAppOta').disabled=!online||!onKitLink||!!rcSession;
   if(el('kitOtaCancel'))el('kitOtaCancel').disabled=true;
@@ -390,19 +501,22 @@ function bind(){
  if(!native?.requestSecure){show('Install updated Android APK for signed Wi-Fi sessions');return;}
  el('kitIp').value=ip;
  el('kitLink').addEventListener('change',()=>{
-  void releaseRc();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
-  link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
+  void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
+  discoveredId='';cachedFallbackIp='';link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
   show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
  });
- el('kitIp').addEventListener('change',()=>{void releaseRc();forgetNativePin();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
+ el('kitIp').addEventListener('change',()=>{void releaseRc();forgetGrants();forgetNativePin();discoveredId='';cachedFallbackIp='';ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc()});
  window.addEventListener('blur',()=>{if(rcSession)void releaseRc()});
  action('kitWifiSettings',()=>native.openWifiSettings());
- action('kitDiscover',discoverKit);
+ action('kitDiscover',()=>discoverKit());
+ action('kitConnectSaved',connectSavedKit);
+ action('kitForgetSaved',forgetSavedKit);
+ try{native.getInstalledVersion?.()}catch{}
  action('kitConnect',connectKit);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
  action('kitTestSave',testSave);action('kitSwitch',setMode);
  action('kitRead',async()=>{const data=await pollTelemetry();el('kitTelemetry').textContent=JSON.stringify(data,null,2)});
@@ -422,8 +536,14 @@ function bind(){
  });
  setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
-function networkChanged(){forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
-window.zebjusNativeAppPaused=()=>{forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android app paused; request delivery unconfirmed')};
+function networkChanged(){forgetGrants();forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
+window.zebjusNativeAppPaused=()=>{
+ if(otaBusy){otaPaused=true;otaNeedsRecheck=true;cancelNativePending('Android backgrounded during OTA: result uncertain until signed offset recovery')}
+ else forgetNativePin();
+};
+window.zebjusNativeAppResumed=()=>{
+ if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
+};
  window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

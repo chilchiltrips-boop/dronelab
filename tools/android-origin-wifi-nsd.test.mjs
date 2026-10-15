@@ -40,9 +40,9 @@ test('mDNS/NSD _zebjus service and TTL cached IP candidates always reauthenticat
  assert.match(link,/info\.getAttributes\(\)\.get\("id"\)/);
  assert.match(link,/kitId\.equals\(new String\(raw,/);
  assert.match(link,/address instanceof Inet4Address/);
- assert.match(client,/const candidate=found\|\|cachedIp\(id\)/);
+ assert.match(client,/const known=cachedIp\(id\),candidate=found\|\|known/);
  assert.match(client,/Date\.now\(\)-saved\.at<7\*86400000/);
- assert.match(client,/const raw=await nativeTransport\('\/api\/identify'\)/);
+ assert.match(client,/raw=await nativeTransport\('\/api\/identify'\)/);
  assert.match(client,/window\.ZebjusKitAuth\.open\(nativeTransport/);
  assert.match(page,/id="kitDiscover"/);
 });
