@@ -7,6 +7,16 @@
 static Preferences zjKitPrefs;
 static bool zjAdminUnlocked=false;static uint32_t zjAdminUnlockAt=0,zjAdminCooldownAt=0;static uint8_t zjAdminFailures=0;
 static String zjKitId,zjKitCode,zjKitName;
+static uint32_t zjAdminApRestartAt=0;
+static const char* ZJ_DEFAULT_AP_PASS="12345678";
+static String zjEffectiveApSsid(){
+ const String custom=zjKitPrefs.getString("apName","");
+ return custom.isEmpty()?zjKitName:custom+"-"+zjKitCode;
+}
+static String zjEffectiveApPassword(){
+ const String saved=zjKitPrefs.getString("apPass","");
+ return saved.length()>=8&&saved.length()<=63?saved:String(ZJ_DEFAULT_AP_PASS);
+}
 static bool zjKitAutoName=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
@@ -171,6 +181,24 @@ static bool zjAdminSerialCommand(char* line){
  if(!strncmp(line,"ZJADMIN,NAME,",13)){
   const char* name=line+13;if(!zjAdminValue(name,3,31)){Serial.println("ZJADMIN,ERR,INVALID_NAME");return true;}
   zjKitName=name;zjKitAutoName=false;zjKitPrefs.putString("name",zjKitName);zjKitPrefs.putString("autoName","0");Serial.println("ZJADMIN,ACK,NAME");return true;
+ }
+ // AP credentials are only disclosed after unlocking teacher admin over USB.
+ if(!strcmp(line,"ZJADMIN,AP_SHOW")){
+  Serial.print("ZJADMIN,AP_CREDENTIALS,");Serial.print(zjEffectiveApSsid());Serial.print(',');
+  Serial.println(zjEffectiveApPassword());return true;
+ }
+ // AP-only reset preserves STA router profiles, pairing, identity and teacher passphrase.
+ if(!strcmp(line,"ZJADMIN,AP_RESET,CONFIRM")){
+  zjKitPrefs.remove("apName");zjKitPrefs.remove("apPass");
+  if(zjKitPrefs.getString("apName","").length()||zjKitPrefs.getString("apPass","").length()){
+   Serial.println("ZJADMIN,ERR,AP_RESET_STORAGE_FAILED");return true;
+  }
+  zjAdminApRestartAt=millis()+1500;
+  Serial.println("ZJADMIN,ACK,AP_RESET,REBOOTING");return true;
+ }
+ if(!strcmp(line,"ZJADMIN,AP_APPLY,CONFIRM")){
+  zjAdminApRestartAt=millis()+1500;
+  Serial.println("ZJADMIN,ACK,AP_APPLY,REBOOTING");return true;
  }
  if(!strncmp(line,"ZJADMIN,APNAME,",15)){
   const char* name=line+15;if(!zjAdminValue(name,3,24,false)){Serial.println("ZJADMIN,ERR,INVALID_AP_NAME");return true;}

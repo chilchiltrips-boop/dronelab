@@ -304,14 +304,13 @@ static void zjNetworkSetup(){
  zjLoadProfiles();
  if(zjMode!="auto"&&zjMode!="sta"&&zjMode!="ap")zjMode="auto";
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
- // Classroom AP common WPA2 password; per-device access key remains separate and secret.
- zjApPass=zjKitPrefs.getString("apPass","12345678");
- if(zjApPass.length()<8||zjApPass.length()>63)zjApPass="12345678";
+ // Default remains 12345678 until a teacher optionally changes it.
+ zjApPass=zjEffectiveApPassword();
  const uint64_t mac=ESP.getEfuseMac();
  char suffix[7];snprintf(suffix,sizeof(suffix),"%06X",unsigned(mac&0xFFFFFF));
  String apRoot=zjKitPrefs.getString("apName",String("ZEBJUS-AERION-")+GYRO_BOARD);
  if(apRoot.length()<3||apRoot.length()>24)apRoot=String("ZEBJUS-AERION-")+GYRO_BOARD;
- zjApSsid=zjKitPrefs.getString("apName","").isEmpty()?zjKitName:apRoot+"-"+zjKitCode;
+ zjApSsid=zjEffectiveApSsid();
  if(zjMode=="ap"||zjSavedSsid.length()==0){zjEnsureAP();zjPhase="ap_ready";}
  else zjConnectSaved();
  zjSetupHttp();
@@ -410,6 +409,11 @@ static void zjNetworkLoop(uint32_t now){
  if(zjPreviousScanActive&&!scanActive)zjLastScanSeq++;
  zjPreviousScanActive=scanActive;
  if(zjOtaRebootAt&&int32_t(now-zjOtaRebootAt)>=0){ESP.restart();return;}
+ // Flush the USB ACK; never restart during OTA, RC ownership, scan or Wi-Fi test.
+ if(zjAdminApRestartAt&&int32_t(now-zjAdminApRestartAt)>=0&&
+    !zjSecureOtaActive&&!zjOtaAuthorized&&!zjNetTesting&&!zjUsbScanning&&!zjRcOwned){
+  zjAdminApRestartAt=0;ESP.restart();return;
+ }
  if(zjNetTesting&&!zjTestStartAt){
   const bool associated=zjAssociationEpoch!=zjTestAssociationEpoch&&WiFi.status()==WL_CONNECTED&&WiFi.SSID()==zjPendingSsid&&WiFi.localIP()!=IPAddress(0,0,0,0);
   if(associated&&!zjTestConnectedAt)zjTestConnectedAt=now;

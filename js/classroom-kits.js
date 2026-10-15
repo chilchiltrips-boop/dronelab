@@ -12,6 +12,17 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
  ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
+let apRevealTimer=null;
+function hideAdminApCredentials(){
+ if(apRevealTimer){clearTimeout(apRevealTimer);apRevealTimer=null}
+ const ssid=$('kitAdminCurrentSsid'),pass=$('kitAdminCurrentPass');
+ if(ssid)ssid.value='';
+ if(pass){pass.value='';pass.type='password'}
+ const toggle=$('kitAdminShowPass');
+ if(toggle){toggle.textContent='Show Password';toggle.setAttribute('aria-pressed','false')}
+}
+function adminApNotice(msg){const el=$('kitAdminApMessage');if(el)el.textContent=msg}
+
 const EVENTS_MAX=70;
 const localKitHosts=new Map(),authSessions=new Map(),secureIds=new Set();try{for(const id of JSON.parse(localStorage.getItem('zebjus.kit.v2.ids')||'[]'))secureIds.add(id)}catch{}let setupStep=0;
 const adminKitHosts=new Map();
@@ -135,6 +146,8 @@ function render(){
  if($('kitAdminApply'))$('kitAdminApply').disabled=!adminReady||Date.now()>adminUnlockedUntil;
  for(const id of ['kitAdminEnroll','kitAdminUnlock','kitAdminLock'])if($(id))$(id).disabled=!adminReady;
  if($('kitAdminRead'))$('kitAdminRead').disabled=!ready||state.transport!=='usb'||state.working;
+ for(const id of ['kitAdminReadAp','kitAdminResetAp','kitAdminShowPass'])if($(id))$(id).disabled=!adminReady||Date.now()>adminUnlockedUntil;
+ if((!adminReady||Date.now()>adminUnlockedUntil)&&$('kitAdminCurrentPass')?.value)hideAdminApCredentials();
  for(const id of ['kitRotateKey','kitFactoryReset'])if($(id))$(id).disabled=!adminReady||Date.now()>adminUnlockedUntil;
  for(const id of ['kitModeApply','kitWifiSave','kitWifiScan'])if($(id))$(id).disabled=!ready||state.working||state.owner||wifiTesting||(state.transport!=='usb'&&!state.setupAuthorized);
  for(const id of ['kitSavedRefresh','kitSavedUse','kitSavedForget'])if($(id))$(id).disabled=!ready||state.working||state.owner||!!state.rc?.claimed||wifiTesting||(state.transport!=='usb'&&!state.setupAuthorized);
@@ -303,6 +316,7 @@ function showKnown(){
  }
 }
 async function disconnect(reason='Disconnected',{automatic=false}={}){
+ hideAdminApCredentials();
  autoReconnectAllowed=automatic;otaActive=false;
  const priorId=state.kitId;pendingNetworkTarget=null;closeReconnectOffer();
  ++controlTicket;ownOwnerId='';++wifiTestNonce;wifiTesting=false;
@@ -758,8 +772,51 @@ async function adminSave(){
   if(response.includes(',ERR,'))throw Error('Device rejected admin setting: '+response);
  }
  if($('kitAdminPass'))$('kitAdminPass').value='';
- audit('Admin settings submitted over physical USB; inspect Serial ACKs • reboot kit to apply AP settings','warn');
+ hideAdminApCredentials();
+ if(ap||pass){
+  const pending=waitSerial(/^ZJADMIN,(?:ACK|ERR),AP_APPLY,/,3000);
+  await usbWrite('ZJADMIN,AP_APPLY,CONFIRM');
+  const result=await pending;
+  if(result!=='ZJADMIN,ACK,AP_APPLY,REBOOTING')throw Error('AP update reboot was rejected: '+result);
+  adminApNotice('AP settings saved. Kit restarting; use new credentials when reconnecting.');
+  audit('Teacher AP SSID/password saved; Kit reboot acknowledged','success');
+ }else audit('Kit settings saved by USB; reboot if Kit Name / Code changed','warn');
  await disconnect('Kit settings changed • verify Device ID / new code and reconnect');
+}
+async function adminReadApCredentials(){
+ if(state.transport!=='usb'||!state.connected||state.owner||state.working||!linkFresh())throw Error('Connect a verified idle Kit via USB.');
+ if(Date.now()>adminUnlockedUntil)throw Error('Unlock Teacher Admin before reading AP credentials.');
+ hideAdminApCredentials();
+ const expected=state.kitId;
+ const reply=waitSerial(/^ZJADMIN,AP_CREDENTIALS,/,2600);
+ await usbWrite('ZJADMIN,AP_SHOW');
+ const response=await reply;
+ if(state.transport!=='usb'||!state.connected||state.kitId!==expected||Date.now()>adminUnlockedUntil)throw Error('USB Kit authorization or identity changed.');
+ const value=response.slice('ZJADMIN,AP_CREDENTIALS,'.length),split=value.indexOf(',');
+ const name=split>=0?value.slice(0,split):'',password=split>=0?value.slice(split+1):'';
+ if(!name||!/^[\x21-\x7e]{8,63}$/.test(password))throw Error('Kit returned invalid AP credentials.');
+ $('kitAdminCurrentSsid').value=name;
+ $('kitAdminCurrentPass').value=password;
+ adminApNotice('Read current AP credentials over USB. Password masked; auto-clears after 30 seconds.');
+ apRevealTimer=setTimeout(hideAdminApCredentials,30000);
+}
+async function adminResetAp(){
+ if(state.transport!=='usb'||!state.connected||state.owner||state.working||!linkFresh())throw Error('Connect a verified idle Kit via USB.');
+ if(Date.now()>adminUnlockedUntil)throw Error('Unlock Teacher Admin first.');
+ const question='Reset AP name to the current Kit Name and password to 12345678? Saved STA Wi-Fi, pairing and teacher passphrase remain.';
+ if(!await (root.AerionDialogs?.confirm(question)??Promise.resolve(confirm(question))))return;
+ hideAdminApCredentials();
+ const expected=state.kitId;
+ const reply=waitSerial(/^ZJADMIN,(?:ACK|ERR),(?:AP_RESET|ADMIN_LOCKED|CONTROLLER_ACTIVE)/,3000);
+ await usbWrite('ZJADMIN,AP_RESET,CONFIRM');
+ const result=await reply;
+ if(result!=='ZJADMIN,ACK,AP_RESET,REBOOTING')throw Error('Reset was rejected: '+result);
+ if(expected!==state.kitId||state.transport!=='usb')throw Error('Wrong USB Kit during AP reset.');
+ if($('kitAdminSsid'))$('kitAdminSsid').value='';
+ if($('kitAdminPass'))$('kitAdminPass').value='';
+ adminApNotice('AP defaults restored: current Kit Name / 12345678. Kit restarting.');
+ audit('Teacher restored Kit AP defaults; saved router and pairing retained','success');
+ await disconnect('AP credentials reset; reconnect with default password');
 }
 async function adminDanger(action){
  if(!state.connected||state.transport!=='usb'||state.owner)throw Error('Admin operation requires unlocked USB kit');
@@ -786,6 +843,7 @@ async function adminAccess(action){
  const line=await response;
  if(line.startsWith('ZJADMIN,ERR,'))throw Error('Admin refused: '+line.replace('ZJADMIN,ERR,',''));
  adminUnlockedUntil=action==='LOCK'?0:Date.now()+60000;
+ hideAdminApCredentials();
  if(action==='ENROLL')adminEnrolled=true;
  wifiNote('Teacher admin '+(action==='LOCK'?'locked':'unlocked for 60 seconds')+' on physical USB','good');
  render();
@@ -861,7 +919,7 @@ function onSerial(e){
   if(status==='LOCKED'||status==='ENROLL_REQUIRED')adminUnlockedUntil=0;
   render();
  }
- if(line==='ZJADMIN,ACK,LOCKED')adminUnlockedUntil=0;
+ if(line==='ZJADMIN,ACK,LOCKED'){adminUnlockedUntil=0;hideAdminApCredentials()}
  if(line.startsWith('ZJADMIN,NAME,')){$('kitAdminName').value=line.slice(13)}
  if(line.startsWith('ZJADMIN,APNAME,')){$('kitAdminSsid').value=line.slice(15)}
  if(line.startsWith('ZJKIT,CODE,')){$('kitAdminCode').value=line.slice(11)}
@@ -1343,6 +1401,16 @@ function init(){
  guardAction('kitSavedRefresh',refreshSavedNetworks);guardAction('kitSavedUse',()=>manageSavedNetwork('use'));guardAction('kitSavedForget',()=>manageSavedNetwork('forget'));
  $('kitWifiNetworks')?.addEventListener('change',e=>{if(e.target.value)$('kitRouterSsid').value=e.target.value});
  guardAction('kitAdminEnroll',()=>adminAccess('ENROLL'));guardAction('kitAdminUnlock',()=>adminAccess('UNLOCK'));guardAction('kitAdminLock',()=>adminAccess('LOCK'));
+ guardAction('kitAdminReadAp',adminReadApCredentials);
+ guardAction('kitAdminResetAp',adminResetAp);
+ $('kitAdminShowPass')?.addEventListener('click',()=>{
+  const input=$('kitAdminCurrentPass');
+  if(!input?.value||Date.now()>adminUnlockedUntil){hideAdminApCredentials();return}
+  input.type=input.type==='password'?'text':'password';
+  const shown=input.type==='text';
+  $('kitAdminShowPass').textContent=shown?'Hide Password':'Show Password';
+  $('kitAdminShowPass').setAttribute('aria-pressed',String(shown));
+ });
  guardAction('kitAdminApply',adminSave);guardAction('kitAdminRead',async()=>{if(state.transport!=='usb'||!state.connected)throw Error('Admin reads require physical USB');await usbWrite('ZJADMIN,GET');audit('Read admin settings over USB')});guardAction('kitRotateKey',()=>adminDanger('rotate'));guardAction('kitFactoryReset',()=>adminDanger('factory'));
  $('fwOpenKitNetwork')?.addEventListener('click',()=>window.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));
  guardAction('kitTopNetworkSwitch',toggleHeaderNetwork);guardAction('kitTopWifiConnect',()=>connectHeaderNetwork());guardAction('kitTopControl',toggleHeaderControl);

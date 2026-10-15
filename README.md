@@ -1,5 +1,13 @@
 # ZEBJUS DroneLab
 
+## Optional Kit AP Wi-Fi settings and teacher recovery
+
+Devices & Firmware → Security & Admin uses the existing teacher passphrase with physical USB access. The teacher can optionally change AP Name Prefix and WPA2 password (first-time setup never forces a change), explicitly read current AP credentials using `ZJADMIN,AP_SHOW` after USB admin unlock, or click **Reset AP to Default**. The display is masked until Show Password, then clears after 30 seconds. The generic USB monitor and copied logs redact credentials.
+
+Reset removes only the `apName` and `apPass` entries from the `zj-classroom` preferences and safely reboots. Default SSID is the Kit Name and password is `12345678`; Device ID, Kit Name, STA profiles, pairing, teacher passphrase and firmware stay unchanged. APP OTA preserves these values, while a full FACTORY erase may not. AP password does not grant diagnostic control or administrator authorization.
+
+
+
 DroneLab retains **Assembly**, **2D Wiring**, **Python Lab**, **Settings**, and **Firmware / USB Serial Tools**, with one canonical **Flight Training** page at `tripod.html`. `index.html` and `lab.html` are synchronized entry points; `companion.html` is also packaged in the Android companion.
 
 Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the app under `/dronelab/`. Desktop Chrome/Edge on HTTPS or localhost supports Web Serial. Android WebView USB flashing is unsupported.
