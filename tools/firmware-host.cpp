@@ -96,7 +96,7 @@ int main(){
  zjAuthResetRequest();requestIP=IPAddress(192,168,4,99);assert(!zjAllow());requestIP=IPAddress(192,168,4,2);
  // Exercise real AES-256-GCM admin decryption for a 1024-byte encrypted
  // OTA chunk: never just bypass authentication in the large-payload test.
- const signedOtaPost=[&](const ZjSession& s,String route,uint32_t seq,const String& body,bool tamper=false){
+ const auto signedOtaPost=[&](const ZjSession& s,String route,uint32_t seq,const String& body,bool tamper=false){
   uint8_t keyBytes[32],iv[12]={0};zjUnhex(s.key,keyBytes);
   const std::string clear=body.c_str();
   std::vector<uint8_t> ciphertext(clear.size()+16);uint8_t tag[16];
