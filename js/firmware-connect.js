@@ -165,7 +165,11 @@ function render(){
 }
 async function sampleHealth(){
  const s=state();
- if(!s.connected||$('fwKitDemoMode')?.checked||!$('tab-firmware')?.classList.contains('active'))return;
+ // Overview is the only consumer of this telemetry. Don't send additional
+ // signed requests while AP/STA mode changes, OTA or pairing is in progress.
+ if(!s.connected||s.working||s.otaInProgress||$('fwKitDemoMode')?.checked||
+    !$('tab-firmware')?.classList.contains('active')||
+    root.ZebjusDevicesWorkspace?.active?.()!=='overview')return;
  try{
   const t=await kit().request('/api/telemetry');
   if(t.kitId===s.kitId){telemetry=t;telemetryTime=Date.now();healthAt=telemetryTime}

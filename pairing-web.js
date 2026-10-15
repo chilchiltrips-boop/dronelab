@@ -3,6 +3,7 @@
 const $=id=>document.getElementById(id);
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
 let flightTimer=null,statsTimer=null;
+let previousMobileTab=null,previousHardwareView='overview';
 const networkPending=new Map();let networkId=0;
 function networkRequest(route,method='GET',args={}){
  if(!host?.status()?.paired||!host?.status()?.connected)return Promise.reject(Error('Pair Android first, then enable WebApp kit access in Android Wi-Fi settings'));
@@ -33,8 +34,33 @@ function forwardSimulatorControl(m){
   'Control denied: '+result.reason;
  return result;
 }
-function openSettings(){const dialog=$('connectionDialog');if(inlineSettings()){window.ZebjusDevicesWorkspace?.open('mobile',{scroll:true});const details=$('kitMobilePairDetails');if(details)details.open=true;return}if(!dialog.open)dialog.showModal()}
-function closeSettings(){stopCamera();if(inlineSettings()){document.querySelector('[data-tab="pid"]')?.click();return}$('connectionDialog').close();$('topPairMobileBtn').focus()}
+function openSettings(){
+ const dialog=$('connectionDialog');
+ if(inlineSettings()){
+  const active=document.querySelector('.tab.active')?.dataset.tab||'firmware';
+  const view=window.ZebjusDevicesWorkspace?.active?.()||'overview';
+  if(active!=='firmware'||view!=='mobile'){
+   previousMobileTab=active;
+   previousHardwareView=view==='mobile'?'overview':view;
+  }
+  window.ZebjusDevicesWorkspace?.open('mobile',{scroll:true});
+  const details=$('kitMobilePairDetails');if(details)details.open=true;
+  return;
+ }
+ if(!dialog.open)dialog.showModal();
+}
+function closeSettings(){
+ stopCamera();
+ if(inlineSettings()){
+  const back=previousMobileTab,view=previousHardwareView;
+  previousMobileTab=null;previousHardwareView='overview';
+  if(back&&back!=='firmware')
+   document.querySelector('.tab[data-tab="'+back+'"]')?.click();
+  else window.ZebjusDevicesWorkspace?.open(view==='mobile'?'overview':view,{scroll:true});
+  return;
+ }
+ $('connectionDialog').close();$('topPairMobileBtn').focus();
+}
 function openStep(number){
  const s=host.status();
  if((number===2&&!offer)||(number===3&&!s.connected))return;
