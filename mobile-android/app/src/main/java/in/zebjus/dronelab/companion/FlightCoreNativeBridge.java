@@ -35,15 +35,15 @@ final class FlightCoreNativeBridge {
     static final int OTA_DOCUMENT_PICKER=802;
     private final WebView view;
     private final ExecutorService worker = new java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,new java.util.concurrent.ArrayBlockingQueue<>(6));
-    private final ConnectivityManager connectivity;
+    private final FlightCoreWifiLink wifiLink;
     private static final class RequestState {
         volatile boolean cancelled;
         volatile HttpURLConnection connection;
     }
     private final ConcurrentHashMap<String,RequestState> outstanding=new ConcurrentHashMap<>();
-    FlightCoreNativeBridge(Activity activity, WebView view) {
+    FlightCoreNativeBridge(Activity activity, WebView view, FlightCoreWifiLink wifiLink) {
         this.activity=activity;this.view=view;
-        this.connectivity=(ConnectivityManager)activity.getSystemService(Context.CONNECTIVITY_SERVICE);
+        this.wifiLink=wifiLink;
     }
     private static boolean privateIp(String text) {
         if(text==null||!text.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))return false;
@@ -55,14 +55,6 @@ final class FlightCoreNativeBridge {
         if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
         if(!method.equals("POST"))return false;
         return route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
-    }
-    private Network wifiNetwork() {
-        if(connectivity==null)return null;
-        for(Network n:connectivity.getAllNetworks()){
-            NetworkCapabilities c=connectivity.getNetworkCapabilities(n);
-            if(c!=null&&c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))return n;
-        }
-        return null;
     }
     private void reply(String id,boolean ok,int status,String body,String error,String proof) {
         try{
@@ -136,7 +128,7 @@ final class FlightCoreNativeBridge {
                 // Never run a queued firmware write after its JS caller gave up.
                 if(elapsed>(firmwareWrite?1500:750))throw new IllegalStateException("Stale native request dropped");
                 if(route.equals("/api/rc/preview")&&elapsed>250)throw new IllegalStateException("Stale input dropped");
-                Network wifi=wifiNetwork();if(wifi==null)throw new IllegalStateException("Connect Android Wi-Fi to the kit first");
+                Network wifi=wifiLink.networkFor(ip,route.equals("/api/identify")||route.startsWith("/api/auth/")||route.equals("/api/status"));
                 if(state.cancelled)return;
                 connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
                 state.connection=connection;
@@ -177,6 +169,22 @@ final class FlightCoreNativeBridge {
             reply(id,false,0,"{}","Native Wi-Fi queue busy; input dropped",null);
         }
     }
+    // Called only by the origin-checked WebMessage listener on the main frame.
+    void pinSelectedNetwork(String requestId,String deviceId,String ip,String transport,String ssid){
+        JSONObject result=new JSONObject();
+        try{
+            wifiLink.pin(deviceId,ip,transport,ssid);
+            result.put("ok",true);
+        }catch(Exception e){
+            try{result.put("ok",false);result.put("error",e.getMessage());}catch(Exception ignored){}
+        }
+        try{
+            result.put("id",requestId);
+            String js="window.zebjusNativePinResult && window.zebjusNativePinResult("+result.toString()+")";
+            activity.runOnUiThread(()->{if(view.getParent()!=null)view.evaluateJavascript(js,null);});
+        }catch(Exception ignored){}
+    }
+    void clearSelectedNetwork(){wifiLink.clear();cancelOutstanding();}
     @JavascriptInterface public void openWifiSettings(){
         activity.runOnUiThread(()->{
             try{
