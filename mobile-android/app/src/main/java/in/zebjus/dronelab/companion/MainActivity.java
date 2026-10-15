@@ -3,7 +3,17 @@ package in.zebjus.dronelab.companion;
 import android.Manifest;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import java.util.concurrent.atomic.AtomicBoolean;
+import android.net.NetworkCapabilities;
+import android.webkit.WebResourceResponse;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import androidx.webkit.WebMessageCompat;
+import androidx.webkit.JavaScriptReplyProxy;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -29,15 +39,14 @@ import java.util.Arrays;
 public class MainActivity extends Activity {
     private static final int CAMERA_REQUEST = 701;
     private static final String LOCAL_ORIGIN = "https://appassets.androidplatform.net";
+    private static final String LOCAL_PAGE = LOCAL_ORIGIN + "/assets/companion.html";
     private WebView view;
     private FlightCoreNativeBridge nativeFlightCore;
     private PermissionRequest pendingVideoRequest;
     private ValueCallback<Uri[]> pendingFirmwareFilePicker;
     private static final int SECURE_OTA_FILE_PICKER=802;
-    private ConnectivityManager connectivity;
-    private ConnectivityManager.NetworkCallback networkCallback;
-    private final AtomicBoolean seenNetwork = new AtomicBoolean(false);
-    private volatile Network lastNetwork;
+    private FlightCoreWifiLink wifiLink;
+    private boolean scopedBridgeReady;
 
     private void cockpitFullscreen() {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -116,6 +125,57 @@ public class MainActivity extends Activity {
             else { req.deny(); explainDeniedCameraPermission(); }
         }
     }
+    private static boolean officialAsset(Uri uri){
+        if(uri==null||!"https".equals(uri.getScheme())||!"appassets.androidplatform.net".equals(uri.getHost())||
+           (uri.getPort()!=-1&&uri.getPort()!=443))return false;
+        String path=uri.getEncodedPath();
+        return path!=null&&path.startsWith("/assets/")&&!path.contains("..")&&!path.contains("%2e")&&!path.contains("%2E");
+    }
+    private static boolean mainPage(Uri uri){return officialAsset(uri)&&"/assets/companion.html".equals(uri.getEncodedPath());}
+    private static WebResourceResponse blockedResource(){
+        WebResourceResponse response=new WebResourceResponse("text/plain","UTF-8",
+            new ByteArrayInputStream(new byte[0]));
+        response.setStatusCodeAndReasonPhrase(403,"Forbidden");
+        return response;
+    }
+    private void deliverDiscovery(String id,String ip,String error){
+        if(view==null||!scopedBridgeReady)return;
+        try{
+            JSONObject message=new JSONObject();
+            message.put("kitId",id==null?"":id);message.put("ip",ip);message.put("error",error);
+            String script="window.zebjusNativeDiscoveryResult && window.zebjusNativeDiscoveryResult("+message.toString()+")";
+            runOnUiThread(()->{if(view!=null)view.evaluateJavascript(script,null);});
+        }catch(Exception ignored){}
+    }
+    private static String arg(JSONArray values,int index){return values==null?"":values.optString(index,"");}
+    private void handleNativeMessage(WebMessageCompat message,Uri origin,boolean isMainFrame){
+        if(!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
+           !"appassets.androidplatform.net".equals(origin.getHost())||origin.getPort()!=-1&&origin.getPort()!=443||
+           message==null||message.getData()==null)return;
+        try{
+            JSONObject data=new JSONObject(message.getData());
+            String op=data.optString("op","");JSONArray args=data.optJSONArray("args");
+            if(args==null||args.length()>7)return;
+            switch(op){
+                case "requestSecure":
+                    if(args.length()==6)nativeFlightCore.requestSecure(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4),arg(args,5));
+                    break;
+                case "cancelRequest":if(args.length()==1)nativeFlightCore.cancelRequest(arg(args,0));break;
+                case "clearSelectedNetwork":if(args.length()==0)nativeFlightCore.clearSelectedNetwork();break;
+                case "pinSelectedNetwork":
+                    if(args.length()==5)nativeFlightCore.pinSelectedNetwork(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4));
+                    break;
+                case "discoverKit":if(args.length()==1&&wifiLink!=null)wifiLink.discover(arg(args,0));break;
+                case "openWifiSettings":if(args.length()==0)nativeFlightCore.openWifiSettings();break;
+                case "requestWifiPermission":
+                    if(args.length()==0&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},702);
+                    break;
+                // No raw-key, arbitrary HTTP, filesystem or privileged JS methods.
+                default:break;
+            }
+        }catch(Exception ignored){}
+    }
     private void signalNetworkChange() {
         if (nativeFlightCore != null) nativeFlightCore.cancelOutstanding();
         if (view != null) view.post(() -> {
@@ -148,22 +208,43 @@ public class MainActivity extends Activity {
         view.getSettings().setAllowContentAccess(false);
         view.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        nativeFlightCore = new FlightCoreNativeBridge(this,view);
-        view.addJavascriptInterface(nativeFlightCore,"ZebjusNative");
+        wifiLink=new FlightCoreWifiLink(this,new FlightCoreWifiLink.Listener(){
+            @Override public void linkChanged(){signalNetworkChange();}
+            @Override public void discovery(String id,String ip,String error){deliverDiscovery(id,ip,error);}
+        });
+        nativeFlightCore = new FlightCoreNativeBridge(this,view,wifiLink);
+        // Android's addJavascriptInterface is frame-global; never expose it.
+        // WebMessageListener enforces this exact HTTPS origin AND main frame.
+        scopedBridgeReady=WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER);
+        if(scopedBridgeReady)WebViewCompat.addWebMessageListener(view,"ZebjusHost",
+            Collections.singleton(LOCAL_ORIGIN),
+            (web,message,origin,isMainFrame,replyProxy)->handleNativeMessage(message,origin,isMainFrame));
+        wifiLink.start();
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
                 Uri url = request.getUrl();
                 // Only this official release APK link is allowed to open externally.
                 // Android/Chrome handles download + user-approved package update.
-                if ("https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk".equals(url.toString())) {
-                    try { startActivity(new Intent(Intent.ACTION_VIEW, url)); }
-                    catch (Exception ignored) { /* User can download from GitHub website */ }
+                if(request.isForMainFrame()&&request.hasGesture()&&
+                   "https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk".equals(url.toString())){
+                    try{startActivity(new Intent(Intent.ACTION_VIEW,url));}catch(Exception ignored){}
                     return true;
                 }
-                return !"https".equals(url.getScheme()) || !"appassets.androidplatform.net".equals(url.getHost());
+                // Never navigate the embedded page outside its single bundled entry.
+                return !mainPage(url);
             }
             @Override public android.webkit.WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
-                return assetLoader.shouldInterceptRequest(request.getUrl());
+                // No external scripts/images/iframes (nor injected remote JS).
+                // WebRTC signaling runs through JS networking, not WebView subresources.
+                Uri uri=request.getUrl();
+                if(!officialAsset(uri))return blockedResource();
+                WebResourceResponse bundled=assetLoader.shouldInterceptRequest(uri);
+                return bundled==null?blockedResource():bundled;
+            }
+            @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
+                if(!LOCAL_PAGE.equals(url)){
+                    if(nativeFlightCore!=null)nativeFlightCore.clearSelectedNetwork();
+                }
             }
             @Override public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
                 // A terminated renderer cannot be reused; clear the old session safely.
@@ -180,7 +261,7 @@ public class MainActivity extends Activity {
         });
         view.setWebChromeClient(new WebChromeClient() {
             @Override public boolean onShowFileChooser(WebView webView,ValueCallback<Uri[]> callback,WebChromeClient.FileChooserParams params) {
-                if(webView!=view){callback.onReceiveValue(null);return true;}
+                if(webView!=view||!LOCAL_PAGE.equals(view.getUrl())){callback.onReceiveValue(null);return true;}
                 if(pendingFirmwareFilePicker!=null)pendingFirmwareFilePicker.onReceiveValue(null);
                 pendingFirmwareFilePicker=callback;
                 Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -195,17 +276,6 @@ public class MainActivity extends Activity {
                 if (pendingVideoRequest == request) pendingVideoRequest = null;
             }
         });
-        connectivity = (ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
-        networkCallback = new ConnectivityManager.NetworkCallback() {
-            @Override public void onAvailable(Network network) {
-                if (seenNetwork.getAndSet(true) && lastNetwork != null && !lastNetwork.equals(network)) signalNetworkChange();
-                lastNetwork = network;
-            }
-            @Override public void onLost(Network network) {
-                if (lastNetwork != null && lastNetwork.equals(network)) signalNetworkChange();
-            }
-        };
-        if (connectivity != null) connectivity.registerDefaultNetworkCallback(networkCallback);
         FrameLayout container = new FrameLayout(this);
         container.setBackgroundColor(Color.rgb(18, 18, 31));
         container.addView(view, new FrameLayout.LayoutParams(-1, -1));
@@ -239,7 +309,7 @@ public class MainActivity extends Activity {
             return insets.replaceSystemWindowInsets(0, 0, 0, 0);
         });
         container.requestApplyInsets();
-        view.loadUrl(LOCAL_ORIGIN + "/assets/companion.html");
+        view.loadUrl(LOCAL_PAGE);
         cockpitFullscreen();
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
@@ -264,7 +334,7 @@ public class MainActivity extends Activity {
         if (view != null) view.onResume();
     }
     @Override protected void onDestroy() {
-        if (connectivity != null && networkCallback != null) connectivity.unregisterNetworkCallback(networkCallback);
+        if (wifiLink != null) { wifiLink.shutdown(); wifiLink = null; }
         if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
         if (pendingFirmwareFilePicker != null) { pendingFirmwareFilePicker.onReceiveValue(null); pendingFirmwareFilePicker = null; }

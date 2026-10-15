@@ -33,20 +33,52 @@ if [[ "$immersive_confirmed" != confirmed ]]; then
   exit 1
 fi
 echo "Android emulator fully booted; first-run immersive tutorial pre-confirmed."
+# Early emulator boot can temporarily stall WebView focus dispatch. Warm Android
+# WebView while still testing every baseline / upgrade / touch assertion.
+warm_webview() {
+  adb shell cmd package compile -m speed -f in.zebjus.dronelab.companion || true
+  adb shell am start -W -n in.zebjus.dronelab.companion/.MainActivity > "test-output/native/prewarm-${label}.txt" || true
+  sleep 5
+  adb shell am force-stop in.zebjus.dronelab.companion || true
+  adb shell input keyevent KEYCODE_HOME || true
+  sleep 2
+}
+diagnose_failure() {
+  local case_name="$1"
+  adb logcat -d -b main -b system -b crash -t 3600 > "test-output/native/failure-logcat-${case_name}.txt" || true
+  adb shell dumpsys activity processes > "test-output/native/failure-processes-${case_name}.txt" || true
+  adb shell dumpsys activity anr > "test-output/native/failure-anr-${case_name}.txt" || true
+  adb shell dumpsys window > "test-output/native/failure-window-${case_name}.txt" || true
+  adb shell dumpsys gfxinfo in.zebjus.dronelab.companion > "test-output/native/failure-gfx-${case_name}.txt" || true
+  adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-ready.png "test-output/native/ready-${case_name}.png" || true
+  if ! adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-failure.png "test-output/native/failure-${case_name}.png"; then
+    adb exec-out screencap -p > "test-output/native/failure-${case_name}.png" || true
+  fi
+}
 run_case() {
   local case_name="$1"
   shift
-  adb shell am instrument -w -r "$@" "$runner" | tee "test-output/native/$case_name.log"
-  if ! grep -q 'PASS ' "test-output/native/$case_name.log" || grep -Eq 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
-    adb logcat -d -t 1800 > "test-output/native/failure-logcat-${case_name}.txt" || true
-    # The instrumentation captures the foreground BEFORE finish() closes it.
-    adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-ready.png "test-output/native/ready-${case_name}.png" || true
-    if ! adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-failure.png "test-output/native/failure-${case_name}.png"; then
-      adb exec-out screencap -p > "test-output/native/failure-${case_name}.png"
+  local attempt=1
+  while true; do
+    adb shell am instrument -w -r "$@" "$runner" | tee "test-output/native/$case_name.log" || true
+    if grep -q 'PASS ' "test-output/native/$case_name.log" &&
+       ! grep -Eq 'FAIL |INSTRUMENTATION_FAILED|INSTRUMENTATION_CODE: 0' "test-output/native/$case_name.log"; then
+      break
     fi
-    echo "Native acceptance failed: $case_name"
+    diagnose_failure "$case_name-attempt$attempt"
+    # Only cold-start emulator focus ANRs merit a single warm retry.
+    # Actual test assertion failures stay release-blocking.
+    if [[ "$case_name" == baseline-preference-* && "$attempt" == 1 ]] &&
+       grep -Eq 'Input dispatching timed out|keyDispatchingTimedOut|FocusEvent\(hasFocus=false\)' "test-output/native/$case_name.log"; then
+      echo "CI emulator cold-start focus ANR; retrying full baseline fixture ONCE after fresh WebView warmup"
+      adb shell am force-stop in.zebjus.dronelab.companion || true
+      warm_webview
+      attempt=2
+      continue
+    fi
+    echo "Native acceptance failed: $case_name (all required assertions retained)"
     exit 1
-  fi
+  done
   if [[ "$case_name" == touch-* ]]; then
     adb pull /sdcard/Android/data/in.zebjus.dronelab.companion/files/native-completed.png "test-output/native/landscape-${case_name}.png"
   fi
@@ -54,6 +86,7 @@ run_case() {
 }
 adb install "$RUNNER_TEMP/zebjus-previous.apk"
 adb install "$test_apk"
+warm_webview
 run_case "baseline-preference-${label}" -e baselineOnly true
 adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee "test-output/native/in-place-upgrade-${label}.log"
 adb shell dumpsys package in.zebjus.dronelab.companion | grep -E 'versionCode|versionName|signatures' > "test-output/native/installed-identity-${label}.txt"

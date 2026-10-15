@@ -14,6 +14,7 @@ on:
       - 'companion.css'
       - 'companion.js'
       - 'companion-network.js'
+      - 'android-native-bridge.js'
       - 'companion-flight.js'
       - 'flight-input.js'
       - 'pairing-core.js'
@@ -47,7 +48,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
@@ -58,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
-          cp companion.html companion.css companion.js companion-network.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
           cp js/kit-auth.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
@@ -66,6 +67,7 @@ jobs:
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
           test -s mobile-android/app/src/main/assets/companion-flight.js
+          test -s mobile-android/app/src/main/assets/android-native-bridge.js
           test -s mobile-android/app/src/main/assets/companion-network.js
           test -s mobile-android/app/src/main/assets/firmware-catalog.json
           test -s mobile-android/app/src/main/assets/flight-input.js
@@ -123,7 +125,7 @@ jobs:
           cp mobile-android/app/build/outputs/apk/release/app-release.apk mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.7.5-ota-catalog\nVersionCode: 21\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.7.6-origin-wifi-nsd\nVersionCode: 22\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
           printf 'Source commit: %s\n' "$GITHUB_SHA" >> mobile-apk/ANDROID_RELEASE_META.txt
 
       - uses: actions/upload-artifact@v4
@@ -187,7 +189,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools'
       - uses: actions/download-artifact@v4
@@ -268,7 +270,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/zebjus-release-output"
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt "$RUNNER_TEMP/zebjus-release-output/"
           git fetch origin main
-          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py
+          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py
           git checkout -B ci-signed-apk-release origin/main
           mkdir -p mobile-apk
           cp "$RUNNER_TEMP"/zebjus-release-output/* mobile-apk/
