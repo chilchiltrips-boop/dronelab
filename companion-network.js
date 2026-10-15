@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false;
+const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
@@ -35,6 +35,69 @@ function nativeTransport(route,method='GET',args={},headers={}){
   catch(e){clearTimeout(timer);pending.delete(id);const error=Error('Native request failed: '+e.message);error.uncertain=write;reject(error);}
  });
 }
+// An NSD address is only a candidate. Only a signed Device ID response can
+// authorize a kit, and only the matching Wi-Fi Network/SSID/BSSID may carry writes.
+const verifiedCacheKey=id=>'zebjus.android.verified-ip:'+id+':'+link;
+function cachedIp(id){
+ try{
+  const saved=JSON.parse(localStorage.getItem(verifiedCacheKey(id))||'null');
+  return saved&&Date.now()-saved.at<7*86400000&&validHost(saved.ip)?saved.ip:'';
+ }catch{return ''}
+}
+function saveVerifiedIp(id,host,ssid){
+ try{localStorage.setItem(verifiedCacheKey(id),JSON.stringify({ip:host,ssid,at:Date.now()}))}catch{}
+}
+function forgetNativePin(){
+ pinIdentity='';
+ try{native?.clearSelectedNetwork?.()}catch{}
+}
+window.zebjusNativePinResult=data=>{
+ const pendingPin=pinWaiters.get(data?.id);
+ if(!pendingPin)return;
+ clearTimeout(pendingPin.timer);pinWaiters.delete(data.id);
+ data.ok?pendingPin.resolve():pendingPin.reject(Error(data.error||'Unable to pin trusted Wi-Fi network'));
+};
+async function pinVerifiedStatus(data){
+ if(typeof native?.pinSelectedNetwork!=='function')return; // Non-Android test stub.
+ const expectedSsid=link==='ap'?data.apSsid:data.ssid;
+ if(!expectedSsid||!data.kitId)throw Error('Signed kit status has no Wi-Fi SSID; cannot pin selected network.');
+ const identity=[data.kitId,ip,link,expectedSsid].join('|');
+ if(pinIdentity===identity)return;
+ const pinId='pin'+(++requestId);
+ await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>{pinWaiters.delete(pinId);reject(Error('Wi-Fi pin acknowledgment timed out'))},5000);
+  pinWaiters.set(pinId,{resolve,reject,timer});
+  native.pinSelectedNetwork(pinId,data.kitId,ip,link.toUpperCase(),expectedSsid);
+ });
+ pinIdentity=identity;
+}
+window.zebjusNativeDiscoveryResult=data=>{
+ const lookup=discoveryWaiters.get(data?.kitId);if(!lookup)return;
+ clearTimeout(lookup.timer);discoveryWaiters.delete(data.kitId);
+ if(data.ip&&validHost(data.ip))lookup.resolve(data.ip);
+ else lookup.resolve('');
+};
+async function discoverKit(){
+ const labelText=el('kitKey')?.value.trim()||'';
+ let id=verifiedKitId;
+ if(labelText)id=window.ZebjusKitAuth.label(labelText).deviceId;
+ if(!id)throw Error('Enter the private Kit label once before mDNS discovery.');
+ if(link!=='sta')throw Error('mDNS discovery requires the Android phone and Kit on the same router (STA).');
+ let found='';
+ if(typeof native?.discoverKit==='function'){
+  found=await new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{discoveryWaiters.delete(id);resolve('')},7500);
+   discoveryWaiters.set(id,{resolve,reject,timer});
+   native.discoverKit(id);
+  });
+ }
+ const candidate=found||cachedIp(id);
+ if(!candidate)throw Error('mDNS found no matching Device ID and no cached verified STA IP. Enter IP manually or check router client isolation.');
+ ip=candidate;staIp=candidate;el('kitIp').value=candidate;
+ forgetNativePin();online=false;auth=null;
+ show(found?'mDNS candidate '+candidate+' • click Connect to verify signed Kit identity':
+  'Cached previously verified IP '+candidate+' • click Connect for fresh signed identity','warn');
+}
 async function request(route,method='GET',args={}){
  if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
  if(!auth||Date.now()>auth.expiresAt-5000){
@@ -47,6 +110,9 @@ async function request(route,method='GET',args={}){
 async function connectKit(){
  if(connecting)return;connecting=true;
  try{
+  // Android location permission is required only to inspect Wi-Fi identity.
+  // If absent, the signed status can load but privileged pinning fails closed.
+  try{native?.requestWifiPermission?.()}catch{}
   const value=el('kitKey').value.trim();
   if(value){
    const p=window.ZebjusKitAuth.label(value),raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
@@ -71,7 +137,12 @@ window.zebjusNativeResult=data=>{
 async function status(){
  const data=await request('/api/status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
- verifiedKitId=data.kitId||'';online=true;mode=data.mode||mode;lastStatus=Date.now();
+ verifiedKitId=data.kitId||'';mode=data.mode||mode;
+ // Do not advertise ONLINE or enable OTA/control until Android pins this
+ // physical Wi-Fi network to the verified device and signed SSID.
+ await pinVerifiedStatus(data);
+ online=true;lastStatus=Date.now();
+ saveVerifiedIp(verifiedKitId,ip,link==='ap'?data.apSsid:data.ssid);
  // AUTO can run AP + STA simultaneously; only the verified request interface may own input.
  onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
  if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
@@ -313,18 +384,19 @@ function bind(){
  if(!native?.requestSecure){show('Install updated Android APK for signed Wi-Fi sessions');return;}
  el('kitIp').value=ip;
  el('kitLink').addEventListener('change',()=>{
-  void releaseRc();if(link==='sta'&&validHost(ip))staIp=ip;
+  void releaseRc();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
   link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
   show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
  });
- el('kitIp').addEventListener('change',()=>{void releaseRc();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
+ el('kitIp').addEventListener('change',()=>{void releaseRc();forgetNativePin();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc()});
  window.addEventListener('blur',()=>{if(rcSession)void releaseRc()});
  action('kitWifiSettings',()=>native.openWifiSettings());
+ action('kitDiscover',discoverKit);
  action('kitConnect',connectKit);action('kitScan',async()=>{await scan();if(el('kitNetStatus')?.textContent.includes('Scanning'))setTimeout(()=>scan().catch(()=>{}),2300)});
  action('kitTestSave',testSave);action('kitSwitch',setMode);
  action('kitRead',async()=>{const data=await pollTelemetry();el('kitTelemetry').textContent=JSON.stringify(data,null,2)});
@@ -344,8 +416,8 @@ function bind(){
  });
  setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
-function networkChanged(){if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
-window.zebjusNativeAppPaused=()=>{if(otaBusy)otaCancelRequested=true;cancelNativePending('Android app paused; request delivery unconfirmed')};
+function networkChanged(){forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
+window.zebjusNativeAppPaused=()=>{forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android app paused; request delivery unconfirmed')};
  window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
