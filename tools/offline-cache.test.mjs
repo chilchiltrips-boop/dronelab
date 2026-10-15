@@ -70,7 +70,7 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
 });
 
 test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
- const page=read('index.html'),sw=source;
+ const page=readFileSync(new URL('index.html',root),'utf8'),sw=source;
  for(const asset of ['pairing-web.js','firmware-updater.js','js/firmware-connect.js']){
   assert.ok(page.includes(asset+'?v=connectivity-audit-20261015'),asset+' page source');
   assert.ok(sw.includes(asset+'?v=connectivity-audit-20261015'),asset+' offline precache');
