@@ -14,7 +14,7 @@ test('My Kits is consolidated into one icon navigated Devices & Firmware tab',()
    for(const prefix of ['dw-panel-','dw-tab-'])assert.ok(h.includes('id="'+prefix+view+'"'),path+' '+prefix+view);
   for(const id of ['fwNetworkFlashBtn','fwUsbFlashBtn','kitWifiScan','kitWifiSave','kitSavedRefresh','kitAdmin','kitMobilePairDetails','connectionDialog','kitConnect'])
    assert.equal(h.split('id="'+id+'"').length-1,1,path+' '+id+' unique control');
-  assert.match(h,/src=".\/js\/devices-workspace.js\?v=unified-devices-overview-20261015"/);
+  assert.match(h,/src=".\/js\/devices-workspace.js\?v=unified-devices-compact-20261015"/);
  }
 });
 test('existing controls are moved, never cloned, and keep their kit and WebRTC handlers',()=>{
