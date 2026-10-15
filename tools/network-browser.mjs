@@ -109,12 +109,15 @@ try{
  assert.ok(calls.some(c=>c.host==='192.168.4.1'&&c.path==='/api/wifi/test'),'Wi-Fi credentials must be tested on the verified AP session');
  await web.locator('[data-dw-view="connection"]').click();
  await web.locator('#kitHandover').click();await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
- // Same-router discovery lists live Kit Names. Clicking the row must connect
- // immediately with verified STA observer scope, without an access-key dialog.
+ // Same-router discovery selects a verified Kit Name. Selection is NOT
+ // authorization: clicking Connect Selected Kit must perform fresh identity and
+ // encrypted observer-session checks before reporting connected STA.
  await web.locator('#fwKitDisconnect').click();
  await web.locator('#fwDiscoverKits').click();
  const staRow=web.locator('#fwDiscoveryResults .kit-known-item').filter({hasText:'STA'}).first();
  await staRow.waitFor({timeout:45000});await staRow.click();
+ assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().connected),false,'Kit selection alone must never silently connect');
+ await web.locator('#fwKitConnectSelected').click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
  assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),false);
  await web.locator('[data-tab=python]').click();await web.locator('#pythonMonaco .monaco-editor').waitFor({timeout:45000});
