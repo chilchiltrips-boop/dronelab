@@ -152,6 +152,11 @@
    const heading=document.createElement('summary');
    heading.textContent='Advanced • Manual Kit connection, recovery and controller diagnostics';
    legacy.append(heading,document.querySelector('#kitCenter'));
+   // The previous My Kits page already nests manual tools inside its own
+   // Advanced details. The unified page has an outer Advanced section, so
+   // unwrap only the redundant disclosure (keep every control and listener).
+   const innerManual=$('kitAdvancedHardware');
+   if(innerManual){innerManual.open=true;innerManual.classList.add('dw-unwrapped-advanced')}
    body('connection').append(legacy);
    relocate('.firmware-grid','firmware');
    relocate('.firmware-safety-strip','firmware');

@@ -547,3 +547,14 @@
  #tab-firmware #dw-body-diagnostics .fw-serial-tabs .btn{min-height:40px}
  #tab-firmware #dw-body-diagnostics .dw-serial-access>.btn{min-height:42px}
 }
+
+/* The unified Kit Connection Advanced disclosure replaces the old nested one.
+   No duplicate "Advanced" heading or second click is needed. */
+#tab-firmware #dwLegacyConnection #kitAdvancedHardware.dw-unwrapped-advanced{
+ display:block;
+ border:0;
+ background:transparent;
+ padding:0;
+ margin:0;
+}
+#tab-firmware #dwLegacyConnection #kitAdvancedHardware.dw-unwrapped-advanced>summary{display:none!important}

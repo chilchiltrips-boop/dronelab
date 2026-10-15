@@ -91,6 +91,8 @@ try{
  await web.locator('[data-tab="firmware"]').click();
  await web.locator('[data-dw-view="connection"]').click();
  await web.locator('#dwLegacyConnection > summary').click();
+ assert.equal(await web.locator('#kitAdvancedHardware').evaluate(el=>el.open),true,'The inner legacy disclosure must not hide Kit Setup after opening Advanced once');
+ assert.equal(await web.locator('#kitNewSetup').isVisible(),true,'New Kit Setup must be reachable inside one Advanced disclosure');
  await web.locator('#kitNewSetup').click();await wait(web,()=>window.ZebjusKits.getState().connected);
  assert.equal(await web.locator('#kitCodeInput').inputValue(),'123456');
  assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().setupAuthorized),true);
