@@ -133,7 +133,7 @@ function previewControls(m){
  .catch(e=>{dropInput('Input stopped: '+e.message);void request('/api/rc/release','POST',{session}).catch(()=>{});})
  .finally(()=>{previewBusy=false});
 }
-// Secure Android OTA uses the same admin-enrolled AES-GCM/HMAC session as the
+// Secure Android OTA v1.7.3 uses the same admin-enrolled AES-GCM/HMAC session as the
 // WebApp, never the legacy raw X-ZJ-Key multipart endpoint. No credentials are
 // retained in localStorage, IndexedDB, URLs, files or WebRTC signaling.
 const firmwareHex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
