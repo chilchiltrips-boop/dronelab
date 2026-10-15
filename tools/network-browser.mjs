@@ -85,22 +85,30 @@ mkdirSync('test-output/network',{recursive:true});
 try{
  await web.goto('http://127.0.0.1:8765/#settings');await wait(web,()=>!!window.ZebjusKits&&document.getElementById('app')?.dataset.ready==='true');
  assert.equal(await web.locator('#kitLabelInput').count(),0);assert.equal(await web.locator('#kitEnrollment').count(),0);
+ // Legacy setup controls still exist by design, but are now an explicitly
+ // disclosed Advanced section in the unified Hardware Center. Navigate as a
+ // real teacher would; do not force-click invisible elements.
+ await web.locator('[data-tab="firmware"]').click();
+ await web.locator('[data-dw-view="connection"]').click();
+ await web.locator('#dwLegacyConnection > summary').click();
  await web.locator('#kitNewSetup').click();await wait(web,()=>window.ZebjusKits.getState().connected);
  assert.equal(await web.locator('#kitCodeInput').inputValue(),'123456');
  assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().setupAuthorized),true);
  assert.equal(await web.locator('#kitWifiScan').isDisabled(),false);
  assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().owner),false);
  await web.screenshot({path:'test-output/network/simple-ap-connected.png'});
+ await web.locator('[data-dw-view="wifi"]').click();
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
  await wait(web,()=>document.getElementById('kitWifiResult')?.textContent.includes('saved')||window.ZebjusKits.getState().staIp==='192.168.1.42');
+ await web.locator('[data-dw-view="connection"]').click();
  await web.locator('#kitHandover').click();await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
  // Same-router discovery lists live Kit Names. Clicking the row must connect
  // immediately with verified STA observer scope, without an access-key dialog.
- await web.locator('#kitDisconnect').click();
- await web.locator('#kitDiscover').click();
- const staRow=web.locator('#kitDiscoveryResults .kit-known-item').filter({hasText:'STA'}).first();
+ await web.locator('#fwKitDisconnect').click();
+ await web.locator('#fwDiscoverKits').click();
+ const staRow=web.locator('#fwDiscoveryResults .kit-known-item').filter({hasText:'STA'}).first();
  await staRow.waitFor({timeout:45000});await staRow.click();
  await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
  assert.equal(await web.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),false);
