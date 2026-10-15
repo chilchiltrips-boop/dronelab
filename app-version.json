@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0+227",
+  "version": "1.8.0+228",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -9,6 +9,6 @@
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
     "FlightCore 1.4.6 APP and FACTORY firmware for A1 and A2"
   ],
-  "buildCommit": "edd2af39ec33",
-  "publishedAt": "2026-10-15T05:28:12.156555+00:00"
+  "buildCommit": "7346357058ed",
+  "publishedAt": "2026-10-15T05:29:50.044713+00:00"
 }
