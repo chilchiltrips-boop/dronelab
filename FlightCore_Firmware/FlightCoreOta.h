@@ -1,6 +1,7 @@
 #pragma once
 // Encrypted, session-bound APP OTA. SHA-256 validates submitted bytes; publisher
 // signing/secure boot is a separate production provisioning requirement.
+static constexpr size_t ZJ_OTA_CHUNK_MAX_BYTES=1024;
 static bool zjSecureOtaActive=false;
 static uint32_t zjSecureOtaSize=0,zjSecureOtaOffset=0,zjSecureOtaAt=0;
 static String zjSecureOtaSession,zjSecureOtaHash;
@@ -31,8 +32,8 @@ static void zjSetupSecureOtaHttp(){
  zjHttp.on("/api/firmware/chunk",HTTP_POST,[](){
   if(!zjSecureOtaAccess(true))return;
   long offset=0;const String data=zjArg("data");
-  if(!parseNumber(zjArg("offset").c_str(),0,0x1e0000,offset)||uint32_t(offset)!=zjSecureOtaOffset||data.isEmpty()||data.length()>768||data.length()%2||!zjHex(data,data.length())||zjSecureOtaOffset+data.length()/2>zjSecureOtaSize){zjReply(409,"{\"error\":\"ota_offset_or_chunk_invalid\"}");return;}
-  uint8_t bytes[384];const size_t size=data.length()/2;zjUnhex(data,bytes);
+  if(!parseNumber(zjArg("offset").c_str(),0,0x1e0000,offset)||uint32_t(offset)!=zjSecureOtaOffset||data.isEmpty()||data.length()>ZJ_OTA_CHUNK_MAX_BYTES*2||data.length()%2||!zjHex(data,data.length())||zjSecureOtaOffset+data.length()/2>zjSecureOtaSize){zjReply(409,"{\"error\":\"ota_offset_or_chunk_invalid\"}");return;}
+  uint8_t bytes[ZJ_OTA_CHUNK_MAX_BYTES];const size_t size=data.length()/2;zjUnhex(data,bytes);
   if(zjSecureOtaOffset==0){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
    const uint16_t expected=13;

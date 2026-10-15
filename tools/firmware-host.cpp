@@ -143,11 +143,15 @@ int main(){
  zjRcOwned=true;ota("/api/firmware/begin",begin);assert(replyStatus==409);zjRcOwned=false;
  ota("/api/firmware/begin",begin);assert(replyStatus==200&&zjSecureOtaActive);
  ota("/api/firmware/chunk","offset=1&data=00");assert(replyStatus==409&&Update.written.empty());
- for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));assert(replyStatus==200);}
- assert(!Update.activated);ota("/api/firmware/end","");assert(replyStatus==200&&Update.activated&&!zjSecureOtaActive&&zjOtaRebootAt);
+ // New receiver accepts 1024-byte chunks without disabling 384-byte clients.
+ for(size_t at=0;at<app.size();at+=1024){const size_t n=std::min(size_t(1024),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));assert(replyStatus==200);}
+ assert(Update.written==app&&!Update.activated);ota("/api/firmware/end","");assert(replyStatus==200&&Update.activated&&!zjSecureOtaActive&&zjOtaRebootAt);
  zjOtaRebootAt=0;ota("/api/firmware/begin","boardId=ZFC-A1&size=32768&sha256="+String(std::string(64,'0')));assert(replyStatus==200);
  for(size_t at=0;at<app.size();at+=384){const size_t n=std::min(size_t(384),app.size()-at);ota("/api/firmware/chunk","offset="+String(at)+"&data="+zjHexBytes(app.data()+at,n));}
  ota("/api/firmware/end","");assert(replyStatus==400&&!Update.activated&&!zjSecureOtaActive);
- ota("/api/firmware/begin",begin);clockMs+=30001;zjSecureOtaLoop(clockMs);assert(!zjSecureOtaActive&&!Update.activated);
+ ota("/api/firmware/begin",begin);
+ ota("/api/firmware/chunk","offset=0&data="+String(std::string(2050,'a')));
+ assert(replyStatus==409&&Update.written.empty()); // oversized OTA never reaches the flash writer
+ clockMs+=30001;zjSecureOtaLoop(clockMs);assert(!zjSecureOtaActive&&!Update.activated);
  std::cout<<"PASS actual firmware headers: RC first frame, exclusivity, replay, bounds, IP binding, deadman, lease, rollover; enrollment scope, counter replay, expiry, reboot revocation\n";
 }

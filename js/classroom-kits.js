@@ -40,7 +40,7 @@ function adoptNetworkStatus(d){
   mode:d.mode||state.mode,version:d.version||state.version,kitName:d.kitName||d.name||state.kitName,
   apActive:!!d.apActive,apIp:d.apIp||'',apSsid:d.apSsid||'',staConnected:!!d.staConnected,staIp:d.ip||'',ssid:d.ssid||'',
   hostname:d.hostname||state.hostname,bootId:d.bootId||'',firmwareBuiltAt:d.firmwareBuiltAt||'',
-  partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
+  partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,otaChunkMaxBytes:supportedOtaChunkSize(d),networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
   staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number.isFinite(Number(d.rssi))?Number(d.rssi):null});
 }
 function nameHosts(name){
@@ -52,6 +52,12 @@ function identityHosts(kit){
   'zebjus-'+String(kit.board||'').replace('ZFC-','').toLowerCase()+'-'+(kit.kitCode||kit.code)+'.local',
   ...discoveredKits.filter(k=>k.kitId===(kit.kitId||kit.id)).map(k=>k.ip)];
  return [...new Set(hosts.filter(safeKitHost))];
+}
+function supportedOtaChunkSize(status){
+ // Legacy encrypted-OTA firmware has no advertised chunk limit.
+ // Capability comes from the authenticated live status, never a version guess.
+ const limit=Number(status?.otaChunkMaxBytes);
+ return Number.isSafeInteger(limit)&&limit>=1024?1024:384;
 }
 function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
@@ -1415,11 +1421,13 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
    const digest=hex(root.ZfcCrypto.sha256(bytes));
    try{
     let lastUploadPercent=-1;
+    const chunkSize=supportedOtaChunkSize(pre);
+    onProgress({phase:'upload',percent:4,message:'Encrypted '+transport.toUpperCase()+' APP OTA • '+chunkSize+'-byte chunks'});
     const begin=await wifiDirect(ip,key,'/api/firmware/begin','POST',{size:bytes.length,sha256:digest,boardId});
     if(begin.kitId!==deviceId||begin.offset!==0)throw Error('Encrypted OTA target did not confirm the selected Device ID');
-    for(let offset=0;offset<bytes.length;offset+=384){
+    for(let offset=0;offset<bytes.length;offset+=chunkSize){
      if(ticket!==reconnectTicket)throw Error('Firmware update cancelled by kit selection change');
-     const chunk=bytes.slice(offset,offset+384),ack=await wifiDirect(ip,key,'/api/firmware/chunk','POST',{offset,data:hex(chunk)});
+     const chunk=bytes.slice(offset,offset+chunkSize),ack=await wifiDirect(ip,key,'/api/firmware/chunk','POST',{offset,data:hex(chunk)});
      if(ack.kitId!==deviceId||ack.offset!==offset+chunk.length)throw Error('Encrypted firmware chunk offset was not confirmed');
      const percent=Math.min(87,4+Math.round(ack.offset/bytes.length*82));if(percent!==lastUploadPercent){lastUploadPercent=percent;onProgress({phase:'upload',percent,message:'Encrypted '+transport.toUpperCase()+' APP upload • '+Math.round(ack.offset/bytes.length*100)+'%'})}
     }
@@ -1536,7 +1544,7 @@ root.ZebjusKits={
  getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

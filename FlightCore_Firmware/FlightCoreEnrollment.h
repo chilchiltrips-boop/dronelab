@@ -3,6 +3,12 @@
 // Manufacturer writes a random 256-bit label secret using protected USB admin.
 #include <mbedtls/md.h>
 #include <mbedtls/gcm.h>
+#include <memory>
+#include <new>
+// A 1024-byte OTA chunk expands to ~2068 form-encoded plaintext bytes.
+// AES-GCM adds a nonce and tag; the encrypted envelope is transmitted as hex.
+// Bound the payload and allocate on the heap, not the ESP32 HTTP task stack.
+static constexpr size_t ZJ_AUTH_PAYLOAD_HEX_MAX=4352;
 
 static String zjLabelSecret,zjDiagnosticKey,zjBootId,zjAuthBody;
 struct ZjChallenge {String nonce,kind,client;IPAddress ip;uint32_t at=0;};
@@ -49,7 +55,7 @@ static bool zjSessionAuthenticated(){
  }
  if(zjHttp.header("X-ZJ-Device")!=zjKitId)return false;
  const String id=zjHttp.header("X-ZJ-Session"),counter=zjHttp.header("X-ZJ-Seq"),payload=zjHttp.arg("payload");
- if(counter.length()>10||!counter.length()||payload.length()>2048)return false;
+ if(counter.length()>10||!counter.length()||payload.length()>ZJ_AUTH_PAYLOAD_HEX_MAX)return false;
  for(size_t i=0;i<counter.length();i++)if(!isdigit(counter[i]))return false;
  const uint64_t wide=strtoull(counter.c_str(),nullptr,10);if(!wide||wide>0xffffffffULL)return false;
  for(int i=0;i<8;i++){
@@ -62,11 +68,15 @@ static bool zjSessionAuthenticated(){
   if(!zjEqual(zjHmac(s.key,msg),zjHttp.header("X-ZJ-Proof")))return false;
   if(method=="POST"){
    if(payload.length()<56||payload.length()%2||!zjHex(payload,payload.length()))return false;
-   uint8_t bytes[1024],key[32],plain[1000];zjUnhex(payload,bytes);zjUnhex(s.key,key);
-   const size_t n=payload.length()/2-28;mbedtls_gcm_context ctx;mbedtls_gcm_init(&ctx);
+   const size_t cipherBytes=payload.length()/2,n=cipherBytes-28;
+   std::unique_ptr<uint8_t[]> bytes(new(std::nothrow) uint8_t[cipherBytes]);
+   std::unique_ptr<uint8_t[]> plain(new(std::nothrow) uint8_t[n+1]);
+   if(!bytes||!plain)return false;
+   uint8_t key[32];zjUnhex(payload,bytes.get());zjUnhex(s.key,key);
+   mbedtls_gcm_context ctx;mbedtls_gcm_init(&ctx);
    int err=mbedtls_gcm_setkey(&ctx,MBEDTLS_CIPHER_ID_AES,key,256);
-   if(!err)err=mbedtls_gcm_auth_decrypt(&ctx,n,bytes,12,(const uint8_t*)msg.c_str(),0,bytes+12+n,16,bytes+12,plain);
-   mbedtls_gcm_free(&ctx);if(err)return false;plain[n]=0;zjAuthBody=String((const char*)plain);
+   if(!err)err=mbedtls_gcm_auth_decrypt(&ctx,n,bytes.get(),12,(const uint8_t*)msg.c_str(),0,bytes.get()+12+n,16,bytes.get()+12,plain.get());
+   mbedtls_gcm_free(&ctx);if(err)return false;plain[n]=0;zjAuthBody=String((const char*)plain.get());
   }
   s.seq=uint32_t(wide);zjRequestSession=i;zjAuthAdmin=s.admin;return true;
  }return false;
