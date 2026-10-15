@@ -303,7 +303,8 @@ async function uploadAdminApp(file){
  if(el('kitOtaAdminKey'))el('kitOtaAdminKey').value='';
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
  if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
- otaBusy=true;otaCancelRequested=false;reconnectEnabled=false;
+ otaBusy=true;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;reconnectEnabled=false;
+ try{native?.setOtaKeepAwake?.(true)}catch{}
  const id=verifiedKitId,host=ip,transport=link;
  let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,board='',result=null;
  const checkTarget=(allowCancellation=false)=>{
@@ -322,6 +323,20 @@ async function uploadAdminApp(file){
    throw Error('Controller cannot report signed OTA offset; do NOT retry the flash write. Update firmware over USB if required.');
   return {state,ota};
  };
+ const waitResume=async offset=>{
+  if(!otaPaused&&!otaNeedsRecheck)return;
+  show('OTA paused • waiting for foreground and signed offset verification','warn');
+  const deadline=Date.now()+45000;
+  while(otaPaused&&Date.now()<deadline){
+   if(otaCancelRequested)throw Error('OTA cancelled while backgrounded');
+   await otaSleep(250);
+  }
+  if(otaPaused)throw Error('OTA paused too long; safe recovery requires a new verified session');
+  otaNeedsRecheck=false;
+  const {ota}=await signedProgress();
+  if(!owned(ota,offset))throw Error('OTA resume unsafe: signed session/hash/offset changed; no further writes');
+  show('OTA resumed • signed offset '+offset+' verified','good');
+ };
  const owned=(ota,offset)=>ota.active===true&&ota.owned===true&&ota.size===bytes.length&&
   String(ota.sha256).toLowerCase()===hash&&ota.offset===offset;
  if(el('kitAppOta'))el('kitAppOta').disabled=true;
@@ -331,10 +346,27 @@ async function uploadAdminApp(file){
   const catalogResponse=await fetch('./firmware-catalog.json',{cache:'no-store'});
   if(!catalogResponse.ok)throw Error('Official firmware catalog is unavailable in this Android release.');
   const catalog=await catalogResponse.json();
-  board=id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1';
+  const target=policy?.otaTarget?.({method:'wifi',kit:{connected:online&&onKitLink,transport:link,kitId:id,board:id.slice(0,6)}});
+  board=target?.boardId||(id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1');
+  if(target&&target.kitId!==id)throw Error('Selected Wi-Fi Kit is not verified for OTA');
   const entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
   if(!release?.available||!release.sha256||file.name!==release.file)throw Error('Choose the official '+board+' APP firmware from the currently bundled release.');
-  bytes=new Uint8Array(await file.arrayBuffer());
+  // Reject oversized, wrong type and board image before allocating whole firmware.
+  const advertisedSize=Number(file.size);
+  if(!Number.isSafeInteger(advertisedSize)||advertisedSize!==release.size||
+     advertisedSize<32768||advertisedSize>0x1e0000)
+   throw Error('Firmware size does not match official APP catalog; nothing allocated/flashed');
+  if(file.type&&file.type!=='application/octet-stream'&&file.type!=='application/x-binary')
+   throw Error('Firmware MIME type unsupported; choose the official APP .bin');
+  if(typeof file.slice!=='function')throw Error('Firmware picker does not support header verification');
+  const header=new Uint8Array(await file.slice(0,208).arrayBuffer());
+  const hChip=header[12]|(header[13]<<8),hDescriptor=(header[32]|header[33]<<8|header[34]<<16|header[35]<<24)>>>0;
+  if(header.length!==208||header[0]!==0xe9||header[1]<1||header[1]>16||
+     hChip!==(board==='ZFC-A2'?13:5)||hDescriptor!==0xabcd5432)
+   throw Error('ESP header or physical board mismatch; full image not allocated');
+  const buffer=await file.arrayBuffer();
+  if(buffer.byteLength!==advertisedSize)throw Error('Firmware file changed size during read');
+  bytes=new Uint8Array(buffer);
   checkTarget();
   hash=firmwareHex(window.ZfcCrypto.sha256(bytes));
   if(bytes.length!==release.size||hash!==String(release.sha256).toLowerCase())throw Error('Official APP image size/SHA-256 mismatch. Nothing was flashed.');
@@ -368,6 +400,7 @@ async function uploadAdminApp(file){
   let offset=0,lastPct=-1;
   while(offset<bytes.length){
    checkTarget();
+   await waitResume(offset);
    const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
    const next=offset+chunk.length;
    let completed=false;
@@ -379,11 +412,11 @@ async function uploadAdminApp(file){
      completed=true;
     }catch(error){
      let progress;
-     try{progress=(await signedProgress()).ota}
+     try{if(otaPaused)await waitResume(offset);progress=(await signedProgress()).ota}
      catch(e){throw Error('WRITE UNCONFIRMED at '+offset+': '+e.message+'. Do not restart OTA without checking the Kit.');}
      if(owned(progress,next)){
       completed=true;show('Recovered lost chunk ACK at byte '+next,'warn');
-     }else if(owned(progress,offset)&&attempt===0){
+     }else if(owned(progress,offset)&&attempt===0&&policy?.retryDisposition?.(error)?.retry!==false){
       show('Signed offset unchanged at '+offset+'; retrying this chunk once','warn');
      }else{
       throw Error('WRITE UNCONFIRMED at '+offset+': offset/session mismatch ('+progress.offset+'). Do not retry automatically.');
@@ -396,6 +429,7 @@ async function uploadAdminApp(file){
    if(pct!==lastPct){lastPct=pct;show('Encrypted APP upload '+pct+'% • '+chunkSize+' B chunks');}
   }
   checkTarget();
+  await waitResume(offset);
   endAttempted=true; // An uncertain END could already have selected a new boot partition.
   try{
    const done=await admin.request('/api/firmware/end','POST');
@@ -438,7 +472,8 @@ async function uploadAdminApp(file){
   show('Secure APP OTA stopped: '+String(error?.message||error)+abortMessage+' • no blind retries','warn');
   throw error;
  }finally{
-  otaBusy=false;otaCancelRequested=false;auth=null;
+  otaBusy=false;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;auth=null;
+  try{native?.setOtaKeepAwake?.(false)}catch{}
   for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=false;
   if(el('kitAppOta'))el('kitAppOta').disabled=!online||!onKitLink||!!rcSession;
   if(el('kitOtaCancel'))el('kitOtaCancel').disabled=true;
@@ -487,7 +522,13 @@ function bind(){
  setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
 function networkChanged(){forgetGrants();forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
-window.zebjusNativeAppPaused=()=>{forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android app paused; request delivery unconfirmed')};
+window.zebjusNativeAppPaused=()=>{
+ if(otaBusy){otaPaused=true;otaNeedsRecheck=true;cancelNativePending('Android backgrounded during OTA: result uncertain until signed offset recovery')}
+ else forgetNativePin();
+};
+window.zebjusNativeAppResumed=()=>{
+ if(otaBusy){otaPaused=false;show('App resumed • signed OTA offset must be verified before next write','warn')}
+};
  window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
