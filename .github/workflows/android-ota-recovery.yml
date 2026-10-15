@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'companion-network.js'
+      - 'js/kit-network-policy.js'
       - 'android-native-bridge.js'
       - 'tools/android-origin-wifi-nsd.test.mjs'
       - 'companion.html'
@@ -53,7 +54,7 @@ jobs:
         run: |
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
           cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
-          cp js/kit-auth.js mobile-android/app/src/main/assets/js/
+          cp js/kit-auth.js js/kit-network-policy.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
           cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
