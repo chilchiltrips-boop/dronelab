@@ -11,6 +11,7 @@ on:
       - 'tools/network-transport.test.mjs'
       - 'tools/controls-browser.mjs'
       - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
       - 'tools/verify_signed_android_release.py'
       - 'tools/wait-release-checks.mjs'
       - '.github/workflows/build-qr-android.yml'
