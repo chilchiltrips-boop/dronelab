@@ -9,21 +9,25 @@ test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only 
  assert.ok(ino.includes('zjNetworkSetup();')&&ino.includes('zjNetworkLoop(now);'));
  assert.ok(!f.includes('WiFi.begin("')&&!f.includes('SSID="'),'No hard-coded router credentials');
 });
-test('Network operations are authenticated and flight outputs remain disabled',()=>{
- const f=read('FlightCore_Firmware/FlightCoreNetwork.h');
- for(const text of ['X-ZJ-Key','zjAuthenticated()','access_key_required','hardware_arming_disabled','motorsArmed\\":false','/api/rc/claim','/api/rc/release','/api/rc/preview','zjRcState()','/api/ota','U_FLASH','u.buf[0]!=0xe9','chip!=13','chip!=5'])assert.ok(f.includes(text),text);
+test('Network operations use signed sessions and retired multipart route cannot update firmware',()=>{
+ const f=read('FlightCore_Firmware/FlightCoreNetwork.h'),ota=read('FlightCore_Firmware/FlightCoreOta.h');
+ for(const word of ['X-ZJ-Session','X-ZJ-Proof','zjAuthenticated()','legacy_ota_disabled_use_encrypted_session','hardware_arming_disabled','/api/rc/claim','/api/rc/release','/api/rc/preview','zjRcState()','/api/ota'])assert.ok(f.includes(word),word);
+ assert.match(ota,/zjSecureOtaAccess\(true\)/);
+ assert.match(ota,/Update\.begin\(size,U_FLASH\)/);
  assert.ok(!f.includes('ledcWrite(ESC'),'No motor mixer on diagnostics API');
 });
-test('Android local HTTP is isolated from bundled HTTPS WebView and public sites',()=>{
+test('Android local HTTP uses verified Wi-Fi and signed AES-GCM session requests',()=>{
  const n=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
  const m=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
- assert.ok(n.includes('@JavascriptInterface public void request('));
+ assert.ok(n.includes('@JavascriptInterface public void requestSecure('));
+ assert.ok(n.includes('Legacy raw-key requests are disabled.'));
  assert.ok(n.includes('privateIp(')&&n.includes('allowed(method,route)'));
- assert.ok(n.includes('wifi.openConnection(target)'));
- assert.ok(n.includes('otaReply(')&&n.includes('OTA_DOCUMENT_PICKER'));
+ assert.ok(n.includes('wifi.openConnection(new URL("http://"+ip+route))'));
+ assert.ok(n.includes('"/api/firmware/chunk"'));
+ assert.doesNotMatch(n,/multipart\/form-data/);
  assert.ok(m.includes('MIXED_CONTENT_NEVER_ALLOW'));
  assert.ok(m.includes('view.addJavascriptInterface(nativeFlightCore,"ZebjusNative")'));
- assert.ok(!n.includes('http://"+ip+form'),'Only fixed local path requests');
+ assert.ok(m.includes('onShowFileChooser'));
 });
 test('WebRTC kit management needs verified pairing and Android operator opt-in',()=>{
  const p=read('pairing-core.js'),a=read('companion-network.js'),w=read('pairing-web.js');
@@ -58,17 +62,17 @@ test('AERION 1.4.0 USB-only provisioning and browser origin restrictions remain 
  assert.ok(!net.includes('/api/admin/'),'remote admin and key changes must not be exposed');
 });
 
-test('Android APP OTA never falls back to default cellular/system network',()=>{
+test('Android encrypted APP chunks are bound to Wi-Fi, never cellular/system network',()=>{
  const n=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
- const body=n.slice(n.indexOf('void onFirmwareFile(Uri file)'),n.indexOf('void shutdown()'));
- assert.ok(body.includes('Network wifi=wifiNetwork();'), 'resolve intended Wi-Fi network for upload');
- assert.match(body,/if\(wifi==null\)throw new IllegalStateException\(/,'missing Wi-Fi must block before sending bytes');
- assert.ok(body.includes('connection=(HttpURLConnection)wifi.openConnection(target);'),'upload must bind to Wi-Fi');
- assert.ok(!body.includes('target.openConnection()'),'no default-network/cellular fallback for firmware bytes');
- const firmware=read('FlightCore_Firmware/FlightCoreNetwork.h');
- assert.ok(firmware.includes('String(zjClientTransport())=="STA"'), 'STA is an explicitly supported OTA interface');
+ const js=read('companion-network.js');
+ const body=n.slice(n.indexOf('private void submit('),n.indexOf('@JavascriptInterface public void openWifiSettings'));
+ assert.match(body,/Network wifi=wifiNetwork\(\)/);
+ assert.match(body,/if\(wifi==null\)throw new IllegalStateException/);
+ assert.match(body,/wifi\.openConnection\(new URL/);
+ assert.ok(js.includes("ZebjusKitAuth.open(nativeTransport,id,credential,'admin')"));
+ assert.ok(js.includes("'/api/firmware/chunk'"));
+ assert.ok(read('FlightCore_Firmware/FlightCoreOta.h').includes('zjSecureOtaAccess(true)'));
 });
-
 test('Python Network Lab reports actual authenticated AP request even while STA is online',async()=>{
  const {runInNewContext}=await import('node:vm');
  const id='ZFC-A1-012345ABCDEF',state={connected:true,transport:'ap',kitId:id};

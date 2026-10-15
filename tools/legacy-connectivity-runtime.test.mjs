@@ -279,15 +279,12 @@ test('Disconnect cancels late STA handover and header discovery replies',async()
   assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().owner,false);
  }finally{f.dispose()}}
 });
-test('OTA verifies changed boot ID and same Device ID through Kit Name when DHCP reuses the old IP',async()=>{
+test('legacy multipart OTA is rejected; encrypted OTA remains the upgrade path',async()=>{
  const f=fixture({paired:true});try{
   await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=5;
-  const result=await f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A1',version:'1.4.6'});
-  assert.equal(result.verified,true);assert.equal(result.kitId,id);assert.equal(f.api.getState().owner,false);
-  assert.equal(f.api.getState().bootId,'c2'.repeat(16));assert.equal(f.api.getState().connected,true);
-  assert.ok(f.requests.some(r=>r.host==='zebjus-drone-2.local'&&r.route==='/api/status'));
-  const writesAfterMismatch=f.requests.filter(r=>r.host==='192.168.1.20'&&r.route==='/api/status');
-  assert.equal(writesAfterMismatch.length,3,'No credential request to the old IP after its identity changes');
+  await assert.rejects(f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A1',version:'1.4.6'}),/Legacy raw-key multipart OTA is disabled/);
+  assert.equal(f.api.getState().owner,false);
+  assert.ok(!f.requests.some(r=>r.route==='/api/ota'));
  }finally{f.dispose()}
 });
 test('selection rejects changed hardware before trusting discovery or sending a saved key',async()=>{

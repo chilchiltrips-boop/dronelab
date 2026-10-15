@@ -73,7 +73,11 @@ test('Python reads actual identity-bound firmware snapshots without claiming RC 
 });
 test('firmware scopes OTA to idle USB-paired AP/STA; setup labels never grant OTA',()=>{
  const source=read('FlightCore_Firmware/FlightCoreNetwork.h'),auth=read('FlightCore_Firmware/FlightCoreEnrollment.h');
- assert.match(source,/zjOtaAuthorized=zjAuthenticated\(\)&&zjAuthAdmin&&\(String\(zjClientTransport\(\)\)=="STA"\|\|String\(zjClientTransport\(\)\)=="AP"\)&&!zjRcOwned&&!zjNetTesting/);
+ const ota=read('FlightCore_Firmware/FlightCoreOta.h');
+ assert.match(ota,/zjSecureOtaAccess\(\)/);
+ assert.match(ota,/zjAuthAdmin\|\|zjRequestSession<0/);
+ assert.match(ota,/controller_or_network_busy/);
+ assert.match(source,/legacy_ota_disabled_use_encrypted_session/);
  assert.match(auth,/c\.nonce=""; \/\/ consume before verification/);
  assert.match(auth,/wide<=s\.seq/);assert.match(auth,/zjAuthFailures>=3/);
  assert.doesNotMatch(source,/Serial\.print\(zjApPass\)/);
