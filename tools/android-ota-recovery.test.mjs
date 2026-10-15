@@ -22,7 +22,7 @@ function harness(mode){
  const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[1]=2;bytes[12]=5;
  bytes.set([0x32,0x54,0xcd,0xab],32);bytes.fill(0x23,176,208);
  const build=Array.from(bytes.slice(176,208),v=>v.toString(16).padStart(2,'0')).join('');
- const file={name:'official-app.bin',arrayBuffer:async()=>bytes.buffer};
+ const file={name:'official-app.bin',size:bytes.length,type:'application/octet-stream',slice:(start,end)=>({arrayBuffer:async()=>bytes.slice(start,end).buffer}),arrayBuffer:async()=>bytes.buffer};
  const ota={active:false,owned:false,offset:0,size:0,sha256:'',rebootPending:false};
  let runningBoot=bootA,runningVersion='1.7.3',runningBuild='old',calls=[],aborts=0,ends=0,losses=0;
  const currentStatus=()=>({kitId:id,board,requestTransport:'AP',bootId:runningBoot,mode:'ap',
@@ -102,7 +102,7 @@ test('teacher Cancel waits for current write and signed abort; never sends more 
  assert.equal(h.calls.length,1);assert.equal(h.ends,0);assert.equal(h.aborts,1);
 });
 test('native + JS timers, cancellation and OTA progress contract agree',()=>{
- assert.match(client,/write\?18000:6000/);
+ assert.match(client,/policy\?\.requestTimeout\?\.\(route,method,link,'android'\)/);
  assert.match(client,/native\.cancelRequest\?\.\(id\)/);
  assert.match(client,/signedProgress\(\)/);
  assert.match(client,/owned\(progress,next\)/);
