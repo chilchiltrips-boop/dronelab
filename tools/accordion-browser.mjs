@@ -33,11 +33,17 @@ try{
    const outer=page.locator('#dwLegacyConnection');
    assert.equal(await outer.count(),1);
    assert.equal(await outer.evaluate(e=>e.open),false);
-   assert.equal(await page.locator('#kitAdvancedHardware').evaluate(e=>e.open),true);
    assert.equal(await page.locator('#kitNewSetup').isVisible(),false,'recovery must stay folded initially');
    await outer.locator(':scope > summary').click();
+   await page.waitForFunction(()=>document.querySelector('#kitAdvancedHardware')?.open);
    assert.equal(await outer.evaluate(e=>e.open),true);
    assert.equal(await page.locator('#kitNewSetup').isVisible(),true,'one click exposes setup recovery');
+   // The same native toggle event must work for keyboard-assisted opening.
+   await outer.locator(':scope > summary').focus();
+   await page.keyboard.press('Enter');assert.equal(await outer.evaluate(e=>e.open),false);
+   await page.keyboard.press('Enter');
+   await page.waitForFunction(()=>document.querySelector('#kitAdvancedHardware')?.open);
+   assert.equal(await page.locator('#kitNewSetup').isVisible(),true,'keyboard opens recovery in one action');
    // First visit to Security opens existing USB maintenance accordion.
    await page.locator('[data-dw-view="security"]').click();
    assert.equal(await page.locator('#dw-panel-security').isVisible(),true);

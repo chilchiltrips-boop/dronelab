@@ -164,13 +164,16 @@
    // Advanced details. The unified page has an outer Advanced section, so
    // unwrap only the redundant disclosure (keep every control and listener).
    const innerManual=$('kitAdvancedHardware');
-   if(innerManual){innerManual.open=true;innerManual.classList.add('dw-unwrapped-advanced')}
-   // The outer Advanced disclosure must expose Kit Setup in a single click.
-   legacy.addEventListener('click',event=>{
-    if(event.target.closest('summary')!==heading)return;
+   if(innerManual)innerManual.classList.add('dw-unwrapped-advanced');
+   // An initially collapsed parent <details> may not retain the nested
+   // disclosure's open property after relocation. Synchronize on native
+   // toggle instead: works for mouse, keyboard and scripted opens.
+   const exposeAdvanced=()=>{
+    if(!legacy.open)return;
     const inner=$('kitAdvancedHardware');
     if(inner){inner.open=true;inner.classList.add('dw-unwrapped-advanced')}
-   });
+   };
+   legacy.addEventListener('toggle',exposeAdvanced);
    body('connection').append(legacy);
    relocate('.firmware-grid','firmware');
    relocate('.firmware-safety-strip','firmware');
