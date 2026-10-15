@@ -10,7 +10,7 @@ const page=read('index.html');
 const native=read('companion-network.js');
 const cockpit=read('companion-flight.js');
 test('exclusive Wi-Fi policy is advertised; manual AP and saved-router fallback replace coexistence',()=>{
- assert.match(ino,/FW_VERSION="1\.4\.6"/);
+ assert.ok(ino.includes('FW_VERSION="'+read('VERSION.txt').trim()+'"'));
  assert.ok(fw.includes('FlightCoreWifiPolicy.h'));
  assert.ok(fw.includes('exclusiveWifi'));
  assert.ok(!fw.includes('AP_STA_COEXISTENCE'));

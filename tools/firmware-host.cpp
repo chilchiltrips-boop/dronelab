@@ -94,6 +94,35 @@ int main(){
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(admin.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+admin.id+"|1|");
  assert(zjAllow()&&zjAuthAdmin&&zjSetupAuthorized());
  zjAuthResetRequest();requestIP=IPAddress(192,168,4,99);assert(!zjAllow());requestIP=IPAddress(192,168,4,2);
+ // Exercise real AES-256-GCM admin decryption for a 1024-byte encrypted
+ // OTA chunk: never just bypass authentication in the large-payload test.
+ const signedOtaPost=[&](const ZjSession& s,String route,uint32_t seq,const String& body,bool tamper=false){
+  uint8_t keyBytes[32],iv[12]={0};zjUnhex(s.key,keyBytes);
+  const std::string clear=body.c_str();
+  std::vector<uint8_t> ciphertext(clear.size()+16);uint8_t tag[16];
+  EVP_CIPHER_CTX* ctx=EVP_CIPHER_CTX_new();assert(ctx);
+  int n=0,m=0;
+  assert(EVP_EncryptInit_ex(ctx,EVP_aes_256_gcm(),nullptr,nullptr,nullptr)==1);
+  assert(EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_SET_IVLEN,sizeof(iv),nullptr)==1);
+  assert(EVP_EncryptInit_ex(ctx,nullptr,nullptr,keyBytes,iv)==1);
+  assert(EVP_EncryptUpdate(ctx,ciphertext.data(),&n,reinterpret_cast<const uint8_t*>(clear.data()),int(clear.size()))==1);
+  assert(EVP_EncryptFinal_ex(ctx,ciphertext.data()+n,&m)==1);
+  assert(EVP_CIPHER_CTX_ctrl(ctx,EVP_CTRL_GCM_GET_TAG,sizeof(tag),tag)==1);
+  EVP_CIPHER_CTX_free(ctx);
+  String payload=zjHexBytes(iv,sizeof(iv))+zjHexBytes(ciphertext.data(),n+m)+zjHexBytes(tag,sizeof(tag));
+  prepare(route);zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=s.id;
+  zjHttp.headers["X-ZJ-Seq"]=String(seq);zjHttp.args["payload"]=payload;
+  const String proofMsg="POST|"+route+"|"+zjKitId+"|"+zjBootId+"|"+s.id+"|"+String(seq)+"|"+payload;
+  zjHttp.headers["X-ZJ-Proof"]=tamper?"invalid":zjHmac(s.key,proofMsg);
+  return zjAllow();
+ };
+ const String largeChunkBody="offset=0&data="+String(std::string(2048,'a'));
+ assert(signedOtaPost(admin,"/api/firmware/chunk",2,largeChunkBody)&&zjAuthAdmin);
+ assert(zjArg("data").length()==2048&&zjArg("offset")=="0"); // 1024 bytes decoded intact
+ assert(!signedOtaPost(admin,"/api/firmware/chunk",2,largeChunkBody)); // no replay
+ assert(!signedOtaPost(admin,"/api/firmware/chunk",3,largeChunkBody,true)); // bad proof
+ assert(!signedOtaPost(admin,"/api/firmware/chunk",3,"offset=0&data="+String(std::string(2500,'a')))); // bounded payload
+
 
  // Simple AP Wi-Fi setup works without BOOT, USB or manufacturer labels.
  zjPrefs.putString("label","");zjEnrollmentInit();transport="AP";clockMs+=1000;
