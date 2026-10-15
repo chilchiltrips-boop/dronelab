@@ -104,3 +104,207 @@
  .dw-view.settings-workspace #connectionFlow .qr-code-entry{grid-template-columns:minmax(0,1fr)}
  .dw-view.settings-workspace #connectionFlow .qr-code-entry>#pairConnectCodeBtn{width:100%}
 }
+
+/* 2026-10-15: Scroll-contained hardware workspace.
+ * Desktop: neither sidebar nor content should extend the document; only
+ * a menu longer than the viewport gets its own scrollbar.
+ * Mobile: single natural document scrollbar, sticky horizontal nav.
+ */
+#tab-firmware.active{
+ display:flex;
+ flex-direction:column;
+ min-height:0!important;
+ padding:8px 12px!important;
+ overflow:hidden;
+}
+#tab-firmware .firmware-hero{display:none!important}
+#tab-firmware .dw-shell{
+ flex:1 1 auto;
+ height:var(--dw-height,calc(100dvh - 155px));
+ min-height:0;
+ max-height:var(--dw-height,calc(100dvh - 155px));
+ overflow:hidden;
+ align-items:stretch;
+ gap:10px;
+ grid-template-columns:200px minmax(0,1fr);
+}
+#tab-firmware .dw-sidebar{
+ position:relative;
+ top:auto;
+ z-index:auto;
+ min-height:0;
+ height:100%;
+ max-height:100%;
+ overflow:hidden;
+ padding:8px;
+ gap:7px;
+ grid-template-rows:auto minmax(0,1fr) auto;
+}
+#tab-firmware .dw-sidebar-title{padding:5px 7px;font-size:10px}
+#tab-firmware .dw-nav-list{
+ min-height:0;
+ max-height:100%;
+ overflow-y:auto;
+ overflow-x:hidden;
+ overscroll-behavior-y:contain;
+ scrollbar-width:thin;
+ scrollbar-color:#365b69 transparent;
+ align-content:start;
+}
+#tab-firmware .dw-nav{
+ min-height:41px;
+ padding:7px 9px;
+ gap:9px;
+ font-size:12px;
+}
+#tab-firmware .dw-icon{width:20px;height:20px;flex-basis:20px}
+#tab-firmware .dw-sidebar-foot{padding:8px 6px}
+#tab-firmware .dw-content{
+ display:flex;
+ flex-direction:column;
+ gap:7px;
+ min-height:0;
+ height:100%;
+ overflow:hidden;
+}
+#tab-firmware .dw-topline{
+ flex:0 0 auto;
+ display:flex;
+ min-height:36px;
+ padding:6px 10px;
+ gap:8px;
+ border-radius:9px;
+}
+#tab-firmware .dw-topline>div{
+ display:flex;
+ flex-wrap:wrap;
+ align-items:center;
+ gap:5px 9px;
+ min-width:0;
+}
+#tab-firmware .dw-topline b{font-size:12px}
+#tab-firmware .dw-topline span:not(.status){display:inline;font-size:10px;margin:0}
+#tab-firmware .dw-topline .status{font-size:9px;padding:4px 7px;white-space:nowrap}
+#tab-firmware .dw-workspace-notice{flex:0 0 auto;padding:7px 10px;font-size:11px;line-height:1.35}
+#tab-firmware .dw-view{
+ flex:1 1 auto;
+ display:flex;
+ flex-direction:column;
+ gap:6px;
+ min-height:0;
+ overflow:hidden;
+}
+#tab-firmware .dw-view-header{
+ flex:0 0 auto;
+ min-height:32px;
+ gap:8px;
+ padding:2px 2px 3px;
+}
+#tab-firmware .dw-view-header small,
+#tab-firmware .dw-view-header p{display:none}
+#tab-firmware .dw-view-header h2{font-size:17px;line-height:1.2;margin:0}
+#tab-firmware .dw-view-content{
+ flex:1 1 auto;
+ min-height:0;
+ height:100%;
+ overflow-y:auto;
+ overflow-x:hidden;
+ overscroll-behavior-y:contain;
+ scrollbar-width:thin;
+ scrollbar-color:#365b69 transparent;
+ align-content:start;
+ gap:9px;
+ padding:0 5px 8px 0;
+}
+#tab-firmware .dw-view-content>*{min-width:0}
+#tab-firmware .dw-view #dw-body-mobile>.settings-heading{display:none!important}
+#tab-firmware .dw-view #dw-body-mobile .tp-dialog-header p{display:none}
+#tab-firmware .dw-view #dw-body-mobile .tp-dialog-header h2{font-size:13px}
+#tab-firmware .dw-view #dw-body-mobile .tp-dialog-header{padding:7px 10px}
+#tab-firmware .dw-view #dw-body-mobile #kitMobilePairDetails>summary{
+ font-size:11px;
+ padding:7px 10px;
+ min-height:31px;
+}
+#tab-firmware .dw-view #dw-body-mobile #connectionFlow .qr-hero{margin-bottom:5px}
+#tab-firmware .dw-view #dw-body-mobile #connectionFlow .qr-hero p{display:none}
+#tab-firmware .dw-view .kit-card,
+#tab-firmware .dw-view .form-card{scroll-margin-top:10px}
+#tab-firmware .dw-view .fw-serial-console{overflow:auto;overscroll-behavior:contain}
+@media(min-width:781px) and (max-width:1290px){
+ #tab-firmware .dw-shell{grid-template-columns:70px minmax(0,1fr)}
+ #tab-firmware .dw-sidebar{padding:7px 5px}
+ #tab-firmware .dw-nav{min-height:45px;padding:7px}
+ #tab-firmware .dw-nav-label,
+ #tab-firmware .dw-sidebar-title span,
+ #tab-firmware .dw-sidebar-foot>div{display:none}
+ #tab-firmware .dw-sidebar-title,
+ #tab-firmware .dw-sidebar-foot{justify-content:center}
+}
+@media(max-width:780px){
+ #tab-firmware.active{
+  display:block;
+  overflow:visible;
+  padding:7px!important;
+ }
+ #tab-firmware .dw-shell{
+  display:flex;
+  flex-direction:column;
+  height:auto;
+  max-height:none;
+  min-height:0;
+  overflow:visible;
+  gap:7px;
+ }
+ #tab-firmware .dw-sidebar{
+  position:sticky;
+  top:var(--dw-mobile-top,70px);
+  z-index:35;
+  align-self:stretch;
+  height:auto;
+  max-height:none;
+  padding:6px;
+  gap:0;
+  display:block;
+  overflow:visible;
+ }
+ #tab-firmware .dw-sidebar-title,
+ #tab-firmware .dw-sidebar-foot{display:none}
+ #tab-firmware .dw-nav-list{
+  display:flex;
+  gap:5px;
+  padding-bottom:3px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  max-height:none;
+  overscroll-behavior-x:contain;
+ }
+ #tab-firmware .dw-nav{
+  flex:0 0 auto;
+  width:auto;
+  min-width:108px;
+  min-height:42px;
+  gap:6px;
+  padding:7px 9px;
+ }
+ #tab-firmware .dw-nav-label{display:inline;font-size:11px}
+ #tab-firmware .dw-icon{width:18px;height:18px;flex-basis:18px}
+ #tab-firmware .dw-content,
+ #tab-firmware .dw-view{
+  height:auto;
+  min-height:0;
+  overflow:visible;
+ }
+ #tab-firmware .dw-view-content{
+  height:auto;
+  min-height:0;
+  overflow:visible;
+  padding:0 0 8px;
+ }
+ #tab-firmware .dw-topline{min-height:35px}
+}
+@media(max-width:420px){
+ #tab-firmware .dw-nav{min-width:100px}
+ #tab-firmware .dw-topline{padding:6px 8px}
+ #tab-firmware .dw-topline span:not(.status){font-size:9px}
+}

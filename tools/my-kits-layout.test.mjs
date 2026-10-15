@@ -28,3 +28,17 @@ test('existing controls are moved, never cloned, and keep their kit and WebRTC h
  assert.match(read('js/ui-controls.js'),/if\(name==='settings'\)/);
  assert.match(read('devices-workspace.css'),/grid-template-columns:210px minmax\(0,1fr\)/);
 });
+
+test('fixed-height desktop Devices panels scroll independently; mobile stays natural',()=>{
+ const css=read('devices-workspace.css');
+ const behavior=read('js/devices-workspace.js');
+ assert.match(css,/#tab-firmware \.dw-shell\{[\s\S]*?height:var\(--dw-height/);
+ assert.match(css,/#tab-firmware \.dw-sidebar\{[\s\S]*?grid-template-rows:auto minmax\(0,1fr\) auto/);
+ assert.match(css,/#tab-firmware \.dw-nav-list\{[\s\S]*?overflow-y:auto/);
+ assert.match(css,/#tab-firmware \.dw-view-content\{[\s\S]*?overflow-y:auto/);
+ assert.match(css,/@media\(max-width:780px\)\{[\s\S]*?#tab-firmware \.dw-shell\{[\s\S]*?height:auto/);
+ assert.match(css,/#tab-firmware \.firmware-hero\{display:none!important\}/);
+ assert.match(behavior,/function sizeWorkspace\(\)/);
+ assert.match(behavior,/visualViewport\?\.addEventListener\('resize',scheduleLayout/);
+ assert.match(behavior,/viewScroll\.set\(selected,body\(selected\)\?\.scrollTop\|\|0\)/);
+});

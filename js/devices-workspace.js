@@ -13,7 +13,32 @@
   diagnostics:'Diagnostics',security:'Security & Admin'
  };
  let selected='overview',ready=false;
+ const viewScroll=new Map();
+ let layoutFrame=0;
  const body=name=>$('dw-body-'+name);
+ function sizeWorkspace(){
+  if(!ready)return;
+  const compact=root.matchMedia('(max-width:780px)').matches;
+  const topbar=document.querySelector('#app .topbar');
+  // Header is sticky, but its height changes at tablet/phone breakpoints.
+  const headerBottom=Math.max(0,Math.round(topbar?.getBoundingClientRect().bottom||0));
+  shell.style.setProperty('--dw-mobile-top',(headerBottom+4)+'px');
+  const page=$('tab-firmware');
+  if(compact||!page?.classList.contains('active')){
+   shell.style.removeProperty('--dw-height');
+   return;
+  }
+  const top=shell.getBoundingClientRect().top;
+  const viewport=root.visualViewport?.height||root.innerHeight;
+  // Leave the panel bottom padding visible; never stretch from an offscreen
+  // rect when switching back from a different long lab page.
+  const remaining=Math.floor(viewport-Math.max(top,headerBottom+6)-14);
+  shell.style.setProperty('--dw-height',Math.max(240,remaining)+'px');
+ }
+ function scheduleLayout(){
+  if(layoutFrame)root.cancelAnimationFrame(layoutFrame);
+  layoutFrame=root.requestAnimationFrame(()=>{layoutFrame=0;sizeWorkspace()});
+ }
  function relocate(selector,name){
   const node=document.querySelector(selector),target=body(name);
   if(!node||!target)throw Error('Missing Devices workspace element '+selector);
@@ -43,6 +68,7 @@
   if(!names[name]||!ready)return false;
   if(activateTab&&!$('tab-firmware')?.classList.contains('active'))
    document.querySelector('.tab[data-tab="firmware"]')?.click();
+  if(selected!==name)viewScroll.set(selected,body(selected)?.scrollTop||0);
   selected=name;
   for(const key of Object.keys(names)){
    const view=$('dw-panel-'+key),tab=$('dw-tab-'+key);
@@ -50,7 +76,13 @@
    if(tab){tab.setAttribute('aria-selected',String(key===name));tab.tabIndex=key===name?0:-1}
   }
   if(name==='mobile'){$('kitMobilePairDetails').open=true;root.ZebjusPairingBridge?.ensureSimulator?.()}
-  if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>shell.scrollIntoView({block:'start',behavior:'smooth'}));
+  if(body(name))body(name).scrollTop=viewScroll.get(name)||0;
+  scheduleLayout();
+  if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>{
+   if(root.matchMedia('(max-width:780px)').matches)shell.scrollIntoView({block:'start',behavior:'smooth'});
+   else if(root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
+   scheduleLayout();
+  });
   root.dispatchEvent(new CustomEvent('dronelab:devices-view',{detail:{name}}));
   summary();
   return true;
@@ -105,7 +137,7 @@
    if(old){old.hidden=true;old.setAttribute('aria-hidden','true')}
    shell.hidden=false;ready=true;shell.dataset.ready='true';
    const defaultView=location.hash==='#settings'?'wifi':'overview';
-   open(defaultView,{activateTab:false});
+   open(defaultView,{activateTab:false});scheduleLayout();
   }catch(error){
    console.error('Devices workspace unavailable:',error);
    shell.hidden=false;
@@ -116,6 +148,21 @@
    const original=$('fwConnectionWorkspace');
    if(original)original.hidden=false;
   }
+ }
+ root.addEventListener('resize',scheduleLayout,{passive:true});
+ root.visualViewport?.addEventListener('resize',scheduleLayout,{passive:true});
+ root.addEventListener('dronelab:tab',event=>{
+  if(event.detail?.name==='firmware'){
+   if(!root.matchMedia('(max-width:780px)').matches&&root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
+   scheduleLayout();
+  }
+ });
+ if(root.ResizeObserver){
+  const resize=new ResizeObserver(scheduleLayout);
+  const topbar=document.querySelector('#app .topbar');
+  if(topbar)resize.observe(topbar);
+  const tools=document.querySelector('.v2-workspace-tools');
+  if(tools)resize.observe(tools);
  }
  shell.addEventListener('click',event=>{
   const button=event.target.closest('button[data-dw-view]');
