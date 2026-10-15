@@ -38,7 +38,7 @@ function harness(mode){
   if(route==='/api/firmware/chunk'){
    calls.push(args.offset);
    if(args.offset!==ota.offset)throw Error('Server detected duplicate/reordered write');
-   if(mode==='cancel'&&calls.length===1)await wait(45);
+   if((mode==='cancel'||mode==='pause')&&calls.length===1)await wait(45);
    ota.offset+=args.data.length/2;
    if(mode==='lost-chunk'&&args.offset===0&&!losses++){throw Error('Wi-Fi dropped after flash write');}
    return {kitId:id,offset:ota.offset};
@@ -100,6 +100,56 @@ test('teacher Cancel waits for current write and signed abort; never sends more 
  const final=await completion(h,'OTA stopped:');
  assert.match(final,/OTA stopped:/);
  assert.equal(h.calls.length,1);assert.equal(h.ends,0);assert.equal(h.aborts,1);
+});
+test('rejects oversized APP before calling file.arrayBuffer or writing flash',async()=>{
+ const h=harness('normal');
+ h.invoke('kitConnect');
+ for(let i=0;i<80&&!h.window.ZebjusNetwork.isConnected();i++)await wait(10);
+ let fullReads=0;
+ h.file.size=4000000;
+ h.file.arrayBuffer=async()=>{fullReads++;throw Error('MUST NOT READ OVERSIZED FILE')};
+ h.el('kitOtaAdminKey').value='a'.repeat(32);
+ h.invoke('kitOtaFile','change',{target:{files:[h.file],value:''}});
+ const outcome=await completion(h,'OTA stopped:');
+ assert.match(outcome,/Firmware size does not match/);
+ assert.equal(fullReads,0);assert.equal(h.calls.length,0);assert.equal(h.ends,0);
+});
+test('rejects disallowed MIME and malformed ESP header before full read',async()=>{
+ for(const issue of ['mime','header']){
+  const h=harness('normal');
+  h.invoke('kitConnect');
+  for(let i=0;i<80&&!h.window.ZebjusNetwork.isConnected();i++)await wait(10);
+  let fullReads=0;
+  h.file.arrayBuffer=async()=>{fullReads++;throw Error('FULL READ NOT ALLOWED')};
+  if(issue==='mime')h.file.type='text/plain';
+  else h.file.slice=()=>({arrayBuffer:async()=>new Uint8Array(208).buffer});
+  h.el('kitOtaAdminKey').value='a'.repeat(32);
+  h.invoke('kitOtaFile','change',{target:{files:[h.file],value:''}});
+  const message=await completion(h,'OTA stopped:');
+  assert.match(message,issue==='mime'?/MIME type unsupported/:/ESP header or physical board mismatch/);
+  assert.equal(fullReads,0);assert.equal(h.calls.length,0);
+ }
+});
+test('foreground pause resumes only after verifying signed controller offset',async()=>{
+ const h=harness('pause');await connectAndUpload(h);
+ for(let i=0;i<100&&!h.calls.length;i++)await wait(5);
+ assert.equal(h.calls.length,1);
+ h.window.zebjusNativeAppPaused();
+ await wait(70);
+ assert.equal(h.ends,0);
+ h.window.zebjusNativeAppResumed();
+ const message=await completion(h,'OTA VERIFIED');
+ assert.match(message,/OTA VERIFIED/);
+ assert.equal(h.calls.length,16);
+ assert.equal(h.ends,1);assert.equal(h.aborts,0);
+});
+test('installed APK version and explicit OTA keep-awake hooks are native scoped',()=>{
+ assert.match(activity,/case "getInstalledVersion"/);
+ assert.match(activity,/getPackageManager\(\)\.getPackageInfo\(getPackageName\(\),0\)/);
+ assert.match(activity,/FLAG_KEEP_SCREEN_ON/);
+ assert.match(activity,/case "setOtaKeepAwake"/);
+ assert.match(client,/native\?\.setOtaKeepAwake\?\.\(true\)/);
+ assert.match(client,/native\?\.setOtaKeepAwake\?\.\(false\)/);
 });
 test('native + JS timers, cancellation and OTA progress contract agree',()=>{
  assert.match(client,/policy\?\.requestTimeout\?\.\(route,method,link,'android'\)/);
