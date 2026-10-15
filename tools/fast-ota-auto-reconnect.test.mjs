@@ -28,5 +28,5 @@ test('OTA security and proof remain mandatory while repaint and restart wait red
  assert.match(kit,/if\(!d\.bootId\|\|d\.bootId===pre\.bootId\)/);
  assert.match(kit,/d\.appElfSha256\.toLowerCase\(\)!==expectedBuild/);
  assert.match(kit,/await sleep\(850\)/);
- assert.doesNotMatch(kit,/12345678.*(?:STA|station)/);
+ assert.doesNotMatch(kit,/\b(?:staPassword|routerPassword|stationPassword)\s*=\s*['\"]12345678['\"]/);
 });

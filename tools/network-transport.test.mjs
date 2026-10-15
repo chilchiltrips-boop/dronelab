@@ -48,7 +48,7 @@ test('AERION classroom six-digit code persists and never acts as the control pas
  const k=read('FlightCore_Firmware/FlightCoreClassroom.h'),f=read('FlightCore_Firmware/FlightCoreNetwork.h');
  const ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  for(const t of ['zjKitPrefs.getString("code"','zjKitPrefs.putString("code"','ZJKIT,CODE,','ZJKIT,ID,','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,STOP','ZJ_RC_DEADMAN_MS=350','ZJ_RC_LEASE_MS=1800','ZJRC,FAILSAFE,INPUT_TIMEOUT','zjRcFrame(','zjRcClaim(','zjRcRelease(','zjRcOwned','zjRcSession','Serial.availableForWrite()>100'])assert.ok(k.includes(t),t);
- for(const t of ['zjKitPrefs.getString("apPass","12345678")','ZEBJUS-AERION-','/api/identify','MDNS.addService','MDNS.addServiceTxt','zjClientTransport','zjRcClaim(','zjRcFrame(','zjRcRelease("NETWORK_MODE_CHANGED")'])assert.ok(f.includes(t),t);
+ for(const t of ['zjApPass=zjEffectiveApPassword()','ZEBJUS-AERION-','/api/identify','MDNS.addService','MDNS.addServiceTxt','zjClientTransport','zjRcClaim(','zjRcFrame(','zjRcRelease("NETWORK_MODE_CHANGED")'])assert.ok(f.includes(t),t);
  assert.ok(ino.includes('zjKitSetup();')&&ino.includes('zjRcLoop(now);'));
  assert.ok(ino.includes('ZEBJUS AERION A1')&&ino.includes('ZEBJUS AERION A2'));
  assert.ok(!k.includes('ledcWrite(')&&!k.includes('digitalWrite('),'Joystick diagnostic handler must never activate motors');
@@ -57,7 +57,7 @@ test('AERION classroom six-digit code persists and never acts as the control pas
 
 test('AERION 1.4.0 USB-only provisioning and browser origin restrictions remain motor-disabled',()=>{
  const net=read('FlightCore_Firmware/FlightCoreNetwork.h'),c=read('FlightCore_Firmware/FlightCoreClassroom.h');
- for(const k of ['zjCorsAllowed()','Access-Control-Allow-Private-Network','origin_denied','zjKitPrefs.getString("apPass","12345678")','zjKitPrefs.getString("apName"','rssi\\":'])assert.ok(net.includes(k),k);
+ for(const k of ['zjCorsAllowed()','Access-Control-Allow-Private-Network','origin_denied','zjApPass=zjEffectiveApPassword()','zjKitPrefs.getString("apName"','rssi\\":'])assert.ok(net.includes(k),k);
  for(const k of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM'])assert.ok(c.includes(k),k);
  assert.ok(!net.includes('/api/admin/'),'remote admin and key changes must not be exposed');
 });
