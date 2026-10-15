@@ -59,7 +59,7 @@ adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee "test-output
 adb shell dumpsys package in.zebjus.dronelab.companion | grep -E 'versionCode|versionName|signatures' > "test-output/native/installed-identity-${label}.txt"
 # Match the source Gradle upgrade version; never hardcode a previously
 # released versionCode (the APK is installed successfully above).
-expected_version_code="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]\\([0-9][0-9]*\\).*$/\\1/p' mobile-android/app/build.gradle | head -n 1)"
+expected_version_code="$(awk '$1=="versionCode" {print $2; exit}' mobile-android/app/build.gradle)"
 if [[ ! "$expected_version_code" =~ ^[0-9]+$ ]]; then
   echo "::error::Unable to read current Android release versionCode"; exit 1
 fi
