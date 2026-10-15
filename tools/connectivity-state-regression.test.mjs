@@ -13,7 +13,7 @@ test('Firmware reconnect is blocked without a verified kit or during a protected
   return nodes.get(sel);
  };
  let selected={connected:false,kitId:'',transport:'none'};
- const context={busy:false,fw:null,navigator:{serial:{}},isSecureContext:true,
+ const context={busy:false,fw:null,loader:null,monitorPort:null,navigator:{serial:{}},isSecureContext:true,
   ZebjusKits:{getState:()=>selected,reconnect:async()=>true},
   $:get,usbFlashReadiness:()=>({ready:false,message:'USB missing'}),
   networkFlashReadiness:()=>({ready:false,message:'Kit missing'}),
