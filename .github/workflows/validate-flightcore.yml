@@ -30,6 +30,9 @@ on:
       - package.json
       - tools/flightcore.test.mjs
       - 'tools/firmware-guards.test.mjs'
+      - 'tools/fast-ota-chunks.test.mjs'
+      - 'tools/firmware-host.cpp'
+      - 'tools/firmware-host.test.mjs'
       - 'tools/classroom-kits.test.mjs'
       - 'tools/header-ota-regression.test.mjs'
       - 'tools/discovery-pairing.test.mjs'

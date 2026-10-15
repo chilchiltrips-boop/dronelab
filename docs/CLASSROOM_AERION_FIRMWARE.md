@@ -88,3 +88,38 @@ Normal kit naming, AP naming/password, 6-digit selector changes, access-key rota
 ## Release verification
 
 Run `npm test`, `npm run check`, `python3 tools/build_scanner.py`, `python3 tools/verify_release.py` and browser/Android regression workflows. Full acceptance still requires physical A1 and A2 checks with motors and propellers disconnected, including AP visibility after reboot, USB STA test/save, bad passwords, code collisions, kit ID changes, Android WebRTC RC packets, RC timeout, Android direct AP and STA-only AP shutdown.
+
+## Fast encrypted OTA • FlightCore v1.4.7
+
+The **WebApp automatically negotiates the encrypted OTA chunk size from the live,
+authenticated `/api/status` response**. v1.4.7 reports
+`otaChunkMaxBytes: 1024` and supports encrypted APP upload in 1024-byte
+chunks. A 1.4.6 or older kit does not advertise this capability, so the same
+WebApp continues to use the supported **384-byte** chunks. Do not decide the
+size from a filename, displayed version, or stale cache.
+
+The firmware increases the AES-GCM encrypted request payload bound to 4352
+hex characters. Decryption buffers are allocated on the heap after rejecting
+oversized requests, rather than placing multiple large arrays on the HTTP task
+stack. OTA receiver checks offset monotonicity, board-specific APP header,
+admin authorization from physical USB pairing, session ownership, length,
+SHA-256 and final firmware image activation. Network firmware replacement is
+APP-only and does **not** call NVS erase, Wi-Fi profile deletion or pairing reset.
+
+### Upgrade sequence
+
+1. Pair/authorize the actual Kit over USB **once** (when needed); connect STA/AP
+   with the physical Kit's Device ID verified. Do not enable Take Control:
+   diagnostics must be released, propellers removed and motors disabled.
+2. The first upgrade from v1.4.6 to v1.4.7 uses **384-byte encrypted OTA**.
+   The router profiles/pairing are retained by APP OTA. Avoid USB FACTORY/Erase.
+3. After firmware ACK, let the Kit reboot and verify its **new boot ID, exact
+   Device ID, expected version and running build fingerprint**.
+4. Future encrypted APP updates can use **1024-byte chunks** automatically.
+   Large encrypted request support requires the new firmware to be running;
+   changing JavaScript alone never makes an old Kit accept larger chunks.
+
+Wi-Fi association, flash write and final verification take nonzero time; this
+reduces HTTP request overhead but does not guarantee a particular speedup.
+Both board images still need GitHub Actions compilation and physical bench
+testing (A1 and A2) before classroom rollout.
