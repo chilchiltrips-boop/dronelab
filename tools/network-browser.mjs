@@ -101,7 +101,10 @@ try{
  await web.locator('#kitNetworkSettings').evaluate(e=>e.open=true);
  await web.locator('#kitWifiScan').click();await web.locator('#kitWifiNetworks').selectOption('Mock classroom');
  await web.locator('#kitRouterPass').fill('fixture-password');await web.locator('#kitWifiSave').click();
- await wait(web,()=>document.getElementById('kitWifiResult')?.textContent.includes('saved')||window.ZebjusKits.getState().staIp==='192.168.1.42');
+ // A previously reported STA IP is not proof that this newly tested SSID
+ // was saved. Wait for the authenticated kit status to confirm association.
+ await wait(web,()=>document.getElementById('kitWifiStatus')?.textContent.includes('Wi-Fi VERIFIED and saved'));
+ assert.ok(calls.some(c=>c.host==='192.168.4.1'&&c.path==='/api/wifi/test'),'Wi-Fi credentials must be tested on the verified AP session');
  await web.locator('[data-dw-view="connection"]').click();
  await web.locator('#kitHandover').click();await wait(web,()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
  // Same-router discovery lists live Kit Names. Clicking the row must connect
