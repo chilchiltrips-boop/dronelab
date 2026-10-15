@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
     private static final int SECURE_OTA_FILE_PICKER=802;
     private FlightCoreWifiLink wifiLink;
     private boolean scopedBridgeReady;
+    private boolean otaKeepAwake;
+    private FlightCoreKitVault enrollmentVault;
 
     private void cockpitFullscreen() {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -147,6 +149,42 @@ public class MainActivity extends Activity {
             runOnUiThread(()->{if(view!=null)view.evaluateJavascript(script,null);});
         }catch(Exception ignored){}
     }
+    private void dispatchToPage(String callback,JSONObject result){
+        if(view==null||!scopedBridgeReady)return;
+        String script="window."+callback+" && window."+callback+"("+result.toString()+")";
+        runOnUiThread(()->{if(view!=null&&LOCAL_PAGE.equals(view.getUrl()))view.evaluateJavascript(script,null);});
+    }
+    private void vaultOperation(String op,JSONArray args){
+        String id=arg(args,1),requestId=arg(args,0);
+        if(!requestId.matches("[a-zA-Z0-9_-]{1,32}")||!id.matches("ZFC-A[12]-[0-9A-F]{12}"))return;
+        JSONObject result=new JSONObject();
+        try{
+            result.put("id",requestId);result.put("deviceId",id);
+            if(op.equals("saveDiagnostic")){
+                if(args.length()!=3||!arg(args,2).matches("[a-fA-F0-9]{32}"))throw new IllegalArgumentException("Diagnostic credential only");
+                enrollmentVault.store(id,arg(args,2));result.put("ok",true);
+            }else if(op.equals("loadDiagnostic")){
+                String value=enrollmentVault.load(id);
+                result.put("ok",!value.isEmpty());result.put("credential",value);
+            }else{enrollmentVault.forget(id);result.put("ok",true);}
+        }catch(Exception e){try{result.put("ok",false);result.put("error",e.getClass().getSimpleName());}catch(Exception ignored){}}
+        dispatchToPage("zebjusNativeVaultResult",result);
+    }
+    private void setOtaKeepAwake(boolean active){
+        otaKeepAwake=active;
+        if(active)getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+    private void reportInstalledVersion(){
+        JSONObject result=new JSONObject();
+        try{
+            android.content.pm.PackageInfo info=getPackageManager().getPackageInfo(getPackageName(),0);
+            result.put("versionName",info.versionName);
+            result.put("versionCode",Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode);
+            result.put("packageId",getPackageName());
+        }catch(Exception e){try{result.put("error","Version unavailable");}catch(Exception ignored){}}
+        dispatchToPage("zebjusNativeVersionResult",result);
+    }
     private static String arg(JSONArray values,int index){return values==null?"":values.optString(index,"");}
     private void handleNativeMessage(WebMessageCompat message,Uri origin,boolean isMainFrame){
         if(!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
@@ -166,6 +204,13 @@ public class MainActivity extends Activity {
                     if(args.length()==5)nativeFlightCore.pinSelectedNetwork(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4));
                     break;
                 case "discoverKit":if(args.length()==1&&wifiLink!=null)wifiLink.discover(arg(args,0));break;
+                case "setOtaKeepAwake":if(args.length()==1)setOtaKeepAwake("true".equals(arg(args,0)));break;
+                case "getInstalledVersion":if(args.length()==0)reportInstalledVersion();break;
+                case "saveDiagnostic":
+                case "loadDiagnostic":
+                case "forgetDiagnostic":
+                    if(args.length()==2||op.equals("saveDiagnostic")&&args.length()==3)vaultOperation(op,args);
+                    break;
                 case "openWifiSettings":if(args.length()==0)nativeFlightCore.openWifiSettings();break;
                 case "requestWifiPermission":
                     if(args.length()==0&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
@@ -208,6 +253,7 @@ public class MainActivity extends Activity {
         view.getSettings().setAllowContentAccess(false);
         view.getSettings().setJavaScriptCanOpenWindowsAutomatically(false);
         view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        enrollmentVault=new FlightCoreKitVault(this);
         wifiLink=new FlightCoreWifiLink(this,new FlightCoreWifiLink.Listener(){
             @Override public void linkChanged(){signalNetworkChange();}
             @Override public void discovery(String id,String ip,String error){deliverDiscovery(id,ip,error);}
@@ -331,9 +377,13 @@ public class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume();
-        if (view != null) view.onResume();
+        if (view != null) {
+            view.onResume();
+            view.evaluateJavascript("window.zebjusNativeAppResumed && window.zebjusNativeAppResumed()",null);
+        }
     }
     @Override protected void onDestroy() {
+        setOtaKeepAwake(false);
         if (wifiLink != null) { wifiLink.shutdown(); wifiLink = null; }
         if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
