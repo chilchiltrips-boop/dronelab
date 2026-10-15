@@ -57,13 +57,19 @@ adb install "$test_apk"
 run_case "baseline-preference-${label}" -e baselineOnly true
 adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee "test-output/native/in-place-upgrade-${label}.log"
 adb shell dumpsys package in.zebjus.dronelab.companion | grep -E 'versionCode|versionName|signatures' > "test-output/native/installed-identity-${label}.txt"
-grep -q 'versionCode=17' "test-output/native/installed-identity-${label}.txt"
+# Match the source Gradle upgrade version; never hardcode a previously
+# released versionCode (the APK is installed successfully above).
+expected_version_code="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]\\([0-9][0-9]*\\).*$/\\1/p' mobile-android/app/build.gradle | head -n 1)"
+if [[ ! "$expected_version_code" =~ ^[0-9]+$ ]]; then
+  echo "::error::Unable to read current Android release versionCode"; exit 1
+fi
+grep -Eq "versionCode=${expected_version_code}([[:space:]]|$)" "test-output/native/installed-identity-${label}.txt"
 adb shell svc wifi disable
 adb shell svc data disable
 # One display size per fresh AVD. Emulator 37.2.12 lost its connection when
 # changing 16x9 to 19.5x9 within the same running virtual device. CI boots two
 # independent AVDs; mandatory 16:9 checks both landscape directions with
-# APK16->17 preference-preserving upgrade. Wider native phones need manual QA.
+# signed previous->current APK preference-preserving upgrade. Wider native phones need manual QA.
 adb shell am force-stop in.zebjus.dronelab.companion
 adb shell wm size | tee "test-output/native/display-metrics-${label}.txt"
 grep -q "Physical size: ${display_w}x${display_h}" "test-output/native/display-metrics-${label}.txt"
