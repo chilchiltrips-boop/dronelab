@@ -154,21 +154,48 @@ public class MainActivity extends Activity {
         String script="window."+callback+" && window."+callback+"("+result.toString()+")";
         runOnUiThread(()->{if(view!=null&&LOCAL_PAGE.equals(view.getUrl()))view.evaluateJavascript(script,null);});
     }
-    private void vaultOperation(String op,JSONArray args){
-        String id=arg(args,1),requestId=arg(args,0);
-        if(!requestId.matches("[a-zA-Z0-9_-]{1,32}")||!id.matches("ZFC-A[12]-[0-9A-F]{12}"))return;
+    private void respondVault(String requestId,String id,String error){
+        JSONObject result=new JSONObject();
+        try{
+            result.put("id",requestId);result.put("deviceId",id);
+            result.put("ok",false);result.put("error",error);
+        }catch(Exception ignored){}
+        dispatchToPage("zebjusNativeVaultResult",result);
+    }
+    private void performVault(String op,String requestId,String id,String credential){
         JSONObject result=new JSONObject();
         try{
             result.put("id",requestId);result.put("deviceId",id);
             if(op.equals("saveDiagnostic")){
-                if(args.length()!=3||!arg(args,2).matches("[a-fA-F0-9]{32}"))throw new IllegalArgumentException("Diagnostic credential only");
-                enrollmentVault.store(id,arg(args,2));result.put("ok",true);
+                if(wifiLink==null||!wifiLink.isPinnedTo(id))
+                    throw new IllegalStateException("Verify and pin this Kit before saving diagnostic enrollment");
+                enrollmentVault.store(id,credential);result.put("ok",true);
             }else if(op.equals("loadDiagnostic")){
                 String value=enrollmentVault.load(id);
                 result.put("ok",!value.isEmpty());result.put("credential",value);
             }else{enrollmentVault.forget(id);result.put("ok",true);}
         }catch(Exception e){try{result.put("ok",false);result.put("error",e.getClass().getSimpleName());}catch(Exception ignored){}}
         dispatchToPage("zebjusNativeVaultResult",result);
+    }
+    private void vaultOperation(String op,JSONArray args){
+        String id=arg(args,1),requestId=arg(args,0);
+        if(!requestId.matches("[a-zA-Z0-9_-]{1,32}")||!id.matches("ZFC-A[12]-[0-9A-F]{12}"))return;
+        String credential=arg(args,2);
+        if(op.equals("saveDiagnostic")&&
+          (args.length()!=3||!credential.matches("[a-fA-F0-9]{32}"))){
+            respondVault(requestId,id,"Diagnostic credential only");return;
+        }
+        if(op.equals("saveDiagnostic")||op.equals("loadDiagnostic")){
+            final boolean saving=op.equals("saveDiagnostic");
+            new AlertDialog.Builder(this)
+                .setTitle(saving?"Remember Kit diagnostic key?":"Use saved Kit diagnostic key?")
+                .setMessage("Kit "+id+" • "+(saving?
+                    "Encrypt and store diagnostic-only enrollment in Android Keystore? OWNER code is never stored.":
+                    "Unlock this Kit's diagnostic-only credential for a fresh authenticated STA session?"))
+                .setNegativeButton("Cancel",(dialog,which)->respondVault(requestId,id,"User declined"))
+                .setPositiveButton(saving?"Save":"Use",(dialog,which)->performVault(op,requestId,id,credential))
+                .show();
+        }else performVault(op,requestId,id,"");
     }
     private void setOtaKeepAwake(boolean active){
         otaKeepAwake=active;
@@ -187,7 +214,7 @@ public class MainActivity extends Activity {
     }
     private static String arg(JSONArray values,int index){return values==null?"":values.optString(index,"");}
     private void handleNativeMessage(WebMessageCompat message,Uri origin,boolean isMainFrame){
-        if(!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
+        if(view==null||!LOCAL_PAGE.equals(view.getUrl())||!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
            !"appassets.androidplatform.net".equals(origin.getHost())||origin.getPort()!=-1&&origin.getPort()!=443||
            message==null||message.getData()==null)return;
         try{
