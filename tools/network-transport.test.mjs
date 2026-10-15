@@ -26,7 +26,10 @@ test('Android local HTTP uses verified Wi-Fi and signed AES-GCM session requests
  assert.ok(n.includes('"/api/firmware/chunk"'));
  assert.doesNotMatch(n,/multipart\/form-data/);
  assert.ok(m.includes('MIXED_CONTENT_NEVER_ALLOW'));
- assert.ok(m.includes('view.addJavascriptInterface(nativeFlightCore,"ZebjusNative")'));
+ assert.ok(m.includes('WebViewCompat.addWebMessageListener(view,"ZebjusHost"'));
+ assert.ok(m.includes('Collections.singleton(LOCAL_ORIGIN)'));
+ assert.doesNotMatch(m,/view\.addJavascriptInterface\(/,'frame-global JS bridge is forbidden');
+ assert.ok(read('android-native-bridge.js').includes('host.postMessage(JSON.stringify({op,args}))'));
  assert.ok(m.includes('onShowFileChooser'));
 });
 test('WebRTC kit management needs verified pairing and Android operator opt-in',()=>{
@@ -66,8 +69,12 @@ test('Android encrypted APP chunks are bound to Wi-Fi, never cellular/system net
  const n=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
  const js=read('companion-network.js');
  const body=n.slice(n.indexOf('private void submit('),n.indexOf('@JavascriptInterface public void openWifiSettings'));
- assert.match(body,/Network wifi=wifiNetwork\(\)/);
- assert.match(body,/if\(wifi==null\)throw new IllegalStateException/);
+ assert.match(body,/Network wifi=wifiLink\.networkFor\(ip,/);
+ const pin=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreWifiLink.java');
+ assert.match(pin,/if\(!bootstrap\)throw new IllegalStateException/);
+ assert.match(pin,/pinnedSsid\.equals\(checkedSsid\(\)\)/);
+ assert.match(pin,/pinnedBssid\.equalsIgnoreCase/);
+ assert.doesNotMatch(body,/connectivity\.getActiveNetwork\(\)/,'never use default/cellular network');
  assert.match(body,/wifi\.openConnection\(new URL/);
  assert.ok(js.includes("ZebjusKitAuth.open(nativeTransport,id,credential,'admin')"));
  assert.ok(js.includes("'/api/firmware/chunk'"));
