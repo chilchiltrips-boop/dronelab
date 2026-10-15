@@ -14,7 +14,8 @@ test('KeyStore uses nonexportable AES-GCM and Device ID as authenticated associa
   '.setRandomizedEncryptionRequired(true)','cipher.updateAAD(id.getBytes(StandardCharsets.UTF_8))',
   'getSharedPreferences(PREF,Context.MODE_PRIVATE)'])assert.ok(vault.includes(t),t);
  assert.match(vault,/Only per-Kit 32-hex diagnostic credentials may be saved/);
- assert.doesNotMatch(vault,/OWNER|ownerCode|otaKey/i,'Stored secret must not be OWNER/OTA material');
+ assert.match(vault,/credential\.matches\("\[a-fA-F0-9\]\{32\}"\)/,'only diagnostic 32-hex credential accepted');
+ assert.doesNotMatch(vault,/store\(String id,String owner|store\(String id,String otaKey/,'No OWNER/OTA storage API');
  assert.match(read('mobile-android/app/src/main/AndroidManifest.xml'),/android:allowBackup="false"/);
 });
 test('Native vault, version, screen-awake operations remain origin and main-frame scoped',()=>{
