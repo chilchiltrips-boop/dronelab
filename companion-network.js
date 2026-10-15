@@ -4,18 +4,35 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false;
+const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
 function form(v){return new URLSearchParams(v||{}).toString()}
+// The native HTTP deadline is shorter than this JS watchdog (including queue
+// time). A timed-out write is UNKNOWN, never a reason to resend blindly.
+function cancelNativePending(reason){
+ for(const [id,item] of pending){
+  clearTimeout(item.timer);pending.delete(id);
+  try{native?.cancelRequest?.(id)}catch{}
+  const error=Error(reason);error.uncertain=item.write;item.reject(error);
+ }
+}
 function nativeTransport(route,method='GET',args={},headers={}){
  if(!native?.requestSecure)return Promise.reject(Error('Install the current Android APK for private label enrollment.'));
  if(!validHost(ip))return Promise.reject(Error('Use the kit private IPv4 address.'));
- const id='zj'+(++requestId);
+ const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
  return new Promise((resolve,reject)=>{
-  const timer=setTimeout(()=>{pending.delete(id);reject(Error('Device request timed out'))},route.startsWith('/api/firmware/')?24000:4500);
-  pending.set(id,{resolve,reject,timer,raw:true});native.requestSecure(id,ip,method,route,method==='POST'?form(args):'',JSON.stringify(headers));
+  const timer=setTimeout(()=>{
+   if(!pending.has(id))return;
+   pending.delete(id);
+   try{native.cancelRequest?.(id)}catch{}
+   const error=Error((write?'Encrypted firmware write':'Device request')+' timed out at '+route+'; delivery is unconfirmed');
+   error.uncertain=write;reject(error);
+  },write?18000:6000);
+  pending.set(id,{resolve,reject,timer,raw:true,write});
+  try{native.requestSecure(id,ip,method,route,method==='POST'?form(args):'',JSON.stringify(headers));}
+  catch(e){clearTimeout(timer);pending.delete(id);const error=Error('Native request failed: '+e.message);error.uncertain=write;reject(error);}
  });
 }
 async function request(route,method='GET',args={}){
@@ -138,88 +155,155 @@ function previewControls(m){
 // retained in localStorage, IndexedDB, URLs, files or WebRTC signaling.
 const firmwareHex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
 const otaSleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// Recovery invariant: a lost ACK is reconciled against a fresh, signed
+// firmware status from the SAME admin session before any further flash write.
+// Older firmware without ota.offset stays fail-closed on uncertain writes.
 async function uploadAdminApp(file){
  if(otaBusy||!online||!onKitLink||!verifiedKitId||!['ap','sta'].includes(link))throw Error('Connect and verify the same Kit over AP/STA first.');
  if(rcSession)throw Error('Release Android diagnostic control before OTA.');
  const credential=el('kitOtaAdminKey')?.value.trim()||'';
  if(el('kitOtaAdminKey'))el('kitOtaAdminKey').value='';
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
- if(!file||!/\\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
- otaBusy=true;reconnectEnabled=false;
- const id=verifiedKitId,host=ip,transport=link,originalStatus=el('kitNetStatus')?.textContent||'';
- let admin=null,begun=false,ended=false;
- const checkTarget=()=>{if(ip!==host||link!==transport||verifiedKitId!==id)throw Error('Selected Kit or Wi-Fi link changed during firmware upload.');};
+ if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
+ otaBusy=true;otaCancelRequested=false;reconnectEnabled=false;
+ const id=verifiedKitId,host=ip,transport=link;
+ let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,board='',result=null;
+ const checkTarget=(allowCancellation=false)=>{
+  if(ip!==host||link!==transport||verifiedKitId!==id)throw Error('Selected Kit or Wi-Fi link changed during firmware upload.');
+  if(otaCancelRequested&&!allowCancellation)throw Error('OTA cancelled: no further firmware writes will be sent.');
+ };
+ const checkStatus=data=>{
+  if(data.kitId!==id||data.board!==board||data.requestTransport!==transport.toUpperCase())
+   throw Error('Different Kit, physical board or network answered; write state cannot be trusted.');
+ };
+ const signedProgress=async()=>{
+  // Auth.request serializes signed sequence numbers even after transport errors.
+  const state=await admin.request('/api/status');checkStatus(state);
+  const ota=state.ota;
+  if(!ota||typeof ota.active!=='boolean'||!Number.isSafeInteger(ota.offset))
+   throw Error('Controller cannot report signed OTA offset; do NOT retry the flash write. Update firmware over USB if required.');
+  return {state,ota};
+ };
+ const owned=(ota,offset)=>ota.active===true&&ota.owned===true&&ota.size===bytes.length&&
+  String(ota.sha256).toLowerCase()===hash&&ota.offset===offset;
  if(el('kitAppOta'))el('kitAppOta').disabled=true;
+ if(el('kitOtaCancel'))el('kitOtaCancel').disabled=false;
  for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=true;
  try{
   const catalogResponse=await fetch('./firmware-catalog.json',{cache:'no-store'});
   if(!catalogResponse.ok)throw Error('Official firmware catalog is unavailable in this Android release.');
   const catalog=await catalogResponse.json();
-  const board=id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1',entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
+  board=id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1';
+  const entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
   if(!release?.available||!release.sha256||file.name!==release.file)throw Error('Choose the official '+board+' APP firmware from the currently bundled release.');
-  const bytes=new Uint8Array(await file.arrayBuffer());
-  const hash=firmwareHex(window.ZfcCrypto.sha256(bytes));
+  bytes=new Uint8Array(await file.arrayBuffer());
+  checkTarget();
+  hash=firmwareHex(window.ZfcCrypto.sha256(bytes));
   if(bytes.length!==release.size||hash!==String(release.sha256).toLowerCase())throw Error('Official APP image size/SHA-256 mismatch. Nothing was flashed.');
   if(bytes.length<32768||bytes.length>0x1e0000||bytes[0]!==0xe9||bytes[1]<1||bytes[1]>16)
    throw Error('Invalid ESP32 application image.');
   const chip=bytes[12]|(bytes[13]<<8),descriptor=(bytes[32]|bytes[33]<<8|bytes[34]<<16|bytes[35]<<24)>>>0;
   if(chip!==(board==='ZFC-A2'?13:5)||descriptor!==0xabcd5432)throw Error('Firmware header does not match this physical board.');
   const expectedBuild=firmwareHex(bytes.slice(176,208));
-  show('Authenticating teacher USB-paired OWNER code for '+id+'…');
+  show('Authenticating USB-paired OWNER code for '+id+'…');
   admin=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'admin');
   checkTarget();
-  const pre=await admin.request('/api/status');
-  if(pre.kitId!==id||pre.board!==board||pre.requestTransport!==transport.toUpperCase())
-   throw Error('Firmware target Device ID/board/transport mismatch.');
+  pre=await admin.request('/api/status');checkStatus(pre);
   if(pre.rc?.claimed||pre.motorsArmed!==false||pre.firmwareControl!==false||pre.otaAppOnly!==true)
    throw Error('Release control and DISARM. Firmware must guarantee disabled motor outputs.');
   if(pre.partitionLayout!=='ZFC_DUAL_1E0000'||bytes.length>(pre.otaMaxBytes||0))
-   throw Error('Existing OTA partition is incompatible. Use physical USB recovery; do NOT erase saved Wi-Fi.');
+   throw Error('Existing OTA partition incompatible. Use USB recovery; preserve saved Wi-Fi.');
   if(pre.encryptedOta!==true||!/^[a-fA-F0-9]{32}$/.test(pre.bootId||''))
    throw Error('Kit does not support encrypted, independently verifiable APP OTA.');
   const chunkSize=Number(pre.otaChunkMaxBytes)>=2048?2048:Number(pre.otaChunkMaxBytes)>=1024?1024:384;
   show('Encrypted '+chunkSize+'-byte APP OTA • verified '+id);
-  const begin=await admin.request('/api/firmware/begin','POST',{size:bytes.length,sha256:hash,boardId:board});
-  begun=true;
-  if(begin.kitId!==id||begin.offset!==0)throw Error('Controller did not ACK the correct device and initial offset.');
-  let lastPct=-1;
-  for(let offset=0;offset<bytes.length;offset+=chunkSize){
+  checkTarget();
+  beginAttempted=true;
+  try{
+   const begin=await admin.request('/api/firmware/begin','POST',{size:bytes.length,sha256:hash,boardId:board});
+   if(begin.kitId!==id||begin.offset!==0)throw Error('Controller did not ACK the correct device and initial offset.');
+  }catch(error){
+   const {ota}=await signedProgress().catch(e=>{throw Error('BEGIN unconfirmed: '+e.message)});
+   if(!owned(ota,0))throw Error('BEGIN unconfirmed; controller OTA state does not match this session. No further write sent.');
+   show('Recovered lost BEGIN ACK using signed controller state','warn');
+  }
+  let offset=0,lastPct=-1;
+  while(offset<bytes.length){
    checkTarget();
    const chunk=bytes.subarray(offset,Math.min(offset+chunkSize,bytes.length));
-   const ack=await admin.request('/api/firmware/chunk','POST',{offset,data:firmwareHex(chunk)});
-   if(ack.kitId!==id||ack.offset!==offset+chunk.length)throw Error('Authenticated firmware chunk ACK/offset mismatch.');
-   const pct=Math.floor(100*ack.offset/bytes.length);
+   const next=offset+chunk.length;
+   let completed=false;
+   for(let attempt=0;attempt<2&&!completed;attempt++){
+    checkTarget();
+    try{
+     const ack=await admin.request('/api/firmware/chunk','POST',{offset,data:firmwareHex(chunk)});
+     if(ack.kitId!==id||ack.offset!==offset+chunk.length)throw Error('Authenticated firmware chunk ACK/offset mismatch.');
+     completed=true;
+    }catch(error){
+     let progress;
+     try{progress=(await signedProgress()).ota}
+     catch(e){throw Error('WRITE UNCONFIRMED at '+offset+': '+e.message+'. Do not restart OTA without checking the Kit.');}
+     if(owned(progress,next)){
+      completed=true;show('Recovered lost chunk ACK at byte '+next,'warn');
+     }else if(owned(progress,offset)&&attempt===0){
+      show('Signed offset unchanged at '+offset+'; retrying this chunk once','warn');
+     }else{
+      throw Error('WRITE UNCONFIRMED at '+offset+': offset/session mismatch ('+progress.offset+'). Do not retry automatically.');
+     }
+    }
+   }
+   if(!completed)throw Error('Chunk recovery exhausted: verify signed status before retrying.');
+   offset=next;
+   const pct=Math.floor(100*offset/bytes.length);
    if(pct!==lastPct){lastPct=pct;show('Encrypted APP upload '+pct+'% • '+chunkSize+' B chunks');}
   }
-  const done=await admin.request('/api/firmware/end','POST');
-  if(done.kitId!==id||done.sha256!==hash||done.rebooting!==true)throw Error('Firmware SHA-256 or reboot acknowledgment invalid.');
-  ended=true;show('Firmware written. Waiting for same Device ID and new boot fingerprint…');
-  let result=null;const deadline=Date.now()+120000;
+  checkTarget();
+  endAttempted=true; // An uncertain END could already have selected a new boot partition.
+  try{
+   const done=await admin.request('/api/firmware/end','POST');
+   if(done.kitId!==id||done.sha256!==hash||done.rebooting!==true)throw Error('Firmware SHA-256 or reboot acknowledgment invalid.');
+  }catch(error){
+   show('END acknowledgment unconfirmed; checking new boot and running build. Never resending END blindly.','warn');
+  }
+  if(el('kitOtaCancel'))el('kitOtaCancel').disabled=true;
+  const deadline=Date.now()+120000;
   await otaSleep(1700);
   while(Date.now()<deadline){
-   checkTarget();
+   checkTarget(true);
    try{
     const live=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'admin');
-    const status=await live.request('/api/status');
-    if(status.kitId!==id||status.board!==board||status.requestTransport!==transport.toUpperCase())throw Error('A different device or network answered.');
+    const status=await live.request('/api/status');checkStatus(status);
     if(status.bootId===pre.bootId||!status.bootId)throw Error('Waiting for a new firmware boot ID.');
     if(status.version!==catalog.version||String(status.appElfSha256||'').toLowerCase()!==expectedBuild)
      throw Error('Updated firmware version/build is not yet verified.');
     result=status;break;
-   }catch(e){if(/different device|network answered|selected kit/i.test(String(e.message)))throw e}
+   }catch(e){if(/Different Kit|network answered|Selected Kit/i.test(String(e.message)))throw e}
    await otaSleep(2200);
   }
-  if(!result){show('OTA ACK received, but running build is NOT VERIFIED. Check Kit status or USB before retrying.','warn');return}
+  if(!result){online=false;show('OTA END UNCONFIRMED / runtime NOT VERIFIED. Inspect same Kit and running build before any retry.','warn');return}
   auth=null;online=false;
   show('OTA VERIFIED • '+id+' • '+result.version+' • matching new boot & running build','good');
  }catch(error){
-  if(begun&&!ended&&admin){await admin.request('/api/firmware/abort','POST').catch(()=>{});}
-  show('Secure APP OTA stopped: '+String(error?.message||error)+' • no automatic retry','warn');
+  // Only abort a positively identified, still-active SAME-session OTA.
+  // If status is unreachable, leaving the firmware's 30s inactivity rollback
+  // is safer than racing a possibly completed END or replaying a write.
+  let abortMessage='';
+  if(beginAttempted&&!endAttempted&&admin&&bytes&&hash){
+   try{
+    const {ota}=await signedProgress();
+    if(ota.active&&ota.owned&&ota.size===bytes.length&&String(ota.sha256).toLowerCase()===hash){
+     const response=await admin.request('/api/firmware/abort','POST');
+     abortMessage=response.aborted===true?' • controller confirmed OTA aborted':' • abort response unconfirmed';
+    }else if(ota.active){abortMessage=' • different/unconfirmed OTA owner: do not retry';}
+   }catch(e){abortMessage=' • flash state not confirmed; let controller timeout, inspect status before retry';}
+  }
+  show('Secure APP OTA stopped: '+String(error?.message||error)+abortMessage+' • no blind retries','warn');
   throw error;
  }finally{
-  otaBusy=false;auth=null;
+  otaBusy=false;otaCancelRequested=false;auth=null;
   for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=false;
   if(el('kitAppOta'))el('kitAppOta').disabled=!online||!onKitLink||!!rcSession;
+  if(el('kitOtaCancel'))el('kitOtaCancel').disabled=true;
   reconnectEnabled=online&&onKitLink;
  }
 }
@@ -246,6 +330,7 @@ function bind(){
  action('kitRead',async()=>{const data=await pollTelemetry();el('kitTelemetry').textContent=JSON.stringify(data,null,2)});
  action('kitI2cScan',async()=>{await command('ZJI2C,SCAN');show('I²C scan requested; refresh telemetry for device addresses','good')});
  action('kitLedOff',()=>command('ZJLED,1,STOP'));
+ action('kitOtaCancel',()=>{if(otaBusy){otaCancelRequested=true;show('Cancelling after the current signed write; checking Kit state before abort','warn');}});
  action('kitAppOta',()=>{
   if(!online||!onKitLink||rcSession||otaBusy)throw Error('Connect and verify an idle Kit. Release diagnostic control before OTA.');
   if(!/^[a-fA-F0-9]{32}$/.test(el('kitOtaAdminKey')?.value.trim()||''))throw Error('Enter the USB-paired OWNER code to authorize encrypted APP OTA.');
@@ -259,7 +344,8 @@ function bind(){
  });
  setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
-function networkChanged(){dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
-window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
+function networkChanged(){if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
+window.zebjusNativeAppPaused=()=>{if(otaBusy)otaCancelRequested=true;cancelNativePending('Android app paused; request delivery unconfirmed')};
+ window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
