@@ -4,7 +4,7 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
+const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
@@ -118,7 +118,8 @@ async function discoverKit(idOverride=''){
    native.discoverKit(id);
   });
  }
- const candidate=found||cachedIp(id);
+ const known=cachedIp(id),candidate=found||known;
+ discoveredId=found?id:'';cachedFallbackIp=found&&known!==found?known:'';
  if(!candidate)throw Error('mDNS found no matching Device ID and no cached verified STA IP. Enter IP manually or check router client isolation.');
  ip=candidate;staIp=candidate;el('kitIp').value=candidate;
  forgetNativePin();online=false;auth=null;
@@ -149,7 +150,19 @@ async function connectKit(){
     const fallback=cachedIp(p.deviceId);
     if(fallback){ip=fallback;staIp=fallback;el('kitIp').value=fallback;}
    }
-   const raw=await nativeTransport('/api/identify'),live=JSON.parse(raw.text);
+   let raw;
+   try{raw=await nativeTransport('/api/identify')}
+   catch(error){
+    // An mDNS TXT candidate is untrusted. Fall back only on transient link
+    // failure, and perform a fresh identify/enroll/signed status on cached IP.
+    const retryable=policy?.retryDisposition?.(error)?.retry!==false;
+    if(link!=='sta'||discoveredId!==p.deviceId||!cachedFallbackIp||!retryable)throw error;
+    ip=cachedFallbackIp;staIp=ip;el('kitIp').value=ip;
+    discoveredId='';cachedFallbackIp='';
+    show('mDNS address unreachable • checking last verified IP with fresh signed identity','warn');
+    raw=await nativeTransport('/api/identify');
+   }
+   const live=JSON.parse(raw.text);
    if(raw.status!==200||live.kitId!==p.deviceId)throw Error('Private label Device ID does not match this kit.');
    if(rcSession)await releaseRc();
    if(verifiedKitId&&verifiedKitId!==p.deviceId)forgetGrants();
@@ -489,11 +502,11 @@ function bind(){
  el('kitIp').value=ip;
  el('kitLink').addEventListener('change',()=>{
   void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
-  link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
+  discoveredId='';cachedFallbackIp='';link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
   show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
  });
- el('kitIp').addEventListener('change',()=>{void releaseRc();forgetGrants();forgetNativePin();ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
+ el('kitIp').addEventListener('change',()=>{void releaseRc();forgetGrants();forgetNativePin();discoveredId='';cachedFallbackIp='';ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
