@@ -16,6 +16,7 @@ import android.os.Build;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
@@ -31,6 +32,8 @@ public class MainActivity extends Activity {
     private WebView view;
     private FlightCoreNativeBridge nativeFlightCore;
     private PermissionRequest pendingVideoRequest;
+    private ValueCallback<Uri[]> pendingFirmwareFilePicker;
+    private static final int SECURE_OTA_FILE_PICKER=802;
     private ConnectivityManager connectivity;
     private ConnectivityManager.NetworkCallback networkCallback;
     private final AtomicBoolean seenNetwork = new AtomicBoolean(false);
@@ -175,6 +178,17 @@ public class MainActivity extends Activity {
             }
         });
         view.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onShowFileChooser(WebView webView,ValueCallback<Uri[]> callback,WebChromeClient.FileChooserParams params) {
+                if(webView!=view){callback.onReceiveValue(null);return true;}
+                if(pendingFirmwareFilePicker!=null)pendingFirmwareFilePicker.onReceiveValue(null);
+                pendingFirmwareFilePicker=callback;
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/octet-stream");
+                try{startActivityForResult(intent,SECURE_OTA_FILE_PICKER);}
+                catch(Exception e){pendingFirmwareFilePicker=null;callback.onReceiveValue(null);}
+                return true;
+            }
             @Override public void onPermissionRequest(PermissionRequest request) { cameraPermission(request); }
             @Override public void onPermissionRequestCanceled(PermissionRequest request) {
                 if (pendingVideoRequest == request) pendingVideoRequest = null;
@@ -229,8 +243,10 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==FlightCoreNativeBridge.OTA_DOCUMENT_PICKER&&nativeFlightCore!=null)
-            nativeFlightCore.onFirmwareFile(resultCode==RESULT_OK&&data!=null?data.getData():null);
+        if(requestCode==SECURE_OTA_FILE_PICKER&&pendingFirmwareFilePicker!=null){
+            ValueCallback<Uri[]> callback=pendingFirmwareFilePicker;pendingFirmwareFilePicker=null;
+            callback.onReceiveValue(resultCode==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);
+        }
     }
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
@@ -249,6 +265,7 @@ public class MainActivity extends Activity {
         if (connectivity != null && networkCallback != null) connectivity.unregisterNetworkCallback(networkCallback);
         if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
+        if (pendingFirmwareFilePicker != null) { pendingFirmwareFilePicker.onReceiveValue(null); pendingFirmwareFilePicker = null; }
         if (view != null) {
             view.loadUrl("about:blank");
             view.destroy();

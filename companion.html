@@ -62,7 +62,10 @@
 <label>Router password<input type="password" id="kitPassword" autocomplete="new-password" placeholder="Password kept on FlightCore"/></label></div>
 <div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
 <div class="actions"><button id="kitRead">Read Telemetry</button><button id="kitI2cScan">Scan I²C</button><button id="kitLedOff">LED OFF</button></div>
-<div class="actions"><button id="kitAppOta" type="button" disabled>APP OTA • teacher-authorized STA only</button></div><p class="hint">Student diagnostic enrollment cannot update firmware. Use the WebApp Firmware page with teacher-authorized STA access. USB factory recovery remains available.</p><pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
+<div class="kit-net-grid"><label>Teacher USB-paired OWNER code (32 hexadecimal characters)<input type="password" id="kitOtaAdminKey" autocomplete="off" spellcheck="false" placeholder="Enter once for this OTA • never stored"/></label></div>
+<input id="kitOtaFile" type="file" accept=".bin,application/octet-stream" hidden aria-label="Select official FlightCore APP firmware"/>
+<div class="actions"><button id="kitAppOta" type="button" disabled>Secure APP OTA • teacher authorized</button></div>
+<p class="hint">Connect a verified idle AP/STA Kit, release Take Control, then enter the OWNER code obtained through physical USB pairing. The selected APP image must match the official bundled SHA-256 catalog. Encrypted upload preserves saved Wi-Fi; FACTORY/Erase is not available on Android.</p><pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
 <label class="kit-net-toggle"><input id="kitAllowWeb" type="checkbox"/> Allow paired WebApp to access this FlightCore</label>
 <label class="kit-net-toggle"><input id="kitRcPreview" type="checkbox"/> Take / release Android diagnostic input (motors disabled)</label>
 <p id="kitRcAck" class="hint" role="status">No firmware receive acknowledgment yet</p><p class="hint">The laptop reads actual joystick values through kit STA, independently of WebRTC. Pairing, AP connection and input ownership are separate. Link recovery restores monitoring; explicitly take control again.</p>
