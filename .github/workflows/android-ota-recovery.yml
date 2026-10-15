@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'companion-network.js'
+      - 'android-native-bridge.js'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
       - 'companion.html'
       - 'FlightCore_Firmware/FlightCoreNetwork.h'
       - 'mobile-android/**'
@@ -34,4 +36,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tools/android-ota-recovery.test.mjs tools/android-secure-ota.test.mjs tools/android-ap-sta-control.test.mjs tools/android-camera-permission.test.mjs tools/release-signing.test.mjs
+      - run: node --test tools/android-ota-recovery.test.mjs tools/android-secure-ota.test.mjs tools/android-ap-sta-control.test.mjs tools/android-camera-permission.test.mjs tools/release-signing.test.mjs tools/android-origin-wifi-nsd.test.mjs
+  android-debug-bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Package exact trusted WebView assets
+        run: |
+          mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
+          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp js/kit-auth.js mobile-android/app/src/main/assets/js/
+          cp firmware-catalog.json mobile-android/app/src/main/assets/
+          cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
+          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
+      - name: Compile bridge, NSD, Wi-Fi callbacks against Android 35
+        run: gradle -p mobile-android :app:assembleDebug --no-daemon
