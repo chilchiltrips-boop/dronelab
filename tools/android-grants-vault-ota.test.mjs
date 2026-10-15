@@ -27,6 +27,9 @@ test('Native vault, version, screen-awake operations remain origin and main-fram
   assert.ok(app.includes('case "'+name+'"'),name);
  }
  assert.match(app,/FLAG_KEEP_SCREEN_ON/);
+ assert.match(app,/new AlertDialog\.Builder\(this\)/);
+ assert.match(app,/setNegativeButton\("Cancel"/);
+ assert.match(app,/wifiLink\.isPinnedTo\(id\)/);
  assert.match(app,/getPackageManager\(\)\.getPackageInfo\(getPackageName\(\),0\)/);
  assert.match(ui,/id="androidInstalledVersion"/);
 });
@@ -65,4 +68,14 @@ test('Shared policy shipped in Android package and attached before signed sessio
  assert.match(client,/policy\?\.requestTimeout\?\./);
  assert.match(ui,/js\/kit-network-policy.js.*js\/kit-auth.js/s);
  assert.match(workflow,/cp js\/kit-auth.js js\/kit-network-policy.js/);
+});
+test('mDNS temporary multicast lock and signed same-Kit cached fallback',()=>{
+ const nativeNsd=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreWifiLink.java');
+ const manifest=read('mobile-android/app/src/main/AndroidManifest.xml');
+ assert.match(manifest,/CHANGE_WIFI_MULTICAST_STATE/);
+ assert.match(nativeNsd,/createMulticastLock\("zebjus-kit-nsd"\)/);
+ assert.match(nativeNsd,/releaseMulticast\(\)/);
+ assert.match(client,/discoveredId===?p\.deviceId/);
+ assert.match(client,/ip=cachedFallbackIp/);
+ assert.match(client,/const live=JSON\.parse\(raw\.text\)/);
 });
