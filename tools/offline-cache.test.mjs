@@ -71,13 +71,14 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
 
 test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
  const page=readFileSync(new URL('index.html',root),'utf8'),sw=source;
- for(const asset of ['pairing-web.js','firmware-updater.js','js/firmware-connect.js']){
-  assert.ok(page.includes(asset+'?v=connectivity-audit-20261015'),asset+' page source');
-  assert.ok(sw.includes(asset+'?v=connectivity-audit-20261015'),asset+' offline precache');
+ const versions=[['pairing-web.js','connectivity-audit-20261015'],['firmware-updater.js','connectivity-audit-20261015'],['js/firmware-connect.js','kit-selection-20261015']];
+ for(const [asset,version] of versions){
+  assert.ok(page.includes(asset+'?v='+version),asset+' page source');
+  assert.ok(sw.includes(asset+'?v='+version),asset+' offline precache');
  }
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./pairing-web.js','./firmware-updater.js','./js/firmware-connect.js']){
-  const response=await r.request(path+'?v=connectivity-audit-20261015');
-  assert.equal(response.ok,true,path+' offline');
+ for(const [asset,version] of versions){
+  const response=await r.request('./'+asset+'?v='+version);
+  assert.equal(response.ok,true,asset+' offline');
  }
 });
