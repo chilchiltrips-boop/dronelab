@@ -340,7 +340,7 @@ function bind(){
  el('kitOtaFile')?.addEventListener('change',event=>{
   const file=event.target.files?.[0];
   event.target.value='';
-  if(file)void uploadAdminApp(file).catch(error=>show('OTA: '+error.message,'warn'));
+  if(file)void uploadAdminApp(file).catch(error=>{if(!/OTA stopped:|UNCONFIRMED|NOT VERIFIED/.test(el('kitNetStatus')?.textContent||''))show('OTA: '+error.message,'warn');});
  });
  setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false})},3500);
 }
