@@ -323,7 +323,7 @@ async function uploadAdminApp(file){
    throw Error('Controller cannot report signed OTA offset; do NOT retry the flash write. Update firmware over USB if required.');
   return {state,ota};
  };
- const waitResume=async offset=>{
+ const waitResume=async (offset,allowNext=offset)=>{
   if(!otaPaused&&!otaNeedsRecheck)return;
   show('OTA paused • waiting for foreground and signed offset verification','warn');
   const deadline=Date.now()+45000;
@@ -334,7 +334,7 @@ async function uploadAdminApp(file){
   if(otaPaused)throw Error('OTA paused too long; safe recovery requires a new verified session');
   otaNeedsRecheck=false;
   const {ota}=await signedProgress();
-  if(!owned(ota,offset))throw Error('OTA resume unsafe: signed session/hash/offset changed; no further writes');
+  if(!owned(ota,offset)&&!owned(ota,allowNext))throw Error('OTA resume unsafe: signed session/hash/offset changed; no further writes');
   show('OTA resumed • signed offset '+offset+' verified','good');
  };
  const owned=(ota,offset)=>ota.active===true&&ota.owned===true&&ota.size===bytes.length&&
@@ -412,7 +412,7 @@ async function uploadAdminApp(file){
      completed=true;
     }catch(error){
      let progress;
-     try{if(otaPaused)await waitResume(offset);progress=(await signedProgress()).ota}
+     try{if(otaPaused)await waitResume(offset,next);progress=(await signedProgress()).ota}
      catch(e){throw Error('WRITE UNCONFIRMED at '+offset+': '+e.message+'. Do not restart OTA without checking the Kit.');}
      if(owned(progress,next)){
       completed=true;show('Recovered lost chunk ACK at byte '+next,'warn');
