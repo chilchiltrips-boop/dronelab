@@ -85,6 +85,42 @@ try{
     Math.abs(after.asideY-before.asideY)>2||after.navY!==before.navY)
   hardFailures.push('Desktop mousewheel should scroll only the right hardware settings pane');
  await page.screenshot({path:'test-output/form-fit/hardware-scroll-desktop.png'});
+ // Overview must allow a long status/details card to scroll under an always
+ // visible, physically identical Take Control button (no duplicate handler).
+ await page.setViewportSize({width:1480,height:590});
+ await page.locator('[data-dw-view="overview"]').click();
+ await page.waitForTimeout(240);
+ const ovBefore=await page.evaluate(()=>{
+  const content=document.querySelector('#dw-body-overview');
+  const ctl=document.querySelector('#fwKitTakeControl');
+  const bar=document.querySelector('#dw-panel-overview>.dw-overview-actions');
+  const card=document.querySelector('#dw-body-overview>.fw-kit-detail-card');
+  const rect=ctl.getBoundingClientRect();
+  return {bodyY:scrollY,contentY:content.scrollTop,hasOverflow:content.scrollHeight>content.clientHeight+20,
+   controlVisible:rect.top>=0&&rect.bottom<=innerHeight,
+   controlBarParent:ctl.closest('.dw-overview-actions')===bar,
+   buttonCount:document.querySelectorAll('#fwKitTakeControl').length,
+   cardNatural:card.scrollHeight<=card.getBoundingClientRect().height+2,
+   barY:bar.getBoundingClientRect().top};
+ });
+ if(!ovBefore.hasOverflow||!ovBefore.controlVisible||!ovBefore.controlBarParent||ovBefore.buttonCount!==1||!ovBefore.cardNatural)
+  hardFailures.push('Overview Take Control needs one visible button and an independently scrollable, unclipped details card');
+ await page.locator('#dw-body-overview').hover();
+ await page.mouse.wheel(0,440);
+ await page.waitForTimeout(200);
+ const ovAfter=await page.evaluate(()=>{
+  const content=document.querySelector('#dw-body-overview');
+  const bar=document.querySelector('#dw-panel-overview>.dw-overview-actions');
+  return {bodyY:scrollY,contentY:content.scrollTop,barY:bar.getBoundingClientRect().top,
+   hitTest:document.elementFromPoint(...(()=>{
+    const r=document.querySelector('#fwKitTakeControl').getBoundingClientRect();
+    return [r.left+r.width/2,r.top+r.height/2]
+   })())?.closest('#fwKitTakeControl')!==null};
+ });
+ if(ovAfter.contentY<=ovBefore.contentY+15||Math.abs(ovAfter.bodyY-ovBefore.bodyY)>2||
+    Math.abs(ovAfter.barY-ovBefore.barY)>2||!ovAfter.hitTest)
+  hardFailures.push('Overview wheel must scroll details without moving/click-blocking Take Control');
+ await page.screenshot({path:'test-output/form-fit/hardware-overview-controls-desktop.png'});
  // A short desktop screen must scroll the middle menu while header/status stay frozen.
  await page.setViewportSize({width:1480,height:410});
  await page.waitForTimeout(230);

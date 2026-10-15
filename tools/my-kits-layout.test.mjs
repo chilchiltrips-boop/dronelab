@@ -42,3 +42,14 @@ test('fixed-height desktop Devices panels scroll independently; mobile stays nat
  assert.match(behavior,/visualViewport\?\.addEventListener\('resize',scheduleLayout/);
  assert.match(behavior,/viewScroll\.set\(selected,body\(selected\)\?\.scrollTop\|\|0\)/);
 });
+
+test('Overview control buttons are kept outside the scrollable identity card',()=>{
+ const s=read('js/devices-workspace.js');
+ const css=read('devices-workspace.css');
+ assert.match(s,/const controlActions=\$\('fwKitTakeControl'\)\?\.closest\('\.fw-connect-actions'\)/);
+ assert.match(s,/overview\.insertBefore\(controlActions,overviewContent\)/);
+ assert.match(css,/#tab-firmware #dw-body-overview\{[\s\S]*?overflow-y:auto!important/);
+ assert.match(css,/#tab-firmware #dw-body-overview>\.fw-kit-detail-card\{[\s\S]*?overflow:visible!important/);
+ assert.match(css,/#dw-panel-overview>\.dw-overview-actions/);
+ assert.match(read('js/firmware-connect.js'),/bind\('fwKitTakeControl',\(\)=>kit\(\)\.toggleControl\(\)\)/);
+});

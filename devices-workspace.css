@@ -308,3 +308,63 @@
  #tab-firmware .dw-topline{padding:6px 8px}
  #tab-firmware .dw-topline span:not(.status){font-size:9px}
 }
+
+/* Overview: one long intrinsic-height card must never be a clipped grid row.
+   The action strip stays in sight while the identity/sensor details scroll. */
+@media(min-width:781px){
+ #tab-firmware #dw-panel-overview{min-height:0}
+ #tab-firmware #dw-body-overview{
+  display:block!important;
+  flex:1 1 0%!important;
+  height:0!important;
+  min-height:0!important;
+  max-height:none;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior-y:contain;
+  scrollbar-width:thin;
+  padding:0 6px 12px 0;
+ }
+ #tab-firmware #dw-body-overview>.fw-kit-detail-card{
+  display:block;
+  width:100%;
+  height:auto!important;
+  max-height:none!important;
+  min-height:0;
+  overflow:visible!important;
+ }
+}
+#tab-firmware #dw-panel-overview>.dw-overview-actions{
+ flex:0 0 auto;
+ display:flex;
+ align-items:center;
+ gap:8px;
+ margin:0 0 4px;
+ min-height:43px;
+ padding:5px 8px;
+ border:1px solid #2c5868;
+ border-radius:9px;
+ background:#102b38;
+}
+#tab-firmware #dw-panel-overview>.dw-overview-actions .btn{
+ min-height:33px;
+ margin:0;
+ padding:6px 13px;
+}
+#tab-firmware #dw-panel-overview>.dw-overview-actions #fwKitTakeControl{
+ min-width:128px;
+}
+#tab-firmware #dw-panel-overview>.dw-overview-actions .btn:focus-visible{
+ outline:2px solid #57e6bc;
+ outline-offset:2px;
+}
+@media(max-width:780px){
+ #tab-firmware #dw-body-overview{display:block;overflow:visible;height:auto;min-height:0}
+ #tab-firmware #dw-body-overview>.fw-kit-detail-card{height:auto;overflow:visible}
+ #tab-firmware #dw-panel-overview>.dw-overview-actions{
+  flex-wrap:wrap;
+  padding:7px;
+  min-height:44px;
+ }
+ #tab-firmware #dw-panel-overview>.dw-overview-actions .btn{min-height:42px}
+}

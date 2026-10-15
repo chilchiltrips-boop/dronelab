@@ -102,6 +102,18 @@
    const missing=required.filter(selector=>!document.querySelector(selector));
    if(missing.length)throw Error('Missing controls: '+missing.join(', '));
    relocate('.fw-kit-detail-card','overview');
+   // Keep the original authenticated Take Control / Release Control button
+   // visible above the long identity/sensor grid. Never clone or bypass the
+   // existing state-dependent disabled flag or its listener.
+   const controlActions=$('fwKitTakeControl')?.closest('.fw-connect-actions');
+   const overview=$('dw-panel-overview');
+   const overviewContent=body('overview');
+   if(!controlActions||!overview||!overviewContent)throw Error('Overview control actions missing');
+   controlActions.classList.add('dw-overview-actions');
+   controlActions.setAttribute('role','group');
+   controlActions.setAttribute('aria-label','Kit diagnostic control and connection test');
+   overview.insertBefore(controlActions,overviewContent);
+
    relocate('.fw-connect-card','connection');
    relocate('.fw-available-card','connection');
    relocate('.fw-rename-card','connection');
