@@ -1434,22 +1434,7 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
     response=await wifiDirect(ip,key,'/api/firmware/end','POST');
     if(response.kitId!==deviceId||response.sha256!==digest)throw Error('Firmware SHA-256 acknowledgement did not match the submitted APP');
    }catch(e){if(ticket===reconnectTicket)await wifiDirect(ip,key,'/api/firmware/abort','POST').catch(()=>{});throw e}
-  }else response=await new Promise((resolve,reject)=>{
-   const req=new XMLHttpRequest();
-   req.open('POST','http://'+ip+'/api/ota',true);
-   req.timeout=120000;req.responseType='text';
-   req.setRequestHeader('X-ZJ-Key',key);req.setRequestHeader('X-ZJ-Device',deviceId);
-   req.upload.onprogress=e=>{if(e.lengthComputable)onProgress({phase:'upload',percent:Math.min(87,4+Math.round(e.loaded/e.total*82)),message:'Uploading firmware '+Math.round(100*e.loaded/e.total)+'%'})};
-   req.onerror=()=>reject(Error('Wi-Fi OTA browser/network request blocked or disconnected. Do not retry until firmware version is checked via USB/STA/AP.'));
-   req.ontimeout=()=>reject(Error('OTA timed out. Check firmware version before retrying.'));
-   req.onload=()=>{let data={};try{data=JSON.parse(req.responseText||'{}')}catch{}
-    if(req.status!==200||data.updated!==true)return reject(Error(data.error||'OTA rejected • HTTP '+req.status));
-    resolve(data);
-   };
-   const body=new FormData();
-   body.append('firmware',new Blob([bytes],{type:'application/octet-stream'}),name);
-   req.send(body);
-  });
+  }else throw Error('Legacy raw-key multipart OTA is disabled. Update via encrypted OTA or physical USB recovery.');
   if(!response.updated)throw Error('No firmware write acknowledgement');
   if(ticket!==reconnectTicket)return {written:true,verified:false,expectedVersion:version,kitId:deviceId,reason:'Selection changed after OTA write acknowledgement'};
   state.connected=false;state.heartbeatAt=0;state.linkState='reconnecting';state.owner=false;state.rcSession='';state.rcSource='';render();

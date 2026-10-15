@@ -269,27 +269,9 @@ static void zjSetupHttp(){
 
  // Secure-by-default factory flashing remains USB-only. OTA is APP-only with per-device key,
  // ESP chip header check and Update partition guard. Production requires signed-image policy.
- zjHttp.on("/api/ota",HTTP_POST,[](){
-  if(!zjAuthenticated()||!zjAuthAdmin){zjReply(401,"{\"error\":\"access_key_required\"}");return;}
-  if(zjOtaFailed||!zjOtaComplete||Update.hasError()){zjOtaAuthorized=zjSecureOtaActive;zjReply(400,"{\"error\":\"ota_rejected_or_incomplete\"}");return;}
-  zjReply(200,"{\"updated\":true,\"rebooting\":true}");zjOtaRebootAt=millis()+1200;
- },[](){
-  HTTPUpload& u=zjHttp.upload();
-  if(u.status==UPLOAD_FILE_START){
-   if(zjSecureOtaActive||zjOtaRebootAt){zjOtaFailed=true;return;}
-   zjOtaAuthorized=zjAuthenticated()&&zjAuthAdmin&&(String(zjClientTransport())=="STA"||String(zjClientTransport())=="AP")&&!zjRcOwned&&!zjNetTesting&&!zjUsbScanning;zjOtaFailed=!zjOtaAuthorized;zjOtaComplete=false;if(!zjOtaFailed&&(!u.filename.endsWith(".bin")||!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)))zjOtaFailed=true;
-  }
-  else if(u.status==UPLOAD_FILE_WRITE&&!zjOtaFailed){
-   if(u.totalSize==0){const uint16_t chip=u.currentSize>13?uint16_t(u.buf[12])|uint16_t(u.buf[13])<<8:0;
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
-    if(u.currentSize<24||u.buf[0]!=0xe9||chip!=13){zjOtaFailed=true;Update.abort();return;}
-#else
-    if(u.currentSize<24||u.buf[0]!=0xe9||chip!=5){zjOtaFailed=true;Update.abort();return;}
-#endif
-   }
-   if(Update.write(u.buf,u.currentSize)!=u.currentSize){zjOtaFailed=true;zjOtaAuthorized=false;Update.abort();}
-  }else if(u.status==UPLOAD_FILE_END&&!zjOtaFailed){zjOtaComplete=Update.end(true);zjOtaFailed=!zjOtaComplete;}
-  else if(u.status==UPLOAD_FILE_ABORTED){zjOtaFailed=true;if(!zjSecureOtaActive){zjOtaAuthorized=false;Update.abort();}}
+ // Raw-key multipart OTA is retired: authenticated encrypted chunk OTA only.
+ zjHttp.on("/api/ota",HTTP_POST,[](){zjReply(410,"{\"error\":\"legacy_ota_disabled_use_encrypted_session\"}");},[](){
+  if(zjHttp.upload().status==UPLOAD_FILE_START)zjOtaFailed=true;
  });
  zjHttp.on("/api/reboot",HTTP_POST,[](){
   if(!zjAllow())return;

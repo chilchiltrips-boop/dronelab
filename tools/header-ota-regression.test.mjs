@@ -22,14 +22,15 @@ test('network OTA is APP-only, verified for exact physical A1/A2 kit and never u
  assert.match(updater,/kit\.transport\.toUpperCase\(\)/);
  assert.match(updater,/validateEspImage\(fw\.bytes,fw\.boardId,'app'\)/);
  assert.match(kit,/async function uploadAppFirmware/);
+ assert.match(kit,/\/api\/firmware\/begin/);
+ assert.doesNotMatch(kit,/new XMLHttpRequest/);
  assert.match(kit,/pre\.kitId!==deviceId\|\|pre\.kitCode!==kitCode\|\|pre\.board!==boardId/);
  assert.match(kit,/pre\.rc\?\.claimed\|\|pre\.motorsArmed!==false/);
- assert.match(kit,/req\.setRequestHeader\('X-ZJ-Key',key\)/);
- assert.match(kit,/body\.append\('firmware'/);
  assert.match(kit,/d\.kitId!==deviceId\|\|d\.kitCode!==kitCode\|\|d\.board!==boardId/);
  assert.match(network,/zjHttp\.on\("\/api\/ota",HTTP_POST/);
- assert.match(network,/if\(u\.currentSize<24\|\|u\.buf\[0\]!=0xe9/);
- assert.match(network,/zjOtaAuthorized=zjAuthenticated\(\)/);
+ assert.match(network,/legacy_ota_disabled_use_encrypted_session/);
+ assert.doesNotMatch(network,/Update\.begin\(UPDATE_SIZE_UNKNOWN/);
+ assert.match(read('FlightCore_Firmware/FlightCoreOta.h'),/zjSecureOtaAccess\(true\)/);
 });
 test('network OTA UI excludes USB/relay and does not claim success without runtime version verification',()=>{
  assert.match(updater,/!\['sta','ap'\]\.includes\(device\.transport\)/);

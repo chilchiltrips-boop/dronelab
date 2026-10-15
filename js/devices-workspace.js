@@ -157,6 +157,12 @@
    // unwrap only the redundant disclosure (keep every control and listener).
    const innerManual=$('kitAdvancedHardware');
    if(innerManual){innerManual.open=true;innerManual.classList.add('dw-unwrapped-advanced')}
+   // The outer Advanced disclosure must expose Kit Setup in a single click.
+   legacy.addEventListener('click',event=>{
+    if(event.target.closest('summary')!==heading)return;
+    const inner=$('kitAdvancedHardware');
+    if(inner){inner.open=true;inner.classList.add('dw-unwrapped-advanced')}
+   });
    body('connection').append(legacy);
    relocate('.firmware-grid','firmware');
    relocate('.firmware-safety-strip','firmware');
