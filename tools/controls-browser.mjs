@@ -42,7 +42,7 @@ try{
  if(!await page.locator('#fwBoardProfile').isVisible())throw Error('Firmware Flash board profile remains hidden after opening its workspace view');
  await page.locator('#fwBoardProfile').selectOption('ZFC-A2');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_APP.bin'));
  await page.locator('#fwImageType').selectOption('factory');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_FACTORY.bin'));
- await page.locator('#fwFileInput').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.alloc(32)});await page.waitForFunction(()=>document.getElementById('fwLog').textContent.includes('does not match'));
+ await page.locator('#fwFileInput').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.alloc(32)});await page.waitForFunction(()=>document.getElementById('fwLog').textContent.includes('Unsupported image chip'));
  await page.locator('#fwFileInput').setInputFiles({name:a2Factory.file,mimeType:'application/octet-stream',buffer:readFileSync('FlightCore_Firmware/'+a2Factory.file)});await page.waitForFunction(()=>document.getElementById('fwPackageState').textContent==='VERIFIED IMPORT');
  if(await page.locator('#fwUsbFlashBtn').isEnabled())throw Error('Flash enabled after denied USB selection');
  results.push({id:'firmware-select/import',result:'A2 APP/factory loaded; truncated image rejected; flash remains disabled'});
