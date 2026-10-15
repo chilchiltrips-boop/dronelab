@@ -56,6 +56,71 @@ try{
  await page.goto(base+'index.html#firmware',{waitUntil:'domcontentloaded',timeout:30000});
  await page.waitForFunction(()=>document.querySelector('#app')?.dataset.ready==='true',null,{timeout:40000});
  await page.evaluate(()=>{const d=document.getElementById('pairStep2');if(d)d.open=true});
+ // Actual independent wheel-scroll behavior, not just CSS string assertions.
+ await page.setViewportSize({width:1480,height:640});
+ await page.locator('[data-tab="firmware"]').click();
+ await page.locator('[data-dw-view="wifi"]').click();
+ await page.waitForTimeout(220);
+ const before=await page.evaluate(()=>{
+  const nav=document.querySelector('.dw-nav-list');
+  const aside=document.querySelector('.dw-sidebar');
+  const content=document.querySelector('#dw-body-wifi');
+  const shell=document.querySelector('#devicesWorkspace');
+  return {bodyY:scrollY,asideY:aside.getBoundingClientRect().top,navY:nav.scrollTop,
+    contentY:content.scrollTop,contentHasOverflow:content.scrollHeight>content.clientHeight+20,
+    shellBottom:shell.getBoundingClientRect().bottom,
+    rightOverflow:getComputedStyle(content).overflowY};
+ });
+ if(!before.contentHasOverflow||before.rightOverflow!=='auto')
+  hardFailures.push('Desktop hardware Wi-Fi pane must overflow and use independent scrolling');
+ await page.locator('#dw-body-wifi').hover();
+ await page.mouse.wheel(0,410);
+ await page.waitForTimeout(250);
+ const after=await page.evaluate(()=>({
+  bodyY:scrollY,asideY:document.querySelector('.dw-sidebar').getBoundingClientRect().top,
+  navY:document.querySelector('.dw-nav-list').scrollTop,
+  contentY:document.querySelector('#dw-body-wifi').scrollTop
+ }));
+ if(after.contentY<=before.contentY+10||Math.abs(after.bodyY-before.bodyY)>2||
+    Math.abs(after.asideY-before.asideY)>2||after.navY!==before.navY)
+  hardFailures.push('Desktop mousewheel should scroll only the right hardware settings pane');
+ await page.screenshot({path:'test-output/form-fit/hardware-scroll-desktop.png'});
+ // A short desktop screen must scroll the middle menu while header/status stay frozen.
+ await page.setViewportSize({width:1480,height:410});
+ await page.waitForTimeout(230);
+ const navSize=await page.evaluate(()=>{
+  const el=document.querySelector('.dw-nav-list');
+  return {height:el.clientHeight,scrollHeight:el.scrollHeight,overflow:getComputedStyle(el).overflowY};
+ });
+ if(navSize.overflow!=='auto'||navSize.scrollHeight<=navSize.height+10)
+  hardFailures.push('Short desktop hardware sidebar navigation should overflow independently');
+ const prior=await page.evaluate(()=>({
+  bodyY:scrollY,contentY:document.querySelector('#dw-body-wifi').scrollTop,
+  navY:document.querySelector('.dw-nav-list').scrollTop
+ }));
+ await page.locator('.dw-nav-list').hover();
+ await page.mouse.wheel(0,220);
+ await page.waitForTimeout(200);
+ const menuAfter=await page.evaluate(()=>({
+  bodyY:scrollY,contentY:document.querySelector('#dw-body-wifi').scrollTop,
+  navY:document.querySelector('.dw-nav-list').scrollTop
+ }));
+ if(menuAfter.navY<=prior.navY+10||Math.abs(menuAfter.bodyY-prior.bodyY)>2||
+    Math.abs(menuAfter.contentY-prior.contentY)>2)
+  hardFailures.push('Short desktop mousewheel should scroll only the left hardware menu');
+ // Mobile should return to one natural scrolling document and sticky horizontal menu.
+ await page.setViewportSize({width:390,height:760});
+ await page.waitForTimeout(250);
+ const mobile=await page.evaluate(()=>{
+  const el=document.querySelector('.dw-sidebar'),nav=document.querySelector('.dw-nav-list');
+  const shell=document.getElementById('devicesWorkspace');
+  const content=document.getElementById('dw-body-wifi');
+  return {sidebarPos:getComputedStyle(el).position,navOverflow:getComputedStyle(nav).overflowX,
+    shellHeight:getComputedStyle(shell).height,contentOverflow:getComputedStyle(content).overflowY};
+ });
+ if(mobile.sidebarPos!=='sticky'||mobile.navOverflow!=='auto'||mobile.contentOverflow!=='visible')
+  hardFailures.push('Mobile needs sticky horizontal navigation and natural document scrolling');
+ await page.screenshot({path:'test-output/form-fit/hardware-scroll-mobile.png'});
  for(const width of widths){
   await page.setViewportSize({width,height:840});
   for(const tab of ['firmware','assembly','wiring','python','pid']){
