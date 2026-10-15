@@ -214,7 +214,8 @@ public class MainActivity extends Activity {
     }
     private static String arg(JSONArray values,int index){return values==null?"":values.optString(index,"");}
     private void handleNativeMessage(WebMessageCompat message,Uri origin,boolean isMainFrame){
-        if(view==null||!LOCAL_PAGE.equals(view.getUrl())||!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
+        if(view==null||!LOCAL_PAGE.equals(view.getUrl()))return;
+        if(!isMainFrame||origin==null||!"https".equals(origin.getScheme())||
            !"appassets.androidplatform.net".equals(origin.getHost())||origin.getPort()!=-1&&origin.getPort()!=443||
            message==null||message.getData()==null)return;
         try{
