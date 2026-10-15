@@ -34,6 +34,12 @@ try{
  await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('APP.bin'));
  await page.evaluate(()=>{Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>{throw new DOMException('Permission denied for test','NotAllowedError')},getPorts:async()=>[],addEventListener(){}}})});
  for(const id of ['fwAutoLoadBtn','fwConnectUsbBtn','fwSerialMonitorBtn','fwSerialReconnectBtn','fwSerialTabPlotter','fwPlotClearBtn','fwSerialTabMonitor','fwSerialClearBtn','fwForgetBtn','fwAutoLoadBtn'])await click(id);
+ // Firmware source selectors live in the relocated Firmware Flash view;
+ // the top-level firmware tab initially opens Overview, so selecting a hidden
+ // option would wait forever instead of exercising the real user workflow.
+ await page.locator('[data-dw-view="firmware"]').click();
+ await page.waitForFunction(()=>document.querySelector('#dw-panel-firmware')?.hidden===false);
+ if(!await page.locator('#fwBoardProfile').isVisible())throw Error('Firmware Flash board profile remains hidden after opening its workspace view');
  await page.locator('#fwBoardProfile').selectOption('ZFC-A2');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_APP.bin'));
  await page.locator('#fwImageType').selectOption('factory');await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_FACTORY.bin'));
  await page.locator('#fwFileInput').setInputFiles({name:'invalid.bin',mimeType:'application/octet-stream',buffer:Buffer.alloc(32)});await page.waitForFunction(()=>document.getElementById('fwLog').textContent.includes('does not match'));
