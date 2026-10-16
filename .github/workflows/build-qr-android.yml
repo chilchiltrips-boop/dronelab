@@ -82,7 +82,7 @@ jobs:
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
 
       - name: Check Android camera, code pairing and permanent release-signing rules
-        run: node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/android-connection-reliability.test.mjs
+        run: node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/android-connection-reliability.test.mjs tools/network-transport.test.mjs
 
       - name: Validate debug compilation (never publish a debug APK)
         run: gradle -p mobile-android :app:assembleDebug --no-daemon
