@@ -45,7 +45,8 @@
   panel.id='mobile-panel-'+tab.id;panel.dataset.mobilePanel=tab.id;
   panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);
   const title=make('header','mobile-panel-heading');
-  title.append(make('h2','',tab.title));
+  const live=make('span','mobile-panel-live','DISCONNECTED');live.id='mobile-live-'+tab.id;
+  title.append(make('h2','',tab.title),live);
   panel.append(title);
   nav.append(button);main.append(panel);groups.set(tab.id,panel);buttons.set(tab.id,button);
  }
@@ -74,6 +75,24 @@
  dialog.insertBefore(shell,main);shell.append(nav,main);
  main.classList.add('mobile-adaptive-main');
  let current='pair';
+ function refreshLive(){
+  const kitText=$('kitNetStatus')?.textContent||'',kitOk=$('kitNetStatus')?.dataset.state==='good';
+  const kitMode=$('kitLink')?.value?.toUpperCase()||'AP';
+  const statuses={
+   pair:($('appConnection')?.textContent||'NOT PAIRED'),
+   kit:kitOk?kitMode+' CONNECTED':(/switching|connecting/i.test(kitText)?'CONNECTING':(/failed|error|denied|timeout|unavailable/i.test(kitText)?'ERROR':'DISCONNECTED')),
+   wifi:/switching|connecting/i.test(kitText)?'SWITCHING':kitOk?kitMode+' CONNECTED':(/fallback/i.test(kitText)?'AP FALLBACK':'OFFLINE'),
+   control:$('controlState')?.textContent||'NO CONTROL',
+   more:($('kitOtaPhase')?.textContent||'OTA IDLE')
+  };
+  for(const [name,value] of Object.entries(statuses)){
+   const target=$('mobile-live-'+name);if(target)target.textContent=String(value).slice(0,54);
+  }
+ }
+ window.addEventListener('zebjus:kit-status',refreshLive);
+ window.addEventListener('zebjus:kit-transport',refreshLive);
+ const livePoll=setInterval(()=>{if(dialog.open)refreshLive()},1000);
+ dialog.addEventListener('close',()=>refreshLive());
  function setActive(name,{focus=false}={}){
   if(!groups.has(name))return false;
   if(current!==name&&current==='pair')root.ZebjusPairingStopCamera?.();
@@ -82,7 +101,7 @@
    const active=key===name,b=buttons.get(key);
    panel.hidden=!active;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;
   }
-  main.scrollTop=0;
+  main.scrollTop=0;refreshLive();
   if(focus)buttons.get(name).focus({preventScroll:true});
   return true;
  }
