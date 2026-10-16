@@ -217,6 +217,7 @@ public class MainActivity extends Activity {
                 .setMessage("Kit "+id+" • "+(saving?
                     "Encrypt and store diagnostic-only enrollment in Android Keystore? OWNER code is never stored.":
                     "Unlock this Kit's diagnostic-only credential for a fresh authenticated STA session?"))
+                .setOnCancelListener(dialog->respondVault(requestId,id,"User cancelled"))
                 .setNegativeButton("Cancel",(dialog,which)->respondVault(requestId,id,"User declined"))
                 .setPositiveButton(saving?"Save":"Use",(dialog,which)->performVault(op,requestId,id,credential))
                 .show();
