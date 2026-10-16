@@ -14,7 +14,7 @@ test('My Kits is consolidated into one icon navigated Devices & Firmware tab',()
    for(const prefix of ['dw-panel-','dw-tab-'])assert.ok(h.includes('id="'+prefix+view+'"'),path+' '+prefix+view);
   for(const id of ['fwNetworkFlashBtn','fwUsbFlashBtn','kitWifiScan','kitWifiSave','kitSavedRefresh','kitAdmin','kitMobilePairDetails','connectionDialog','kitConnect'])
    assert.equal(h.split('id="'+id+'"').length-1,1,path+' '+id+' unique control');
-  assert.match(h,/src=".\/js\/devices-workspace.js\?v=android-stable-download-20261016"/);
+  assert.match(h,/src=".\/js\/devices-workspace.js\?v=compact-scroll-header-20261016"/);
  }
 });
 test('existing controls are moved, never cloned, and keep their kit and WebRTC handlers',()=>{
@@ -29,18 +29,17 @@ test('existing controls are moved, never cloned, and keep their kit and WebRTC h
  assert.match(read('devices-workspace.css'),/grid-template-columns:210px minmax\(0,1fr\)/);
 });
 
-test('fixed-height desktop Devices panels scroll independently; mobile stays natural',()=>{
- const css=read('devices-workspace.css');
- const behavior=read('js/devices-workspace.js');
- assert.match(css,/#tab-firmware \.dw-shell\{[\s\S]*?height:var\(--dw-height/);
- assert.match(css,/#tab-firmware \.dw-sidebar\{[\s\S]*?grid-template-rows:auto minmax\(0,1fr\) auto/);
- assert.match(css,/#tab-firmware \.dw-nav-list\{[\s\S]*?overflow-y:auto/);
- assert.match(css,/#tab-firmware \.dw-view-content\{[\s\S]*?overflow-y:auto/);
- assert.match(css,/@media\(max-width:780px\)\{[\s\S]*?#tab-firmware \.dw-shell\{[\s\S]*?height:auto/);
+test('Devices & Firmware uses document scrolling: no frozen desktop panel or mobile sidebar',()=>{
+ const css=read('devices-workspace.css'),header=read('v2-header.css'),behavior=read('js/devices-workspace.js');
+ const final=css.slice(css.indexOf('/* Natural page scrolling:'));
+ assert.ok(final.includes('#tab-firmware.active{display:block!important;min-height:0!important;overflow:visible!important}'));
+ assert.ok(final.includes('height:auto!important;min-height:0!important;max-height:none!important'));
+ assert.ok(final.includes('position:relative!important;top:auto!important'));
+ assert.ok(final.includes('overflow-y:visible!important'));
+ assert.ok(final.includes('overflow-x:auto!important'),'Small horizontal nav still scrolls sideways');
+ assert.match(header,/#app \.topbar\{position:relative!important;top:auto!important/);
+ assert.doesNotMatch(behavior,/root\.scrollTo\(\{top:0/);
  assert.match(css,/#tab-firmware \.firmware-hero\{display:none!important\}/);
- assert.match(behavior,/function sizeWorkspace\(\)/);
- assert.match(behavior,/visualViewport\?\.addEventListener\('resize',scheduleLayout/);
- assert.match(behavior,/viewScroll\.set\(selected,body\(selected\)\?\.scrollTop\|\|0\)/);
 });
 
 test('Overview control buttons are kept outside the scrollable identity card',()=>{
@@ -85,4 +84,13 @@ test('unified Kit Connection opens the preserved legacy manual setup within one 
  assert.match(js,/if\(!legacy\.open\)return/);
  assert.match(js,/inner\.open=true;inner\.classList\.add\('dw-unwrapped-advanced'\)/);
  assert.match(css,/#dwLegacyConnection #kitAdvancedHardware\.dw-unwrapped-advanced>summary\{display:none!important\}/);
+});
+
+test('header names and verified connection status remain readable at every breakpoint',()=>{
+ const css=read('v2-header.css'),kit=read('js/classroom-kits.js');
+ assert.match(css,/#app \.topbar \.kit-top-detail b,#app \.topbar \.kit-top-detail small\{[\s\S]*?text-overflow:clip!important/);
+ assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="true"\]\{background:#167a4a!important/);
+ assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="false"\]\{background:#b32636!important/);
+ assert.match(css,/@media\(max-width:660px\)/);
+ assert.ok(kit.includes('pill.dataset.connected=String(ready)'), 'Status reflects verified live Kit, not chosen AP/STA');
 });
