@@ -54,8 +54,14 @@ try{
   assert.match(await page.locator('#fwWifiRouteHint').textContent(),/browser still uses the kit AP.*Update to FlightCore/);
   assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'AP setup does not authorize OTA');
-  assert.equal(await page.locator('#kitTopControl').isVisible(),true);assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),false);
+  assert.equal(await page.locator('#kitTopControl').isVisible(),true);
   await page.screenshot({path:`${output}/${entry.replace('.html','')}-firmware-${width}.png`,fullPage:true});
+  // Unified Devices moved the original, listener-bound Take Control action to
+  // Overview. Exercise the visible control there instead of clicking a button
+  // inside a hidden connection tab (which times out even if it is enabled).
+  await page.locator('[data-dw-view="overview"]').click();
+  await page.locator('#fwKitTakeControl').waitFor({state:'visible'});
+  assert.equal(await page.locator('#fwKitTakeControl').isDisabled(),false);
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
   assert.equal(await page.locator('#kitTopControl').getAttribute('aria-checked'),'true');
   await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
