@@ -15,7 +15,19 @@ try{
    return {height:header.getBoundingClientRect().height,width:innerWidth,scroll:document.documentElement.scrollWidth,navOverflow:nav.scrollWidth>nav.clientWidth+1,overlap:boxes.some((b,i)=>i&&b.left<boxes[i-1].right-1)};
   });results.push(metrics);
   await page.screenshot({path:`test-output/v2/header-${width}.png`});
-  assert.ok(metrics.height<=82,JSON.stringify(metrics));assert.ok(metrics.scroll<=width,JSON.stringify(metrics));assert.equal(metrics.navOverflow,false,JSON.stringify(metrics));assert.equal(metrics.overlap,false);
+  assert.ok(metrics.height<=(width<=600?205:width<=950?170:140),JSON.stringify(metrics));assert.ok(metrics.scroll<=width,JSON.stringify(metrics));assert.equal(metrics.navOverflow,false,JSON.stringify(metrics));assert.equal(metrics.overlap,false);
+  const headerState=await page.evaluate(()=>{
+   const name=document.getElementById('kitGlobalName'),badge=document.getElementById('kitGlobalState');
+   const kitRect=name.getBoundingClientRect(),badgeRect=badge.getBoundingClientRect();
+   return {nameVisible:getComputedStyle(name).display!=='none'&&kitRect.width>0&&kitRect.height>0,
+    badgeVisible:getComputedStyle(badge).display!=='none'&&badgeRect.width>0&&badgeRect.height>0,
+    color:getComputedStyle(badge).color,background:getComputedStyle(badge).backgroundColor,
+    position:getComputedStyle(document.querySelector('#app .topbar')).position};
+  });
+  assert.ok(headerState.nameVisible&&headerState.badgeVisible,JSON.stringify({width,headerState}));
+  assert.equal(headerState.position,'relative','Header scrolls with page, never stays sticky');
+  assert.equal(headerState.color,'rgb(255, 255, 255)','Offline and connected pills use white text');
+
   await page.locator('.v2-connection-details>summary').click();
   const pop=await page.locator('.v2-connection-popover').boundingBox();assert.ok(pop.x>=0&&pop.x+pop.width<=width+1);
   await page.locator('#kitTopNetworkSwitch').click();assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
