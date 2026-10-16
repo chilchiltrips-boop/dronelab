@@ -38,6 +38,8 @@ import java.util.Arrays;
 
 public class MainActivity extends Activity {
     private static final int CAMERA_REQUEST = 701;
+    private static final int WIFI_LOCATION_REQUEST = 702;
+    private String pendingWifiPermissionRequestId;
     private static final String LOCAL_ORIGIN = "https://appassets.androidplatform.net";
     private static final String LOCAL_PAGE = LOCAL_ORIGIN + "/assets/companion.html";
     private WebView view;
@@ -120,6 +122,12 @@ public class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if(requestCode==WIFI_LOCATION_REQUEST){
+            String id=pendingWifiPermissionRequestId;
+            pendingWifiPermissionRequestId=null;
+            if(id!=null)reportWifiPermission(id,
+                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
+        }
         if (requestCode == CAMERA_REQUEST && pendingVideoRequest != null) {
             PermissionRequest req = pendingVideoRequest;
             pendingVideoRequest = null;
@@ -153,6 +161,23 @@ public class MainActivity extends Activity {
         if(view==null||!scopedBridgeReady)return;
         String script="window."+callback+" && window."+callback+"("+result.toString()+")";
         runOnUiThread(()->{if(view!=null&&LOCAL_PAGE.equals(view.getUrl()))view.evaluateJavascript(script,null);});
+    }
+    private void reportWifiPermission(String id,boolean granted){
+        JSONObject result=new JSONObject();
+        try{
+            result.put("id",id);result.put("granted",granted);
+            if(!granted)result.put("error","Location permission denied. Allow precise location to verify Wi-Fi SSID/BSSID.");
+        }catch(Exception ignored){}
+        dispatchToPage("zebjusNativeWifiPermissionResult",result);
+    }
+    private void requestWifiPermission(String id){
+        if(!id.matches("[a-zA-Z0-9_-]{1,32}"))return;
+        if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED){
+            reportWifiPermission(id,true);return;
+        }
+        if(pendingWifiPermissionRequestId!=null){reportWifiPermission(id,false);return;}
+        pendingWifiPermissionRequestId=id;
+        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},WIFI_LOCATION_REQUEST);
     }
     private void respondVault(String requestId,String id,String error){
         JSONObject result=new JSONObject();
@@ -240,10 +265,7 @@ public class MainActivity extends Activity {
                     if(args.length()==2||op.equals("saveDiagnostic")&&args.length()==3)vaultOperation(op,args);
                     break;
                 case "openWifiSettings":if(args.length()==0)nativeFlightCore.openWifiSettings();break;
-                case "requestWifiPermission":
-                    if(args.length()==0&&checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
-                        requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},702);
-                    break;
+                case "requestWifiPermission":if(args.length()==1)requestWifiPermission(arg(args,0));break;
                 // No raw-key, arbitrary HTTP, filesystem or privileged JS methods.
                 default:break;
             }
@@ -396,8 +418,8 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
         // pending getUserMedia request finish rather than cancelling the prompt.
-        if (nativeFlightCore != null && pendingVideoRequest == null) nativeFlightCore.cancelOutstanding();
-        if (view != null && pendingVideoRequest == null) {
+        if (nativeFlightCore != null && pendingVideoRequest == null && pendingWifiPermissionRequestId == null) nativeFlightCore.cancelOutstanding();
+        if (view != null && pendingVideoRequest == null && pendingWifiPermissionRequestId == null) {
             view.evaluateJavascript("window.zebjusNativeAppPaused && window.zebjusNativeAppPaused();window.zebjusAppPaused && window.zebjusAppPaused()", null);
             view.onPause();
         }
@@ -412,6 +434,10 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         setOtaKeepAwake(false);
+        if(pendingWifiPermissionRequestId!=null){
+            reportWifiPermission(pendingWifiPermissionRequestId,false);
+            pendingWifiPermissionRequestId=null;
+        }
         if (wifiLink != null) { wifiLink.shutdown(); wifiLink = null; }
         if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
