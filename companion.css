@@ -443,3 +443,23 @@ button{min-height:44px}
 .mobile-connection .mobile-panel-heading{padding:2px 0 8px}
 .mobile-connection .mobile-version{padding:8px 3px;margin:0;color:#afc7d0;font-size:12px}
 @media(max-width:480px){.mobile-connection[open] .mobile-adaptive-shell{grid-template-columns:90px minmax(0,1fr)}.mobile-connection[open] .mobile-adaptive-main{padding:7px 8px 14px}.mobile-connection[open] .mobile-nav-item{font-size:10px;padding-inline:4px;gap:4px}.mobile-connection[open] .mobile-nav-icon{width:16px;height:16px;flex-basis:16px}}
+
+/* Preserve all Home controls in their existing locations. LED lives beside
+   the existing right-hand utility icons, never in the busy header. */
+.flight-cockpit .flight-led-toggle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:44px;width:44px;min-height:44px;padding:4px;border-radius:50%;background:#292537;border-color:#777083;color:#c3b6cb}
+.flight-led-toggle svg{width:19px;height:19px}
+.flight-led-toggle span{font-size:7px;line-height:1}
+.flight-led-toggle[aria-pressed="true"]{color:#ffe39b;border-color:#f2c66a;background:#52421e}
+.flight-led-toggle:disabled{opacity:.55}
+/* Latency stays the same width from — ms through 9999 ms, avoiding header drift. */
+.flight-topbar .flight-link{width:94px;min-width:94px;max-width:94px;justify-self:end;flex-shrink:0}
+.flight-topbar #flightLatency{display:inline-block;width:7ch;min-width:7ch;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-feature-settings:'tnum';font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.flight-topbar .flight-session{font-variant-numeric:tabular-nums;font-feature-settings:'tnum'}
+/* Compact menu: live operational feedback instead of static onboarding guides. */
+.mobile-connection .mobile-panel-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:5px}
+.mobile-connection .mobile-panel-live{font-size:11px;font-weight:750;color:#83d7ba;overflow-wrap:anywhere}
+.mobile-connection #mobile-panel-pair p.hint:not([id]),
+.mobile-connection #mobile-panel-kit p.mobile-guide,
+.mobile-connection #mobile-panel-control p.hint:not([id]){display:none}
+.mobile-connection .kit-saved-sta{margin:6px 0;padding:7px;border:1px solid #29485c;border-radius:7px;color:#b6f1d9;font-size:12px;overflow-wrap:anywhere}
+@media(orientation:landscape) and (max-height:440px){.flight-utilities{gap:4px}.flight-cockpit .flight-led-toggle{min-height:44px}}
