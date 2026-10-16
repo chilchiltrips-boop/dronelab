@@ -20,6 +20,22 @@ in run `38865490220`; publication was correctly skipped.
 | Transport/host could change while the permission or identity operation was pending | Lock transport, host and connection controls through verification/OTA, and restore them on completion or denial. |
 | Browser acceptance assumed all sections open and all optional downloads pre-cached | Open Permissions using its visible summary; verify Factory assets start uncached, then exercise on-demand Factory/Python caching before the offline reuse checks. |
 
+## Integration checkpoint
+
+`main` advanced to `0b314b347ccb42a9d7f1218265fe4d5700481007` during this audit.
+Its rebuilt firmware/catalogs, WebApp stamp, PeerJS regression gate and syntax
+checks are retained. Conflicting implementations are consolidated into one
+transport handler and the live-view instrumentation above. The regression gate
+now follows those implementations; native and browser behavioral checks remain
+mandatory. Local integration: **323/323 Node tests**, syntax/assets and both
+firmware image hashes pass.
+
+Pre-integration source `f22ba37dcac89b5a2f72845b85b786ddfa9dc87d` passed
+production-signed native acceptance in run `38900721447`: 31 assertions in each
+landscape direction, including AP/STA/Back, HOME/resume, Activity recreation and
+encrypted enrollment retention. Publication still requires all gates on the
+final integrated source, so this checkpoint is not release approval.
+
 ## Release evidence requirements
 
 - Local Node regression and repository integrity checks.

@@ -51,8 +51,18 @@ try{
   await p.screenshot({path:`test-output/android-landscape-settings-${width}x${height}.png`});
   if(await p.locator('#mobileSettingsStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Safety STOP hit area must remain at least 44px');
   if(width>=740){const bar=await p.locator('#flightOptions').boundingBox();if(bar.height>65)throw Error('Landscape settings toolbar is too tall: '+bar.height)}
-  const modal=await p.evaluate(()=>{const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth}});
-  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||modal.cols!==1)throw Error('Landscape settings sections clipped or not full width '+JSON.stringify(modal));
+  const modal=await p.evaluate(()=>{
+   const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();
+   const accordions=[...m.querySelectorAll(':scope > .settings-accordion')].map(e=>e.getBoundingClientRect().toJSON());
+   return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,
+    mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth,mainScroll:m.scrollWidth,accordions};
+  });
+  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||modal.cols!==1||
+     modal.mainScroll>modal.mainW+2||modal.accordions.length<2||modal.accordions.some(r=>r.width<modal.mainW-45))
+    throw Error('Landscape settings sections clipped or not full width '+JSON.stringify(modal));
+  const transport=await p.locator('#flightNetworkSwitch').boundingBox();
+  if(!transport||transport.height<44||transport.x<0||transport.x+transport.width>width+1)
+    throw Error('Cockpit AP/STA switch missing or clipped '+JSON.stringify({width,transport}));
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');
   const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,footerTop:document.querySelector('.flight-footer').getBoundingClientRect().top,touchReadoutBottoms:['flightLeftTouch','flightRightTouch'].map(id=>document.getElementById(id).getBoundingClientRect().bottom),stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));
