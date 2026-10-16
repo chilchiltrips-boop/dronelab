@@ -57,12 +57,12 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
 async function local(transport,deviceId,requiredScope='ap_diagnostics'){
  if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId))throw Error('Invalid FlightCore Device ID');
  if(!['ap_diagnostics','sta_observer'].includes(requiredScope))throw Error('Invalid local Wi-Fi scope');
- // Reuse this random client within the app session so firmware reuses one
- // local-session slot instead of exhausting its four AP slots on reconnects.
- let client;try{client=root.sessionStorage?.getItem('zebjus.auth.local-client:'+deviceId)}catch{}
+ // Reuse a nonsecret random client identifier across app restarts so the
+ // firmware does not exhaust its four AP-local enrollment slots.
+ let client;try{client=root.localStorage?.getItem('zebjus.auth.local-client:'+deviceId)}catch{}
  if(!/^[a-f0-9]{32}$/.test(client||'')){
   client=hex(root.crypto.getRandomValues(new Uint8Array(16)));
-  try{root.sessionStorage?.setItem('zebjus.auth.local-client:'+deviceId,client)}catch{}
+  try{root.localStorage?.setItem('zebjus.auth.local-client:'+deviceId,client)}catch{}
  }
  const r=decoded(await transport('/api/auth/local','POST',{deviceId,client},{}));
  if(r.kitId!==deviceId||r.scope!==requiredScope||
