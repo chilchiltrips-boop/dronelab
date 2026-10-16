@@ -49,7 +49,9 @@ try{
   }
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.screenshot({path:`test-output/android-landscape-settings-${width}x${height}.png`});
-  if(await p.locator('#mobileSettingsStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Safety STOP hit area must remain at least 44px');
+  if(await p.locator('#mobileSettingsStop').isVisible())throw Error('Duplicate Menu STOP must remain hidden');
+  if(await p.locator('#flightStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Home safety STOP hit area must remain at least 44px');
+  if(await p.locator('#flightBack').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Menu Back arrow must remain accessible at 44px');
   // The adaptive menu intentionally shows one category at a time; the old
   // test expected every top-level accordion to share one giant scroll page.
   await p.locator('[data-mobile-tab="control"]').click();
