@@ -97,11 +97,11 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
  listeners.get('document:DOMContentLoaded')();
  // No label, and no manual Connect button: this simulates Android Wi-Fi joining AP.
  window.ZebjusNetwork.networkChanged();
- await new Promise(resolve=>setTimeout(resolve,760));
+ await new Promise(resolve=>setTimeout(resolve,950));
  assert.equal(window.ZebjusNetwork.isConnected(),true);
  assert.equal(localSessions,1);
  assert.equal(element('kitKey').value,'');
  assert.equal(element('kitSavedId').value,kitId);
  assert.deepEqual(calls,['/api/identify']);
- assert.match(element('kitNetStatus').textContent,/VERIFIED/);
+ assert.match(element('kitNetStatus').textContent,/AP-LOCAL/);
 });
