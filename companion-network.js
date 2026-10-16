@@ -378,6 +378,7 @@ async function status(){
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  online=true;lastStatus=Date.now();statusMisses=0;
+ if(link==='ap'&&autoApTimer){clearTimeout(autoApTimer);autoApTimer=null;}
  if(el('kitSavedId')&&verifiedKitId)el('kitSavedId').value=verifiedKitId;
  saveVerifiedIp(verifiedKitId,ip,link==='ap'?data.apSsid:data.ssid);
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
