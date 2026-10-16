@@ -124,7 +124,10 @@ try{
  await web.locator('#pythonTarget').selectOption('sta');
  await phone.goto('http://127.0.0.1:8765/companion.html');await phone.locator('#flightSettings').click();
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
- await phone.locator('#kitRcPreview').check();await wait(phone,()=>window.ZebjusNetwork.hasControl());await phone.locator('#flightBack').click();
+ await phone.locator('details.settings-accordion > summary').filter({hasText:'Permissions'}).click();
+ await phone.locator('#kitRcPreview').check();
+ await wait(phone,()=>window.ZebjusNetwork.hasControl());
+ await phone.locator('#flightBack').click();
  // Real touch-follow handlers and response mapping, with DOM pointer events.
  const beforeTouch=await phone.evaluate(()=>{
   const previous=window.ZebjusNetwork.feedback()?.seq||0;
