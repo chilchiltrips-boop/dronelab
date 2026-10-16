@@ -125,6 +125,8 @@ try{
  await phone.goto('http://127.0.0.1:8765/companion.html');await phone.locator('#flightSettings').click();
  // Same secured Kit/permission listeners, now reached through visible tabs.
  await phone.locator('[data-mobile-tab="kit"]').click();
+ // Manufacturer label is now inside the optional Advanced disclosure.
+ await phone.locator('details.kit-label-advanced').evaluate(el=>el.open=true);
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
  await phone.locator('[data-mobile-tab="more"]').click();
  await phone.locator('.settings-accordion > summary').filter({hasText:'Permissions • WebApp Grants / Diagnostic Control'}).click();
