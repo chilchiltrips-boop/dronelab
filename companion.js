@@ -156,7 +156,7 @@ async function scanWebQR(){
   const denied=err?.name==='NotAllowedError'||err?.name==='PermissionDeniedError'||/denied|permission/i.test(err?.message||'');
   const help=denied?'Camera access denied. Android Settings → Apps → ZEBJUS Flight Control → Permissions → Camera → Allow only while using the app.':String(err?.message||err);
   $('offerState').textContent=denied?'CAMERA PERMISSION DENIED':'Camera unavailable';
-  $('cameraPermissionHelp').textContent=help;message('QR scanner: '+help);
+  $('cameraPermissionHelp').textContent=help;$('cameraPermissionHelp').classList.remove('mobile-guide');message('QR scanner: '+help);
  }finally{if(ticket===scannerEpoch){scannerStarting=false;$('scanOfferBtn').textContent='Scan Web QR';sync()}}
 }
 function expandQR(){
