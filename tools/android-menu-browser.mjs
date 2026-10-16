@@ -19,7 +19,7 @@ try{
   const toggle=page.locator('#flightNetworkSwitch');
   assert.equal(await toggle.getAttribute('aria-checked'),'false');
   await toggle.click();
-  await page.waitForFunction(()=>document.getElementById('mobileConnection').open);
+  await page.waitForFunction(()=>document.getElementById('mobileConnection').open&&/Connect and verify the Kit/.test(document.getElementById('kitNetStatus').textContent));
   assert.equal(await toggle.getAttribute('aria-checked'),'false','Unverified kit must not switch AP/STA');
   assert.equal(await page.locator('[data-mobile-tab="wifi"]').getAttribute('aria-selected'),'true');
   assert.match(await page.locator('#kitNetStatus').textContent(),/Connect and verify the Kit/);
