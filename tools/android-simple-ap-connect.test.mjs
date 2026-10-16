@@ -67,11 +67,12 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
    addEventListener(type,fn){listeners.set(id+':'+type,fn)},replaceChildren(){},add(){}});
   return elements.get(id);
  };
- let localSessions=0;
+ let localSessions=0,rejectNextStatus=false;
  const window={dispatchEvent(){},addEventListener(){},ZebjusKitAuth:{
   local:async(_transport,id,scope)=>{
    assert.equal(id,kitId);assert.equal(scope,'ap_diagnostics');localSessions++;
    return {local:true,deviceId:id,expiresAt:Date.now()+60000,request:async route=>{
+    if(rejectNextStatus){rejectNextStatus=false;const err=Error('local session expired');err.status=401;throw err;}
     if(route==='/api/status')return {kitId,requestTransport:'AP',apActive:true,staConnected:false,
       apSsid:'zebjus_drone_1',apIp:'192.168.4.1',board:'ZFC-A1',kitCode:'123456',mode:'ap'};
     throw Error('Unexpected route '+route);
@@ -105,4 +106,8 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
  assert.equal(element('kitSavedId').value,kitId);
  assert.deepEqual(calls,['/api/identify']);
  assert.match(element('kitNetStatus').textContent,/CONNECTED.*AP-local/);
+ rejectNextStatus=true;
+ await assert.rejects(window.ZebjusNetwork.status(),/local session expired/);
+ await window.ZebjusNetwork.status();
+ assert.equal(localSessions,2,'stale local session is automatically renewed');
 });
