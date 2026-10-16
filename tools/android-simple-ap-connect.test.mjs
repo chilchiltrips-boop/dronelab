@@ -52,6 +52,7 @@ test('joining Kit AP yields label-free signed local session, no OWNER/OTA author
  await assert.rejects(session.request('/api/firmware/begin','POST',{size:1}),/OWNER/);
  assert.deepEqual(requested.map(x=>x.route),['/api/auth/local','/api/status']);
  const other=await kitAuth.local(transport,kitId,'ap_diagnostics');
+ assert.equal(requested[0].args.client,requested[2].args.client,'reconnect must reuse the AP session slot');
  mismatch=true;
  await assert.rejects(other.request('/api/status'),/Unsigned or mismatched/);
  await assert.rejects(kitAuth.local(async()=>({status:200,text:JSON.stringify({kitId,bootId,session:sid,key:sessionKey,scope:'sta_observer',expiresMs:1800000})}),kitId,'ap_diagnostics'),/scope invalid/);
