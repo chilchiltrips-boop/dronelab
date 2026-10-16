@@ -33,7 +33,7 @@ test('joining Kit AP yields label-free signed local session, no OWNER/OTA author
   requested.push({route,method,args,headers});
   if(route==='/api/auth/local'){
    assert.equal(method,'POST');assert.equal(args.deviceId,kitId);
-   assert.match(args.client,/^[a-f0-9]{32}$/);assert.deepEqual(headers,{});
+   assert.match(args.client,/^[a-f0-9]{32}$/);assert.equal(Object.keys(headers).length,0);
    return {status:200,text:JSON.stringify({kitId,bootId,session:sid,key:sessionKey,scope:'ap_diagnostics',expiresMs:1800000})};
   }
   if(route==='/api/status'){
