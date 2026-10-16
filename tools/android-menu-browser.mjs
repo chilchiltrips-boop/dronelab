@@ -71,6 +71,7 @@ try{
   assert.equal(await toggle.getAttribute('aria-checked'),'false');
   await page.locator('#flightBack').tap();
   await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
+  assert.equal(await page.locator('#flightStop').isVisible(),true,'Home emergency STOP must be visible after returning from full-height Menu');
   const header=await page.locator('.flight-topbar').evaluate(e=>({height:e.getBoundingClientRect().height,children:[...e.children].filter(n=>n.getClientRects().length).map(n=>{const r=n.getBoundingClientRect();return{id:n.id,left:r.left,right:r.right,bottom:r.bottom,top:r.top,height:r.height}})}));
   for(const child of header.children)assert.ok(child.left>=0&&child.right<=width+1,JSON.stringify(header));
   if(width>height)assert.ok(header.height<=56,JSON.stringify(header));
