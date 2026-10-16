@@ -177,11 +177,14 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){}
         dispatchToPage("zebjusNativeWifiPermissionResult",result);
     }
-    private void requestWifiPermission(String id){
+    private void requestWifiPermission(String id,boolean silent){
         if(!id.matches("[a-zA-Z0-9_-]{1,32}"))return;
         if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED){
             reportWifiPermission(id,true);return;
         }
+        // Background AP discovery must never open an unsolicited Android permission dialog.
+        // A real user tap on Connect Kit / Open Wi-Fi Settings may ask once.
+        if(silent){reportWifiPermission(id,false);return;}
         if(pendingWifiPermissionRequestId!=null){reportWifiPermission(id,false);return;}
         pendingWifiPermissionRequestId=id;
         requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},WIFI_LOCATION_REQUEST);
@@ -273,7 +276,10 @@ public class MainActivity extends Activity {
                     if(args.length()==2||op.equals("saveDiagnostic")&&args.length()==3)vaultOperation(op,args);
                     break;
                 case "openWifiSettings":if(args.length()==0)nativeFlightCore.openWifiSettings();break;
-                case "requestWifiPermission":if(args.length()==1)requestWifiPermission(arg(args,0));break;
+                case "requestWifiPermission":
+                    if(args.length()==1)requestWifiPermission(arg(args,0),false);
+                    else if(args.length()==2&&"silent".equals(arg(args,1)))requestWifiPermission(arg(args,0),true);
+                    break;
                 // No raw-key, arbitrary HTTP, filesystem or privileged JS methods.
                 default:break;
             }
