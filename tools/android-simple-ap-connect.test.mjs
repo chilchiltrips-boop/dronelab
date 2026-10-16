@@ -23,7 +23,7 @@ test('joining Kit AP yields label-free signed local session, no OWNER/OTA author
  const root={ZfcCrypto:{
    hmac256:(key,body)=>new Uint8Array(createHmac('sha256',Buffer.from(key)).update(Buffer.from(body)).digest()),
    encryptGCM:()=>new Uint8Array(20)
-  },crypto:{getRandomValues:a=>a.fill(7)},sessionStorage:{getItem:k=>savedClients.get(k)||null,setItem:(k,v)=>savedClients.set(k,v)}};
+  },crypto:{getRandomValues:a=>a.fill(7)},sessionStorage:{getItem:()=>null,setItem(){}},localStorage:{getItem:k=>savedClients.get(k)||null,setItem:(k,v)=>savedClients.set(k,v)}};
  runInNewContext(source,{...root,TextEncoder,Uint8Array,URLSearchParams,Date,Promise,AbortController,setTimeout,clearTimeout});
  // globalThis in the VM is the context; retrieve the bound library separately.
  const context={...root,TextEncoder,Uint8Array,URLSearchParams,Date,Promise,AbortController,setTimeout,clearTimeout};
