@@ -72,7 +72,7 @@ test('Android encrypted APP chunks are bound to Wi-Fi, never cellular/system net
  assert.match(body,/Network wifi=wifiLink\.networkFor\(ip,/);
  const pin=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreWifiLink.java');
  assert.match(pin,/if\(!bootstrap\)throw new IllegalStateException/);
- assert.match(pin,/pinnedSsid\.equals\(checkedSsid\(\)\)/);
+ assert.match(pin,/pinnedSsid\.equals\(checkedSsid\(observed\)\)/);
  assert.match(pin,/pinnedBssid\.equalsIgnoreCase/);
  assert.doesNotMatch(body,/connectivity\.getActiveNetwork\(\)/,'never use default/cellular network');
  assert.match(body,/wifi\.openConnection\(new URL/);
