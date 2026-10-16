@@ -3,6 +3,27 @@
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
 let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
 let diagnosticThrottle=1000;
+let lastControlSentAt=0,lastControlAttemptAt=0,lastRejectedAt=0,acceptedFrames=0,rejectedFrames=0;
+function controlLinkDiagnostic(now=performance.now()){
+ const ackAge=lastAckAt?Math.round(now-lastAckAt):-1;
+ const sentAge=lastControlSentAt?Math.round(now-lastControlSentAt):-1;
+ const buffered=Math.max(0,Number(peer?.channel?.bufferedAmount)||0);
+ const reason=sentAge<0||sentAge>180?'PHONE SENDER SCHEDULE DELAY':
+  buffered>32768||now-lastRejectedAt<250?'WEBRTC QUEUE / SEND REJECTION':
+  'WEBAPP RECEIVER / RETURN ACK DELAY';
+ return {reason,ackAgeMs:ackAge,lastSentAgeMs:sentAge,bufferedBytes:buffered,
+  sentSeq:seq,ackSeq:lastAckSeq,acceptedFrames,rejectedFrames};
+}
+function recordControlLinkTimeout(now){
+ const detail=controlLinkDiagnostic(now);
+ // Preserve the actual safety stop. These are symptoms, not proof of
+ // a specific Wi-Fi fault; collect the two sequence counters for diagnosis.
+ console.warn('ZEBJUS virtual flight receiver ACK timeout',detail);
+ return 'NO RECEIVER ACK FOR >650ms • SAFE DISARM • '+detail.reason+
+  ' • TX #'+detail.sentSeq+' ACK #'+detail.ackSeq+
+  ' • sent '+detail.lastSentAgeMs+'ms ago • queue '+detail.bufferedBytes+'B';
+}
+
 const diagnosticInput=()=>{const m=current();return {throttle:diagnosticThrottle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},responseMode:preset}};
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
@@ -82,7 +103,7 @@ function tick(now){
  if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
- if(isOwned()&&armed&&lastAckAt&&now-lastAckAt>650){stopLocally('NO RECEIVER ACK FOR >650ms • SAFE DISARM; CHECK WI-FI / WEBAPP LOAD');send(true)}
+ if(isOwned()&&armed&&lastAckAt&&now-lastAckAt>650){stopLocally(recordControlLinkTimeout(now));send(true)}
  if(Math.floor(now/80)!==Math.floor((now-dt*1000)/80))render();raf=requestAnimationFrame(tick);
 }
 function send(critical=false){
@@ -92,18 +113,26 @@ function send(critical=false){
  const m=halted?{...current(),armed:false,throttle:1000}:current();
  const payload={seq:++seq,sessionId:peer.status().sessionId,mode:m.mode,armed:m.armed,throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},sticks:{left:{...(left||{x:0,y:0})},right:{...(right||{x:0,y:0})}}};
  if(critical)criticalRequestSeq=seq;
- window.ZebjusNetwork?.previewControls?.(diagnosticInput());
-  if(!peer.sendSimulatorControl(payload,critical))return false;
- sent.set(seq,performance.now());return true;
+ // Simulator control always has priority over optional FlightCore HTTP
+ // diagnostics, which can schedule bridge traffic and generate UI updates.
+ lastControlAttemptAt=performance.now();
+ if(!peer.sendSimulatorControl(payload,critical)){
+  rejectedFrames++;lastRejectedAt=performance.now();return false;
+ }
+ const at=performance.now();sent.set(seq,at);lastControlSentAt=at;acceptedFrames++;
+ try{window.ZebjusNetwork?.previewControls?.(diagnosticInput())}catch(error){
+  console.warn('Optional FlightCore preview failed; WebRTC control preserved',error?.message||error);
+ }
+ return true;
 }
 function connect(p){
- peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;clockAt=clockElapsed=0;sent.clear();
+ peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;clockAt=clockElapsed=0;sent.clear();
  clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{window.ZebjusNetwork?.previewControls?.(diagnosticInput())}},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
 function onStatus(s){
- if(s?.sessionId!==sessionId){if(authority||armed)stopLocally('NEW SESSION • DISARMED');sessionId=s?.sessionId||'';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;sent.clear();ready=false;lastApplied=null}
+ if(s?.sessionId!==sessionId){if(authority||armed)stopLocally('NEW SESSION • DISARMED');sessionId=s?.sessionId||'';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;sent.clear();ready=false;lastApplied=null}
  const owns=isOwned();if(authority&&!owns)stopLocally('CONTROL LOST • SAFE STOP');
  if(!authority&&owns){stopLocally('CONNECTED • RECEIVER DISARM CHECK');send(true)}authority=owns;
  if(!owns)updateStatus('INPUT PREVIEW • NO FLIGHT COMMAND');else if(!armed)updateStatus(ready?'CONNECTED • THROTTLE LOW • READY TO ARM':'CONNECTED • WAITING FOR RECEIVER');render();
@@ -197,6 +226,6 @@ function intro(){
  splash.hidden=false;splashTimer=setTimeout(()=>{splash.classList.add('closing');splashTimer=setTimeout(()=>splash.hidden=true,350)},4650);
 }
 function init(){bind();intro();render()}
-window.ZebjusFlightApp={connect,onStatus,onAck,onTelemetry,remoteStop,doStop,show};
+window.ZebjusFlightApp={connect,onStatus,onAck,onTelemetry,remoteStop,doStop,show,controlLinkDiagnostic};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
