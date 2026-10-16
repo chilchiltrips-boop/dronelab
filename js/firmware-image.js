@@ -4,6 +4,29 @@ const u16=(b,i)=>b[i]|b[i+1]<<8;
 const u32=(b,i)=>(b[i]|b[i+1]<<8|b[i+2]<<16|b[i+3]<<24)>>>0;
 export function boardFromChip(catalog,chip){return catalog.boards.find(b=>b.imageChipIds.includes(chip))||null}
 export function imageType(bytes){return bytes.length>APP_OFFSET+32768&&bytes[APP_OFFSET]===0xe9?'factory':'app'}
+// ESP-IDF esp_app_desc_t follows the 24-byte image header and 8-byte first
+// segment header. Its time/date fields are the compiled firmware's own build
+// timestamp, unlike firmware-catalog.builtAt (CI build start) or flash time.
+export function imageBuildStamp(bytes,kind='app'){
+ const offset=kind==='factory'?APP_OFFSET:0;
+ if(!(bytes instanceof Uint8Array)||bytes.length<offset+144||u32(bytes,offset+32)!==0xabcd5432)return'';
+ function ascii(at){
+  const slice=bytes.subarray(offset+at,offset+at+16);
+  const zero=slice.indexOf(0);
+  const value=slice.subarray(0,zero<0?slice.length:zero);
+  if(value.some(x=>x<32||x>126))return'';
+  return String.fromCharCode(...value);
+ }
+ const time=ascii(112),date=ascii(128);
+ if(!/^\\d{2}:\\d{2}:\\d{2}$/.test(time)||!/^[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{4}$/.test(date))return'';
+ const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+ const m=/^([A-Z][a-z]{2})\\s+(\\d{1,2})\\s+(\\d{4})$/.exec(date),t=time.split(':').map(Number);
+ const index=months.indexOf(m[1]),day=+m[2],year=+m[3];
+ if(index<0||year<2000||year>2100||t[0]>23||t[1]>59||t[2]>59)return'';
+ const d=new Date(Date.UTC(year,index,day,...t));
+ if(d.getUTCFullYear()!==year||d.getUTCMonth()!==index||d.getUTCDate()!==day)return'';
+ return date+' '+time;
+}
 export function inspectImage(bytes,kind,board,catalog){
   if(!(bytes instanceof Uint8Array)||bytes.length<32768)throw Error('The firmware file is truncated or too small.');
   if(!['app','factory'].includes(kind)||!board)throw Error('Choose a known board and image type.');
