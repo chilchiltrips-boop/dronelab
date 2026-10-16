@@ -54,7 +54,7 @@ final class FlightCoreNativeBridge {
     private static boolean allowed(String method,String route) {
         if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
         if(!method.equals("POST"))return false;
-        return route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
+        return route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
     }
     private void reply(String id,boolean ok,int status,String body,String error,String proof) {
         try{
@@ -78,7 +78,7 @@ final class FlightCoreNativeBridge {
                 String n=names.next(),v=headers.getString(n);
                 if(!(n.equals("X-ZJ-Device")||n.equals("X-ZJ-Session")||n.equals("X-ZJ-Seq")||n.equals("X-ZJ-Proof"))||!v.matches("[A-Za-z0-9-]{1,80}"))throw new IllegalArgumentException();
             }
-            boolean publicRoute=route.equals("/api/identify")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll");
+            boolean publicRoute=route.equals("/api/identify")||route.equals("/api/health")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local");
             if(publicRoute&&headers.length()!=0)throw new IllegalArgumentException();
             if(!publicRoute) {
                 if(headers.length()!=4||!headers.has("X-ZJ-Device")||!headers.has("X-ZJ-Session")||

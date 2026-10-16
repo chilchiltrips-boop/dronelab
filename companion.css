@@ -421,3 +421,9 @@ button{min-height:44px}
  .mobile-connection .mobile-nav-item{font-size:10px}
  .mobile-connection .mobile-adaptive-main{padding:9px 7px 16px}
 }
+
+/* Optional label enrollment must not interrupt ordinary WPA2 AP onboarding. */
+.mobile-connection .kit-label-advanced{min-width:0;border:1px solid #526075;border-radius:7px;padding:6px 10px}
+.mobile-connection .kit-label-advanced>summary{cursor:pointer;min-height:34px;display:flex;align-items:center;line-height:1.35;font-size:12px}
+.mobile-connection .kit-label-advanced>label{display:flex;flex-direction:column;gap:6px;min-width:0;margin-top:8px}
+.mobile-connection .kit-label-advanced input{width:100%;min-width:0;min-height:44px;font-size:14px}

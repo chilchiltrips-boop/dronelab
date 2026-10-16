@@ -52,17 +52,17 @@
 <section class="card kit-network-card" id="kitNetworkCard" aria-label="FlightCore Wi-Fi transport and setup">
 <div class="section-title"><strong>FlightCore Connection • AP / STA</strong><span>Verified Kit Wi-Fi only • motors OFF</span></div>
 <details class="settings-accordion" open><summary>My Kits • Connect / Discovery</summary><div class="settings-accordion-body">
-<p class="hint">Join the controller AP in Android Wi-Fi settings or join the same router as the controller. Use the private manufacturer label to verify this exact kit without USB. Wi-Fi cannot ARM motors in this firmware.</p>
+<p class="hint">Simple AP connect: open Android Wi-Fi settings, select your Kit SSID and enter its Wi-Fi password. Return here; the app connects automatically without a private label. Existing paired STA connections still work. Wi-Fi cannot ARM motors.</p>
 <div class="kit-net-grid">
 <label>Android connection<select id="kitLink"><option value="ap">AP • kit Wi-Fi</option><option value="sta">STA • same router</option></select></label>
 <label>Device IP<input id="kitIp" inputmode="decimal" value="192.168.4.1" autocomplete="off" spellcheck="false"/></label>
-<label>Private kit label<input id="kitKey" type="password" autocomplete="off" placeholder="Device ID:private label secret"/></label>
+<details class="kit-label-advanced"><summary>Advanced • Private kit label (optional)</summary><label>Device ID:secret<input id="kitKey" type="password" autocomplete="off" placeholder="Only for existing advanced enrollment"/></label></details>
 <label>Operating mode<select id="kitMode"><option value="auto">AUTO • STA then AP fallback</option><option value="ap">AP • direct FlightCore Wi-Fi</option><option value="sta">STA • router network</option></select></label>
 </div>
-<div class="actions"><button id="kitWifiSettings">Open Wi-Fi Settings</button><button id="kitDiscover">Discover Kit on Wi-Fi</button><button class="primary" id="kitConnect">Connect / Refresh</button><button id="kitSwitch">Apply Mode</button></div>
+<div class="actions"><button id="kitWifiSettings">Open Wi-Fi Settings</button><button id="kitDiscover">Discover Kit on Wi-Fi</button><button class="primary" id="kitConnect">Connect Kit</button><button id="kitSwitch">Apply Mode</button></div>
 <div class="kit-net-grid"><label>Saved Kit Device ID (STA reconnect)<input id="kitSavedId" autocomplete="off" spellcheck="false" placeholder="ZFC-A1-XXXXXXXXXXXX"/></label><label class="kit-net-toggle"><input id="kitRememberDiagnostic" type="checkbox"/> Remember diagnostic credential encrypted in Android Keystore (optional; never OWNER)</label></div>
 <div class="actions"><button id="kitConnectSaved">Connect Saved STA Kit</button><button id="kitForgetSaved">Forget saved diagnostic credential</button></div>
-<p id="kitNetStatus" class="hint" role="status">Select AP or STA, join that Wi-Fi, then connect to the verified kit.</p>
+<p id="kitNetStatus" class="hint" role="status">AP: join Kit Wi-Fi to connect automatically. No private label needed.</p>
 <div class="status-grid"><div><small>FLIGHTCORE</small><b id="kitDevice">—</b></div><div><small>IP ADDRESSES</small><b id="kitAddresses">—</b></div></div>
 </div></details>
 <details class="settings-accordion"><summary>Wi-Fi • Scan / Save / Mode</summary><div class="settings-accordion-body">
