@@ -104,4 +104,6 @@ test('Android capability redaction cannot clear a trusted pin or trigger synthet
  assert.match(native,/if\(matches\(network\)\)\{clear\(\);listener\.linkChanged\(\);\}/);
  assert.match(native,/pinnedBssid\.equalsIgnoreCase\(checkedBssid\(snapshot\)\)/);
  assert.match(native,/Network networkFor\(String ip,boolean bootstrap\)/);
+ assert.match(native,/Pinned Kit Wi-Fi temporarily unavailable; verifying Network identity/);
+ assert.doesNotMatch(native,/if\(caps==null\|\|!caps\.hasTransport\(NetworkCapabilities\.TRANSPORT_WIFI\)\)\{\s*clear\(\);/);
 });
