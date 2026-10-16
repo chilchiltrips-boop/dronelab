@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 APP_ID = "in.zebjus.dronelab.companion"
-EXPECTED_VERSION_CODE = 27
-EXPECTED_VERSION_NAME = "1.7.11-simple-ap-wifi"
+EXPECTED_VERSION_CODE = 28
+EXPECTED_VERSION_NAME = "1.7.12-kit-connectivity"
 EXPECTED_CERT_SHA256 = "f1b86575b3590734654f638e4e0d68056d37b2e8884ac7d6c24636fe9b516894"
 
 def output(cmd):

@@ -43,10 +43,17 @@ function stopLocally(message='STOP • DISARMED'){
  $('flightAttitudeLadder').style.transform='';$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW';
  render();updateStatus(message);
 }
+function refreshConnectionLabel(){
+ const receiver=!!peer?.status()?.connected;
+ const kit=!receiver&&!!window.ZebjusNetwork?.isConnected?.();
+ const label=$('flightConnection');
+ label.textContent=receiver?'CONNECTED':kit?'KIT '+window.ZebjusNetwork.selectedTransport().toUpperCase()+' CONNECTED':'NOT CONNECTED';
+ label.dataset.ready=String(receiver||kit);
+ label.title=receiver?'WebRTC simulator receiver connected':kit?'FlightCore Wi-Fi connected • simulator ARM still requires WebRTC control':'No verified WebRTC receiver or FlightCore Kit';
+}
 function updateStatus(message){
  $('flightWarning').textContent=message;
- $('flightConnection').textContent=peer?.status().connected?'CONNECTED':'NOT CONNECTED';
- $('flightConnection').dataset.ready=String(isOwned());
+ refreshConnectionLabel();
  $('flightOwner').textContent=isOwned()?'ANDROID OWNS CONTROLS':peer?.status().controller==='web'?'WEB OWNS CONTROLS':'INPUT PREVIEW • NO FLIGHT COMMAND';
 }
 function stickRender(side,position){
@@ -58,6 +65,7 @@ function stickRender(side,position){
  label.textContent='X '+Math.round(d.x*100)+'% Y '+Math.round(-d.y*100)+'% • '+(armed&&isOwned()?'FLIGHT':'PREVIEW ONLY');
 }
 function render(){
+ refreshConnectionLabel();
  const preview=current(),a=isOwned()&&armed&&lastApplied?.armed?lastApplied:null;
  const now=performance.now();if(a){if(!clockAt)clockAt=now;clockElapsed=now-clockAt}else if(clockAt){clockElapsed=now-clockAt;clockAt=0}
  const seconds=Math.floor(clockElapsed/1000);$('flightTimer').textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
@@ -171,8 +179,12 @@ function onTelemetry(packet){
  if(!isOwned())$('flightAppliedTelemetry').textContent+=' • '+a.throttle+' µs '+a.mode.toUpperCase()+' '+(a.armed?'WEB ARMED':'DISARMED');
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
-function doStop(){diagnosticThrottle=1000;void window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
-function openConnection(){clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')}
+function doStop(){diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true);return released}
+function openConnection(){
+ // Entering settings releases virtual ARM and Kit diagnostic control, so the
+ // duplicate Menu STOP can be hidden without leaving an armed modal.
+ doStop();clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')
+}
 function closeConnection(){
   window.ZebjusPairingStopCamera?.();
   const dialog=$('mobileConnection');if(dialog?.open)dialog.close();

@@ -624,37 +624,3 @@
  #tab-firmware .dw-android-release{padding:4px 6px;gap:5px}
  #tab-firmware .dw-android-release-link{width:auto;min-height:40px;flex:none}
 }
-
-/* Natural page scrolling: header, sidebar and Android download row move
-   together with the content; no frozen desktop panel or sticky mobile nav. */
-#tab-firmware.active{display:block!important;min-height:0!important;overflow:visible!important}
-#tab-firmware .dw-shell{
- height:auto!important;min-height:0!important;max-height:none!important;
- overflow:visible!important;align-items:start!important;flex:none!important
-}
-#tab-firmware .dw-sidebar{
- position:relative!important;top:auto!important;
- height:auto!important;max-height:none!important;min-height:0!important;
- overflow:visible!important;grid-template-rows:auto auto auto!important
-}
-#tab-firmware .dw-nav-list{
- max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important
-}
-#tab-firmware .dw-content,#tab-firmware .dw-view{
- height:auto!important;max-height:none!important;min-height:0!important;
- overflow:visible!important;flex:none!important
-}
-#tab-firmware .dw-view-content,
-#tab-firmware #dw-body-overview,
-#tab-firmware #dw-panel-connection>.dw-view-content,
-#tab-firmware #dw-panel-firmware>.dw-view-content{
- height:auto!important;max-height:none!important;min-height:0!important;
- overflow:visible!important;overflow-y:visible!important;
- flex:none!important;overscroll-behavior:auto!important
-}
-@media(max-width:780px){
- #tab-firmware .dw-nav-list{
-  display:flex;overflow-x:auto!important;overflow-y:hidden!important;
-  flex-wrap:nowrap;scrollbar-width:thin
- }
-}

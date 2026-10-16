@@ -47,12 +47,14 @@ test('Code availability depends on PeerServer registration; offline fail closed 
  assert.match(html,/id="copyAnswerBtn"/);
 });
 
-test('Cockpit header AP/STA is accessible and linked to the same Kit transport dropdown',()=>{
+test('Cockpit header AP/STA sends verified firmware mode command and keeps transport synchronized',()=>{
  assert.equal((html.match(/id="flightNetworkSwitch"/g)||[]).length,1);
  assert.match(html,/id="flightNetworkSwitch"[^>]*role="switch"/);
  assert.match(html,/id="kitLink"/);
  assert.match(network,/action\('flightNetworkSwitch'/);
- assert.match(network,/selectTransport\(link==='ap'\?'sta':'ap'\)/);
+ assert.match(network,/await setMode\(next\)/);
+ assert.match(network,/request\('\/api\/wifi\/mode','POST',\{mode:desired\}\)/);
+ assert.match(network,/if\(!online\|\|!onKitLink\)throw Error/);
  assert.match(network,/zebjus:kit-transport/);
  assert.match(network,/e\.dispatchEvent\(new Event\('change'/);
  assert.match(network,/selectTransport,selectedTransport:\(\)=>link/);

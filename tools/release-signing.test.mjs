@@ -7,8 +7,8 @@ const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'
 test('stable Android package ID and strictly monotonic release versionCode',()=>{
  const gradle=read('mobile-android/app/build.gradle');
  assert.match(gradle,/applicationId 'in\.zebjus\.dronelab\.companion'/);
- assert.match(gradle,/versionCode\s+27\b/);
- assert.match(gradle,/versionName '1\.7\.11-simple-ap-wifi'/);
+ assert.match(gradle,/versionCode\s+28\b/);
+ assert.match(gradle,/versionName '1\.7\.12-kit-connectivity'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);
