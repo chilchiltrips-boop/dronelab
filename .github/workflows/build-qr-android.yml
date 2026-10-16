@@ -5,6 +5,7 @@ on:
     paths:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
+      - 'tools/flight-controller-browser.mjs'
       - 'tools/android-peerjs-menu-regression.test.mjs'
       - 'mobile-android/**'
       - 'tools/android-camera-permission.test.mjs'
