@@ -75,7 +75,9 @@ test('Saved ID drives NSD without requiring private label, with transient cached
 test('Android 12+ uses per-Network unredacted WifiInfo after runtime approval',()=>{
  assert.match(activity,/WIFI_LOCATION_REQUEST = 702/);
  assert.match(activity,/pendingWifiPermissionRequestId/);
- assert.match(activity,/requestWifiPermission\(arg\(args,0\)\)/);
+ assert.match(activity,/requestWifiPermission\(arg\(args,0\),false\)/);
+ assert.match(activity,/requestWifiPermission\(arg\(args,0\),true\)/);
+ assert.match(activity,/if\(silent\)\{reportWifiPermission\(id,false\);return;\}/);
  assert.match(activity,/wifiLink\.refreshLocationIdentity\(\)/);
  assert.match(activity,/postDelayed\(\(\)->reportWifiPermission\(id,true\),350\)/);
  assert.match(wifi,/FLAG_INCLUDE_LOCATION_INFO/);
