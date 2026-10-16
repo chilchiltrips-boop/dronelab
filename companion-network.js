@@ -557,8 +557,8 @@ async function uploadAdminApp(file){
 function action(id,fn){el(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>show(e.message,'warn')))}
 function syncHeaderTransport(){
  const b=el('flightNetworkSwitch');if(!b)return;
- b.setAttribute('aria-checked',String(link==='sta'));
- b.setAttribute('aria-label','Selected FlightCore request connection: '+link.toUpperCase()+'. Tap to select '+(link==='ap'?'STA':'AP'));
+ b.setAttribute?.('aria-checked',String(link==='sta'));
+ b.setAttribute?.('aria-label','Selected FlightCore request connection: '+link.toUpperCase()+'. Tap to select '+(link==='ap'?'STA':'AP'));
  b.dataset.transport=link;
  b.disabled=otaBusy;
  window.dispatchEvent(new CustomEvent('zebjus:kit-transport',{detail:{transport:link,online:online&&onKitLink}}));
