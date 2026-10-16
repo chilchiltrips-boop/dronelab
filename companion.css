@@ -263,8 +263,9 @@ button{min-height:44px}
 }
 @media(orientation:portrait){
  .flight-topbar{grid-template-columns:44px minmax(90px,1fr) auto;gap:5px}
- .flight-network-switch{grid-column:1/3;grid-row:2;justify-self:start}
- .flight-session{grid-column:2;grid-row:1}
+ .flight-network-switch{grid-column:1;grid-row:2;justify-self:start}
+ .flight-brand{grid-column:2;grid-row:1}
+ .flight-session{grid-column:2;grid-row:2}
  .flight-link{display:none}
  .flight-topbar #flightStop{grid-column:3;grid-row:1/3}
 }
