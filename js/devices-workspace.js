@@ -123,7 +123,7 @@
   if(body(name))body(name).scrollTop=viewScroll.get(name)||0;
   scheduleLayout();
   if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>{
-   if(root.matchMedia('(max-width:780px)').matches)shell.scrollIntoView({block:'start',behavior:'smooth'});
+   shell.scrollIntoView({block:'start',behavior:'smooth'});
    else if(root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
    scheduleLayout();
   });
@@ -236,7 +236,6 @@
  root.visualViewport?.addEventListener('resize',scheduleLayout,{passive:true});
  root.addEventListener('dronelab:tab',event=>{
   if(event.detail?.name==='firmware'){
-   if(!root.matchMedia('(max-width:780px)').matches&&root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
    scheduleLayout();
   }
  });
