@@ -44,7 +44,7 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
   async function attempt(){
    if(ended)return;
    if(++attempts>5){onCode('');onStatus('Unable to reserve a six-digit code. Use the Two-Way QR option.');return}
-   code=generateCode();const thisCode=code,expected=await digest(offer,thisCode);
+   code='';const thisCode=generateCode(),expected=await digest(offer,thisCode);
    if(ended||!isCurrent(expires))return;
    peer=cloudPeer(Peer,PREFIX+thisCode);const own=peer;
    onStatus('PeerJS ready • contacting online pairing service…');
