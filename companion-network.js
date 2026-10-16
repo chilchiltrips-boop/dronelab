@@ -667,6 +667,7 @@ function networkChanged(){
  if(otaBusy)otaCancelRequested=true;
  cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');
  dropInput('Android Wi-Fi changed • reconnecting on Kit AP if available');
+ nextAutoApAttempt=0; // A real network change must bypass the old network's retry cooldown.
  online=false;auth=null;diagnosticKey='';reconnectEnabled=false;onKitLink=false;lastStatus=0;
  scheduleAutoApConnect();
 }
@@ -680,7 +681,7 @@ window.zebjusNativeAppPaused=()=>{
 };
 window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
- else scheduleAutoApConnect(350);
+ else {nextAutoApAttempt=0;scheduleAutoApConnect(350)}
 };
  window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
