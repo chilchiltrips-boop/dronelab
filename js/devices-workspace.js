@@ -31,7 +31,7 @@
      !/^[0-9][A-Za-z0-9._-]{0,79}$/.test(version||'')||!/^[1-9][0-9]{0,9}$/.test(code||'')||
      !Number.isSafeInteger(Number(code)))
    throw Error('Official signed Android release metadata unavailable or invalid');
-  return 'Published stable Android APK: '+version+' (code '+code+')';
+  return 'Android APK • '+version.split('-')[0]+' (code '+code+')';
  }
  function updatePublishedAndroidRelease(){
   const labels=document.querySelectorAll('[data-dw-android-version]');
