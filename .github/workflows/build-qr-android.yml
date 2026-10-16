@@ -6,6 +6,7 @@ on:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
       - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
       - 'tools/android-peerjs-menu-regression.test.mjs'
       - 'tools/flight-ack-priority.test.mjs'
       - 'tools/apk-verifier.test.mjs'
