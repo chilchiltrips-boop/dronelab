@@ -15,6 +15,7 @@ function harness(mode){
  const listeners=new Map(),elements=new Map();
  const el=name=>{
   if(!elements.has(name))elements.set(name,{value:'',disabled:false,checked:false,dataset:{},textContent:'',
+   attributes:{},setAttribute(name,value){this.attributes[name]=String(value)},getAttribute(name){return this.attributes[name]??null},
    addEventListener(type,fn){listeners.set(name+':'+type,fn)},replaceChildren(){},add(){},click(){}});
   return elements.get(name);
  };
@@ -96,10 +97,15 @@ test('teacher Cancel waits for current write and signed abort; never sends more 
  const h=harness('cancel');await connectAndUpload(h);
  for(let i=0;i<100&&!h.calls.length;i++)await wait(5);
  assert.equal(h.calls.length,1,'first chunk in flight');
+ assert.equal(h.el('flightNetworkSwitch').disabled,true,'header must be disabled during encrypted OTA');
+ assert.equal(h.window.ZebjusNetwork.selectTransport('sta'),false,'transport cannot change mid write');
+ h.invoke('flightNetworkSwitch');
+ assert.equal(h.window.ZebjusNetwork.selectedTransport(),'ap');
  h.invoke('kitOtaCancel');
  const final=await completion(h,'OTA stopped:');
  assert.match(final,/OTA stopped:/);
  assert.equal(h.calls.length,1);assert.equal(h.ends,0);assert.equal(h.aborts,1);
+ assert.equal(h.el('flightNetworkSwitch').disabled,false,'header is restored after signed abort');
 });
 test('rejects oversized APP before calling file.arrayBuffer or writing flash',async()=>{
  const h=harness('normal');

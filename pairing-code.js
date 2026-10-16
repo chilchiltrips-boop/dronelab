@@ -35,6 +35,7 @@ function cloudPeer(Peer,id){
 }
 function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
  let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0,connectionCleanup=null,registrationTimer=null;
+ const retire=own=>{if(peer===own)peer=null;clearTimeout(registrationTimer);code='';onCode('');try{own?.destroy()}catch{}};
  const stop=()=>{ended=true;clearTimeout(timeout);clearTimeout(registrationTimer);connectionCleanup?.();connectionCleanup=null;try{connection?.close()}catch{}try{peer?.destroy()}catch{}connection=null;peer=null;code='';onCode('')};
  async function init(){
   const Peer=await loadPeer();
@@ -51,23 +52,22 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
    clearTimeout(registrationTimer);
    registrationTimer=setTimeout(()=>{
     if(!ended&&peer===own&&!code){
-     onCode('');
+     retire(own);
      onStatus('Online code service unavailable. Check Internet/DNS/campus firewall, or use Response QR offline.');
-     try{own.destroy()}catch{}
     }
    },18000);
    peer.on('open',()=>{
-    if(ended||peer!==own)return;
+    if(ended||peer!==own||!isCurrent(expires))return;
     clearTimeout(registrationTimer);code=thisCode;onCode(thisCode);onStatus('Six-digit code ready • Enter on College PC (expires with QR)');
    });
    peer.on('error',e=>{
     if(ended||peer!==own)return;
     clearTimeout(registrationTimer);
-    if(e.type==='unavailable-id'){try{own.destroy()}catch{}onStatus('Code already in use • generating another…');void attempt();return}
-    code='';onCode('');
+    retire(own);
+    if(e.type==='unavailable-id'){onStatus('Code already in use • generating another…');void attempt().catch(error=>{if(!ended)onStatus('Code registration failed: '+error.message)});return}
     onStatus('Online code service unavailable: '+(e.message||e.type||'Internet/signaling error')+'. Check phone Internet; use Response QR offline.');
    });
-   peer.on('disconnected',()=>{if(!ended&&peer===own){code='';onCode('');onStatus('Online pairing service disconnected • reconnect and regenerate, or use Response QR offline.')}});
+   peer.on('disconnected',()=>{if(!ended&&peer===own){retire(own);onStatus('Online pairing service disconnected • reconnect and regenerate, or use Response QR offline.')}});
    peer.on('connection',conn=>{
     if(ended||peer!==own){conn.close();return}
     if(connection&&connection!==conn){conn.close();return}

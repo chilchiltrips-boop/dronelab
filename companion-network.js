@@ -370,6 +370,7 @@ async function uploadAdminApp(file){
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
  if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
  otaBusy=true;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;reconnectEnabled=false;
+ syncHeaderTransport();
  if(el('kitOtaProgress'))el('kitOtaProgress').value=0;
  show('OTA preflight • verifying official APP image size, board and SHA-256');
  try{native?.setOtaKeepAwake?.(true)}catch{}
@@ -547,6 +548,7 @@ async function uploadAdminApp(file){
   throw error;
  }finally{
   otaBusy=false;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;auth=null;
+  syncHeaderTransport();
   try{native?.setOtaKeepAwake?.(false)}catch{}
   for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=false;
   if(el('kitAppOta'))el('kitAppOta').disabled=!online||!onKitLink||!!rcSession;
@@ -560,7 +562,7 @@ function syncHeaderTransport(){
  b.setAttribute('aria-checked',String(link==='sta'));
  b.setAttribute('aria-label','Selected FlightCore request connection: '+link.toUpperCase()+'. Tap to select '+(link==='ap'?'STA':'AP'));
  b.dataset.transport=link;
- b.disabled=otaBusy;
+ b.disabled=otaBusy||!native?.requestSecure;
  window.dispatchEvent(new CustomEvent('zebjus:kit-transport',{detail:{transport:link,online:online&&onKitLink}}));
 }
 function selectTransport(next){
@@ -572,13 +574,20 @@ function selectTransport(next){
 }
 function bind(){
  if(!el('kitNetStatus'))return;
+ syncHeaderTransport();
  if(!native?.requestSecure){show('Install updated Android APK for signed Wi-Fi sessions');return;}
  el('kitIp').value=ip;
  syncHeaderTransport();
+ action('flightNetworkSwitch',()=>{
+  if(otaBusy)return;
+  window.ZebjusFlightApp?.doStop();
+  if(selectTransport(link==='ap'?'sta':'ap'))el('flightSettings')?.click();
+ });
  el('kitLink').addEventListener('change',()=>{
   if(otaBusy){el('kitLink').value=link;show('OTA active • AP/STA switching blocked until signed recovery completes','warn');return;}
   if(!['ap','sta'].includes(el('kitLink').value)){el('kitLink').value=link;return;}
   if(el('kitLink').value===link){syncHeaderTransport();return;}
+  window.ZebjusFlightApp?.doStop();
   void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
   discoveredId='';cachedFallbackIp='';link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;

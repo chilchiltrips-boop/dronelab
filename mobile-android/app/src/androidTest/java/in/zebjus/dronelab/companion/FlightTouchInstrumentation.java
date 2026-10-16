@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
@@ -31,23 +32,54 @@ import org.json.JSONObject;
  * It does not claim physical-phone, real-camera, acoustic or radio coverage. */
 public final class FlightTouchInstrumentation extends Instrumentation {
     private Bundle args;
-    private WebView web;
-    private Activity activity;
+    private volatile WebView web;
+    private volatile Activity activity;
     private long down;
     private int checks;
     private int touchCalls;
     private boolean fullscreenHelpDismissed;
     private String lastTouch="";
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
+    @Override public void callActivityOnResume(Activity resumed) {
+        super.callActivityOnResume(resumed);
+        if(resumed instanceof MainActivity){activity=resumed;web=findWeb(resumed.getWindow().getDecorView());}
+    }
+    @Override public void callActivityOnDestroy(Activity destroyed) {
+        if(activity==destroyed){web=null;activity=null;}
+        super.callActivityOnDestroy(destroyed);
+    }
     private WebView findWeb(View view) {
         if(view instanceof WebView)return (WebView)view;
         if(view instanceof ViewGroup){ViewGroup g=(ViewGroup)view;for(int i=0;i<g.getChildCount();i++){WebView w=findWeb(g.getChildAt(i));if(w!=null)return w;}}
         return null;
     }
+    // Always run on the UI thread: HOME/relaunch and rotation can replace both
+    // Activity and WebView. Never evaluate JavaScript on a detached old renderer.
+    private WebView currentWeb() {
+        Activity current=activity;
+        if(current==null||current.isFinishing()||current.isDestroyed())throw new AssertionError("No live cockpit Activity");
+        WebView currentView=findWeb(current.getWindow().getDecorView());
+        if(currentView==null||!currentView.isAttachedToWindow())throw new AssertionError("No attached cockpit WebView");
+        web=currentView;
+        return currentView;
+    }
+    private void awaitCurrentWeb() throws Exception {
+        long until=SystemClock.uptimeMillis()+15000;
+        while(SystemClock.uptimeMillis()<until){
+            AtomicReference<Boolean> ready=new AtomicReference<>(false);
+            runOnMainSync(()->{try{currentWeb();ready.set(true);}catch(AssertionError unavailable){/* Lifecycle transition. */}});
+            if(ready.get()){waitJs("document.readyState==='complete' && window.ZebjusFlightApp");return;}
+            SystemClock.sleep(80);
+        }
+        throw new AssertionError("Resumed cockpit Activity/WebView did not become ready");
+    }
     private String js(String source) throws Exception {
         CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();
-        runOnMainSync(()->web.evaluateJavascript(source,value->{result.set(value);done.countDown();}));
+        AtomicReference<Throwable> error=new AtomicReference<>();
+        runOnMainSync(()->{try{currentWeb().evaluateJavascript(source,value->{result.set(value);done.countDown();});}
+            catch(Throwable failure){error.set(failure);done.countDown();}});
         if(!done.await(12,TimeUnit.SECONDS))throw new AssertionError("WebView JavaScript response timed out (12 s)");
+        if(error.get()!=null)throw new AssertionError("WebView JavaScript evaluation failed",error.get());
         return result.get();
     }
     private void waitJs(String condition) throws Exception {
@@ -99,7 +131,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 fullscreenHelpDismissed=true;
             }
             AtomicReference<Boolean> focused=new AtomicReference<>(false);
-            runOnMainSync(()->focused.set(activity.hasWindowFocus()));
+            runOnMainSync(()->focused.set(activity!=null&&!activity.isDestroyed()&&activity.hasWindowFocus()));
             if(focused.get()){
                 if(focusedSince==0)focusedSince=SystemClock.uptimeMillis();
                 if(SystemClock.uptimeMillis()-started>=2500&&SystemClock.uptimeMillis()-focusedSince>=500){waitForIdleSync();return;}
@@ -110,7 +142,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     }
     private float[] point(String id,float rx,float ry) throws Exception {
         String result=js("(()=>{const r=document.getElementById('"+id+"').getBoundingClientRect();return [r.x+r.width*"+rx+",r.y+r.height*"+ry+",devicePixelRatio]})()");
-        JSONArray p=new JSONArray(result);int[] origin=new int[2];runOnMainSync(()->web.getLocationOnScreen(origin));
+        JSONArray p=new JSONArray(result);int[] origin=new int[2];runOnMainSync(()->currentWeb().getLocationOnScreen(origin));
         return new float[]{origin[0]+(float)p.getDouble(0)*(float)p.getDouble(2),origin[1]+(float)p.getDouble(1)*(float)p.getDouble(2)};
     }
     private void touch(int action,int[] ids,float[]... xy) {
@@ -136,6 +168,16 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
         check("['flightLeftTouch','flightRightTouch'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=document.querySelector('.flight-footer').getBoundingClientRect().top+1)");
+        check("typeof window.Peer==='function'");
+        float[] transport=point("flightNetworkSwitch",.5f,.5f);
+        touch(MotionEvent.ACTION_DOWN,new int[]{7},transport);touch(MotionEvent.ACTION_UP,new int[]{7},transport);
+        check("document.getElementById('mobileConnection').open && document.getElementById('kitLink').value==='sta' && document.getElementById('flightNetworkSwitch').getAttribute('aria-checked')==='true'");
+        float[] transportBack=point("flightBack",.5f,.5f);
+        touch(MotionEvent.ACTION_DOWN,new int[]{7},transportBack);touch(MotionEvent.ACTION_UP,new int[]{7},transportBack);
+        touch(MotionEvent.ACTION_DOWN,new int[]{7},transport);touch(MotionEvent.ACTION_UP,new int[]{7},transport);
+        check("document.getElementById('kitLink').value==='ap' && document.getElementById('flightNetworkSwitch').getAttribute('aria-checked')==='false'");
+        touch(MotionEvent.ACTION_DOWN,new int[]{7},transportBack);touch(MotionEvent.ACTION_UP,new int[]{7},transportBack);
+        check("!document.getElementById('mobileConnection').open");
         screenshot("native-ready.png");
         float[] l=point("flightLeftZone",.50f,.65f),r=point("flightRightZone",.50f,.65f);
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);
@@ -184,16 +226,26 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         systemCommand("input keyevent KEYCODE_HOME");
         long backgroundUntil=SystemClock.uptimeMillis()+5000;boolean backgrounded=false;
         while(SystemClock.uptimeMillis()<backgroundUntil){
-            AtomicReference<Boolean> focused=new AtomicReference<>(true);runOnMainSync(()->focused.set(activity.hasWindowFocus()));
+            AtomicReference<Boolean> focused=new AtomicReference<>(true);runOnMainSync(()->focused.set(activity!=null&&!activity.isDestroyed()&&activity.hasWindowFocus()));
             if(!focused.get()){backgrounded=true;break;}SystemClock.sleep(80);
         }
         if(!backgrounded)throw new AssertionError("Android HOME did not background the cockpit");
         systemCommand("am start -W -n in.zebjus.dronelab.companion/.MainActivity -f 0x30020000");
         prepareCockpitWindow();
+        awaitCurrentWeb();
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false' && !document.getElementById('flightLeftRing').classList.contains('dragging') && !document.getElementById('flightRightRing').classList.contains('dragging')");
         js("window.__nativePaintReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__nativePaintReady=true));true");
         waitJs("window.__nativePaintReady===true");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().top>=0 && innerWidth>innerHeight");
+        // Force the replacement path too, even on devices that retain the same
+        // Activity after HOME. The persisted preset must survive a real recreate.
+        Activity previous=activity;WebView previousWeb=web;
+        runOnMainSync(()->previous.recreate());
+        long recreatedUntil=SystemClock.uptimeMillis()+15000;
+        while(activity==previous&&SystemClock.uptimeMillis()<recreatedUntil)SystemClock.sleep(80);
+        awaitCurrentWeb();prepareCockpitWindow();
+        if(activity==previous||web==previousWeb)throw new AssertionError("Recreation reused destroyed Activity/WebView");
+        check("document.getElementById('flightPreset').value==='Fast' && document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false'");
     }
     @Override public void onStart() {
         Bundle result=new Bundle();
@@ -206,9 +258,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 Activity rotated=monitor.waitForActivityWithTimeout(3000);if(rotated!=null)activity=rotated;removeMonitor(monitor);
                 waitForIdleSync();SystemClock.sleep(600);
             }
-            runOnMainSync(()->web=findWeb(activity.getWindow().getDecorView()));
-            if(web==null)throw new AssertionError("Native WebView missing");
-            waitJs("document.readyState==='complete' && window.ZebjusFlightApp");
+            awaitCurrentWeb();
             waitForIdleSync();SystemClock.sleep(300);
             if(args!=null&&"true".equals(args.getString("baselineOnly"))){
                 js("localStorage.setItem('zebjus.flight.preset.v1','Fast');true");check("localStorage.getItem('zebjus.flight.preset.v1')==='Fast'");
@@ -230,12 +280,17 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, OS HOME/resume, resumed compositor frames, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
-            screenshot("native-failure.png");
-            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent,trace:window.__nativeInputTrace,zones:['flightLeftZone','flightRightZone'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,rect:r.toJSON(),hit:document.elementFromPoint(r.x+r.width*.5,r.y+r.height*.65)?.id}})})");}catch(Exception ignored){}
-            AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
-            String activePackage=root==null?"none":String.valueOf(root.getPackageName());
-            if(root!=null)root.recycle();
-            result.putString("stream","FAIL native flight acceptance: "+failure.toString()+"\nAssertions="+checks+" touchCalls="+touchCalls+" lastTouch="+lastTouch+"\nWindow focus="+(activity!=null&&activity.hasWindowFocus())+" activePackage="+activePackage+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
+            // Preserve the original failure before best-effort diagnostics. An
+            // AssertionError from a dead renderer must not replace this cause.
+            Log.e("FlightTouchAcceptance","Original native acceptance failure",failure);
+            String original=Log.getStackTraceString(failure);
+            try{screenshot("native-failure.png");}catch(Throwable diagnosticFailure){Log.w("FlightTouchAcceptance","Screenshot unavailable",diagnosticFailure);}
+            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent,trace:window.__nativeInputTrace,zones:['flightLeftZone','flightRightZone'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,rect:r.toJSON(),hit:document.elementFromPoint(r.x+r.width*.5,r.y+r.height*.65)?.id}})})");}catch(Throwable diagnosticFailure){diagnostic="unavailable: "+diagnosticFailure;Log.w("FlightTouchAcceptance","JS diagnostic unavailable; original failure retained",diagnosticFailure);}
+            String activePackage="unavailable";
+            try{AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+                activePackage=root==null?"none":String.valueOf(root.getPackageName());if(root!=null)root.recycle();
+            }catch(Throwable diagnosticFailure){Log.w("FlightTouchAcceptance","Window diagnostic unavailable",diagnosticFailure);}
+            result.putString("stream","FAIL native flight acceptance: "+original+"\nAssertions="+checks+" touchCalls="+touchCalls+" lastTouch="+lastTouch+"\nActive package="+activePackage+"\nPreference/layout diagnostic: "+diagnostic+"\n");result.putString("shortMsg",failure.toString());finish(Activity.RESULT_CANCELED,result);
         }
     }
 }

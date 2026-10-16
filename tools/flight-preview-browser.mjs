@@ -52,7 +52,7 @@ try{
   if(await p.locator('#mobileSettingsStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Safety STOP hit area must remain at least 44px');
   if(width>=740){const bar=await p.locator('#flightOptions').boundingBox();if(bar.height>65)throw Error('Landscape settings toolbar is too tall: '+bar.height)}
   const modal=await p.evaluate(()=>{const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth}});
-  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||(width>=740&&modal.cols<3))throw Error('Landscape settings layout clipped or missing columns '+JSON.stringify(modal));
+  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||modal.cols!==1)throw Error('Landscape settings sections clipped or not full width '+JSON.stringify(modal));
   await p.locator('#flightPreset').selectOption('Slow');await p.locator('#flightBack').click();await p.reload();await p.waitForFunction(()=>window.ZebjusFlightApp);
   if(await p.locator('#flightPreset').inputValue()!=='Slow')throw Error('Preset did not persist');
   const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,footerTop:document.querySelector('.flight-footer').getBoundingClientRect().top,touchReadoutBottoms:['flightLeftTouch','flightRightTouch'].map(id=>document.getElementById(id).getBoundingClientRect().bottom),stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));

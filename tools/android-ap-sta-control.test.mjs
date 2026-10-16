@@ -9,6 +9,7 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  const listeners=new Map(),elements=new Map(),requests=[];
  const element=id=>{
   if(!elements.has(id))elements.set(id,{value:'',checked:false,textContent:'',dataset:{},disabled:false,
+   attributes:{},setAttribute(name,value){this.attributes[name]=String(value)},getAttribute(name){return this.attributes[name]??null},
    addEventListener(type,fn){listeners.set(id+':'+type,fn)},replaceChildren(){},add(){}});
   return elements.get(id);
  };
@@ -29,7 +30,8 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
   requests.push(route+'@'+ip);
   queueMicrotask(()=>window.zebjusNativeResult({id,ok:true,status:200,text:JSON.stringify({kitId}),proof:'proof'}));
  },requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},openWifiSettings(){}};
- const document={readyState:'loading',hidden:false,getElementById:element,addEventListener(type,fn){listeners.set('document:'+type,fn)}};
+ const document={readyState:'loading',hidden:false,getElementById:element,attributes:{},setAttribute(name,value){this.attributes[name]=String(value)},getAttribute(name){return this.attributes[name]??null},
+   addEventListener(type,fn){listeners.set('document:'+type,fn)}};
  runInNewContext(source,{window,document,Date,performance,URLSearchParams,Promise,Set,Map,Option:class {},
   setInterval(){},setTimeout,clearTimeout,CustomEvent:class {constructor(type,options){this.type=type;this.detail=options?.detail}}});
  listeners.get('document:DOMContentLoaded')();

@@ -1,8 +1,10 @@
 name: Unified PID Tuning Shell & Persistent WebRTC
 on:
   push:
-    branches: [work/sta-ap-diagnostics-20261012, feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main, feature/pid-fullwidth-responsive-layout]
+    branches: [fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main, feature/pid-fullwidth-responsive-layout]
     paths:
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
       - 'mobile-android/**'
       - 'docs/flight-training/**'
       - 'companion.html'

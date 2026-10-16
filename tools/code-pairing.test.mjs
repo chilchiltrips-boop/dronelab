@@ -94,3 +94,29 @@ test('cancelling code lookup rejects promptly without a stale answer',async()=>{
   await assert.rejects(app.resolveAnswer({offer,code,sid,expires:Date.now()+60000,signal:controller.signal}),/cancelled/);
  }finally{phone.stop()}
 });
+
+test('phone advertises only a registered code and clears it on signaling failure',async()=>{
+ const peers=[],timers=new Map();let timerId=0,code='',status='';
+ class Peer{
+  handlers=new Map();destroyed=false;
+  constructor(){peers.push(this)}
+  on(type,handler){this.handlers.set(type,handler);return this}
+  emit(type,value){this.handlers.get(type)?.(value)}
+  destroy(){this.destroyed=true}
+ }
+ const context={crypto:webcrypto,TextEncoder,Uint8Array,Peer,console,
+  setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId},clearTimeout(id){timers.delete(id)}};
+ context.globalThis=context;vm.runInNewContext(read('pairing-code.js'),context);
+ const start=()=>context.ZebjusCodePair.beginPhone({offer:'zj1:offer',answer:'zj1:answer',expires:Date.now()+120000,onCode:c=>code=c,onStatus:s=>status=s});
+ const first=start();await first.start();
+ assert.equal(code,'','do not show an unregistered local random number');
+ peers[0].emit('open');assert.match(code,/^[1-9]\d{5}$/);
+ peers[0].emit('disconnected');assert.equal(code,'');assert.equal(first.getCode(),'');assert.ok(peers[0].destroyed);
+ peers[0].emit('open');assert.equal(code,'','stale callbacks cannot restore an invalid code');first.stop();
+ const second=start();await second.start();
+ const registration=[...timers.values()].find(x=>x.ms===18000);assert.ok(registration);registration.fn();
+ assert.match(status,/Online code service unavailable/);assert.equal(code,'');assert.ok(peers[1].destroyed);
+ peers[1].emit('open');assert.equal(code,'','late signaling after timeout is ignored');second.stop();
+ const third=start();await third.start();peers[2].emit('error',{type:'network',message:'server blocked'});
+ assert.match(status,/Online code service unavailable: server blocked/);assert.doesNotMatch(status,/load PeerJS/);assert.equal(code,'');third.stop();
+});

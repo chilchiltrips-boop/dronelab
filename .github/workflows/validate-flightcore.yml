@@ -1,8 +1,10 @@
 name: Verify DroneLab FlightCore Firmware Center
 on:
   push:
-    branches: [feature/legacy-connectivity-port-20261013,work/sta-ap-diagnostics-20261012, fix/usb-rom-runtime-identity-single-line-telemetry, fix/python-editor-two-axis-scroll-sticky-run-controls, feature/python-a1-a2-gyro-read, testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, release/flightcore-v1-3-unified-telemetry-python-guard, feature/single-row-header-wifi-ota-v1-3-6, main]
+    branches: [fix/android-178-acceptance-release-20261016, feature/legacy-connectivity-port-20261013,work/sta-ap-diagnostics-20261012, fix/usb-rom-runtime-identity-single-line-telemetry, fix/python-editor-two-axis-scroll-sticky-run-controls, feature/python-a1-a2-gyro-read, testing/audit-compact-pairing-v1.4.5, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, release/flightcore-v1-3-unified-telemetry-python-guard, feature/single-row-header-wifi-ota-v1-3-6, main]
     paths:
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
       - 'mobile-android/**'
       - 'companion.html'
       - 'companion.css'

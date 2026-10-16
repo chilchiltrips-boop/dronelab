@@ -14,6 +14,7 @@ function harness(){
  const listeners=new Map(),elements=new Map(),requests=[],permissions=[];
  const el=name=>{
   if(!elements.has(name))elements.set(name,{value:'',checked:false,disabled:false,textContent:'',dataset:{},
+   attributes:{},setAttribute(name,value){this.attributes[name]=String(value)},getAttribute(name){return this.attributes[name]??null},
    addEventListener(type,fn){listeners.set(name+':'+type,fn)},replaceChildren(){},add(){}});
   return elements.get(name);
  };
