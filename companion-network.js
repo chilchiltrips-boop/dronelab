@@ -619,7 +619,7 @@ function bind(){
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
- document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc()});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc();else scheduleAutoApConnect(300)});
  window.addEventListener('blur',()=>{if(rcSession)void releaseRc()});
  action('kitWifiSettings',()=>native.openWifiSettings());
  action('kitDiscover',async()=>{
