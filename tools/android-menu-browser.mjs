@@ -25,7 +25,17 @@ try{
   assert.match(await page.locator('#kitNetStatus').textContent(),/STA selected/);
   assert.equal(await page.locator('#downloadStableApk').count(),0,'No App Update button in controller');
   assert.equal(await page.locator('#androidInstalledVersion').count(),0,'No duplicate app update card');
-  assert.equal(await page.locator('#appBuildVersion').count(),1,'Installed version remains in header');
+  assert.equal(await page.locator('#appBuildVersion').count(),1,'Installed APK version remains in More');
+  assert.equal(await page.locator('#mobileSettingsStop').isVisible(),false,'No duplicate menu STOP');
+  assert.equal(await page.locator('#flightBack').isVisible(),true,'Back arrow remains accessible');
+  const bounds=await page.evaluate(()=>{
+   const d=document.getElementById('mobileConnection').getBoundingClientRect();
+   const n=document.querySelector('.mobile-adaptive-nav').getBoundingClientRect();
+   const m=document.querySelector('.mobile-adaptive-main').getBoundingClientRect();
+   return {d:{top:d.top,bottom:d.bottom},n:{top:n.top,bottom:n.bottom,right:n.right},m:{top:m.top,bottom:m.bottom,left:m.left}};
+  });
+  assert.ok(bounds.m.left>=bounds.n.right-1,JSON.stringify(bounds));
+  assert.ok(Math.abs(bounds.m.top-bounds.n.top)<=2&&Math.abs(bounds.m.bottom-bounds.n.bottom)<=2,'Right panel and left sidebar must have equal full height: '+JSON.stringify(bounds));
   const categories=['pair','kit','wifi','control','more'],verified=[];
   for(const category of categories){
    await page.locator('[data-mobile-tab="'+category+'"]').click();
