@@ -124,7 +124,6 @@
   scheduleLayout();
   if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>{
    shell.scrollIntoView({block:'start',behavior:'smooth'});
-   else if(root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
    scheduleLayout();
   });
   root.dispatchEvent(new CustomEvent('dronelab:devices-view',{detail:{name}}));
