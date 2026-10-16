@@ -300,7 +300,7 @@ async function status(){
  el('kitAddresses').textContent='STA: '+(data.ip||'offline')+' • AP: '+(data.apIp||'offline');
  if(el('kitAppOta'))el('kitAppOta').disabled=otaBusy||!online||!onKitLink||!!rcSession;
  if(data.ip&&validHost(data.ip))staIp=data.ip;
- show('Phone → '+data.requestTransport+' VERIFIED • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
+ show('Phone → '+data.requestTransport+ (auth?.local?' AP-LOCAL Wi-Fi session':' VERIFIED signed identity')+' • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
  return data;
 }
 async function scan(){
