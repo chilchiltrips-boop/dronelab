@@ -185,6 +185,7 @@ function bind(){
    if(!network?.selectTransport){updateStatus('KIT WI-FI MANAGER UNAVAILABLE • OPEN MENU');return}
    const current=network.selectedTransport?.()||'ap',next=current==='ap'?'sta':'ap';
    if(!network.selectTransport(next))updateStatus('KIT AP/STA CHANGE BLOCKED • FINISH OTA FIRST');
+   else updateStatus('KIT '+next.toUpperCase()+' SELECTED • JOIN CORRECT WI-FI AND RECONNECT IN MENU');
   };
   const updateTransport=()=>{
    const current=window.ZebjusNetwork?.selectedTransport?.()||'ap';
