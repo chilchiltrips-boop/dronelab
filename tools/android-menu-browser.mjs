@@ -19,10 +19,10 @@ try{
   const toggle=page.locator('#flightNetworkSwitch');
   assert.equal(await toggle.getAttribute('aria-checked'),'false');
   await toggle.click();
-  await page.waitForFunction(()=>document.getElementById('mobileConnection').open&&document.getElementById('kitLink').value==='sta');
-  assert.equal(await toggle.getAttribute('aria-checked'),'true');
+  await page.waitForFunction(()=>document.getElementById('mobileConnection').open);
+  assert.equal(await toggle.getAttribute('aria-checked'),'false','Unverified kit must not switch AP/STA');
   assert.equal(await page.locator('[data-mobile-tab="wifi"]').getAttribute('aria-selected'),'true');
-  assert.match(await page.locator('#kitNetStatus').textContent(),/STA selected/);
+  assert.match(await page.locator('#kitNetStatus').textContent(),/Connect and verify the Kit/);
   assert.equal(await page.locator('#downloadStableApk').count(),0,'No App Update button in controller');
   assert.equal(await page.locator('#androidInstalledVersion').count(),0,'No duplicate app update card');
   assert.equal(await page.locator('#appBuildVersion').count(),1,'Installed APK version remains in More');
@@ -67,7 +67,8 @@ try{
   await page.locator('#flightBack').tap();
   await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
   await toggle.tap();
-  await page.waitForFunction(()=>document.getElementById('mobileConnection').open&&document.getElementById('kitLink').value==='sta');
+  await page.waitForFunction(()=>document.getElementById('mobileConnection').open);
+  assert.equal(await toggle.getAttribute('aria-checked'),'false');
   await page.locator('#flightBack').tap();
   await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
   const header=await page.locator('.flight-topbar').evaluate(e=>({height:e.getBoundingClientRect().height,children:[...e.children].filter(n=>n.getClientRects().length).map(n=>{const r=n.getBoundingClientRect();return{id:n.id,left:r.left,right:r.right,bottom:r.bottom,top:r.top,height:r.height}})}));
