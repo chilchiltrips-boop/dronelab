@@ -5,7 +5,7 @@
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
-let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0;
+let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
@@ -15,6 +15,7 @@ const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
+ const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
  if(otaBusy&&el('kitOtaPhase')){el('kitOtaPhase').textContent=text;el('kitOtaPhase').dataset.state=tone}
  window.dispatchEvent(new CustomEvent('zebjus:kit-status',{detail:{text,tone}}));
 }
@@ -313,13 +314,37 @@ async function toggleLed(forceOff=false){
   ledOn=next;show('KIT '+link.toUpperCase()+' CONNECTED • LED '+(ledOn?'ON':'OFF'),'good');
  }finally{ledBusy=false;syncLedButton()}
 }
-function finishHandover(){handoverExpectedKit='';handoverAttempts=0;clearTimeout(handoverTimer);handoverTimer=null;}
+function finishHandover(){handoverExpectedKit='';handoverAttempts=0;clearTimeout(handoverTimer);handoverTimer=null;clearTimeout(staObserverTimer);staObserverTimer=null;}
+function scheduleStaObserver(delay=2500){
+ if(!handoverExpectedKit||link!=='sta'||online||otaBusy||document.hidden)return;
+ clearTimeout(staObserverTimer);
+ staObserverTimer=setTimeout(async()=>{
+  staObserverTimer=null;
+  if(!handoverExpectedKit||link!=='sta'||online||otaBusy||document.hidden||connecting)return;
+  const wanted=handoverExpectedKit;
+  connecting=true;syncHeaderTransport();
+  try{
+   await ensureWifiPermission(true);
+   await discoverKit(wanted); // NSD candidate is still untrusted.
+   const raw=await nativeTransport('/api/identify');
+   const identity=JSON.parse(raw.text);
+   if(raw.status!==200||identity.kitId!==wanted)throw Error('STA Device ID mismatch');
+   auth=await window.ZebjusKitAuth.local(nativeTransport,wanted,'sta_observer');
+   verifiedKitId=wanted;diagnosticKey='';
+   await status();reconnectEnabled=true;
+   show('STA CONNECTED • signed read-only observer • control requires saved pairing','good');
+  }catch(error){
+   show('STA CONNECTING • '+String(error.message||error).slice(0,125)+' • AP fallback remains available','warn');
+  }finally{connecting=false;syncHeaderTransport()}
+ },delay);
+}
 function scheduleFallbackCheck(delay=25000){
  if(!handoverExpectedKit||link!=='sta'||online||otaBusy||document.hidden)return;
  clearTimeout(handoverTimer);
  handoverTimer=setTimeout(async()=>{
   handoverTimer=null;
-  if(!handoverExpectedKit||link!=='sta'||online||otaBusy||connecting||document.hidden)return;
+  if(!handoverExpectedKit||link!=='sta'||online||otaBusy||document.hidden)return;
+  if(connecting){scheduleFallbackCheck(10000);return;}
   // Android cannot forcibly join an AP; probe only the current Wi-Fi, and
   // accept fallback solely after a fresh signed status for the SAME Kit ID.
   const previousIp=ip,previousStaIp=staIp,oldKey=diagnosticKey;
@@ -364,7 +389,8 @@ async function status(){
   try{await refreshSavedSta()}catch(error){if(el('kitSavedStaStatus'))el('kitSavedStaStatus').textContent='Saved STA: could not load ('+error.message+')'}
  }else if(link==='ap'&&!data.staCredentialsSaved&&el('kitSavedStaStatus'))el('kitSavedStaStatus').textContent='Saved STA: none';
  syncLedButton();
- show('Phone → '+data.requestTransport+ (auth?.local?' CONNECTED • AP-local signed session':' VERIFIED signed identity')+' • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
+ const fallback=link==='ap'&&data.mode!=='ap'&&data.phase==='sta_failed_ap_fallback';
+ show((fallback?'AP FALLBACK CONNECTED • saved STA unavailable':('Phone → '+data.requestTransport+ (auth?.local?(link==='ap'?' CONNECTED • AP-local signed session':' CONNECTED • STA signed observer'):' VERIFIED signed identity')))+' • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
  return data;
 }
 async function scan(){
@@ -415,7 +441,7 @@ async function setMode(desired=el('kitMode')?.value){
   }else show('AP SWITCHING • join Kit hotspot; waiting for signed connection','');
  }finally{connecting=false;syncHeaderTransport()}
  if(physical==='ap')scheduleAutoApConnect(1200);
- else scheduleFallbackCheck();
+ else{scheduleStaObserver(3000);scheduleFallbackCheck()}
 }
 async function command(line){
  if(typeof line!=='string'||line.length>160||!/^(ZJI2C,SCAN|ZJINFO,GET|ZJLED,[0-9]+,(?:STOP|KEEP|SET|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Command is not allowed on the network bridge');
@@ -766,7 +792,7 @@ function networkChanged(){
  nextAutoApAttempt=0; // A real network change must bypass the old network's retry cooldown.
  online=false;auth=null;diagnosticKey='';reconnectEnabled=false;onKitLink=false;lastStatus=0;ledOn=false;savedProfilesFor='';
  syncHeaderTransport();scheduleAutoApConnect();
- if(handoverExpectedKit&&link==='sta')scheduleFallbackCheck(2500);
+ if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}
 }
 window.zebjusNativeAppPaused=()=>{
  if(otaBusy){
@@ -778,7 +804,7 @@ window.zebjusNativeAppPaused=()=>{
 };
 window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
- else {nextAutoApAttempt=0;scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta')scheduleFallbackCheck(2500)}
+ else {nextAutoApAttempt=0;scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
  window.ZebjusNetwork={request,status,scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
