@@ -123,7 +123,10 @@ try{
  await web.locator('[data-tab=python]').click();await web.locator('#pythonMonaco .monaco-editor').waitFor({timeout:45000});
  await web.locator('#pythonTarget').selectOption('sta');
  await phone.goto('http://127.0.0.1:8765/companion.html');await phone.locator('#flightSettings').click();
+ // Same secured Kit/permission listeners, now reached through visible tabs.
+ await phone.locator('[data-mobile-tab="kit"]').click();
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
+ await phone.locator('[data-mobile-tab="more"]').click();
  await phone.locator('.settings-accordion > summary').filter({hasText:'Permissions • WebApp Grants / Diagnostic Control'}).click();
  await phone.locator('#kitRcPreview').check();await wait(phone,()=>window.ZebjusNetwork.hasControl());await phone.locator('#flightBack').click();
  // Real touch-follow handlers and response mapping, with DOM pointer events.

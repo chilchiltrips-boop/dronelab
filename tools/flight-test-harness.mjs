@@ -23,6 +23,9 @@ export async function exchange(web,phone,{camera=false}={}){
  await wait(phone,()=>!document.getElementById('requestControlBtn').disabled);
 }
 export async function grant(web,phone){
+ // The existing control button now lives in the adaptive Control category.
+ // Navigate there without recreating its WebRTC/permission event listener.
+ await phone.evaluate(()=>window.ZebjusMobileMenu?.select('control'));
  await phone.locator('#requestControlBtn').click();await web.locator('#topGrantMobileSwitch').evaluate(e=>e.closest('label').click());
  await wait(phone,()=>!document.getElementById('flightArm').disabled);
 }

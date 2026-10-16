@@ -50,16 +50,20 @@ try{
   await p.locator('#flightSettings').click();if(!await p.locator('#mobileConnection').evaluate(d=>d.open))throw Error('Gear did not open sheet');
   await p.screenshot({path:`test-output/android-landscape-settings-${width}x${height}.png`});
   if(await p.locator('#mobileSettingsStop').evaluate(e=>e.getBoundingClientRect().height)<44)throw Error('Safety STOP hit area must remain at least 44px');
-  if(width>=740){const bar=await p.locator('#flightOptions').boundingBox();if(bar.height>65)throw Error('Landscape settings toolbar is too tall: '+bar.height)}
+  // The adaptive menu intentionally shows one category at a time; the old
+  // test expected every top-level accordion to share one giant scroll page.
+  await p.locator('[data-mobile-tab="control"]').click();
+  if(!await p.locator('#flightPreset').isVisible())throw Error('Joystick response selector missing from Control category');
   const modal=await p.evaluate(()=>{
    const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();
-   const accordions=[...m.querySelectorAll(':scope > .settings-accordion')].map(e=>e.getBoundingClientRect().toJSON());
+   const panel=m.querySelector('.mobile-adaptive-panel:not([hidden])'),accordions=[...panel.querySelectorAll('.settings-accordion')].filter(e=>e.getClientRects().length).map(e=>e.getBoundingClientRect().toJSON());
+   const nav=d.querySelector('.mobile-adaptive-nav').getBoundingClientRect();
    return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,
-    mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth,mainScroll:m.scrollWidth,accordions};
+    mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth,mainScroll:m.scrollWidth,active:panel.dataset.mobilePanel,navW:nav.width,accordions};
   });
   if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||modal.cols!==1||
-     modal.mainScroll>modal.mainW+2||modal.accordions.length<2||modal.accordions.some(r=>r.width<modal.mainW-45))
-    throw Error('Landscape settings sections clipped or not full width '+JSON.stringify(modal));
+     modal.mainScroll>modal.mainW+2||modal.active!=='control'||modal.accordions.length<1||modal.accordions.some(r=>r.width<modal.mainW-45))
+    throw Error('Landscape adaptive settings sections clipped or unreachable '+JSON.stringify(modal));
   const transport=await p.locator('#flightNetworkSwitch').boundingBox();
   if(!transport||transport.height<44||transport.x<0||transport.x+transport.width>width+1)
     throw Error('Cockpit AP/STA switch missing or clipped '+JSON.stringify({width,transport}));

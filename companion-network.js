@@ -93,7 +93,7 @@ function vaultCall(op,id,credential){
 window.zebjusNativeVersionResult=data=>{
  const version=data?.versionName&&Number.isSafeInteger(Number(data?.versionCode))
   ?data.versionName+' (code '+data.versionCode+')':'Installed APK version unavailable';
- for(const key of ['androidInstalledVersion','appBuildVersion']){const v=el(key);if(v)v.textContent=version}
+ for(const key of ['appBuildVersion']){const v=el(key);if(v)v.textContent=version}
 };
 function forgetGrants(){for(const id of ['kitAllowWeb','kitGrantWifi','kitGrantDiagnostic'])if(el(id))el(id).checked=false;}
 function forgetNativePin(){

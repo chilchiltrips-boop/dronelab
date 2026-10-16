@@ -6,7 +6,7 @@ from zipfile import ZipFile
 
 ASSETS = (
     "companion.html", "companion.css", "companion.js", "companion-network.js",
-    "android-native-bridge.js", "companion-flight.js", "flight-input.js",
+    "android-native-bridge.js", "companion-flight.js", "companion-menu.js", "flight-input.js",
     "pairing-core.js", "pairing-code.js", "pairing-qr-ui.js", "firmware-catalog.json",
     "js/kit-auth.js", "js/kit-network-policy.js", "vendor/crypto/zfc-crypto.js",
     "vendor/qrgen.js", "vendor/jsqr.js", "vendor/peerjs.min.js", "vendor/peerjs.LICENSE",

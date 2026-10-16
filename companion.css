@@ -287,3 +287,137 @@ button{min-height:44px}
  .mobile-connection .section-title strong{font-size:13px}
  .mobile-connection .actions button{font-size:12px}
 }
+
+
+/* Android Adaptive Control Center: fixed safety actions, independent category
+ * navigation and panel scrolling. No control copies or conditional app logic. */
+.mobile-connection[open]{
+ display:flex;flex-direction:column;
+ width:min(1120px,98vw);max-width:none;
+ height:min(680px,96dvh);max-height:96dvh;
+ padding:0;overflow:hidden;
+}
+.mobile-connection .mobile-dialog-actions{
+ position:relative;top:auto;flex:0 0 auto;z-index:2;
+ padding:6px 10px;min-height:50px;
+}
+.mobile-connection .mobile-dialog-actions button{
+ min-height:44px;font-size:clamp(11px,1.4vw,13px);
+}
+.mobile-connection .app-top{
+ position:relative;top:auto;flex:0 0 auto;min-height:40px;
+ padding:5px 11px;
+}
+.mobile-connection .brand-text b{font-size:12px}
+.mobile-connection .brand-text span{font-size:10px}
+.mobile-connection .mobile-adaptive-shell{
+ flex:1 1 auto;display:grid;grid-template-columns:160px minmax(0,1fr);
+ min-height:0;min-width:0;overflow:hidden;
+}
+.mobile-connection .mobile-adaptive-nav{
+ display:flex;flex-direction:column;gap:5px;align-items:stretch;
+ overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+ background:#171829;border-right:1px solid #505068;
+ padding:10px 7px;scrollbar-width:thin;
+}
+.mobile-connection .mobile-nav-item{
+ display:flex;align-items:center;gap:10px;min-height:48px;width:100%;
+ padding:9px 10px;border-radius:10px;border:1px solid transparent;
+ background:transparent;color:#c8c8d6;font:750 13px/1.25 system-ui,sans-serif;
+ text-align:left;white-space:nowrap;cursor:pointer;touch-action:manipulation;
+}
+.mobile-connection .mobile-nav-item[aria-selected="true"]{
+ background:#284b48;border-color:#467c72;color:#c5ffdf;
+ box-shadow:inset 3px 0 #62ebbb;
+}
+.mobile-connection .mobile-nav-item:focus-visible{outline:2px solid #8ef8d7;outline-offset:-2px}
+.mobile-connection .mobile-nav-icon{width:21px;height:21px;flex:0 0 21px}
+.mobile-connection .mobile-nav-icon svg{width:100%;height:100%}
+.mobile-connection .mobile-adaptive-main{
+ display:block!important;grid-template-columns:none!important;
+ flex:none;min-width:0;min-height:0;
+ width:100%;height:100%;max-width:none;margin:0;
+ overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+ padding:12px 14px 24px;
+ scrollbar-width:thin;
+}
+.mobile-connection .mobile-adaptive-panel{min-width:0;width:100%}
+.mobile-connection .mobile-adaptive-panel[hidden]{display:none!important}
+.mobile-connection .mobile-panel-heading{padding:3px 1px 12px}
+.mobile-connection .mobile-panel-heading h2{margin:0;font-size:clamp(16px,2.2vw,20px);line-height:1.25}
+.mobile-connection .mobile-panel-heading p{
+ margin:4px 0 0;color:#aebfd0;font-size:12px;line-height:1.4;overflow-wrap:anywhere;
+}
+.mobile-connection .mobile-adaptive-panel>.hero{margin-bottom:10px}
+.mobile-connection .mobile-adaptive-panel>.settings-accordion,
+.mobile-connection .mobile-adaptive-panel>.card{width:100%;margin:0 0 10px}
+.mobile-connection .mobile-adaptive-panel>.flight-options{
+ margin:0 0 12px;width:100%;
+}
+.mobile-connection .mobile-adaptive-panel>.flight-options label{font-size:12px}
+.mobile-connection .mobile-adaptive-panel>.flight-options select,
+.mobile-connection .mobile-adaptive-panel>.flight-options button{min-height:44px;font-size:12px}
+.mobile-connection .mobile-adaptive-panel .settings-accordion>summary{
+ min-height:44px;font-size:13px;padding:11px 12px;
+}
+.mobile-connection .mobile-adaptive-panel .hint{font-size:12px;line-height:1.45}
+.mobile-connection .mobile-adaptive-panel .actions button{
+ min-width:0;min-height:44px;font-size:12px;white-space:normal;overflow-wrap:anywhere;
+}
+.mobile-connection .mobile-adaptive-panel .kit-net-grid{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));
+}
+.mobile-connection .mobile-adaptive-panel .kit-net-grid label{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:12px;line-height:1.35}
+.mobile-connection .mobile-adaptive-panel .kit-net-grid :is(input,select){width:100%;min-width:0;background:#1c2334;color:#f1f5f9;border:1px solid #526075;border-radius:7px;padding:8px;font-size:14px;min-height:44px}
+.mobile-connection .mobile-adaptive-panel .kit-net-toggle{display:flex;flex-direction:row;align-items:center;gap:9px;font-size:12px;line-height:1.4}
+.mobile-connection .mobile-adaptive-panel .kit-net-toggle input{width:19px;height:19px;flex:0 0 19px}
+.mobile-connection .mobile-adaptive-panel .kit-telemetry{max-height:160px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#101723;color:#d1eaff;padding:9px;border-radius:7px;font-size:12px}
+.mobile-connection .mobile-adaptive-panel .pin-box strong{font-size:clamp(20px,4vw,36px)}
+.mobile-connection .mobile-adaptive-panel #phoneShortCode{font-size:clamp(24px,4.2vw,44px)}
+.mobile-connection .mobile-adaptive-panel .section-title strong{font-size:13px}
+.mobile-connection .mobile-adaptive-panel .section-title span{font-size:11px}
+.mobile-connection .mobile-adaptive-panel #mobileLog{font-size:10px;min-height:52px;max-height:110px}
+.mobile-connection .mobile-about{background:#0d2433}
+.mobile-connection .mobile-about h3{font-size:15px;margin:0}
+@media(orientation:landscape) and (min-width:740px){
+ .mobile-connection .pairing-settings>.settings-accordion-body{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start;
+ }
+ .mobile-connection .mobile-adaptive-main{padding:10px 12px 16px}
+ .mobile-connection .mobile-adaptive-panel>.hero{display:none}
+}
+@media(max-width:739px),(orientation:portrait){
+ .mobile-connection[open]{height:98dvh;max-height:98dvh;width:98vw}
+ .mobile-connection .mobile-adaptive-shell{display:flex;flex-direction:column}
+ .mobile-connection .mobile-adaptive-nav{
+  flex:0 0 auto;flex-direction:row;align-items:stretch;gap:3px;
+  width:100%;overflow-x:auto;overflow-y:hidden;min-height:54px;
+  padding:4px;border-right:0;border-bottom:1px solid #505068;
+ }
+ .mobile-connection .mobile-nav-item{
+  flex:1 0 0;min-width:0;min-height:44px;display:flex;
+  flex-direction:column;justify-content:center;gap:2px;text-align:center;
+  padding:4px 1px;font-size:11px;white-space:nowrap;
+ }
+ .mobile-connection .mobile-nav-item[aria-selected="true"]{box-shadow:inset 0 -3px #62ebbb}
+ .mobile-connection .mobile-nav-icon{width:19px;height:19px;flex:0 0 19px}
+ .mobile-connection .mobile-adaptive-main{flex:1 1 auto;height:auto;padding:8px 9px 15px}
+ .mobile-connection .mobile-panel-heading{padding-bottom:7px}
+ .mobile-connection .mobile-panel-heading h2{font-size:16px}
+ .mobile-connection .mobile-panel-heading p{font-size:11px}
+ .mobile-connection .pairing-settings>.settings-accordion-body{
+  display:flex;flex-direction:column;gap:9px;
+ }
+}
+@media(max-height:310px) and (orientation:landscape){
+ .mobile-connection .app-top{display:none}
+ .mobile-connection .mobile-panel-heading p{display:none}
+ .mobile-connection .mobile-dialog-actions{padding:2px 7px;min-height:45px}
+ .mobile-connection .mobile-adaptive-nav{min-height:47px;padding:2px 4px}
+ .mobile-connection .mobile-nav-item{min-height:42px}
+ .mobile-connection .mobile-adaptive-main{padding:5px 8px 12px}
+}
+@media(max-width:390px) and (orientation:portrait){
+ .mobile-connection .mobile-nav-item{font-size:10px}
+ .mobile-connection .mobile-adaptive-main{padding:9px 7px 16px}
+}

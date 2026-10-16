@@ -5,6 +5,7 @@ mkdirSync('test-output',{recursive:true});const {browser,web,phone,errors}=await
 async function assertQr(p,id,value){const decoded=await p.locator('#'+id).evaluate(c=>{const x=c.getContext('2d',{willReadFrequently:true}),data=x.getImageData(0,0,c.width,c.height);return jsQR(data.data,c.width,c.height,{inversionAttempts:'attemptBoth'})?.data});if(decoded!==value)throw Error('QR pixel roundtrip failed '+id)}
 async function finishPair(){await wait(web,()=>!document.getElementById('pairConfirmBtn').disabled);if(!await web.locator('#pairConfirmPanel').evaluate(e=>e.classList.contains('ready')))throw Error('Confirmation readiness missing');await web.locator('#pairConfirmBtn').click();await wait(phone,()=>!document.getElementById('requestControlBtn').disabled)}
 async function onePair(){
+ await phone.evaluate(()=>window.ZebjusMobileMenu?.select('pair'));
  await web.evaluate(()=>window.__qrScanOptions=null);await web.locator('#pairCreateBtn').click();await wait(web,()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
  const offer=await web.locator('#pairOfferText').inputValue();await assertQr(web,'pairOfferCanvas',offer);
  if(await web.evaluate(()=>!!window.__qrScanOptions))throw Error('Camera opened during Step 1');
@@ -28,7 +29,7 @@ try{
  await phone.evaluate(()=>window.zebjusNetworkChanged());await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
  await wait(phone,()=>document.getElementById('appPairCode').textContent==='------');await onePair();await exerciseControl();
  // Preserve the six-digit UI path. Only public signaling lookup is substituted.
- await web.locator('#pairDisconnectBtn').click();await phone.locator('#resetPairBtn').click();await web.locator('#pairCodeMode').click();
+ await web.locator('#pairDisconnectBtn').click();await phone.evaluate(()=>window.ZebjusMobileMenu?.select('pair'));await phone.locator('#resetPairBtn').click();await web.locator('#pairCodeMode').click();
  await web.locator('#pairCreateBtn').click();await wait(web,()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
  const offer=await web.locator('#pairOfferText').inputValue();await phone.locator('#offerInput').fill(offer);await phone.locator('#useOfferBtn').click();await wait(phone,()=>document.getElementById('answerText').value.startsWith('zj1:'));
  const answer=await phone.locator('#answerText').inputValue();await web.exposeFunction('__testCodeReply',()=>answer);await web.evaluate(()=>window.ZebjusCodePair.resolveAnswer=async ({code})=>{if(code!=='654321')throw Error('Wrong test code');return window.__testCodeReply()});

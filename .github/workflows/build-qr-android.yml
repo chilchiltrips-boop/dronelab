@@ -1,7 +1,7 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main]
+    branches: [feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main]
     paths:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
@@ -29,6 +29,7 @@ on:
       - 'companion-network.js'
       - 'android-native-bridge.js'
       - 'companion-flight.js'
+      - 'companion-menu.js'
       - 'flight-input.js'
       - 'pairing-core.js'
       - 'pairing-code.js'
@@ -73,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
-          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
           cp js/kit-auth.js js/kit-network-policy.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
@@ -81,6 +82,7 @@ jobs:
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
           test -s mobile-android/app/src/main/assets/companion-flight.js
+          test -s mobile-android/app/src/main/assets/companion-menu.js
           test -s mobile-android/app/src/main/assets/js/kit-network-policy.js
           test -s mobile-android/app/src/main/assets/android-native-bridge.js
           test -s mobile-android/app/src/main/assets/companion-network.js
@@ -96,13 +98,14 @@ jobs:
           node --check pairing-code.js
           node --check companion-network.js
           node --check companion-flight.js
+          node --check companion-menu.js
           node --test tools/android-peerjs-menu-regression.test.mjs tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/android-connection-reliability.test.mjs tools/network-transport.test.mjs tools/flight-ack-priority.test.mjs tools/apk-verifier.test.mjs
 
       - name: Validate debug compilation (never publish a debug APK)
         run: gradle -p mobile-android :app:assembleDebug --no-daemon
 
       - name: Load PRIVATE signing key from encrypted GitHub secrets
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_KEYSTORE_B64: ${{ secrets.ZEBJUS_ANDROID_KEYSTORE_B64 }}
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
@@ -119,13 +122,13 @@ jobs:
           echo "ZEBJUS_ANDROID_RELEASE_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
 
       - name: Assemble permanently signed non-debug release APK
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
         run: gradle -p mobile-android :app:assembleRelease --stacktrace --no-daemon
 
       - name: Refuse wrong APK certificate or app identity
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           RELEASE_APK="mobile-android/app/build/outputs/apk/release/app-release.apk"
@@ -140,7 +143,7 @@ jobs:
           echo "Verified release APK size: $(stat -c %s "$RELEASE_APK") bytes"
 
       - name: Package one stable Android APK update URL
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk "$RUNNER_TEMP/zebjus-previous.apk"
@@ -148,11 +151,11 @@ jobs:
           cp mobile-android/app/build/outputs/apk/release/app-release.apk mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
           sha256sum mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk | tee mobile-apk/SHA256SUMS.txt
           sha256sum -c mobile-apk/SHA256SUMS.txt
-          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.7.9-control-ack-reliability\nVersionCode: 25\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
+          printf 'App: in.zebjus.dronelab.companion\nVersion: 1.7.10-adaptive-control-center\nVersionCode: 26\nRelease certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94\n' > mobile-apk/ANDROID_RELEASE_META.txt
           printf 'Source commit: %s\n' "$GITHUB_SHA" >> mobile-apk/ANDROID_RELEASE_META.txt
 
       - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         with:
           name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}
           path: |
@@ -163,14 +166,14 @@ jobs:
           if-no-files-found: error
 
       - name: Build production-signed native touchscreen instrumentation
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
           ZEBJUS_TEST_RELEASE: '1'
         run: gradle -p mobile-android :app:assembleReleaseAndroidTest --no-daemon
 
       - name: Package exact-source signed native test bundle
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           mkdir -p native-test-bundle
@@ -178,7 +181,7 @@ jobs:
           cp "$RUNNER_TEMP/zebjus-previous.apk" native-test-bundle/
 
       - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         with:
           name: ZEBJUS_NATIVE_TOUCH_TEST_BUNDLE
           path: native-test-bundle/
@@ -194,7 +197,7 @@ jobs:
   native_touch:
     name: Native Android touch (16x9 REQUIRED)
     needs: android
-    if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+    if: github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -293,7 +296,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/zebjus-release-output"
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt "$RUNNER_TEMP/zebjus-release-output/"
           git fetch origin main
-          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py tools/native-flight-acceptance.sh tools/wait-release-checks.mjs vendor/peerjs.min.js vendor/peerjs.LICENSE vendor/qrgen.js vendor/jsqr.js vendor/crypto js/kit-auth.js js/kit-network-policy.js firmware-catalog.json .github/workflows/build-qr-android.yml
+          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py tools/native-flight-acceptance.sh tools/wait-release-checks.mjs vendor/peerjs.min.js vendor/peerjs.LICENSE vendor/qrgen.js vendor/jsqr.js vendor/crypto js/kit-auth.js js/kit-network-policy.js firmware-catalog.json .github/workflows/build-qr-android.yml
           git checkout -B ci-signed-apk-release origin/main
           mkdir -p mobile-apk
           cp "$RUNNER_TEMP"/zebjus-release-output/* mobile-apk/
