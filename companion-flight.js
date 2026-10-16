@@ -172,7 +172,11 @@ function onTelemetry(packet){
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
 function doStop(){diagnosticThrottle=1000;void window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
-function openConnection(){clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')}
+function openConnection(){
+ // Entering settings releases virtual ARM and Kit diagnostic control, so the
+ // duplicate Menu STOP can be hidden without leaving an armed modal.
+ doStop();clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')
+}
 function closeConnection(){
   window.ZebjusPairingStopCamera?.();
   const dialog=$('mobileConnection');if(dialog?.open)dialog.close();
