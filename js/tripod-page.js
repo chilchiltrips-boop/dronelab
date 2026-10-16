@@ -8,7 +8,16 @@ import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulat
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
 let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false;
 const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
-const receiver=createTrainingReceiver(s,{onChange:()=>{syncActions();renderStickKnobs()},onTimeout:()=>{audioStop();setStatus('CONTROL TIMEOUT • MOTORS OFF');window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason:'Control timeout'}}))}});
+// Do not run DOM updates synchronously for every 25-Hz WebRTC control
+// frame. The receiver must validate/apply and return its ACK before layout
+// and stick presentation can consume another frame on the main thread.
+let receiverUiScheduled=false;
+function scheduleReceiverUi(){
+ if(receiverUiScheduled)return;
+ receiverUiScheduled=true;
+ requestAnimationFrame(()=>{receiverUiScheduled=false;syncActions();renderStickKnobs()});
+}
+const receiver=createTrainingReceiver(s,{onChange:scheduleReceiverUi,onTimeout:()=>{audioStop();setStatus('CONTROL TIMEOUT • MOTORS OFF');window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason:'Control timeout'}}))}});
 const localInput=()=>receiver.owner==='web';
 let lastMode=s.mode,lastRunning=false,audioUnlocked=false;
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
