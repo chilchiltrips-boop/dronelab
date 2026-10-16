@@ -38,7 +38,8 @@ test('The displayed Android version comes from signed published metadata, not pe
  const official=parse(metadata);
  assert.match(official,/Published stable Android APK:/);
  assert.match(official,/code [1-9][0-9]*\)/);
- assert.match(official,/1\.7\./);
+ const publishedVersion=metadata.match(/^Version:\s*(\S+)/m)?.[1];
+ assert.ok(publishedVersion&&official.includes(publishedVersion),'No hardcoded release version');
  assert.throws(()=>parse(metadata.replace(/^App:.*$/m,'App: example.fake.app')),/invalid/);
  assert.throws(()=>parse(metadata.replace(/^Release certificate SHA256:.*$/m,'Release certificate SHA256: 00')),/invalid/);
  assert.throws(()=>parse(metadata.replace(/^VersionCode:.*$/m,'VersionCode: 0')),/invalid/);
