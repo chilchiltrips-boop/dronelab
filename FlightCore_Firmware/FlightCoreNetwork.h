@@ -70,6 +70,18 @@ static bool zjAllow();static const char* zjClientTransport();
 static bool zjAuthenticated(){return zjSessionAuthenticated();}
 static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
 static bool zjAllowSetup(){if(!zjAllow())return false;if(zjSetupAuthorized())return true;zjReply(403,"{\"error\":\"setup_authorization_required\"}");return false;}
+// A paired diagnostic STA client may change ONLY the Wi-Fi operating mode.
+// SSID/password changes, owner enrollment and firmware OTA keep their stricter scopes.
+static bool zjAllowModeChange(){
+ if(!zjAllow())return false;
+ if(zjSetupAuthorized())return true;
+ if(zjRequestSession>=0){
+  const auto& session=zjSessions[zjRequestSession];
+  if(!session.local&&!session.localSta&&!session.setup&&!session.admin&&
+     String(zjClientTransport())=="STA"&&session.id.length()==32)return true;
+ }
+ zjReply(403,"{\"error\":\"mode_change_requires_paired_kit_or_ap_setup\"}");return false;
+}
 static void zjReply(int status,const String& body){
  zjCorsHeaders();zjHttp.sendHeader("Cache-Control","no-store");
  if(zjRequestSession>=0){const auto& s=zjSessions[zjRequestSession];zjHttp.sendHeader("X-ZJ-Response",zjHmac(s.key,"response|"+String(s.seq)+"|"+String(status)+"|"+body));}
@@ -217,7 +229,7 @@ static void zjSetupHttp(){
   zjReply(200,zjProfilesStatus());
  });
  zjHttp.on("/api/wifi/mode",HTTP_POST,[](){
-  if(!zjAllowSetup())return;const String mode=zjArg("mode");
+  if(!zjAllowModeChange())return;const String mode=zjArg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
   if(zjNetTesting||zjRcOwned||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
   if(mode=="sta"&&!zjSavedSsid.length()){zjReply(409,"{\"error\":\"save_sta_credentials_first\"}");return;}
