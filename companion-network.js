@@ -12,7 +12,10 @@ const wifiRoutes=new Set(['GET /api/wifi/scan','POST /api/wifi/test','POST /api/
 const diagnosticRoutes=new Set(['POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
 const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
-function show(text,tone=''){const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone} }
+function show(text,tone=''){
+ const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
+ if(otaBusy&&el('kitOtaPhase')){el('kitOtaPhase').textContent=text;el('kitOtaPhase').dataset.state=tone}
+}
 function form(v){return new URLSearchParams(v||{}).toString()}
 // The native HTTP deadline is shorter than this JS watchdog (including queue
 // time). A timed-out write is UNKNOWN, never a reason to resend blindly.
@@ -88,8 +91,9 @@ function vaultCall(op,id,credential){
  });
 }
 window.zebjusNativeVersionResult=data=>{
- const v=el('androidInstalledVersion');if(v)v.textContent=data?.versionName&&Number.isSafeInteger(Number(data?.versionCode))
+ const version=data?.versionName&&Number.isSafeInteger(Number(data?.versionCode))
   ?data.versionName+' (code '+data.versionCode+')':'Installed APK version unavailable';
+ for(const key of ['androidInstalledVersion','appBuildVersion']){const v=el(key);if(v)v.textContent=version}
 };
 function forgetGrants(){for(const id of ['kitAllowWeb','kitGrantWifi','kitGrantDiagnostic'])if(el(id))el(id).checked=false;}
 function forgetNativePin(){
@@ -365,6 +369,8 @@ async function uploadAdminApp(file){
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
  if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
  otaBusy=true;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;reconnectEnabled=false;
+ if(el('kitOtaProgress'))el('kitOtaProgress').value=0;
+ show('OTA preflight • verifying official APP image size, board and SHA-256');
  try{native?.setOtaKeepAwake?.(true)}catch{}
  const id=verifiedKitId,host=ip,transport=link;
  let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,board='',result=null;
@@ -487,7 +493,7 @@ async function uploadAdminApp(file){
    if(!completed)throw Error('Chunk recovery exhausted: verify signed status before retrying.');
    offset=next;
    const pct=Math.floor(100*offset/bytes.length);
-   if(pct!==lastPct){lastPct=pct;show('Encrypted APP upload '+pct+'% • '+chunkSize+' B chunks');}
+   if(pct!==lastPct){lastPct=pct;if(el('kitOtaProgress'))el('kitOtaProgress').value=pct;show('Encrypted APP upload '+pct+'% • '+chunkSize+' B chunks');}
   }
   checkTarget();
   await waitResume(offset);
@@ -499,6 +505,7 @@ async function uploadAdminApp(file){
    show('END acknowledgment unconfirmed; checking new boot and running build. Never resending END blindly.','warn');
   }
   if(el('kitOtaCancel'))el('kitOtaCancel').disabled=true;
+  show('OTA transmitted • waiting for verified controller reboot and running build','warn');
   const deadline=Date.now()+120000;
   await otaSleep(1700);
   while(Date.now()<deadline){
@@ -516,6 +523,7 @@ async function uploadAdminApp(file){
   if(!result){online=false;show('OTA END UNCONFIRMED / runtime NOT VERIFIED. Inspect same Kit and running build before any retry.','warn');return}
   auth=null;online=false;
   show('OTA VERIFIED • '+id+' • '+result.version+' • matching new boot & running build','good');
+  if(el('kitOtaProgress'))el('kitOtaProgress').value=100;
  }catch(error){
   // Only abort a positively identified, still-active SAME-session OTA.
   // If status is unreachable, leaving the firmware's 30s inactivity rollback
@@ -531,6 +539,10 @@ async function uploadAdminApp(file){
    }catch(e){abortMessage=' • flash state not confirmed; let controller timeout, inspect status before retry';}
   }
   show('Secure APP OTA stopped: '+String(error?.message||error)+abortMessage+' • no blind retries','warn');
+  if(el('kitOtaPhase'))el('kitOtaPhase').textContent=
+   (abortMessage.includes('controller confirmed OTA aborted')?'OTA ABORT CONFIRMED':
+    abortMessage.includes('not confirmed')||abortMessage.includes('not trusted')||abortMessage.includes('not reachable')?'OTA STATE UNCONFIRMED':'OTA STOPPED / CHECK KIT')+
+   ' • '+String(error?.message||error)+abortMessage;
   throw error;
  }finally{
   otaBusy=false;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;auth=null;
@@ -584,7 +596,11 @@ function bind(){
 }
 function networkChanged(){forgetGrants();forgetNativePin();if(otaBusy)otaCancelRequested=true;cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');dropInput('Android Wi-Fi changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;onKitLink=false;lastStatus=0;}
 window.zebjusNativeAppPaused=()=>{
- if(otaBusy){otaPaused=true;otaNeedsRecheck=true;cancelNativePending('Android backgrounded during OTA: result uncertain until signed offset recovery')}
+ if(otaBusy){
+  otaPaused=true;otaNeedsRecheck=true;
+  show('OTA PAUSED • app backgrounded; no writes until signed offset verified','warn');
+  cancelNativePending('Android backgrounded during OTA: result uncertain until signed offset recovery')
+ }
  else forgetNativePin();
 };
 window.zebjusNativeAppResumed=()=>{
