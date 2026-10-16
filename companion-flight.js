@@ -171,7 +171,7 @@ function onTelemetry(packet){
  if(!isOwned())$('flightAppliedTelemetry').textContent+=' • '+a.throttle+' µs '+a.mode.toUpperCase()+' '+(a.armed?'WEB ARMED':'DISARMED');
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
-function doStop(){diagnosticThrottle=1000;void window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true)}
+function doStop(){diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true);return released}
 function openConnection(){
  // Entering settings releases virtual ARM and Kit diagnostic control, so the
  // duplicate Menu STOP can be hidden without leaving an armed modal.
