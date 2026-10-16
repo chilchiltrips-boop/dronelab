@@ -16,6 +16,41 @@
  const viewScroll=new Map();
  let layoutFrame=0;
  const body=name=>$('dw-body-'+name);
+ // The GitHub main branch can contain an unreleased APK build. Show ONLY the
+ // version in published stable release metadata, never the source APK version.
+ const expectedAndroidCert='F1B86575B3590734654F638E4E0D68056D37B2E8884AC7D6C24636FE9B516894';
+ let releaseLastChecked=0,releaseChecking=false,releaseVersion='';
+ function parsePublishedAndroidRelease(text){
+  const fields=new Map(text.split(String.fromCharCode(10)).filter(line=>line.includes(':')).map(line=>{
+   const colon=line.indexOf(':');
+   return [line.slice(0,colon).trim(),line.slice(colon+1).trim()];
+  }));
+  const app=fields.get('App'),version=fields.get('Version'),code=fields.get('VersionCode');
+  const cert=(fields.get('Release certificate SHA256')||'').replace(/:/g,'').toUpperCase();
+  if(app!=='in.zebjus.dronelab.companion'||cert!==expectedAndroidCert||
+     !/^[0-9][A-Za-z0-9._-]{0,79}$/.test(version||'')||!/^[1-9][0-9]{0,9}$/.test(code||'')||
+     !Number.isSafeInteger(Number(code)))
+   throw Error('Official signed Android release metadata unavailable or invalid');
+  return 'Published stable Android APK: '+version+' (code '+code+')';
+ }
+ function updatePublishedAndroidRelease(){
+  const labels=document.querySelectorAll('[data-dw-android-version]');
+  if(!labels.length||typeof root.fetch!=='function')return;
+  if(releaseChecking||Date.now()-releaseLastChecked<300000)return;
+  releaseLastChecked=Date.now();releaseChecking=true;
+  root.fetch('./mobile-apk/ANDROID_RELEASE_META.txt',{cache:'no-store'})
+   .then(response=>{if(!response.ok)throw Error('Release metadata HTTP '+response.status);return response.text()})
+   .then(text=>{
+    releaseVersion=parsePublishedAndroidRelease(text);
+    for(const label of labels)label.textContent=releaseVersion;
+   })
+   .catch(()=>{
+    for(const label of labels)label.textContent=releaseVersion||
+     'Published APK version unavailable offline • official signed download link remains available';
+   })
+   .finally(()=>{releaseChecking=false});
+ }
+
  function sizeWorkspace(){
   if(!ready)return;
   const compact=root.matchMedia('(max-width:780px)').matches;
@@ -76,6 +111,7 @@
    if(tab){tab.setAttribute('aria-selected',String(key===name));tab.tabIndex=key===name?0:-1}
   }
   if(name==='mobile'){$('kitMobilePairDetails').open=true;root.ZebjusPairingBridge?.ensureSimulator?.()}
+  if(name==='overview'||name==='mobile')updatePublishedAndroidRelease();
   // The Security workspace owns the physical USB maintenance disclosure.
   // Expand it on first entry so teacher controls are actually visible after
   // moving the original <details> into this tab. Later preserve user toggles
