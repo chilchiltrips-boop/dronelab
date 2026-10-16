@@ -19,7 +19,8 @@ test('Devices & Firmware Overview and Mobile Controller both offer the same offi
   const close=html.indexOf('</section>',beginning);
   assert.ok(beginning>=0&&next>beginning&&next<close,id+' has visible APK download card');
  }
- assert.match(html,/not a FlightCore firmware image/);
+ assert.match(html,/Android APK • Checking version/);
+ assert.equal((html.match(/<span>Download APK<\/span>/g)||[]).length,2);
  assert.match(styles,/\.dw-android-release-link:focus-visible/);
  assert.match(styles,/@media\(max-width:560px\)/);
 });
@@ -36,10 +37,10 @@ test('The displayed Android version comes from signed published metadata, not pe
  const cert='F1B86575B3590734654F638E4E0D68056D37B2E8884AC7D6C24636FE9B516894';
  const parse=runInNewContext('const expectedAndroidCert='+JSON.stringify(cert)+';'+workspace.slice(start,end)+';parsePublishedAndroidRelease;', {Map,Number,Error});
  const official=parse(metadata);
- assert.match(official,/Published stable Android APK:/);
+ assert.match(official,/Android APK • /);
  assert.match(official,/code [1-9][0-9]*\)/);
  const publishedVersion=metadata.match(/^Version:\s*(\S+)/m)?.[1];
- assert.ok(publishedVersion&&official.includes(publishedVersion),'No hardcoded release version');
+ assert.ok(publishedVersion&&official.includes(publishedVersion.split('-')[0]),'No hardcoded release version');
  assert.throws(()=>parse(metadata.replace(/^App:.*$/m,'App: example.fake.app')),/invalid/);
  assert.throws(()=>parse(metadata.replace(/^Release certificate SHA256:.*$/m,'Release certificate SHA256: 00')),/invalid/);
  assert.throws(()=>parse(metadata.replace(/^VersionCode:.*$/m,'VersionCode: 0')),/invalid/);
@@ -49,6 +50,13 @@ test('The Hardware Center script refreshes release details without touching Kit/
  assert.match(workspace,/name==='overview'\|\|name==='mobile'\)updatePublishedAndroidRelease\(\)/);
  assert.match(workspace,/releaseChecking\|\|Date\.now\(\)-releaseLastChecked<300000/);
  assert.match(workspace,/releaseVersion\|\|/);
- assert.match(html,/devices-workspace\.css\?v=android-stable-download-20261016/);
- assert.match(html,/devices-workspace\.js\?v=android-stable-download-20261016/);
+ assert.match(html,/devices-workspace\.css\?v=compact-scroll-header-20261016/);
+ assert.match(html,/devices-workspace\.js\?v=compact-scroll-header-20261016/);
+});
+
+test('Android download occupies one small row, not the old full marketing card',()=>{
+ assert.doesNotMatch(html,/dw-android-release-kicker|dw-android-release-copy/);
+ assert.match(styles,/#tab-firmware \.dw-android-release\{[\s\S]*?width:fit-content/);
+ assert.match(styles,/#tab-firmware \.dw-android-release-link\{[\s\S]*?min-height:30px/);
+ assert.match(html,/v2-header\.css\?v=compact-scroll-header-20261016/);
 });
