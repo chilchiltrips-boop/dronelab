@@ -12,12 +12,16 @@ test('live STA or AP selects verified board APP, not a destructive factory image
  assert.match(update,/await loadCached\(id,type\)/);
  assert.match(update,/Connecting a kit never flashes it|connecting a kit never flashes it/);
 });
-test('fast reconnect remains explicitly approved, authenticated and identity-checked',()=>{
- assert.match(kit,/AUTO_CONNECT_APPROVALS/);
- assert.match(kit,/autoConnectApproved\(last\.id\)/);
- assert.match(kit,/pairedKeys\.get\(last\.id\)/);
- assert.match(kit,/found\?\.kitId!==last\.id\|\|found\.kitCode!==last\.code/);
- assert.match(kit,/return connectDiscoveredKit\(kit\)/);
+test('fast saved-kit discovery requires fresh Connect/Later approval and verified Device ID',()=>{
+ const startup=kit.slice(kit.indexOf('async function restoreLastKit(){'),kit.indexOf('async function rebootConnectedKit(){'));
+ assert.ok(startup.startsWith('async function restoreLastKit(){'));
+ assert.match(kit,/localStorage\.removeItem\('zebjus\.classroom\.auto-connect-approved\.v1'\)/);
+ assert.doesNotMatch(startup,/connectDiscoveredKit\(/,'A new tab must not authenticate a kit in the background');
+ assert.match(startup,/pairedKeys\.get\(last\.id\)/);
+ assert.match(startup,/found\?\.kitId!==last\.id\|\|found\.kitCode!==last\.code/);
+ assert.match(startup,/await offerRememberedConnection\(\)/);
+ assert.match(kit,/dialog\.showModal\?\.\(\)/);
+ assert.match(kit,/return connectDiscoveredKit\(kit\)/,'Only the explicit Connect action may authenticate the offered kit');
  assert.match(kit,/if\(state\.owner\)throw Error\('Release diagnostic control/);
  assert.match(kit,/for\(const delay of \[250,700,1600,3000,5000\]\)/);
 });
