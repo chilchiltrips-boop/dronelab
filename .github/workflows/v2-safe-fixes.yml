@@ -58,6 +58,7 @@ jobs:
           node tools/full-page-input-fit-browser.mjs
           node tools/pid-shell-browser.mjs
           node tools/network-browser.mjs
+          node tools/android-menu-browser.mjs
           node tools/legacy-connectivity-browser.mjs
           node tools/exclusive-connectivity-browser.mjs
           node tools/offline-browser.mjs
