@@ -28,6 +28,7 @@ final class FlightCoreWifiLink {
     private Network selected;
     private String pinnedIp,pinnedId,pinnedSsid,pinnedBssid;
     private ConnectivityManager.NetworkCallback callback;
+    private final java.util.concurrent.ConcurrentHashMap<Network,WifiInfo> observedWifi=new java.util.concurrent.ConcurrentHashMap<>();
     private NsdManager.DiscoveryListener discovery;
     private WifiManager.MulticastLock multicastLock;
     private final AtomicBoolean discoveryFinished=new AtomicBoolean(true);
@@ -48,17 +49,35 @@ final class FlightCoreWifiLink {
         if(s==null)return "";
         return s.length()>=2&&s.startsWith("\"")&&s.endsWith("\"")?s.substring(1,s.length()-1):s;
     }
-    private WifiInfo info(){
+    private WifiInfo info(Network network){
+        if(network==null)throw new IllegalStateException("No selected Wi-Fi network");
+        if(activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
+            throw new IllegalStateException("Allow precise Location permission to verify Wi-Fi identity.");
+        if(Build.VERSION.SDK_INT>=31){
+            // Only location-inclusive NetworkCallback objects contain unredacted
+            // WifiInfo on Android 12+, and the data belongs to THIS Network.
+            WifiInfo observed=observedWifi.get(network);
+            if(observed==null)throw new IllegalStateException("Waiting for verified Wi-Fi network details; enable Location Services and retry.");
+            return observed;
+        }
+        NetworkCapabilities caps=connectivity.getNetworkCapabilities(network);
+        if(Build.VERSION.SDK_INT>=29&&caps!=null&&caps.getTransportInfo() instanceof WifiInfo)
+            return (WifiInfo)caps.getTransportInfo();
+        // Pre-Android 12 compatibility only. Never use global WifiManager info
+        // to identify a selected network on a modern concurrent-Wi-Fi device.
         return wifi==null?null:wifi.getConnectionInfo();
     }
-    private String checkedSsid(){
-        if(activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
-            throw new IllegalStateException("Allow Android Location permission for verified Wi-Fi SSID pinning.");
-        WifiInfo data=info();
-        String ssid=clean(data==null?null:data.getSSID());
-        if(ssid.isEmpty()||ssid.equalsIgnoreCase("<unknown ssid>"))
-            throw new IllegalStateException("Enable Android Location services and Wi-Fi; SSID is unavailable.");
-        return ssid;
+    private static String checkedSsid(WifiInfo info){
+        String value=clean(info==null?null:info.getSSID());
+        if(value.isEmpty()||value.equalsIgnoreCase("<unknown ssid>"))
+            throw new IllegalStateException("Wi-Fi SSID hidden. Enable precise Location and Location Services.");
+        return value;
+    }
+    private static String checkedBssid(WifiInfo info){
+        String value=clean(info==null?null:info.getBSSID());
+        if(value.isEmpty()||value.equalsIgnoreCase("02:00:00:00:00:00"))
+            throw new IllegalStateException("Wi-Fi BSSID hidden. Enable precise Location and Location Services.");
+        return value;
     }
     private Network onlyWifi(){
         if(connectivity==null)throw new IllegalStateException("No network service");
@@ -66,10 +85,26 @@ final class FlightCoreWifiLink {
         for(Network n:connectivity.getAllNetworks()){
             NetworkCapabilities caps=connectivity.getNetworkCapabilities(n);
             if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))continue;
-            if(found!=null&&!found.equals(n))throw new IllegalStateException("Multiple Wi-Fi networks; select one trusted kit network");
+            if(found!=null&&!found.equals(n))
+                throw new IllegalStateException("Multiple Wi-Fi interfaces. Identify the exact trusted Kit Wi-Fi first.");
             found=n;
         }
-        if(found==null)throw new IllegalStateException("No Android Wi-Fi network; join the kit AP or router");
+        if(found==null)throw new IllegalStateException("No Android Wi-Fi network; join Kit AP or router");
+        return found;
+    }
+    private Network matchingWifi(String expectedSsid){
+        Network found=null;
+        for(Network n:connectivity.getAllNetworks()){
+            NetworkCapabilities caps=connectivity.getNetworkCapabilities(n);
+            if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))continue;
+            WifiInfo info=info(n);
+            if(!expectedSsid.equals(checkedSsid(info)))continue;
+            checkedBssid(info);
+            if(found!=null&&!found.equals(n))
+                throw new IllegalStateException("Multiple Wi-Fi networks match this SSID; cannot safely choose a Kit.");
+            found=n;
+        }
+        if(found==null)throw new IllegalStateException("Selected Wi-Fi SSID not found; connect to "+expectedSsid);
         return found;
     }
     synchronized Network networkFor(String ip,boolean bootstrap){
@@ -83,7 +118,9 @@ final class FlightCoreWifiLink {
         if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
             clear();throw new IllegalStateException("Pinned Kit Wi-Fi disconnected");
         }
-        if(!pinnedSsid.equals(checkedSsid())||!pinnedBssid.equalsIgnoreCase(clean(info().getBSSID()))){
+        WifiInfo observed=info(selected);
+        if(!pinnedSsid.equals(checkedSsid(observed))||
+           !pinnedBssid.equalsIgnoreCase(checkedBssid(observed))){
             clear();throw new IllegalStateException("Pinned Wi-Fi SSID/BSSID changed; verify Kit again");
         }
         return selected;
@@ -92,12 +129,10 @@ final class FlightCoreWifiLink {
         if(!id.matches("ZFC-A[12]-[0-9A-F]{12}")||!privateIp(ip)||
            !("AP".equals(transport)||"STA".equals(transport))||expectedSsid==null||expectedSsid.isEmpty())
             throw new IllegalArgumentException("Invalid verified kit link");
-        Network n=onlyWifi();
-        String actual=checkedSsid();
-        if(!expectedSsid.equals(actual))throw new IllegalStateException("Wrong Wi-Fi SSID: connected to "+actual+"; expected "+expectedSsid);
-        String bssid=clean(info().getBSSID());
-        if(bssid.isEmpty()||bssid.equals("02:00:00:00:00:00"))throw new IllegalStateException("Cannot verify Wi-Fi BSSID; enable Location.");
-        selected=n;pinnedId=id;pinnedIp=ip;pinnedSsid=actual;pinnedBssid=bssid;
+        Network n=matchingWifi(expectedSsid);
+        WifiInfo observed=info(n);
+        String bssid=checkedBssid(observed);
+        selected=n;pinnedId=id;pinnedIp=ip;pinnedSsid=checkedSsid(observed);pinnedBssid=bssid;
     }
     synchronized boolean isPinned(){return selected!=null;}
     synchronized boolean isPinnedTo(String id){return selected!=null&&id!=null&&id.equals(pinnedId);}
@@ -105,21 +140,41 @@ final class FlightCoreWifiLink {
     synchronized boolean matches(Network n){
         return selected!=null&&selected.equals(n);
     }
+    synchronized void refreshLocationIdentity(){
+        // Android 12+ callback objects are redacted if registered before
+        // Location was granted. Re-register after the runtime result.
+        if(connectivity==null||Build.VERSION.SDK_INT<31)return;
+        if(callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}}
+        callback=null;observedWifi.clear();
+        start();
+    }
     void start(){
         if(connectivity==null)return;
-        callback=new ConnectivityManager.NetworkCallback(){
-            @Override public void onLost(Network network){
-                if(matches(network)){clear();listener.linkChanged();}
-            }
-            @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps){
-                if(matches(network)){
-                    try{networkFor(pinnedIp,false);}
-                    catch(Exception failure){clear();listener.linkChanged();}
-                }
-            }
-        };
+        callback=Build.VERSION.SDK_INT>=31
+            ?new ConnectivityManager.NetworkCallback(ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO){
+                @Override public void onLost(Network network){handleLost(network);}
+                @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps){handleCapabilities(network,caps);}
+             }
+            :new ConnectivityManager.NetworkCallback(){
+                @Override public void onLost(Network network){handleLost(network);}
+                @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps){handleCapabilities(network,caps);}
+             };
         connectivity.registerNetworkCallback(new NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),callback);
+    }
+    private void handleLost(Network network){
+        observedWifi.remove(network);
+        if(matches(network)){clear();listener.linkChanged();}
+    }
+    private void handleCapabilities(Network network,NetworkCapabilities caps){
+        if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&
+           caps.getTransportInfo() instanceof WifiInfo)
+            observedWifi.put(network,(WifiInfo)caps.getTransportInfo());
+        else observedWifi.remove(network);
+        if(matches(network)){
+            try{networkFor(pinnedIp,false);}
+            catch(Exception failure){clear();listener.linkChanged();}
+        }
     }
     private synchronized void releaseMulticast(){
         if(multicastLock!=null){
@@ -180,7 +235,7 @@ final class FlightCoreWifiLink {
         },6000);
     }
     void shutdown(){
-        clear();releaseMulticast();
+        clear();releaseMulticast();observedWifi.clear();
         if(connectivity!=null&&callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}}
         if(nsd!=null&&discovery!=null&&discoveryFinished.compareAndSet(false,true)){
             try{nsd.stopServiceDiscovery(discovery);}catch(Exception ignored){}

@@ -227,3 +227,18 @@ button{min-height:44px}
 #kitNetStatus[data-state=good]{color:#5fe1bb}#kitNetStatus[data-state=warn]{color:#ffd595}
 @media(max-width:680px){.kit-network-card .kit-net-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:390px){.kit-network-card .kit-net-grid{grid-template-columns:1fr}}
+
+/* Android Settings: compact keyboard-friendly collapsible sections.
+   All legacy control IDs remain intact for native acceptance. */
+.settings-accordion{width:100%;min-width:0;border:1px solid #29485c;border-radius:11px;background:#0a1b29;margin:5px 0;overflow:visible}
+.settings-accordion>summary{cursor:pointer;list-style:none;min-height:44px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#baf5dc;font-weight:800;font-size:13px;user-select:none}
+.settings-accordion>summary::-webkit-details-marker{display:none}
+.settings-accordion>summary::after{content:"▾";font-size:14px;color:#77d4b5;transition:transform .2s}
+.settings-accordion:not([open])>summary::after{transform:rotate(-90deg)}
+.settings-accordion[open]>summary{border-bottom:1px solid #29485c}
+.settings-accordion-body{min-width:0;padding:10px;display:flex;flex-direction:column;gap:9px}
+.settings-accordion-body>.card{margin:0;min-width:0}
+#kitOtaProgress{width:100%;height:13px;accent-color:#56dcb0}
+#kitOtaPhase{overflow-wrap:anywhere;font-size:12px}
+#appBuildVersion{color:#97ebca}
+@media(max-width:480px){.settings-accordion-body{padding:7px}.settings-accordion>summary{padding:12px 10px}}

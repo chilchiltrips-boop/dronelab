@@ -30,9 +30,10 @@
  <div class="flight-options" id="flightOptions"><label for="flightPreset">JOYSTICK RESPONSE</label>
  <select id="flightPreset"><option value="Slow">Slow</option><option value="Medium">Medium</option><option value="Fast">Fast</option></select>
  <small>Throttle holds on release • simulation only</small><button id="flightPair">Pair / Connection Settings</button><button id="flightTakeControl">Request Mobile Control</button><button id="flightReleaseControl">Release Control</button></div>
-<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Flight Controller • v1.7.0 WEBRTC + AP/STA</span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
+<header class="app-top"><span class="brand-mark">Z</span><div class="brand-text"><b>ZEBJUS DroneLab</b><span>Android Flight Controller • <span id="appBuildVersion">Checking installed APK…</span></span></div><span id="appConnection" class="conn-status">DISCONNECTED</span></header>
 <main>
 <section class="hero"><small>KIT-FREE • SAME WI-FI • QR OFFLINE / CODE ONLINE</small><h1>Flight Training Connection</h1><p><strong>Recommended: 6-Digit CONNECT Code.</strong> Scan the Web App QR, then type the short code shown here on your College PC. Camera-based response QR is also available.</p></section>
+<details class="settings-accordion" open><summary>Pairing • QR / 6-digit code</summary><div class="settings-accordion-body">
 <section class="card"><div class="section-title"><strong>1. Scan Web App Offer</strong><span id="offerState">Waiting for QR</span></div>
 <div class="actions"><button id="scanOfferBtn" class="primary">Scan Web QR</button><button id="phoneTorchBtn" disabled>Flashlight OFF</button><button id="stopCameraBtn">Close Camera</button></div><div id="phoneScanFeedback" class="phone-scan-feedback" role="status" aria-live="assertive">Ready to scan QR • good lighting recommended</div><p class="hint" id="cameraPermissionHelp">Tap Scan Web QR to request Android Camera permission. If no popup appears, open Android Settings → Apps → ZEBJUS Flight Control → Permissions → Camera → Allow only while using the app.</p><div id="phoneScanFrame" class="phone-scan-frame" hidden><video id="scanVideo" autoplay muted playsinline hidden></video><span class="phone-scan-guide" aria-hidden="true"></span></div><canvas id="scanCanvas" hidden></canvas>
 <textarea id="offerInput" placeholder="Alternatively paste Web App pairing offer here"></textarea>
@@ -40,12 +41,16 @@
 <div class="pin-box"><span>Confirmation code — verify on Web App</span><strong id="appPairCode">------</strong></div>
 <p id="offerExpiry" class="hint">QR expires after 3 minutes.</p></section>
 <section class="card"><div class="section-title"><strong>2. Pair with PC • Recommended Code First</strong><span id="answerState" role="status" aria-live="polite">Waiting for Web QR scan</span></div><div class="phone-code-panel"><div class="section-title"><strong>Recommended • No Camera</strong><span>CONNECT CODE</span></div><div class="pin-box"><span>Enter these 6 digits on your PC</span><strong id="phoneShortCode">------</strong></div><p id="phoneShortCodeStatus" class="hint">Generating a temporary 6-digit code when Internet is available…</p><p class="hint">The CONNECT code uses Internet signaling. If your network blocks it, use the Phone Response QR below. Verify the Web App 6-digit confirmation PIN before giving control.</p><button id="phoneRetryCode" disabled>Generate New Code</button></div><details class="qr-phone-alternative"><summary>Alternative • Show Phone Response QR to laptop webcam</summary><p class="hint">The response QR appears automatically after scanning the Web QR. Point the laptop webcam at it; the Web App will detect and confirm the response automatically.</p><div class="answer-qr"><div class="qr-frame qr-phone-frame" id="answerQrFrame"><canvas id="answerCanvas" hidden></canvas><span id="answerPlaceholder">Your response QR will appear here</span></div></div><div class="actions"><button id="showAnswerBtn" class="primary" disabled>Expand Response QR</button><button id="retryAnswerBtn" disabled>Regenerate Response</button></div><p id="networkState" class="hint">If Wi-Fi changes, scan a fresh Web QR to re-pair and regain control.</p></details><details><summary>No laptop webcam? Manual response fallback</summary><p class="hint">Copy the answer text and paste it into Web App Connection Settings → Advanced.</p><textarea id="answerText" readonly aria-label="Phone QR response text"></textarea><button id="copyAnswerBtn">Copy Response Text</button></details></section>
+</div></details>
+<details class="settings-accordion" open><summary>Mobile Control</summary><div class="settings-accordion-body">
 <section class="card"><div class="section-title"><strong>3. Mobile Control</strong><span id="controlState">NO CONTROL</span></div>
 <div class="status-grid"><div><small>CONNECTION</small><b id="connectionDetail">Disconnected</b></div><div><small>CONTROLLER</small><b id="controllerDetail">None</b></div><div><small>HEARTBEAT</small><b id="heartbeatDetail">—</b></div></div>
 <div class="actions"><button id="requestControlBtn" class="primary" disabled>Take Control</button><button id="releaseControlBtn" disabled>Release Control</button><button id="disconnectBtn" class="danger">Disconnect</button></div>
 <p id="commandStatus" class="hint" role="status">Pair and grant control to the virtual Flight Training simulator.</p><pre id="mobileLog">Android companion ready. Scan the Web App QR.</pre></section>
+</div></details>
 <section class="card kit-network-card" id="kitNetworkCard" aria-label="FlightCore Wi-Fi transport and setup">
 <div class="section-title"><strong>FlightCore Connection • AP / STA</strong><span>Direct Android input • motors OFF</span></div>
+<details class="settings-accordion" open><summary>My Kits • Connect / Discovery</summary><div class="settings-accordion-body">
 <p class="hint">Join the controller AP in Android Wi-Fi settings or join the same router as the controller. Use the private manufacturer label to verify this exact kit without USB. Wi-Fi cannot ARM motors in this firmware.</p>
 <div class="kit-net-grid">
 <label>Android connection<select id="kitLink"><option value="ap">AP • kit Wi-Fi</option><option value="sta">STA • same router</option></select></label>
@@ -58,21 +63,32 @@
 <div class="actions"><button id="kitConnectSaved">Connect Saved STA Kit</button><button id="kitForgetSaved">Forget saved diagnostic credential</button></div>
 <p id="kitNetStatus" class="hint" role="status">Select AP or STA, join that Wi-Fi, then connect to the verified kit.</p>
 <div class="status-grid"><div><small>FLIGHTCORE</small><b id="kitDevice">—</b></div><div><small>IP ADDRESSES</small><b id="kitAddresses">—</b></div></div>
+</div></details>
+<details class="settings-accordion" open><summary>Wi-Fi • Scan / Save / Mode</summary><div class="settings-accordion-body">
 <div class="kit-net-grid">
 <label>Detected networks<select id="kitNetworks"><option value="">Scan Wi-Fi first</option></select></label>
 <label>Router SSID<input id="kitSsid" autocomplete="off" placeholder="Wi-Fi name"/></label>
 <label>Router password<input type="password" id="kitPassword" autocomplete="new-password" placeholder="Password kept on FlightCore"/></label></div>
 <div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
+</div></details>
+<details class="settings-accordion" open><summary>Diagnostics • Telemetry / I²C</summary><div class="settings-accordion-body">
 <div class="actions"><button id="kitRead">Read Telemetry</button><button id="kitI2cScan">Scan I²C</button><button id="kitLedOff">LED OFF</button></div>
+</div></details>
+<details class="settings-accordion" open><summary>Firmware OTA • Signed APP / Recovery</summary><div class="settings-accordion-body">
 <div class="kit-net-grid"><label>Teacher USB-paired OWNER code (32 hexadecimal characters)<input type="password" id="kitOtaAdminKey" autocomplete="off" spellcheck="false" placeholder="Enter once for this OTA • never stored"/></label></div>
 <input id="kitOtaFile" type="file" accept=".bin,application/octet-stream" hidden aria-label="Select official FlightCore APP firmware"/>
-<div class="actions"><button id="kitAppOta" type="button" disabled>Secure APP OTA • teacher authorized</button><button id="kitOtaCancel" type="button" disabled>Cancel OTA safely</button></div><p class="hint">Screen stays on during OTA. App backgrounding pauses writes; resume checks signed Kit offset before any further flash. If unverifiable, no blind retries. Do not power off or retry an unverified flash.</p>
-<p class="hint">Connect a verified idle AP/STA Kit, release Take Control, then enter the OWNER code obtained through physical USB pairing. The selected APP image must match the official bundled SHA-256 catalog. Encrypted upload preserves saved Wi-Fi; FACTORY/Erase is not available on Android.</p><pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
+<div class="actions"><button id="kitAppOta" type="button" disabled>Secure APP OTA • teacher authorized</button><button id="kitOtaCancel" type="button" disabled>Cancel OTA safely</button></div>
+<p id="kitOtaPhase" class="hint" role="status" aria-live="polite">OTA idle • connect a verified idle Kit to begin</p>
+<progress id="kitOtaProgress" max="100" value="0" aria-label="Firmware upload progress"></progress><p class="hint">Screen stays on during OTA. App backgrounding pauses writes; resume checks signed Kit offset before any further flash. If unverifiable, no blind retries. Do not power off or retry an unverified flash.</p>
+<p class="hint">Connect a verified idle AP/STA Kit, release Take Control, then enter the OWNER code obtained through physical USB pairing. The selected APP image must match the official bundled SHA-256 catalog. Encrypted upload preserves saved Wi-Fi; FACTORY/Erase is not available on Android.</p></div></details>
+<details class="settings-accordion" open><summary>Permissions • WebApp Grants / Diagnostic Control</summary><div class="settings-accordion-body">
+<pre id="kitTelemetry" class="kit-telemetry" aria-label="FlightCore network telemetry">No live telemetry yet</pre>
 <label class="kit-net-toggle"><input id="kitAllowWeb" type="checkbox"/> Grant paired WebApp read-only status/telemetry</label>
 <label class="kit-net-toggle"><input id="kitGrantWifi" type="checkbox"/> Grant paired WebApp Wi-Fi management (scan, test/save, mode)</label>
 <label class="kit-net-toggle"><input id="kitGrantDiagnostic" type="checkbox"/> Grant paired WebApp diagnostic control/LED (motors disabled)</label>
 <label class="kit-net-toggle"><input id="kitRcPreview" type="checkbox"/> Take / release Android diagnostic input (motors disabled)</label>
 <p id="kitRcAck" class="hint" role="status">No firmware receive acknowledgment yet</p><p class="hint">The laptop reads actual joystick values through kit STA, independently of WebRTC. Pairing, AP connection and input ownership are separate. Link recovery restores monitoring; explicitly take control again.</p>
+</div></details>
 </section>
 <section class="card"><div class="section-title"><strong>App Updates</strong><span>Permanent ZEBJUS release signing</span></div><p class="hint">From V1.4.2 onward, download the newer APK and tap Update. You won't need to uninstall again as long as the official ZEBJUS certificate remains unchanged and the version increases. Older debug APKs require one final uninstall to migrate.</p><p class="hint">Installed Android APK: <strong id="androidInstalledVersion">Checking package…</strong></p><a id="downloadStableApk" class="primary" href="https://github.com/chilchiltrips-boop/dronelab/raw/refs/heads/main/mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk">Check / Download Latest Android APK</a></section><footer>Official stable-signed ZEBJUS Android APK • WebRTC DataChannel • Local Wi-Fi</footer>
 </main>

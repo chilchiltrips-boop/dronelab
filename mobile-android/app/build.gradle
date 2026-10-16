@@ -15,8 +15,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 23
-    versionName '1.7.7-ota-grants-vault'
+    versionCode 24
+    versionName '1.7.8-connection-reliability'
   }
   testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {

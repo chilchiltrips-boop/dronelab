@@ -57,7 +57,7 @@ function harness(mode){
    open:async()=>session},dispatchEvent(){},addEventListener(){}};
  window.ZebjusNative={requestSecure(requestId){
   queueMicrotask(()=>window.zebjusNativeResult({id:requestId,ok:true,status:200,text:JSON.stringify({kitId:id}),proof:''}));
- },cancelRequest(){},openWifiSettings(){}};
+ },cancelRequest(){},requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},openWifiSettings(){}};
  const document={readyState:'loading',hidden:false,getElementById:el,addEventListener(name,fn){listeners.set('document:'+name,fn)}};
  const catalog={version:'1.7.4',boards:[{id:board,latest:{app:{available:true,file:file.name,size:bytes.length,sha256:hash}}}]};
  runInNewContext(client,{window,document,console,Date,Math,Number,Set,Map,Promise,Uint8Array,URLSearchParams,

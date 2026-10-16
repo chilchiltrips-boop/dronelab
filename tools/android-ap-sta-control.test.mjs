@@ -28,7 +28,7 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  window.ZebjusNative={request(){},requestSecure(id,ip,method,route){
   requests.push(route+'@'+ip);
   queueMicrotask(()=>window.zebjusNativeResult({id,ok:true,status:200,text:JSON.stringify({kitId}),proof:'proof'}));
- },openWifiSettings(){}};
+ },requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},openWifiSettings(){}};
  const document={readyState:'loading',hidden:false,getElementById:element,addEventListener(type,fn){listeners.set('document:'+type,fn)}};
  runInNewContext(source,{window,document,Date,performance,URLSearchParams,Promise,Set,Map,Option:class {},
   setInterval(){},setTimeout,clearTimeout,CustomEvent:class {constructor(type,options){this.type=type;this.detail=options?.detail}}});

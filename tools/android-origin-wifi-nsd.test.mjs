@@ -29,8 +29,8 @@ test('only selected Wi-Fi Network+SSID+BSSID carries privileged signed Kit reque
  assert.match(link,/Network networkFor\(String ip,boolean bootstrap\)/);
  assert.match(link,/if\(!bootstrap\)throw new IllegalStateException/);
  assert.match(link,/if\(!pinnedIp\.equals\(ip\)\)/);
- assert.match(link,/pinnedSsid\.equals\(checkedSsid\(\)\)/);
- assert.match(link,/pinnedBssid\.equalsIgnoreCase\(clean\(info\(\)\.getBSSID\(\)\)\)/);
+ assert.match(link,/pinnedSsid\.equals\(checkedSsid\(observed\)\)/);
+ assert.match(link,/pinnedBssid\.equalsIgnoreCase\(checkedBssid\(observed\)\)/);
  assert.match(bridge,/wifiLink\.networkFor\(ip,route\.equals\("\/api\/identify"\)/);
  assert.match(client,/await pinVerifiedStatus\(data\)/);
  assert.match(client,/forgetNativePin\(\)/);

@@ -17,7 +17,7 @@
   saveDiagnostic:(requestId,id,credential)=>send('saveDiagnostic',requestId,id,credential),
   loadDiagnostic:(requestId,id)=>send('loadDiagnostic',requestId,id),
   forgetDiagnostic:(requestId,id)=>send('forgetDiagnostic',requestId,id),
-  requestWifiPermission:()=>send('requestWifiPermission'),
+  requestWifiPermission:requestId=>send('requestWifiPermission',requestId),
   openWifiSettings:()=>send('openWifiSettings')
  });
 })(window);
