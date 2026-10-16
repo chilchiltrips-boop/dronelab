@@ -77,7 +77,7 @@ await laptop.route(/^http:\/\/192\.168\.(?:4\.1|1\.42)\//,async route=>{
  return route.fulfill({status:d.status,body:d.text,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*','Access-Control-Expose-Headers':'X-ZJ-Response','X-ZJ-Response':d.proof}});
 });
 await android.exposeFunction('__nativeFixture',async(host,path,method,body,headers)=>handle(host,path,method,Object.fromEntries(new URLSearchParams(body)),JSON.parse(headers)));
-await android.addInitScript(()=>{window.ZebjusNative={request(){},openWifiSettings(){},requestSecure(id,host,method,path,body,headers){window.__nativeFixture(host,path,method,body,headers).then(d=>window.zebjusNativeResult({id,ok:true,...d})).catch(e=>window.zebjusNativeResult({id,ok:false,error:e.message}))}}});
+await android.addInitScript(()=>{window.ZebjusNative={request(){},openWifiSettings(){},requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},requestSecure(id,host,method,path,body,headers){window.__nativeFixture(host,path,method,body,headers).then(d=>window.zebjusNativeResult({id,ok:true,...d})).catch(e=>window.zebjusNativeResult({id,ok:false,error:e.message}))}}});
 const web=await laptop.newPage(),phone=await android.newPage();
 for(const p of [web,phone])p.on('pageerror',e=>errors.push(e.message));
 const wait=(p,fn)=>p.waitForFunction(fn,null,{timeout:45000});
