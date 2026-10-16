@@ -18,9 +18,9 @@ export function imageBuildStamp(bytes,kind='app'){
   return String.fromCharCode(...value);
  }
  const time=ascii(112),date=ascii(128);
- if(!/^\\d{2}:\\d{2}:\\d{2}$/.test(time)||!/^[A-Z][a-z]{2}\\s+\\d{1,2}\\s+\\d{4}$/.test(date))return'';
+ if(!/^\d{2}:\d{2}:\d{2}$/.test(time)||!/^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}$/.test(date))return'';
  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
- const m=/^([A-Z][a-z]{2})\\s+(\\d{1,2})\\s+(\\d{4})$/.exec(date),t=time.split(':').map(Number);
+ const m=/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})$/.exec(date),t=time.split(':').map(Number);
  const index=months.indexOf(m[1]),day=+m[2],year=+m[3];
  if(index<0||year<2000||year>2100||t[0]>23||t[1]>59||t[2]>59)return'';
  const d=new Date(Date.UTC(year,index,day,...t));
