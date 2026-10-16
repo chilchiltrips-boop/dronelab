@@ -39,6 +39,8 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private int touchCalls;
     private boolean fullscreenHelpDismissed;
     private String lastTouch="";
+    private static final String FIXTURE_ID="ZFC-A1-000000000001";
+    private static final String FIXTURE_DIAGNOSTIC="0123456789abcdef0123456789abcdef";
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
     @Override public void callActivityOnResume(Activity resumed) {
         super.callActivityOnResume(resumed);
@@ -263,6 +265,8 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             if(args!=null&&"true".equals(args.getString("baselineOnly"))){
                 js("localStorage.setItem('zebjus.flight.preset.v1','Fast');true");check("localStorage.getItem('zebjus.flight.preset.v1')==='Fast'");
                 if(!getTargetContext().getSharedPreferences("native-upgrade-fixture",0).edit().putString("retained","version-11").commit())throw new AssertionError("Native preference fixture write failed");
+                new FlightCoreKitVault(getTargetContext()).store(FIXTURE_ID,FIXTURE_DIAGNOSTIC);
+                if(!FIXTURE_DIAGNOSTIC.equals(new FlightCoreKitVault(getTargetContext()).load(FIXTURE_ID)))throw new AssertionError("Baseline diagnostic vault write failed");
                 // Finish the old activity gracefully so Chromium flushes its
                 // asynchronous DOM-storage journal before the shell force-stop.
                 runOnMainSync(()->activity.finish());waitForIdleSync();SystemClock.sleep(2500);
@@ -270,6 +274,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             }
             if(args!=null&&args.getString("expectedPreset")!=null){
                 if(!"version-11".equals(getTargetContext().getSharedPreferences("native-upgrade-fixture",0).getString("retained","")))throw new AssertionError("In-place upgrade lost native app data");
+                if(!FIXTURE_DIAGNOSTIC.equals(new FlightCoreKitVault(getTargetContext()).load(FIXTURE_ID)))throw new AssertionError("In-place upgrade lost encrypted diagnostic enrollment or Keystore key");checks++;
                 check("localStorage.getItem('zebjus.flight.preset.v1')==='"+args.getString("expectedPreset")+"' && document.getElementById('flightPreset').value==='Fast'");
             }
             // Stabilize Android window/focus before installing native event capture hooks.
@@ -277,7 +282,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             observeNativeInput();
             multitouch();
             screenshot("native-completed.png");
-            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, settings, OS HOME/resume, resumed compositor frames, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
+            result.putString("stream","PASS production Android WebView touchscreen: "+checks+" assertions; two independent MotionEvent pointers, preview, zero first displacement, release, capture, CANCEL, 3-finger STOP, AP/STA, settings, OS HOME/resume, Activity recreation, encrypted diagnostic vault retention, resumed compositor frames, layout. Fullscreen OS tutorial acknowledged="+fullscreenHelpDismissed+".\n");
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
             // Preserve the original failure before best-effort diagnostics. An

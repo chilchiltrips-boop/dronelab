@@ -12,6 +12,17 @@ try{
  await page.goto(base+'#settings');await page.waitForFunction(()=>document.getElementById('app').dataset.ready==='true');
  await page.evaluate(async()=>{await navigator.serviceWorker.ready});
  await page.waitForFunction(()=>navigator.serviceWorker.controller!==null,null,{timeout:120000});
+ // Factory images and optional Python packages are intentionally downloaded
+ // only on demand. Verify that policy, then exercise the real online-to-offline
+ // cache transition before asking those features to work without Internet.
+ const eagerlyCached=await page.evaluate(async path=>!!await caches.match(new URL(path,location.href)),firmwareUrl);
+ if(eagerlyCached)throw Error('Unused Factory image was eagerly cached');
+ const warmFactory=await page.evaluate(async path=>{const r=await fetch(path);return {ok:r.ok,bytes:(await r.arrayBuffer()).byteLength}},firmwareUrl);
+ if(!warmFactory.ok||warmFactory.bytes!==a2Factory.size)throw Error('Online Factory download mismatch');
+ await page.locator('[data-tab=python]').click();await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:30000});
+ page.once('dialog',d=>d.accept());await page.locator('#pythonQuickHardware').selectOption('plot');await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
+ await page.waitForFunction(async path=>!!await caches.match(new URL(path,location.href)),firmwareUrl,{timeout:30000});
  await ctx.setOffline(true);await page.goto(base+'#firmware');await page.locator('#tab-firmware.active').waitFor();
  await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A1_APP.bin'),null,{timeout:30000});
  const fw=await page.evaluate(async path=>{const r=await fetch(path);return {ok:r.ok,bytes:(await r.arrayBuffer()).byteLength}},firmwareUrl);
@@ -29,7 +40,7 @@ try{
  await page.locator('#topPairMobileBtn').click();await page.locator('#connectionStop').click();await page.locator('#connectionClose').click();
  await page.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(v=>v===0));
  await page.screenshot({path:'test-output/offline-flight-training.png',fullPage:true});
- await page.goto(base+'companion.html');await page.waitForFunction(()=>window.ZebjusFlightApp&&!document.getElementById('flightCockpit').hidden);
+ await page.goto(base+'companion.html');await page.waitForFunction(()=>window.ZebjusFlightApp&&typeof window.Peer==='function'&&!document.getElementById('flightCockpit').hidden);
  if(!await page.locator('#flightArm').isDisabled())throw Error('Offline companion armed without a peer');
- console.log('PASS real Service Worker: fresh offline firmware/4MB factory image, Monaco/Matplotlib, Flight Training GLBs/controls/gear STOP, companion preview');
+ console.log('PASS real Service Worker: lazy Factory/Python downloads reused offline, firmware, Monaco/Matplotlib, Flight Training GLBs/controls/gear STOP, bundled PeerJS and companion preview');
 }finally{await browser.close()}

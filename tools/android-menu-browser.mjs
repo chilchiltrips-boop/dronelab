@@ -36,7 +36,12 @@ try{
   assert.ok(layout.scroll<=layout.width+1,JSON.stringify(layout));
   assert.deepEqual(layout.clipped,[],JSON.stringify(layout));
   await page.screenshot({path:`test-output/android-menu-${width}x${height}.png`});
-  await page.locator('#flightBack').click();
+  await page.locator('#flightBack').tap();
+  await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
+  await toggle.tap();
+  await page.waitForFunction(()=>document.getElementById('mobileConnection').open&&document.getElementById('kitLink').value==='sta');
+  await page.locator('#flightBack').tap();
+  await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
   const header=await page.locator('.flight-topbar').evaluate(e=>({height:e.getBoundingClientRect().height,children:[...e.children].filter(n=>n.getClientRects().length).map(n=>{const r=n.getBoundingClientRect();return{id:n.id,left:r.left,right:r.right,bottom:r.bottom,top:r.top,height:r.height}})}));
   for(const child of header.children)assert.ok(child.left>=0&&child.right<=width+1,JSON.stringify(header));
   if(width>height)assert.ok(header.height<=56,JSON.stringify(header));
