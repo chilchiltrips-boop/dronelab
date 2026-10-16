@@ -60,7 +60,7 @@ test('joining Kit AP yields label-free signed local session, no OWNER/OTA author
 
 test('Android auto-connects after joining Wi-Fi; private label and OWNER not requested',async()=>{
  const source=readFileSync(new URL('../companion-network.js',import.meta.url),'utf8');
- const listeners=new Map(),elements=new Map(),calls=[];
+ const listeners=new Map(),elements=new Map(),calls=[],permissionModes=[];
  const element=id=>{
   if(!elements.has(id))elements.set(id,{value:'',checked:false,textContent:'',dataset:{},disabled:false,
    attrs:{},setAttribute(k,v){this.attrs[k]=String(v)},getAttribute(k){return this.attrs[k]??null},
@@ -85,7 +85,7 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
    queueMicrotask(()=>window.zebjusNativeResult({id,ok:true,status:200,
     text:JSON.stringify({kitId,authVersion:2,simpleConnection:true}),proof:''}));
   },
-  requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},
+  requestWifiPermission(id,silent){permissionModes.push(silent);queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},
   pinSelectedNetwork(id,kit,ip,transport,ssid){
    assert.equal(kit,kitId);assert.equal(transport,'AP');assert.equal(ssid,'zebjus_drone_1');
    queueMicrotask(()=>window.zebjusNativePinResult({id,ok:true}));
@@ -101,6 +101,7 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
  window.ZebjusNetwork.networkChanged();
  await new Promise(resolve=>setTimeout(resolve,950));
  assert.equal(window.ZebjusNetwork.isConnected(),true);
+ assert.deepEqual(permissionModes,[true],'background AP association must NOT prompt Android Location permission');
  assert.equal(localSessions,1);
  assert.equal(element('kitKey').value,'');
  assert.equal(element('kitSavedId').value,kitId);
@@ -110,4 +111,12 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
  await assert.rejects(window.ZebjusNetwork.status(),/local session expired/);
  await window.ZebjusNetwork.status();
  assert.equal(localSessions,2,'stale local session is automatically renewed');
+ // The visible Connect Kit action deliberately allows the one-time Android prompt.
+ listeners.get('kitConnect:click')();
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(permissionModes.at(-1),false,'manual Connect Kit may request Location permission');
+ const java=readFileSync(new URL('../mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java',import.meta.url),'utf8');
+ const gate=java.indexOf('if(silent){reportWifiPermission(id,false);return;}');
+ const permissionRequest=java.indexOf('requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}');
+ assert.ok(gate>0&&permissionRequest>gate,'Android must reject silent auto permission before requesting the OS dialog');
 });
