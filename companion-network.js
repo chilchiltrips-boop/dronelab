@@ -156,7 +156,7 @@ async function discoverKit(idOverride=''){
 async function request(route,method='GET',args={}){
  if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
  if(!auth||Date.now()>auth.expiresAt-5000){
-  if(auth?.local&&verifiedKitId&&link==='ap')
+  if(link==='ap'&&verifiedKitId&&(auth?.local||!diagnosticKey))
    auth=await window.ZebjusKitAuth.local(nativeTransport,verifiedKitId,'ap_diagnostics');
   else {
    if(!diagnosticKey||!verifiedKitId)throw Error('Join Kit AP Wi-Fi first, or use saved STA enrollment.');
