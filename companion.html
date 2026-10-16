@@ -23,7 +23,7 @@
   <span class="flight-zone-title">RIGHT STICK <b>PITCH / ROLL</b></span>
   <div id="flightRightRing" class="flight-ring"><svg class="flight-directions" viewBox="0 0 200 200" aria-hidden="true"><path d="m88 29 12-15 12 15m-24 142 12 15 12-15M29 88l-15 12 15 12m142-24 15 12-15 12"/></svg><div id="flightRightKnob" class="flight-knob"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="12"/><path d="M20 2v36M2 20h36"/></svg></div></div>
   <span id="flightRightTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
- <div class="flight-utilities"><button id="flightResponse" class="flight-response" aria-label="Joystick response Medium. Tap to change"><small>RESP</small><b id="flightResponseValue">MED</b><span aria-hidden="true">↕</span></button><button id="flightQuickScan" class="flight-quick-scan" aria-label="Scan Web QR"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="M8 8h3v3H8zM14 8h2v3h-2zM8 14h3v2H8zM14 14h3v3h-3z"/></svg></button></div>
+ <div class="flight-utilities"><button id="flightLedToggle" class="flight-led-toggle" type="button" aria-label="Kit internal LED: connect Kit first" aria-pressed="false" title="Kit internal LED ON/OFF" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 18h6m-5 3h4m-5-6c-.8-1.7-3-3.1-3-6a6 6 0 1 1 12 0c0 2.9-2.2 4.3-3 6l-.5 2h-5z"/></svg><span>LED</span></button><button id="flightResponse" class="flight-response" aria-label="Joystick response Medium. Tap to change"><small>RESP</small><b id="flightResponseValue">MED</b><span aria-hidden="true">↕</span></button><button id="flightQuickScan" class="flight-quick-scan" aria-label="Scan Web QR"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path d="M8 8h3v3H8zM14 8h2v3h-2zM8 14h3v2H8zM14 14h3v3h-3z"/></svg></button></div>
  </div>
  <footer class="flight-footer"><div class="flight-readouts"><span><small>THR</small><b id="flightThrottle">1000 µs</b></span><span><small>ROLL</small><b id="flightRoll">0%</b></span><span><small>PITCH</small><b id="flightPitch">0%</b></span><span><small>YAW</small><b id="flightYaw">0%</b></span></div><div class="flight-center-state"><span id="flightModeState">PREVIEW • ANGLE</span><span>SEQ <b id="flightSent">#0</b></span><span id="flightFeedback" hidden>NO ACK</span></div><div id="flightAppliedControls" class="flight-applied-controls">INPUT PREVIEW • NO FLIGHT COMMAND</div><div id="flightAppliedTelemetry" class="flight-feedback"></div></footer>
 </section>
@@ -52,7 +52,7 @@
 <section class="card kit-network-card" id="kitNetworkCard" aria-label="FlightCore Wi-Fi transport and setup">
 <div class="section-title"><strong>FlightCore Connection • AP / STA</strong><span>Verified Kit Wi-Fi only • motors OFF</span></div>
 <details class="settings-accordion" open><summary>My Kits • Connect / Discovery</summary><div class="settings-accordion-body">
-<p class="hint">Simple AP connect: open Android Wi-Fi settings, select your Kit SSID and enter its Wi-Fi password. Return here; the app connects automatically without a private label. Existing paired STA connections still work. Wi-Fi cannot ARM motors.</p>
+<p class="hint mobile-guide">Simple AP connect: open Android Wi-Fi settings, select your Kit SSID and enter its Wi-Fi password. Return here; the app connects automatically without a private label. Existing paired STA connections still work. Wi-Fi cannot ARM motors.</p>
 <div class="kit-net-grid">
 <label>Android connection<select id="kitLink"><option value="ap">AP • kit Wi-Fi</option><option value="sta">STA • same router</option></select></label>
 <label>Device IP<input id="kitIp" inputmode="decimal" value="192.168.4.1" autocomplete="off" spellcheck="false"/></label>
@@ -67,7 +67,7 @@
 </div></details>
 <details class="settings-accordion"><summary>Wi-Fi • Scan / Save / Mode</summary><div class="settings-accordion-body">
 <div class="kit-net-grid">
-<label>Detected networks<select id="kitNetworks"><option value="">Scan Wi-Fi first</option></select></label>
+<p id="kitSavedStaStatus" class="kit-saved-sta" role="status">Saved STA: —</p><label>Detected networks<select id="kitNetworks"><option value="">Scan Wi-Fi first</option></select></label>
 <label>Router SSID<input id="kitSsid" autocomplete="off" placeholder="Wi-Fi name"/></label>
 <label>Router password<input type="password" id="kitPassword" autocomplete="new-password" placeholder="Password kept on FlightCore"/></label></div>
 <div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
