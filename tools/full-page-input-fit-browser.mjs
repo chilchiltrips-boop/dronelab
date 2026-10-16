@@ -71,6 +71,7 @@ try{
     shellBottom:shell.getBoundingClientRect().bottom,
     rightOverflow:getComputedStyle(content).overflowY};
  });
+ console.log('SCROLL_DIAG wifi-before',JSON.stringify(before));
  if(!before.contentHasOverflow||before.rightOverflow!=='auto')
   hardFailures.push('Desktop hardware Wi-Fi pane must overflow and use independent scrolling');
  await page.locator('#dw-body-wifi').hover();
@@ -81,6 +82,7 @@ try{
   navY:document.querySelector('.dw-nav-list').scrollTop,
   contentY:document.querySelector('#dw-body-wifi').scrollTop
  }));
+ console.log('SCROLL_DIAG wifi-after',JSON.stringify(after));
  if(after.contentY<=before.contentY+10||Math.abs(after.bodyY-before.bodyY)>2||
     Math.abs(after.asideY-before.asideY)>2||after.navY!==before.navY)
   hardFailures.push('Desktop mousewheel should scroll only the right hardware settings pane');
@@ -103,6 +105,7 @@ try{
    cardNatural:card.scrollHeight<=card.getBoundingClientRect().height+2,
    barY:bar.getBoundingClientRect().top};
  });
+ console.log('SCROLL_DIAG overview-before',JSON.stringify(ovBefore));
  if(!ovBefore.hasOverflow||!ovBefore.controlVisible||!ovBefore.controlBarParent||ovBefore.buttonCount!==1||!ovBefore.cardNatural)
   hardFailures.push('Overview Take Control needs one visible button and an independently scrollable, unclipped details card');
  await page.locator('#dw-body-overview').hover();
@@ -117,6 +120,7 @@ try{
     return [r.left+r.width/2,r.top+r.height/2]
    })())?.closest('#fwKitTakeControl')!==null};
  });
+ console.log('SCROLL_DIAG overview-after',JSON.stringify(ovAfter));
  if(ovAfter.contentY<=ovBefore.contentY+15||Math.abs(ovAfter.bodyY-ovBefore.bodyY)>2||
     Math.abs(ovAfter.barY-ovBefore.barY)>2||!ovAfter.hitTest)
   hardFailures.push('Overview wheel must scroll details without moving/click-blocking Take Control');
@@ -135,6 +139,7 @@ try{
    stepsFit:steps.length===3&&steps.every(n=>{const span=n.querySelector('span').getBoundingClientRect(),r=n.getBoundingClientRect();return span.bottom<=r.bottom+2&&r.bottom<=rc.bottom}),
    formAfterSteps:connect.top>steps[2].getBoundingClientRect().bottom};
  });
+ console.log('SCROLL_DIAG connect-before',JSON.stringify(connBefore));
  if(!connBefore.hasOverflow||!connBefore.naturalCard||!connBefore.stepsFit||!connBefore.formAfterSteps)
   hardFailures.push('Kit Connection 1/2/3 content or Connect form clipped inside its panel');
  await page.locator('#dw-body-connection').hover();
@@ -150,6 +155,7 @@ try{
   return {hasOverflow:root.scrollHeight>root.clientHeight+15,
    cardsFit:cards.length>=3&&cards.every(n=>n.scrollHeight<=n.getBoundingClientRect().height+5)};
  });
+ console.log('SCROLL_DIAG firmware-fit',JSON.stringify(firmwareFit));
  if(!firmwareFit.hasOverflow||!firmwareFit.cardsFit)
   hardFailures.push('Firmware Flash contains truncated Step 1/2/3 cards');
  // Verify contextual Step 2 panels and full-width Step 3 for both methods.
@@ -216,6 +222,7 @@ try{
   const el=document.querySelector('.dw-nav-list');
   return {height:el.clientHeight,scrollHeight:el.scrollHeight,overflow:getComputedStyle(el).overflowY};
  });
+ console.log('SCROLL_DIAG menu-before',JSON.stringify(navSize));
  if(navSize.overflow!=='auto'||navSize.scrollHeight<=navSize.height+10)
   hardFailures.push('Short desktop hardware sidebar navigation should overflow independently');
  const prior=await page.evaluate(()=>({
@@ -229,6 +236,7 @@ try{
   bodyY:scrollY,contentY:document.querySelector('#dw-body-wifi').scrollTop,
   navY:document.querySelector('.dw-nav-list').scrollTop
  }));
+ console.log('SCROLL_DIAG menu-after',JSON.stringify({prior,menuAfter}));
  if(menuAfter.navY<=prior.navY+10||Math.abs(menuAfter.bodyY-prior.bodyY)>2||
     Math.abs(menuAfter.contentY-prior.contentY)>2)
   hardFailures.push('Short desktop mousewheel should scroll only the left hardware menu');
@@ -242,6 +250,7 @@ try{
   return {sidebarPos:getComputedStyle(el).position,navOverflow:getComputedStyle(nav).overflowX,
     shellHeight:getComputedStyle(shell).height,contentOverflow:getComputedStyle(content).overflowY};
  });
+ console.log('SCROLL_DIAG mobile',JSON.stringify(mobile));
  if(mobile.sidebarPos!=='sticky'||mobile.navOverflow!=='auto'||mobile.contentOverflow!=='visible')
   hardFailures.push('Mobile needs sticky horizontal navigation and natural document scrolling');
  await page.screenshot({path:'test-output/form-fit/hardware-scroll-mobile.png'});
