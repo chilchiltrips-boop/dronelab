@@ -100,7 +100,7 @@ function render(){
  byId('kitInternetStatus','Web '+state.internet);
  byId('kitHeartbeat',state.heartbeatAt?Math.max(0,Math.round((Date.now()-state.heartbeatAt)/1000))+' s ago':'Unverified');
  byId('kitGlobalState',otaActive?(state.connected?'OTA UPLOADING':'OTA RECONNECTING'):state.linkState==='stale'?'LINK STALE':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':globalTone==='locked'?'KIT IN USE':ready?'KIT CONNECTED':'KIT OFFLINE');
- const pill=$('kitGlobalState');if(pill)pill.dataset.tone=globalTone;
+ const pill=$('kitGlobalState');if(pill){pill.dataset.tone=globalTone;pill.dataset.connected=String(ready);pill.title=(ready?'Verified kit online • ':'Kit not verified online • ')+(state.kitName||'No kit')+' • '+(state.transport||'offline').toUpperCase();}
  const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
  byId('kitSelectedBoard',ready?state.board:'—');byId('kitSelectedVersion',ready?state.version:'—');

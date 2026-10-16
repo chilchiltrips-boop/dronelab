@@ -31,7 +31,7 @@
      !/^[0-9][A-Za-z0-9._-]{0,79}$/.test(version||'')||!/^[1-9][0-9]{0,9}$/.test(code||'')||
      !Number.isSafeInteger(Number(code)))
    throw Error('Official signed Android release metadata unavailable or invalid');
-  return 'Published stable Android APK: '+version+' (code '+code+')';
+  return 'Android APK • '+version.split('-')[0]+' (code '+code+')';
  }
  function updatePublishedAndroidRelease(){
   const labels=document.querySelectorAll('[data-dw-android-version]');
@@ -123,7 +123,7 @@
   if(body(name))body(name).scrollTop=viewScroll.get(name)||0;
   scheduleLayout();
   if(scroll&&root.requestAnimationFrame)root.requestAnimationFrame(()=>{
-   if(root.matchMedia('(max-width:780px)').matches)shell.scrollIntoView({block:'start',behavior:'smooth'});
+   shell.scrollIntoView({block:'start',behavior:'smooth'});
    else if(root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
    scheduleLayout();
   });
@@ -236,7 +236,6 @@
  root.visualViewport?.addEventListener('resize',scheduleLayout,{passive:true});
  root.addEventListener('dronelab:tab',event=>{
   if(event.detail?.name==='firmware'){
-   if(!root.matchMedia('(max-width:780px)').matches&&root.scrollY>0)root.scrollTo({top:0,behavior:'instant'});
    scheduleLayout();
   }
  });

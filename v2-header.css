@@ -118,3 +118,73 @@
  height:1px;
  opacity:0;
 }
+
+
+/* 2026-10-16: Scroll WITH the document; never freeze the global header. */
+#app .topbar{position:relative!important;top:auto!important;inset-block-start:auto!important}
+#app .topbar-main>.tabs{position:static!important;top:auto!important}
+
+/* Full-width readable Kit identity, connection badge and network controls.
+   Header connection state comes from authenticated live Kit data, not STA choice. */
+#app .topbar-main{grid-template-columns:minmax(120px,155px) minmax(270px,1fr) minmax(560px,1.45fr)!important;gap:10px!important}
+#app .topbar-main>.kit-top-status{
+ display:grid!important;grid-template-columns:minmax(170px,1fr) auto auto auto auto auto auto;
+ align-items:center;justify-content:stretch!important;width:100%!important;
+ min-width:0!important;max-width:none!important;gap:7px!important
+}
+#app .topbar .kit-top-detail{
+ display:block!important;min-width:0!important;max-width:none!important;
+ width:auto!important;overflow:visible!important
+}
+#app .topbar .kit-top-detail b,#app .topbar .kit-top-detail small{
+ display:block!important;max-width:none!important;overflow:visible!important;
+ text-overflow:clip!important;white-space:normal!important;overflow-wrap:anywhere;
+ line-height:1.3!important
+}
+#app .topbar .kit-top-detail b{font-size:12px!important;color:#f5fcff}
+#app .topbar .kit-top-detail small{font-size:10px!important;color:#abc7d4}
+#app .topbar #kitGlobalState{
+ display:inline-flex!important;align-items:center;justify-content:center;
+ max-width:none!important;min-width:103px;min-height:28px;padding:6px 9px!important;
+ border:1px solid transparent;border-radius:7px!important;
+ color:#fff!important;font-size:10px!important;font-weight:800!important;
+ line-height:1.25!important;white-space:normal!important;text-align:center;
+ text-overflow:clip!important;overflow:visible!important
+}
+#app .topbar #kitGlobalState[data-connected="true"]{background:#167a4a!important;border-color:#38ad79!important;color:#fff!important}
+#app .topbar #kitGlobalState[data-connected="false"]{background:#b32636!important;border-color:#e25867!important;color:#fff!important}
+#app .topbar .kit-top-network,#app .topbar .kit-control-switch,#app .topbar .v2-connection-details{justify-self:end}
+#app .topbar .kit-top-network{white-space:nowrap}
+@media(max-width:1350px){
+ #app .topbar-main{grid-template-columns:minmax(120px,170px) minmax(0,1fr)!important}
+ #app .topbar-main>.tabs{grid-column:1/-1!important;grid-row:2!important;justify-content:flex-start!important}
+ #app .topbar-main>.kit-top-status{grid-column:2!important;grid-row:1!important}
+}
+@media(max-width:950px){
+ #app .topbar-main{grid-template-columns:minmax(0,1fr)!important}
+ #app .topbar-main>.brand{grid-column:1!important;grid-row:1!important}
+ #app .topbar-main>.tabs{grid-column:1!important;grid-row:2!important}
+ #app .topbar-main>.kit-top-status{grid-column:1!important;grid-row:3!important}
+ #app .topbar-main>.kit-top-status{grid-template-columns:minmax(180px,1fr) auto auto auto auto auto auto}
+}
+@media(max-width:660px){
+ #app .topbar-main>.kit-top-status{
+  grid-template-columns:minmax(0,1fr) minmax(102px,max-content) auto!important;
+  grid-template-areas:"identity state refresh" "network control details";
+  gap:7px 8px!important
+ }
+ #app .topbar .kit-top-detail{grid-area:identity}
+ #app .topbar #kitGlobalState{grid-area:state;min-width:100px}
+ #app .topbar #kitTopRefresh{grid-area:refresh;display:none!important}
+ #app .topbar #kitInternetStatus{display:none!important}
+ #app .topbar .kit-top-network{grid-area:network;justify-self:start}
+ #app .topbar .kit-control-switch{grid-area:control;justify-self:end}
+ #app .topbar .v2-connection-details{grid-area:details;justify-self:end}
+ #app .topbar .kit-top-detail b{font-size:11px!important}
+ #app .topbar .kit-top-detail small{font-size:10px!important;display:block!important}
+}
+@media(max-width:390px){
+ #app .topbar-main>.kit-top-status{grid-template-columns:minmax(0,1fr) minmax(97px,max-content) auto!important}
+ #app .topbar #kitGlobalState{min-width:97px;padding:5px!important;font-size:9px!important}
+ #app .topbar .kit-control-switch{padding:5px!important}
+}

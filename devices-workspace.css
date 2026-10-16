@@ -599,3 +599,62 @@
 .dw-android-release-link .dw-icon{width:18px;height:18px;flex:0 0 18px}
 .dw-android-release-link:focus-visible{outline:3px solid #a0ffda;outline-offset:3px}
 @media(max-width:560px){.dw-android-release{padding:13px;gap:13px}.dw-android-release-copy{flex-basis:100%}.dw-android-release-link{width:100%}}
+
+
+/* 2026-10-16: One compact APK action — roughly one short toolbar row,
+   instead of the old multi-line marketing card. */
+#tab-firmware .dw-android-release{
+ display:inline-flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;
+ gap:5px 9px;width:fit-content;max-width:100%;min-width:0;align-self:flex-start;
+ margin:0;padding:4px 6px;border-radius:7px;border-color:#285e62;
+ background:#0e2b33;box-shadow:none
+}
+#tab-firmware .dw-android-release-version{
+ display:inline!important;min-width:0;font-size:10px!important;
+ color:#d6eee9;line-height:1.3;margin:0;overflow-wrap:anywhere
+}
+#tab-firmware .dw-android-release-link{
+ display:inline-flex;gap:5px;flex:none;min-height:30px;
+ padding:5px 9px;font-size:10px;font-weight:750;
+ line-height:1.2;border-radius:6px;white-space:nowrap
+}
+#tab-firmware .dw-android-release-link .dw-icon{width:13px;height:13px;flex-basis:13px}
+#tab-firmware .dw-android-release-link:focus-visible{outline:2px solid #a0ffda;outline-offset:2px}
+@media(max-width:560px){
+ #tab-firmware .dw-android-release{padding:4px 6px;gap:5px}
+ #tab-firmware .dw-android-release-link{width:auto;min-height:40px;flex:none}
+}
+
+/* Natural page scrolling: header, sidebar and Android download row move
+   together with the content; no frozen desktop panel or sticky mobile nav. */
+#tab-firmware.active{display:block!important;min-height:0!important;overflow:visible!important}
+#tab-firmware .dw-shell{
+ height:auto!important;min-height:0!important;max-height:none!important;
+ overflow:visible!important;align-items:start!important;flex:none!important
+}
+#tab-firmware .dw-sidebar{
+ position:relative!important;top:auto!important;
+ height:auto!important;max-height:none!important;min-height:0!important;
+ overflow:visible!important;grid-template-rows:auto auto auto!important
+}
+#tab-firmware .dw-nav-list{
+ max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important
+}
+#tab-firmware .dw-content,#tab-firmware .dw-view{
+ height:auto!important;max-height:none!important;min-height:0!important;
+ overflow:visible!important;flex:none!important
+}
+#tab-firmware .dw-view-content,
+#tab-firmware #dw-body-overview,
+#tab-firmware #dw-panel-connection>.dw-view-content,
+#tab-firmware #dw-panel-firmware>.dw-view-content{
+ height:auto!important;max-height:none!important;min-height:0!important;
+ overflow:visible!important;overflow-y:visible!important;
+ flex:none!important;overscroll-behavior:auto!important
+}
+@media(max-width:780px){
+ #tab-firmware .dw-nav-list{
+  display:flex;overflow-x:auto!important;overflow-y:hidden!important;
+  flex-wrap:nowrap;scrollbar-width:thin
+ }
+}
