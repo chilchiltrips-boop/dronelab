@@ -2,8 +2,10 @@ name: Verify Accordion Initialization and Visibility
 
 on:
   push:
-    branches: [main]
+    branches: [fix/android-178-acceptance-release-20261016, main]
     paths:
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
       - 'js/devices-workspace.js'
       - 'js/cloud-admin.js'
       - 'tools/accordion-browser.mjs'

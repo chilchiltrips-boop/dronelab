@@ -173,29 +173,12 @@ function bind(){
  $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
  document.addEventListener('contextmenu',event=>{if(event.target.closest('button,select,.flight-touch-zone'))event.preventDefault()});
  $('flightPair').onclick=openConnection;$('flightBack').onclick=closeConnection;$('flightSettings').onclick=openConnection;
-  $('flightBack').addEventListener('pointerdown',e=>{
-    // Native Android long press may swallow the synthetic click after pointerdown.
-    // Close on the original touch so the controller is never trapped by the modal.
-    if(e.pointerType==='touch'||e.pointerType==='pen'){e.preventDefault();closeConnection()}
-  });
- const networkSwitch=$('flightNetworkSwitch');
- if(networkSwitch){
-  networkSwitch.onclick=()=>{
-   const network=window.ZebjusNetwork;
-   if(!network?.selectTransport){updateStatus('KIT WI-FI MANAGER UNAVAILABLE • OPEN MENU');return}
-   const current=network.selectedTransport?.()||'ap',next=current==='ap'?'sta':'ap';
-   if(!network.selectTransport(next))updateStatus('KIT AP/STA CHANGE BLOCKED • FINISH OTA FIRST');
-   else updateStatus('KIT '+next.toUpperCase()+' SELECTED • JOIN CORRECT WI-FI AND RECONNECT IN MENU');
-  };
-  const updateTransport=()=>{
-   const current=window.ZebjusNetwork?.selectedTransport?.()||'ap';
-   networkSwitch.dataset.transport=current;
-   networkSwitch.setAttribute('aria-checked',String(current==='sta'));
-   networkSwitch.setAttribute('aria-label','Kit '+current.toUpperCase()+' transport selected. Tap to switch AP/STA');
-  };
-  window.addEventListener('zebjus:kit-transport',updateTransport);
-  updateTransport();
- }
+ // Keep the dialog present until the touch ends. Closing on pointerdown lets
+ // Android retarget the later compatibility click to the header underneath.
+ // Cancel compatibility mouse events and close on touchend, including a hold
+ // for which WebView does not synthesize click. Mouse/keyboard use onclick.
+ $('flightBack').addEventListener('touchstart',e=>e.preventDefault(),{passive:false});
+ $('flightBack').addEventListener('touchend',e=>{e.preventDefault();closeConnection()},{passive:false});
  $('flightConnect').onclick=openConnection;
  $('flightQuickScan').onclick=()=>{openConnection();$('scanOfferBtn').click()};
  $('flightResponse').onclick=()=>{const names=Object.keys(F.PRESETS);$('flightPreset').value=names[(names.indexOf(preset)+1)%names.length];$('flightPreset').dispatchEvent(new Event('change',{bubbles:true}))};

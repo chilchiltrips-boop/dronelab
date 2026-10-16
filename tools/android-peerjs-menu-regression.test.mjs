@@ -50,33 +50,37 @@ test('Cockpit header AP/STA is accessible and linked to the same Kit transport d
  assert.equal((html.match(/id="flightNetworkSwitch"/g)||[]).length,1);
  assert.match(html,/id="flightNetworkSwitch"[^>]*role="switch"/);
  assert.match(html,/id="kitLink"/);
- assert.match(flight,/network\.selectTransport\(next\)/);
- assert.match(flight,/zebjus:kit-transport/);
+ assert.match(network,/action\('flightNetworkSwitch'/);
+ assert.match(network,/selectTransport\(link==='ap'\?'sta':'ap'\)/);
+ assert.match(network,/zebjus:kit-transport/);
  assert.match(network,/e\.dispatchEvent\(new Event\('change'/);
  assert.match(network,/selectTransport,selectedTransport:\(\)=>link/);
- assert.match(network,/if\(otaBusy\)\{el\('kitLink'\)\.value=link/);
+ assert.match(network,/if\(otaBusy\|\|connecting\)\{el\('kitLink'\)\.value=link/);
  assert.match(network,/forgetGrants\(\);forgetNativePin\(\)/);
- assert.match(css,/\.flight-topbar\{grid-template-columns:auto minmax\(98px,1fr\)/);
- assert.match(css,/\.flight-network-switch\[aria-checked="true"\]/);
+ assert.match(css,/\.flight-topbar\{[^\n]*grid-template-columns:auto minmax\(0,1fr\)/);
+ assert.match(css,/\.flight-network-switch\[aria-checked=true\]/);
 });
 
 test('Android menu accordion and Kit grid are full width, nested actions readable and keyboard-friendly',()=>{
- assert.match(css,/\.mobile-connection main\{display:flex!important;flex-direction:column!important/);
- assert.match(css,/\.mobile-connection \.settings-accordion-body\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
- assert.match(css,/\.mobile-connection \.actions\{display:grid;grid-template-columns:repeat\(auto-fit/);
- assert.match(css,/\.mobile-connection \.kit-net-grid\{display:grid;grid-template-columns:repeat\(auto-fit/);
- assert.match(css,/\.mobile-connection \.actions button\{[^\n]*min-height:44px!important/);
- assert.match(css,/@media\(max-width:520px\)/);
+ assert.match(css,/\.mobile-connection main\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
+ assert.match(css,/\.mobile-connection \.pairing-settings>\.settings-accordion-body\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+ assert.match(css,/\.actions\{display:flex;flex-wrap:wrap/);
+ assert.match(css,/\.mobile-connection \.kit-net-grid\{grid-template-columns:repeat\(auto-fit/);
+ assert.match(css,/\.mobile-connection \.actions button\{[^\n]*min-height:44px/);
+ assert.match(css,/\.mobile-connection \.hint,\.mobile-connection label,\.mobile-connection summary\{overflow-wrap:anywhere/);
  for(const section of ['Pairing','My Kits','Wi-Fi','Firmware OTA','Permissions'])assert.ok(html.includes('<summary>'+section));
- assert.ok(html.indexOf('<details class="settings-accordion" open><summary>Pairing')>=0);
+ assert.ok(html.indexOf('<details class="settings-accordion pairing-settings" open><summary>Pairing')>=0);
  assert.ok(html.indexOf('<details class="settings-accordion"><summary>Firmware OTA')>=0);
 });
 
 test('Native UI release test reacquires current WebView after HOME/Resume instead of querying destroyed view',()=>{
- assert.match(nativeTest,/implements|ActivityLifecycleCallbacks/);
- assert.match(nativeTest,/refreshResumedWebView\(\)/);
- assert.match(nativeTest,/trackActivityLifecycle\(\)/);
- assert.match(nativeTest,/catch\(Throwable ignored\)/);
- assert.match(nativeTest,/WebView target=web/);
- assert.match(workflow,/vendor\/peerjs\.min\.js tools\/verify_signed_android_release\.py/);
+ assert.match(nativeTest,/callActivityOnResume\(Activity resumed\)/);
+ assert.match(nativeTest,/callActivityOnDestroy\(Activity destroyed\)/);
+ assert.match(nativeTest,/awaitCurrentWeb\(\)/);
+ assert.match(nativeTest,/catch\(Throwable diagnosticFailure\)/);
+ assert.match(nativeTest,/currentWeb\(\)\.evaluateJavascript/);
+ assert.match(nativeTest,/currentView\.isAttachedToWindow\(\)/);
+ assert.match(nativeTest,/previous\.recreate\(\)/);
+ assert.ok(nativeTest.indexOf('Log.e("FlightTouchAcceptance","Original native acceptance failure",failure)')<nativeTest.indexOf('try{screenshot("native-failure.png");}'));
+ assert.match(workflow,/python3 tools\/verify_android_assets\.py/);
 });

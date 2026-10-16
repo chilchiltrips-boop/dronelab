@@ -14,6 +14,7 @@ function harness(){
  const listeners=new Map(),elements=new Map(),requests=[],permissions=[];
  const el=name=>{
   if(!elements.has(name))elements.set(name,{value:'',checked:false,disabled:false,textContent:'',dataset:{},
+   attributes:{},setAttribute(name,value){this.attributes[name]=String(value)},getAttribute(name){return this.attributes[name]??null},
    addEventListener(type,fn){listeners.set(name+':'+type,fn)},replaceChildren(){},add(){}});
   return elements.get(name);
  };
@@ -44,11 +45,15 @@ test('first Location prompt blocks identify/auth until explicit result, denial i
  await sleep(15);
  assert.equal(h.permissions.length,1);
  assert.deepEqual(h.requests,[],'no identify or authentication while Android permission is pending');
+ assert.equal(h.el('flightNetworkSwitch').disabled,true,'cannot switch during the permission/identity operation');
+ assert.equal(h.win.ZebjusNetwork.selectTransport('sta'),false);
+ assert.equal(h.win.ZebjusNetwork.selectedTransport(),'ap');
  h.win.zebjusNativeWifiPermissionResult({id:h.permissions[0],granted:false,error:'Precise Location denied'});
  await sleep(20);
  assert.deepEqual(h.requests,[]);
  assert.match(h.el('kitNetStatus').textContent,/Precise Location denied/);
  assert.equal(h.win.ZebjusNetwork.isConnected(),false);
+ assert.equal(h.el('flightNetworkSwitch').disabled,false,'denial releases the UI lock');
  h.click('kitConnect');
  await sleep(15);
  assert.equal(h.permissions.length,2);

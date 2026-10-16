@@ -28,16 +28,10 @@ const localKitHosts=new Map(),authSessions=new Map(),secureIds=new Set();try{for
 const adminKitHosts=new Map();
 const networkTails=new Map(),rejectedPairings=new Map(),enrollmentCooldowns=new Map(),authorizationNotices=new Map();
 const rememberedWrites=new Map(),offeredConnections=new Set();
-let reconnectOffer=null,pendingNetworkTarget=null,offerPending=null,autoConnectPending=false;
-const AUTO_CONNECT_APPROVALS='zebjus.classroom.auto-connect-approved.v1';
-function autoConnectApproved(id){
- if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(id||''))return false;
- try{return JSON.parse(localStorage.getItem(AUTO_CONNECT_APPROVALS)||'[]').includes(id)}catch{return false}
-}
-function approveAutoConnect(id){
- if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(id||''))return;
- try{const set=new Set(JSON.parse(localStorage.getItem(AUTO_CONNECT_APPROVALS)||'[]'));set.add(id);localStorage.setItem(AUTO_CONNECT_APPROVALS,JSON.stringify([...set].slice(-20)))}catch{}
-}
+let reconnectOffer=null,pendingNetworkTarget=null,offerPending=null;
+// Earlier builds persisted permission for silent cross-tab connections.
+// A saved pairing is not permission to open a new authenticated session.
+try{localStorage.removeItem('zebjus.classroom.auto-connect-approved.v1')}catch{}
 let headerNetworkChoice='sta',headerModePending=false;
 let statusPending=null,recoveryTarget=null,authorizationPending=null,otaActive=false;
 const HEARTBEAT_MAX_AGE=6500;
@@ -483,7 +477,7 @@ async function connect(expectedId=''){
   state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
  audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   if(state.transport==='usb')state.controlAuthorized=true;
-  if(state.transport==='sta')setupStep=5;recordKnown();if(['sta','ap'].includes(state.transport))approveAutoConnect(state.kitId); // successful explicit verified connection grants future read-only reconnect
+  if(state.transport==='sta')setupStep=5;recordKnown(); // Save identity/pairing, not blanket permission for later connections
   pendingNetworkTarget=null;closeReconnectOffer();
   const notice=authorizationNotice(state.kitId);
   tone('Verified '+state.kitName+' • '+state.transport.toUpperCase()+' • motors disabled'+(notice?' • '+notice:''),notice?'warn':'good');
@@ -1103,12 +1097,8 @@ async function offerRememberedConnection(){
    if(!key&&!pendingNetworkTarget)continue;
    const fresh=await probeIdentity(kit.ip,1550);
    if(ticket!==reconnectTicket||!autoReconnectAllowed||!fresh||fresh.kitId!==kit.kitId||fresh.transport!==kit.transport)continue;
-   if(!pendingNetworkTarget&&autoConnectApproved(kit.kitId)&&!autoConnectPending&&!state.connected&&!state.working){ // explicit AP↔STA handover still asks once
-    autoConnectPending=true;
-    try{await connectDiscoveredKit(fresh);audit('Approved kit auto-connected by verified Device ID • '+kit.kitId,'success');return}
-    catch(e){audit('Auto-connect postponed: '+String(e.message||e).slice(0,100),'warn')}
-    finally{autoConnectPending=false}
-   }
+   // Discovery uses public identity only; even a previously paired kit needs
+   // Connect/Later approval before opening its authenticated read-only session.
    offeredConnections.add(signature);reconnectOffer={...kit};
    byId('kitReconnectName',kit.kitName);byId('kitReconnectIdentity',kit.kitId+' • '+kit.transport.toUpperCase());
    const dialog=$('kitReconnectDialog');if(dialog){dialog.hidden=false;dialog.showModal?.();}
@@ -1166,11 +1156,11 @@ async function reconnectSelected(){
  return recoverVerifiedLink(target);
 }
 async function restoreLastKit(){
- if(!autoReconnectAllowed||state.connected||state.working||autoConnectPending)return;
+ if(!autoReconnectAllowed||state.connected||state.working)return;
  let last=null;try{last=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
- if(last&&autoConnectApproved(last.id)&&codePattern.test(last.code)&&!document.hidden){
-  // Local storage contains only the explicit consent and public identity.
-  // Protected credentials remain in the pairing vault; never store Wi-Fi passwords here.
+ if(last&&codePattern.test(last.code)&&!document.hidden){
+  // A cached STA address speeds up *discovery*, not authenticated connection.
+  // Pairing stays in the protected vault, and every new page asks Connect/Later.
   const key=pairedKeys.get(last.id)||pairing()?.fromSession?.(last.id)||await pairing()?.restore?.(last.id)||'';
   if(/^[a-fA-F0-9]{32}$/.test(key)){
    const ticket=reconnectTicket;
@@ -1179,16 +1169,16 @@ async function restoreLastKit(){
     if(ticket!==reconnectTicket||state.connected||state.working||!autoReconnectAllowed)return;
     const found=await probeIdentity(host,1100);
     if(found?.kitId!==last.id||found.kitCode!==last.code||found.transport!=='sta')continue;
-    autoConnectPending=true;
-    try{await connectDiscoveredKit(found);audit('Fast saved STA reconnect • same verified Device ID','success');return}
-    catch(e){audit('Saved STA reconnect: '+String(e.message||e).slice(0,100),'warn')}
-    finally{autoConnectPending=false}
+    if(!discoveredKits.some(kit=>kit.kitId===found.kitId&&kit.transport===found.transport)){
+     discoveredKits.push(found);showDiscovered();
+    }
+    await offerRememberedConnection();
+    return;
    }
   }
  }
  return offerRememberedConnection();
 }
-
 async function rebootConnectedKit(){
  if(!linkFresh()||!['ap','sta'].includes(state.transport)||!state.otaAuthorized)throw Error('Reboot requires an authorized AP/STA connection; USB uses Reset Board');
  if(state.owner||state.rc?.claimed||state.working)throw Error('Release control before rebooting');

@@ -54,14 +54,12 @@ try{
   const modal=await p.evaluate(()=>{
    const d=document.getElementById('mobileConnection'),m=d.querySelector('main'),r=d.getBoundingClientRect();
    const accordions=[...m.querySelectorAll(':scope > .settings-accordion')].map(e=>e.getBoundingClientRect().toJSON());
-   const kit=m.querySelector('.kit-network-card').getBoundingClientRect().toJSON();
-   return{display:getComputedStyle(m).display,dialogW:r.width,dialogRight:r.right,mainW:m.getBoundingClientRect().width,
-     bodyScroll:d.scrollWidth,mainScroll:m.scrollWidth,accordions,kit};
+   return{cols:getComputedStyle(m).gridTemplateColumns.split(' ').length,dialogW:r.width,dialogRight:r.right,
+    mainW:m.getBoundingClientRect().width,bodyScroll:d.scrollWidth,mainScroll:m.scrollWidth,accordions};
   });
-  if(modal.display!=='flex'||modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||
-     modal.mainScroll>modal.mainW+2||modal.accordions.length<2||
-     modal.accordions.some(r=>r.width<modal.mainW-45)||modal.kit.width<modal.mainW-45)
-    throw Error('Full-width Android menu accordion clipped or uneven '+JSON.stringify(modal));
+  if(modal.dialogRight>width+1||modal.bodyScroll>modal.dialogW+2||modal.cols!==1||
+     modal.mainScroll>modal.mainW+2||modal.accordions.length<2||modal.accordions.some(r=>r.width<modal.mainW-45))
+    throw Error('Landscape settings sections clipped or not full width '+JSON.stringify(modal));
   const transport=await p.locator('#flightNetworkSwitch').boundingBox();
   if(!transport||transport.height<44||transport.x<0||transport.x+transport.width>width+1)
     throw Error('Cockpit AP/STA switch missing or clipped '+JSON.stringify({width,transport}));
