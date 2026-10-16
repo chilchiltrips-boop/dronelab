@@ -11,6 +11,7 @@ on:
       - 'mobile-android/**'
       - 'tools/android-ota-recovery.test.mjs'
       - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
       - 'tools/android-secure-ota.test.mjs'
       - 'tools/android-ap-sta-control.test.mjs'
       - 'tools/android-camera-permission.test.mjs'
@@ -24,6 +25,7 @@ on:
       - 'mobile-android/**'
       - 'tools/android-ota-recovery.test.mjs'
       - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
       - 'tools/android-secure-ota.test.mjs'
       - 'tools/android-ap-sta-control.test.mjs'
       - 'tools/android-camera-permission.test.mjs'
@@ -39,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tools/android-ota-recovery.test.mjs tools/android-secure-ota.test.mjs tools/android-ap-sta-control.test.mjs tools/android-camera-permission.test.mjs tools/release-signing.test.mjs tools/android-origin-wifi-nsd.test.mjs tools/android-grants-vault-ota.test.mjs
+      - run: node --test tools/android-ota-recovery.test.mjs tools/android-secure-ota.test.mjs tools/android-ap-sta-control.test.mjs tools/android-camera-permission.test.mjs tools/release-signing.test.mjs tools/android-origin-wifi-nsd.test.mjs tools/android-grants-vault-ota.test.mjs tools/android-connection-reliability.test.mjs
   android-debug-bridge:
     runs-on: ubuntu-latest
     steps:
