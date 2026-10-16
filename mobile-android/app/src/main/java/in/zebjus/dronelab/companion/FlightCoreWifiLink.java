@@ -162,11 +162,11 @@ final class FlightCoreWifiLink {
         connectivity.registerNetworkCallback(new NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),callback);
     }
-    private void handleLost(Network network){
+    private synchronized void handleLost(Network network){
         observedWifi.remove(network);
         if(matches(network)){clear();listener.linkChanged();}
     }
-    private void handleCapabilities(Network network,NetworkCapabilities caps){
+    private synchronized void handleCapabilities(Network network,NetworkCapabilities caps){
         if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&
            caps.getTransportInfo() instanceof WifiInfo)
             observedWifi.put(network,(WifiInfo)caps.getTransportInfo());

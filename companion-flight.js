@@ -2,7 +2,9 @@
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
 let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
-let diagnosticThrottle=1000;
+let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0;
+const directKit=()=>!peer?.status()?.connected&&!!window.ZebjusNetwork?.isConnected?.();
+const kitArmed=()=>directKit()&&!!window.ZebjusNetwork?.inputArmed?.();
 let lastControlSentAt=0,lastControlAttemptAt=0,lastRejectedAt=0,acceptedFrames=0,rejectedFrames=0;
 function controlLinkDiagnostic(now=performance.now()){
  const ackAge=lastAckAt?Math.round(now-lastAckAt):-1;
@@ -49,39 +51,41 @@ function refreshConnectionLabel(){
  const label=$('flightConnection');
  label.textContent=receiver?'CONNECTED':kit?'KIT '+window.ZebjusNetwork.selectedTransport().toUpperCase()+' CONNECTED':'NOT CONNECTED';
  label.dataset.ready=String(receiver||kit);
- label.title=receiver?'WebRTC simulator receiver connected':kit?'FlightCore Wi-Fi connected • simulator ARM still requires WebRTC control':'No verified WebRTC receiver or FlightCore Kit';
+ label.title=receiver?'WebRTC simulator receiver connected':kit?'FlightCore Wi-Fi connected • ARM sends Kit input; motor outputs disabled':'No verified WebRTC receiver or FlightCore Kit';
 }
 function updateStatus(message){
  $('flightWarning').textContent=message;
  refreshConnectionLabel();
- $('flightOwner').textContent=isOwned()?'ANDROID OWNS CONTROLS':peer?.status().controller==='web'?'WEB OWNS CONTROLS':'INPUT PREVIEW • NO FLIGHT COMMAND';
+ $('flightOwner').textContent=directKit()?(kitArmed()?'ANDROID KIT INPUT ARMED':'KIT CONNECTED • PRESS ARM'):isOwned()?'ANDROID OWNS CONTROLS':peer?.status().controller==='web'?'WEB OWNS CONTROLS':'INPUT PREVIEW • NO FLIGHT COMMAND';
 }
 function stickRender(side,position){
  const pad=$(side==='left'?'flightLeftZone':'flightRightZone'),ring=$(side==='left'?'flightLeftRing':'flightRightRing'),knob=$(side==='left'?'flightLeftKnob':'flightRightKnob'),label=$(side==='left'?'flightLeftTouch':'flightRightTouch');
- if(!position){ring.style.left='';ring.style.top='';ring.classList.remove('dragging');knob.style.transform='translate(-50%,-50%)';label.textContent=armed&&isOwned()?'TOUCH TO CONTROL':'TOUCH TO PREVIEW';return}
+ if(!position){ring.style.left='';ring.style.top='';ring.classList.remove('dragging');knob.style.transform='translate(-50%,-50%)';label.textContent=(armed&&isOwned()||kitArmed())?'TOUCH TO CONTROL':'TOUCH TO PREVIEW';return}
  const rect=pad.getBoundingClientRect(),d=position.data;
  ring.style.left=(position.cx-rect.left)+'px';ring.style.top=(position.cy-rect.top)+'px';ring.classList.add('dragging');
  knob.style.transform='translate(calc(-50% + '+(d.x*position.radius)+'px), calc(-50% + '+(d.y*position.radius)+'px))';
- label.textContent='X '+Math.round(d.x*100)+'% Y '+Math.round(-d.y*100)+'% • '+(armed&&isOwned()?'FLIGHT':'PREVIEW ONLY');
+ label.textContent='X '+Math.round(d.x*100)+'% Y '+Math.round(-d.y*100)+'% • '+((armed&&isOwned()||kitArmed())?'FLIGHT':'PREVIEW ONLY');
 }
 function render(){
  refreshConnectionLabel();
  const preview=current(),a=isOwned()&&armed&&lastApplied?.armed?lastApplied:null;
- const now=performance.now();if(a){if(!clockAt)clockAt=now;clockElapsed=now-clockAt}else if(clockAt){clockElapsed=now-clockAt;clockAt=0}
+ const now=performance.now();if(a||kitArmed()){if(!clockAt)clockAt=now;clockElapsed=now-clockAt}else if(clockAt){clockElapsed=now-clockAt;clockAt=0}
  const seconds=Math.floor(clockElapsed/1000);$('flightTimer').textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
- $('flightCockpit').dataset.armed=String(!!a);$('flightConnect').textContent=peer?.status().connected?'LINK SETTINGS':'CONNECT';
+ $('flightCockpit').dataset.armed=String(!!a||kitArmed());$('flightConnect').textContent=peer?.status().connected?'LINK SETTINGS':'CONNECT';
  $('flightResponseValue').textContent=preset==='Medium'?'MED':preset.toUpperCase();$('flightResponse').setAttribute('aria-label','Joystick response '+preset+'. Tap to change');
  $('flightCockpit').dataset.response=preset;$('mobileConnection').dataset.response=preset;$('flightResponse').title=preset+' • Roll/Pitch/Yaw '+Math.round(F.PRESETS[preset].axisScale*100)+'% maximum • throttle '+F.PRESETS[preset].throttleRate+' µs/s';
  const m=a?{...a.axes,throttle:a.throttle}:preview;
  $('flightThrottle').textContent=m.throttle+' µs';$('flightRoll').textContent=Math.round(m.roll*100)+'%';$('flightPitch').textContent=Math.round(m.pitch*100)+'%';$('flightYaw').textContent=Math.round(m.yaw*100)+'%';
  $('flightMode').value=mode;$('flightModeState').textContent=(a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+((a?.mode||mode)==='acro'?'ACRO / RATE':'ANGLE');
- $('flightArm').textContent=armed?'DISARM':'ARM';$('flightArm').disabled=!isOwned()||(!armed&&(!ready||throttle>1050));$('flightArm').setAttribute('aria-pressed',String(armed));
+ $('flightArm').textContent=kitArmPending?'ARMING…':armed||kitArmed()?'DISARM':'ARM';
+ $('flightArm').disabled=kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
+ $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
- const diagnostic=window.ZebjusNetwork?.feedback?.();if(diagnostic){$('flightFeedback').textContent='ESP32 RX #'+diagnostic.seq+' • '+diagnostic.rtt+' ms • '+(Date.now()-diagnostic.at>350?'STALE':'DIAGNOSTIC • MOTORS OFF');$('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';}
+ const diagnostic=window.ZebjusNetwork?.feedback?.();if(diagnostic){$('flightFeedback').textContent='ESP32 RX #'+diagnostic.seq+' • '+diagnostic.rtt+' ms • '+(Date.now()-diagnostic.at>350?'STALE':diagnostic.inputArmed?'INPUT ARMED • MOTORS OFF':'DISARMED • MOTORS OFF');$('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';if(directKit()){$('flightLatency').textContent=diagnostic.rtt+' ms';$('flightModeState').textContent=(diagnostic.inputArmed?'KIT INPUT ARMED':'KIT DISARMED')+' • '+mode.toUpperCase();}}
  $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
- for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!isOwned()||!armed);
+ for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
  $('flightSent').textContent='#'+seq;
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
@@ -93,7 +97,7 @@ function setupStick(side){
   const d=drag[side];if(!d||d.id!==e.pointerId)return;
   d.data=first?{x:0,y:0}:F.vector(e.clientX,e.clientY,d.cx,d.cy,d.radius);
   if(side==='left')left=d.data;else right=d.data;
-  if(!armed)updateStatus('INPUT PREVIEW • NO FLIGHT COMMAND');render();
+  if(!armed&&!kitArmed())updateStatus(directKit()?'KIT CONNECTED • PRESS ARM':'INPUT PREVIEW • NO FLIGHT COMMAND');render();
  };
  pad.addEventListener('pointerdown',e=>{
   if(drag[side]||e.pointerType==='mouse'&&e.button!==0)return;
@@ -108,6 +112,7 @@ function setupStick(side){
 function tick(now){
  if(!loopStarted)return;
  const dt=last?Math.min(.08,Math.max(0,(now-last)/1000)):0;last=now;
+ if(kitArmed()&&window.ZebjusNetwork?.feedback?.()&&Date.now()-window.ZebjusNetwork.feedback().at>350){void doStop();updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')}
  if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
@@ -179,7 +184,7 @@ function onTelemetry(packet){
  if(!isOwned())$('flightAppliedTelemetry').textContent+=' • '+a.throttle+' µs '+a.mode.toUpperCase()+' '+(a.armed?'WEB ARMED':'DISARMED');
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
-function doStop(){diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true);return released}
+function doStop(){++kitArmGeneration;kitArmPending=false;diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.();stopLocally('STOP • VIRTUAL MOTORS OFF');send(true);return released}
 function openConnection(){
  // Entering settings releases virtual ARM and Kit diagnostic control, so the
  // duplicate Menu STOP can be hidden without leaving an armed modal.
@@ -195,7 +200,20 @@ function closeConnection(){
 }
 function bind(){
  setupStick('left');setupStick('right');
- $('flightArm').onclick=()=>{
+ $('flightArm').onclick=async()=>{
+  if(directKit()){
+   if(kitArmed()){await doStop();updateStatus('KIT DISARMED • MOTORS OFF');return}
+   if(kitArmPending)return;
+   const generation=++kitArmGeneration;
+   kitArmPending=true;diagnosticThrottle=1000;clearTouches();render();
+   try{
+    await window.ZebjusNetwork.armControls();
+    if(generation!==kitArmGeneration)return;
+    clockAt=clockElapsed=0;updateStatus('KIT INPUT ARMED • MOTORS OFF');
+   }catch(error){if(generation===kitArmGeneration)updateStatus('KIT ARM: '+error.message)}
+   finally{if(generation===kitArmGeneration){kitArmPending=false;render()}}
+   return;
+  }
   if(armed){doStop();return}if(!isOwned()||!ready){updateStatus('PAIR, GRANT CONTROL AND WAIT FOR RECEIVER');return}
   if(throttle>1050){updateStatus('THROTTLE MUST BE ≤1050');return}
   clearTouches();armed=true;halted=false;clockAt=clockElapsed=0;lastAckAt=performance.now();sent.clear();

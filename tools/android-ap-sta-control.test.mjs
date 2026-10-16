@@ -17,8 +17,9 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  let reportedTransport='STA';
  const response=route=>{
   if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',version:'1.4.0',mode:'auto',
-   requestTransport:reportedTransport,apActive:true,staConnected:true,ip:'192.168.1.42',apIp:'192.168.4.1'};
+   inputArmSupported:true,controlAuthorized:true,requestTransport:reportedTransport,apActive:true,staConnected:true,ip:'192.168.1.42',apIp:'192.168.4.1'};
   if(route==='/api/rc/claim')return {kitId,session:'owned-sta'};
+  if(route==='/api/rc/preview')return {kitId,received:true,seq:1,inputArmed:true};
   if(route==='/api/rc/release')return {released:true};
   return {};
  };
@@ -43,7 +44,7 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  assert.equal(window.ZebjusNetwork.isConnected(),true);
  assert.equal(element('kitKey').value,'','label cleared after enrollment');
  assert.ok(requests.includes('/api/identify@192.168.1.42'));
- element('kitRcPreview').checked=true;listeners.get('kitRcPreview:change')();
+ await window.ZebjusNetwork.armControls();
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(window.ZebjusNetwork.hasControl(),true,'verified STA can claim input');
  reportedTransport='AP';
@@ -58,7 +59,7 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  listeners.get('kitConnect:click')();
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(window.ZebjusNetwork.isConnected(),true,'AP still connects after returning from STA');
- element('kitRcPreview').checked=true;listeners.get('kitRcPreview:change')();
+ await window.ZebjusNetwork.armControls();
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(window.ZebjusNetwork.hasControl(),true,'verified AP still claims input');
 });

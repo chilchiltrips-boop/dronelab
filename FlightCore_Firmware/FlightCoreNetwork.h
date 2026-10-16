@@ -104,6 +104,7 @@ static String zjStatus(){
  out+=",\"networkState\":"+zjJson(networkState)+",\"exclusiveWifi\":true";
  out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
+ out+=",\"inputArmSupported\":true,\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"));
  out+=",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"firmwareBuiltAt\":"+zjJson(String(__DATE__)+" "+__TIME__)+",\"partitionLayout\":\"ZFC_DUAL_1E0000\",\"otaMaxBytes\":1966080,\"encryptedOta\":true,\"otaChunkMaxBytes\":2048";
  out+=",\"appElfSha256\":"+zjJson(zjHexBytes(esp_app_get_description()->app_elf_sha256,32));
  // Signed admin-only status makes timed-out OTA writes recoverable without
@@ -275,16 +276,19 @@ static void zjSetupHttp(){
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
   if(!zjAllow())return;
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
+  const String inputArm=zjArg("inputArmed");
+  if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
   long seq=0,t=0,r=0,p=0,y=0;
   const String response=zjArg("responseMode");
   if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
      !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
      (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
-     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.client().remoteIP())){
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.client().remoteIP(),inputArm=="true")){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
   zjRcResponse=response.length()?response:String("Medium");
-  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsArmed\":false}");
+  if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
+  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
  });
  zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjRcLoop(millis());zjReply(200,zjRcState());});

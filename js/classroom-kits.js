@@ -119,7 +119,7 @@ function render(){
  byId('kitRcAge',Number.isFinite(rc.ageMs)?rc.ageMs+' ms':'—');
  byId('kitRcCounts',(rc.accepted??state.sent)+' / '+(rc.rejected??state.rejected));
  byId('kitRcOrigin',rc.source||state.rcSource||'NONE');
- byId('kitRcState',!ready?'OFFLINE':rc.active?'RECEIVING':rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
+ byId('kitRcState',!ready?'OFFLINE':rc.active?(rc.inputArmed?'INPUT ARMED':'RECEIVING • DISARMED'):rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitRememberBrowser'))$('kitRememberBrowser').disabled=ready&&state.transport!=='usb'&&!state.key;
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
@@ -904,9 +904,9 @@ function onSerial(e){
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
  if(!state.connected||state.transport!=='usb')return;
  if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
- const rc=/^ZJRC,USB,(WEB|ANDROID),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+)$/.exec(line);
- if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,source:rc[1],seq:+rc[2],throttle:+rc[3],roll:+rc[4],pitch:+rc[5],yaw:+rc[6]};state.ackAt=Date.now();render()}
- if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE'))void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
+ const rc=/^ZJRC,(USB|AP|STA),(WEB|ANDROID),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+)(?:,ARM=([01]))?$/.exec(line);
+ if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,transport:rc[1],source:rc[2],seq:+rc[3],throttle:+rc[4],roll:+rc[5],pitch:+rc[6],yaw:+rc[7],inputArmed:rc[8]==='1'};state.ackAt=Date.now();render()}
+ if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE')&&state.owner)void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
  if(line.startsWith('ZJADMIN,ERR,')||line.startsWith('ZJKIT,ERR,'))audit(line,'error');
  if(line.startsWith('ZJADMIN,AUTH,')){
   const status=line.slice(13);adminEnrolled=status!=='ENROLL_REQUIRED';

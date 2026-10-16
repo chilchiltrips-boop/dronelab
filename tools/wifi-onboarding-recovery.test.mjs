@@ -36,7 +36,7 @@ test('Controller preview accepts verified AP or STA transport, separately from W
  assert.match(native,/link==='ap'\?data\.apActive===true:data\.staConnected===true/);
  assert.match(native,/onKitLink/);
  assert.doesNotMatch(native,/onKitAp=!data\.staConnected/);
- assert.match(native,/seq:\+\+rcSeq/);
+ assert.match(native,/frameSeq=\+\+rcSeq/);
  assert.match(cockpit,/previewControls\?\.\(diagnosticInput\(\)\)/);
  assert.match(cockpit,/let diagnosticThrottle=1000/);
  assert.doesNotMatch(cockpit,/previewControls\?\.\(\{seq:\+\+seq,throttle/);
