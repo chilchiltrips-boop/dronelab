@@ -274,6 +274,7 @@ async function status(){
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  online=true;lastStatus=Date.now();
+ if(el('kitSavedId')&&verifiedKitId)el('kitSavedId').value=verifiedKitId;
  saveVerifiedIp(verifiedKitId,ip,link==='ap'?data.apSsid:data.ssid);
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
  el('kitMode').value=mode;el('kitDevice').textContent=(data.board||'FlightCore')+' • '+(data.version||'')+' • '+(data.phase||'');
@@ -306,7 +307,7 @@ async function setMode(){
  if(rcSession)await releaseRc();
  const v=el('kitMode').value;
  if(!['ap','sta','auto'].includes(v))throw Error('Invalid Wi-Fi mode');
- await request('/api/wifi/mode','POST',{mode:v});dropInput('Wi-Fi mode changed • reconnect and claim input again');online=false;auth=null;reconnectEnabled=false;show('Switching to '+v.toUpperCase()+'; reconnect your phone to the new network.');
+ await request('/api/wifi/mode','POST',{mode:v});dropInput('Wi-Fi mode changed • reconnect and claim input again');forgetGrants();forgetNativePin();online=false;onKitLink=false;auth=null;reconnectEnabled=false;show('Switching to '+v.toUpperCase()+'; reconnect your phone to the new network.');
 }
 async function command(line){
  if(typeof line!=='string'||line.length>160||!/^(ZJI2C,SCAN|ZJINFO,GET|ZJLED,[0-9]+,(?:STOP|KEEP|SET|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Command is not allowed on the network bridge');
