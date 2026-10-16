@@ -35,10 +35,16 @@ try{
  await wait(phone,()=>parseInt(document.getElementById('flightYaw').textContent)<-5&&parseInt(document.getElementById('flightRoll').textContent)>5);
  const mirror=await web.evaluate(()=>({a:window.ZebjusTraining.snapshot(),left:document.getElementById('tpLeftKnob').style.left,right:document.getElementById('tpRightKnob').style.left}));
  if(mirror.a.axes.yaw>=0||mirror.a.axes.roll<=0||mirror.a.sticks.left.x<=0||mirror.a.sticks.right.x<=0)throw Error('Applied dual-stick mirror missing');
- // Send actual Web keyboard input without focusing the phone out of its
- // captured touch session. Compare applied plant state, not a 10-Hz UI sample.
- const before=await web.evaluate(()=>window.ZebjusTraining.snapshot());await web.keyboard.press('w');
- const after=await web.evaluate(()=>window.ZebjusTraining.snapshot());
+ // Exercise the Web keyboard event handler without switching focus away
+ // from the active phone touch session. Playwright keyboard.press on the other
+ // tab may background the phone and correctly trip the 450ms fail-safe.
+ // Never loosen the receiver watchdog to make this ownership test pass.
+ const {before,after}=await web.evaluate(()=>{
+  const before=window.ZebjusTraining.snapshot();
+  window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',code:'KeyW',bubbles:true}));
+  window.dispatchEvent(new KeyboardEvent('keyup',{key:'w',code:'KeyW',bubbles:true}));
+  return {before,after:window.ZebjusTraining.snapshot()};
+ });
  if(!after.armed)throw Error('Receiver safety-stopped during ownership keyboard check: '+await web.locator('#tpStatus').textContent());
  if(after.source!=='mobile'||after.throttle!==before.throttle)throw Error('Web keys changed Android-applied throttle: '+before.throttle+' -> '+after.throttle);
  await safeShot(web,'test-output/web-mobile-mirror.png');await safeShot(phone,'test-output/android-connected.png');measurements.push({heldThrottle:held,appliedAxes:mirror.a.axes,knobs:{left:mirror.left,right:mirror.right}});
