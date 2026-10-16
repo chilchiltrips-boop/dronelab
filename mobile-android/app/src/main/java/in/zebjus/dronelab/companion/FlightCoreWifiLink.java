@@ -116,7 +116,12 @@ final class FlightCoreWifiLink {
         if(!pinnedIp.equals(ip))throw new IllegalStateException("Selected Kit IP changed; reconnect and verify again");
         NetworkCapabilities caps=connectivity.getNetworkCapabilities(selected);
         if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
-            clear();throw new IllegalStateException("Pinned Kit Wi-Fi disconnected");
+            // Capability lookups can transiently be null during Android's
+            // validated/unvalidated (no Internet) Wi-Fi transitions. Do NOT
+            // deliver this request through cellular or a different Network.
+            // Only onLost() establishes that this pinned Network was removed.
+            // Pending reads fail closed; the next poll can recover silently.
+            throw new IllegalStateException("Pinned Kit Wi-Fi temporarily unavailable; verifying Network identity");
         }
         WifiInfo observed=info(selected);
         if(!pinnedSsid.equals(checkedSsid(observed))||
