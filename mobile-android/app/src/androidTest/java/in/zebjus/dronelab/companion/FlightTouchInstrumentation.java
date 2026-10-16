@@ -219,7 +219,8 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         }
         // Header sheet does not hide STOP or freeze preview after closing.
         float[] gear=point("flightSettings",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},gear);touch(MotionEvent.ACTION_UP,new int[]{4},gear);
-        check("document.getElementById('mobileConnection').open && getComputedStyle(document.getElementById('mobileSettingsStop')).display==='none' && document.getElementById('flightBack').getBoundingClientRect().height>=44 && (()=>{const n=document.querySelector('.mobile-adaptive-nav').getBoundingClientRect(),m=document.querySelector('.mobile-adaptive-main').getBoundingClientRect();return Math.abs(n.top-m.top)<=2&&Math.abs(n.bottom-m.bottom)<=2&&m.left>=n.right-1})()");
+        check("document.getElementById('mobileConnection').open && document.getElementById('mobileSettingsStop').getClientRects().length===0 && document.getElementById('flightBack').getBoundingClientRect().height>=44");
+        check("(()=>{const n=document.querySelector('.mobile-adaptive-nav').getBoundingClientRect(),m=document.querySelector('.mobile-adaptive-main').getBoundingClientRect();return Math.abs(n.top-m.top)<=2&&Math.abs(n.bottom-m.bottom)<=2&&m.left>=n.right-1})()");
         float[] back=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},back);touch(MotionEvent.ACTION_UP,new int[]{4},back);
         check("!document.getElementById('mobileConnection').open");
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);touch(MotionEvent.ACTION_MOVE,new int[]{0},lm);
