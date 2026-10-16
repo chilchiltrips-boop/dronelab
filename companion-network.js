@@ -52,6 +52,22 @@ function cachedIp(id){
 function saveVerifiedIp(id,host,ssid){
  try{localStorage.setItem(verifiedCacheKey(id),JSON.stringify({ip:host,ssid,at:Date.now()}))}catch{}
 }
+const permissionWaiters=new Map();
+window.zebjusNativeWifiPermissionResult=data=>{
+ const waiter=permissionWaiters.get(data?.id);if(!waiter)return;
+ clearTimeout(waiter.timer);permissionWaiters.delete(data.id);
+ data.granted?waiter.resolve():waiter.reject(Error(data.error||'Precise Location permission required for Wi-Fi verification'));
+};
+function ensureWifiPermission(){
+ if(typeof native?.requestWifiPermission!=='function')return Promise.reject(Error('Install latest Android APK for Wi-Fi permission verification'));
+ return new Promise((resolve,reject)=>{
+  const id='permission'+(++requestId);
+  const timer=setTimeout(()=>{permissionWaiters.delete(id);reject(Error('Location permission dialog did not return a result'))},120000);
+  permissionWaiters.set(id,{timer,resolve,reject});
+  try{native.requestWifiPermission(id)}
+  catch(error){clearTimeout(timer);permissionWaiters.delete(id);reject(error)}
+ });
+}
 const vaultWaiters=new Map();
 window.zebjusNativeVaultResult=data=>{
  const waiter=vaultWaiters.get(data?.id);if(!waiter)return;
@@ -63,7 +79,9 @@ function vaultCall(op,id,credential){
   return Promise.reject(Error('Android Keystore enrollment not available on this APK'));
  return new Promise((resolve,reject)=>{
   const rid='vault'+(++requestId);
-  const timer=setTimeout(()=>{vaultWaiters.delete(rid);reject(Error('Android Keystore request timed out'))},5000);
+  // Native save/load shows user confirmation: no fixed 5-second timeout.
+  // Android cancel/back returns a definite reply to settle this promise.
+  const timer=op==='forgetDiagnostic'?setTimeout(()=>{vaultWaiters.delete(rid);reject(Error('Android Keystore request timed out'))},15000):null;
   vaultWaiters.set(rid,{timer,resolve,reject});
   try{op==='saveDiagnostic'?native[op](rid,id,credential):native[op](rid,id)}
   catch(error){clearTimeout(timer);vaultWaiters.delete(rid);reject(error)}
@@ -107,9 +125,14 @@ window.zebjusNativeDiscoveryResult=data=>{
 async function discoverKit(idOverride=''){
  const labelText=el('kitKey')?.value.trim()||'';
  let id=typeof idOverride==='string'&&/^ZFC-A[12]-[0-9A-F]{12}$/.test(idOverride)?idOverride:verifiedKitId;
- if(labelText)id=window.ZebjusKitAuth.label(labelText).deviceId;
- if(!id)throw Error('Enter the private Kit label once before mDNS discovery.');
+ if(labelText&&!idOverride)id=window.ZebjusKitAuth.label(labelText).deviceId;
+ if(!id){
+  const savedId=(el('kitSavedId')?.value||'').trim().toUpperCase();
+  if(/^ZFC-A[12]-[0-9A-F]{12}$/.test(savedId))id=savedId;
+ }
+ if(!id)throw Error('Enter saved Kit Device ID or private label for mDNS discovery.');
  if(link!=='sta')throw Error('mDNS discovery requires the Android phone and Kit on the same router (STA).');
+ await ensureWifiPermission();
  let found='';
  if(typeof native?.discoverKit==='function'){
   found=await new Promise((resolve,reject)=>{
@@ -138,9 +161,8 @@ async function request(route,method='GET',args={}){
 async function connectKit(){
  if(connecting)return;connecting=true;
  try{
-  // Android location permission is required only to inspect Wi-Fi identity.
-  // If absent, the signed status can load but privileged pinning fails closed.
-  try{native?.requestWifiPermission?.()}catch{}
+  // Wait until the system permission dialog returns before signed Kit auth.
+  await ensureWifiPermission();
   const value=el('kitKey').value.trim();
   if(value){
    const p=window.ZebjusKitAuth.label(value);
@@ -185,18 +207,42 @@ async function connectSavedKit(){
  if(otaBusy||connecting)throw Error('Another Kit operation is in progress');
  connecting=true;
  try{
+  await ensureWifiPermission();
   const credential=await vaultCall('loadDiagnostic',id);
   if(!/^[a-f0-9]{32}$/.test(credential))throw Error('No saved diagnostic credential for Kit');
-  let candidate=validHost(el('kitIp')?.value||'')?el('kitIp').value:cachedIp(id);
-  if(!validHost(candidate))throw Error('Discover Kit or enter its private STA IP first');
-  ip=candidate;staIp=candidate;el('kitIp').value=candidate;
-  const raw=await nativeTransport('/api/identify'),identified=JSON.parse(raw.text);
-  if(raw.status!==200||identified.kitId!==id)throw Error('Saved IP belongs to a different Kit');
-  auth=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'diagnostic');
-  if(verifiedKitId&&verifiedKitId!==id)forgetGrants();
-  verifiedKitId=id;diagnosticKey=credential;
-  await status();reconnectEnabled=true;
-  show('Saved diagnostic key re-enrolled; read/Wi-Fi/control grants remain OFF','good');
+  const oldInput=(el('kitIp')?.value||'').trim(),known=cachedIp(id);
+  let found='';
+  try{await discoverKit(id);if(discoveredId===id)found=ip}
+  catch(error){show('mDNS unavailable • verifying saved Kit IP candidates','warn')}
+  // Prefer fresh NSD, then verified Kit-specific cache, then manual STA IP.
+  // Never treat default AP address or stale editor value as the primary target.
+  const candidates=[found,known,oldInput!=='192.168.4.1'?oldInput:'']
+   .filter((v,i,all)=>validHost(v)&&all.indexOf(v)===i);
+  if(!candidates.length)throw Error('No Kit STA IP candidate; discover or enter router address');
+  let lastFailure;
+  forgetGrants();
+  for(const candidate of candidates){
+   try{
+    ip=candidate;staIp=candidate;el('kitIp').value=candidate;
+    forgetNativePin();auth=null;online=false;onKitLink=false;
+    const raw=await nativeTransport('/api/identify');
+    const identified=JSON.parse(raw.text);
+    if(raw.status!==200||identified.kitId!==id)
+     throw Error('Device ID mismatch at '+candidate+'; verify physical Kit');
+    auth=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'diagnostic');
+    verifiedKitId=id;diagnosticKey=credential;
+    await status();reconnectEnabled=true;
+    show('Saved Kit verified by signed STA status at '+candidate+' • grants OFF','good');
+    return;
+   }catch(error){
+    lastFailure=error;
+    if(/Device ID mismatch|Wrong kit|Different Kit|signed|proof|unauthoriz|session expired/i.test(String(error.message)))
+     throw error;
+    if(policy?.retryDisposition?.(error)?.retry===false)throw error;
+    show('IP '+candidate+' unreachable • checking next Kit candidate','warn');
+   }
+  }
+  throw lastFailure||Error('Could not verify saved Kit over selected Wi-Fi');
  }finally{connecting=false}
 }
 async function forgetSavedKit(){
