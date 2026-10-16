@@ -9,6 +9,7 @@ const html=read('companion.html'),css=read('companion.css'),code=read('pairing-c
   workflow=read('.github/workflows/build-qr-android.yml'),sw=read('sw.js'),
   nativeTest=read('mobile-android/app/src/androidTest/java/in/zebjus/dronelab/companion/FlightTouchInstrumentation.java');
 const vendor=read('vendor/peerjs.min.js');
+const adaptive=read('companion-menu.js');
 
 test('PeerJS 1.5.5 is vendored offline for both WebApp and signed Android build',()=>{
  assert.ok(vendor.length>60000&&vendor.length<150000,'real bundled PeerJS 1.5.5 client');
@@ -83,4 +84,22 @@ test('Native UI release test reacquires current WebView after HOME/Resume instea
  assert.match(nativeTest,/previous\.recreate\(\)/);
  assert.ok(nativeTest.indexOf('Log.e("FlightTouchAcceptance","Original native acceptance failure",failure)')<nativeTest.indexOf('try{screenshot("native-failure.png");}'));
  assert.match(workflow,/python3 tools\/verify_android_assets\.py/);
+});
+
+test('Adaptive five-category menu relocates live pairing/Kit/Wi-Fi/OTA/Keystore inputs and omits APK update',()=>{
+ assert.match(html,/<script src="companion-menu\.js"><\/script>/);
+ assert.doesNotMatch(html,/id="downloadStableApk"|App Updates|id="androidInstalledVersion"/);
+ assert.match(html,/id="appBuildVersion"/);
+ for(const category of ['pair','kit','wifi','control','more'])assert.ok(adaptive.includes("id:'"+category+"'"));
+ assert.match(adaptive,/groups\.get\(name\)\.append\(node\)/);
+ assert.match(adaptive,/place\(sub\[1\],'wifi'\)/);
+ assert.match(adaptive,/for\(const element of sub\.slice\(2\)\)place\(element,'more'\)/);
+ assert.match(adaptive,/place\(options,'control'\)/);
+ assert.match(adaptive,/root\.ZebjusPairingStopCamera\?\.\(\)/);
+ assert.match(adaptive,/aria-selected/);
+ assert.match(css,/\.mobile-connection\[open\]\{/);
+ assert.match(css,/\.mobile-adaptive-shell\{/);
+ assert.match(css,/\.mobile-adaptive-main\{/);
+ assert.match(workflow,/cp companion\.html companion\.css companion\.js companion-network\.js android-native-bridge\.js companion-flight\.js companion-menu\.js/);
+ assert.match(workflow,/test -s mobile-android\/app\/src\/main\/assets\/companion-menu\.js/);
 });

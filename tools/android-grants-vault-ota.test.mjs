@@ -31,7 +31,8 @@ test('Native vault, version, screen-awake operations remain origin and main-fram
  assert.match(app,/setNegativeButton\("Cancel"/);
  assert.match(app,/wifiLink\.isPinnedTo\(id\)/);
  assert.match(app,/getPackageManager\(\)\.getPackageInfo\(getPackageName\(\),0\)/);
- assert.match(ui,/id="androidInstalledVersion"/);
+ assert.match(ui,/id="appBuildVersion"/);
+ assert.doesNotMatch(ui,/id="androidInstalledVersion"|id="downloadStableApk"/);
 });
 test('Paired WebApp requires explicit independent grants with privileged routes separated',()=>{
  for(const id of ['kitAllowWeb','kitGrantWifi','kitGrantDiagnostic'])assert.ok(ui.includes('id="'+id+'"'),id);

@@ -55,6 +55,7 @@ try{
  await until(page,()=>!document.getElementById('pairConfirmBtn').disabled,23000);
  await page.locator('#pairConfirmBtn').click();
  await until(phone,()=>!document.getElementById('requestControlBtn').disabled);
+ await phone.locator('[data-mobile-tab="control"]').click();
  await phone.locator('#requestControlBtn').click();
  await page.locator('.v2-workspace-tools>summary').click();
  await page.locator('.top-grant-control').click();

@@ -21,21 +21,39 @@ try{
   await toggle.click();
   await page.waitForFunction(()=>document.getElementById('mobileConnection').open&&document.getElementById('kitLink').value==='sta');
   assert.equal(await toggle.getAttribute('aria-checked'),'true');
+  assert.equal(await page.locator('[data-mobile-tab="wifi"]').getAttribute('aria-selected'),'true');
   assert.match(await page.locator('#kitNetStatus').textContent(),/STA selected/);
+  assert.equal(await page.locator('#downloadStableApk').count(),0,'No App Update button in controller');
+  assert.equal(await page.locator('#androidInstalledVersion').count(),0,'No duplicate app update card');
+  assert.equal(await page.locator('#appBuildVersion').count(),1,'Installed version remains in header');
+  const categories=['pair','kit','wifi','control','more'],verified=[];
+  for(const category of categories){
+   await page.locator('[data-mobile-tab="'+category+'"]').click();
+   await page.waitForFunction(name=>window.ZebjusMobileMenu.active()===name,category);
+   const panel=page.locator('[data-mobile-panel="'+category+'"]');
+   assert.equal(await panel.isVisible(),true,category+' content not reachable');
+   assert.equal(await page.locator('.mobile-adaptive-panel:visible').count(),1,'Exactly one active category');
+   await panel.locator('details.settings-accordion').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+   const layout=await page.evaluate(()=>{
+    const dialog=document.getElementById('mobileConnection'),main=dialog.querySelector('main'),box=main.getBoundingClientRect(),nav=dialog.querySelector('.mobile-adaptive-nav');
+    const clipped=[...main.querySelectorAll('button,input:not([type=hidden]),select,textarea,summary')].filter(e=>e.getClientRects().length).filter(e=>{
+     const r=e.getBoundingClientRect();return r.left<box.left-1||r.right>box.right+1||r.width<1;
+    }).map(e=>e.id||e.tagName);
+    return {scroll:main.scrollWidth,width:main.clientWidth,navScroll:nav.scrollWidth,navWidth:nav.clientWidth,dialogScroll:dialog.scrollWidth,dialogWidth:dialog.clientWidth,clipped};
+   });
+   assert.ok(layout.scroll<=layout.width+1,category+': '+JSON.stringify(layout));
+   assert.ok(layout.dialogScroll<=layout.dialogWidth+1,category+': '+JSON.stringify(layout));
+   assert.deepEqual(layout.clipped,[],category+': '+JSON.stringify(layout));
+   await page.screenshot({path:`test-output/android-menu-${width}x${height}-${category}.png`});
+   verified.push({category,layout});
+  }
+  assert.equal(await page.locator('#scanOfferBtn').count(),1);
+  assert.equal(await page.locator('#kitOtaAdminKey').count(),1);
+  assert.equal(await page.locator('#kitRememberDiagnostic').count(),1);
+  assert.equal(await page.locator('#kitAllowWeb').count(),1);
+  await page.locator('[data-mobile-tab="kit"]').click();
   await page.locator('#kitLink').selectOption('ap');
   assert.equal(await toggle.getAttribute('aria-checked'),'false');
-  // Check every expanded section, including hidden-by-default Wi-Fi and OTA.
-  await page.locator('.settings-accordion').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
-  const layout=await page.evaluate(()=>{
-   const dialog=document.getElementById('mobileConnection'),main=dialog.querySelector('main'),box=main.getBoundingClientRect();
-   const clipped=[...main.querySelectorAll('button,input:not([type=hidden]),select,textarea,summary')].filter(e=>e.getClientRects().length).filter(e=>{
-    const r=e.getBoundingClientRect();return r.left<box.left-1||r.right>box.right+1||r.width<1;
-   }).map(e=>e.id||e.tagName);
-   return {scroll:dialog.scrollWidth,width:dialog.clientWidth,columns:getComputedStyle(main).gridTemplateColumns,clipped};
-  });
-  assert.ok(layout.scroll<=layout.width+1,JSON.stringify(layout));
-  assert.deepEqual(layout.clipped,[],JSON.stringify(layout));
-  await page.screenshot({path:`test-output/android-menu-${width}x${height}.png`});
   await page.locator('#flightBack').tap();
   await page.waitForFunction(()=>!document.getElementById('mobileConnection').open);
   await toggle.tap();
@@ -48,7 +66,7 @@ try{
   for(const id of ['flightStop','flightNetworkSwitch'])assert.ok(header.children.find(e=>e.id===id).height>=44);
   assert.deepEqual(externalScripts,[],'PeerJS must load locally with external scripts unavailable');
   assert.deepEqual(errors,[]);
-  results.push({width,height,layout,header});await context.close();
+  results.push({width,height,categories:verified,header});await context.close();
  }
  writeFileSync('test-output/android-menu-results.json',JSON.stringify(results,null,2));
  console.log('PASS local PeerJS, synchronized AP/STA header, five menu/header viewports');
