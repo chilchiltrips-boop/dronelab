@@ -11,9 +11,9 @@ test('Firmware & Connect reference panel retains existing flashing controls',()=
   'fwHealthBaro','fwHealthLidar','fwHealthReceiver','fwKitTakeControl','fwKitPing','fwRenameInput','fwRenameSave',
   'fwRenameReset','fwKitDemoMode','fwUsbFlashBtn','fwNetworkFlashBtn','fwSourceBadge','fwSerialOutput'])
   assert.ok(html.includes('id="'+id+'"'),id);
- assert.ok(html.includes('js/firmware-connect.js?v=kit-selection-20261015'));
+ assert.ok(html.includes('js/firmware-connect.js?v=buildtime-utc-20261016'));
  assert.ok(css.includes('.fw-connection-workspace'));
- assert.ok(read('sw.js').includes('./js/firmware-connect.js?v=kit-selection-20261015'));
+ assert.ok(read('sw.js').includes('./js/firmware-connect.js?v=buildtime-utc-20261016'));
 });
 test('Firmware connection JS is valid and exposes kit-select-only controls',()=>{
  const code=read('js/firmware-connect.js'),kit=read('js/classroom-kits.js');
