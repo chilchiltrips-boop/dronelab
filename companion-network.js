@@ -61,13 +61,13 @@ window.zebjusNativeWifiPermissionResult=data=>{
  clearTimeout(waiter.timer);permissionWaiters.delete(data.id);
  data.granted?waiter.resolve():waiter.reject(Error(data.error||'Precise Location permission required for Wi-Fi verification'));
 };
-function ensureWifiPermission(){
+function ensureWifiPermission(silent=false){
  if(typeof native?.requestWifiPermission!=='function')return Promise.reject(Error('Install latest Android APK for Wi-Fi permission verification'));
  return new Promise((resolve,reject)=>{
   const id='permission'+(++requestId);
   const timer=setTimeout(()=>{permissionWaiters.delete(id);reject(Error('Location permission dialog did not return a result'))},120000);
   permissionWaiters.set(id,{timer,resolve,reject});
-  try{native.requestWifiPermission(id)}
+  try{native.requestWifiPermission(id,silent)}
   catch(error){clearTimeout(timer);permissionWaiters.delete(id);reject(error)}
  });
 }
@@ -166,11 +166,11 @@ async function request(route,method='GET',args={}){
  try{const d=await auth.request(route,method,args);if(d.kitId&&d.kitId!==verifiedKitId)throw Error('Kit Device ID mismatch');return d}
  catch(e){if(e.status===401)auth=null;throw e}
 }
-async function connectKit(){
+async function connectKit(automatic=false){
  if(otaBusy||connecting)throw Error('Another Kit operation is in progress');connecting=true;syncHeaderTransport();
  try{
   // Wait until the system permission dialog returns before signed Kit auth.
-  await ensureWifiPermission();
+  await ensureWifiPermission(automatic);
   const value=el('kitKey').value.trim();
   if(value){
    const p=window.ZebjusKitAuth.label(value);
@@ -621,7 +621,7 @@ function bind(){
  el('kitRcPreview')?.addEventListener('change',()=>{if(!el('kitRcPreview').checked)void releaseRc();else void claimRc().catch(e=>dropInput(e.message))});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc();else scheduleAutoApConnect(300)});
  window.addEventListener('blur',()=>{if(rcSession)void releaseRc()});
- action('kitWifiSettings',()=>native.openWifiSettings());
+ action('kitWifiSettings',async()=>{await ensureWifiPermission();native.openWifiSettings();});
  action('kitDiscover',async()=>{
   if(otaBusy||connecting)throw Error('Another Kit operation is in progress');
   connecting=true;syncHeaderTransport();
@@ -659,7 +659,7 @@ function scheduleAutoApConnect(delay=650){
   autoApTimer=null;
   if(link!=='ap'||online||otaBusy||connecting||document.hidden)return;
   nextAutoApAttempt=Date.now()+15000; // Avoid repeated permission dialogs/probes.
-  connectKit().catch(error=>show('Kit AP not connected: '+error.message,'warn'));
+  connectKit(true).catch(error=>show('Kit AP not connected: '+error.message+' • tap Connect Kit to grant permission if needed','warn'));
  },delay);
 }
 function networkChanged(){
