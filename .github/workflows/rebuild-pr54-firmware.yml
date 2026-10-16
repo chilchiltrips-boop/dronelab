@@ -1,0 +1,46 @@
+name: Rebuild PR54 A1 A2 Firmware With Source Integrity
+on:
+  push:
+    branches: [fix/android-full-height-menu-panel-20261016]
+    paths: ['.github/workflows/rebuild-pr54-firmware.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          ref: fix/android-full-height-menu-panel-20261016
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Embed reviewed setup portal
+        run: python3 tools/embed_setup_portal.py
+      - name: Compile A1 and A2 APP and factory from exact PR source
+        run: python3 tools/build_scanner.py
+      - name: SHA256, image-chip, OTA-slot, version and factory consistency
+        run: python3 tools/verify_release.py
+      - name: Publish reproducible firmware binaries and manifests to PR branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add             FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin             FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin             FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin             FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin             FlightCore_Firmware/catalog.json             FlightCore_Firmware/latest.json             FlightCore_Firmware/build-report.json             firmware-catalog.json             firmware-latest.json             FlightCore_Firmware/FlightCoreSetupPortal.h
+          if git diff --cached --quiet; then
+            echo 'No firmware release changes'
+          else
+            git commit -m 'Rebuild FlightCore 1.4.9 A1/A2 binaries and SHA256 manifests'
+            git push origin HEAD:fix/android-full-height-menu-panel-20261016
+          fi
+      - name: Preserve independently verified review build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlightCore-1.4.9-A1-A2-verified-review
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
+            firmware-catalog.json
+          retention-days: 30
