@@ -605,7 +605,7 @@
    instead of the old multi-line marketing card. */
 #tab-firmware .dw-android-release{
  display:inline-flex;align-items:center;justify-content:flex-start;flex-wrap:wrap;
- gap:5px 9px;width:fit-content;max-width:100%;min-width:0;
+ gap:5px 9px;width:fit-content;max-width:100%;min-width:0;align-self:flex-start;
  margin:0;padding:4px 6px;border-radius:7px;border-color:#285e62;
  background:#0e2b33;box-shadow:none
 }
