@@ -1,6 +1,7 @@
 package in.zebjus.dronelab.companion;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -31,8 +32,9 @@ import org.json.JSONObject;
  * It does not claim physical-phone, real-camera, acoustic or radio coverage. */
 public final class FlightTouchInstrumentation extends Instrumentation {
     private Bundle args;
-    private WebView web;
-    private Activity activity;
+    private volatile WebView web;
+    private volatile Activity activity;
+    private Application.ActivityLifecycleCallbacks resumeObserver;
     private long down;
     private int checks;
     private int touchCalls;
@@ -44,9 +46,39 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         if(view instanceof ViewGroup){ViewGroup g=(ViewGroup)view;for(int i=0;i<g.getChildCount();i++){WebView w=findWeb(g.getChildAt(i));if(w!=null)return w;}}
         return null;
     }
+    private void trackActivityLifecycle(){
+        final Application app=activity.getApplication();
+        resumeObserver=new Application.ActivityLifecycleCallbacks(){
+            @Override public void onActivityCreated(Activity a,Bundle state){}
+            @Override public void onActivityStarted(Activity a){}
+            @Override public void onActivityResumed(Activity a){
+                if(a instanceof MainActivity){
+                    activity=a;
+                    web=findWeb(a.getWindow().getDecorView());
+                }
+            }
+            @Override public void onActivityPaused(Activity a){}
+            @Override public void onActivityStopped(Activity a){}
+            @Override public void onActivitySaveInstanceState(Activity a,Bundle out){}
+            @Override public void onActivityDestroyed(Activity a){
+                if(activity==a)web=null;
+            }
+        };
+        runOnMainSync(()->app.registerActivityLifecycleCallbacks(resumeObserver));
+    }
+    private void refreshResumedWebView() throws Exception {
+        runOnMainSync(()->{
+            Activity current=activity;
+            if(current!=null&&!current.isDestroyed())
+                web=findWeb(current.getWindow().getDecorView());
+        });
+        if(web==null)throw new AssertionError("Resumed Android Activity has no live WebView");
+    }
     private String js(String source) throws Exception {
         CountDownLatch done=new CountDownLatch(1);AtomicReference<String> result=new AtomicReference<>();
-        runOnMainSync(()->web.evaluateJavascript(source,value->{result.set(value);done.countDown();}));
+        WebView target=web;
+        if(target==null)throw new AssertionError("WebView not yet available during Android Activity transition");
+        runOnMainSync(()->target.evaluateJavascript(source,value->{result.set(value);done.countDown();}));
         if(!done.await(12,TimeUnit.SECONDS))throw new AssertionError("WebView JavaScript response timed out (12 s)");
         return result.get();
     }
@@ -190,6 +222,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         if(!backgrounded)throw new AssertionError("Android HOME did not background the cockpit");
         systemCommand("am start -W -n in.zebjus.dronelab.companion/.MainActivity -f 0x30020000");
         prepareCockpitWindow();
+        refreshResumedWebView(); // Do not evaluate Javascript on destroyed pre-HOME WebView.
         check("document.getElementById('flightYaw').textContent==='0%' && document.getElementById('flightArm').getAttribute('aria-pressed')==='false' && !document.getElementById('flightLeftRing').classList.contains('dragging') && !document.getElementById('flightRightRing').classList.contains('dragging')");
         js("window.__nativePaintReady=false;requestAnimationFrame(()=>requestAnimationFrame(()=>window.__nativePaintReady=true));true");
         waitJs("window.__nativePaintReady===true");
@@ -200,6 +233,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         try{
             Intent intent=new Intent(getTargetContext(),MainActivity.class);intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity=startActivitySync(intent);
+            trackActivityLifecycle();
             if(args!=null&&"true".equals(args.getString("reverse"))){
                 ActivityMonitor monitor=addMonitor(MainActivity.class.getName(),null,false);
                 runOnMainSync(()->activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE));
@@ -224,6 +258,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             }
             // Stabilize Android window/focus before installing native event capture hooks.
             prepareCockpitWindow();
+            refreshResumedWebView();
             observeNativeInput();
             multitouch();
             screenshot("native-completed.png");
@@ -231,7 +266,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
             result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);
         }catch(Throwable failure){
             screenshot("native-failure.png");
-            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent,trace:window.__nativeInputTrace,zones:['flightLeftZone','flightRightZone'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,rect:r.toJSON(),hit:document.elementFromPoint(r.x+r.width*.5,r.y+r.height*.65)?.id}})})");}catch(Exception ignored){}
+            String diagnostic="";try{diagnostic=js("JSON.stringify({storedPreset:localStorage.getItem('zebjus.flight.preset.v1'),selectedPreset:document.getElementById('flightPreset')?.value,origin:location.origin,width:innerWidth,height:innerHeight,stop:document.getElementById('flightStop')?.getBoundingClientRect().toJSON(),roll:document.getElementById('flightRoll')?.textContent,yaw:document.getElementById('flightYaw')?.textContent,trace:window.__nativeInputTrace,zones:['flightLeftZone','flightRightZone'].map(id=>{const r=document.getElementById(id).getBoundingClientRect();return {id,rect:r.toJSON(),hit:document.elementFromPoint(r.x+r.width*.5,r.y+r.height*.65)?.id}})})");}catch(Throwable ignored){}
             AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
             String activePackage=root==null?"none":String.valueOf(root.getPackageName());
             if(root!=null)root.recycle();
