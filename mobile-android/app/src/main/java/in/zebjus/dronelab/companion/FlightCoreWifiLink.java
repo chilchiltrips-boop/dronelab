@@ -116,7 +116,12 @@ final class FlightCoreWifiLink {
         if(!pinnedIp.equals(ip))throw new IllegalStateException("Selected Kit IP changed; reconnect and verify again");
         NetworkCapabilities caps=connectivity.getNetworkCapabilities(selected);
         if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
-            clear();throw new IllegalStateException("Pinned Kit Wi-Fi disconnected");
+            // Capability lookups can transiently be null during Android's
+            // validated/unvalidated (no Internet) Wi-Fi transitions. Do NOT
+            // deliver this request through cellular or a different Network.
+            // Only onLost() establishes that this pinned Network was removed.
+            // Pending reads fail closed; the next poll can recover silently.
+            throw new IllegalStateException("Pinned Kit Wi-Fi temporarily unavailable; verifying Network identity");
         }
         WifiInfo observed=info(selected);
         if(!pinnedSsid.equals(checkedSsid(observed))||
@@ -167,13 +172,32 @@ final class FlightCoreWifiLink {
         if(matches(network)){clear();listener.linkChanged();}
     }
     private void handleCapabilities(Network network,NetworkCapabilities caps){
-        if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&
-           caps.getTransportInfo() instanceof WifiInfo)
-            observedWifi.put(network,(WifiInfo)caps.getTransportInfo());
-        else observedWifi.remove(network);
+        if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
+            observedWifi.remove(network);
+            if(matches(network)){clear();listener.linkChanged();}
+            return;
+        }
+        // Android 12+ can briefly publish a capability update without an
+        // unredacted WifiInfo (permission / connectivity refresh). Treat it
+        // as UNKNOWN: block signed requests until full identity returns,
+        // but do not tear down a still-existing Wi-Fi Network or blink UI.
+        if(!(caps.getTransportInfo() instanceof WifiInfo)){
+            observedWifi.remove(network);
+            return;
+        }
+        final WifiInfo snapshot=(WifiInfo)caps.getTransportInfo();
+        observedWifi.put(network,snapshot);
         if(matches(network)){
-            try{networkFor(pinnedIp,false);}
-            catch(Exception failure){clear();listener.linkChanged();}
+            try{
+                if(!pinnedSsid.equals(checkedSsid(snapshot))||
+                   !pinnedBssid.equalsIgnoreCase(checkedBssid(snapshot))){
+                    clear();listener.linkChanged();
+                }
+            }catch(IllegalStateException redacted){
+                // Missing identity fails closed in networkFor(); it is not
+                // evidence that the AP changed or the Kit disconnected.
+                observedWifi.remove(network);
+            }
         }
     }
     private synchronized void releaseMulticast(){

@@ -6,6 +6,7 @@
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
+let statusPolling=false,statusMisses=0;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
@@ -376,7 +377,8 @@ async function status(){
  if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
- online=true;lastStatus=Date.now();
+ online=true;lastStatus=Date.now();statusMisses=0;
+ if(link==='ap'&&autoApTimer){clearTimeout(autoApTimer);autoApTimer=null;}
  if(el('kitSavedId')&&verifiedKitId)el('kitSavedId').value=verifiedKitId;
  saveVerifiedIp(verifiedKitId,ip,link==='ap'?data.apSsid:data.ssid);
  if(kitCode&&data.kitCode!==kitCode)rcSession='';kitCode=data.kitCode||'';
@@ -414,7 +416,7 @@ async function testSave(){
 }
 async function setMode(desired=el('kitMode')?.value){
  if(!['ap','sta','auto'].includes(desired))throw Error('Invalid Wi-Fi mode');
- if(otaBusy||connecting)throw Error('Kit operation is already in progress');
+ if(otaBusy||connecting||statusPolling)throw Error('Kit operation or signed status verification in progress; retry shortly');
  if(!online||!onKitLink)throw Error('Connect and verify the Kit on its current AP/STA network before switching');
  const before=link,same=desired===before,physical=desired==='auto'?'sta':desired;
  if(same&&mode===desired){show('KIT '+before.toUpperCase()+' CONNECTED • already selected','good');return}
@@ -769,27 +771,53 @@ function bind(){
   event.target.value='';
   if(file)void uploadAdminApp(file).catch(error=>{if(!/OTA stopped:|UNCONFIRMED|NOT VERIFIED/.test(el('kitNetStatus')?.textContent||''))show('OTA: '+error.message,'warn');});
  });
- setInterval(()=>{if(otaBusy||!reconnectEnabled||connecting||document.hidden)return;connecting=true;syncHeaderTransport();status().catch(()=>{online=false;dropInput('Kit disconnected • retrying the same Device ID; control remains released')}).finally(()=>{connecting=false;syncHeaderTransport()})},3500);
+ // Read-only health polling must not repeatedly disable/enable the AP/STA
+ // switch. Only user-initiated operations own the foreground "connecting" lock.
+ setInterval(()=>{
+  if(otaBusy||!reconnectEnabled||connecting||statusPolling||document.hidden)return;
+  statusPolling=true;
+  status().catch(error=>{
+   const reason=String(error?.message||error).slice(0,150);
+   const disposition=policy?.retryDisposition?.(error);
+   if(rcSession)dropInput('Diagnostic control paused • signed Kit status unavailable; motors OFF');
+   // One missed GET should be visible as "VERIFYING", not a fake AP/STA
+   // switch or immediate loss of the last signed Kit status.
+   if(disposition?.retry!==false&&++statusMisses<2&&Date.now()-lastStatus<10000){
+    show(link.toUpperCase()+' LINK VERIFYING • brief status delay • '+reason,'warn');
+    return;
+   }
+   online=false;onKitLink=false;reconnectEnabled=false;auth=null;
+   forgetNativePin();syncLedButton();
+   show(link.toUpperCase()+' DISCONNECTED • '+reason+' • reconnect requires fresh Kit identity verification','warn');
+   if(link==='ap'&&disposition?.retry!==false)scheduleAutoApConnect(1000);
+  }).finally(()=>{statusPolling=false});
+ },3500);
  scheduleAutoApConnect(1000);
 }
 function scheduleAutoApConnect(delay=650){
  if(link!=='ap'||online||otaBusy||connecting||document.hidden||
     !native?.requestSecure||!native?.pinSelectedNetwork||!window.ZebjusKitAuth?.local)return;
- if(Date.now()<nextAutoApAttempt)return;
+ const wait=Math.max(delay,Math.max(0,nextAutoApAttempt-Date.now()));
  clearTimeout(autoApTimer);
  autoApTimer=setTimeout(()=>{
   autoApTimer=null;
   if(link!=='ap'||online||otaBusy||connecting||document.hidden)return;
-  nextAutoApAttempt=Date.now()+15000; // Avoid repeated permission dialogs/probes.
-  connectKit(true).catch(error=>show('AP DISCONNECTED • '+error.message,'warn'));
- },delay);
+  nextAutoApAttempt=Date.now()+12000; // Never open an unsolicited permission dialog.
+  connectKit(true).catch(error=>{
+   const detail=String(error?.message||error).slice(0,130);
+   const retry=policy?.retryDisposition?.(error)?.retry!==false;
+   show('AP '+(retry?'RECONNECTING':'CONNECT FAILED')+' • '+detail+
+    (retry?' • checking same Kit again':' • use Connect Kit to correct permission or identity'),'warn');
+   if(retry)scheduleAutoApConnect(12000);
+  });
+ },wait);
 }
 function networkChanged(){
  forgetGrants();forgetNativePin();
  if(otaBusy)otaCancelRequested=true;
  cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');
  dropInput('Android Wi-Fi changed • awaiting verified AP/STA reconnection');
- nextAutoApAttempt=0; // A real network change must bypass the old network's retry cooldown.
+ nextAutoApAttempt=0;statusMisses=0; // Genuine Wi-Fi change bypasses cooldown.
  online=false;auth=null;diagnosticKey='';reconnectEnabled=false;onKitLink=false;lastStatus=0;ledOn=false;savedProfilesFor='';
  syncHeaderTransport();scheduleAutoApConnect();
  if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}
