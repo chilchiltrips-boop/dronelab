@@ -28,6 +28,8 @@ on:
       - 'pairing-qr-ui.js'
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'
+      - 'vendor/peerjs.min.js'
+      - 'vendor/peerjs.LICENSE'
       - 'js/kit-auth.js'
       - 'js/kit-network-policy.js'
       - 'firmware-catalog.json'
@@ -70,7 +72,7 @@ jobs:
           cp js/kit-auth.js js/kit-network-policy.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
-          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
+          cp vendor/qrgen.js vendor/jsqr.js vendor/peerjs.min.js vendor/peerjs.LICENSE mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
           test -s mobile-android/app/src/main/assets/companion-flight.js
@@ -80,11 +82,13 @@ jobs:
           test -s mobile-android/app/src/main/assets/firmware-catalog.json
           test -s mobile-android/app/src/main/assets/flight-input.js
           test -s mobile-android/app/src/main/assets/vendor/jsqr.js
+          test -s mobile-android/app/src/main/assets/vendor/peerjs.min.js
+          test -s mobile-android/app/src/main/assets/vendor/peerjs.LICENSE
 
       - name: Check Android camera, code pairing and permanent release-signing rules
         run: |
           node --check tools/network-browser.mjs
-          node --test tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/android-connection-reliability.test.mjs tools/network-transport.test.mjs
+          node --test tools/android-peerjs-menu-regression.test.mjs tools/android-camera-permission.test.mjs tools/code-pairing.test.mjs tools/release-signing.test.mjs tools/android-connection-reliability.test.mjs tools/network-transport.test.mjs
 
       - name: Validate debug compilation (never publish a debug APK)
         run: gradle -p mobile-android :app:assembleDebug --no-daemon
@@ -122,7 +126,7 @@ jobs:
           test -x "$BUILD_TOOLS/apksigner"
           test -x "$BUILD_TOOLS/aapt"
           python3 tools/verify_signed_android_release.py "$RELEASE_APK" "$BUILD_TOOLS/apksigner" "$BUILD_TOOLS/aapt" mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
-          unzip -l "$RELEASE_APK" | grep -E 'assets/(companion.html|pairing-core.js|pairing-code.js|vendor/jsqr.js)'
+          unzip -l "$RELEASE_APK" | grep -E 'assets/(companion.html|pairing-core.js|pairing-code.js|vendor/jsqr.js|vendor/peerjs.min.js)'
           unzip -t "$RELEASE_APK" >/dev/null
           echo "Verified release APK size: $(stat -c %s "$RELEASE_APK") bytes"
 
@@ -280,7 +284,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/zebjus-release-output"
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt "$RUNNER_TEMP/zebjus-release-output/"
           git fetch origin main
-          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py
+          git diff --exit-code "${{ github.sha }}" origin/main -- mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js vendor/peerjs.min.js tools/verify_signed_android_release.py
           git checkout -B ci-signed-apk-release origin/main
           mkdir -p mobile-apk
           cp "$RUNNER_TEMP"/zebjus-release-output/* mobile-apk/

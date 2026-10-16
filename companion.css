@@ -242,3 +242,87 @@ button{min-height:44px}
 #kitOtaPhase{overflow-wrap:anywhere;font-size:12px}
 #appBuildVersion{color:#97ebca}
 @media(max-width:480px){.settings-accordion-body{padding:7px}.settings-accordion>summary{padding:12px 10px}}
+
+/* v1.7.8 final cockpit link selector. This is a transport choice, NOT a
+   firmware AP/STA mode mutation; Kit identity must be reverified. */
+.flight-topbar{grid-template-columns:auto minmax(98px,1fr) auto auto minmax(48px,.35fr) auto;gap:clamp(4px,1vw,11px);padding-inline:clamp(6px,1.4vw,16px)}
+.flight-topbar .flight-network-switch{min-height:44px;padding:5px 8px;min-width:95px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:22px;background:#232432;border:1px solid #4f7a82;font-weight:850;font-size:10px;white-space:nowrap;color:#d2e9e4}
+.flight-network-switch i{display:block;position:relative;flex:0 0 29px;width:29px;height:17px;border-radius:12px;background:#51626d;box-shadow:inset 0 0 0 1px #789ba2}
+.flight-network-switch i::before{position:absolute;content:"";width:13px;height:13px;left:2px;top:2px;border-radius:50%;background:#f3fff9;transition:transform .15s}
+.flight-network-switch[aria-checked="true"]{border-color:#59dfa7;color:#c6ffe7}
+.flight-network-switch[aria-checked="true"] i{background:#1b9771}
+.flight-network-switch[aria-checked="true"] i::before{transform:translateX(12px)}
+.flight-network-switch[data-transport="ap"] .flight-transport-label:first-child,
+.flight-network-switch[data-transport="sta"] .flight-transport-label:last-child{color:#a8ffe2}
+@media(orientation:landscape) and (max-width:780px){
+ .flight-topbar{grid-template-columns:44px minmax(70px,1fr) minmax(98px,auto) 89px auto;gap:4px;padding-inline:5px}
+ .flight-topbar .flight-network-switch{min-width:87px;padding:4px;gap:4px;font-size:9px}
+ .flight-topbar .flight-link{display:none}
+ .flight-session{min-width:0;padding-inline:0}
+ .flight-brand{overflow:hidden}
+}
+@media(orientation:portrait){
+ .flight-topbar{grid-template-columns:44px minmax(90px,1fr) auto;gap:5px}
+ .flight-network-switch{grid-column:1;grid-row:2;justify-self:start}
+ .flight-brand{grid-column:2;grid-row:1}
+ .flight-session{grid-column:2;grid-row:2}
+ .flight-link{display:none}
+ .flight-topbar #flightStop{grid-column:3;grid-row:1/3}
+}
+@media(max-width:470px) and (orientation:landscape){
+ .flight-brand em{display:none}
+ .flight-session{min-width:0}
+ .flight-topbar{grid-template-columns:42px minmax(0,1fr) 80px 82px 63px}
+ .flight-topbar .flight-network-switch{min-width:80px}
+}
+/* Fix: the old three-column layout assumed flat cards. Pairing, Kit and OTA
+   are now grouped in accordions. A three-column parent made each group only
+   a third of the viewport, clipped fields and stacked buttons arbitrarily. */
+.mobile-connection{
+ width:min(980px,98vw);max-width:98vw;max-height:min(95dvh,95vh);
+ height:auto;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+}
+.mobile-connection,.mobile-connection *{min-width:0}
+.mobile-connection main{display:flex!important;flex-direction:column!important;align-items:stretch!important;grid-template-columns:none!important;gap:10px!important;width:100%!important;max-width:100%!important;padding:10px!important}
+.mobile-connection main>*{width:100%;max-width:100%;min-width:0;margin:0}
+.mobile-connection main>.hero{display:block!important;padding:12px!important}
+.mobile-connection .hero h1{white-space:normal!important;font-size:clamp(15px,2vw,21px)!important;line-height:1.3}
+.mobile-connection .hero p{display:block!important;font-size:12px!important;line-height:1.5!important;margin:5px 0!important}
+.mobile-connection .hero small{display:block!important;font-size:10px!important;letter-spacing:.05em}
+.mobile-connection .settings-accordion{width:100%;overflow:hidden;background:#0b202d;border-radius:12px;margin:0}
+.mobile-connection .settings-accordion>summary{padding:12px 14px;font-size:14px;min-height:47px}
+.mobile-connection .settings-accordion-body{display:grid;grid-template-columns:minmax(0,1fr);padding:12px;gap:11px}
+.mobile-connection .card,.mobile-connection main>.card{margin:0;padding:12px;gap:10px}
+.mobile-connection .section-title{align-items:flex-start;flex-wrap:wrap;gap:5px 10px}
+.mobile-connection .section-title strong{font-size:clamp(12px,1.5vw,15px)!important;line-height:1.35}
+.mobile-connection .section-title span{font-size:11px!important;overflow-wrap:anywhere;text-align:start}
+.mobile-connection .hint{font-size:12px!important;line-height:1.5!important;margin:4px 0!important;overflow-wrap:anywhere}
+.mobile-connection .actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px;align-items:stretch}
+.mobile-connection .actions button{width:100%;min-height:44px!important;max-width:none;white-space:normal;overflow-wrap:anywhere;line-height:1.25;font-size:12px!important;padding:10px!important}
+.mobile-connection :is(input,select,textarea){max-width:100%;box-sizing:border-box}
+.mobile-connection :is(select,input:not([type=checkbox])){min-height:44px!important;padding:8px 11px;font-size:13px!important}
+.mobile-connection textarea{min-height:80px;max-height:170px;font-size:12px!important;line-height:1.5}
+.mobile-connection .kit-net-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;margin:7px 0}
+.mobile-connection .kit-net-grid label{width:100%;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.mobile-connection .kit-net-toggle{display:flex!important;align-items:flex-start;flex-direction:row!important;gap:11px;font-size:12px}
+.mobile-connection .kit-net-toggle input[type=checkbox]{flex:0 0 21px;width:21px;height:21px;min-height:21px!important;margin:0}
+.mobile-connection .phone-code-panel{padding:12px;max-width:100%}
+.mobile-connection .phone-code-panel #phoneShortCode{font-size:clamp(30px,5vw,44px)!important;letter-spacing:.12em;overflow-wrap:anywhere}
+.mobile-connection .pin-box{flex-wrap:wrap;gap:8px}
+.mobile-connection .status-grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,130px),1fr));gap:9px}
+.mobile-connection .status-grid :is(b,small){font-size:11px!important}
+.mobile-connection #mobileLog{font-size:11px;max-height:150px;min-height:64px}
+.mobile-connection .flight-options{display:flex;flex-wrap:wrap;align-items:center;gap:9px;padding:9px 12px;margin:10px}
+.mobile-connection .flight-options :is(label,small){font-size:11px}
+.mobile-connection .app-top{position:static;padding:10px 12px;min-height:48px;flex-wrap:wrap}
+.mobile-connection footer{padding:8px;font-size:11px}
+.mobile-connection .qr-frame{width:min(100%,340px);min-height:170px}
+.mobile-connection :is(.qr-phone-alternative,details:not(.settings-accordion)) summary{overflow-wrap:anywhere;line-height:1.4}
+@media(orientation:landscape) and (min-width:870px){
+ .mobile-connection .settings-accordion:first-of-type>.settings-accordion-body{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+ .mobile-connection main{padding:7px!important;gap:8px!important}
+ .mobile-connection .settings-accordion-body{padding:8px}
+ .mobile-connection .actions{grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr))}
+}

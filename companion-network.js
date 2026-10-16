@@ -370,6 +370,7 @@ async function uploadAdminApp(file){
  if(!/^[a-fA-F0-9]{32}$/.test(credential))throw Error('Enter the 32-hex USB-paired OWNER key. Diagnostic label secrets cannot authorize firmware.');
  if(!file||!/\.bin$/i.test(file.name)||/factory|merged/i.test(file.name))throw Error('Select a matching official APP .bin, not Factory.');
  otaBusy=true;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;reconnectEnabled=false;
+ syncHeaderTransport();
  if(el('kitOtaProgress'))el('kitOtaProgress').value=0;
  show('OTA preflight • verifying official APP image size, board and SHA-256');
  try{native?.setOtaKeepAwake?.(true)}catch{}
@@ -547,6 +548,7 @@ async function uploadAdminApp(file){
   throw error;
  }finally{
   otaBusy=false;otaCancelRequested=false;otaPaused=false;otaNeedsRecheck=false;auth=null;
+   syncHeaderTransport();
   try{native?.setOtaKeepAwake?.(false)}catch{}
   for(const selector of ['kitLink','kitIp','kitSwitch'])if(el(selector))el(selector).disabled=false;
   if(el('kitAppOta'))el('kitAppOta').disabled=!online||!onKitLink||!!rcSession;
@@ -555,15 +557,35 @@ async function uploadAdminApp(file){
  }
 }
 function action(id,fn){el(id)?.addEventListener('click',()=>Promise.resolve().then(fn).catch(e=>show(e.message,'warn')))}
+function syncHeaderTransport(){
+ const b=el('flightNetworkSwitch');if(!b)return;
+ b.setAttribute?.('aria-checked',String(link==='sta'));
+ b.setAttribute?.('aria-label','Selected FlightCore request connection: '+link.toUpperCase()+'. Tap to select '+(link==='ap'?'STA':'AP'));
+ b.dataset.transport=link;
+ b.disabled=otaBusy;
+ window.dispatchEvent(new CustomEvent('zebjus:kit-transport',{detail:{transport:link,online:online&&onKitLink}}));
+}
+function selectTransport(next){
+ if(!['ap','sta'].includes(next)||otaBusy)return false;
+ if(next===link){syncHeaderTransport();return true}
+ const e=el('kitLink');if(!e)return false;
+ e.value=next;e.dispatchEvent(new Event('change',{bubbles:true}));
+ return link===next;
+}
 function bind(){
  if(!el('kitNetStatus'))return;
  if(!native?.requestSecure){show('Install updated Android APK for signed Wi-Fi sessions');return;}
  el('kitIp').value=ip;
+ syncHeaderTransport();
  el('kitLink').addEventListener('change',()=>{
+  if(otaBusy){el('kitLink').value=link;show('OTA active • AP/STA switching blocked until signed recovery completes','warn');return;}
+  if(!['ap','sta'].includes(el('kitLink').value)){el('kitLink').value=link;return;}
+  if(el('kitLink').value===link){syncHeaderTransport();return;}
   void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
   discoveredId='';cachedFallbackIp='';link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
-  show(link==='sta'?'Join the kit router Wi-Fi and enter its verified STA IP, then Connect.':'Join the kit AP Wi-Fi, then Connect.');
+  syncHeaderTransport();
+  show(link==='sta'?'STA selected • join the same router as this Kit, discover and verify again.':'AP selected • join the Kit hotspot, then reconnect and verify.');
  });
  el('kitIp').addEventListener('change',()=>{void releaseRc();forgetGrants();forgetNativePin();discoveredId='';cachedFallbackIp='';ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
@@ -607,6 +629,6 @@ window.zebjusNativeAppPaused=()=>{
 window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
 };
- window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
+ window.ZebjusNetwork={request,status,scan,command,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
