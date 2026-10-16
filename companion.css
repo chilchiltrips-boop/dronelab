@@ -463,3 +463,7 @@ button{min-height:44px}
 .mobile-connection #mobile-panel-control p.hint:not([id]){display:none}
 .mobile-connection .kit-saved-sta{margin:6px 0;padding:7px;border:1px solid #29485c;border-radius:7px;color:#b6f1d9;font-size:12px;overflow-wrap:anywhere}
 @media(orientation:landscape) and (max-height:440px){.flight-utilities{gap:4px}.flight-cockpit .flight-led-toggle{min-height:44px}}
+
+/* Hide initial scanner how-to; reveal actual Android permission errors in JS. */
+.mobile-connection #cameraPermissionHelp.mobile-guide{display:none}
+.mobile-connection .mobile-control-live{margin:6px 0 0;padding:7px;border:1px solid #29485c;border-radius:7px;font-size:11px;color:#a9e8d8;overflow-wrap:anywhere}
