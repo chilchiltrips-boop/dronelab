@@ -125,8 +125,15 @@ public class MainActivity extends Activity {
         if(requestCode==WIFI_LOCATION_REQUEST){
             String id=pendingWifiPermissionRequestId;
             pendingWifiPermissionRequestId=null;
-            if(id!=null)reportWifiPermission(id,
-                checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED);
+            boolean granted=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+            if(granted&&wifiLink!=null)wifiLink.refreshLocationIdentity();
+            if(id!=null){
+                // Allow location-inclusive capabilities callback to provide an
+                // unredacted WifiInfo for the exact newly selected Network.
+                if(granted)new android.os.Handler(android.os.Looper.getMainLooper())
+                    .postDelayed(()->reportWifiPermission(id,true),350);
+                else reportWifiPermission(id,false);
+            }
         }
         if (requestCode == CAMERA_REQUEST && pendingVideoRequest != null) {
             PermissionRequest req = pendingVideoRequest;
