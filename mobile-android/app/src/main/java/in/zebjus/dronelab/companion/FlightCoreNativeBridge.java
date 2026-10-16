@@ -52,7 +52,7 @@ final class FlightCoreNativeBridge {
         return n[0]==10||(n[0]==192&&n[1]==168)||(n[0]==172&&n[1]>=16&&n[1]<=31);
     }
     private static boolean allowed(String method,String route) {
-        if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
+        if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/wifi/saved")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
         if(!method.equals("POST"))return false;
         return route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
     }
