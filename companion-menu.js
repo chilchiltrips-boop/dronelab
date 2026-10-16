@@ -57,6 +57,7 @@
  const mobileControl=[...main.children].find(el=>el.matches('details.settings-accordion')&&el.querySelector('summary')?.textContent?.trim()==='Mobile Control');
  place(options,'control');
  place(mobileControl,'control');
+ const controlLive=make('p','mobile-control-live','Kit RX: no ACK • joystick preview only');controlLive.id='mobileControlKitAck';groups.get('control').append(controlLive);
  const kit=$('kitNetworkCard');
  if(!kit||kit.parentElement!==main)throw Error('Missing original Android Kit workspace');
  const sub=[...kit.children].filter(el=>el.matches('details.settings-accordion'));
@@ -85,6 +86,7 @@
    control:$('controlState')?.textContent||'NO CONTROL',
    more:($('kitOtaPhase')?.textContent||'OTA IDLE')
   };
+  const ack=$('mobileControlKitAck');if(ack){const firmware=$('kitRcAck')?.textContent||'No firmware ACK';const left=$('flightLeftTouch')?.textContent||'';const right=$('flightRightTouch')?.textContent||'';ack.textContent=firmware+' • '+left+' • '+right;}
   for(const [name,value] of Object.entries(statuses)){
    const target=$('mobile-live-'+name);if(target)target.textContent=String(value).slice(0,54);
   }
