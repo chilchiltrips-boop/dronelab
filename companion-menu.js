@@ -30,6 +30,9 @@
  shell.id='mobileAdaptiveShell';nav.setAttribute('aria-label','Flight Control Center categories');
  nav.setAttribute('role','tablist');
  nav.setAttribute('aria-orientation','vertical');
+ // Preserve the original Back button and move it above sidebar tabs.
+ const back=$('flightBack');back.textContent='←';back.setAttribute('aria-label','Back to Controller');back.title='Back to Controller';
+ nav.append(back);
  for(const tab of tabs){
   const button=make('button','mobile-nav-item'),panel=make('section','mobile-adaptive-panel');
   button.type='button';button.id='mobile-nav-'+tab.id;button.setAttribute('role','tab');
@@ -42,7 +45,7 @@
   panel.id='mobile-panel-'+tab.id;panel.dataset.mobilePanel=tab.id;
   panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);
   const title=make('header','mobile-panel-heading');
-  title.append(make('h2','',tab.title),make('p','',tab.subtitle));
+  title.append(make('h2','',tab.title));
   panel.append(title);
   nav.append(button);main.append(panel);groups.set(tab.id,panel);buttons.set(tab.id,button);
  }
@@ -64,12 +67,10 @@
  for(const element of sub.slice(2))place(element,'more');
  const oldRelease=[...main.children].find(el=>el.matches('section.card')&&!!el.querySelector('#downloadStableApk'));
  if(oldRelease)oldRelease.remove();
- // About retains the installed APK label but offers no in-app APK download.
- const about=make('section','card mobile-about');
- about.append(make('h3','','About ZEBJUS Flight Control'),make('p','hint','Installed version is shown in the header. Pairing credentials stay in Android Keystore; firmware OTA requires teacher authorization.'));
- groups.get('more').append(about);
- const footer=[...main.children].find(el=>el.tagName==='FOOTER');
- if(footer){footer.textContent='ZEBJUS Flight Control • secure WebRTC • local Wi-Fi';place(footer,'more');}
+ // Retain one live native APK version label in More, not a tall banner.
+ const version=$('appBuildVersion');
+ if(version){const row=make('p','mobile-version');row.append(document.createTextNode('APK '),version);groups.get('more').append(row);}
+ const footer=[...main.children].find(el=>el.tagName==='FOOTER');footer?.remove();
  dialog.insertBefore(shell,main);shell.append(nav,main);
  main.classList.add('mobile-adaptive-main');
  let current='pair';
