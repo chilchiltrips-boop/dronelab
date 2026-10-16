@@ -61,7 +61,28 @@ function text(id,v){const e=$(id);if(e)e.textContent=v}
 function textTitle(id,v){const e=$(id);if(e){e.textContent=v;e.title=String(v||'')}}
 function badge(id,label,cls=''){const e=$(id);if(e){e.textContent=label;e.className='status '+cls}}
 function prettyBytes(n){n=+n||0;if(n<1024)return n+' B';if(n<1048576)return(n/1024).toFixed(1)+' KB';return(n/1048576).toFixed(2)+' MB'}
-function formatBuildTime(v){if(!v)return'--';const d=new Date(v);return Number.isNaN(d.getTime())?String(v):d.toLocaleString([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true})}
+function formatBuildTime(v){
+ if(!v)return'--';
+ const raw=String(v).trim();
+ // GitHub Actions compiles official FlightCore binaries in UTC. ESP32
+ // __DATE__ / __TIME__ omit their timezone: JavaScript would otherwise
+ // interpret the LIVE firmware timestamp in the viewer's local timezone.
+ // Release catalog builtAt values are already ISO-8601 with a Z offset.
+ const esp=/^([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/.exec(raw);
+ let d;
+ if(esp){
+  const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(esp[1]);
+  const day=Number(esp[2]),year=Number(esp[3]),hour=Number(esp[4]),minute=Number(esp[5]),second=Number(esp[6]);
+  if(month<0||year<2000||year>2100||day<1||day>31||hour>23||minute>59||second>59)return raw;
+  d=new Date(Date.UTC(year,month,day,hour,minute,second));
+  if(d.getUTCFullYear()!==year||d.getUTCMonth()!==month||d.getUTCDate()!==day)return raw;
+ }else d=new Date(raw);
+ return Number.isNaN(d.getTime())?raw:d.toLocaleString([],{
+  year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'
+ });
+}
+// Share the same read-only display formatter with the Kit details panel.
+window.ZebjusFirmwareTime={formatBuildTime};
 function stage(name,state){const e=$('#fwStage'+name);if(e)e.className=state||''}
 function resetStages(){['Prepare','Flash','Verify','Reboot','Reconnect'].forEach(x=>stage(x,''))}
 function progress(p,title){p=Math.max(0,Math.min(100,Math.round(p)));const b=$('#fwProgressBar');if(b)b.style.width=p+'%';text('#fwProgressPct',p+'%');if(title)text('#fwProgressTitle',title)}
@@ -226,7 +247,7 @@ function kitStatus(){
  const board=running?usbRuntimeInfo.boardId:bootloader?usbBoardId:kit?.board||'';
  const prior=lastVerifiedRuntime&&((bootloader&&lastVerifiedRuntime.boardId===usbBoardId)||(serial&&!usbRuntimeInfo))?lastVerifiedRuntime:null;
  const version=running?usbRuntimeInfo.version:bootloader?(prior?'Last verified '+prior.version+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for firmware ID':wifiOnline?(kit?.version||d?.firmware||d?.version||'--'):'--';
- const build=running?usbRuntimeInfo.buildStamp:bootloader?(prior?'Last verified '+prior.buildStamp+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(kit?.firmwareBuiltAt||d?.firmwareBuiltAt||d?.buildDateTime||d?.buildTime||liveFirmwareBuiltAt):'--';
+ const build=running?formatBuildTime(usbRuntimeInfo.buildStamp):bootloader?(prior?'Last verified '+formatBuildTime(prior.buildStamp)+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(kit?.firmwareBuiltAt||d?.firmwareBuiltAt||d?.buildDateTime||d?.buildTime||liveFirmwareBuiltAt):'--';
  const name=running?usbRuntimeInfo.boardName:bootloader?boardName(board):serial?'USB serial • identifying…':wifiOnline?(kit?.kitName||d?.deviceName||d?.name||'--'):'--';
  const state=usbRomDownload&&serial?'ROM DOWNLOAD • APP NOT RUNNING':running?'USB FIRMWARE RUNNING':bootloader?'USB BOOTLOADER VERIFIED':serial?'USB SERIAL • IDENTIFYING':wifiOnline?'ONLINE • MOTORS DISABLED':'OFFLINE';
  const profile=board?boardName(board):serial?'Reading firmware board ID…':wifiOnline?(boardName(kit?.board||d?.boardId)||'Detecting…'):'--';

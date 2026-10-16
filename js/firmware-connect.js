@@ -138,7 +138,7 @@ function render(){
  set('fwDetailWifi',live?s.staConnected?'STA connected':s.apActive?'AP available':'Offline':'--');
  set('fwDetailRssi',live&&s.staConnected&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
  set('fwDetailFirmware',live?s.version||'Not reported':'--');
- set('fwDetailBuild',live?s.firmwareBuiltAt||'Not reported by Kit':'--');
+ set('fwDetailBuild',live?(s.firmwareBuiltAt?(root.ZebjusFirmwareTime?.formatBuildTime?.(s.firmwareBuiltAt)||s.firmwareBuiltAt):'Not reported by Kit'):'--');
  set('fwDetailIp',live?s.transport==='ap'?'192.168.4.1':s.staIp||'Unknown':'--');
  set('fwDetailControl',live?s.owner?'Owned here':s.rc?.claimed?'Owned elsewhere':'Released':'--');
  set('fwDetailLastSeen',live&&s.heartbeatAt?new Date(s.heartbeatAt).toLocaleTimeString():'--');
