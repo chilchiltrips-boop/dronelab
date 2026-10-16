@@ -81,7 +81,7 @@
   const statuses={
    pair:($('appConnection')?.textContent||'NOT PAIRED'),
    kit:kitOk?kitMode+' CONNECTED':(/switching|connecting/i.test(kitText)?'CONNECTING':(/failed|error|denied|timeout|unavailable/i.test(kitText)?'ERROR':'DISCONNECTED')),
-   wifi:/switching|connecting/i.test(kitText)?'SWITCHING':kitOk?kitMode+' CONNECTED':(/fallback/i.test(kitText)?'AP FALLBACK':'OFFLINE'),
+   wifi:/fallback/i.test(kitText)?'AP FALLBACK':/switching|connecting/i.test(kitText)?'STA CONNECTING':kitOk?kitMode+' CONNECTED':(/failed|error|timeout|denied/i.test(kitText)?'ERROR':'OFFLINE'),
    control:$('controlState')?.textContent||'NO CONTROL',
    more:($('kitOtaPhase')?.textContent||'OTA IDLE')
   };
