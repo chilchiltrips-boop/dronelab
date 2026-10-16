@@ -11,12 +11,13 @@ function loadPeer(){
  if(libraryPromise)return libraryPromise;
  libraryPromise=new Promise((resolve,reject)=>{
   const s=document.createElement('script');
-  s.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.5/peerjs.min.js';
+  // PeerJS 1.5.5 is bundled with APK and WebApp, no runtime CDN dependency.
+  s.src='vendor/peerjs.min.js';
   s.crossOrigin='anonymous';s.referrerPolicy='no-referrer';
   let done=false;
-  const timer=setTimeout(()=>finish(Error('Online signaling library unavailable. Check Internet and use the camera QR option.')),12000);
-  function finish(err){if(done)return;done=true;clearTimeout(timer);if(err){s.remove();libraryPromise=null;reject(err)}else if(root.Peer)resolve(root.Peer);else{s.remove();libraryPromise=null;reject(Error('Signaling library did not load'))}}
-  s.onload=()=>finish();s.onerror=()=>finish(Error('Could not load PeerJS. Check Internet access.'));
+  const timer=setTimeout(()=>finish(Error('Bundled PeerJS client failed to initialize. Update APK / refresh WebApp; offline Response QR is still available.')),12000);
+  function finish(err){if(done)return;done=true;clearTimeout(timer);if(err){s.remove();libraryPromise=null;reject(err)}else if(root.Peer)resolve(root.Peer);else{s.remove();libraryPromise=null;reject(Error('Bundled PeerJS client did not initialize'))}}
+  s.onload=()=>finish();s.onerror=()=>finish(Error('Bundled PeerJS library missing. Update the official APK or refresh WebApp assets.'));
   document.head.append(s);
  });
  return libraryPromise;
@@ -33,8 +34,8 @@ function cloudPeer(Peer,id){
  return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]},debug:0});
 }
 function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
- let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0,connectionCleanup=null;
- const stop=()=>{ended=true;clearTimeout(timeout);connectionCleanup?.();connectionCleanup=null;try{connection?.close()}catch{}try{peer?.destroy()}catch{}connection=null;peer=null;code='';onCode('')};
+ let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0,connectionCleanup=null,registrationTimer=null;
+ const stop=()=>{ended=true;clearTimeout(timeout);clearTimeout(registrationTimer);connectionCleanup?.();connectionCleanup=null;try{connection?.close()}catch{}try{peer?.destroy()}catch{}connection=null;peer=null;code='';onCode('')};
  async function init(){
   const Peer=await loadPeer();
   if(ended)return;
@@ -42,20 +43,31 @@ function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
   if(expires-Date.now()<=0)throw Error('Web QR expired. Scan a new QR.');
   async function attempt(){
    if(ended)return;
-   if(++attempts>5){onStatus('Unable to reserve a six-digit code. Use the Two-Way QR option.');return}
+   if(++attempts>5){onCode('');onStatus('Unable to reserve a six-digit code. Use the Two-Way QR option.');return}
    code=generateCode();const thisCode=code,expected=await digest(offer,thisCode);
    if(ended||!isCurrent(expires))return;
    peer=cloudPeer(Peer,PREFIX+thisCode);const own=peer;
+   onStatus('PeerJS ready • contacting online pairing service…');
+   clearTimeout(registrationTimer);
+   registrationTimer=setTimeout(()=>{
+    if(!ended&&peer===own&&!code){
+     onCode('');
+     onStatus('Online code service unavailable. Check Internet/DNS/campus firewall, or use Response QR offline.');
+     try{own.destroy()}catch{}
+    }
+   },18000);
    peer.on('open',()=>{
     if(ended||peer!==own)return;
-    onCode(thisCode);onStatus('Six-digit code ready • Enter on College PC (expires with QR)');
+    clearTimeout(registrationTimer);code=thisCode;onCode(thisCode);onStatus('Six-digit code ready • Enter on College PC (expires with QR)');
    });
    peer.on('error',e=>{
     if(ended||peer!==own)return;
+    clearTimeout(registrationTimer);
     if(e.type==='unavailable-id'){try{own.destroy()}catch{}onStatus('Code already in use • generating another…');void attempt();return}
-    onStatus('Code pairing unavailable: '+(e.message||e.type||'Internet/signaling error'));
+    code='';onCode('');
+    onStatus('Online code service unavailable: '+(e.message||e.type||'Internet/signaling error')+'. Check phone Internet; use Response QR offline.');
    });
-   peer.on('disconnected',()=>{if(!ended&&peer===own)onStatus('Online signaling interrupted • scan QR / regenerate code')});
+   peer.on('disconnected',()=>{if(!ended&&peer===own){code='';onCode('');onStatus('Online pairing service disconnected • reconnect and regenerate, or use Response QR offline.')}});
    peer.on('connection',conn=>{
     if(ended||peer!==own){conn.close();return}
     if(connection&&connection!==conn){conn.close();return}
