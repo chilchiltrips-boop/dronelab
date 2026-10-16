@@ -128,7 +128,7 @@
    Header connection state comes from authenticated live Kit data, not STA choice. */
 #app .topbar-main{grid-template-columns:minmax(120px,155px) minmax(270px,1fr) minmax(560px,1.45fr)!important;gap:10px!important}
 #app .topbar-main>.kit-top-status{
- display:grid!important;grid-template-columns:minmax(170px,1fr) auto auto auto auto auto;
+ display:grid!important;grid-template-columns:minmax(170px,1fr) auto auto auto auto auto auto;
  align-items:center;justify-content:stretch!important;width:100%!important;
  min-width:0!important;max-width:none!important;gap:7px!important
 }
@@ -165,7 +165,7 @@
  #app .topbar-main>.brand{grid-column:1!important;grid-row:1!important}
  #app .topbar-main>.tabs{grid-column:1!important;grid-row:2!important}
  #app .topbar-main>.kit-top-status{grid-column:1!important;grid-row:3!important}
- #app .topbar-main>.kit-top-status{grid-template-columns:minmax(180px,1fr) auto auto auto auto auto}
+ #app .topbar-main>.kit-top-status{grid-template-columns:minmax(180px,1fr) auto auto auto auto auto auto}
 }
 @media(max-width:660px){
  #app .topbar-main>.kit-top-status{
