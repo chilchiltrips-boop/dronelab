@@ -140,6 +140,14 @@ final class FlightCoreWifiLink {
     synchronized boolean matches(Network n){
         return selected!=null&&selected.equals(n);
     }
+    synchronized void refreshLocationIdentity(){
+        // Android 12+ callback objects are redacted if registered before
+        // Location was granted. Re-register after the runtime result.
+        if(connectivity==null||Build.VERSION.SDK_INT<31)return;
+        if(callback!=null){try{connectivity.unregisterNetworkCallback(callback);}catch(Exception ignored){}}
+        callback=null;observedWifi.clear();
+        start();
+    }
     void start(){
         if(connectivity==null)return;
         callback=Build.VERSION.SDK_INT>=31
