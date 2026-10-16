@@ -29,14 +29,16 @@ test('existing controls are moved, never cloned, and keep their kit and WebRTC h
  assert.match(read('devices-workspace.css'),/grid-template-columns:210px minmax\(0,1fr\)/);
 });
 
-test('Devices & Firmware uses document scrolling: no frozen desktop panel or mobile sidebar',()=>{
+test('Devices & Firmware uses independent desktop scroll panes and sticky mobile navigation',()=>{
  const css=read('devices-workspace.css'),header=read('v2-header.css'),behavior=read('js/devices-workspace.js');
- const final=css.slice(css.indexOf('/* Natural page scrolling:'));
- assert.ok(final.includes('#tab-firmware.active{display:block!important;min-height:0!important;overflow:visible!important}'));
- assert.ok(final.includes('height:auto!important;min-height:0!important;max-height:none!important'));
- assert.ok(final.includes('position:relative!important;top:auto!important'));
- assert.ok(final.includes('overflow-y:visible!important'));
- assert.ok(final.includes('overflow-x:auto!important'),'Small horizontal nav still scrolls sideways');
+ assert.match(css,/#tab-firmware\.active\{[\s\S]*?display:flex;[\s\S]*?overflow:hidden/);
+ assert.match(css,/#tab-firmware \.dw-shell\{[\s\S]*?height:var\(--dw-height/);
+ assert.match(css,/#tab-firmware \.dw-nav-list\{[\s\S]*?overflow-y:auto/);
+ assert.match(css,/#tab-firmware \.dw-view-content\{[\s\S]*?overflow-y:auto/);
+ assert.match(css,/#tab-firmware #dw-body-overview\{[\s\S]*?overflow-y:auto!important/);
+ assert.match(css,/@media\(max-width:780px\)\{[\s\S]*?#tab-firmware \.dw-sidebar\{[\s\S]*?position:sticky/);
+ assert.match(css,/#tab-firmware \.dw-nav-list\{[\s\S]*?overflow-x:auto/);
+ assert.doesNotMatch(css,/\/\* Natural page scrolling: header, sidebar and Android download row move/);
  assert.match(header,/#app \.topbar\{position:relative!important;top:auto!important/);
  assert.doesNotMatch(behavior,/root\.scrollTo\(\{top:0/);
  assert.match(css,/#tab-firmware \.firmware-hero\{display:none!important\}/);
