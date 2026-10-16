@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0+302",
+  "version": "1.8.0+303",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -10,5 +10,5 @@
     "FlightCore 1.4.6 APP and FACTORY firmware for A1 and A2"
   ],
   "buildCommit": "90500d5db2ef",
-  "publishedAt": "2026-10-16T14:15:29.148995+00:00"
+  "publishedAt": "2026-10-16T14:16:15.620492+00:00"
 }
