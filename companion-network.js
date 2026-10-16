@@ -690,7 +690,7 @@ function bind(){
  syncHeaderTransport();
  action('flightNetworkSwitch',async()=>{
   if(otaBusy||connecting)return;
-  window.ZebjusFlightApp?.doStop();
+  await window.ZebjusFlightApp?.doStop();
   const next=link==='ap'?'sta':'ap';
   try{await setMode(next)}finally{
    el('flightSettings')?.click();window.ZebjusMobileMenu?.select('wifi');
