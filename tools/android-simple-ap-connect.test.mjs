@@ -103,5 +103,5 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
  assert.equal(element('kitKey').value,'');
  assert.equal(element('kitSavedId').value,kitId);
  assert.deepEqual(calls,['/api/identify']);
- assert.match(element('kitNetStatus').textContent,/AP-LOCAL/);
+ assert.match(element('kitNetStatus').textContent,/CONNECTED.*AP-local/);
 });
