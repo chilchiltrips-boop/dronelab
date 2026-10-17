@@ -222,7 +222,7 @@
  <div><small>RSSI</small><b id="fwDetailRssi">--</b></div><div><small>Firmware</small><b id="fwDetailFirmware">--</b></div><div><small>Firmware built</small><b id="fwDetailBuild">--</b></div><div><small>IP</small><b id="fwDetailIp">--</b></div><div><small>Control</small><b id="fwDetailControl">--</b></div><div><small>Last seen</small><b id="fwDetailLastSeen">--</b></div>
  </div>
  <p class="micro-note" id="fwControlNote">Select a discovered Kit or enter its name. Diagnostic control never arms motors.</p>
- <div class="fw-connect-actions"><button class="btn primary" id="fwKitTakeControl" type="button">Take Control</button><button class="btn ghost" id="fwKitPing" type="button">Ping Kit</button></div>
+ <div class="fw-connect-actions"><button class="btn ghost small" id="fwKitPairUsb" type="button" disabled title="Verify this physical USB Kit to authorize protected STA/AP access">Verify USB &amp; Authorize</button><button class="btn primary" id="fwKitTakeControl" type="button">Take Control</button><button class="btn ghost" id="fwKitPing" type="button">Ping Kit</button></div>
  <div class="fw-network-strip"><span>AP / Setup <b id="fwApIndicator">--</b></span><span>STA / WebApp <b id="fwStaIndicator">--</b></span></div>
 </section>
 <section class="form-card fw-available-card">
@@ -380,7 +380,7 @@
 </section><section class="kit-card"><div class="kit-card-title"><span>03 • HARDWARE INPUT TEST</span><strong>Controller Ownership</strong></div>
 <p class="kit-hint">FlightCore receives RC values for diagnosis only. ESC outputs, arming, and real PID are disabled.</p>
 <label for="kitSourceSelect">Control source<select id="kitSourceSelect"><option value="WEB">WEB • PID page joystick</option><option value="ANDROID">ANDROID • paired WebRTC joystick (USB/STA)</option></select></label>
-<div class="kit-actions"><button id="kitTakeControl" type="button" class="btn primary" disabled>Take Control</button><button id="kitReleaseControl" type="button" class="btn ghost" disabled>Release Control</button></div>
+<div class="kit-actions"><button id="kitPairUsb" type="button" class="btn ghost" disabled title="Physical USB Device ID verification required">Verify USB &amp; Authorize STA/AP</button><button id="kitTakeControl" type="button" class="btn primary" disabled>Take Control</button><button id="kitReleaseControl" type="button" class="btn ghost" disabled>Release Control</button></div>
 <p class="kit-hint">For Android direct AP joystick, use the Android native connection. WebApp will not echo those packets to AP hardware. Link loss neutralizes input.</p>
 </section></div><div class="kit-column"><section class="kit-card kit-selected-card">
 <div class="kit-card-title"><span>02 • VERIFIED DEVICE</span><strong>Selected AERION</strong></div><p class="kit-offline-hint kit-hint">Enroll or reconnect your kit to see verified identity, active interfaces and firmware-received joystick values here.</p><div class="kit-facts">
