@@ -106,7 +106,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
   const line=String(raw??'').trim();
   if(!line)return null;
   const f=line.split(',');
-  if(f[0]==='ZJTEL'&&f[1]==='1'&&f.length===12){
+  if(f[0]==='ZJTEL'&&f[1]==='1'&&(f.length===12||f.length===20)){
    const board=f[2],spec=FLIGHTCORE_GYROS[board],addr=/^0x[0-9a-f]{2}$/i.test(f[5])?'0x'+f[5].slice(2).toUpperCase():'';
    const seq=Number(f[3]),ms=Number(f[4]),drops=Number(f[11]);
    if(!spec||addr!==spec.address||![seq,ms,drops].every(x=>Number.isSafeInteger(x)&&x>=0))return null;

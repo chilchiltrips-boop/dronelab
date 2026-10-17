@@ -18,6 +18,8 @@ static String zjEffectiveApPassword(){
  return saved.length()>=8&&saved.length()<=63?saved:String(ZJ_DEFAULT_AP_PASS);
 }
 static bool zjKitAutoName=false;
+// Arduino sketch and standalone firmware-host use the same default telemetry mode.
+bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
@@ -93,8 +95,9 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  }
  zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
  zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
- // Maximum 10 diagnostic frames/s; sensors and Wi-Fi service take priority.
- if(now-zjRcLastLog>=ZJ_RC_LOG_MS&&Serial.availableForWrite()>100){
+ // RAW mode logs separate RC packets for legacy tools; COMBINED includes RC in ZJTEL.
+ // Maximum 10 RAW diagnostic frames/s; sensors and Wi-Fi service take priority.
+ if(zjTelemetryRaw&&now-zjRcLastLog>=ZJ_RC_LOG_MS&&Serial.availableForWrite()>100){
   zjRcLastLog=now;
   Serial.printf("ZJRC,%s,%s,%lu,T=%d,R=%d,P=%d,Y=%d,ARM=%d\n",zjRcTransport,zjRcSource.c_str(),
    (unsigned long)seq,t,r,p,y,inputArmed?1:0);

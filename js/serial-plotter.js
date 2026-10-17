@@ -1,19 +1,24 @@
-// Generic Arduino-compatible Serial Plotter: numeric values, CSV/TSV, and label:value streams.
-// No firmware-specific assumptions; plain text stays in Serial Monitor.
+// Generic Arduino-compatible Serial Plotter: numeric, CSV, gyroscope and RC.
 const NUMBER='[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?';
 const pair=new RegExp('([A-Za-z_][A-Za-z0-9_./%\\-]*)\\s*:\\s*('+NUMBER+')','g');
 const numberOnly=new RegExp('^'+NUMBER+'$');
 export function parseSerialPlotLine(line){
  const s=String(line??'').trim();
  if(!s||s.length>512)return null;
- // Classroom RC receiver frames: USB Serial Monitor → same four-channel plotter.
- const rc=/^ZJRC,(?:USB|STA|AP),(?:WEB|ANDROID),\d+,T=(\d+),R=(\d+),P=(\d+),Y=(\d+)$/.exec(s);
+ const rc=/^ZJRC,(?:USB|STA|AP),(?:WEB|ANDROID),\d+,T=(\d+),R=(\d+),P=(\d+),Y=(\d+)(?:,ARM=[01])?$/.exec(s);
  if(rc)return {Throttle:Number(rc[1]),Roll:Number(rc[2]),Pitch:Number(rc[3]),Yaw:Number(rc[4])};
  const tel=s.split(',');
- if(tel.length===12&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&Number.isSafeInteger(Number(tel[3]))&&Number(tel[3])>=0&&Number.isSafeInteger(Number(tel[4]))&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&Number.isSafeInteger(Number(tel[11]))&&tel.slice(7,10).every(x=>numberOnly.test(x))){
-  // Do not graph stale gyro values when the sensor is not ready.
+ if((tel.length===12||tel.length===20)&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&Number.isSafeInteger(Number(tel[3]))&&Number(tel[3])>=0&&Number.isSafeInteger(Number(tel[4]))&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&Number.isSafeInteger(Number(tel[11]))&&tel.slice(7,10).every(x=>numberOnly.test(x))){
   if(tel[6]!=='READY')return null;
-  return {GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])};
+  const series={GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])};
+  if(tel.length===20&&/^RC=(?:NONE\/IDLE|(?:USB|STA|AP)\/(?:WEB|ANDROID))$/.test(tel[12])&&
+    /^RCSEQ=\d+$/.test(tel[13])&&tel[19]==='MOTORS=OFF'&&/^INPUT_ARMED=[01]$/.test(tel[18])){
+   for(const [i,label,field] of [[14,'Throttle','T'],[15,'Roll','R'],[16,'Pitch','P'],[17,'Yaw','Y']]){
+    if(!new RegExp('^'+field+'=\\d+$').test(tel[i]))return null;
+    series[label]=Number(tel[i].split('=')[1]);
+   }
+  }
+  return series;
  }
  const gyro=s.split(',');
  if(gyro.length===8&&gyro[0]==='ZJGYRO'&&gyro[1]==='DATA'&&/^A[12]$/.test(gyro[2])&&/^(MPU6050|LSM6DS3)$/.test(gyro[3])&&/^0x[0-9a-f]{2}$/i.test(gyro[4])&&gyro.slice(5).every(x=>numberOnly.test(x))){

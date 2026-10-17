@@ -547,6 +547,7 @@ function selectSerialView(view){
  if(plot){serialPlotterPromise?.then(()=>requestAnimationFrame(()=>serialPlotter?.draw()));serialPlotter?.draw()}
 }
 let lastTelemetryLine='';
+let readableKitMonitor=null;
 function readUnifiedTelemetry(line){
  const p=String(line||'').trim().split(',');
  if(p[0]==='ZJTEL'&&p[1]==='ACK'&&p[2]==='RATE'){
@@ -656,7 +657,9 @@ function appendSerialOutput(value){
  if(serialDisplayBuffer.length>2048)serialDisplayBuffer=serialDisplayBuffer.slice(-2048);
  if(out&&lines.length){
   const scroll=$('#fwSerialAutoScroll')?.checked!==false;
-  const complete=lines.map(serialVisibleLine).filter(Boolean).join('\n');
+  const rawView=$('#fwSerialRawFrames')?.checked===true;
+  const complete=lines.map(serialVisibleLine).map(line=>
+   line&&!rawView&&readableKitMonitor?readableKitMonitor.view(line):line).filter(Boolean).join('\n');
   if(complete){
    out.textContent=(out.textContent+complete+'\n').slice(-48000);
    if(scroll)out.scrollTop=out.scrollHeight;
@@ -673,6 +676,12 @@ function appendSerialOutput(value){
 }
 function setupSerialConveniences(){
  const auto=$('#fwSerialAutoScroll'),toggle=$('#fwSerialPauseScrollBtn'),copy=$('#fwSerialCopyBtn');
+ const raw=$('#fwSerialRawFrames'),monitor=$('#fwSerialOutput');
+ raw?.addEventListener('change',()=>{
+  readableKitMonitor?.clear();
+  if(monitor)monitor.textContent='';
+  if(monitor)monitor.setAttribute('aria-label',raw.checked?'Raw USB serial output: original firmware packets':'Readable combined IMU and RC diagnostic status, motors disabled');
+ });
  const sync=()=>{if(toggle){toggle.textContent=auto?.checked?'Pause Scroll':'Resume Scroll';toggle.setAttribute('aria-pressed',String(auto?.checked===false))}};
  toggle?.addEventListener('click',()=>{if(auto)auto.checked=!auto.checked;sync()});auto?.addEventListener('change',sync);sync();
  copy?.addEventListener('click',async()=>{
@@ -682,10 +691,11 @@ function setupSerialConveniences(){
   catch{log('Clipboard denied. Select text and use Ctrl/Cmd+C.')}
  });
 }
-function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';serialDisplayBuffer='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
+function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';readableKitMonitor?.clear();serialDisplayBuffer='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
 function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
 async function closeSerialMonitor(keepWanted=false){
  if(!keepWanted)monitorWanted=false;
+ readableKitMonitor?.clear();
  clearMonitorTimer();
  const reader=monitorReader,port=monitorPort,task=monitorTask;
  usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
@@ -863,6 +873,9 @@ function initSerialTools(){
    writeLine:line=>writePythonSerialLine(String(line))
  };
  const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
+ import('./js/serial-readable-monitor.js?v=readable-20261017').then(({createReadableKitMonitor})=>{
+  readableKitMonitor=createReadableKitMonitor();
+ }).catch(error=>log('Readable USB monitor unavailable; raw messages kept: '+error.message));
  serialPlotterPromise=import('./js/serial-plotter.js').then(({createSerialPlotter})=>{
   if(plotCanvas)serialPlotter=createSerialPlotter(plotCanvas,plotLegend);
  }).catch(e=>log('Serial Plotter module failed: '+e.message));
