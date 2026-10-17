@@ -28,6 +28,8 @@ LedMode ledMode=LED_OFF;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,lastScan=0,telLast=0;
 uint16_t telRateHz=20;
+// COMBINED (default): one full IMU+RC line; RAW is the legacy two-stream protocol.
+bool zjTelemetryRaw=false;
 uint32_t telemetrySeq=0,telemetryDropped=0; // Declare before serialCommand() so rate changes compile
 uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
 bool ledAvailable=true;
@@ -116,6 +118,14 @@ void serialCommand(char* line){
  if(zjNetSerialCommand(line))return;
  if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
  if(!strcmp(line,"ZJI2C,SCAN")){requestScan();return;}
+ if(!strncmp(line,"ZJTEL,FORMAT,",13)){
+  const char* requested=line+13;
+  if(!strcmp(requested,"RAW")||!strcmp(requested,"COMBINED")){
+   zjTelemetryRaw=!strcmp(requested,"RAW");
+   Serial.print("ZJTEL,ACK,FORMAT,");Serial.println(zjTelemetryRaw?"RAW":"COMBINED");
+  }else Serial.println("ZJTEL,ERR,FORMAT,USE_RAW_OR_COMBINED");
+  return;
+ }
  if(!strncmp(line,"ZJTEL,RATE,",11)){
   const long rate=atol(line+11);
   if((rate==10||rate==20||rate==50)&&strlen(line+11)<=2){
@@ -318,6 +328,7 @@ void emitLegacyGyro(unsigned long now){
  Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
  Serial.println(RateYaw,2);
 }
+#include "FlightCoreNetwork.h"
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
  // A rate-change command can update telLast after loop() captured "now".
@@ -337,11 +348,27 @@ void emitTelemetry(unsigned long now){
  Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
  Serial.print(RateYaw,2);Serial.print(',');
  Serial.print(ledAvailable?"1":"0");
- Serial.print(',');Serial.println(telemetryDropped);
+ Serial.print(',');Serial.print(telemetryDropped);
+ if(!zjTelemetryRaw){
+  // Append compact, clearly labelled RC inputs to the SAME telemetry record.
+  // Fields 0..11 remain 100% compatible with the canonical ZJTEL v1 schema.
+  // A deadman/lease expiry is always displayed as neutral INPUT OFF.
+  const bool fresh=zjRcOwned&&zjRcHasFrame&&uint32_t(now-zjRcLast)<=ZJ_RC_DEADMAN_MS;
+  Serial.print(",RC=");
+  if(fresh){Serial.print(zjRcTransport);Serial.print('/');Serial.print(zjRcSource);}
+  else Serial.print("NONE/IDLE");
+  Serial.print(",RCSEQ=");Serial.print(fresh?zjRcSeq:0);
+  Serial.print(",T=");Serial.print(fresh?zjRcThrottle:1000);
+  Serial.print(",R=");Serial.print(fresh?zjRcRoll:1500);
+  Serial.print(",P=");Serial.print(fresh?zjRcPitch:1500);
+  Serial.print(",Y=");Serial.print(fresh?zjRcYaw:1500);
+  Serial.print(",INPUT_ARMED=");Serial.print(fresh&&zjRcInputArmed?1:0);
+  Serial.print(",MOTORS=OFF");
+ }
+ Serial.println();
  telemetrySent++;
 }
 // Network code can access verified scanner/gyro state and existing serial commands.
-#include "FlightCoreNetwork.h"
 void setup(){
  Serial.begin(115200);
  zjKitSetup();
@@ -353,6 +380,7 @@ void setup(){
  // No decorative startup banner.
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
+ Serial.println("ZJTEL,ACK,FORMAT,COMBINED");
  zjNetworkSetup();
  lastGyro=millis()-GYRO_PERIOD_MS;
  lastGyroProbe=millis()-2500;
