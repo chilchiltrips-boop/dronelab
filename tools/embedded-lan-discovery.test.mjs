@@ -1,72 +1,60 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {assessEmbedEnvironment,embeddedDiscoveryHint,readableDirectUrl,initEmbedKitAccess} from '../js/embed-kit-access.js';
+import {assessEmbedEnvironment,embeddedDiscoveryHint,embedScanBlocked,initEmbedKitAccess} from '../js/embed-kit-access.js';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 
-test('Wix/third-party cross-origin iframe denied local-network delegates direct-tab fallback',()=>{
- const docEls=new Map();
- for(const prefix of ['fw','kit'])for(const suffix of ['EmbeddedAccessNotice','EmbeddedAccessHint','OpenDirectKit','EmbeddedDirectUrl'])
-  docEls.set(prefix+suffix,{hidden:true,dataset:{},textContent:'',href:''});
- const doc={getElementById:id=>docEls.get(id),permissionsPolicy:{
-  allowedFeatures:()=>['local-network','loopback-network'],allowsFeature:name=>name==='loopback-network'}};
+test('denied Wix/third-party iframe retains safe network policy guard without inserting UI',()=>{
  const host={self:{},top:{}};
- const info=initEmbedKitAccess({host,documentRef:doc,moduleUrl:'https://example.org/dronelab/js/embed-kit-access.js?v=1#secret'});
+ const doc={getElementById(){throw Error('Embedded banner elements must never be mounted')},
+  permissionsPolicy:{allowedFeatures:()=>['local-network','loopback-network'],
+   allowsFeature:name=>name==='loopback-network'}};
+ const info=initEmbedKitAccess({host,documentRef:doc});
  assert.equal(info.embedded,true);
  assert.equal(info.localNetworkAllowed,false);
  assert.equal(info.scanBlocked,true);
- assert.equal(host.ZebjusEmbedKitAccess.directUrl,'https://example.org/dronelab/index.html');
- for(const prefix of ['fw','kit']){
-  assert.equal(docEls.get(prefix+'EmbeddedAccessNotice').hidden,false);
-  assert.equal(docEls.get(prefix+'EmbeddedAccessNotice').dataset.lanPolicy,'blocked');
-  assert.match(docEls.get(prefix+'EmbeddedAccessHint').textContent,/not delegated/);
-  assert.equal(docEls.get(prefix+'OpenDirectKit').href,'https://example.org/dronelab/index.html');
-  assert.equal(docEls.get(prefix+'EmbeddedDirectUrl').textContent,'https://example.org/dronelab/index.html');
+ assert.equal(host.ZebjusEmbedKitAccess,info);
+ assert.match(info.getHint(),/blocked by the embedding site/);
+ assert.equal(Object.hasOwn(info,'directUrl'),false);
+ assert.equal(Object.isFrozen(info),true);
+});
+test('top-level WebApp does not claim scanning is blocked',()=>{
+ const self={};
+ const info=initEmbedKitAccess({host:{self,top:self},documentRef:{}});
+ assert.equal(info.embedded,false);
+ assert.equal(info.scanBlocked,false);
+ assert.equal(info.localNetworkAllowed,null);
+});
+test('unknown iframe policy allows discovery attempts without false denial',()=>{
+ const env=assessEmbedEnvironment({embedded:true,localNetworkAllowed:null});
+ assert.equal(env.delegated,true);
+ assert.equal(env.reason,'');
+ assert.match(embeddedDiscoveryHint(env),/same STA router/);
+ assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:null}),false);
+ assert.equal(embedScanBlocked({embedded:false,localNetworkAllowed:false}),false);
+ assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:false}),true);
+});
+test('remove persistent iframe banners, buttons and direct URLs on both WebApp layouts',()=>{
+ const html=read('index.html'),lab=read('lab.html'),css=read('classroom-kits.css'),sw=read('sw.js');
+ assert.equal(html,lab);
+ for(const id of ['fwEmbeddedAccessNotice','fwEmbeddedAccessHint','fwOpenDirectKit','fwEmbeddedDirectUrl',
+  'kitEmbeddedAccessNotice','kitEmbeddedAccessHint','kitOpenDirectKit','kitEmbeddedDirectUrl'])
+  assert.ok(!html.includes(id),id);
+ assert.doesNotMatch(html,/Embedded website • AP\/STA discovery|Open DroneLab Directly|Direct link:/);
+ assert.doesNotMatch(css,/kit-embed-notice/);
+ assert.doesNotMatch(read('js/embed-kit-access.js'),/getElementById|postMessage\s*\(|directUrl|pairingKey/);
+ for(const name of ['js/embed-kit-access.js','js/classroom-kits.js','js/firmware-connect.js','classroom-kits.css']){
+  const marker=name+'?v=embed-clean-20261017';
+  assert.ok(html.includes(marker),'missing page version: '+marker);
+  assert.ok(sw.includes('./'+marker),'missing offline version: '+marker);
  }
- assert.match(info.getHint(),/same STA router/);
 });
-test('top-level page leaves embedded warnings hidden and does not claim LAN blocked',()=>{
- const notices=[{hidden:true,dataset:{}},{hidden:true,dataset:{}}];
- let n=0;
- const self={};const result=initEmbedKitAccess({host:{self,top:self},documentRef:{getElementById(id){if(id.endsWith('EmbeddedAccessNotice'))return notices[n++];return null;}},moduleUrl:'https://example.net/js/embed-kit-access.js'});
- assert.equal(result.embedded,false);
- assert.equal(result.scanBlocked,false);assert.equal(notices.every(x=>x.hidden),true);
-});
-test('unknown iframe permission remains diagnostic, not a false claim of blocked access',()=>{
- const state=assessEmbedEnvironment({embedded:true,localNetworkAllowed:null});
- assert.equal(state.delegated,true);
- assert.match(state.reason,/may block/);
- assert.match(embeddedDiscoveryHint(state),/0 verified kits/);
- assert.equal(assessEmbedEnvironment().embedded,false);
-});
-test('direct link is derived from verified WebApp code origin without forwarding query tokens or Wix parent URL',()=>{
- assert.equal(readableDirectUrl('https://my-kit-app.example/flight/js/embed-kit-access.js?v=1&pairing=secret#key'),
-  'https://my-kit-app.example/flight/index.html');
- assert.throws(()=>readableDirectUrl('http://external-plain-http.example/js/embed-kit-access.js'),/HTTPS/);
-});
-test('WebApp iframe fallback links are user-initiated, blank-target and no permission bypass/proxy',()=>{
- const a=read('index.html'),lab=read('lab.html'),sw=read('sw.js'),classroom=read('js/classroom-kits.js'),firmware=read('js/firmware-connect.js');
- assert.equal(a,lab);
- for(const id of ['fwEmbeddedAccessNotice','fwOpenDirectKit','kitEmbeddedAccessNotice','kitOpenDirectKit'])
-  assert.ok(a.includes('id="'+id+'"'),id);
- assert.equal((a.match(/target="_blank" rel="noopener noreferrer"/g)||[]).length>=2,true);
- assert.match(a,/js\/embed-kit-access\.js\?v=embedded-lan-guard-20261017/);
- assert.match(sw,/js\/embed-kit-access\.js\?v=embedded-lan-guard-20261017/);
- assert.match(classroom,/ZebjusEmbedKitAccess\?\.embedded/);
- assert.match(firmware,/ZebjusEmbedKitAccess\?\.embedded/);
- assert.match(classroom,/targetAddressSpace:'local'/);
- assert.doesNotMatch(read('js/embed-kit-access.js'),/postMessage\s*\(/);
- assert.doesNotMatch(read('js/embed-kit-access.js'),/kit\.key|pairedKeys|Access-Control-Allow-Origin/);
-});
-
-test('only explicitly denied iframe LAN policy short-circuits scans; delegated and top-level attempts remain enabled',async()=>{
+test('discovery denial still short-circuits scans while delegated/local scans remain enabled',()=>{
  const source=read('js/classroom-kits.js');
  assert.match(source,/if\(root\.ZebjusEmbedKitAccess\?\.scanBlocked\)/);
  assert.match(source,/const help=root\.ZebjusEmbedKitAccess\.getHint\(\)/);
  assert.match(source,/discovering=false;lastDiscoverAt=Date\.now\(\)/);
- assert.match(source,/return \[\];/);
- const {embedScanBlocked}=await import('../js/embed-kit-access.js');
- assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:false}),true);
- assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:null}),false);
- assert.equal(embedScanBlocked({embedded:false,localNetworkAllowed:false}),false);
+ assert.doesNotMatch(source,/Open DroneLab Directly/);
+ assert.doesNotMatch(read('js/firmware-connect.js'),/Open DroneLab Directly/);
+ assert.doesNotMatch(read('js/embed-kit-access.js'),/kit\.key|pairedKeys|Access-Control-Allow-Origin/);
 });

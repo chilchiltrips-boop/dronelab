@@ -1072,7 +1072,7 @@ async function scanKitCandidates(){
  if(root.ZebjusEmbedKitAccess?.scanBlocked){
   discoveredKits=[];discovering=false;lastDiscoverAt=Date.now();
   const help=root.ZebjusEmbedKitAccess.getHint();
-  audit('Discovery blocked by embedding site Local Network Access policy • open DroneLab directly','warn');
+  audit('Discovery unavailable: the embedding site blocks browser Local Network Access','warn');
   tone(help,'warn');render();showDiscovered();return [];
  }
  discovering=true;render();showDiscovered();
@@ -1107,7 +1107,6 @@ async function scanKitCandidates(){
   }));
   discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
   lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
-  if(!discoveredKits.length&&root.ZebjusEmbedKitAccess?.embedded)audit('Embedded host blocked or isolated? Try Open DroneLab Directly to request local network access; verify this computer Wi-Fi','warn');
   await offerRememberedConnection();return discoveredKits;
  }finally{discovering=false;showDiscovered()}
 }

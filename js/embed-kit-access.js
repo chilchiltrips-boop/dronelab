@@ -1,31 +1,25 @@
-// Embedded classroom kit access. Never proxies privileged device requests to the
-// parent site: cross-origin iframes may be denied Local Network Access by policy.
-// A direct top-level HTTPS tab is the reliable, user-initiated fallback.
+// Embedded AP/STA discovery policy guard. This file exposes only the capability
+// assessment used by scanning; it deliberately renders no persistent iframe banner,
+// direct-link button, or pairing/authorization data into the embedding website.
 export function assessEmbedEnvironment({embedded=false,localNetworkAllowed=null}={}){
- if(!embedded)return {embedded:false,delegated:true,reason:''};
- const denied=localNetworkAllowed===false;
- return {embedded:true,delegated:!denied,reason:denied?
-  'The embedding website has not delegated Local Network Access to this iframe. Kit AP/STA scanning can be blocked here.':
-  'This website embeds DroneLab in an iframe. Browser sandbox or Local Network Access policy may block Kit AP/STA scanning here.'};
+ const denied=embedded===true&&localNetworkAllowed===false;
+ return {
+  embedded:embedded===true,
+  delegated:!denied,
+  reason:denied?'This embedded page does not have browser permission to scan the local network.':''
+ };
 }
-export function readableDirectUrl(moduleUrl){
- // The entry point belongs to the loaded DroneLab script, not the Wix wrapper.
- // Strip any query/hash so pairing tokens can never enter the new-tab URL.
- const url=new URL('../index.html',moduleUrl);
- if(url.protocol!=='https:'&&url.hostname!=='localhost'&&url.hostname!=='127.0.0.1')
-  throw Error('Direct DroneLab requires HTTPS');
- url.search='';url.hash='';return url.href;
+export function embedScanBlocked(environment){
+ return environment?.embedded===true&&environment?.localNetworkAllowed===false;
 }
-export function embedScanBlocked(environment){return environment?.embedded===true&&environment?.localNetworkAllowed===false}
 export function embeddedDiscoveryHint(environment){
- return environment.embedded?
-  'Embedded website: 0 verified kits. This iframe may not have Local Network Access. Open DroneLab Directly, join Kit AP or the same STA router on this computer, grant browser Local Network Access, and scan again. A phone on the Kit AP does not connect the laptop.':
-  '0 verified kits. Join Kit AP or the same STA router on this computer; check browser Local Network Access and identity before connecting.';
+ return environment?.delegated===false?
+  'No Kit detected. Local Network Access is blocked by the embedding site.':
+  'No Kit detected. Join Kit AP or the same STA router on this computer and allow browser Local Network Access; optional mDNS bridge for new kits.';
 }
 export function initEmbedKitAccess({
  host=typeof window==='undefined'?null:window,
- documentRef=typeof document==='undefined'?null:document,
- moduleUrl=import.meta.url
+ documentRef=typeof document==='undefined'?null:document
 }={}){
  if(!host||!documentRef)return null;
  let embedded=false;
@@ -41,23 +35,11 @@ export function initEmbedKitAccess({
   }
  }catch{}
  const environment=assessEmbedEnvironment({embedded,localNetworkAllowed});
- let directUrl=null;try{directUrl=readableDirectUrl(moduleUrl)}catch{}
- for(const name of ['fw','kit']){
-  const notice=documentRef.getElementById(name+'EmbeddedAccessNotice');
-  if(notice){notice.hidden=!embedded;notice.dataset.lanPolicy=localNetworkAllowed===false?'blocked':'unknown-or-allowed';}
-  const hint=documentRef.getElementById(name+'EmbeddedAccessHint');
-  if(hint&&embedded)hint.textContent=environment.reason+' Only this computer can grant access; the Kit identity is always reverified.';
-  const link=documentRef.getElementById(name+'OpenDirectKit');
-  if(link){if(directUrl)link.href=directUrl;else link.hidden=true;}
-  const text=documentRef.getElementById(name+'EmbeddedDirectUrl');
-  if(text&&directUrl)text.textContent=directUrl;
- }
- // Only public integration capability is exposed. Never expose an access key.
+ // This object is status-only and cannot change permissions, pairing or ownership.
  const publicInfo=Object.freeze({
   embedded:environment.embedded,localNetworkAllowed,
   scanBlocked:embedScanBlocked({embedded,localNetworkAllowed}),
-  getHint:()=>embeddedDiscoveryHint(environment),
-  directUrl:directUrl||''
+  getHint:()=>embeddedDiscoveryHint(environment)
  });
  host.ZebjusEmbedKitAccess=publicInfo;
  return publicInfo;

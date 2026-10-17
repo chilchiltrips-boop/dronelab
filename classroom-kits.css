@@ -357,11 +357,3 @@
  #tab-settings .kit-firmware-shortcut .btn{width:100%}
 }
 
-/* Cross-origin Wix / other host iframe: informational only, never assumes LAN authority. */
-.kit-embed-notice:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;margin:12px 0;border:1px solid #79612e;border-radius:12px;background:#211d12;color:#f4e3b6}
-.kit-embed-notice strong{display:block;width:100%;font-size:13px}
-.kit-embed-notice p{flex:1 1 270px;margin:0;font-size:12px;line-height:1.5}
-.kit-embed-notice .btn{flex:0 0 auto;white-space:nowrap;text-decoration:none}
-.kit-embed-notice small{width:100%;overflow-wrap:anywhere;font-size:11px;color:#cabd9f}
-.kit-embed-notice[data-lan-policy="blocked"]{border-color:#a64c51;background:#26171a}
-@media(max-width:590px){.kit-embed-notice .btn{width:100%;text-align:center}}

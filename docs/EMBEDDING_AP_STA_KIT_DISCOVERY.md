@@ -29,7 +29,7 @@ Some browser versions also accept \`local-network-access\` as an alias. Preserve
 
 ## Wix or a host that does not let you set iframe permissions
 
-Use Wix **Embed a Site** with the HTTPS DroneLab URL. In Wix **published Site mode**, the iframe may work if permissions are delegated; the editor and preview are not reliable tests of hardware/network reachability. If the iframe cannot request LAN access, click **Open DroneLab Directly** inside **Firmware & Connect** or **My Kits**. The link comes from the loaded DroneLab script itself, opens a new top-level HTTPS tab, and contains no device credentials or URL query tokens. If the host blocks opening new tabs, copy the displayed direct URL into a new browser tab yourself.
+Use Wix **Embed a Site** with the HTTPS DroneLab URL. In Wix **published Site mode**, the iframe may work if permissions are delegated; the editor and preview are not reliable tests of hardware/network reachability. DroneLab does not display a persistent embedded-site warning banner or direct-launch button. If the iframe cannot request LAN access, manually open the published DroneLab HTTPS address in a separate top-level browser tab on the **same computer**. This fallback is described here rather than inserted into the Kit connection UI.
 
 On the **same laptop/desktop running that browser**, connect the Kit AP (typically \`192.168.4.1\`) or the same STA router as the Kit. Allow the top-level site permission for **Local network** (and if using the optional loopback mDNS helper, **Loopback network**). Run **Rescan This Wi-Fi**, choose the actual Device ID, then connect using the normal permission/security flow. A phone joined to Kit AP does **not** put the laptop on that AP.
 

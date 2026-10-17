@@ -66,7 +66,6 @@ async function scan(){
   if(discovered.length===1&&!selectedId)select(discovered[0]);
   renderAvailable(discovered,false);
   line('Discovery complete • '+discovered.length+' candidate kit(s) • identity verification still required');
-  if(!discovered.length&&root.ZebjusEmbedKitAccess?.embedded)note('Embedded website may block AP/STA discovery. Use Open DroneLab Directly, then rescan on the same Kit Wi-Fi.',true);
  }catch(e){note('Discovery failed: '+e.message,true)}
  finally{scanning=false;lastScanAt=Date.now();renderAvailable(discovered,false)}
 }
