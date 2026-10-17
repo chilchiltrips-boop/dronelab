@@ -70,9 +70,9 @@ test('Android controller names actual Kit versus WebRTC simulator, never claims 
 test('new assets are cached for offline Wix and module versions stay in sync',()=>{
  const html=read('index.html'),sw=read('sw.js');
  for(const path of ['js/kit-data-interface.js','js/network-lab.js','js/classroom-kits.js','js/python-lab.js','js/live-inputs.js']){
-  const full=path+'?v='+(path==='js/live-inputs.js'?'kit-freshness-recovery-20261017':'kit-transport-unified-20261017');
+  const full=path+'?v='+(path==='js/live-inputs.js'?'ppm-ch8-20261017':'kit-transport-unified-20261017');
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-kit-freshness-recovery-20261017/);
+ assert.match(sw,/dronelab-ppm-ch8-20261017/);
 });
