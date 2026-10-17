@@ -80,12 +80,16 @@ try{
  // A controlled cross-origin iframe verifies embedded layout and module loading.
  // Mock fetch is deliberate: this cannot validate a real Wix/WordPress LAN grant.
  const context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:'block'});await seed(context);
- await context.route('http://127.0.0.1:8765/input-embed-test',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><style>body{margin:0}iframe{width:100%;height:95vh;border:0}</style><iframe src="http://localhost:8765/index.html" allow="serial; camera; fullscreen" sandbox="allow-scripts allow-same-origin allow-downloads"></iframe>'}));
+ await context.route('http://127.0.0.1:8766/input-embed-test',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><style>body{margin:0}iframe{width:100%;height:95vh;border:0}</style><iframe src="http://127.0.0.1:8765/index.html" allow="serial; camera; fullscreen" sandbox="allow-scripts allow-same-origin allow-downloads"></iframe>'}));
  const page=await context.newPage();page.on('pageerror',e=>errors.push('embedded: '+e.message));
- await page.goto('http://127.0.0.1:8765/input-embed-test');
+ await page.goto('http://127.0.0.1:8766/input-embed-test');
  await page.waitForFunction(()=>document.querySelector('iframe')!==null);
  const frame=await page.locator('iframe').elementHandle().then(e=>e.contentFrame());
- await openInputs(frame);await connect(frame,'ap');await frame.waitForFunction(()=>document.getElementById('liveInputStatus').textContent==='LIVE');
+ try{await openInputs(frame)}catch(e){
+  console.error('Embedded load state',await frame.evaluate(()=>({url:location.href,boot:document.getElementById('assetStatus')?.textContent,workspace:document.getElementById('devicesWorkspace')?.dataset.ready})));
+  await page.screenshot({path:'test-output/live-inputs-embedded-failure.png',fullPage:true});throw e;
+ }
+ await connect(frame,'ap');await frame.waitForFunction(()=>document.getElementById('liveInputStatus').textContent==='LIVE');
  assert.equal(await frame.locator('#fwEmbeddedAccessNotice').count(),0);
  await page.screenshot({path:'test-output/live-inputs-embedded.png',fullPage:true});
  results.push({name:'cross-origin embedded AP monitor',passed:true,hardwarePermissionsTested:false});await context.close();
