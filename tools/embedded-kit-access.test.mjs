@@ -62,7 +62,7 @@ test('Standalone official app never has its hardware connection disabled by ifra
 test('Copied WebApp on arbitrary origin cannot trigger CORS bypass or unverified host access',()=>{
  const {api,banners}=setup({frame:false,origin:'https://example-embedded-site.com'});
  assert.equal(api.status().trustedOrigin,false);
- assert.equal(api.shouldSkipLocalProbe(),true);
+ assert.equal(api.shouldSkipLocalProbe(),false,'custom origin is not blanket-blocked by frontend; ESP32 CORS still decides');
  assert.equal(banners.fwEmbeddedKitAccess.hidden,false);
  assert.equal(banners.fwEmbeddedKitAccess.link.href,official);
  assert.ok(!/postMessage|parent\.|accessToken|sessionSecret/.test(source));
