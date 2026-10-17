@@ -50,8 +50,8 @@ test('WebApp iframe fallback links are user-initiated, blank-target and no permi
  for(const id of ['fwEmbeddedAccessNotice','fwOpenDirectKit','kitEmbeddedAccessNotice','kitOpenDirectKit'])
   assert.ok(a.includes('id="'+id+'"'),id);
  assert.equal((a.match(/target="_blank" rel="noopener noreferrer"/g)||[]).length>=2,true);
- assert.match(a,/js\/embed-kit-access\.js\?v=embedded-lan-20261017/);
- assert.match(sw,/js\/embed-kit-access\.js\?v=embedded-lan-20261017/);
+ assert.match(a,/js\/embed-kit-access\.js\?v=embedded-lan-guard-20261017/);
+ assert.match(sw,/js\/embed-kit-access\.js\?v=embedded-lan-guard-20261017/);
  assert.match(classroom,/ZebjusEmbedKitAccess\?\.embedded/);
  assert.match(firmware,/ZebjusEmbedKitAccess\?\.embedded/);
  assert.match(classroom,/targetAddressSpace:'local'/);
