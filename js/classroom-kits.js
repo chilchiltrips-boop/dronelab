@@ -1030,7 +1030,7 @@ function showDiscovered(){
   }
   target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning saved IPs, Kit names and local bridge…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit verified. Join the same AP/STA Wi-Fi on this computer and allow browser Local Network Access; optionally use the mDNS bridge.';target.append(empty);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
@@ -1099,6 +1099,7 @@ async function scanKitCandidates(){
   }));
   discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
   lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
+  if(!discoveredKits.length&&root.ZebjusEmbedKitAccess?.embedded)audit('Embedded host blocked or isolated? Try Open DroneLab Directly to request local network access; verify this computer Wi-Fi','warn');
   await offerRememberedConnection();return discoveredKits;
  }finally{discovering=false;showDiscovered()}
 }
