@@ -57,7 +57,7 @@ test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, 
  assert.match(html,/id="fwSerialRawFrames"/);
  assert.match(html,/MOTORS remain OFF|physical motors remain OFF/);
  assert.match(sw,/serial-readable-monitor\.js\?v=usb-rc-shared-20261017/);
- assert.match(sw,/firmware-updater\.js\?v=combined-usb-20261017/);
+ assert.match(sw,/firmware-updater\.js\?v=compile-time-verified-20261017/);
 });
 
 test('new native combined frame retains gyro and joystick values as one serial line',async()=>{

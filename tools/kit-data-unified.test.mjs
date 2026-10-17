@@ -74,5 +74,5 @@ test('new assets are cached for offline Wix and module versions stay in sync',()
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-remote-phase1-20261017/);
+ assert.match(sw,/dronelab-build-time-verified-20261017/);
 });
