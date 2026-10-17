@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
-import {imageBuildStamp,imageBuildTimeIso} from '../js/firmware-image.js';
+import {imageBuildStamp,imageBuildTimeIso,imageSketchBuildStamp} from '../js/firmware-image.js';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('official A1/A2 APP compiler dates come from ESP32 binary, not catalog creation',()=>{
  const catalog=JSON.parse(read('firmware-catalog.json'));
@@ -11,7 +11,12 @@ test('official A1/A2 APP compiler dates come from ESP32 binary, not catalog crea
   const bytes=new Uint8Array(readFileSync(new URL('../FlightCore_Firmware/'+app.file,import.meta.url)));
   const utc=imageBuildTimeIso(bytes,'app');
   assert.match(utc,/^20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
-  if(app.compiledAt)assert.equal(utc,app.compiledAt,b.id+' embedded date differs from catalog');
+  assert.ok(app.compiledAt,b.id+' must publish authoritative binary compile date');
+  assert.equal(utc,app.compiledAt,b.id+' embedded date differs from catalog');
+  assert.equal(imageSketchBuildStamp(bytes,'app'),imageBuildStamp(bytes,'app'),'read actual sketch marker, not prebuilt toolchain date');
+  const factory=new Uint8Array(readFileSync(new URL('../FlightCore_Firmware/'+b.latest.factory.file,import.meta.url)));
+  assert.equal(imageBuildTimeIso(factory,'factory'),utc,'APP and FACTORY must include identical sketch');
+  assert.equal(b.latest.factory.compiledAt,utc,'factory metadata must match embedded timestamp');
   const start=Date.parse(app.builtAt),compiled=Date.parse(utc);
   assert.ok(Number.isFinite(start)&&Number.isFinite(compiled));
   assert.ok(compiled>=start-15*60000&&compiled<=start+12*60*60000,
