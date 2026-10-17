@@ -81,3 +81,18 @@ test('UI and service worker expose responsive CH1–CH8 without enabling motors 
  assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
  assert.match(read('docs/FLIGHTCORE_PPM_RECEIVER.md'),/hardware verification required/i);
 });
+
+test('A1/A2 1.4.12 binaries are compiled and catalog-matched, but bench hardware validation remains pending',()=>{
+ const catalog=JSON.parse(read('firmware-catalog.json'));
+ const report=JSON.parse(read('FlightCore_Firmware/build-report.json'));
+ assert.equal(catalog.version,'1.4.12');
+ assert.equal(report.version,'1.4.12');
+ assert.equal(report.hardwareFlashingTested,false,'never claim physical receiver acceptance from CI');
+ assert.ok(report.sourceSha256['FlightCore_Firmware/FlightCorePpm.h']);
+ for(const board of catalog.boards){
+  assert.equal(board.latest.version,'1.4.12');
+  assert.equal(board.latest.app.available,true);
+  assert.equal(board.latest.factory.available,true);
+  assert.ok(board.latest.app.size>1000000&&board.latest.app.size<1966080);
+ }
+});
