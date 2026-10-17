@@ -14,6 +14,7 @@ test('Wix/third-party cross-origin iframe denied local-network delegates direct-
  const info=initEmbedKitAccess({host,documentRef:doc,moduleUrl:'https://example.org/dronelab/js/embed-kit-access.js?v=1#secret'});
  assert.equal(info.embedded,true);
  assert.equal(info.localNetworkAllowed,false);
+ assert.equal(info.scanBlocked,true);
  assert.equal(host.ZebjusEmbedKitAccess.directUrl,'https://example.org/dronelab/index.html');
  for(const prefix of ['fw','kit']){
   assert.equal(docEls.get(prefix+'EmbeddedAccessNotice').hidden,false);
@@ -28,7 +29,8 @@ test('top-level page leaves embedded warnings hidden and does not claim LAN bloc
  const notices=[{hidden:true,dataset:{}},{hidden:true,dataset:{}}];
  let n=0;
  const self={};const result=initEmbedKitAccess({host:{self,top:self},documentRef:{getElementById(id){if(id.endsWith('EmbeddedAccessNotice'))return notices[n++];return null;}},moduleUrl:'https://example.net/js/embed-kit-access.js'});
- assert.equal(result.embedded,false);assert.equal(notices.every(x=>x.hidden),true);
+ assert.equal(result.embedded,false);
+ assert.equal(result.scanBlocked,false);assert.equal(notices.every(x=>x.hidden),true);
 });
 test('unknown iframe permission remains diagnostic, not a false claim of blocked access',()=>{
  const state=assessEmbedEnvironment({embedded:true,localNetworkAllowed:null});
@@ -55,4 +57,16 @@ test('WebApp iframe fallback links are user-initiated, blank-target and no permi
  assert.match(classroom,/targetAddressSpace:'local'/);
  assert.doesNotMatch(read('js/embed-kit-access.js'),/postMessage\s*\(/);
  assert.doesNotMatch(read('js/embed-kit-access.js'),/kit\.key|pairedKeys|Access-Control-Allow-Origin/);
+});
+
+test('only explicitly denied iframe LAN policy short-circuits scans; delegated and top-level attempts remain enabled',async()=>{
+ const source=read('js/classroom-kits.js');
+ assert.match(source,/if\(root\.ZebjusEmbedKitAccess\?\.scanBlocked\)/);
+ assert.match(source,/const help=root\.ZebjusEmbedKitAccess\.getHint\(\)/);
+ assert.match(source,/discovering=false;lastDiscoverAt=Date\.now\(\)/);
+ assert.match(source,/return \[\];/);
+ const {embedScanBlocked}=await import('../js/embed-kit-access.js');
+ assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:false}),true);
+ assert.equal(embedScanBlocked({embedded:true,localNetworkAllowed:null}),false);
+ assert.equal(embedScanBlocked({embedded:false,localNetworkAllowed:false}),false);
 });
