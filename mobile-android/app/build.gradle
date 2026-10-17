@@ -15,8 +15,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 29
-    versionName '1.7.13-direct-kit-control'
+    versionCode 30
+    versionName '1.7.14-unified-kit-target'
   }
   testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {
