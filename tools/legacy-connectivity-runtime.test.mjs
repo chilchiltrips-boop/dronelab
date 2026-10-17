@@ -79,7 +79,17 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
-  enableUsb:()=>{window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,writeLine:async()=>{}}},
+  enableUsb:({usbId=id,usbCode='123456',usbBoard='ZFC-A1'}={})=>{
+   window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>{
+    const cmd=String(line).trim();
+    requests.push({route:'USB:'+cmd});
+    const emit=value=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:value}});
+    if(cmd==='ZJKIT,GET'){emit('ZJKIT,ID,'+usbId);emit('ZJKIT,CODE,'+usbCode);emit('ZJKIT,NAME,zebjus_drone_2');}
+    else if(cmd==='ZJINFO,GET')emit('ZJINFO,FW,'+usbBoard+',1.4.9');
+    else if(cmd==='ZJNET,PAIR')emit('ZJNET,PAIR,'+usbId+','+key);
+    else if(cmd.startsWith('ZJNET,MODE,'))emit('ZJNET,ACK,MODE,'+cmd.slice(11));
+   }};
+  },
   serialLine:line=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line}}),
   reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{disposed=true;for(const t of timers)clearTimeout(t)}};
 }
@@ -302,5 +312,62 @@ test('new firmware uses ordered encrypted OTA commands and verifies full SHA-256
   assert.equal(f.requests.filter(r=>r.route==='/api/firmware/chunk').length,Math.ceil(bytes.length/384));
   assert.equal(f.requests.find(r=>r.route==='/api/firmware/begin').args.sha256,createHash('sha256').update(bytes).digest('hex'));
   assert.ok(!f.requests.some(r=>r.headers?.['X-ZJ-Key']),'new firmware does not send its private USB pairing key in an HTTP header');
+ }finally{f.dispose()}
+});
+
+test('STA observer with matching physical USB becomes explicitly authorized; Take Control then works without hidden auto-arming',async()=>{
+ const f=fixture({mode:'sta',paired:false,encrypted:true,exclusive:true,initialize:true});try{
+  await f.api.connect();assert.equal(f.api.getState().controlAuthorized,false);
+  assert.equal(f.elements.get('kitTakeControl').disabled,true);
+  f.enableUsb();await f.api.read();
+  assert.equal(f.elements.get('kitPairUsb').disabled,false,'explicit same-Kit USB authorization offered');
+  assert.equal(f.elements.get('kitTakeControl').disabled,true,'still read-only until physical enrollment');
+  await f.api.pairAndAuthorizeSelectedKit();
+  assert.equal(f.api.getState().controlAuthorized,true);
+  assert.equal(f.api.getState().owner,false,'authorization never claims diagnostic input automatically');
+  assert.equal(f.elements.get('kitTakeControl').disabled,false);
+  assert.ok(f.requests.some(v=>v.route==='USB:ZJNET,PAIR'));
+  assert.equal(f.authAttempts(),1);
+  await f.api.toggleControl();assert.equal(f.api.getState().owner,true);
+  await f.api.toggleControl();assert.equal(f.api.getState().owner,false);
+ }finally{f.dispose()}
+});
+
+test('same physical USB Kit can switch a verified STA link to AP without unavailable STA setup grant',async()=>{
+ const f=fixture({mode:'sta',paired:false,encrypted:true,exclusive:true,initialize:true});try{
+  await f.api.connect();f.enableUsb();
+  await f.api.switchNetworkMode('ap');
+  const messages=f.requests.filter(v=>String(v.route).startsWith('USB:')).map(v=>v.route);
+  assert.ok(messages.indexOf('USB:ZJKIT,GET')<messages.indexOf('USB:ZJNET,MODE,ap'));
+  assert.ok(messages.includes('USB:ZJINFO,GET'));
+  assert.ok(messages.includes('USB:ZJNET,MODE,ap'));
+  assert.equal(f.requests.some(v=>v.route==='/api/wifi/mode'),false,'network observer is never promoted implicitly');
+  assert.equal(f.api.getState().connected,false,'STA link is retired after authenticated radio-mode acknowledgment');
+  assert.equal(f.api.getState().pendingNetworkMode,'ap','await same-device AP rediscovery');
+  assert.equal(f.api.getState().owner,false);
+ }finally{f.dispose()}
+});
+
+test('wrong USB Device ID or board is rejected before STA authorization and mode writes',async()=>{
+ for(const usb of [{usbId:other},{usbBoard:'ZFC-A2'},{usbCode:'999999'}]){
+  const f=fixture({mode:'sta',paired:false,encrypted:true,exclusive:true,initialize:true});try{
+   await f.api.connect();f.enableUsb(usb);
+   await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/mismatch|differs|identity/i);
+   await assert.rejects(f.api.switchNetworkMode('ap'),/mismatch|differs|identity/i);
+   assert.equal(f.requests.some(v=>v.route==='USB:ZJNET,PAIR'),false);
+   assert.equal(f.requests.some(v=>v.route==='USB:ZJNET,MODE,ap'),false);
+   assert.equal(f.api.getState().connected,true);
+   assert.equal(f.api.getState().owner,false);
+  }finally{f.dispose()}
+ }
+});
+
+test('USB not attached leaves read-only STA Take Control disabled and mode change uses signed network policy',async()=>{
+ const f=fixture({mode:'sta',paired:false,encrypted:true,exclusive:true,initialize:true});try{
+  await f.api.connect();
+  assert.equal(f.elements.get('kitPairUsb').disabled,true);
+  assert.equal(f.elements.get('kitTakeControl').disabled,true);
+  await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/USB Serial/);
+  assert.equal(f.requests.some(v=>String(v.route).startsWith('USB:')),false);
  }finally{f.dispose()}
 });
