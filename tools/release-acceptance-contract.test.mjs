@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {validateEvidence,requiredIds} from './release-acceptance.mjs';
-import {requirePublicHttps,probeRemote} from './remote-deployment-smoke.mjs';
+import {requirePublicHttps,probeAdminDeployment} from './remote-deployment-smoke.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('canonical release labels and binary date come from independent sources',()=>{
  const cat=JSON.parse(read('firmware-catalog.json')),a=JSON.parse(read('app-version.json'));
@@ -34,16 +34,17 @@ test('manual evidence starts NOT_RUN and strict mode cannot pass without operato
  const f=structuredClone(e);f.cases[0].status='PASS';
  assert.equal(validateEvidence(f).passed,false,'unsubstantiated PASS rejected');
 });
-test('remote reachability excludes unsafe/public TURN claims',async()=>{
+test('optional Admin HTTPS only; TURN and internet Kit control are excluded',async()=>{
  for(const x of ['http://example.com','https://localhost:4173','https://user:password@example.com','https://example.com/?token=x'])
-  assert.throws(()=>requirePublicHttps(x,'remote'));
- const ok=await probeRemote({adminOrigin:'https://admin.example.org',turnEndpoint:'https://rtc.example.org/api/rtc/credentials',
- fetcher:async url=>String(url).includes('/api/admin/session')?{ok:true,json:async()=>({available:true})}:{status:401}});
- assert.equal(ok.relayIce,'NOT VERIFIED');
- await assert.rejects(probeRemote({adminOrigin:'https://admin.example.org',turnEndpoint:'https://rtc.example.org/api/rtc/credentials',
- fetcher:async url=>String(url).includes('/api/admin/session')?{ok:true,json:async()=>({available:true})}:{status:200}}),/must reject/);
-});
-test('WebRTC UI never advertises TURN credential retrieval as proven relay',()=>{
- assert.match(read('remote-rtc.js'),/relay unverified/);
- assert.match(read('remote-telemetry.js'),/RELAY UNVERIFIED/);
+  assert.throws(()=>requirePublicHttps(x,'admin'));
+ const ok=await probeAdminDeployment({adminOrigin:'https://admin.example.org',
+ fetcher:async()=>({ok:true,json:async()=>({available:true,user:null})})});
+ assert.equal(ok.turnRelay,'OUT OF SCOPE');
+ await assert.rejects(probeAdminDeployment({adminOrigin:'https://admin.example.org',
+ fetcher:async()=>({ok:true,json:async()=>({available:true,user:{role:'admin'}})})}),/must not disclose/);
+ const config=JSON.parse(read('remote-rtc-config.json'));
+ assert.equal(config.turnCredentialsUrl,null);
+ assert.match(config.note,/out of project scope/);
+ assert.doesNotMatch(read('remote-rtc.js'),/fetch\(/);
+ assert.match(read('remote-telemetry.js'),/STUN ONLY • LOCAL P2P/);
 });

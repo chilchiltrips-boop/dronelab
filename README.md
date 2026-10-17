@@ -8,14 +8,14 @@
 | FlightCore A1 (ESP32-C3) | **1.4.12**, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
 | FlightCore A2 (XIAO ESP32-C6) | **1.4.12**, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
 | Android signed companion | Gradle candidate **1.7.16-release-gate**, versionCode **32**; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
-| Remote access | STUN-first WebRTC; read-only Kit telemetry and simulator | **TURN not deployed/verified**; no reliable all-network or remote motor control claim |
+| WebRTC pairing | Local QR/peer simulator pairing uses host/STUN candidates; Kit controls remain local AP/STA/USB | **TURN relay and internet-based physical Kit control intentionally out of scope** |
 | Central Admin | `admin-server.cjs` HTTP API source | Must be deployed behind external HTTPS reverse proxy with private storage |
 
 **Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed local HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
 
 **No flight motors are controlled by FlightCore 1.4.12.** Diagnostic INPUT ARM differs from MOTOR ARM (motors stay disabled). A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
 
-**Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and [remote infrastructure runbook](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). No public TURN backend has been provisioned by a GitHub Pages commit.
+**Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and the [optional Central Admin hosting guide](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). TURN and internet-based physical Kit control are excluded from the project.
 
 ## Optional Kit AP Wi-Fi settings and teacher recovery
 
@@ -47,7 +47,7 @@ Browser storage can be lost after clearing site data, using private browsing or 
 2. Click Next. Enter the temporary CONNECT code (Internet/PeerJS required) or choose Two-Way QR and explicitly start the Step 2 camera. Advanced manual response entry remains available.
 3. Compare the Safety PIN, confirm pairing, then explicitly grant mobile control. CONNECT code and Safety PIN serve different purposes. Cancellation, refresh, expiry or a lost session requires a fresh QR and fresh control grant.
 
-The DataChannel currently uses public STUN candidates and an optional short-lived TURN credential endpoint, which is not configured in the published release. Restrictive carrier/school networks can fail until a separately hosted authenticated TURN service is deployed and relay ICE candidates are tested. CONNECT code signaling requires internet. Authenticated simulator control and explicitly granted read-only remote Kit telemetry do not enable physical motor commands.
+Local QR/WebRTC simulator pairing may use host and STUN ICE candidates. **No TURN relay will be deployed** and connectivity across restrictive networks is neither promised nor a release goal. Optional CONNECT-code signaling itself requires internet; use direct QR on a reachable local network when offline. Kit physical diagnostics, input ARM and firmware operations are limited to verified local AP/STA/USB routes; **no internet-based physical Kit control** is planned. Existing explicitly granted telemetry remains read-only, not a control tunnel.
 
 ## FlightCore A1/A2 1.4.12 — verified diagnostic firmware
 

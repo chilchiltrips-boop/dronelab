@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mode": "phase1-remote-telemetry-simulator",
+  "mode": "local-stun-only",
   "turnCredentialsUrl": null,
-  "note": "To support carrier NAT or restrictive school networks, deploy an HTTPS authenticated TURN credential service. Do not put permanent TURN passwords in this public file."
+  "note": "Local/same-network WebRTC simulator pairing only. TURN relay and internet-based physical Kit control are intentionally out of project scope; do not configure a credential URL."
 }
