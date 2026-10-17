@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0+354",
+  "version": "1.8.0+355",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -10,6 +10,6 @@
     "FlightCore 1.4.12 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Remote telemetry + simulator control only; TURN relay and production hardware acceptance are not yet verified"
   ],
-  "buildCommit": "495f3abf83d6",
-  "publishedAt": "2026-10-17T17:28:53.606952+00:00"
+  "buildCommit": "9f959bc696cb",
+  "publishedAt": "2026-10-17T18:13:22.180700+00:00"
 }
