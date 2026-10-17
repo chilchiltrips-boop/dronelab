@@ -18,6 +18,8 @@ static String zjEffectiveApPassword(){
  return saved.length()>=8&&saved.length()<=63?saved:String(ZJ_DEFAULT_AP_PASS);
 }
 static bool zjKitAutoName=false;
+// Arduino sketch and standalone firmware-host use the same default telemetry mode.
+bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
