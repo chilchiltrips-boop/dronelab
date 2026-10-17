@@ -13,7 +13,8 @@ test('MY KITS provides direct AP Wi-Fi setup and discovery without BOOT or USB p
  assert.doesNotMatch(source,/kitLabelInput|kitEnrollment|kitEnrollLabel|enrollLabel|private kit label/i);
  assert.match(source,/guardAction\('kitFindAp',findKitAp\)/);
  assert.doesNotMatch(html,/id="kitPairFirst"/);
- assert.doesNotMatch(html,/id="kitPairUsb"/);
+ assert.match(html,/id="kitPairUsb"[^>]*disabled/,'USB authorization is optional and disabled by default on simple AP setup');
+ assert.match(source,/async function verifyPhysicalUsbForSelectedKit\(/,'protected STA controls require physical identity verification');
  assert.match(source,/async function discoverBridgeHosts\(/);
  assert.match(source,/await connect\(\)/);
 });
