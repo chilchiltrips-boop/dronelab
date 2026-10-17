@@ -63,6 +63,8 @@ test('Android controller names actual Kit versus WebRTC simulator, never claims 
  assert.match(control,/TARGET • KIT \/ /);
  assert.match(control,/TARGET • PREVIEW ONLY/);
  assert.match(control,/FlightCore diagnostic input • MOTOR OUTPUTS DISABLED/);
+ assert.match(control,/if\(directKit\(\)\)window\.ZebjusNetwork\?\.previewControls/);
+ assert.match(control,/s\?\.connected&&window\.ZebjusNetwork\?\.hasControl\?\.\(\)/);
  assert.match(css,/\.flight-sim-badge\[data-target=kit\]/);
 });
 test('new assets are cached for offline Wix and module versions stay in sync',()=>{

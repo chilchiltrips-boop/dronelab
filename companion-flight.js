@@ -148,18 +148,24 @@ function send(critical=false){
   rejectedFrames++;lastRejectedAt=performance.now();return false;
  }
  const at=performance.now();sent.set(seq,at);lastControlSentAt=at;acceptedFrames++;
- try{window.ZebjusNetwork?.previewControls?.(diagnosticInput())}catch(error){
+ try{if(directKit())window.ZebjusNetwork?.previewControls?.(diagnosticInput())}catch(error){
   console.warn('Optional FlightCore preview failed; WebRTC control preserved',error?.message||error);
  }
  return true;
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else{window.ZebjusNetwork?.previewControls?.(diagnosticInput())}},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else if(directKit())window.ZebjusNetwork?.previewControls?.(diagnosticInput())},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
 function onStatus(s){
+ // Switching the visible target to WebRTC also releases any previous physical
+ // diagnostic Kit session. A simulator target must never send to the Kit.
+ if(s?.connected&&window.ZebjusNetwork?.hasControl?.()){
+  diagnosticThrottle=1000;
+  void Promise.resolve(window.ZebjusNetwork.releaseRc()).catch(()=>{});
+ }
  if(s?.sessionId!==sessionId){if(authority||armed)stopLocally('NEW SESSION • DISARMED');sessionId=s?.sessionId||'';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;sent.clear();ready=false;lastApplied=null}
  const owns=isOwned();if(authority&&!owns)stopLocally('CONTROL LOST • SAFE STOP');
  if(!authority&&owns){stopLocally('CONNECTED • RECEIVER DISARM CHECK');send(true)}authority=owns;
