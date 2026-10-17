@@ -45,6 +45,9 @@ function adoptNetworkStatus(d){
   mode:d.mode||state.mode,version:d.version||state.version,kitName:d.kitName||d.name||state.kitName,
   apActive:!!d.apActive,apIp:d.apIp||'',apSsid:d.apSsid||'',staConnected:!!d.staConnected,staIp:d.ip||'',ssid:d.ssid||'',
   hostname:d.hostname||state.hostname,bootId:d.bootId||'',firmwareBuiltAt:d.firmwareBuiltAt||'',
+  // Trusted status only; never infer physical LED/motor state from UI input.
+  ledOn:typeof d.ledOn==='boolean'?d.ledOn:null,
+  motorsDisabled:d.motorsDisabled===true,motorsArmed:typeof d.motorsArmed==='boolean'?d.motorsArmed:null,
   partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,otaChunkMaxBytes:supportedOtaChunkSize(d),networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
   staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number.isFinite(Number(d.rssi))?Number(d.rssi):null});
 }
@@ -323,7 +326,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
  state.connected=false;state.rc=null;state.key='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
- Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:''});
+ Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:false});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
 function waitSerial(pattern,timeout=2300){
@@ -1645,7 +1648,7 @@ root.ZebjusKits={
  getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

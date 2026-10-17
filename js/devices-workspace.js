@@ -158,6 +158,7 @@
    overview.insertBefore(controlActions,overviewContent);
 
    relocate('.fw-connect-card','connection');
+   relocate('.fw-live-inputs-card','connection');
    relocate('.fw-available-card','connection');
    relocate('.fw-rename-card','connection');
    relocate('.fw-network-card','wifi');

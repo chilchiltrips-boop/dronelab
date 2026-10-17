@@ -1,0 +1,42 @@
+/* Read-only accepted RC input monitor, Devices & Firmware → Kit Connection. */
+.fw-live-inputs-card{min-width:0;max-width:100%;display:grid;gap:14px;border:1px solid #2c4b60!important;background:linear-gradient(155deg,#0c2434,#0a1929)!important}
+.li-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.li-header small{font-size:10px;letter-spacing:.13em;color:#73d2d5;font-weight:750}
+.li-header h2{font-size:21px;line-height:1.15;margin:5px 0}
+.li-header p{font-size:12px;color:#a7bfd0;line-height:1.5;max-width:690px;margin:0}
+.li-link-state{display:inline-block;font-size:11px;letter-spacing:.08em;padding:7px 11px;border:1px solid #5a6f7c;border-radius:20px;background:#162737;color:#b7c7d1;white-space:nowrap}
+.li-link-state[data-state=live]{border-color:#3fd7a6;color:#77edc8;background:#113b35}
+.li-link-state[data-state=stale]{border-color:#dcb367;color:#f3d28e;background:#393022}
+.li-identity{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:8px}
+.li-identity>div,.li-metrics>div,.li-safety>div{border:1px solid #294559;border-radius:10px;background:#0a1b2a;padding:9px 11px;min-width:0}
+.li-identity small,.li-metrics small,.li-safety small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:#9bb6c7}
+.li-identity b,.li-metrics b,.li-safety b{display:block;font-size:14px;font-weight:760;margin-top:6px;overflow-wrap:anywhere}
+.li-middle{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
+.li-sticks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.li-stick-card{border:1px solid #2e5065;background:#10283b;border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.li-stick-title{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;font-size:11px}
+.li-stick-title span{color:#9bb9ca;font-size:10px}
+.li-stick-area{position:relative;width:min(100%,150px);aspect-ratio:1;border:1px solid #4f7588;border-radius:15px;background:radial-gradient(circle at center,#193c50,#092232);overflow:hidden}
+.li-stick-axis{position:absolute;background:#416579;opacity:.75;pointer-events:none}
+.li-stick-axis-x{top:50%;height:1px;width:100%;left:0}
+.li-stick-axis-y{left:50%;width:1px;height:100%;top:0}
+.li-stick-dot{position:absolute;z-index:2;width:18px;height:18px;transform:translate(-50%,-50%);border-radius:50%;border:2px solid #c3fff1;background:#43d8ae;box-shadow:0 0 0 4px #3fd8ae24,0 2px 8px #000a;transition:left 120ms linear,top 120ms linear}
+.li-stick-label{display:flex;justify-content:space-between;width:100%;flex-wrap:wrap;gap:4px;color:#b5cedb;font-size:10px;font-variant-numeric:tabular-nums}
+.li-stick-label b{color:#f0f8fc}
+.li-channels{display:grid;align-content:center;gap:12px;min-width:0}
+.li-channel{display:grid;gap:6px}
+.li-channel>div:first-child{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.04em}
+.li-channel output{font-weight:800;font-size:15px;color:#edfaff;font-variant-numeric:tabular-nums}
+.li-bar{background:#10293c;border:1px solid #35576c;border-radius:8px;height:12px;overflow:hidden}
+.li-bar i{display:block;width:0;height:100%;background:linear-gradient(90deg,#3299cb,#49dec0);transition:width 120ms linear;border-radius:inherit}
+.li-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.li-safety{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.li-safety b[data-state=off]{color:#78edc7}
+.li-safety b[data-state=armed]{color:#f5cf83}
+.li-footnote{margin:0;color:#a8bed1;font-size:11px;line-height:1.55}
+.fw-live-inputs-card[data-live-state=stale] .li-stick-dot,.fw-live-inputs-card[data-live-state=offline] .li-stick-dot,.fw-live-inputs-card[data-live-state=idle] .li-stick-dot{opacity:.55;box-shadow:none}
+.fw-live-inputs-card .li-identity,.fw-live-inputs-card .li-channels{min-width:0}
+@media(max-width:980px){.li-middle{grid-template-columns:1fr}.li-identity{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:580px){.li-header{align-items:flex-start}.li-header h2{font-size:18px}.li-header p{font-size:11px}.li-sticks{gap:7px}.li-stick-card{padding:8px}.li-stick-area{width:min(100%,135px)}.li-identity,.li-metrics,.li-safety{grid-template-columns:repeat(2,minmax(0,1fr))}.li-identity b,.li-metrics b,.li-safety b{font-size:12px}}
+@media(max-width:390px){.li-identity,.li-metrics,.li-safety{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.li-stick-dot,.li-bar i{transition:none}}

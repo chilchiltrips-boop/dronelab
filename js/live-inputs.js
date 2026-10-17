@@ -1,0 +1,177 @@
+/* Live Inputs — read-only hardware-received RC telemetry.
+ * Never claims controller ownership, arms motors, or writes joystick values.
+ * AP/STA reads authenticated /api/rc/snapshot; USB follows the verified
+ * Serial Monitor's shared frame decoder. PPM is display-only until firmware
+ * actually advertises it in an authenticated RC snapshot.
+ */
+const SNAPSHOT_TTL_MS=2600, NETWORK_POLL_MS=1100;
+const channels=['throttle','roll','pitch','yaw'];
+const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
+const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
+const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
+
+export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
+ const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
+ const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
+ const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
+  seq:null,values:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
+  inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
+ if(!connected)return base;
+ const network=['AP','STA'].includes(transport);
+ const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
+  motors:network&&(kit.motorsDisabled===true||kit.motorsArmed===false)?'DISABLED':'NOT REPORTED'};
+ if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
+ const rc=sample.rc;
+ if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
+ const valid=channels.every(field=>finitePulse(rc[field]));
+ if(!valid)return {...m,state:'waiting'};
+ const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
+ const receiveAge=Math.max(0,now-sample.at);
+ const ageMs=(Number.isFinite(ageBase)&&ageBase>=0?ageBase:0)+receiveAge;
+ const recent=receiveAge<=SNAPSHOT_TTL_MS;
+ const source=String(rc.source||'NONE').toUpperCase();
+ const validSource=['WEB','ANDROID','PPM'].includes(source)?source:'NONE';
+ const active=rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&validSource!=='NONE';
+ const stale=active&&!recent;
+ // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
+ const armed=active&&rc.inputArmed===true;
+ return {...m,
+  source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
+  values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
+  ageMs:Math.round(ageMs),rateHz:Number.isFinite(sample.rateHz)?sample.rateHz:null,
+  accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
+  rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
+  inputArm:armed?'ARMED':'DISARMED',
+  led:typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
+  motors:sample.motorsOff===true?'DISABLED':m.motors
+ };
+}
+
+export function createInputRateTracker(){
+ let previous=null,rate=null;
+ function reset(){previous=null;rate=null}
+ function observe(kitId,rc,at){
+  const seq=Number(rc?.seq),counter=Number(rc?.accepted);
+  const key=kitId+'|'+String(rc?.source||'')+'|'+String(rc?.transport||'');
+  const valid=rc?.active===true&&Number.isSafeInteger(seq)&&seq>0;
+  if(!valid){reset();return null}
+  const accepted=Number.isSafeInteger(counter)&&counter>=0?counter:null;
+  if(!previous||previous.key!==key||seq<previous.seq||accepted!==null&&previous.accepted!==null&&accepted<previous.accepted){
+   previous={key,seq,accepted,at};rate=null;return rate;
+  }
+  const elapsed=at-previous.at;
+  if(seq===previous.seq||elapsed<=0)return rate;
+  const delta=accepted!==null&&previous.accepted!==null?accepted-previous.accepted:seq-previous.seq;
+  previous={key,seq,accepted,at};
+  if(delta<=0||delta>1000||elapsed>10000){rate=null;return rate}
+  const instantaneous=bounded(delta*1000/elapsed,0,100);
+  rate=rate===null?instantaneous:0.4*instantaneous+0.6*rate;
+  return rate;
+ }
+ return {observe,reset};
+}
+
+function initLiveInputs(){
+ const card=document.getElementById('fwLiveInputs');
+ if(!card||!window.ZebjusKits)return;
+ const $=id=>document.getElementById(id);
+ const getKit=()=>window.ZebjusKits?.getState?.()||{connected:false};
+ const rate=createInputRateTracker();
+ let sample=null,inFlight=false,lastKit='',lastTransport='',usbFrameAt=0,requestAt=0;
+ const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
+  window.ZebjusDevicesWorkspace?.active?.()==='connection'&&!document.hidden&&
+  !$('fwKitDemoMode')?.checked;
+ function wipe(){sample=null;rate.reset();usbFrameAt=0}
+ const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
+ function display(){
+  const kit=getKit(),identity=kit.connected?kit.kitId:'';
+  if(identity!==lastKit||kit.transport!==lastTransport){
+   wipe();lastKit=identity;lastTransport=kit.transport;
+  }
+  const v=normalizeAcceptedInput(kit,sample);
+  card.dataset.liveState=v.state;
+  write('liLiveState',v.state.toUpperCase());
+  $('liLiveState').dataset.state=v.state;
+  write('liKitName',v.kitName);
+  write('liInputSource',v.source);
+  write('liKitTransport',v.transport);
+  write('liPacketNumber',v.seq??'—');
+  write('liAge',v.ageMs===null?'—':v.ageMs+' ms');
+  write('liRate',v.rateHz===null?'— Hz':v.rateHz.toFixed(1)+' Hz');
+  write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
+  write('liInputArm',v.inputArm);
+  $('liInputArm').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':'unknown';
+  write('liLed',v.led);
+  write('liMotors',v.motors);
+  $('liMotors').dataset.state=v.motors==='DISABLED'?'off':'unknown';
+  for(const field of channels){
+   const label=field[0].toUpperCase()+field.slice(1),n=v.values?.[field];
+   const pct=finitePulse(n)?(n-1000)/10:0;
+   write('li'+label,finitePulse(n)?n:'—');
+   const bar=$('li'+label+'Bar');if(bar){
+    bar.style.width=pct+'%';const track=bar.parentElement;
+    if(track){if(finitePulse(n))track.setAttribute('aria-valuenow',String(n));else track.removeAttribute('aria-valuenow')}
+   }
+  }
+  const stick=(id,x,y)=>{const e=$(id);if(e){e.style.left=bounded(x,0,100)+'%';e.style.top=bounded(y,0,100)+'%'}};
+  const n=v.values||neutral;
+  stick('liLeftDot',(n.yaw-1000)/10,100-(n.throttle-1000)/10);
+  stick('liRightDot',(n.roll-1000)/10,100-(n.pitch-1000)/10);
+  write('liLeftYaw',v.values?n.yaw:'—');write('liLeftThrottle',v.values?n.throttle:'—');
+  write('liRightRoll',v.values?n.roll:'—');write('liRightPitch',v.values?n.pitch:'—');
+  const message=v.state==='live'?'Received by physical Kit • monitoring only; no control session was claimed.':
+   v.state==='idle'?'No current accepted RC input. Joysticks neutral; no Take Control needed to view.':
+   v.state==='stale'?'Last confirmed packet is stale. Values are historical, not live control.':
+   v.state==='waiting'?'Waiting for authenticated accepted-input telemetry from this Kit. PPM requires firmware support.':
+   'Select and connect a verified Kit to view its accepted RC inputs.';
+  write('liHelp',message+' INPUT ARM is diagnostic only; motors are never armed by this monitor.');
+ }
+ async function poll(){
+  const kit=getKit();
+  if(!visible()||!kit.connected||!['ap','sta'].includes(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
+  inFlight=true;
+  const id=kit.kitId,transport=kit.transport;
+  try{
+   const reply=await window.ZebjusKits.request('/api/rc/snapshot');
+   const current=getKit();
+   if(!current.connected||current.kitId!==id||current.transport!==transport||reply?.kitId!==id)return;
+   const at=Date.now();
+   const hz=rate.observe(id,reply,at);
+   sample={kitId:id,rc:reply,at,rateHz:hz,ledOn:current.ledOn,
+    motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
+   display();
+  }catch{
+   // Don't fake accepted frames on failed reads; the last sample ages to STALE.
+  }finally{inFlight=false}
+ }
+ window.addEventListener('dronelab:serial-line',event=>{
+  const kit=getKit();
+  if(!kit.connected||kit.transport!=='usb'||!kit.kitId||event.detail?.transport&&event.detail.transport!=='usb')return;
+  const line=String(event.detail?.line||'');
+  const decoder=window.ZebjusSerialRcDecoder;
+  const received=decoder?.parseSerialRc?.(line);
+  if(!received)return;
+  const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
+  if(received.kind==='frame'){
+   const hz=rate.observe(kit.kitId,received,at);
+   sample={kitId:kit.kitId,rc:received,at,rateHz:hz,ageMs:0,
+    motorsOff:motorReported};
+   usbFrameAt=at;
+  }else if(received.kind==='idle'||received.kind==='reset'){
+   rate.reset();
+   sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
+    at,rateHz:null,motorsOff:motorReported};
+  }
+  if(visible())display();
+ });
+ document.addEventListener('visibilitychange',display);
+ window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
+ function tick(){display();if(visible()&&Date.now()-requestAt>=NETWORK_POLL_MS){requestAt=Date.now();void poll()}}
+ tick();
+ setInterval(tick,260);
+}
+if(typeof document!=='undefined'){
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initLiveInputs,{once:true});
+ else initLiveInputs();
+}
