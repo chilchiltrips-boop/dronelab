@@ -13,7 +13,7 @@ The FlightCore firmware intentionally permits protected CORS only for its audite
 ## Guaranteed safe cross-site workflow
 
 1. Embed the official URL. When the page runs inside Wix or another iframe it shows **Open Kit Connection in New Tab** beside the connection controls.
-2. Click this link (a real user gesture; no credential transfer). It opens the official DroneLab website as a **top-level first-party tab** with normal browser permission prompts.
+2. Click this link (a real user gesture; no credential transfer). It attempts to open the official DroneLab website in a **top-level first-party tab**. **Some iframe sandboxes apply restrictions to popup tabs too**: if Local Network Access still fails, right-click the link to copy its URL, open a brand-new browser tab yourself and paste it directly into the browser address bar. This avoids sandbox inheritance.
 3. From the **same computer running the browser**, join the Kit's AP Wi-Fi (typically \`192.168.4.1\`) or the Kit's reachable STA router. A phone connected to Kit AP does **not** give the laptop LAN connectivity.
 4. Grant Chrome's Local Network Access permission on the official tab, then **Devices & Firmware → Scan Kits**. Verify the exact Device ID before using any RC or firmware feature.
 5. Browser storage inside a Wix iframe may be partitioned; the first-party tab may need separate Kit pairing/approval. Nothing secret is passed to the parent page.
