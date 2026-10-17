@@ -1,14 +1,15 @@
 {
-  "version": "1.4.11",
-  "builtAt": "2026-10-17T05:46:19Z",
-  "sourceCommit": "0e90f250507a32dda11277111df05c06ff481540",
+  "version": "1.4.12",
+  "builtAt": "2026-10-17T16:18:22Z",
+  "sourceCommit": "31c711eec0df6aa8983456795b86b851fd39d7e1",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "8c3ef877184ca9764823a05e6e1955e667e1aacc842b9d6be4f970fd65f4fae2",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "b860499eb66c1ff8428843f995c80a59aa812ffdf86e98ad1c7fcee069efc23c",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
-    "FlightCore_Firmware/FlightCoreClassroom.h": "77aa58d454a49fd7530d40657eb14f0b55d1dfa621db46828c51c2a9b2e7ddf4",
+    "FlightCore_Firmware/FlightCoreClassroom.h": "dcec5315c83469de8dd00e0cc1ae47a18d2dd46f93c0e9c1f95ad6bbd6bcc619",
     "FlightCore_Firmware/FlightCoreEnrollment.h": "e45751a9994c51a4eef56761a544b6e44cc32d54f80b314734e1d6d0032a66c5",
-    "FlightCore_Firmware/FlightCoreNetwork.h": "bb7e03a7e05531c458084769426bc2f76a15afea71a24b2f177d5f86e4bc92c6",
+    "FlightCore_Firmware/FlightCoreNetwork.h": "16bdcc29a1b85a864b3f75650df4108d77ba2efcef351a307fca3a1292516090",
     "FlightCore_Firmware/FlightCoreOta.h": "906e344663c08f71a0a72107ddab905424ccfbcd640db98e34b8839bdc584ade",
+    "FlightCore_Firmware/FlightCorePpm.h": "fdaabc51d2163d75097d934167a959bb059853eb7fc80ab5f2fb2be4df3fdcd6",
     "FlightCore_Firmware/FlightCoreSetupPortal.h": "5ef45273ccd866f070b9d1089a76d63fa0d96c0ee18e34ed0263da52f9194de9",
     "FlightCore_Firmware/FlightCoreWifiPolicy.h": "d0b8166a8664c89060f9491f9d8c0ea4206cb16f618fab017203292e116bef19",
     "FlightCore_Firmware/FlightCoreWifiProfiles.h": "8a6b796c56945f24014a33c68371f8cff77d8b30e5daea938958b6c3960c528c",
@@ -21,7 +22,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc",
       "chipId": 5,
-      "appBytes": 1176656,
+      "appBytes": 1185408,
       "otaSlots": [
         {
           "address": 65536,
@@ -47,7 +48,7 @@
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1184192,
+      "appBytes": 1193168,
       "otaSlots": [
         {
           "address": 65536,
