@@ -41,6 +41,7 @@
   const s=status();
   return s.explanation+' Open official DroneLab in a separate browser tab to scan AP/STA kits. '+
    'This computer must still join Kit AP (192.168.4.1) or the same STA router; a phone on Kit Wi-Fi is not enough. '+
+   'If a Wix sandbox is inherited by the opened tab, copy the Open Kit Connection link and paste it directly into a fresh browser address bar. '+
    'If browser storage was partitioned by the embedding host, verify or pair this Kit again in the official tab.';
  }
  function show(){
