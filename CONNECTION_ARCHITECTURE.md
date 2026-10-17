@@ -1,47 +1,64 @@
-# DroneLab 1.7 network architecture
+# DroneLab connections and received inputs
 
-## Data paths
+## Current release paths
 
-```mermaid
-flowchart TD
-    A[Signed Android app] -->|Authenticated AP or STA input| B[FlightCore RC receiver]
-    B -->|Read-only STA snapshot| C[Verified MY KITS session]
-    C --> D[Pyodide Python on laptop]
-    A <-->|Separate QR and WebRTC| E[Virtual flight simulator]
-    F[Teacher USB recovery] --> B
-    C -->|Teacher STA APP OTA| B
+FlightCore 1.4.11 receives Android or Web controller inputs for bench diagnostics. Physical motor outputs remain disabled. Android 1.7.13 supports direct Kit ARM/DISARM, STOP, joysticks and LED control. Input ARM, simulator ARM and physical motor state are separate concepts.
+
+| Connection selected in WebApp | Receiver read path | Requirements |
+| --- | --- | --- |
+| USB | Combined `ZJTEL` or legacy `ZJRC` serial frames | Open serial port and verify the physical Kit identity |
+| AP | Read-only `/api/rc/snapshot` | Computer on Kit AP; browser local-network permission |
+| STA | Read-only `/api/rc/snapshot` | Reachable same network; verified Kit session |
+| Android Relay | The same endpoint through the paired phone | WebRTC pairing, verified phone-to-Kit Wi-Fi, Android **Allow WebApp access** grant |
+
+Android direct AP input can be inspected by a computer on that AP or via USB. Android and the computer can also use the same STA network. Opening Live Inputs or reading Python joystick data never claims controller ownership or sends joystick packets back to the Kit.
+
+## Wi-Fi policy and recovery
+
+AP and STA are exclusive. Automatic/STA mode turns AP off and tries saved routers; if all saved routers fail, AP returns. Selecting AP disables STA and keeps the hotspot active until STA is selected again. A phone cannot remain connected to the Kit AP after the Kit successfully switches to STA. Join the matching network on each device.
+
+Connect Kit on AP, scan nearby 2.4 GHz networks, then Test & Save. Credentials are retained only after successful association and storage verification. Mode changes and setup can interrupt the network. The browser cannot change the operating system's Wi-Fi network.
+
+One physical USB pairing can be remembered in the browser's protected vault. Subsequent sessions still verify Device ID. A saved pairing does not authorize automatic control ownership. Reconnection restores monitoring only; ARM/control requires a new operator action. USB recovery remains available independently of Wi-Fi.
+
+## Live Inputs and Python
+
+Open **Devices & Firmware → Live Inputs**. The section shows two read-only stick indicators, four channel bars (1000–2000 µs), source and transport, input ARM, physical motor confirmation, LED state when reported, sequence, input age, observed frame rate and snapshot round trip. The recent-samples CSV contains only receiver observations, never credentials. PPM decoding is not implemented in this firmware.
+
+The shared decoder accepts the original 12-field gyro telemetry alongside separate `ZJRC` packets, and the 20-field combined telemetry introduced in 1.4.11. Combined frames now update Kit cards, the PID receiver summary and Python USB reads as well as the Serial Monitor.
+
+The monitor makes coalesced snapshot reads at up to 10 Hz while Live Inputs or PID is visible; it pauses during setup and OTA. Python shares pending reads rather than adding simultaneous snapshot requests. Hidden pages do not run the monitor's fast polling. The normal identity heartbeat retains its separate slower cadence. Actual update rate depends on network latency; the displayed observed frame count is not a measurement of every packet received by firmware.
+
+Firmware's 350 ms input deadline remains authoritative. The browser adds snapshot round-trip time and locally elapsed time, expires duplicate sequences, and neutralizes stale displays/Python results to throttle 1000 and axes 1500. USB input age starts when a new RC sequence is observed; serial buffering latency is not measurable from the current frame format. A disconnect, different Device ID, transport, connection generation or firmware boot clears cached inputs. LED observations expire separately; missing telemetry is shown as **Not reported**.
+
+In Python Lab select the exact connected target: **USB Hardware**, **FlightCore AP**, **FlightCore STA**, or **Android Relay**:
+
+```python
+from zebjus_simple import Drone
+import asyncio
+
+drone = Drone()
+while True:
+    rc = await drone.read_joystick()
+    print(rc['source'], rc['throttle'], rc['roll'], rc['pitch'], rc['yaw'],
+          rc['input_valid'], rc['age_ms'])
+    await asyncio.sleep(0.1)
 ```
 
-A1 (ESP32-C3 Super Mini) and A2 (XIAO ESP32-C6) use one Wi-Fi radio. Normal `auto` mode attempts saved STA credentials while keeping AP available. AP follows the STA router channel; a router/channel change can interrupt the phone. Reconnection restores monitoring, never an RC lease or virtual ARM. Physical motors remain disabled.
+No Take Control switch is needed for this read. Relay read permission remains explicit on Android. A grant refusal is surfaced; the reader does not silently switch transports. Relay access does not enable network OTA.
 
-## Factory-to-student setup
+## Trust and firmware updates
 
-1. Factory flashes the matching 1.4.0 FACTORY image at offset 0 using USB. Existing kits need the matching APP upgrade and label installation; old firmware cannot acquire this feature from a WebApp update alone.
-2. Factory enrolls a teacher USB passphrase and runs `python3 tools/provision_kit_label.py --help` for private-label provisioning. The utility generates 256 random bits, writes its private output with mode 0600 and refuses to overwrite it, then uses protected USB admin to install the secret. Keep the label off public photos and never commit its file. A six-digit Kit Code is only a selector.
-3. Student opens the official HTTPS WebApp while Internet is available, keeps that tab open, and selects **New Kit / First-Time Setup**. Use supported Chromium Local Network Access, with permission allowed. Use OS Wi-Fi settings to join the kit AP; JavaScript cannot switch SSIDs.
-4. Enter the private label only in the official HTTPS WebApp or signed Android app. Full Device ID and a cryptographic device proof must both match. The local HTTP help portal deliberately has no secret/password fields: a page served over unauthenticated HTTP cannot securely deliver credential-entry JavaScript against an active LAN attacker.
-5. AP setup authority lasts 5 minutes. Scan a 2.4 GHz router, select it, and Test & Save. Only new association + DHCP to that SSID and successful atomic NVS readback produce `saved`. HTTP 202 means pending. On failure, previous saved credentials survive.
-6. Switch the laptop to the router and select **Connect STA / Resume**. Probe the returned STA IP and known mDNS name; match the full immutable Device ID before binding. mDNS/DHCP/router isolation can require entering the IP manually.
-7. Android can stay on AP or join the same STA router. Select the matching Android AP/STA connection, verify the immutable Device ID and actual request transport, enter the private label in the signed app and explicitly enable diagnostic input. Laptop Python reads `/api/rc/snapshot` through its independently authenticated STA session. No USB or WebRTC relay is required for this path.
+The six-digit Kit Code identifies a Kit; it is not an admin password. Current firmware allows scoped local AP diagnostics and STA observation. Protected STA control/settings and APP OTA require the appropriate USB-paired authorization. Teacher administration remains separately protected. Legacy private-label enrollment is a compatibility path, not a requirement for current AP diagnostics.
 
-## Trust, persistence and recovery
+Signed sessions bind requests to Device ID, boot identity and monotonic request counters. Protected requests retain their cryptographic proofs; encrypted POST bodies, firmware board matching and SHA-256 verification are unchanged by the receiver monitor. APP-only OTA preserves saved Wi-Fi/pairing; factory recovery is a separate USB operation. Secure Boot/Flash Encryption and production signing policy remain manufacturing decisions.
 
-The label authorizes temporary setup and derives a separate 128-bit diagnostic credential. Only the diagnostic credential may be remembered by the existing opt-in encrypted browser vault; the label itself is cleared from the field and never saved. Session storage supports refresh; a new laptop uses its label. An untrusted/shared browser should use session-only access and Forget Pairing afterward. Browser encryption does not protect a compromised browser profile or malicious same-origin script.
+RC has one owner. The firmware input deadline and ownership lease release/neutralize timed-out input. Read-only reconnect never restores an RC lease or ARM state. Network setup and OTA remain blocked while a controller owns input.
 
-Challenges live 30 seconds; setup scope 5 minutes; diagnostic sessions 30 minutes. Sessions are bound to Device ID, boot nonce, client ID, a session key and monotonically increasing request counters. POST bodies use AES-GCM; requests and responses have HMAC-SHA256 proofs. Reboot invalidates all sessions. Protected USB label rotation/revocation invalidates derived credentials; factory reset clears provisioning. NVS is not protected against physical flash extraction without Secure Boot/Flash Encryption; enabling those is a separate manufacturing decision.
+## Embedding and internet boundaries
 
-The AP Wi-Fi password and Kit Code grant no API authority. Teachers retain the legacy per-device admin key for STA APP OTA; student labels cannot update firmware. This legacy bearer path requires a trusted management LAN (or use USB recovery). Never send admin keys through public URLs. Network factory flashing is unsupported.
+The GitHub Pages WebApp can be embedded; the surrounding site/browser must allow required capabilities. CORS, iframe permission delegation, browser local-network permission and network reachability are separate checks. Embedding the official URL retains its origin; rehosting files at another origin requires reviewing the firmware origin allowlist. The current Wix warning cleanup is retained.
 
-RC has one controller, a 350 ms input deadman and 1800 ms ownership lease. Accepted frames renew both. Expiry neutralizes throttle to 1000 and axes to 1500. Authentication reconnect does not reacquire control. Wi-Fi setup/scan/mode changes and OTA are blocked during ownership. STOP releases input; no operation enables physical motors.
+Automated iframe checks use a controlled host with simulated Kit responses. Actual Wix/WordPress USB chooser, camera, local-network permission prompts and Android dual-network routing still need physical acceptance. Do not infer cross-browser support from one Chromium test.
 
-## Observable network state
-
-`networkState` reports AP_ONBOARDING, STA_CONNECTING, STA_TESTING, STA_CONNECTED, AP_STA_COEXISTENCE, AP_JOYSTICK_READY or NETWORK_RECOVERY. `phase`, `wifiTestState`, configured `mode`, actual `requestTransport`, AP/STA active flags, channel, IPs, RSSI, disconnect reason and bootId describe transitions. `wifiTestState=saved` plus matching ID is the handover prerequisite. USB recovery remains a separate physical path. Reason 36 is STA_LEAVING, not a password verdict.
-
-## Compatibility boundaries
-
-HTTPS-to-private-HTTP requests depend on browser Local Network Access support and permission; CORS alone cannot grant this. Ordinary Firefox/Safari support is not claimed. Offline WebApp caching must finish while online, and real permission/offline transitions remain hardware/browser acceptance items. The device help page works without Internet; a signed Android app is an alternative commissioning client.
-
-QR/WebRTC stays separate: QR exchange can operate without Internet only if the peer route is reachable; six-digit CONNECT signaling requires Internet. AP-phone versus router-laptop cross-subnet WebRTC is not assumed. Public signaling never carries direct AP joystick frames.
-
-Primary references: [Chrome Local Network Access](https://developer.chrome.com/blog/local-network-access), [MDN Local Network Access](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Local_network_access), [Espressif ESP32-C3 Wi-Fi](https://docs.espressif.com/projects/esp-idf/en/v5.5.4/esp32c3/api-guides/wifi.html).
+QR/WebRTC pairing and Android Relay remain local/reachable-peer features. The actual control connection does not yet configure STUN/TURN for reliable different-network Internet use. A six-digit pairing code alone does not provide an Internet control gateway. PPM decoding and authenticated Internet telemetry/control are separate future releases.

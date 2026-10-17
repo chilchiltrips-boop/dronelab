@@ -33,5 +33,5 @@ test('Kit uses separate identity, session lock and motor-disabled preview',()=>{
  assert.match(net,/controller_locked_or_invalid_source/);
  assert.match(net,/motorsArmed/);
  assert.match(kits,/ack\?\.received!==true/);
- assert.match(kits,/ZJRC,\(USB\|AP\|STA\),\(WEB\|ANDROID\)/);
+ assert.match(read('js/kit-inputs.js'),/ZJRC,\(USB\|AP\|STA\),\(WEB\|ANDROID\)/);
 });

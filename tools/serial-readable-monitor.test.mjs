@@ -43,7 +43,8 @@ test('malformed frames are not impersonated as verified gyro or diagnostic RC',(
  let time=0;const p=createReadableKitMonitor({now:()=>time,intervalMs:0});
  const bad='ZJTEL,1,A2,0,0,0x68,READY,-5.68,4.29,-0.27,1,2,INJECT=1';
  assert.equal(p.view(bad),bad);
- assert.equal(p.view('ZJRC,AP,ANDROID,1,T=0,R=1500,P=1500,Y=1500,ARM=1'),null);
+ const invalid='ZJRC,AP,ANDROID,1,T=0,R=1500,P=1500,Y=1500,ARM=1';
+ assert.equal(p.view(invalid),invalid,'invalid data stays visible as raw text, never a live input');
  assert.match(p.view(telemetry()),/RC IDLE.*MOTORS OFF/);
 });
 test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, copy and offline cache retained',()=>{

@@ -1,0 +1,36 @@
+name: Verify Live Inputs and receiver transports
+on:
+  push:
+    branches: [main, codex/live-inputs-20261017]
+    paths: ['js/**', 'index.html', 'lab.html', '*.css', 'sw.js', 'tools/**', '.github/workflows/live-inputs.yml']
+  pull_request:
+    branches: [main]
+    paths: ['js/**', 'index.html', 'lab.html', '*.css', 'sw.js', 'tools/**', '.github/workflows/live-inputs.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  receiver-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+      - run: npm run verify:firmware
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Receiver UI, iframe and authenticated connection regressions
+        run: |
+          node server.cjs --port 8765 >/tmp/live-inputs-http.log 2>&1 &
+          node tools/live-inputs-browser.mjs
+          node tools/exclusive-connectivity-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-inputs-browser-evidence
+          path: test-output/
+          if-no-files-found: warn

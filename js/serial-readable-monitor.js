@@ -1,3 +1,4 @@
+import './kit-inputs.js';
 // Presentation only. USB monitor, gyro/Python parsers and plotter retain original bytes.
 // Accepts original 12-field ZJTEL + separate ZJRC, and native 20-field combined ZJTEL.
 export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,staleMs=350}={}){
@@ -10,13 +11,13 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
  function clear(){rc=null;lastPrint=-Infinity}
  function view(line){
   const value=String(line||'').trim();
-  const frame=/^ZJRC,(AP|STA|USB),(ANDROID|WEB),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+),ARM=([01])$/.exec(value);
-  if(frame){
-   const nums=frame.slice(3,8).map(Number);
-   if(nums.every((n,i)=>Number.isSafeInteger(n)&&(i===0?n>0:n>=1000&&n<=2000)))
-    rc={transport:frame[1],source:frame[2],seq:nums[0],throttle:nums[1],roll:nums[2],pitch:nums[3],yaw:nums[4],armed:frame[8]==='1',at:now()};
-   return null;
-  }
+  const decoded=globalThis.ZebjusKitInputs.decodeSerial(value);
+  const accept=d=>{
+   if(!d.active){rc=null;return;}
+   const same=rc&&rc.seq===d.seq&&rc.transport===d.transport&&rc.source===d.source;
+   rc={...d,armed:d.inputArmed,at:same?rc.at:now()};
+  };
+  if(decoded?.kind==='sample'&&value.startsWith('ZJRC,')){accept(decoded);return null;}
   if(/^ZJRC,(?:RELEASE|FAILSAFE|STOP),/.test(value)){rc=null;return value+' • input reset • MOTORS OFF'}
   if(/^ZJRC,CLAIM,/.test(value)){rc=null;return value+' • waiting for input • MOTORS OFF'}
   if(!value.startsWith('ZJTEL,1,'))return value;
@@ -27,18 +28,8 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
   const rates=f.slice(7,10).map(angle);
   if(rates.some(v=>v===null))return value;
   if(f.length===20){
-   const suffix=f.slice(12);
-   const valid=/^RC=(?:NONE\/IDLE|(?:AP|STA|USB)\/(?:WEB|ANDROID))$/.test(suffix[0])&&/^RCSEQ=\d+$/.test(suffix[1])&&
-    ['T','R','P','Y'].every((label,i)=>new RegExp('^'+label+'=\\d+$').test(suffix[i+2]))&&
-    /^INPUT_ARMED=[01]$/.test(suffix[6])&&suffix[7]==='MOTORS=OFF';
-   if(!valid)return value;
-   if(suffix[0]==='RC=NONE/IDLE')rc=null;
-   else{
-    const [transport,source]=suffix[0].slice(3).split('/');
-    rc={transport,source,seq:Number(suffix[1].slice(6)),throttle:Number(suffix[2].slice(2)),
-     roll:Number(suffix[3].slice(2)),pitch:Number(suffix[4].slice(2)),yaw:Number(suffix[5].slice(2)),
-     armed:suffix[6].endsWith('1'),at:now()};
-   }
+   if(decoded?.kind!=='sample')return value;
+   accept(decoded);
   }
   const timestamp=now();
   if(timestamp-lastPrint<intervalMs)return null;

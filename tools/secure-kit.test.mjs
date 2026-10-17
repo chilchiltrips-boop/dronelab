@@ -1,3 +1,4 @@
+import {kitFixture,snapshot} from './live-inputs-harness.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
@@ -62,14 +63,11 @@ test('diagnostic credential cannot assert setup scope and tampered responses fai
  await assert.rejects(a.open(controller().transport,id,key,'setup'));
 });
 test('Python reads actual identity-bound firmware snapshots without claiming RC ownership',async()=>{
- let rc={kitId:id,ownerId:'public-owner-id',source:'ANDROID',motorsDisabled:true,inputValid:true,failsafe:false,ageMs:4,seq:73,throttle:1600,roll:1550,pitch:1430,yaw:1510};
- const calls=[],state={connected:true,transport:'sta',kitId:id};
- const win={ZebjusKits:{getState:()=>({...state}),request:async(route)=>{calls.push(route);return rc}},addEventListener(){},dispatchEvent(){}};
- vm.runInNewContext(read('js/network-lab.js'),{window:win,document:{readyState:'loading',addEventListener(){},getElementById(){return null}},performance:{now:()=>1000},setTimeout,clearTimeout,setInterval,clearInterval,CustomEvent:class{}});
- let result=await win.DroneLabNetwork.readJoystick();assert.equal(result.source,'ANDROID');assert.equal(result.throttle,1600);assert.equal(result.input_valid,true);
- rc={...rc,ageMs:800};result=await win.DroneLabNetwork.readJoystick();assert.equal(result.input_valid,false);assert.equal(result.throttle,1000);assert.equal(result.roll,1500);
- rc={...rc,kitId:'ZFC-A2-FFFFFFFFFFFF'};await assert.rejects(win.DroneLabNetwork.readJoystick(),/identity|Device ID/i);
- assert.ok(calls.every(route=>route==='/api/rc/snapshot'));
+ const f=kitFixture('sta');await f.connect();f.calls.length=0;
+ let result=await f.network.readJoystick();assert.equal(result.source,'ANDROID');assert.equal(result.throttle,1300);assert.equal(result.input_valid,true);
+ f.advance(101);f.setRC(snapshot({ageMs:800}));result=await f.network.readJoystick();assert.equal(result.input_valid,false);assert.equal(result.throttle,1000);assert.equal(result.roll,1500);
+ f.advance(101);f.setRC(snapshot({kitId:'ZFC-A2-FFFFFFFFFFFF'}));await assert.rejects(f.network.readJoystick(),/identity|Device ID/i);
+ assert.ok(f.calls.every(route=>route==='/api/rc/snapshot'));assert.equal(f.api.getState().owner,false);
 });
 test('firmware scopes OTA to idle USB-paired AP/STA; setup labels never grant OTA',()=>{
  const source=read('FlightCore_Firmware/FlightCoreNetwork.h'),auth=read('FlightCore_Firmware/FlightCoreEnrollment.h');

@@ -8,7 +8,7 @@
  const shell=$('devicesWorkspace');
  if(!shell)return;
  const names={
-  overview:'Overview',connection:'Kit Connection',wifi:'Wi-Fi & Network',
+  overview:'Overview',connection:'Kit Connection',inputs:'Live Inputs',wifi:'Wi-Fi & Network',
   firmware:'Firmware Flash',mobile:'Mobile Controller',
   diagnostics:'Diagnostics',security:'Security & Admin'
  };

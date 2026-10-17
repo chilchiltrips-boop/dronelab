@@ -4,7 +4,6 @@
 'use strict';
 const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay;
 let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0,pollBusy=false;
-let joystickReadAt=0,joystickPending=null;
 const output=(text,kind='')=>{const e=$('netResult');if(e){e.textContent=text;e.dataset.state=kind;}};
 async function request(route,method='GET',args={}){
  const kits=window.ZebjusKits;
@@ -81,20 +80,9 @@ async function pythonWifiTestSave(ssid,password){
  return {saved:false,state:'unverified',message:'Reconnect and verify status before retrying.'};
 }
 async function readJoystick(){
- if(joystickPending)return joystickPending;
- const read=async()=>{
-  const wait=Math.max(0,100-(performance.now()-joystickReadAt));if(wait)await new Promise(r=>setTimeout(r,wait));
-  const before=window.ZebjusKits?.getState?.(),start=performance.now();
-  if(!before?.connected||!['sta','ap'].includes(before.transport))throw Error('Select a verified STA/AP kit before reading firmware joystick input.');
-  const rc=await request('/api/rc/snapshot');const after=window.ZebjusKits?.getState?.();
-  if(!after?.connected||after.kitId!==before.kitId||rc.kitId!==before.kitId||rc.motorsDisabled!==true)throw Error('Firmware joystick identity or motor-disabled confirmation failed.');
-  const rtt=Math.round(performance.now()-start),valid=rc.inputValid===true&&rc.failsafe===false&&Number.isFinite(rc.ageMs)&&rc.ageMs+rtt<=350;
-  joystickReadAt=performance.now();
-  return {...rc,device_id:rc.kitId,owner_id:rc.ownerId,age_ms:rc.ageMs===null?null:rc.ageMs+rtt,input_valid:valid,failsafe:!valid,
-   throttle:valid?rc.throttle:1000,roll:valid?rc.roll:1500,pitch:valid?rc.pitch:1500,yaw:valid?rc.yaw:1500,
-   response_mode:rc.responseMode,received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:true,transport:before.transport};
- };
- joystickPending=read().finally(()=>{joystickPending=null});return joystickPending;
+ const kits=window.ZebjusKits;
+ if(!kits?.readInputs)throw Error('Reload the WebApp to enable the shared Kit input reader.');
+ return kits.readInputs();
 }
 function stream(on=true){
  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
@@ -109,6 +97,6 @@ function init(){
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
 window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
- isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&['ap','sta'].includes(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
+ isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&['ap','sta','android-relay'].includes(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

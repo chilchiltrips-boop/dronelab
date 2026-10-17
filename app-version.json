@@ -7,7 +7,8 @@
     "Header switch changes the physical kit Wi-Fi mode before rediscovery",
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
-    "FlightCore 1.4.6 APP and FACTORY firmware for A1 and A2"
+    "FlightCore 1.4.11 APP and FACTORY firmware for A1 and A2",
+    "Read-only Live Inputs over USB, AP, STA and Android Relay with stale-input neutralization"
   ],
   "buildCommit": "58923a6a9d25",
   "publishedAt": "2026-10-17T12:26:19.654429+00:00"
