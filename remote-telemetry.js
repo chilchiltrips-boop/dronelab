@@ -90,8 +90,7 @@
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop('Browser backgrounded • remote telemetry stopped')});
   setInterval(()=>{
    const s=root.ZebjusRemoteRTC?.status?.();
-   write('remoteIceStatus',s?(s.turnReady?'TURN CREDENTIALS READY • RELAY UNVERIFIED':'STUN ONLY • TURN NOT CONFIGURED'):
-     'STUN default');
+   write('remoteIceStatus',s?'STUN ONLY • LOCAL P2P (NO TURN)':'STUN ONLY • LOCAL P2P');
   },2500);
   tick();
  }

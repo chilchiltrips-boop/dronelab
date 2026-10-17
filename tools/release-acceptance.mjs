@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 const defaultFile=fileURLToPath(new URL('../docs/release-acceptance.evidence.json',import.meta.url));
-export const requiredIds=["A1_AP_STA","A1_LIVE_INPUTS","A1_PPM_LOSS","A1_USB_RECOVERY","A1_OTA_INTERRUPT","A1_BUILD_STAMPS","A2_AP_STA","A2_LIVE_INPUTS","A2_PPM_LOSS","A2_USB_RECOVERY","A2_OTA_INTERRUPT","A2_BUILD_STAMPS","ANDROID_WIFI_WITHOUT_APP_LINK","ANDROID_DIAGNOSTIC_ARM","ANDROID_ACK_FRESHNESS","ANDROID_BACKGROUND_RECOVERY","ANDROID_UPGRADE_TOUCH","ADMIN_HTTPS_DEPLOYED","TURN_RELAY_DEPLOYED"];
+export const requiredIds=["A1_AP_STA","A1_LIVE_INPUTS","A1_PPM_LOSS","A1_USB_RECOVERY","A1_OTA_INTERRUPT","A1_BUILD_STAMPS","A2_AP_STA","A2_LIVE_INPUTS","A2_PPM_LOSS","A2_USB_RECOVERY","A2_OTA_INTERRUPT","A2_BUILD_STAMPS","ANDROID_WIFI_WITHOUT_APP_LINK","ANDROID_DIAGNOSTIC_ARM","ANDROID_ACK_FRESHNESS","ANDROID_BACKGROUND_RECOVERY","ANDROID_UPGRADE_TOUCH","ADMIN_HTTPS_DEPLOYED"];
 export function validateEvidence(report,{strict=false}={}){
  const errors=[];
  if(report?.schema!==1||!Array.isArray(report.cases))throw Error('Invalid acceptance evidence schema');

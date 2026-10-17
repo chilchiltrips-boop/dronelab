@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "purpose": "Real hardware and internet deployment acceptance; NOT an automated test result",
+  "purpose": "Physical hardware and optional central Admin HTTPS acceptance; excludes TURN relay and internet physical Kit control",
   "sourceCommit": null,
   "createdFor": "2026-10-17",
   "cases": [
@@ -212,18 +212,6 @@
       "id": "ADMIN_HTTPS_DEPLOYED",
       "platform": "CLOUD",
       "expected": "Real HTTPS host, private persistent storage, admin login, origin/cookie/security tested",
-      "status": "NOT_RUN",
-      "observedAt": null,
-      "operator": null,
-      "deviceId": null,
-      "firmwareVersion": null,
-      "evidenceRef": null,
-      "notes": null
-    },
-    {
-      "id": "TURN_RELAY_DEPLOYED",
-      "platform": "CLOUD",
-      "expected": "Authenticated ephemeral TURN credentials AND relay ICE candidate across separate restrictive networks",
       "status": "NOT_RUN",
       "observedAt": null,
       "operator": null,
