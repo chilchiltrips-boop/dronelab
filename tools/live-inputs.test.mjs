@@ -73,7 +73,8 @@ test('visible polling is 5-10Hz capped, single-flight, and exponential backoff o
  assert.match(js,/current\.physicalLink!==physicalLink/);
  assert.match(js,/token!==requestGeneration/);
  assert.match(js,/Math\.min\(MAX_RETRY_BACKOFF_MS,NETWORK_POLL_MS\*2\*\*readFailures\)/);
- assert.match(js,/if\(document\.hidden\)wipe\(\)/);
+ assert.doesNotMatch(js,/if\(document\.hidden\)wipe\(\)/);
+ assert.match(js,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate\.reset\(\);display\(\)/);
  assert.match(js,/sequenceAt:seqChanged\?at:prev\.sequenceAt\?\?prev\.at/);
  assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
 });

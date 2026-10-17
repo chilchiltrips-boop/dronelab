@@ -20,7 +20,8 @@ test('Link loss and AP/STA/Android Relay changes invalidate old input before a f
  assert.match(live,/token!==requestGeneration/);
  assert.match(live,/current\.physicalLink!==physicalLink\|\|reply\?\.kitId!==id/);
  assert.match(live,/SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800/);
- assert.match(live,/if\(document\.hidden\)wipe\(\)/);
+ assert.doesNotMatch(live,/if\(document\.hidden\)wipe\(\)/);
+ assert.match(live,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate\.reset\(\);display\(\)/);
  assert.match(kit,/if\(!linkFresh\(\)\|\|state\.working\|\|state\.owner\|\|state\.rc\?\.claimed\|\|wifiTesting\)/);
  assert.match(kit,/await beginNetworkHandover\(target/);
  assert.match(kit,/result\.kitId&&result\.kitId!==target\.kitId/);
