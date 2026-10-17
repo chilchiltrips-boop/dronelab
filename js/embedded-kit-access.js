@@ -29,7 +29,7 @@
  }
  function status(){
   const isFrame=embedded(),trusted=trustedOrigin(),policy=isFrame?localPolicy():'top-level';
-  return {embedded:isFrame,trustedOrigin:trusted,policy,blocked:!trusted||isFrame&&policy==='denied',
+  return {embedded:isFrame,trustedOrigin:trusted,policy,blocked:isFrame&&policy==='denied',
    // Browser may still block unknown iframe policies, HTTPS→HTTP, permissions,
    // private network isolation or browser-specific mixed content handling.
    explanation:!trusted?'This website origin is not approved by FlightCore for direct hardware requests.':
@@ -60,8 +60,9 @@
   }
  }
  const api=Object.freeze({status,guidance,show,officialUrl:OFFICIAL,
-  // Discovery is skipped only if policy denial or non-allowlisted origin is
-  // confirmed, never just because a website uses an iframe.
+  // Skip only confirmed policy denial. A separately audited custom host may
+  // be allowlisted by the user's firmware; CORS/identity enforcement remains
+  // on the ESP32, so frontend origin heuristics never grant device access.
   shouldSkipLocalProbe:()=>status().blocked});
  root.ZebjusEmbeddedAccess=api;
  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',show,{once:true});
