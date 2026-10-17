@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.4.9";
+constexpr const char* FW_VERSION="1.4.10";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS AERION A2";
@@ -80,10 +80,10 @@ void ledCommand(char* line){
  if(!strcmp(action,"KEEP")){leaseStart=millis();ledAck(id,"OK");return;}
  long a=0,b=0,c=0;LedMode next=LED_OFF;
  if(!strcmp(action,"STOP")){
-  ledOff();leaseStart=millis();ledAck(id,"OK");return;
+  ledOff();leaseStart=millis();ledAck(id,"OK");Serial.println("ZJLED,STATE,OFF");return;
  }else if(!strcmp(action,"SET")){
   if(!readLong(state,0,100,a)){ledAck(id,"BAD_ARGS");return;}
-  manualBrightness=a;next=LED_MANUAL;
+  manualBrightness=a;next=a?LED_MANUAL:LED_OFF;
  }else if(!strcmp(action,"BLINK")){
   if(!readLong(state,30,60000,a)||!readLong(state,30,60000,b)||!readLong(state,0,100,c)){ledAck(id,"BAD_ARGS");return;}
   onDuration=a;offDuration=b;manualBrightness=c;next=LED_BLINK;
@@ -106,7 +106,8 @@ void ledCommand(char* line){
   if(!count){ledAck(id,"BAD_ARGS");return;}
   memcpy(pattern,proposed,sizeof(LedStep)*count);patternCount=count;next=LED_PATTERN;
  }else{ledAck(id,"UNKNOWN");return;}
- ledMode=next;effectStart=leaseStart=millis();ledAck(id,"OK");
+ ledMode=next;if(next==LED_OFF)ledOff();effectStart=leaseStart=millis();ledAck(id,"OK");
+ Serial.print("ZJLED,STATE,");Serial.println(ledMode==LED_OFF?"OFF":"ON");
 }
 void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch

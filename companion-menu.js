@@ -77,12 +77,12 @@
  main.classList.add('mobile-adaptive-main');
  let current='pair';
  function refreshLive(){
-  const kitText=$('kitNetStatus')?.textContent||'',kitOk=$('kitNetStatus')?.dataset.state==='good';
+  const kitText=$('kitNetStatus')?.textContent||'',kitOk=!!root.ZebjusNetwork?.isConnected?.();
   const kitMode=$('kitLink')?.value?.toUpperCase()||'AP';
   const statuses={
    pair:($('appConnection')?.textContent||'NOT PAIRED'),
    kit:kitOk?kitMode+' CONNECTED':(/switching|connecting/i.test(kitText)?'CONNECTING':(/failed|error|denied|timeout|unavailable/i.test(kitText)?'ERROR':'DISCONNECTED')),
-   wifi:/fallback/i.test(kitText)?'AP FALLBACK':/switching|connecting/i.test(kitText)?'STA CONNECTING':kitOk?kitMode+' CONNECTED':(/failed|error|timeout|denied/i.test(kitText)?'ERROR':'OFFLINE'),
+   wifi:kitOk?kitMode+' CONNECTED':/switching|connecting/i.test(kitText)?kitMode+' CONNECTING':(/failed|error|timeout|denied/i.test(kitText)?'ERROR':'OFFLINE'),
    control:$('controlState')?.textContent||'NO CONTROL',
    more:($('kitOtaPhase')?.textContent||'OTA IDLE')
   };

@@ -21,7 +21,7 @@ static bool zjKitAutoName=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
-static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false;
+static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
 static const char* zjRcTransport="NONE";
@@ -60,7 +60,7 @@ static String zjRcNewSession(){
  return String(token);
 }
 static void zjRcNeutral(){
- zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;
+ zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
 }
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
@@ -79,26 +79,31 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if(Serial.availableForWrite()>75){Serial.print("ZJRC,CLAIM,");Serial.print(transport);Serial.print(',');Serial.println(source);}
  return true;
 }
-static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip){
+static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false){
  const uint32_t now=millis();
+ // A late packet must never re-arm a timed-out input session. The user must
+ // press ARM again, which obtains a fresh ownership token at low throttle.
+ if(zjRcInputArmed&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS)zjRcRelease("ARMED_INPUT_TIMEOUT");
  if(!zjRcOwned||zjRcNetwork!=network||zjRcSource!=source||now-zjRcLeaseAt>ZJ_RC_LEASE_MS||
     (network&&(session!=zjRcSession||ip!=zjRcOwnerIP))||
     (zjRcHasFrame&&uint32_t(now-zjRcLast)<20)||seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
-    t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000){
+    t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000||
+    (inputArmed&&!zjRcInputArmed&&t>1050)){
   ++zjRcRejected;return false;
  }
- zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
+ zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
  zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
  // Maximum 10 diagnostic frames/s; sensors and Wi-Fi service take priority.
  if(now-zjRcLastLog>=ZJ_RC_LOG_MS&&Serial.availableForWrite()>100){
   zjRcLastLog=now;
-  Serial.printf("ZJRC,%s,%s,%lu,T=%d,R=%d,P=%d,Y=%d\n",zjRcTransport,zjRcSource.c_str(),
-   (unsigned long)seq,t,r,p,y);
+  Serial.printf("ZJRC,%s,%s,%lu,T=%d,R=%d,P=%d,Y=%d,ARM=%d\n",zjRcTransport,zjRcSource.c_str(),
+   (unsigned long)seq,t,r,p,y,inputArmed?1:0);
  }
  return true;
 }
 static void zjRcLoop(uint32_t now){
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
+  if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
   zjRcNeutral();
   if(Serial.availableForWrite()>60)Serial.println("ZJRC,FAILSAFE,INPUT_TIMEOUT");
  }
@@ -112,7 +117,7 @@ static String zjRcState(){
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"motorsArmed\":false}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.

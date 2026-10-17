@@ -14,7 +14,7 @@ let owner='',frame=null,accepted=0,tested=false;
 function snapshot(){
  const age=frame?Date.now()-frame.at:null,valid=!!owner&&age!==null&&age<=350;
  return {kitId:id,claimed:!!owner,active:valid,source:owner?'ANDROID':'NONE',ownerId:owner?'public-owner':'',seq:frame?.seq||0,
-  ageMs:age,receivedAtMs:frame?.at||0,inputValid:valid,failsafe:!valid,motorsDisabled:true,responseMode:frame?.responseMode||'Medium',
+  ageMs:age,receivedAtMs:frame?.at||0,inputValid:valid,inputArmed:valid&&frame?.inputArmed==='true',failsafe:!valid,motorsDisabled:true,responseMode:frame?.responseMode||'Medium',
   throttle:valid?frame.throttle:1000,roll:valid?frame.roll:1500,pitch:valid?frame.pitch:1500,yaw:valid?frame.yaw:1500,accepted,rejected:0};
 }
 function handle(host,path,method,args={},headers={}){
@@ -50,15 +50,16 @@ function handle(host,path,method,args={},headers={}){
  if(s.localSta&&!['/api/status','/api/telemetry','/api/rc/snapshot'].includes(path))
   return result({error:'sta_observer_read_only'},403,s.key,seq);
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.4',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.10',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,inputArmSupported:true,controlAuthorized:!s.localSta,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
  else if(path==='/api/wifi/test'){assert.ok(s.setup||s.local&&!s.localSta);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
  else if(path==='/api/rc/preview'){
   assert.equal(args.session,owner);assert.equal(args.armed,'false');assert.ok(Number(args.seq)>(frame?.seq||0));
+  assert.equal(args.inputArmed,'true');if(!frame)assert.equal(Number(args.throttle),1000,'First ARM frame must have low throttle');
   for(const key of ['throttle','roll','pitch','yaw'])assert.ok(Number(args[key])>=1000&&Number(args[key])<=2000);
   frame={...Object.fromEntries(Object.entries(args).map(([k,v])=>['throttle','roll','pitch','yaw','seq'].includes(k)?[k,Number(v)]:[k,v])),at:Date.now()};accepted++;
-  body={kitId:id,received:true,seq:frame.seq,receivedAtMs:frame.at,motorsDisabled:true};
+  body={kitId:id,received:true,seq:frame.seq,receivedAtMs:frame.at,inputArmed:frame.inputArmed==='true',motorsDisabled:true};
  }else if(path==='/api/rc/release'||path==='/api/rc/stop'){owner='';body={released:true}}
  else if(path==='/api/rc/snapshot')body=snapshot();
  else if(path==='/api/telemetry')body={kitId:id,board:'ZFC-A1',millis:Date.now(),gyroReady:true,address:0x6a,roll:0,pitch:0,yaw:0,scanner:[],scannerRunning:false,scanSequence:1,rc:snapshot()};
@@ -128,9 +129,9 @@ try{
  // Manufacturer label is now inside the optional Advanced disclosure.
  await phone.locator('details.kit-label-advanced').evaluate(el=>el.open=true);
  await phone.locator('#kitKey').fill(id+':'+secret);await phone.locator('#kitConnect').click();await wait(phone,()=>window.ZebjusNetwork?.isConnected());
- await phone.locator('[data-mobile-tab="more"]').click();
- await phone.locator('.settings-accordion > summary').filter({hasText:'Permissions • WebApp Grants / Diagnostic Control'}).click();
- await phone.locator('#kitRcPreview').check();await wait(phone,()=>window.ZebjusNetwork.hasControl());await phone.locator('#flightBack').click();
+ assert.equal(await phone.locator('#kitRcPreview').count(),0,'Direct Kit input needs no diagnostic enable checkbox');
+ await phone.locator('#flightBack').click();await phone.locator('#flightArm').click();
+ await wait(phone,()=>window.ZebjusNetwork.inputArmed()&&document.getElementById('flightArm').textContent==='DISARM');
  // Real touch-follow handlers and response mapping, with DOM pointer events.
  const beforeTouch=await phone.evaluate(()=>{
   const previous=window.ZebjusNetwork.feedback()?.seq||0;
@@ -151,7 +152,7 @@ try{
   document.getElementById('runPythonBtn').click();
  });
  await wait(web,()=>document.getElementById('pythonTerminal').textContent.includes('ESP32_RECEIVE_PYTHON_PASS'));
- await phone.evaluate(()=>document.getElementById('flightStop').click());await wait(phone,()=>!window.ZebjusNetwork.hasControl());
+ await phone.evaluate(()=>document.getElementById('flightStop').click());await wait(phone,()=>!window.ZebjusNetwork.hasControl()&&!window.ZebjusNetwork.inputArmed());
  const stopped=await web.evaluate(()=>window.DroneLabNetwork.readJoystick());assert.equal(stopped.input_valid,false);assert.equal(stopped.throttle,1000);assert.equal(stopped.roll,1500);
  assert.equal(calls.filter(c=>c.path==='/api/rc/claim').length,1,'Python must not claim or revive control');
  assert.ok(calls.some(c=>c.host==='192.168.1.42'&&c.path==='/api/rc/snapshot'));

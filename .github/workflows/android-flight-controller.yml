@@ -1,8 +1,9 @@
 name: Android Landscape Flight WebRTC Tests
 on:
   push:
-    branches: [feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/unified-pid-settings-shell-v1.6.3, main, feature/pid-fullwidth-responsive-layout, feature/classroom-my-kits-webapp-v1-3-5]
+    branches: [fix/kit-control-20261017, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/unified-pid-settings-shell-v1.6.3, main, feature/pid-fullwidth-responsive-layout, feature/classroom-my-kits-webapp-v1-3-5]
     paths:
+      - 'tools/android-direct-kit*'
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
       - 'mobile-android/**'
@@ -65,6 +66,7 @@ jobs:
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/flight-http.log 2>&1 &
           sleep 3
+          node tools/android-direct-kit-browser.mjs
           node tools/android-menu-browser.mjs
           node tools/flight-preview-browser.mjs
           node tools/flight-controller-browser.mjs
