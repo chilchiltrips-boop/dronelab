@@ -57,7 +57,7 @@ test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, 
  assert.match(html,/id="fwSerialRawFrames"/);
  assert.match(html,/MOTORS remain OFF|physical motors remain OFF/);
  assert.match(sw,/serial-readable-monitor\.js\?v=readable-20261017/);
- assert.match(sw,/firmware-updater\.js\?v=usb-readable-20261017/);
+ assert.match(sw,/firmware-updater\.js\?v=combined-usb-20261017/);
 });
 
 test('new native combined frame retains gyro and joystick values as one serial line',async()=>{
@@ -92,7 +92,7 @@ test('combined IDLE and malformed arm metadata cannot silently display input arm
 test('firmware defaults to COMBINED and supports explicit RAW without weakening RC deadman or telemetry schema',()=>{
  const firmware=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
  const rc=read('FlightCore_Firmware/FlightCoreClassroom.h');
- assert.match(firmware,/bool zjTelemetryRaw=false/);
+ assert.match(rc,/bool zjTelemetryRaw=false/);
  assert.match(firmware,/ZJTEL,FORMAT,/);
  assert.match(firmware,/ACK,FORMAT,/);
  assert.match(firmware,/MOTORS=OFF/);
