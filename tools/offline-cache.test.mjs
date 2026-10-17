@@ -43,7 +43,7 @@ test('large Python plotting wheels and Factory images cache on first demand and 
 });
 test('AP-only cache-busted scripts/styles load while firmware version keys stay exact',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./firmware-updater.js?v=pair-138','./js/python-lab.js?v=compact-run-20261011','./python-ide-workspace.css?v=compact-run-20261011']){
+ for(const path of ['./firmware-updater.js?v=pair-138','./js/python-lab.js?v=kit-transport-unified-20261017','./python-ide-workspace.css?v=compact-run-20261011']){
   const response=await r.request(path);assert.equal(response.ok,true,path);assert.ok((await response.text()).length>100);
  }
  assert.equal((await r.request('./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin?v=unpublished')).ok,false);

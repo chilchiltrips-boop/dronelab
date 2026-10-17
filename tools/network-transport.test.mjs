@@ -87,6 +87,8 @@ test('Python Network Lab reports actual authenticated AP request even while STA 
  const els={netResult:{textContent:'',dataset:{}},netRuntime:{textContent:''}};
  const window={ZebjusKits:{getState:()=>state,request:async()=>response},addEventListener(){},dispatchEvent(){}};
  const document={readyState:'loading',addEventListener(){},getElementById:id=>els[id]||null};
+ const transport={};runInNewContext(read('js/kit-data-interface.js'),transport);
+ window.ZebjusKitData=transport.ZebjusKitData;
  runInNewContext(read('js/network-lab.js'),{window,document,Date,performance:{now:()=>1},setTimeout,clearTimeout,setInterval,clearInterval,CustomEvent:class {}});
  await window.DroneLabNetwork.read();
  assert.match(els.netResult.textContent,/AP$/,'AP request must not be relabelled STA merely because STA interface is connected');
