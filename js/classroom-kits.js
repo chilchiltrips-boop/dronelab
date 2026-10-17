@@ -38,6 +38,23 @@ const HEARTBEAT_MAX_AGE=6500;
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
 state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
 let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
+let lastDiscoveryReason='',apDiscoveryFailure='';
+const STANDALONE_KIT_URL='https://chilchiltrips-boop.github.io/dronelab/';
+function embeddedKitContext(){
+ let embedded=false;try{embedded=root.self!==root.top}catch{embedded=true}
+ if(!embedded)return {embedded:false,delegated:true};
+ const policy=document.permissionsPolicy||document.featurePolicy;
+ let delegated=false;
+ try{delegated=!!(policy?.allowsFeature?.('local-network-access')||policy?.allowsFeature?.('local-network'))}catch{}
+ return {embedded:true,delegated};
+}
+function openStandaloneKit(){root.open(STANDALONE_KIT_URL,'_blank','noopener,noreferrer')}
+function embeddedKitNotice(){
+ const {embedded,delegated}=embeddedKitContext();
+ if(!embedded)return '';
+ return delegated?'Embedded Kit scan: allow browser local-network permission. If still blocked, open the direct WebApp.':
+  'Embedded Kit scan blocked by iframe Local Network Access policy. Host website (including Wix) must delegate local-network-access; local-network; loopback-network on every nested iframe. Open Direct WebApp if Wix does not expose iframe permissions.';
+}
 let savedNetworks=[];
 function adoptNetworkStatus(d){
  Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
@@ -1020,7 +1037,10 @@ async function probeIdentity(ip,timeoutMs=1550){
      !String(d.kitId).startsWith(String(d.board||'')+'-'))return null;
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
    simpleConnection:!!d.simpleConnection,adminSessions:!!d.adminSessions,exclusiveWifi:!!d.exclusiveWifi,hostname:d.hostname||'',board:d.board,ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
- }catch{return null}finally{clearTimeout(timer)}
+ }catch(error){
+  if(ip==='192.168.4.1'&&discovering)apDiscoveryFailure=error?.name==='AbortError'?'AP 192.168.4.1 timed out':error?.name==='TypeError'?'AP fetch blocked by browser, iframe or network':'AP fetch failed';
+  return null;
+ }finally{clearTimeout(timer)}
 }
 function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
@@ -1030,7 +1050,7 @@ function showDiscovered(){
   }
   target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning saved IPs, mDNS names and LAN helper…':lastDiscoveryReason||'No Kit verified. Computer must join Kit AP or its STA router and allow local network access.';target.append(empty);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
@@ -1067,7 +1087,7 @@ async function discoverKits(){
  discoveryPending=scanKitCandidates().finally(()=>{discoveryPending=null});return discoveryPending;
 }
 async function scanKitCandidates(){
- discovering=true;render();showDiscovered();
+ discovering=true;lastDiscoveryReason='';apDiscoveryFailure='';render();showDiscovered();
  try{
   let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
   const candidates=new Set(['192.168.4.1']);
@@ -1099,6 +1119,12 @@ async function scanKitCandidates(){
   }));
   discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
   lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
+  if(!discoveredKits.length){
+   lastDiscoveryReason=(embeddedKitNotice()||'Direct WebApp: confirm this computer and Kit are on the same local network.')+
+    ' Join Kit AP or the same STA router on this computer. In AP mode try http://192.168.4.1/api/identify in this computer browser. '+
+    (apDiscoveryFailure?'AP probe: '+apDiscoveryFailure:'');
+   audit('Discovery help • '+lastDiscoveryReason,'warn');tone(lastDiscoveryReason,'warn');
+  }
   await offerRememberedConnection();return discoveredKits;
  }finally{discovering=false;showDiscovered()}
 }
@@ -1420,6 +1446,7 @@ function init(){
   if(!id||!pairedKeys.get(id)){tone('Simple AP diagnostics needs no saved pairing. Authorize Settings over USB to remember protected STA/settings access on this personal browser.','info');return}
   void rememberBrowserPairing().catch(err=>{e.target.checked=false;tone(err.message,'warn')});
  });guardAction('kitDiscover',discoverKits);
+ guardAction('kitOpenStandalone',openStandaloneKit);guardAction('fwOpenStandalone',openStandaloneKit);
  // Firmware tab owns its discovery results; My Kits keeps independent actions.
  $('fwOpenDiscovery')?.addEventListener('click',()=>window.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));
  $('kitOpenFirmwareCenter')?.addEventListener('click',()=>document.querySelector('button.tab[data-tab="firmware"]')?.click());
@@ -1625,7 +1652,7 @@ async function renameConnectedKit(name='',reset=false){
 root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
- getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryHint:()=>lastDiscoveryReason,embeddedKitContext,connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
