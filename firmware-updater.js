@@ -189,9 +189,10 @@ async function loadCached(boardId,type='app'){try{const db=await openDb(),v=awai
  await setFirmware(bytes,pkg.file,{type,version:board.latest.version,boardId,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,cache:false,source:'Verified browser cache'});return true
 }}catch{}return false}
 async function clearCached(){try{const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch{}fw=null;renderFirmware();log('Cached firmware cleared.')}
-async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))bytes=new Uint8Array(bytes);const type=opt.type||inferType(name),boardId=opt.boardId||await targetBoardId(false);const imageInfo=validateEspImage(bytes,boardId,type),{inspectImage,imageBuildStamp,imageBuildTimeIso}=await import('./js/firmware-image.js?v=compile-time-verified-20261017');inspectImage(bytes,type,boardById(boardId),catalog);
+async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))bytes=new Uint8Array(bytes);const type=opt.type||inferType(name),boardId=opt.boardId||await targetBoardId(false);const imageInfo=validateEspImage(bytes,boardId,type),{inspectImage,imageBuildStamp,imageBuildTimeIso,imageSketchBuildStamp}=await import('./js/firmware-image.js?v=compile-time-verified-20261017');inspectImage(bytes,type,boardById(boardId),catalog);
  const compiledAt=imageBuildStamp(bytes,type),compiledIso=imageBuildTimeIso(bytes,type);
  if(opt.builtAt||opt.compiledAt){
+  if(!imageSketchBuildStamp(bytes,type))throw Error('Firmware contains a stale precompiled ESP-IDF timestamp, not a verified ZEBJUS sketch build stamp. Auto Load Latest again; no flash performed.');
   if(!compiledIso)throw Error('Official firmware image is missing its embedded compile timestamp. Reload the current release; nothing flashed.');
   const compiled=Date.parse(compiledIso),built=Date.parse(opt.builtAt||''),expected=Date.parse(opt.compiledAt||'');
   if(opt.compiledAt){

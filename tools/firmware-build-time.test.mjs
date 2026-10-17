@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {imageBuildStamp} from '../js/firmware-image.js';
+import {imageBuildStamp,imageBuildTimeIso,imageSketchBuildStamp} from '../js/firmware-image.js';
 
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const firmware=read('firmware-updater.js');
@@ -56,6 +56,12 @@ test('Step 1 reads the binary embedded compile time, never the flash or catalog-
  image.set([0x32,0x54,0xcd,0xab],32); // esp_app_desc_t magic at image offset 32
  write(112,'16:17:32');write(128,'Oct 16 2026');
  assert.equal(imageBuildStamp(image,'app'),'Oct 16 2026 16:17:32');
+ // Firmware's sketch compilation must win over Arduino core's prebuilt app_desc date.
+ image.set(Buffer.from('ZJ_BUILD_UTC=Oct 17 2026 17:21:11\0'),160);
+ assert.equal(imageSketchBuildStamp(image,'app'),'Oct 17 2026 17:21:11');
+ assert.equal(imageBuildStamp(image,'app'),'Oct 17 2026 17:21:11');
+ assert.equal(imageBuildTimeIso(image,'app'),'2026-10-17T17:21:11Z');
+ image.fill(0,160,160+37);
  // The same app descriptor exists in the factory image at 0x10000.
  const factory=new Uint8Array(0x10000+256);
  factory.set(image,0x10000);

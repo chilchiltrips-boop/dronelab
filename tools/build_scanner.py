@@ -137,7 +137,7 @@ def main():
             run(command+['compile','--jobs','2','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
             verified=verify_build(build,b,version)
             srcbin=find_app_bin(build)
-            embedded_compiled_at=check_compiled_at(srcbin.read_bytes(),built_at)
+            embedded_compiled_at=check_compiled_at(srcbin.read_bytes(),built_at,require_marker=True)
             verified['compiledAt']=embedded_compiled_at
             report['boards'].append(verified)
             dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
@@ -145,7 +145,7 @@ def main():
             pkg.update({'available':True,'sha256':digest,'size':dst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':build_id}); b['latest']['builtAt']=built_at; b['latest']['compiledAt']=embedded_compiled_at
             factory_pkg=b['latest'].get('factory',{}); merged=find_factory_bin(build)
             if merged and factory_pkg.get('file'):
-                if check_compiled_at(merged.read_bytes(),built_at,offset=int(b['appAddress'],0))!=embedded_compiled_at:
+                if check_compiled_at(merged.read_bytes(),built_at,offset=int(b['appAddress'],0),require_marker=True)!=embedded_compiled_at:
                     raise RuntimeError('Merged FACTORY image compile date differs from its APP')
                 fdst=OUT/factory_pkg['file']; shutil.copy2(merged,fdst); fdigest=sha(fdst)
                 factory_pkg.update({'available':True,'sha256':fdigest,'size':fdst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':f'{version}-{b["id"]}-FACTORY-{fdigest[:12]}'})

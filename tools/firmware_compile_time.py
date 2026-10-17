@@ -1,7 +1,7 @@
-"""Build-time source of truth: compiled ESP-IDF APP descriptor in UTC.
+"""Validate the UTC sketch compile marker, not Arduino core packaging dates.
 
-Uses exactly the offsets consumed by WebApp js/firmware-image.js.
-Only genuine embedded binary timestamps can be published as compiledAt.
+Official releases require ZJ_BUILD_UTC from current sketch compilation.
+Legacy ESP-IDF app descriptor remains readable only as fallback diagnostics.
 """
 from datetime import datetime, timedelta, timezone
 import struct

@@ -6,6 +6,9 @@
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
 constexpr const char* FW_VERSION="1.4.12";
+// Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
+// may retain its toolchain packaging date, so it must NOT label our release.
+static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS AERION A2";
@@ -43,6 +46,7 @@ void printFirmwareInfo(){
  Serial.print("ZJINFO,FW,");Serial.print(FC_BOARD);Serial.print(',');
  Serial.print(FW_VERSION);Serial.print(',');Serial.print(__DATE__);Serial.print(',');
  Serial.print(__TIME__);Serial.print(',');Serial.println(FC_LABEL);
+ Serial.println(ZJ_BUILD_STAMP);
  Serial.print("ZJI2C,PINS,");Serial.print(FC_BOARD);Serial.print(',');
  Serial.print(activeSda);Serial.print(',');Serial.print(activeScl);Serial.print(",0x");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)

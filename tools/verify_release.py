@@ -45,10 +45,10 @@ for board in CAT['boards']:
  assert (CAT['version']+'\0').encode() in app, 'Catalog firmware version differs from APP'
  assert len(app)==a['size'] and len(factory)==f['size']==4*1024*1024
  assert sha(app)==a['sha256'] and sha(factory)==f['sha256']
- compiled_utc=check_compiled_at(app,CAT['builtAt'])
+ compiled_utc=check_compiled_at(app,CAT['builtAt'],require_marker=True)
  assert a.get('compiledAt')==compiled_utc and f.get('compiledAt')==compiled_utc, 'Published compiledAt differs from embedded APP/FACTORY binary'
  assert board['latest'].get('compiledAt')==compiled_utc, 'Latest board compile metadata must match the binary'
- assert check_compiled_at(factory,CAT['builtAt'],offset=0x10000)==compiled_utc
+ assert check_compiled_at(factory,CAT['builtAt'],offset=0x10000,require_marker=True)==compiled_utc
  assert next((v.get('compiledAt') for v in report.get('boards',[]) if v.get('boardId')==board['id']),None)==compiled_utc, 'Build report compile stamp differs from image'
  assert chip(app)==chip(factory)==board['imageChipIds'][0]
  assert chip(factory,0x10000)==board['imageChipIds'][0]

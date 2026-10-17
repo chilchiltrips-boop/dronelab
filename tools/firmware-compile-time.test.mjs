@@ -30,6 +30,11 @@ test('firmware build-time verifier rejects stale and future binary relabeling',(
  'now=datetime(2026,10,17,16,21,tzinfo=timezone.utc)',
  'fresh=image("Oct 17 2026","16:18:45")',
  'assert check_compiled_at(fresh,"2026-10-17T16:18:22Z",now)=="2026-10-17T16:18:45Z"',
+ 'try: check_compiled_at(fresh,"2026-10-17T16:18:22Z",now,require_marker=True)',
+ 'except ValueError: pass',
+ 'else: raise AssertionError("official release accepted core descriptor without ZJ_BUILD_UTC sketch marker")',
+ 'marked=bytearray(fresh);marker=b"ZJ_BUILD_UTC=Oct 17 2026 16:18:45\\x00";marked[160:160+len(marker)]=marker',
+ 'assert check_compiled_at(bytes(marked),"2026-10-17T16:18:22Z",now,require_marker=True)=="2026-10-17T16:18:45Z"',
  'for date in ["Sep 17 2026","Nov 17 2026"]:',
  ' try: check_compiled_at(image(date,"02:45:35"),"2026-10-17T16:18:22Z",now)',
  ' except ValueError: pass',
@@ -42,6 +47,7 @@ test('WebApp checks official binary compiledAt, catalog build start, and version
  const fw=read('firmware-updater.js'),img=read('js/firmware-image.js'),sw=read('sw.js');
  assert.match(fw,/const VERSION='1\.4\.12'/);
  assert.match(fw,/imageBuildTimeIso\(bytes,type\)/);
+ assert.match(fw,/imageSketchBuildStamp\(bytes,type\)/);
  assert.match(fw,/Math\.abs\(compiled-expected\)>1000/);
  assert.match(fw,/compiled<built-15\*60\*1000/);
  assert.match(fw,/embedded in verified \.bin/);

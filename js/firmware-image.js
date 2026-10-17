@@ -4,9 +4,9 @@ const u16=(b,i)=>b[i]|b[i+1]<<8;
 const u32=(b,i)=>(b[i]|b[i+1]<<8|b[i+2]<<16|b[i+3]<<24)>>>0;
 export function boardFromChip(catalog,chip){return catalog.boards.find(b=>b.imageChipIds.includes(chip))||null}
 export function imageType(bytes){return bytes.length>APP_OFFSET+32768&&bytes[APP_OFFSET]===0xe9?'factory':'app'}
-// ESP-IDF esp_app_desc_t follows the 24-byte image header and 8-byte first
-// segment header. Its time/date fields are the compiled firmware's own build
-// timestamp, unlike firmware-catalog.builtAt (CI build start) or flash time.
+// ESP-IDF esp_app_desc_t may contain the Arduino core packaging date,
+// rather than the current FlightCore sketch compilation time. Only the
+// explicit ZJ_BUILD_UTC sketch marker is authoritative for official releases.
 export function imageBuildStamp(bytes,kind='app'){
  const offset=kind==='factory'?APP_OFFSET:0;
  if(!(bytes instanceof Uint8Array)||bytes.length<offset+144||u32(bytes,offset+32)!==0xabcd5432)return'';
