@@ -29,7 +29,8 @@ LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,lastScan=0,telLast=0;
 uint16_t telRateHz=20;
 // COMBINED (default): one full IMU+RC line; RAW is the legacy two-stream protocol.
-bool zjTelemetryRaw=false;
+// Defined once by FlightCoreClassroom.h; works in the standalone firmware-host build too.
+extern bool zjTelemetryRaw;
 uint32_t telemetrySeq=0,telemetryDropped=0; // Declare before serialCommand() so rate changes compile
 uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
 bool ledAvailable=true;
