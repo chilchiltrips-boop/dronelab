@@ -35,6 +35,13 @@ try{localStorage.removeItem('zebjus.classroom.auto-connect-approved.v1')}catch{}
 let headerNetworkChoice='sta',headerModePending=false;
 let statusPending=null,recoveryTarget=null,authorizationPending=null,otaActive=false;
 const HEARTBEAT_MAX_AGE=6500;
+// Chrome can throttle background timers. Never treat those delays as real STA loss.
+const BACKGROUND_STATUS_INTERVAL_MS=14000,FOREGROUND_SETTLE_MS=6500;
+let lastBackgroundStatusAt=0,foregroundResumedAt=0,resumeMonitoringPending=null;
+function backgroundLinkPolicy(hidden,now,lastHiddenStatusAt,visibleResumedAt){
+ return {poll:!hidden||now-lastHiddenStatusAt>=BACKGROUND_STATUS_INTERVAL_MS,
+  penalize:!hidden&&(!visibleResumedAt||now-visibleResumedAt>=FOREGROUND_SETTLE_MS)};
+}
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
 state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
 let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
@@ -89,9 +96,9 @@ function render(){
  byId('kitTopology',state.connected?'Laptop '+state.transport.toUpperCase()+' → '+state.kitCode+' • Android AP '+(state.apActive?'ready':'offline')+' • '+(state.rc?.active?'input live':'input idle'):'Power kit → join kit Wi-Fi → Connect Kit');
  const ready=linkFresh(),code=state.kitCode||'------';
  // Keep selected target independent of the currently verified transport.
- const label=ready?(state.kitName||'AERION')+' • '+code:otaActive?(state.kitName||'AERION')+' • '+code:pendingNetworkTarget?'FINDING '+pendingNetworkTarget.transport.toUpperCase():'NO KIT';
+ const label=ready?(state.kitName||'AERION')+' • '+code:state.connected&&['sta','ap'].includes(state.transport)?(state.kitName||'AERION')+' • '+code:otaActive?(state.kitName||'AERION')+' • '+code:pendingNetworkTarget?'FINDING '+pendingNetworkTarget.transport.toUpperCase():'NO KIT';
  byId('kitGlobalName',label);byId('kitGlobalDetail',otaActive?'Firmware update • '+state.transport.toUpperCase()+' • diagnostic controls disabled':ready?state.transport.toUpperCase()+' • '+(state.owner?'YOU CONTROL':state.rc?.claimed?'VIEW ONLY':'CONNECTED'):pendingNetworkTarget?'Join matching Wi-Fi • approve Connect':'Connect the kit on router Wi-Fi or AP');
- byId('kitWifiModeLive',ready?'Wi-Fi '+String(state.mode||'unknown').toUpperCase()+' • Link '+state.transport.toUpperCase():'Not connected');
+ byId('kitWifiModeLive',ready?'Wi-Fi '+String(state.mode||'unknown').toUpperCase()+' • Link '+state.transport.toUpperCase():state.connected&&['sta','ap'].includes(state.transport)?'Wi-Fi '+state.transport.toUpperCase()+' • verifying link':'Not connected');
  byId('kitDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
  byId('fwDiscoveryCount',discovering?'Scanning…':discoveredKits.length+' found');
  const globalTone=state.working?'info':ready&&state.rc?.claimed&&!state.owner?'locked':ready?'good':state.tone==='error'?'error':state.tone==='warn'?'warn':'offline';
@@ -1476,15 +1483,58 @@ function init(){
  $('kitHardwareTarget')?.addEventListener('change',e=>{if(!e.target.checked&&state.owner)void releaseRc();audit('Hardware diagnostic target '+(e.target.checked?'enabled':'disabled'))});
  $('kitSourceSelect')?.addEventListener('change',e=>{if(state.owner)void releaseRc();audit('Controller source selected: '+e.target.value)});
  $('kitCodeInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void connect()}});
- document.addEventListener('visibilitychange',()=>{if(state.working)return;if(document.hidden&&state.owner)void releaseRc();else if(!document.hidden&&autoReconnectAllowed){if(state.connected)void refreshConnection().catch(()=>{});else void restoreLastKit().catch(()=>{})}});
- root.addEventListener('pagehide',()=>{++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer)});
+ // Never discard verified Kit identity just because a tab is minimized.
+ function resumeVisibleMonitoring(){
+  if(document.hidden||!autoReconnectAllowed||state.working||otaActive||wifiTesting)return;
+  if(resumeMonitoringPending)return resumeMonitoringPending;
+  resumeMonitoringPending=(async()=>{
+   if(state.connected){
+    if(!linkFresh()){state.linkState='reconnecting';render()}
+    try{await read();pollErrors=0;render()}
+    catch(e){
+     // Require a fresh authenticated status, but retain the selected Kit.
+     state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
+     audit('Tab restored • rechecking same Kit: '+e.message,'warn');
+    }
+   }else if(recoveryTarget&&['sta','ap'].includes(recoveryTarget.transport)){
+    await recoverVerifiedLink(recoveryTarget);
+   }else await restoreLastKit();
+  })().finally(()=>{resumeMonitoringPending=null});
+  return resumeMonitoringPending;
+ }
+ document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+   lastBackgroundStatusAt=Date.now();pollErrors=0;
+   // Diagnostic joystick control must stop when its tab is not visible.
+   if(state.owner)void releaseRc();
+   return;
+  }
+  foregroundResumedAt=Date.now();pollErrors=0;
+  void resumeVisibleMonitoring().catch(e=>audit('Visible Kit recheck: '+e.message,'warn'));
+ });
+ root.addEventListener('pageshow',event=>{
+  if(!event.persisted)return;
+  foregroundResumedAt=Date.now();pollErrors=0;
+  void resumeVisibleMonitoring().catch(e=>audit('Restored Kit recheck: '+e.message,'warn'));
+ });
+ root.addEventListener('pagehide',event=>{
+  if(event.persisted){if(state.owner)void releaseRc();return}
+  ++reconnectTicket;if(state.owner)void releaseRc();pairedKeys.clear();clearInterval(pollTimer);clearInterval(rcTimer);
+ });
  pollTimer=setInterval(async()=>{
   if(!state.connected||state.working||otaActive||wifiTesting||pollBusy)return;
+  const now=Date.now(),policy=backgroundLinkPolicy(document.hidden,now,lastBackgroundStatusAt,foregroundResumedAt);
+  if(!policy.poll||document.hidden&&state.transport==='usb')return;
+  if(document.hidden)lastBackgroundStatusAt=now;
   pollBusy=true;const ticket=reconnectTicket,usb=state.transport==='usb';
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
    if(ticket!==reconnectTicket||state.working)return;
    state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
+   // Hidden/just-resumed timer stalls are not three verified Wi-Fi failures.
+   if(!backgroundLinkPolicy(document.hidden,Date.now(),lastBackgroundStatusAt,foregroundResumedAt).penalize){
+    pollErrors=0;return;
+   }
    if(++pollErrors<3){audit((usb?'USB':'Wi-Fi')+' check '+pollErrors+'/3 missed • '+e.message,'warn')}
    else{
     const old=connectionTarget();

@@ -91,7 +91,7 @@ function initLiveInputs(){
  function wipe(){sample=null;usbPpm=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
-  const kit=getKit(),identity=kit.connected?kit.kitId:'';
+  const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
   if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink){
    wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;
   }
@@ -205,7 +205,11 @@ function initLiveInputs(){
   }
   if(visible())display();
  });
- document.addEventListener('visibilitychange',()=>{if(document.hidden)wipe();display()});
+ document.addEventListener('visibilitychange',()=>{
+  // Preserve the historical IMU/RC snapshot; never resurrect a stale value as LIVE.
+  // Invalidate old in-flight requests and poll immediately after re-verification.
+  ++requestGeneration;nextPollAt=0;readFailures=0;rate.reset();display();
+ });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
  function tick(){display();if(visible()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();

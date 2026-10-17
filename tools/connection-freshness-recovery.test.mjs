@@ -1,4 +1,5 @@
 import test from 'node:test';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
@@ -73,4 +74,28 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
  assert.ok(current>=32&&previous>0&&current>=previous);
  assert.match(gradle,/versionName '1\.7\.16-release-gate'/);
+});
+
+test('minimized STA tab does not tear down selected Kit on throttled network polls',()=>{
+ const kit=read('js/classroom-kits.js'),start=kit.indexOf('function backgroundLinkPolicy(');
+ assert.ok(start>=0);
+ const end=kit.indexOf('\n}',start)+2,ctx={BACKGROUND_STATUS_INTERVAL_MS:14000,FOREGROUND_SETTLE_MS:6500};
+ vm.runInNewContext(kit.slice(start,end)+';globalThis.policy=backgroundLinkPolicy',ctx);
+ assert.equal(ctx.policy(true,100000,99000,0).poll,false);
+ assert.equal(ctx.policy(true,115000,100000,0).poll,true);
+ assert.equal(ctx.policy(true,115000,100000,0).penalize,false);
+ assert.equal(ctx.policy(false,118000,100000,115000).penalize,false);
+ assert.equal(ctx.policy(false,123000,100000,115000).penalize,true);
+ assert.match(kit,/function resumeVisibleMonitoring\(\)/);
+ assert.match(kit,/foregroundResumedAt=Date.now\(\);pollErrors=0/);
+ assert.match(kit,/root.addEventListener\('pageshow',event/);
+ assert.match(kit,/if\(event.persisted\)\{if\(state.owner\)void releaseRc\(\);return\}/);
+ assert.match(kit,/if\(!backgroundLinkPolicy\(document.hidden,Date.now\(\),lastBackgroundStatusAt,foregroundResumedAt\).penalize\)/);
+ assert.match(kit,/if\(state.owner\)void releaseRc\(\)/);
+ assert.match(kit,/const HEARTBEAT_MAX_AGE=6500/);
+ const inputs=read('js/live-inputs.js');
+ assert.doesNotMatch(inputs,/visibilitychange',\(\)=>\{if\(document.hidden\)wipe\(\)/);
+ assert.match(inputs,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate.reset\(\);display\(\)/);
+ assert.match(inputs,/\['stale','reconnecting'\].includes\(kit.linkState\)/);
+ assert.match(inputs,/SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800/);
 });
