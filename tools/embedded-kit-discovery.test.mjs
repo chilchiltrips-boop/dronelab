@@ -26,6 +26,6 @@ test('Wix and independent website kit access uses explicit opt-in delegation, ne
  const sw=get('sw.js');assert.match(sw,/js\/classroom-kits\.js\?v=embedded-lna-20261017/);
  const docs=get('docs/embed-wix-kit-access.md');
  assert.match(docs,/allow="local-network-access; local-network; loopback-network; serial; usb"/);
- assert.match(docs,/all.*ancestor/i);
+ assert.match(docs,/every ancestor/i);
  assert.match(docs,/noopener noreferrer/);
 });
