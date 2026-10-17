@@ -38,6 +38,7 @@ const HEARTBEAT_MAX_AGE=6500;
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
 state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
 let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
+let lastDiscoveryHint='',lastApProbeFailure='';
 let savedNetworks=[];
 function adoptNetworkStatus(d){
  Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
@@ -979,17 +980,21 @@ async function pairUsb(){
  return true;
 }
 async function probeIdentity(ip,timeoutMs=1550){
+ const apProbe=ip==='192.168.4.1';
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs);
  try{
   const response=await fetch('http://'+ip+'/api/identify',{method:'GET',mode:'cors',credentials:'omit',
    redirect:'error',cache:'no-store',signal:ctrl.signal,targetAddressSpace:'local'});
-  if(!response.ok)return null;
+  if(!response.ok){if(apProbe&&discovering)lastApProbeFailure='HTTP '+response.status+' from 192.168.4.1';return null;}
   const d=await response.json();
   if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(String(d.kitId||''))||!/^\d{6}$/.test(String(d.kitCode||''))||
-     !String(d.kitId).startsWith(String(d.board||'')+'-'))return null;
+     !String(d.kitId).startsWith(String(d.board||'')+'-')){if(apProbe&&discovering)lastApProbeFailure='Invalid Kit identity or board at 192.168.4.1';return null;}
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
    simpleConnection:!!d.simpleConnection,adminSessions:!!d.adminSessions,exclusiveWifi:!!d.exclusiveWifi,hostname:d.hostname||'',board:d.board,ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
- }catch{return null}finally{clearTimeout(timer)}
+ }catch(error){
+  if(apProbe&&discovering)lastApProbeFailure=error?.name==='AbortError'?'AP request timed out':error?.name==='TypeError'?'Browser request blocked or Kit AP unreachable':String(error?.message||error).slice(0,90);
+  return null;
+ }finally{clearTimeout(timer)}
 }
 function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
@@ -999,7 +1004,7 @@ function showDiscovered(){
   }
   target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':lastDiscoveryHint||'No Kit verified. Join Kit AP or its STA router from this computer and allow browser Local Network Access.';target.append(empty);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
@@ -1036,7 +1041,7 @@ async function discoverKits(){
  discoveryPending=scanKitCandidates().finally(()=>{discoveryPending=null});return discoveryPending;
 }
 async function scanKitCandidates(){
- discovering=true;render();showDiscovered();
+ discovering=true;lastDiscoveryHint='';lastApProbeFailure='';render();showDiscovered();
  try{
   let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
   const candidates=new Set(['192.168.4.1']);
@@ -1068,6 +1073,13 @@ async function scanKitCandidates(){
   }));
   discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
   lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
+  if(!discoveredKits.length){
+   lastDiscoveryHint='0 Kits reachable FROM THIS COMPUTER. Phone connected to Kit AP does not connect laptop. '+
+    'For AP join Kit hotspot on the computer and test http://192.168.4.1/api/identify in a browser tab. '+
+    'For STA join the same router. Check browser Local Network Access / HTTPS to HTTP restrictions, or use USB. '+
+    (lastApProbeFailure?'AP probe: '+lastApProbeFailure:'');
+   audit(lastDiscoveryHint,'warn');tone(lastDiscoveryHint,'warn');
+  }
   await offerRememberedConnection();return discoveredKits;
  }finally{discovering=false;showDiscovered()}
 }
@@ -1589,7 +1601,7 @@ async function renameConnectedKit(name='',reset=false){
 root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
- getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryHint:()=>lastDiscoveryHint,connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
