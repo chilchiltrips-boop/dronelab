@@ -16,6 +16,7 @@ export function readableDirectUrl(moduleUrl){
   throw Error('Direct DroneLab requires HTTPS');
  url.search='';url.hash='';return url.href;
 }
+export function embedScanBlocked(environment){return environment?.embedded===true&&environment?.localNetworkAllowed===false}
 export function embeddedDiscoveryHint(environment){
  return environment.embedded?
   'Embedded website: 0 verified kits. This iframe may not have Local Network Access. Open DroneLab Directly, join Kit AP or the same STA router on this computer, grant browser Local Network Access, and scan again. A phone on the Kit AP does not connect the laptop.':
@@ -54,6 +55,7 @@ export function initEmbedKitAccess({
  // Only public integration capability is exposed. Never expose an access key.
  const publicInfo=Object.freeze({
   embedded:environment.embedded,localNetworkAllowed,
+  scanBlocked:embedScanBlocked({embedded,localNetworkAllowed}),
   getHint:()=>embeddedDiscoveryHint(environment),
   directUrl:directUrl||''
  });
