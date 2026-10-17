@@ -17,6 +17,7 @@ try{
  await page.goto('http://localhost:8765/wix-like-embed-test');
  const frame=page.frameLocator('#wixFrame');
  await frame.locator('#fwEmbeddedKitAccess').waitFor({state:'attached',timeout:45000});
+ await frame.locator('#app[data-ready="true"]').waitFor({state:'attached',timeout:45000});
  // The inner Devices workspace defaults to an Overview pane. Open its
  // Connection view just as the Wix visitor would before checking visibility.
  await frame.locator('[data-tab="firmware"]').click();
