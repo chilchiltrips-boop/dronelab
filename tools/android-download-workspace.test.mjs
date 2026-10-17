@@ -51,7 +51,7 @@ test('The Hardware Center script refreshes release details without touching Kit/
  assert.match(workspace,/releaseChecking\|\|Date\.now\(\)-releaseLastChecked<300000/);
  assert.match(workspace,/releaseVersion\|\|/);
  assert.match(html,/devices-workspace\.css\?v=compact-scroll-header-20261016/);
- assert.match(html,/devices-workspace\.js\?v=compact-scroll-header-20261016/);
+ assert.match(html,/devices-workspace\.js\?v=kit-live-inputs-20261017/);
 });
 
 test('Android download occupies one small row, not the old full marketing card',()=>{

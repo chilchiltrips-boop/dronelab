@@ -43,7 +43,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
   inputArm:armed?'ARMED':'DISARMED',
-  led:typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
+  led:network&&typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
   motors:sample.motorsOff===true?'DISABLED':m.motors
  };
 }
