@@ -5,7 +5,7 @@
 ## Reference build and source distinction
 - Main reference before this change: `aa8052d957da266a847c999d683f82a246ea0272`; final acceptance MUST record the exact newly tested commit in the separate evidence report. Do not copy this older SHA into real-run evidence.
 - A1 / A2 FlightCore **1.4.12**; A1 compiled `2026-10-17T17:25:55Z`, A2 `2026-10-17T17:26:40Z` (reported in published catalog, not independently observed in device).
-- Android published release **1.7.15-live-link-recovery**, versionCode **31**, signing fingerprint and APK hashes in `mobile-apk/`. A subsequent Android asset change must rebuild and resign.
+- Android previously published release **1.7.15-live-link-recovery**, versionCode **31**, is the baseline. The **1.7.16-release-gate**, versionCode **32** candidate must pass pinned-signature APK verifier and native touch gates before CI publishes it; the actual published APK version/sha256 is always authoritative in `mobile-apk/`.
 - Firmware **LOADED FW BUILT**: parsed from selected verified binary; **Running FW built**: current Kit's USB `ZJINFO` or signed Kit status. Confirm A1/A2 separately. Displayed timestamp difference is not proof of a display bug, and uploaded firmware is not proof of successful boot.
 
 ## Before touching hardware
@@ -23,7 +23,7 @@
 - **Build timestamps:** compare loaded `ZJ_BUILD_UTC` and catalog `compiledAt`, then record **running** timestamp after verified boot, avoiding the historical ESP-IDF descriptor's Sep 17 time.
 
 ## Real Android handset procedure
-- Test on at least one current physical phone, plus an Android device with a different OS/manufacturer if available. Record OS version, model, APK versionCode=31/signing certificate/sha256, Wi-Fi type and signal.
+- Test on at least one current physical phone, plus an Android device with a different OS/manufacturer if available. Record OS version, model, APK published versionCode/signing certificate/sha256, Wi-Fi type and signal.
 - Connect Android Wi-Fi to Kit AP/router but deliberately block Kit API: screen MUST show **not connected**, fresh ownership disallowed, ARM disabled, no false applied ACK. Then restore link.
 - Assert diagnostic INPUT ARM requires authenticated Kit control at low throttle and reports accepted source/sequence. Physical MOTOR ARM remains false; STOP releases ownership.
 - Hold joysticks with two fingers; compare outbound sequence to Kit-accepted ACK and age. Force >350ms missing RC frame/ACK; check stale state, failsafe, neutral and no recovery auto-ARM.
