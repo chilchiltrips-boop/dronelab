@@ -21,6 +21,7 @@ async function seed(context){
    else if(url.pathname==='/api/status')body={kitId:id,kitCode:'123456',board:'ZFC-A2',kitName:'zebjus_drone_1',
     version:'1.4.11',bootId:'boot-one',mode:model.mode,requestTransport:model.mode.toUpperCase(),
     apActive:model.mode==='ap',staConnected:model.mode==='sta',ledOn:true,rc:rc()};
+   else if(url.pathname==='/api/telemetry')body={kitId:id,board:'A2',millis:1000,address:104,gyroReady:true,roll:0,pitch:0,yaw:0,scanner:[],rc:rc()};
    else if(url.pathname==='/api/rc/snapshot'){model.reads++;if(model.deny)throw Error('Simulated link loss');body=rc();}
    else{model.writes.push([url.pathname,options.method||'GET']);throw Error('Unexpected Kit request '+url.pathname);}
    return new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}});

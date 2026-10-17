@@ -82,3 +82,12 @@ test('both entry points and offline shell include the shared receiver and respon
  assert.ok(html.indexOf('js/kit-inputs.js')<html.indexOf('js/classroom-kits.js'));
  assert.match(html,/value="android-relay">FlightCore • Android Relay/);
 });
+
+test('STOP clears displayed ARM and rejects a snapshot that started before STOP',async()=>{
+ const f=kitFixture('ap');await f.connect();await f.api.readInputs();
+ assert.equal(f.api.getInputs().inputArmed,true);f.advance(101);
+ let finish;f.block(new Promise(r=>finish=r));const pending=f.api.readInputs();
+ await new Promise(r=>setImmediate(r));const stopped=f.api.stop();
+ const rejected=assert.rejects(pending,/connection changed/);finish();await stopped;await rejected;assert.equal(f.api.getInputs().inputArmed,false);
+ assert.equal(f.api.getInputs().throttle,1000);assert.equal(f.api.getState().owner,false);
+});

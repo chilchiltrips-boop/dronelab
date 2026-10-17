@@ -8,7 +8,7 @@
 const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const inputStore=root.ZebjusKitInputs?.createStore();
-let inputPending=null,inputReadAt=-Infinity;
+let inputPending=null,inputReadAt=-Infinity,inputEpoch=0;
 const inputNow=()=>root.performance?.now?.()??Date.now();
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
@@ -85,22 +85,22 @@ function byId(id,v){const e=$(id);if(e)e.textContent=v;}
 function tone(s,t='offline'){state.tone=t;state.lastError=t==='error'?s:'';byId('kitMessage',s);const e=$('kitMessage');if(e)e.dataset.tone=t;render();}
 function syncInputSelection(){
  return inputStore?.select({connected:linkFresh()&&!otaActive&&!state.working,kitId:state.kitId,
-  transport:state.transport,generation:reconnectTicket,bootId:state.bootId});
+  transport:state.transport,generation:reconnectTicket+':'+inputEpoch,bootId:state.bootId});
 }
 function getInputs(){syncInputSelection();return inputStore?.view()||null}
 function observeInputs(rc,options){syncInputSelection();return inputStore?.observe(rc,options)}
 async function readInputs(){
  if(!linkFresh()||state.working||otaActive)throw Error('Connect a verified, idle Kit before reading joystick input.');
  if(state.transport==='usb')return inputResult(getInputs());
- const ticket=reconnectTicket,id=state.kitId,transport=state.transport;
- if(inputPending?.ticket===ticket)return inputPending.promise;
- const slot={ticket};
+ const ticket=reconnectTicket,id=state.kitId,transport=state.transport,epoch=inputEpoch;
+ if(inputPending?.ticket===ticket&&inputPending.epoch===epoch)return inputPending.promise;
+ const slot={ticket,epoch};
  slot.promise=(async()=>{
   const delay=Math.max(0,100-(inputNow()-inputReadAt));if(delay)await sleep(delay);
-  if(ticket!==reconnectTicket||!linkFresh()||state.working||otaActive)throw Error('Kit connection changed before input read.');
+  if(ticket!==reconnectTicket||epoch!==inputEpoch||!linkFresh()||state.working||otaActive)throw Error('Kit connection changed before input read.');
   const started=inputNow();inputReadAt=started;
   const rc=await deviceRequest('/api/rc/snapshot');
-  if(ticket!==reconnectTicket||id!==state.kitId||transport!==state.transport||!linkFresh()||state.working||otaActive)
+  if(ticket!==reconnectTicket||epoch!==inputEpoch||id!==state.kitId||transport!==state.transport||!linkFresh()||state.working||otaActive)
    throw Error('Kit connection changed during input read.');
   if(!observeInputs(rc,{rtt:inputNow()-started}))throw Error('Firmware joystick identity or input validation failed.');
   // Observing never takes or restores control. Keep the ownership metadata from firmware.
@@ -572,7 +572,7 @@ async function readStatus(){
   if(ticket!==reconnectTicket||identity.slice(9).trim()!==expected)throw Error('USB identity changed during refresh');
   state.heartbeatAt=Date.now();state.linkState='connected';render();return state.usbInfo;
  }
- const started=inputNow();
+ const started=inputNow(),epoch=inputEpoch;
  const d=await deviceRequest('/api/status');
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  const actualTransport=verifiedTransport(d);
@@ -589,7 +589,7 @@ async function readStatus(){
  if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
  adoptNetworkStatus(d);
- observeInputs(d.rc,{rtt:inputNow()-started});inputStore?.observeLed(d.ledOn);
+ if(epoch===inputEpoch)observeInputs(d.rc,{rtt:inputNow()-started});inputStore?.observeLed(d.ledOn);
  if(priorName!==state.kitName||priorAddress!==state.staIp){
   for(const kit of discoveredKits)if(kit.kitId===state.kitId){kit.kitName=state.kitName;kit.hostname=state.hostname;}
   recordKnown();root.dispatchEvent(new CustomEvent('dronelab:kit-name',{detail:{kitId:state.kitId,name:state.kitName}}));
@@ -643,6 +643,7 @@ async function claim(source='WEB'){
 async function releaseRc(){
  ++controlTicket;ownOwnerId='';
  const had=state.owner,session=state.rcSession;
+ if(had){++inputEpoch;inputStore?.reset()}
  state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};render();
  if(!had)return;
  try{
@@ -652,7 +653,7 @@ async function releaseRc(){
  audit('RC input session released');
 }
 async function stop(){
- ++controlTicket;ownOwnerId='';
+ ++controlTicket;ownOwnerId='';++inputEpoch;inputStore?.reset();
  const was=state.owner,session=state.rcSession;state.owner=false;state.rcSession='';state.rcSource='';
  state.rc={active:false,claimed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};render();
  try{if(state.connected&&state.transport==='usb')await usbWrite('ZJRC,STOP');
