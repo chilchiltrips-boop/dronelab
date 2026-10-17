@@ -32,7 +32,10 @@ ctx.renderAssemblyUI=()=>{renderAssembly();
 const renderWiring=ctx.render2D;
 ctx.render2D=()=>{renderWiring();applyBranding(ctx);ctx.historyButtons();};
 initControls(ctx);initResponsive(ctx);
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(error=>console.info('Offline cache unavailable:',error.message));
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(reg=>{
+  // Wix iframe sessions should check for a newly deployed offline shell.
+  try{if(window.self!==window.top)return reg.update()}catch{}
+}).catch(error=>console.info('Offline cache unavailable:',error.message));
 async function boot(){
   ctx.setBootStatus('Starting local 3D renderer…');
   let graphics=true;

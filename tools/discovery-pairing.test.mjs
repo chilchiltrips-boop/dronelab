@@ -56,6 +56,6 @@ test('firmware release metadata and Service Worker cache version are aligned wit
  const version=read('VERSION.txt').trim(),sw=read('sw.js'),page=read('index.html');
  assert.match(version,/^1\.[0-9]+\.[0-9]+$/);
  assert.ok(sketch.includes('FW_VERSION="'+version+'"'));
- assert.ok(sw.includes('classroom-kits.css?v=embedded-lan-guard-20261017'));
- assert.ok(page.includes('classroom-kits.css?v=embedded-lan-guard-20261017'));
+ assert.ok(sw.includes('classroom-kits.css?v=embed-clean-20261017'));
+ assert.ok(page.includes('classroom-kits.css?v=embed-clean-20261017'));
 });

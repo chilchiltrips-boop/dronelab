@@ -1272,3 +1272,7 @@ button:disabled,.btn:disabled{transform:none!important;box-shadow:none!important
  #app .topbar-main .top-grant-control{width:179px;min-width:179px!important;max-width:179px}
  #app .topbar-main>.qr-header-controls{justify-content:flex-start;gap:7px}
 }
+
+/* Compatibility: suppress legacy AP/STA iframe warning boxes still present in
+ * old HTML cached by Wix or a previous DroneLab Service Worker. */
+.kit-embed-notice{display:none!important}

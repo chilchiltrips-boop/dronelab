@@ -1,11 +1,12 @@
 // Offline shell and all vendored Python plot dependencies. Keep binary query
 // versions identical to the URLs requested by the active firmware updater.
-const CACHE='dronelab-embed-clean-20261017';
+const CACHE='dronelab-embed-live-refresh-20261017';
 const core=['./js/kit-network-policy.js?v=network-policy-20261015','./js/cloud-admin.js?v=central-admin-20261015','./v2-header.css','./','./tripod.html','./tripod.html?embedded=1','./tripod.html?standalone=1','./tripod.css','./js/tripod-page.js','./js/tripod-physics.js','./js/training-receiver.js','./js/app-version.js','./js/tripod-audio.js','./js/tripod-realism.js','./js/tripod-assembly-model.js','./js/tripod-experiments.js','./index.html','./lab.html','./styles.css','./lab-workflow.css','./project.css','./firmware.css','./devices-workspace.css?v=unified-devices-firmware-method-20261015','./js/devices-workspace.js?v=one-click-advanced-secure-ota-20261015','./firmware-updater.js?v=combined-usb-20261017','./firmware-updater.js','./app-version.json','./pairing.css','./pairing-core.js','./pairing-code.js','./pairing-qr-ui.js','./pairing-web.js?v=connectivity-audit-20261015','./pairing-host-bridge.js','./companion.html','./companion.css','./companion.js','./companion-network.js','./companion-flight.js','./companion-menu.js','./flight-input.js','./vendor/qrgen.js','./vendor/jsqr.js','./vendor/peerjs.min.js','./js/serial-plotter.js','./js/serial-readable-monitor.js?v=readable-20261017','./js/embed-kit-access.js?v=embed-clean-20261017','./python-lab.css','./network-lab.css','./classroom-kits.css?v=embed-clean-20261017','./js/network-lab.js','./js/kit-auth.js','./js/kit-local-auth.js','./js/kit-pairing-store.js?v=1','./js/classroom-kits.js?v=embed-clean-20261017','./js/firmware-connect.js?v=embed-clean-20261017','./python-ide-workspace.css','./assets/python-ide-icons.svg','./js/python-ide-workspace.js','./python-lab-worker.js','./monaco-worker.js','./js/python-lab.js','./js/usb-i2c-bridge.js','./js/usb-live-diagnostic.js','./vendor/pyodide/pyodide.js','./vendor/pyodide/pyodide.asm.js','./vendor/pyodide/pyodide.asm.wasm','./vendor/pyodide/pyodide-lock.json','./vendor/pyodide/python_stdlib.zip','./vendor/monaco/min/vs/loader.js','./vendor/monaco/min/vs/editor/editor.main.js','./vendor/monaco/min/vs/editor/editor.main.css','./vendor/monaco/min/vs/basic-languages/python/python.js','./vendor/monaco/min/vs/base/worker/workerMain.js','./vendor/monaco/min/vs/base/browser/ui/codicons/codicon/codicon.ttf','./three.module.min.js','./glb-loader.js','./firmware-catalog.json','./firmware-latest.json','./vendor/esptool/bundle.mjs','./FlightCore_Firmware/catalog.json?v=1.4.7','./firmware-catalog.json?v=1.4.7','./js/firmware-image.js','./js/firmware-hashes.js','./vendor/crypto/zfc-crypto.js',"./vendor/pyodide/contourpy-1.3.0-cp312-cp312-pyodide_2024_0_wasm32.whl","./vendor/pyodide/cycler-0.12.1-py3-none-any.whl","./vendor/pyodide/fonttools-4.51.0-py3-none-any.whl","./vendor/pyodide/kiwisolver-1.4.5-cp312-cp312-pyodide_2024_0_wasm32.whl","./vendor/pyodide/matplotlib-3.8.4-cp312-cp312-pyodide_2024_0_wasm32.whl","./vendor/pyodide/matplotlib_pyodide-0.2.3-py3-none-any.whl","./vendor/pyodide/numpy-2.0.2-cp312-cp312-pyodide_2024_0_wasm32.whl","./vendor/pyodide/packaging-24.2-py3-none-any.whl","./vendor/pyodide/pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl","./vendor/pyodide/pyparsing-3.1.2-py3-none-any.whl","./vendor/pyodide/python_dateutil-2.9.0.post0-py2.py3-none-any.whl","./vendor/pyodide/pytz-2024.1-py2.py3-none-any.whl","./vendor/pyodide/six-1.16.0-py2.py3-none-any.whl","./vendor/pyodide/opencv_python-4.10.0.84-cp312-cp312-pyodide_2024_0_wasm32.whl"];
 self.addEventListener('install',event=>event.waitUntil((async()=>{
- // Keep the shell usable offline; lazy-cache multi-MB Python wheels and
- // destructive Factory binaries only after the user requests them.
- const essential=core.filter(path=>!/\/vendor\/pyodide\/.*\.whl(?:\?|$)/.test(path)&&
+ // Install quickly even on Wix iframes: cache the WebApp shell and APP images,
+ // but download huge Python runtime/WASM, plotting wheels and Factory images
+ // only when the user actually opens those features.
+ const essential=core.filter(path=>!/\/vendor\/pyodide\/.*\.(?:whl|wasm|zip)(?:\?|$)/.test(path)&&
    !/\/FlightCore_Firmware\/.*FACTORY\.bin(?:\?|$)/.test(path));
  const cache=await caches.open(CACHE),urls=[...essential];
  try{
@@ -28,7 +29,9 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
  await self.skipWaiting();
 })()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
- for(const name of await caches.keys())if(/^dronelab-(firmware|scanner|flightcore|i2c-scanner|qr-pairing|android-flight|flight-training|tripod)-/.test(name)&&name!==CACHE)await caches.delete(name);
+ // Also evict past Wix iframe/discovery cache generations; they can otherwise
+ // outlive a published HTML update in cross-origin embedded browsers.
+ for(const name of await caches.keys())if(name.startsWith('dronelab-')&&name!==CACHE)await caches.delete(name);
  await self.clients.claim();
 })()));
 self.addEventListener('fetch',event=>{
@@ -48,8 +51,11 @@ self.addEventListener('fetch',event=>{
   };
   const fresh=url.pathname.endsWith('/')||/\.(?:html|js|mjs|css)$/.test(url.pathname)||/(?:firmware-(?:catalog|latest)|app-version|catalog)\.json$/.test(url.pathname);
   if(fresh){
-   const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),2500);
-   try{const response=await fetch(event.request,{signal:ctrl.signal});if(response.ok){await cache.put(event.request,response.clone());return response}return await cachedResponse()||response}
+   // Navigations prioritize the live published page, not an expired Wix iframe
+   // shell. Give document fetches time on school/slow Wi-Fi before offline fallback.
+   const documentRequest=url.pathname.endsWith('/')||/\.html$/.test(url.pathname);
+   const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),documentRequest?10000:2500);
+   try{const response=await fetch(event.request,{signal:ctrl.signal,cache:documentRequest?'reload':'default'});if(response.ok){await cache.put(event.request,response.clone());return response}return await cachedResponse()||response}
    catch{return await cachedResponse()||Response.error()}
    finally{clearTimeout(timer)}
   }

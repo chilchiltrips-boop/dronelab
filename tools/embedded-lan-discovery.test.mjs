@@ -58,3 +58,18 @@ test('discovery denial still short-circuits scans while delegated/local scans re
  assert.doesNotMatch(read('js/firmware-connect.js'),/Open DroneLab Directly/);
  assert.doesNotMatch(read('js/embed-kit-access.js'),/kit\.key|pairedKeys|Access-Control-Allow-Origin/);
 });
+
+test('legacy Wix iframe copies are cleaned by independently refreshed metadata helper and CSS',async()=>{
+ const vm=await import('node:vm');
+ const removed=[];
+ const hint={textContent:'Embedded website may block AP/STA discovery. Use Open DroneLab Directly.'};
+ const target={getElementById(id){
+  if(id==='fwEmbeddedAccessNotice'||id==='kitEmbeddedAccessNotice')return {remove(){removed.push(id)}};
+  if(id==='fwConnectionHint')return hint;
+  return null;
+ }};
+ vm.runInNewContext(read('js/app-version.js'),{document:target,MutationObserver:class{observe(){}},console});
+ assert.deepEqual(removed,['fwEmbeddedAccessNotice','kitEmbeddedAccessNotice']);
+ assert.doesNotMatch(hint.textContent,/Open DroneLab Directly/);
+ assert.match(read('styles.css'),/\.kit-embed-notice\{display:none!important\}/);
+});
