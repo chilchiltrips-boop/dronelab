@@ -50,6 +50,7 @@ on:
       - live-inputs.css
       - tools/live-inputs.test.mjs
       - tools/connection-freshness-recovery.test.mjs
+      - tools/release-metadata.test.mjs
       - js/kit-data-interface.js
       - tools/kit-data-unified.test.mjs
       - js/serial-plotter.js

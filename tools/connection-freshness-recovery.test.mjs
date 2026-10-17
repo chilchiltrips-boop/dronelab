@@ -61,8 +61,8 @@ test('Embedding matrix describes cross-origin permissions and does not promise U
 test('Release verification and metadata derive version from Gradle, with fixed signer and upgrade guard',()=>{
  const workflow=read('.github/workflows/build-qr-android.yml'),verifier=read('tools/verify_signed_android_release.py'),
   gradle=read('mobile-android/app/build.gradle'),published=read('mobile-apk/ANDROID_RELEASE_META.txt');
- assert.match(workflow,/VERSION_CODE=\$\(awk /);
- assert.match(workflow,/VERSION_NAME=\$\(awk /);
+ assert.match(workflow,/python3 tools\/write_android_release_metadata\.py mobile-android\/app\/build\.gradle/);
+ assert.doesNotMatch(workflow,/VERSION_CODE=\$\(awk /);
  assert.match(workflow,/printf 'App: in\.zebjus\.dronelab\.companion/);
  assert.doesNotMatch(workflow,/Version: 1\.7\.13-direct-kit-control/);
  assert.match(workflow,/verify_signed_android_release\.py/);
