@@ -1,0 +1,54 @@
+name: Build and Publish A1/A2 PPM FlightCore Firmware
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'FlightCore_Firmware/*.h'
+      - 'FlightCore_Firmware/*.ino'
+      - 'FlightCore_Firmware/partitions.csv'
+      - 'VERSION.txt'
+      - 'tools/build_scanner.py'
+      - '.github/workflows/build-ppm-flightcore.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: flightcore-ppm-release-main
+  cancel-in-progress: false
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Compile verified A1 and A2 APP/FACTORY images
+        run: python3 tools/build_scanner.py
+      - name: Verify per-board image, partition, source hash, catalog, SHA256
+        run: python3 tools/verify_release.py
+      - name: Publish binaries and metadata to main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin
+          git add FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
+          git add FlightCore_Firmware/catalog.json FlightCore_Firmware/latest.json FlightCore_Firmware/build-report.json firmware-catalog.json firmware-latest.json
+          if git diff --cached --quiet; then echo "Compiled binaries already current"; exit 0; fi
+          git commit -m "build: verified FlightCore A1/A2 1.4.12 PPM APP and FACTORY binaries"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flightcore-ppm-a1-a2-build
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
+            FlightCore_Firmware/catalog.json
+          if-no-files-found: error

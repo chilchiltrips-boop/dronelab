@@ -78,10 +78,10 @@ test('only verified USB-linked dashboard consumes USB RC frames',()=>{
 test('both pages load the shared decoder synchronously before dashboard and offline cache retains it',()=>{
  const html=read('index.html'),lab=read('lab.html'),sw=read('sw.js'),kit=read('js/classroom-kits.js'),monitor=read('js/serial-readable-monitor.js');
  assert.equal(html,lab);
- const asset='js/serial-rc-decoder.js?v=usb-joystick-shared-20261017';
+ const asset='js/serial-rc-decoder.js?v=ppm-ch8-20261017';
  assert.ok(html.indexOf(asset)>0&&html.indexOf(asset)<html.indexOf('js/classroom-kits.js?v='));
  assert.ok(sw.includes('./'+asset));
- assert.match(monitor,/import '.\/serial-rc-decoder\.js\?v=usb-joystick-shared-20261017'/);
+ assert.match(monitor,/import '.\/serial-rc-decoder\.js\?v=ppm-ch8-20261017'/);
  assert.match(kit,/root\.ZebjusSerialRcDecoder\?\.parseSerialRc\(line\)/);
  assert.doesNotMatch(kit,/const rc=\/\^ZJRC,/);
  assert.match(sw,/dronelab-kit-freshness-recovery-20261017/);

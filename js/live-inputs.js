@@ -16,7 +16,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
-  seq:null,values:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
+  seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
   inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
@@ -42,6 +42,8 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
+  ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
+   rc.channels.every(finitePulse)?rc.channels.slice():null,
   ageMs:Math.round(ageMs),rateHz:recent&&Number.isFinite(sample.rateHz)?sample.rateHz:null,
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
@@ -81,12 +83,12 @@ function initLiveInputs(){
  const $=id=>document.getElementById(id);
  const getKit=()=>window.ZebjusKits?.getState?.()||{connected:false};
  const rate=createInputRateTracker();
- let sample=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
+ let sample=null,usbPpm=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
   nextPollAt=0,readFailures=0,requestGeneration=0;
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
   window.ZebjusDevicesWorkspace?.active?.()==='connection'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
- function wipe(){sample=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
+ function wipe(){sample=null;usbPpm=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.connected?kit.kitId:'';
@@ -130,6 +132,15 @@ function initLiveInputs(){
    v.state==='waiting'?'Waiting for authenticated accepted-input telemetry from this Kit. PPM requires firmware support.':
    'Select and connect a verified Kit to view its accepted RC inputs.';
   write('liHelp',message+' INPUT ARM is diagnostic only; motors are never armed by this monitor.');
+  const ppmActive=v.source==='PPM'&&v.ppmChannels!==null;
+  write('liPpmHealth',ppmActive?(v.state==='live'?'RECEIVER LIVE': 'RECEIVER STALE'):
+   'No accepted PPM channels');
+  for(let i=0;i<8;i++){
+   const n=ppmActive?v.ppmChannels[i]:null;
+   write('liCh'+(i+1),n??'—');
+   const bar=$('liCh'+(i+1)+'Bar');
+   if(bar)bar.style.width=n===null?'0%':((n-1000)/10)+'%';
+  }
  }
  async function poll(){
   const kit=getKit();
@@ -165,6 +176,16 @@ function initLiveInputs(){
   if(!kit.connected||kit.transport!=='usb'||!kit.kitId||event.detail?.transport&&event.detail.transport!=='usb')return;
   const line=String(event.detail?.line||'');
   const decoder=window.ZebjusSerialRcDecoder;
+  const ppm=decoder?.parsePpmChannels?.(line);
+  if(ppm){
+   usbPpm={...ppm,at:Date.now()};
+   if(ppm.owner&&sample?.rc?.source==='PPM'&&sample?.rc?.active===true){
+    sample.rc={...sample.rc,channels:ppm.channels};
+    if(visible())display();
+   }
+   return;
+  }
+  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;return;}
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
@@ -172,7 +193,10 @@ function initLiveInputs(){
    const hz=rate.observe(kit.kitId,received,at);
    const prev=sample;
    const seqChanged=!prev||prev.rc?.seq!==received.seq||prev.rc?.source!==received.source;
-   sample={kitId:kit.kitId,rc:received,at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
+   const confirmed=received.source==='PPM'&&usbPpm?.owner===true&&
+      at-usbPpm.at<=300?usbPpm.channels:null;
+   sample={kitId:kit.kitId,rc:confirmed?{...received,channels:confirmed}:received,
+    at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
     rateHz:hz,motorsOff:motorReported};
   }else if(received.kind==='idle'||received.kind==='reset'){
    rate.reset();

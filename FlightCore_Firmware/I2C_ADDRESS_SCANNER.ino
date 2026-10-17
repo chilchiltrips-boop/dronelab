@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.4.11";
+constexpr const char* FW_VERSION="1.4.12";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
 constexpr const char* FC_BOARD="ZFC-A2",*FC_LABEL="ZEBJUS AERION A2";
@@ -71,6 +71,7 @@ bool readLong(char*& state,long low,long high,long& result){
  return parseNumber(strtok_r(nullptr,",",&state),low,high,result);
 }
 #include "FlightCoreClassroom.h"
+#include "FlightCorePpm.h"
 void ledCommand(char* line){
  if(strncmp(line,"ZJLED,",6)!=0)return;
  char* state=nullptr;
@@ -116,6 +117,7 @@ void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch
 void serialCommand(char* line){
  if(zjRcSerialCommand(line))return;
+ if(zjPpmSerialCommand(line))return;
  if(zjNetSerialCommand(line))return;
  if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
  if(!strcmp(line,"ZJI2C,SCAN")){requestScan();return;}
@@ -373,6 +375,7 @@ void emitTelemetry(unsigned long now){
 void setup(){
  Serial.begin(115200);
  zjKitSetup();
+ zjPpmSetup();
  selectI2cBus();
  digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
@@ -393,6 +396,7 @@ void loop(){
  updateLedEffect(now);
  updateGyro(now);
  scanI2C(now);
+ zjPpmLoop(millis());
  emitTelemetry(now);
  zjNetworkLoop(now);
  zjRcLoop(now);

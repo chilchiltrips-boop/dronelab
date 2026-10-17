@@ -117,7 +117,7 @@ static String zjStatus(){
   out+=",\"sha256\":"+zjJson(zjSecureOtaHash);
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
- out+=",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
+ out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
@@ -291,7 +291,8 @@ static void zjSetupHttp(){
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
  });
  zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
- zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjRcLoop(millis());zjReply(200,zjRcState());});
+ zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
+ zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 
  // Factory flashing remains USB-only. APP OTA requires an encrypted, signed
  // admin session and an exact, board-matched SHA-256 image. Publisher
@@ -419,6 +420,7 @@ static void zjNetworkLoop(uint32_t now){
  zjAuthResetRequest();zjHttp.handleClient();now=millis();
  zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
+ zjPpmLoop(now);
  zjRcLoop(now);
  if(zjUsbScanning&&Serial.availableForWrite()>128){
   const int n=WiFi.scanComplete();

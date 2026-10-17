@@ -1,4 +1,4 @@
-import './serial-rc-decoder.js?v=usb-joystick-shared-20261017';
+import './serial-rc-decoder.js?v=ppm-ch8-20261017';
 // Presentation only. USB monitor, gyro/Python parsers and plotter retain original bytes.
 // Accepts original 12-field ZJTEL + separate ZJRC, and native 20-field combined ZJTEL.
 export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,staleMs=350}={}){

@@ -40,3 +40,18 @@
 @media(max-width:580px){.li-header{align-items:flex-start}.li-header h2{font-size:18px}.li-header p{font-size:11px}.li-sticks{gap:7px}.li-stick-card{padding:8px}.li-stick-area{width:min(100%,135px)}.li-identity,.li-metrics,.li-safety{grid-template-columns:repeat(2,minmax(0,1fr))}.li-identity b,.li-metrics b,.li-safety b{font-size:12px}}
 @media(max-width:390px){.li-identity,.li-metrics,.li-safety{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.li-stick-dot,.li-bar i{transition:none}}
+
+/* PPM CH1–CH8 from physical Kit, not from simulated Web/Android joystick. */
+.li-ppm-panel{border:1px solid #28556a;border-radius:12px;padding:12px;background:#0b2535;min-width:0}
+.li-ppm-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.li-ppm-head strong{font-size:11px;letter-spacing:.08em;color:#b6f5df}
+.li-ppm-head small{font-size:11px;color:#abc3cf}
+.li-ppm-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.li-ppm-channel{min-width:0;background:#102f43;border:1px solid #315a70;border-radius:8px;padding:7px 9px;display:grid;gap:5px}
+.li-ppm-channel small{color:#a9c5d1;font-weight:700;letter-spacing:.04em}
+.li-ppm-channel output{color:#ecfbff;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+.li-ppm-track{height:7px;background:#082030;border-radius:6px;overflow:hidden}
+.li-ppm-track i{display:block;width:0;height:100%;background:#48cfa6;transition:width .12s linear}
+.li-ppm-note{font-size:11px;color:#92b4c5;margin:8px 0 0;line-height:1.5}
+@media(max-width:580px){.li-ppm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:reduce){.li-ppm-track i{transition:none}}
