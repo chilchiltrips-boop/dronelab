@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "product": "ZEBJUS_I2C_SCANNER",
+  "product": "ZEBJUS_FLIGHTCORE",
   "version": "1.4.12",
   "builtAt": "2026-10-17T17:24:51Z",
   "catalog": "catalog.json",
-  "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
+  "note": "Board-aware FlightCore A1/A2 firmware catalog. The published compiledAt is extracted from the verified APP/FACTORY images; it is not the installation time."
 }
