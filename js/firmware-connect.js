@@ -142,7 +142,7 @@ function render(){
  set('fwDetailIp',live?s.transport==='ap'?'192.168.4.1':s.staIp||'Unknown':'--');
  set('fwDetailControl',live?s.owner?'Owned here':s.rc?.claimed?'Owned elsewhere':'Released':'--');
  set('fwDetailLastSeen',live&&s.heartbeatAt?new Date(s.heartbeatAt).toLocaleTimeString():'--');
- set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized?'Take Control reserves this Kit; Release Control neutralizes input. Motor outputs remain disabled.':'STA observer: pair this browser once over USB, then reconnect to authorize diagnostic control and updates.':'Select a live Kit. No commands are sent while offline.');
+ set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized?'Take Control reserves this Kit; Release Control neutralizes input. Motors remain disabled.':s.usbAvailable?'STA observer • physical USB detected. Click Verify USB & Authorize, then Take Control. USB Device ID and board must match.':'STA observer • Open physical USB Serial, verify this Kit and authorize protected controls; monitoring remains read-only.':'Select a live Kit. No commands are sent while offline.');
  set('fwApIndicator',live?s.apActive?'ACTIVE':'OFF':'--');
  set('fwStaIndicator',live?s.staConnected?'CONNECTED':'OFF':'--');
  if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning||s.working;
