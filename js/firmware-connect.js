@@ -48,7 +48,7 @@ function renderAvailable(kits=[],inProgress=false){
  set('fwDiscoveryCount',(inProgress?'Scanning • ':'')+discovered.length+' kit'+(discovered.length===1?'':'s'));
  if(!list)return;
  list.replaceChildren();
- if(!discovered.length){const p=document.createElement('p');p.className='micro-note';p.textContent=inProgress?'Scanning saved addresses, zebjus_drone_1… and current AERION mDNS names…':'No Kit found. Join the same Wi-Fi and allow Local Network Access. New Kits may require mDNS support or the local discovery helper.';list.append(p);return}
+ if(!discovered.length){const p=document.createElement('p');p.className='micro-note';p.textContent=inProgress?'Scanning saved addresses, zebjus_drone_1… and current AERION mDNS names…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit found. This computer must join Kit AP or same STA router and allow browser Local Network Access; optional mDNS bridge for new kits.';list.append(p);return}
  for(const d of discovered){
   const row=document.createElement('button');row.type='button';row.className='kit-known-item';
   row.dataset.kitId=d.kitId;row.setAttribute('aria-pressed',String(d.kitId===selectedId));
@@ -66,6 +66,7 @@ async function scan(){
   if(discovered.length===1&&!selectedId)select(discovered[0]);
   renderAvailable(discovered,false);
   line('Discovery complete • '+discovered.length+' candidate kit(s) • identity verification still required');
+  if(!discovered.length&&root.ZebjusEmbedKitAccess?.embedded)note('Embedded website may block AP/STA discovery. Use Open DroneLab Directly, then rescan on the same Kit Wi-Fi.',true);
  }catch(e){note('Discovery failed: '+e.message,true)}
  finally{scanning=false;lastScanAt=Date.now();renderAvailable(discovered,false)}
 }
