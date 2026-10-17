@@ -6,8 +6,16 @@ import sys
 from pathlib import Path
 
 APP_ID = "in.zebjus.dronelab.companion"
-EXPECTED_VERSION_CODE = 30
-EXPECTED_VERSION_NAME = "1.7.14-unified-kit-target"
+# Signed production version is pinned to the trusted Gradle source, not hardcoded
+# alongside a separately maintained release workflow or inferred from the APK.
+GRADLE_SOURCE = Path(__file__).resolve().parents[1] / "mobile-android/app/build.gradle"
+GRADLE_TEXT = GRADLE_SOURCE.read_text(encoding="utf-8")
+CODE_MATCH = re.search(r"\bversionCode\s+(\d+)\b", GRADLE_TEXT)
+NAME_MATCH = re.search(r"\bversionName\s+'([^']+)'", GRADLE_TEXT)
+if not CODE_MATCH or not NAME_MATCH:
+    raise SystemExit("RELEASE VERIFICATION FAILED: unable to read pinned Gradle release identity")
+EXPECTED_VERSION_CODE = int(CODE_MATCH.group(1))
+EXPECTED_VERSION_NAME = NAME_MATCH.group(1)
 EXPECTED_CERT_SHA256 = "f1b86575b3590734654f638e4e0d68056d37b2e8884ac7d6c24636fe9b516894"
 
 def output(cmd):

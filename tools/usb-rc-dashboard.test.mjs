@@ -84,5 +84,5 @@ test('both pages load the shared decoder synchronously before dashboard and offl
  assert.match(monitor,/import '.\/serial-rc-decoder\.js\?v=usb-joystick-shared-20261017'/);
  assert.match(kit,/root\.ZebjusSerialRcDecoder\?\.parseSerialRc\(line\)/);
  assert.doesNotMatch(kit,/const rc=\/\^ZJRC,/);
- assert.match(sw,/dronelab-kit-transport-unified-20261017/);
+ assert.match(sw,/dronelab-kit-freshness-recovery-20261017/);
 });

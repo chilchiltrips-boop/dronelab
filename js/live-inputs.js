@@ -4,7 +4,9 @@
  * Serial Monitor's shared frame decoder. PPM is display-only until firmware
  * actually advertises it in an authenticated RC snapshot.
  */
-const SNAPSHOT_TTL_MS=2600, NETWORK_POLL_MS=1100;
+// At most ~6 read requests/s while this pane is visible; never stack slow Wi-Fi/WebRTC requests.
+const SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800;
+const NETWORK_POLL_MS=140, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
 const channels=['throttle','roll','pitch','yaw'];
 const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
 const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
@@ -28,7 +30,8 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
  const receiveAge=Math.max(0,now-sample.at);
  const ageMs=(Number.isFinite(ageBase)&&ageBase>=0?ageBase:0)+receiveAge;
- const recent=receiveAge<=SNAPSHOT_TTL_MS;
+ const sequenceAge=sample.sequenceAt==null?receiveAge:Math.max(0,now-sample.sequenceAt);
+ const recent=receiveAge<=SNAPSHOT_TTL_MS&&ageMs<=INPUT_MAX_AGE_MS&&sequenceAge<=SEQUENCE_TTL_MS;
  const source=String(rc.source||'NONE').toUpperCase();
  const validSource=['WEB','ANDROID','PPM'].includes(source)?source:'NONE';
  const active=rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&validSource!=='NONE';
@@ -39,10 +42,10 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
-  ageMs:Math.round(ageMs),rateHz:Number.isFinite(sample.rateHz)?sample.rateHz:null,
+  ageMs:Math.round(ageMs),rateHz:recent&&Number.isFinite(sample.rateHz)?sample.rateHz:null,
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
-  inputArm:armed?'ARMED':'DISARMED',
+  inputArm:stale?'STALE':armed?'ARMED':'DISARMED',
   led:network&&typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
   motors:sample.motorsOff===true?'DISABLED':m.motors
  };
@@ -78,16 +81,17 @@ function initLiveInputs(){
  const $=id=>document.getElementById(id);
  const getKit=()=>window.ZebjusKits?.getState?.()||{connected:false};
  const rate=createInputRateTracker();
- let sample=null,inFlight=false,lastKit='',lastTransport='',usbFrameAt=0,requestAt=0;
+ let sample=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
+  nextPollAt=0,readFailures=0,requestGeneration=0;
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
   window.ZebjusDevicesWorkspace?.active?.()==='connection'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
- function wipe(){sample=null;rate.reset();usbFrameAt=0}
+ function wipe(){sample=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.connected?kit.kitId:'';
-  if(identity!==lastKit||kit.transport!==lastTransport){
-   wipe();lastKit=identity;lastTransport=kit.transport;
+  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink){
+   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;
   }
   const v=normalizeAcceptedInput(kit,sample);
   card.dataset.liveState=v.state;
@@ -131,18 +135,29 @@ function initLiveInputs(){
   const kit=getKit();
   if(!visible()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
-  const id=kit.kitId,transport=kit.transport;
+  const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,token=requestGeneration,
+   startedAt=Date.now();
   try{
    const reply=await window.ZebjusKits.request('/api/rc/snapshot');
    const current=getKit();
-   if(!current.connected||current.kitId!==id||current.transport!==transport||reply?.kitId!==id)return;
+   if(token!==requestGeneration||!visible()||!current.connected||current.kitId!==id||
+      current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id)return;
    const at=Date.now();
+   const prev=sample;
+   const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source;
+   const sequenceAt=seqChanged?at:prev.sequenceAt??prev.at;
    const hz=rate.observe(id,reply,at);
-   sample={kitId:id,rc:reply,at,rateHz:hz,ledOn:current.ledOn,
+   // Period is measured start-to-start; network wait already consumes budget.
+   // A single in-flight request still caps load when ESP32/WRTC is slow.
+   readFailures=0;nextPollAt=Math.max(at,startedAt+NETWORK_POLL_MS);
+   sample={kitId:id,rc:reply,at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
     motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
    display();
   }catch{
-   // Don't fake accepted frames on failed reads; the last sample ages to STALE.
+   // Connection might be temporarily unavailable; don't invent a fresh packet.
+   // Exponential retry capped at 2.4 s prevents hammering a recovering AP/STA/relay.
+   if(token===requestGeneration){readFailures=Math.min(5,readFailures+1);
+    nextPollAt=Date.now()+Math.min(MAX_RETRY_BACKOFF_MS,NETWORK_POLL_MS*2**readFailures);}
   }finally{inFlight=false}
  }
  window.addEventListener('dronelab:serial-line',event=>{
@@ -155,9 +170,10 @@ function initLiveInputs(){
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
   if(received.kind==='frame'){
    const hz=rate.observe(kit.kitId,received,at);
-   sample={kitId:kit.kitId,rc:received,at,rateHz:hz,ageMs:0,
-    motorsOff:motorReported};
-   usbFrameAt=at;
+   const prev=sample;
+   const seqChanged=!prev||prev.rc?.seq!==received.seq||prev.rc?.source!==received.source;
+   sample={kitId:kit.kitId,rc:received,at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
+    rateHz:hz,motorsOff:motorReported};
   }else if(received.kind==='idle'||received.kind==='reset'){
    rate.reset();
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
@@ -165,11 +181,11 @@ function initLiveInputs(){
   }
   if(visible())display();
  });
- document.addEventListener('visibilitychange',display);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)wipe();display()});
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
- function tick(){display();if(visible()&&Date.now()-requestAt>=NETWORK_POLL_MS){requestAt=Date.now();void poll()}}
+ function tick(){display();if(visible()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
- setInterval(tick,260);
+ setInterval(tick,UI_TICK_MS);
 }
 if(typeof document!=='undefined'){
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initLiveInputs,{once:true});

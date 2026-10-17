@@ -39,3 +39,68 @@ On the **same laptop/desktop running that browser**, connect the Kit AP (typical
 - A user must approve local network access; never disable browser security, issue private requests through arbitrary public-site proxies, forward pairing keys to the parent website or silently reconnect a different Kit.
 - No guarantee of direct in-iframe scanning on every website. A top-level tab, and where necessary USB, are the safe supported fallbacks.
 - If your site only accepts a Wix HTML Code snippet with a separate sandbox, **do not** paste the entire WebApp source there. Embed the published DroneLab HTTPS URL instead.
+
+## Connection freshness and browser permission acceptance matrix (October 2026)
+
+The authenticated **MY KITS** heartbeat remains approximately 2.2 seconds. When
+**Kit Connection → Live Inputs** is in the foreground, its separate read-only
+`/api/rc/snapshot` reader is limited to one request at a time, aiming for
+5–7 requests per second on a responsive kit. It does not claim RC ownership,
+send joystick control packets or change the physical motor state. Slow HTTP or
+WebRTC replies reduce the achieved rate instead of producing a backlog.
+
+A fresh HTTP reply is **not** proof that the joystick frame inside it is new:
+the panel checks firmware `ageMs`, elapsed time since the sample, and how long
+its accepted frame sequence has stopped changing. A missed or stale frame is
+displayed as STALE (never LIVE); disconnection wipes the selected Kit's values.
+A fresh verified frame and exact Device ID are required after reconnect.
+
+| Host / path | AP/STA discovery and joystick readings | USB Serial | Camera / Android Relay |
+|---|---|---|---|
+| Direct top-level DroneLab HTTPS in Chromium | Local Network Access approval, reachable Kit AP or routed STA LAN, authenticated Kit identity required | Web Serial-compatible browser, HTTPS, device port permission and user gesture required | WebRTC relay uses separately paired/authorized Android app; browser camera still requires permission |
+| Wix embedded site | Cross-origin sandbox and parent Permissions-Policy may block local-network; opening a top-level tab is the supported fallback | Wix HTML component cannot be assumed to delegate the `serial` feature or expose Web Serial | Velo documents `camera` and `fullscreen` for HTML Component `allow`; QR/camera and WebRTC require their own permissions |
+| WordPress embedded site | Works only if the parent HTTP policy, iframe `allow` and browser site permission delegate `local-network`; also requires actual Wi-Fi/LAN reachability | Requires parent `serial` policy, compatible browser, secure context and explicit port selection | Requires iframe `camera` delegation as appropriate and a valid paired WebRTC session |
+| Android native companion | Android is the Kit network client: AP/STA signed identity and phone Wi-Fi checks apply | Separate physical USB setup; Android does not magically grant desktop Web Serial access | App background always disarms/relinquishes input; foreground requires fresh signed Kit verification or a deliberate reconnect |
+
+When controlling the WordPress page/iframe HTML, an example permission
+delegation (subject to the parent's own HTTP policy) is:
+
+```html
+<iframe src="https://chilchiltrips-boop.github.io/dronelab/index.html"
+  title="ZEBJUS DroneLab" allow="local-network; loopback-network; serial; camera; fullscreen"
+  style="border:0;width:100%;min-height:860px"></iframe>
+```
+
+In Wix, `$w("#html1").allow = "serial; camera; fullscreen"`
+does **not** guarantee local-network or USB permission. Wix's documented
+HTML Component `allow` settings include `camera`, `encrypted-media`,
+and `fullscreen`, but Wix sandbox and parent policy control the other APIs.
+The embedded UI cannot override a denied permission. Verify on the **published**
+Wix/WordPress URL, in the target Chromium browser, using an actual Kit;
+source-level tests cannot prove that an external host delegates the policies.
+
+### Required hardware acceptance
+
+1. Remove the propellers / disconnect ESCs. Confirm the physical motors remain disabled.
+2. With a verified Kit in AP, open Live Inputs; expect current accepted input and
+   stale status in about one second after packets stop (not several seconds of false LIVE).
+3. Switch AP → STA, then STA → AP. The old Kit transport/frames must become stale
+   immediately, and reconnection must verify the **same full Device ID**. Do not
+   automatically trust a different kit or request network authorizations silently.
+4. Disconnect Kit power or Wi-Fi while Android sends diagnostic values; expect
+   input failsafe and UI STALE/OFFLINE, bounded read retries and eventual
+   identity-checked reconnect (may require user approval).
+5. Background Android and return to foreground; input must remain disarmed until
+   a fresh signed status and the correct SSID/BSSID/path confirm the intended Kit.
+   WebRTC controller permission is not restored merely by foregrounding.
+6. On Wix and WordPress, independently test AP, STA, USB Serial and Android Relay.
+   Record iframe `sandbox`/`allow`, `Permissions-Policy`, Local Network Access
+   prompt, Serial API availability, and whether the top-level tab succeeds.
+   External host/browser restrictions are not treated as firmware bugs.
+
+These are **hardware tests to execute**, not claims that every iframe/browser
+combination has already passed. Connection loss cannot be eliminated: verified
+recovery and firmware failsafe must remain active.
+
+References: Chrome/MDN Local Network Access security guidance and Wix Velo HTML
+Component `allow` documentation.

@@ -33,8 +33,8 @@ test('APK increments version code to allow upgrade and companion UI explains per
  const build=read('mobile-android/app/build.gradle');
  const code=Number(/versionCode\s+(\d+)/.exec(build)?.[1]||0);
  const published=Number(/VersionCode:\s*(\d+)/.exec(read('mobile-apk/ANDROID_RELEASE_META.txt'))?.[1]||0);
- assert.ok(code>=30&&code>=published,'update code must be at least the published APK version');
- assert.match(build,/versionName '1\.7\.14-unified-kit-target'/);
+ assert.ok(code>=31&&code>=published,'update code must be at least the published APK version');
+ assert.match(build,/versionName '1\.7\.15-live-link-recovery'/);
  const html=read('companion.html'),js=read('companion.js');
  assert.ok(html.includes('id="cameraPermissionHelp"'));
  assert.ok(html.includes('Allow only while using the app.'));

@@ -9,8 +9,8 @@ test('stable Android package ID and strictly monotonic release versionCode',()=>
  assert.match(gradle,/applicationId 'in\.zebjus\.dronelab\.companion'/);
  const code=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]||0);
  const published=Number(/VersionCode:\s*(\d+)/.exec(read('mobile-apk/ANDROID_RELEASE_META.txt'))?.[1]||0);
- assert.ok(code>=30&&code>=published,'stable release cannot regress the published version code');
- assert.match(gradle,/versionName '1\.7\.14-unified-kit-target'/);
+ assert.ok(code>=31&&code>=published,'stable release cannot regress the published version code');
+ assert.match(gradle,/versionName '1\.7\.15-live-link-recovery'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);

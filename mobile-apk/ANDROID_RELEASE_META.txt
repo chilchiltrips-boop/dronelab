@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.7.13-direct-kit-control
-VersionCode: 29
+Version: 1.7.14-unified-kit-target
+VersionCode: 30
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
 Source commit: 77ad5febdd46584e0e332578288a2694b8e7de50

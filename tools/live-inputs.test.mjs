@@ -51,6 +51,32 @@ test('USB combined telemetry can report motors OFF but never invent an LED state
  const raw=normalizeAcceptedInput(usb,{...snap('WEB'),motorsOff:false},{now:1100});
  assert.equal(raw.motors,'NOT REPORTED','legacy RAW USB does not report physical motor state');
 });
+test('a current HTTP reply cannot resurrect a stale firmware RC packet or frozen sequence',()=>{
+ const staleHardware=normalizeAcceptedInput(kit,{...snap(),rc:{...rc(),ageMs:950}},{now:1000});
+ assert.equal(staleHardware.state,'stale');
+ assert.equal(staleHardware.inputArm,'STALE');
+ assert.equal(staleHardware.rateHz,null);
+ const seqFrozen=normalizeAcceptedInput(kit,{...snap(),sequenceAt:10},{now:1000});
+ assert.equal(seqFrozen.state,'stale');
+ assert.equal(seqFrozen.inputArm,'STALE');
+ const resumed=normalizeAcceptedInput(kit,{...snap(),sequenceAt:1000},{now:1000});
+ assert.equal(resumed.state,'live');
+ const linkDown=normalizeAcceptedInput({...kit,connected:false,linkState:'stale'},snap(),{now:1000});
+ assert.equal(linkDown.state,'offline');
+ assert.equal(linkDown.values,null);
+});
+test('visible polling is 5-10Hz capped, single-flight, and exponential backoff on failures',()=>{
+ const js=read('js/live-inputs.js');
+ const period=Number(/NETWORK_POLL_MS=(\d+)/.exec(js)?.[1]);
+ assert.ok(period>=100&&period<=200,'fast monitor poll cap expected 5-10Hz');
+ assert.match(js,/!inFlight&&Date\.now\(\)>=nextPollAt/);
+ assert.match(js,/current\.physicalLink!==physicalLink/);
+ assert.match(js,/token!==requestGeneration/);
+ assert.match(js,/Math\.min\(MAX_RETRY_BACKOFF_MS,NETWORK_POLL_MS\*2\*\*readFailures\)/);
+ assert.match(js,/if\(document\.hidden\)wipe\(\)/);
+ assert.match(js,/sequenceAt:seqChanged\?at:prev\.sequenceAt\?\?prev\.at/);
+ assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
+});
 test('packet-rate tracker uses accepted counters and ignores polling without new accepted RC frames',()=>{
  const tracker=createInputRateTracker();const a=rc();
  assert.equal(tracker.observe(kit.kitId,a,1000),null);
@@ -72,7 +98,7 @@ test('Live Inputs is on Kit Connection, read-only, responsive and reachable in W
  assert.match(script,/ZebjusSerialRcDecoder/);
  assert.doesNotMatch(script,/\.claim\(|\.sendFrame\(|\/api\/rc\/preview|\.toggleControl\(/);
  assert.match(style,/@media\(max-width:580px\)/);
- for(const asset of ['live-inputs.css?v=kit-live-inputs-20261017','js/live-inputs.js?v=kit-transport-unified-20261017']){
+ for(const asset of ['live-inputs.css?v=kit-live-inputs-20261017','js/live-inputs.js?v=kit-freshness-recovery-20261017']){
   assert.ok(html.includes(asset),asset+' HTML');assert.ok(sw.includes('./'+asset),asset+' offline');
  }
  assert.match(html,/INPUT ARM is diagnostic only/);
