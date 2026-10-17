@@ -24,11 +24,11 @@ test('Public kit codes are selectors, authentication is per-device and admin is 
  for(const t of ['ZJADMIN,GET','ZJADMIN,NAME,','ZJADMIN,APNAME,','ZJADMIN,APPASS,','ZJADMIN,ROTATE_KEY,CONFIRM','ZJADMIN,FACTORY_RESET,CONFIRM','CONTROLLER_ACTIVE','zjKitPrefs.putString("apName"'])assert.ok(cl.includes(t),t);
  assert.ok(!fw.includes('/api/admin/'),'remote AP password/key rotation must not be exposed over HTTP');
 });
-test('WebRTC input and PID input use the same kit lease; Android AP direct is not echoed',()=>{
+test('Remote WebRTC simulator inputs never claim physical Kit ownership; local control is separate',()=>{
  for(const s of ["state.transport==='ap'","state.physicalLink==='ap'","state.owner","state.rcSource","kitHardwareTarget","armed:'false'","350","targetAddressSpace:'local'"])assert.ok(kit.includes(s),s);
  const pairing=read('pairing-web.js'),host=read('pairing-host-bridge.js'),pid=read('js/tripod-page.js');
- assert.ok(pairing.includes('window.ZebjusKits?.ingestAndroid?.(m)'));
- assert.ok(pairing.includes("host.status().controller==='mobile'"));
+ assert.ok(!pairing.includes('window.ZebjusKits?.ingestAndroid?.(m)'),'simulator receiver must not send physical Kit diagnostic frames');
+ assert.ok(pairing.includes('Remote Phase 1 is simulator-only'));
  assert.ok(host.includes('hardwareInput(){'));
  assert.ok(pid.includes('hardwareInput:()=>'));
  assert.ok(pid.includes('window.parent?.ZebjusKits?.stop?.()'));

@@ -81,13 +81,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
-          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js remote-rtc.js remote-rtc-config.json mobile-android/app/src/main/assets/
           cp js/kit-auth.js js/kit-network-policy.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
           cp vendor/qrgen.js vendor/jsqr.js vendor/peerjs.min.js vendor/peerjs.LICENSE mobile-android/app/src/main/assets/vendor/
           test -s mobile-android/app/src/main/assets/companion.html
           test -s mobile-android/app/src/main/assets/pairing-code.js
+          test -s mobile-android/app/src/main/assets/remote-rtc.js
           test -s mobile-android/app/src/main/assets/companion-flight.js
           test -s mobile-android/app/src/main/assets/companion-menu.js
           test -s mobile-android/app/src/main/assets/js/kit-network-policy.js

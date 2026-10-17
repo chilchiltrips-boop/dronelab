@@ -88,12 +88,12 @@ test('firmware scopes OTA to idle USB-paired AP/STA; setup labels never grant OT
  assert.match(source,/zjAssociationEpoch!=zjTestAssociationEpoch/);
 });
 
-test('WebRTC reset stops only hardware owned by this WebApp, never a separate Android AP owner',()=>{
+test('WebRTC simulator STOP does not mutate separately owned physical Kit at all',()=>{
  const source=read('pairing-web.js'),fn=source.slice(source.indexOf('function stopSimulatorRemote('),source.indexOf('function forwardSimulatorControl('));
  let owner=false,stops=0,virtual=0;
  const context={window:{ZebjusKits:{getState:()=>({owner}),stop:()=>stops++}},training:()=>({stop:()=>virtual++}),$:()=>({})};
  vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,1);
- owner=true;vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,1);assert.equal(virtual,2);
+ owner=true;vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,2);
 });
 
 test('simple AP session needs no label, sends signed/encrypted diagnostic requests and rejects identity changes',async()=>{

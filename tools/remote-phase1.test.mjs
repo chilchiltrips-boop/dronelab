@@ -73,7 +73,7 @@ test('remote telemetry is read-only, identity verified, and never grants physica
  assert.match(s,/RC_DEADMAN_MS=350/);
  assert.match(s,/STALE_MS=2800/);
  assert.match(s,/visibilitychange/);
- assert.doesNotMatch(s,/\/api\/rc\/claim|\/api\/rc\/preview|\/api\/wifi\/mode|\/api\/firmware/);
+ assert.doesNotMatch(s.replace(/^\/\*[\s\S]*?\*\//,''),/\/api\/rc\/claim|\/api\/rc\/preview|\/api\/wifi\/mode|\/api\/firmware/);
 });
 test('remote monitor sends only one verified GET and shuts off on disconnect',async()=>{
  const callbacks=[],elements=new Map();
