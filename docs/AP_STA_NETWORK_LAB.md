@@ -57,3 +57,7 @@ The native Android APP picker rejects filenames containing Factory/Merged and fi
 - Android offline AP kit status, I²C scan, gyro plot, LED STOP; paired WebApp relay; Python worker Run/Stop; disconnect and reconnection.
 - Joystick RC preview accepted only with correct key, disarmed flag and owner; out-of-order frames and concurrent controllers rejected; 350 ms timeout returns 1000/1500.
 - APP-only OTA on both boards, reject wrong chip, factory image, truncated file, oversize file, unauthorized request, power loss; USB factory recovery still available.
+
+
+## Minimized tab / another tab open — STA/IMU resilience
+The physical ESP32 STA association and IMU run independently of browser tabs. Background Chrome timers may be paused, so a missed UI heartbeat is not proof the Kit disconnected. The original page now preserves selected Kit identity and authenticated monitoring while hidden, attempts read-only status no more than once per 14s if browser scheduling permits, and does not count hidden or just-resumed request failures as physical disconnects. On visibility/focus return and back-forward cache restoration, it immediately verifies fresh signed status for the same Kit. Controller ownership is still released when hidden; motors remain disabled. **Browser sleep/discard and PC sleep cannot guarantee uninterrupted background streaming.** Use device `staDisconnectReason`, `staConnected`, RSSI and USB logs to diagnose actual STA loss. Never display historical telemetry as LIVE.
