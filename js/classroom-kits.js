@@ -1030,7 +1030,9 @@ function showDiscovered(){
   }
   target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning mDNS kits, saved addresses and optional LAN helper…':'No Kit verified. Allow Local Network Access, join classroom Wi-Fi or run the optional LAN helper for new STA kits.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning saved IPs, mDNS and optional LAN helper…':
+   window.ZebjusEmbeddedAccess?.status()?.embedded||window.ZebjusEmbeddedAccess?.status()?.trustedOrigin===false?
+   window.ZebjusEmbeddedAccess.guidance():'No Kit verified. Join Kit AP or same STA router and allow browser Local Network Access.';target.append(empty);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
@@ -1069,6 +1071,14 @@ async function discoverKits(){
 async function scanKitCandidates(){
  discovering=true;render();showDiscovered();
  try{
+  // Wix and other embeds cannot grant themselves local-network permissions.
+  // Stop an explicitly denied request path instead of repeatedly probing
+  // dozens of addresses; other embedded pages with delegated access still scan.
+  if(window.ZebjusEmbeddedAccess?.shouldSkipLocalProbe?.()){
+   discoveredKits=[];lastDiscoverAt=Date.now();
+   audit('Embedded Kit discovery unavailable: '+window.ZebjusEmbeddedAccess.guidance(),'warn');
+   return discoveredKits;
+  }
   let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
   const candidates=new Set(['192.168.4.1']);
   for(const k of known){
