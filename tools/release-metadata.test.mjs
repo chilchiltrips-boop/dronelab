@@ -33,4 +33,5 @@ test('signed release gate verifies APK, pinned signer and native touch before pu
  assert.match(wf,/write_android_release_metadata\.py mobile-android\/app\/build\.gradle/);
  assert.match(wf,/sha256sum -c mobile-apk\/SHA256SUMS\.txt/);
  assert.doesNotMatch(wf,/Version: 1\.7\.13-direct-kit-control/);
+ assert.match(read('tools/write_android_release_metadata.py'),/Path\(target\)\.write_text\(result/);
 });

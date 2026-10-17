@@ -63,7 +63,7 @@ test('Release verification and metadata derive version from Gradle, with fixed s
   gradle=read('mobile-android/app/build.gradle'),published=read('mobile-apk/ANDROID_RELEASE_META.txt');
  assert.match(workflow,/python3 tools\/write_android_release_metadata\.py mobile-android\/app\/build\.gradle/);
  assert.doesNotMatch(workflow,/VERSION_CODE=\$\(awk /);
- assert.match(workflow,/printf 'App: in\.zebjus\.dronelab\.companion/);
+ assert.match(read('tools/write_android_release_metadata.py'),/f"App: \{APP_ID\}/);
  assert.doesNotMatch(workflow,/Version: 1\.7\.13-direct-kit-control/);
  assert.match(workflow,/verify_signed_android_release\.py/);
  assert.match(verifier,/EXPECTED_CERT_SHA256 = "[0-9a-f]{64}"/);
