@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const phone=read('companion-flight.js'),tripod=read('js/tripod-page.js');
 const receiver=read('js/training-receiver.js');
 
-test('WebRTC transmitter sends authenticated control before optional FlightCore diagnostic work',()=>{
+test('WebRTC simulator target transmits only authenticated virtual control, never concurrent Kit preview',()=>{
  const start=phone.indexOf('function send(critical=false){'),end=phone.indexOf('function connect(p){',start);
  assert.ok(start>=0&&end>start,'Real flight-control sender found');
  const observed=[],sent=new Map();
@@ -17,14 +17,14 @@ test('WebRTC transmitter sends authenticated control before optional FlightCore 
   peer:{status:()=>({sessionId:'verified-session-01'}),sendSimulatorControl:()=>{observed.push('webrtc');return nextResult}},
   current:()=>({mode:'angle',armed:true,throttle:1000,axes:{roll:0,pitch:0,yaw:0}}),
   diagnosticInput:()=>({axes:{roll:0,pitch:0,yaw:0},throttle:1000}),
-  isOwned:()=>true,halted:false,left:null,right:null,
+  isOwned:()=>true,directKit:()=>false,halted:false,left:null,right:null,
   seq:0,criticalRequestSeq:0,sent,performance:{now:()=>now},
   acceptedFrames:0,rejectedFrames:0,lastControlSentAt:0,lastControlAttemptAt:0,lastRejectedAt:0,
   console:{warn:()=>{}}
  };
  vm.runInNewContext(phone.slice(start,end)+';globalThis.transmit=send;',ctx);
  assert.equal(ctx.transmit(true),true);
- assert.deepEqual(observed,['webrtc','preview']);
+ assert.deepEqual(observed,['webrtc'],'Simulator target must not send real-Kit diagnostics');
  assert.equal(ctx.acceptedFrames,1);
  assert.equal(ctx.criticalRequestSeq,1);
  assert.equal(sent.get(1),1000);
