@@ -71,6 +71,6 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  assert.match(verifier,/int\(version_code\) > int\(old_package\[2\]\)/);
  const current=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
- assert.ok(current>=31&&previous>0&&current>=previous);
- assert.match(gradle,/versionName '1\.7\.15-live-link-recovery'/);
+ assert.ok(current>=32&&previous>0&&current>=previous);
+ assert.match(gradle,/versionName '1\.7\.16-release-gate'/);
 });
