@@ -296,3 +296,10 @@
  .firmware-page .fw-target-quick-status>div:last-child{grid-column:1/-1}
  .firmware-page .fw-target-advanced .firmware-usb-info:not(.firmware-id-info){grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Hardware permission bridge: visible only for sandboxed/cross-origin embeds. */
+.embed-kit-access[hidden]{display:none!important}
+.embed-kit-access{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin:10px 0 12px;padding:12px 14px;border:1px solid var(--line,#567080);border-radius:9px;background:rgba(68,100,120,.09);font-size:13px;line-height:1.5}
+.embed-kit-access strong{font-weight:700}
+.embed-kit-access p{margin:0;overflow-wrap:anywhere;max-width:82ch}
+.embed-kit-access a{display:inline-flex;text-decoration:none;align-items:center;white-space:normal}
