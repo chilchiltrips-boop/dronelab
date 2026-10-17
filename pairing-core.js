@@ -1,4 +1,4 @@
-/* ZEBJUS local WebRTC control • no STUN/TURN in the control connection.
+/* ZEBJUS WebRTC transport • default STUN, optional short-lived authorized TURN.
    Offer/answer travel in two-way QR or optional online code signaling.
    Always volatile: refresh / app restart discards keys, peers and controller leases. */
 (function(root){
@@ -145,20 +145,25 @@ function session(role,events={}){
    const s=pc.connectionState;
    if(s==='connected'){clearTimeout(dropTimer);connected=channel?.readyState==='open';state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
    if(s==='disconnected'){connected=false;dropControl('Wi-Fi changed');controller=null;emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(peer===pc&&pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
-   if(s==='failed'||s==='closed')close('Connection ended • scan fresh QR');
+   if(s==='failed'||s==='closed')close('Connection ended • check STUN/TURN, firewall and scan fresh QR');
   };
  }
  function makePC(){
   if(!root.RTCPeerConnection)throw Error('WebRTC unsupported in this browser');
-  const pc=new RTCPeerConnection({iceServers:[],iceCandidatePoolSize:0});
+  const iceServers=root.ZebjusRemoteRTC?.getIceServers?.()||
+    [{urls:'stun:stun.cloudflare.com:3478'},{urls:'stun:stun.l.google.com:19302'}];
+  const pc=new RTCPeerConnection({iceServers,iceCandidatePoolSize:0});
   peer=pc;return pc;
  }
  async function makeOffer(){
   close('New pairing session');sessionId=randomId(12);code=pin();expires=Date.now()+EXPIRY_MS;
-  const ticket=generation,pc=makePC(),dc=pc.createDataChannel('zebjus-flight-v1',{ordered:true});setup(pc,dc);
+  const ticket=generation;
+  if(root.ZebjusRemoteRTC?.load)await root.ZebjusRemoteRTC.load();
+  if(ticket!==generation)throw Error('Pairing cancelled');
+  const pc=makePC(),dc=pc.createDataChannel('zebjus-flight-v1',{ordered:true});setup(pc,dc);
   const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
   const description=await pc.createOffer();check();await pc.setLocalDescription(description);check();state('Gathering local Wi-Fi connection candidates');
-  await waitIce(pc);check();state('Waiting for Android QR response');
+  await waitIce(pc);check();state('Waiting for Android QR response • ICE candidates gathered');
   const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});check();
   return {qr,pin:code,expires,sessionId};
  }
@@ -166,6 +171,8 @@ function session(role,events={}){
   close('New pairing session');
   const ticket=generation,offer=await unpack(offerText);if(ticket!==generation)throw Error('Pairing cancelled');if(offer.kind!=='offer')throw Error('Expected a Web App offer QR');
   sessionId=offer.sid;code=offer.pin;expires=offer.expires;
+  if(root.ZebjusRemoteRTC?.load)await root.ZebjusRemoteRTC.load();
+  if(ticket!==generation)throw Error('Pairing cancelled');
   const pc=makePC();setup(pc);
   const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
   await pc.setRemoteDescription({type:'offer',sdp:offer.sdp});check();
@@ -185,7 +192,7 @@ function session(role,events={}){
   if(peer.signalingState!=='have-local-offer')throw Error('Pairing offer already answered');
   await pc.setRemoteDescription({type:'answer',sdp:answer.sdp});
   if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled');
-  state('Connecting via local Wi-Fi • approve on Web');
+  state('Connecting via encrypted WebRTC • approve on Web');
   return true;
  }
  function approvePairing(){

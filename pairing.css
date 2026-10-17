@@ -278,3 +278,17 @@
   #pairPhoneCode{font-size:20px;min-height:46px}
   #pairPhoneCode::placeholder{font-size:12px}
 }
+
+/* Remote phase 1: explicitly consented encrypted WebRTC telemetry, simulator only. */
+.remote-phase-one{min-width:0}
+.remote-phase-one .qr-step-body{display:grid;gap:11px}
+.remote-phase-one p{margin:0;font-size:12px;line-height:1.55;color:#aec1cc}
+.remote-phase-controls{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:9px}
+.remote-phase-controls strong{font-size:11px;color:#f0ce87;overflow-wrap:anywhere}
+.remote-phase-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.remote-phase-metrics>div{background:#0b2637;border:1px solid #33556b;padding:10px;border-radius:10px;min-width:0;display:grid;gap:5px}
+.remote-phase-metrics small{font-size:10px;font-weight:720;letter-spacing:.08em;color:#9ebacb}
+.remote-phase-metrics output{font-size:13px;font-weight:700;color:#e4faf4;overflow-wrap:anywhere}
+#remoteTelemetryStatus{font-weight:720;color:#aee6d8}
+.remote-phase-one p.remote-phase-note{font-size:11px;color:#9ab4bf}
+@media(max-width:500px){.remote-phase-metrics{grid-template-columns:1fr}}

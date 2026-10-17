@@ -38,6 +38,8 @@ on:
       - 'flight-input.js'
       - 'pairing-core.js'
       - 'pairing-code.js'
+      - 'remote-rtc.js'
+      - 'remote-rtc-config.json'
       - 'pairing-qr-ui.js'
       - 'vendor/qrgen.js'
       - 'vendor/jsqr.js'

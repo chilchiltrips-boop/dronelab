@@ -20,15 +20,14 @@ window.ZebjusDeviceRelay={request:networkRequest,status:()=>host?.status()||null
 const training=()=>window.ZebjusTraining;
 const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
- // A virtual peer reset must not stop a separately owned Android AP diagnostic session.
- if(window.ZebjusKits?.getState?.()?.owner)window.ZebjusKits?.stop?.();
+ // Simulator STOP must not issue any physical Kit command.
  training()?.stop(reason);
  const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
 }
 function forwardSimulatorControl(m){
  const result=training()?.apply(m)||{accepted:false,reason:'Flight Training receiver is not ready'};
- // WebRTC host owns the sender verification; hardware relay never bypasses the kit lease.
- if(result.accepted&&host?.status()?.approved&&host.status().controller==='mobile')window.ZebjusKits?.ingestAndroid?.(m);
+ // Remote Phase 1 is simulator-only: never mirror WebRTC control to a physical Kit.
+ // Android direct local Kit diagnostic input remains a separate authorized path.
  $('simControlInfo').textContent=result.accepted?
   'Applied #'+m.seq+' • '+result.applied.mode.toUpperCase()+' • '+result.applied.throttle+' µs • '+(result.applied.armed?'VIRTUAL ARMED':'DISARMED'):
   'Control denied: '+result.reason;

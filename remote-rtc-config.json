@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "mode": "phase1-remote-telemetry-simulator",
+  "turnCredentialsUrl": null,
+  "note": "To support carrier NAT or restrictive school networks, deploy an HTTPS authenticated TURN credential service. Do not put permanent TURN passwords in this public file."
+}

@@ -31,7 +31,8 @@ async function digest(offer,code){
  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 function cloudPeer(Peer,id){
- return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]},debug:0});
+ const iceServers=root.ZebjusRemoteRTC?.getIceServers?.()||[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}];
+ return new Peer(id||undefined,{host:'0.peerjs.com',port:443,path:'/',secure:true,config:{iceServers},debug:0});
 }
 function beginPhone({offer,answer,expires,onStatus=()=>{},onCode=()=>{}}){
  let peer=null,ended=false,connection=null,code='',attempts=0,timeout=null,wrong=0,connectionCleanup=null,registrationTimer=null;
