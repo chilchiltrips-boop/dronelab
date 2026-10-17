@@ -1067,6 +1067,14 @@ async function discoverKits(){
  discoveryPending=scanKitCandidates().finally(()=>{discoveryPending=null});return discoveryPending;
 }
 async function scanKitCandidates(){
+ // A parent Wix/site Permissions-Policy denial cannot be overridden by the
+ // child. Do not flood 60+ private LAN hosts from an iframe known to be denied.
+ if(root.ZebjusEmbedKitAccess?.scanBlocked){
+  discoveredKits=[];discovering=false;lastDiscoverAt=Date.now();
+  const help=root.ZebjusEmbedKitAccess.getHint();
+  audit('Discovery blocked by embedding site Local Network Access policy • open DroneLab directly','warn');
+  tone(help,'warn');render();showDiscovered();return [];
+ }
  discovering=true;render();showDiscovered();
  try{
   let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
