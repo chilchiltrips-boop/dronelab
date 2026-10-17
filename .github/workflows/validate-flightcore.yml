@@ -49,6 +49,7 @@ on:
       - js/live-inputs.js
       - live-inputs.css
       - tools/live-inputs.test.mjs
+      - tools/ppm-inputs.test.mjs
       - tools/connection-freshness-recovery.test.mjs
       - tools/release-metadata.test.mjs
       - js/kit-data-interface.js
