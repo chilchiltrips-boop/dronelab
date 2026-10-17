@@ -17,7 +17,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   seq:null,values:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
   inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
- const network=['AP','STA'].includes(transport);
+ const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
   motors:network&&(kit.motorsDisabled===true||kit.motorsArmed===false)?'DISABLED':'NOT REPORTED'};
  if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
@@ -95,7 +95,7 @@ function initLiveInputs(){
   $('liLiveState').dataset.state=v.state;
   write('liKitName',v.kitName);
   write('liInputSource',v.source);
-  write('liKitTransport',v.transport);
+  write('liKitTransport',kit.transport==='android-relay'?'RELAY • '+String(kit.physicalLink||'KIT').toUpperCase():v.transport);
   write('liPacketNumber',v.seq??'—');
   write('liAge',v.ageMs===null?'—':v.ageMs+' ms');
   write('liRate',v.rateHz===null?'— Hz':v.rateHz.toFixed(1)+' Hz');
@@ -129,7 +129,7 @@ function initLiveInputs(){
  }
  async function poll(){
   const kit=getKit();
-  if(!visible()||!kit.connected||!['ap','sta'].includes(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
+  if(!visible()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
   const id=kit.kitId,transport=kit.transport;
   try{

@@ -39,7 +39,7 @@ test('both entry pages wire the same teacher security UI and cache versions',()=
  for(const id of ['kitAdminReadAp','kitAdminResetAp'])
   assert.ok(ui.includes("guardAction('"+id+"'"),id);
  for(const source of [entry,sw]){
-  assert.match(source,/classroom-kits\.js\?v=kit-live-inputs-20261017/);
+  assert.match(source,/classroom-kits\.js\?v=kit-transport-unified-20261017/);
   assert.match(source,/firmware-updater\.js\?v=combined-usb-20261017/);
  }
  assert.match(ui,/hideAdminApCredentials\(\)/);

@@ -72,7 +72,7 @@ test('Live Inputs is on Kit Connection, read-only, responsive and reachable in W
  assert.match(script,/ZebjusSerialRcDecoder/);
  assert.doesNotMatch(script,/\.claim\(|\.sendFrame\(|\/api\/rc\/preview|\.toggleControl\(/);
  assert.match(style,/@media\(max-width:580px\)/);
- for(const asset of ['live-inputs.css?v=kit-live-inputs-20261017','js/live-inputs.js?v=kit-live-inputs-20261017']){
+ for(const asset of ['live-inputs.css?v=kit-live-inputs-20261017','js/live-inputs.js?v=kit-transport-unified-20261017']){
   assert.ok(html.includes(asset),asset+' HTML');assert.ok(sw.includes('./'+asset),asset+' offline');
  }
  assert.match(html,/INPUT ARM is diagnostic only/);

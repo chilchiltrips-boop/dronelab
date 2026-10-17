@@ -2,19 +2,23 @@
  * Every read is bound to the selected Device ID; Python executes in the browser. */
 (function(){
 'use strict';
-const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay;
+const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay,dataInterface=()=>window.ZebjusKitData;
 let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0,pollBusy=false;
 let joystickReadAt=0,joystickPending=null;
 const output=(text,kind='')=>{const e=$('netResult');if(e){e.textContent=text;e.dataset.state=kind;}};
 async function request(route,method='GET',args={}){
- const kits=window.ZebjusKits;
- const selected=kits?.getState?.();
- if(!selected?.connected||selected.transport==='usb')throw Error('Connect a verified STA/AP kit in MY KITS.');
- const data=await kits.request(route,method,args);
- if((route==='/api/status'&&data.kitId!==selected.kitId)||(data.kitId&&data.kitId!==selected.kitId))throw Error('Device ID mismatch or absent: network sample rejected.');
- if(data?.board&&route==='/api/status'){netReady=true;const live=String(data.requestTransport||'').toLowerCase();netMode=['ap','sta'].includes(live)?live:selected.transport;lastSeen=Date.now();}
- return data;
+ const kits=window.ZebjusKits,selected=kits?.getState?.();
+ if(!selected?.connected||!selected.kitId||!dataInterface()?.isNetwork(selected.transport))
+  throw Error('Connect and verify an AP / STA / Android Relay Kit before reading network data.');
+ const result=await kits.request(route,method,args),after=kits.getState();
+ const requireKitId=['/api/status','/api/telemetry','/api/rc/snapshot'].includes(route);
+ dataInterface().validateReply(selected,after,result,{requireKitId});
+ if(result?.board&&route==='/api/status'){
+  netReady=true;netMode=selected.transport;lastSeen=Date.now();
+ }
+ return result;
 }
+
 async function read(){
  const d=await request('/api/status'),e=$('netRuntime');
  if(e)e.textContent=(d.board||'FlightCore')+' • '+d.version+' • '+d.phase+' • STA '+(d.ip||'offline')+' • AP '+(d.apIp||'offline');
@@ -66,7 +70,8 @@ async function pythonWifiScan(){
 }
 async function pythonWifiTestSave(ssid,password){
  const kit=window.ZebjusKits?.getState?.();
- if(!kit?.connected||!['sta','ap'].includes(kit.transport))throw Error('Connect a verified kit first.');
+ if(!kit?.connected||!dataInterface()?.isNetwork(kit.transport))throw Error('Connect a verified Kit first.');
+ if(kit.transport==='android-relay')throw Error('Wi-Fi credential provisioning over Android Relay is not supported; use direct authorized AP/STA or USB.');
  if(kit.rc?.claimed)throw Error('Controller busy: release Android/WEB diagnostic control before network setup.');
  if(!kit.setupAuthorized)throw Error('Connect Kit AP setup or authorize this USB-paired STA kit before changing router settings.');
  if(kit.exclusiveWifi)return window.ZebjusKits.testWifi(ssid,password);
@@ -82,20 +87,35 @@ async function pythonWifiTestSave(ssid,password){
 }
 async function readJoystick(){
  if(joystickPending)return joystickPending;
- const read=async()=>{
-  const wait=Math.max(0,100-(performance.now()-joystickReadAt));if(wait)await new Promise(r=>setTimeout(r,wait));
-  const before=window.ZebjusKits?.getState?.(),start=performance.now();
-  if(!before?.connected||!['sta','ap'].includes(before.transport))throw Error('Select a verified STA/AP kit before reading firmware joystick input.');
-  const rc=await request('/api/rc/snapshot');const after=window.ZebjusKits?.getState?.();
-  if(!after?.connected||after.kitId!==before.kitId||rc.kitId!==before.kitId||rc.motorsDisabled!==true)throw Error('Firmware joystick identity or motor-disabled confirmation failed.');
-  const rtt=Math.round(performance.now()-start),valid=rc.inputValid===true&&rc.failsafe===false&&Number.isFinite(rc.ageMs)&&rc.ageMs+rtt<=350;
+ const operation=async()=>{
+  const before=window.ZebjusKits?.getState?.(),contract=dataInterface();
+  if(!before?.connected||!before.kitId)throw Error('Connect and verify a Kit before reading accepted RC.');
+  if(before.transport==='usb'){
+   // Serial Monitor already decoded accepted ZJRC / combined ZJTEL for
+   // this verified USB Kit. Never start a second port or infer ACKs.
+   const result=contract.usbJoystick(before);
+   const after=window.ZebjusKits?.getState?.();
+   contract.validateReply(before,after,result);return result;
+  }
+  if(!contract.isNetwork(before.transport))throw Error('Unsupported Kit data transport');
+  const wait=Math.max(0,100-(performance.now()-joystickReadAt));
+  if(wait)await new Promise(r=>setTimeout(r,wait));
+  const start=performance.now(),rc=await request('/api/rc/snapshot'),after=window.ZebjusKits?.getState?.();
+  contract.validateReply(before,after,rc);
+  if(rc.motorsDisabled!==true)throw Error('Hardware motor-disabled confirmation absent');
+  const rtt=Math.round(performance.now()-start),valid=rc.inputValid===true&&rc.failsafe===false&&
+   Number.isFinite(rc.ageMs)&&rc.ageMs+rtt<=350;
   joystickReadAt=performance.now();
-  return {...rc,device_id:rc.kitId,owner_id:rc.ownerId,age_ms:rc.ageMs===null?null:rc.ageMs+rtt,input_valid:valid,failsafe:!valid,
-   throttle:valid?rc.throttle:1000,roll:valid?rc.roll:1500,pitch:valid?rc.pitch:1500,yaw:valid?rc.yaw:1500,
-   response_mode:rc.responseMode,received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:true,transport:before.transport};
+  return {...rc,device_id:rc.kitId,owner_id:rc.ownerId,
+   age_ms:rc.ageMs===null?null:rc.ageMs+rtt,input_valid:valid,failsafe:!valid,
+   throttle:valid?rc.throttle:1000,roll:valid?rc.roll:1500,
+   pitch:valid?rc.pitch:1500,yaw:valid?rc.yaw:1500,response_mode:rc.responseMode,
+   received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:true,
+   transport:before.transport,physical_transport:before.physicalLink||before.transport};
  };
- joystickPending=read().finally(()=>{joystickPending=null});return joystickPending;
+ joystickPending=operation().finally(()=>{joystickPending=null});return joystickPending;
 }
+
 function stream(on=true){
  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
  if(on)pollTimer=setInterval(async()=>{if(pollBusy||!window.ZebjusKits?.isConnected?.())return;pollBusy=true;try{await getTelemetry()}catch{netReady=false;lastSeen=0}finally{pollBusy=false}},170);
@@ -109,6 +129,6 @@ function init(){
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
 window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
- isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&['ap','sta'].includes(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
+ isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&dataInterface()?.isNetwork(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

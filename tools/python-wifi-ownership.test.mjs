@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('Python hardware networking is bound to actual verified AP/STA transport without acquiring Android RC ownership',()=>{
  const p=read('js/python-lab.js'),k=read('js/classroom-kits.js');
- assert.match(p,/kit\.transport!==target/);
+ assert.match(p,/kitData\(\)\?\.matchesTarget\(kit,target\)/);
  assert.doesNotMatch(p,/!kit\.owner\|\|kit\.rcSource!=='WEB'/);
  assert.match(p,/readJoystick\(\)/);
  assert.match(p,/window\.ZebjusPythonHardwareActive=false/);

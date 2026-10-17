@@ -45,7 +45,20 @@ function stopLocally(message='STOP • DISARMED'){
  $('flightAttitudeLadder').style.transform='';$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW';
  render();updateStatus(message);
 }
+function renderControlTarget(){
+ const label=$('flightTarget');if(!label)return;
+ const web=peer?.status()?.connected===true;
+ const kit=!web&&window.ZebjusNetwork?.isConnected?.()===true;
+ label.dataset.target=web?'simulator':kit?'kit':'preview';
+ label.textContent=web?'TARGET • SIMULATOR / WEBRTC':kit?
+  'TARGET • KIT / '+String(window.ZebjusNetwork.selectedTransport?.()||'Wi-Fi').toUpperCase():
+  'TARGET • PREVIEW ONLY';
+ label.title=web?'Virtual simulator controlled only after WebRTC authorization':
+  kit?'FlightCore diagnostic input • MOTOR OUTPUTS DISABLED':
+  'No confirmed receiver; joystick values are local preview only';
+}
 function refreshConnectionLabel(){
+ renderControlTarget();
  const receiver=!!peer?.status()?.connected;
  const kit=!receiver&&!!window.ZebjusNetwork?.isConnected?.();
  const label=$('flightConnection');

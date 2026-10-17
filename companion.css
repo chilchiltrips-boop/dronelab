@@ -467,3 +467,9 @@ button{min-height:44px}
 /* Hide initial scanner how-to; reveal actual Android permission errors in JS. */
 .mobile-connection #cameraPermissionHelp.mobile-guide{display:none}
 .mobile-connection .mobile-control-live{margin:6px 0 0;padding:7px;border:1px solid #29485c;border-radius:7px;font-size:11px;color:#a9e8d8;overflow-wrap:anywhere}
+
+/* Clearly identify the actual Android receiver without implying motor arming. */
+.flight-sim-badge{display:inline-flex;align-items:center;max-width:53%;overflow:hidden;text-overflow:ellipsis;font-weight:750;letter-spacing:.03em;font-size:9px;color:#a5b9ca}
+.flight-sim-badge[data-target=kit]{color:#7ee1bc}.flight-sim-badge[data-target=simulator]{color:#91c8ff}.flight-sim-badge[data-target=preview]{color:#afa8b6}
+@media(max-height:440px){.flight-sim-badge{font-size:8px;max-width:52%}}
+@media(max-height:300px){.flight-sim-badge{font-size:7px}}

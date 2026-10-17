@@ -49,6 +49,8 @@ on:
       - js/live-inputs.js
       - live-inputs.css
       - tools/live-inputs.test.mjs
+      - js/kit-data-interface.js
+      - tools/kit-data-unified.test.mjs
       - js/serial-plotter.js
       - js/usb-live-diagnostic.js
       - js/python-lab.js

@@ -115,17 +115,23 @@ async function importProject(file){
   if(editor)editor.setModel(null);for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();if(workspace)await workspace.restore(data);renderFiles();save();status('Imported project','good');
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
-function wifiPythonSelected(){return ['ap','sta'].includes($('pythonTarget')?.value)}
+const kitData=()=>window.ZebjusKitData;
+function wifiPythonSelected(){return kitData()?.isNetwork($('pythonTarget')?.value)===true}
+function selectedPythonKit(){
+ const kit=window.ZebjusKits?.getState?.(),target=$('pythonTarget')?.value;
+ if(!kitData()?.matchesTarget(kit,target))throw Error('KitDataDisconnectedError: Select and verify the '+String(target||'Kit').toUpperCase()+' target in Kit Connection.');
+ return kit;
+}
 function wifiPythonReady(){
  const selected=window.ZebjusKits?.getState?.();
- return !!selected?.connected&&selected.transport===$('pythonTarget')?.value&&
+ return !!kitData()?.matchesTarget(selected,$('pythonTarget')?.value)&&
   !!window.DroneLabNetwork?.isConnected?.();
 }
 function usbStatus(){
  if(wifiPythonSelected()){
   const ready=wifiPythonReady(),selected=window.ZebjusKits?.getState?.();
-  const transport=selected?.connected?selected.transport:'android-relay';
-  const state=ready?'FlightCore '+$('pythonTarget').value.toUpperCase()+' • '+(transport==='android-relay'?'Android Relay':'Direct '+transport.toUpperCase()):'Wi-Fi kit not connected';
+  const transport=selected?.connected?selected.transport:'none';
+  const state=ready?'FlightCore '+$('pythonTarget').value.toUpperCase()+' • '+(transport==='android-relay'?'Android WebRTC Relay':'Direct '+transport.toUpperCase()):'Selected Kit network / relay not connected';
   $('pyUsbState').textContent=state;$('pyUsbState').className='status '+(ready?'good':'');
   const button=$('pyConnectUsbBtn'),t=button?.querySelector('.py-usb-button-text');
   if(t)t.textContent='Connect Kit (Wi-Fi)';else if(button)button.textContent='Connect Kit (Wi-Fi)';
@@ -236,7 +242,7 @@ async function onRpc(w,m){
  try{
   let result;
   if(m.method==='read_joystick'){
-   if(!wifiPythonSelected())throw Error('Select STA or AP to read actual firmware joystick input.');
+   selectedPythonKit(); // Same verified AP / STA / USB / Android Relay reader.
    result=await window.DroneLabNetwork.readJoystick();
   }else if(m.method==='i2c_scan'){
    if(wifiPythonSelected()&&!wifiPythonReady())throw Error('FlightCore Wi-Fi disconnected. Pair Android, connect Kit and enable WebApp access.');
@@ -248,10 +254,8 @@ async function onRpc(w,m){
    if(wifiPythonSelected())await window.DroneLabNetwork.writeLine('ZJI2C,SCAN');else await window.DroneLabSerial.writeLine('ZJI2C,SCAN\n');
    result=await pending;
    }else if(m.method==='wifi_scan'||m.method==='wifi_test_save'){
-    if(!wifiPythonSelected())throw Error('Select the actual FlightCore AP or STA target in Python Lab.');
-    const kit=window.ZebjusKits?.getState?.();
-    if(!kit?.connected||kit.transport!==$('pythonTarget')?.value)
-      throw Error('NetworkDisconnectedError: Connect and verify the selected AP/STA kit in MY KITS.');
+    if(!wifiPythonSelected())throw Error('Select a verified AP, STA or Android Relay target in Python Lab.');
+    const kit=selectedPythonKit();
     if(m.method==='wifi_scan')result=await window.DroneLabNetwork.pythonWifiScan();
     else{
       window.DroneLabNetwork.stream(false);
@@ -260,22 +264,22 @@ async function onRpc(w,m){
     }
   }else if(m.method==='read_gyro'){
     if(wifiPythonSelected()){
-     // AP/STA uses the authenticated kit telemetry API, never the USB gyro bridge.
-     if(!wifiPythonReady())throw Error('NetworkDisconnectedError: FlightCore AP/STA kit is not verified.');
+     // AP, STA and Android Relay use the same verified Kit telemetry endpoint.
+     if(!wifiPythonReady())throw Error('NetworkDisconnectedError: selected AP / STA / Android Relay Kit is not verified.');
      const before=window.ZebjusKits?.getState?.();
-     if(!before?.kitId||before.transport!==$('pythonTarget')?.value)
-      throw Error('NetworkDisconnectedError: Select a verified AP/STA kit before reading gyro.');
+     if(!kitData()?.matchesTarget(before,$('pythonTarget')?.value))
+      throw Error('NetworkDisconnectedError: select a verified network Kit before reading gyro.');
      const timeout=Math.max(200,Math.min(10000,Number(m.args?.timeout)||3000));
      let timer;
      let telemetry;
      try{
       telemetry=await Promise.race([
        window.DroneLabNetwork.getTelemetry(),
-       new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('GyroTimeoutError: No STA/AP telemetry response within '+timeout+' ms. Check the kit connection.')),timeout)})
+       new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('GyroTimeoutError: No Kit network/relay telemetry response within '+timeout+' ms. Check the connection.')),timeout)})
       ]);
      }finally{clearTimeout(timer)}
      const after=window.ZebjusKits?.getState?.();
-     if(!after?.connected||after.kitId!==before.kitId||after.transport!==before.transport||after.transport!==$('pythonTarget')?.value)
+     if(!after?.connected||after.kitId!==before.kitId||after.transport!==before.transport||!kitData()?.matchesTarget(after,$('pythonTarget')?.value))
       throw Error('NetworkDisconnectedError: Connected kit or AP/STA transport changed during gyro read.');
      result=parseNetworkGyroTelemetry(telemetry,before.kitId);
     }else{
@@ -329,8 +333,8 @@ async function runPython(){
  if(wifiPythonSelected()){
    try{
     const kit=window.ZebjusKits?.getState?.(),target=$('pythonTarget').value;
-    if(!kit?.connected||kit.transport!==target)
-     throw Error('Connect and verify the '+target.toUpperCase()+' kit in MY KITS before Python Run.');
+    if(!kitData()?.matchesTarget(kit,target))
+     throw Error('Connect and verify the '+target.toUpperCase()+' Kit in Kit Connection before Python Run.');
     // Monitoring and sensor/LED diagnostics do not acquire the exclusive RC lease.
     // Android may own joystick input while Python reads its firmware snapshot.
     await window.DroneLabNetwork.read();
@@ -638,7 +642,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=e.target.value==='joystick'?'sta':['wifi_scan','wifi_save'].includes(e.target.value)?'ap':['scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?(['sta','ap'].includes(window.ZebjusKits?.getState?.().transport)?window.ZebjusKits.getState().transport:'usb'):'python';e.target.value=''};
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=e.target.value==='joystick'?'sta':['wifi_scan','wifi_save'].includes(e.target.value)?'ap':['scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?(['sta','ap','android-relay'].includes(window.ZebjusKits?.getState?.().transport)?window.ZebjusKits.getState().transport:'usb'):'python';e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',usbStatus);$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);

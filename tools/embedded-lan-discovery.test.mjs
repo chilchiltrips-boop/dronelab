@@ -44,7 +44,7 @@ test('remove persistent iframe banners, buttons and direct URLs on both WebApp l
  assert.doesNotMatch(css,/kit-embed-notice/);
  assert.doesNotMatch(read('js/embed-kit-access.js'),/getElementById|postMessage\s*\(|directUrl|pairingKey/);
  for(const name of ['js/embed-kit-access.js','js/classroom-kits.js','js/firmware-connect.js','classroom-kits.css']){
-  const marker=name+'?v='+(name==='js/classroom-kits.js'?'kit-live-inputs-20261017':'embed-clean-20261017');
+  const marker=name+'?v='+(name==='js/classroom-kits.js'?'kit-transport-unified-20261017':'embed-clean-20261017');
   assert.ok(html.includes(marker),'missing page version: '+marker);
   assert.ok(sw.includes('./'+marker),'missing offline version: '+marker);
  }

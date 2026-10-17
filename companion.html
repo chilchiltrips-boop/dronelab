@@ -8,7 +8,7 @@
   <button id="flightNetworkSwitch" class="flight-network-switch" role="switch" type="button" aria-label="Selected FlightCore request connection: AP. Tap to select STA" aria-checked="false" title="Select Kit AP or same-router STA; connection verification remains required"><span class="flight-transport-label">AP</span><i aria-hidden="true"></i><span class="flight-transport-label">STA</span></button>
  <span class="flight-link" aria-label="WebRTC feedback latency"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8a14 14 0 0 1 18 0M6 12a9 9 0 0 1 12 0M9 16a4 4 0 0 1 6 0"/><circle cx="12" cy="20" r="1"/></svg><b id="flightLatency">— ms</b></span>
  <button id="flightStop" class="flight-stop">■ STOP</button></header>
- <div class="flight-status-line"><span id="flightOwner">INPUT PREVIEW</span><span class="flight-sim-badge">SIMULATOR</span></div>
+ <div class="flight-status-line"><span id="flightOwner">INPUT PREVIEW</span><span id="flightTarget" class="flight-sim-badge" data-target="preview" role="status" aria-live="polite">TARGET • PREVIEW</span></div>
  <div class="flight-field">
  <div id="flightLeftZone" class="flight-touch-zone" aria-label="Left joystick yaw and throttle" role="application">
   <span class="flight-zone-title">LEFT STICK <b>THROTTLE / YAW</b></span>
