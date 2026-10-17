@@ -10,7 +10,7 @@
  const urlOk=url=>typeof url==='string'&&/^https:\/\/[A-Za-z0-9.-]+(?::443)?\/[^\s#]*$/.test(url)&&url.length<=350;
  function publicIce(){return STUN.map(s=>({...s}))}
  function usable(now=Date.now()){return turnExpiry>now+15000&&ice.some(x=>String(x.urls).startsWith('turn'))}
- function status(){return {mode:usable()?'TURN ready':'STUN only',turnReady:usable(),reason}}
+ function status(){return {mode:usable()?'TURN credentials available (relay unverified)':'STUN only',turnReady:usable(),reason}}
  function getIceServers(){return usable()?ice.map(x=>({...x})):publicIce()}
  async function load(){
   if(pending)return pending;

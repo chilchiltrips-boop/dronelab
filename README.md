@@ -1,5 +1,22 @@
 # ZEBJUS DroneLab
 
+## Current releases and verification (17 October 2026)
+
+| Component | Published source metadata | Hardware/deployment status |
+| --- | --- | --- |
+| WebApp | 1.8.0 series (live build in `app-version.json`) | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
+| FlightCore A1 (ESP32-C3) | **1.4.12**, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| FlightCore A2 (XIAO ESP32-C6) | **1.4.12**, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| Android signed companion | **1.7.15-live-link-recovery**, versionCode **31** | Published signed APK; real-handset radio, touch, and reconnect acceptance pending |
+| Remote access | STUN-first WebRTC; read-only Kit telemetry and simulator | **TURN not deployed/verified**; no reliable all-network or remote motor control claim |
+| Central Admin | `admin-server.cjs` HTTP API source | Must be deployed behind external HTTPS reverse proxy with private storage |
+
+**Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed local HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
+
+**No flight motors are controlled by FlightCore 1.4.12.** Diagnostic INPUT ARM differs from MOTOR ARM (motors stay disabled). A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
+
+**Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and [remote infrastructure runbook](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). No public TURN backend has been provisioned by a GitHub Pages commit.
+
 ## Optional Kit AP Wi-Fi settings and teacher recovery
 
 Devices & Firmware → Security & Admin uses the existing teacher passphrase with physical USB access. The teacher can optionally change AP Name Prefix and WPA2 password (first-time setup never forces a change), explicitly read current AP credentials using `ZJADMIN,AP_SHOW` after USB admin unlock, or click **Reset AP to Default**. The display is masked until Show Password, then clears after 30 seconds. The generic USB monitor and copied logs redact credentials.
@@ -30,17 +47,15 @@ Browser storage can be lost after clearing site data, using private browsing or 
 2. Click Next. Enter the temporary CONNECT code (Internet/PeerJS required) or choose Two-Way QR and explicitly start the Step 2 camera. Advanced manual response entry remains available.
 3. Compare the Safety PIN, confirm pairing, then explicitly grant mobile control. CONNECT code and Safety PIN serve different purposes. Cancellation, refresh, expiry or a lost session requires a fresh QR and fresh control grant.
 
-The control DataChannel uses local ICE candidates without a TURN relay. Direct QR exchange can work on a reachable local network; campus client isolation/firewalls can prevent transport. Online code signaling cannot work without Internet. The channel carries authenticated controls for the virtual Flight Training plant and receiver-applied telemetry. The legacy WebRTC Virtual LED demo has been removed; physical LED wiring and Python examples remain.
+The DataChannel currently uses public STUN candidates and an optional short-lived TURN credential endpoint, which is not configured in the published release. Restrictive carrier/school networks can fail until a separately hosted authenticated TURN service is deployed and relay ICE candidates are tested. CONNECT code signaling requires internet. Authenticated simulator control and explicitly granted read-only remote Kit telemetry do not enable physical motor commands.
 
-## FlightCore A1/A2 USB diagnostics firmware 1.3.2
+## FlightCore A1/A2 1.4.12 — verified diagnostic firmware
 
-`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` is USB-only sensor/LED diagnostic firmware, **not** flight-control software. It contains no motor output, arming, AP/STA or Wi-Fi OTA service. Build automation compiles separate A1 (ESP32-C3 Super Mini, SDA4/SCL5) and A2 (XIAO ESP32-C6, SDA22/SCL23) images.
+`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. This is **not physical motor-flight firmware**. A1: ESP32-C3 Super Mini, SDA4/SCL5, PPM GPIO10. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. Both build profiles use a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
 
-USB Serial at 115200 uses compact messages. `ZJTEL,1,A1,seq,ms,0x6B,READY,roll,pitch,yaw,1,drops` is the only periodic gyro frame; the penultimate field `1` means the LED output pin is available (`0` indicates a conflict). Verbose `Scanning I2C bus...`, device-count banners, dashed separators and duplicate `ZJGYRO,DATA` frames are no longer emitted by version 1.3.2.
+`FlightCore_Firmware/catalog.json`, `firmware-catalog.json` and `build-report.json` publish the A1 and A2 version, SHA-256, `builtAt` (build start) and `compiledAt` (individually embedded sketch compilation timestamp). `tools/verify_release.py` rejects stale precompiled dates, nonmatching source hash, wrong chip/partition, and APP/FACTORY mismatch. USB `ZJINFO,GET` and signed Wi-Fi `/api/status` report the **running** firmware timestamp; the Firmware Center separately shows the **loaded** image date.
 
-The board scans I2C once at startup or when it receives `ZJI2C,SCAN\n`, rather than polling every five seconds. Its single structured response is `ZJSCAN,A1,millis,count,0x6B[,0x77...]`. Python Lab explicitly sends the scan command and parses the address list. The browser monitor hides legacy scanner text and duplicate gyro frames from already-flashed v1.3.1 firmware, while still forwarding the raw input to diagnostics and Python.
-
-**Firmware release safety:** Changing the Arduino sketch does not update a controller by itself. The release workflow builds/verifies separate APP and Factory binaries, updates SHA-256/board metadata and commits a new catalog. Check that the firmware selection shows **1.3.2** before flashing; **1.3.1** binaries still contain the old scanner text. Use a verified board profile and USB port. Factory/Merged flashes at `0x0`; APP flashes at `0x10000` only with a compatible existing partition layout. Disconnect motors and remove propellers before hardware work.
+For first installation use the matching board-specific Factory image at `0x0`; APP updates at `0x10000` require the existing verified dual-OTA layout. APP OTA must preserve Wi-Fi/pairing; Factory erase may not. OTA transfer validation is not publisher signing or Secure Boot. Always bench-test both boards, disconnected motors and propellers, before school rollout. See `docs/SCHOOL_PRODUCTION_FIRMWARE_SECURITY.md` and `docs/FLIGHTCORE_PPM_RECEIVER.md`.
 
 ## Runtime and validation
 
@@ -57,9 +72,9 @@ The board scans I2C once at startup or when it receives `ZJI2C,SCAN\n`, rather t
 
 Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, handset installation, USB flashes and campus Wi-Fi require device verification.
 
-Android updates preserve `in.zebjus.dronelab.companion` and the permanent pinned certificate. Version **1.6.2-flight-training**, versionCode **13**, updates published versionCode **12** in place. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the six mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
+Android updates preserve `in.zebjus.dronelab.companion` and the pinned signing certificate. The current published APK metadata is **1.7.15-live-link-recovery**, versionCode **31**; compare source commit and SHA-256 with `mobile-apk/ANDROID_RELEASE_META.txt` / `SHA256SUMS.txt` before testing or installing. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the six mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
 
-## Python Lab toolbar (WebApp 1.4.6)
+## Historical Python Lab toolbar work (WebApp 1.4.6)
 
 The top project bar now shows the **active .py filename**, + New, a chooser for saved Python files, project examples, the Python 3/Simulator vs USB I²C target, and Stop / Run / Rerun. Save/Undo/Redo/Delete/Export/Import remain directly below these controls. The editor header only shows usage help. Files remain browser-local and preserve existing autosave/import/export behavior; this WebApp-only release does not change the Android APK or scanner firmware.
 

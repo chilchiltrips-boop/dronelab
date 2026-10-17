@@ -8,6 +8,8 @@
     "check": "node tools/check.mjs",
     "test": "node --test tools/*.test.mjs",
     "verify:firmware": "python3 tools/verify_release.py",
-    "discover:lan": "node tools/classroom-discovery-bridge.mjs"
+    "discover:lan": "node tools/classroom-discovery-bridge.mjs",
+    "verify:acceptance": "node tools/release-acceptance.mjs",
+    "verify:remote-deployment": "node tools/remote-deployment-smoke.mjs"
   }
 }

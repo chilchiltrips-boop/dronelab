@@ -1,0 +1,40 @@
+name: Release Acceptance Contracts (not hardware proof)
+on:
+  push:
+    branches: [main, fix/release-acceptance-20261017]
+    paths:
+      - 'README.md'
+      - 'app-version.json'
+      - 'firmware-latest.json'
+      - 'FlightCore_Firmware/latest.json'
+      - 'index.html'
+      - 'lab.html'
+      - 'remote-rtc.js'
+      - 'remote-telemetry.js'
+      - 'docs/release-acceptance.evidence.json'
+      - 'docs/RELEASE_ACCEPTANCE_20261017.md'
+      - 'docs/REMOTE_DEPLOYMENT_RUNBOOK.md'
+      - 'tools/release-acceptance.mjs'
+      - 'tools/remote-deployment-smoke.mjs'
+      - 'tools/release-acceptance-contract.test.mjs'
+      - 'package.json'
+      - '.github/workflows/release-acceptance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-release-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Source and contract tests
+        run: |
+          npm test
+          npm run check
+          npm run verify:firmware
+          npm run verify:acceptance
+      - name: State explicit acceptance boundary
+        run: echo "Hardware and public TURN acceptance remain NOT_RUN until externally observed and independently signed off."
