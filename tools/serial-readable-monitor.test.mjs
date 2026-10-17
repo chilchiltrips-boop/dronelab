@@ -56,7 +56,7 @@ test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, 
  assert.match(code,/readableKitMonitor\?\.clear\(\)/);
  assert.match(html,/id="fwSerialRawFrames"/);
  assert.match(html,/MOTORS remain OFF|physical motors remain OFF/);
- assert.match(sw,/serial-readable-monitor\.js\?v=readable-20261017/);
+ assert.match(sw,/serial-readable-monitor\.js\?v=usb-rc-shared-20261017/);
  assert.match(sw,/firmware-updater\.js\?v=combined-usb-20261017/);
 });
 
@@ -101,5 +101,5 @@ test('firmware defaults to COMBINED and supports explicit RAW without weakening 
  assert.match(rc,/if\(zjTelemetryRaw&&now-zjRcLastLog/);
  assert.match(rc,/ZJ_RC_DEADMAN_MS/);
  assert.match(firmware,/Serial\.print\("ZJTEL,1,"\)/);
- assert.match(read('sw.js'),/serial-readable-monitor\.js\?v=readable-20261017/);
+ assert.match(read('sw.js'),/serial-readable-monitor\.js\?v=usb-rc-shared-20261017/);
 });

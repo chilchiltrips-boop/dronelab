@@ -1,3 +1,4 @@
+import './serial-rc-decoder.js?v=usb-joystick-shared-20261017';
 // Presentation only. USB monitor, gyro/Python parsers and plotter retain original bytes.
 // Accepts original 12-field ZJTEL + separate ZJRC, and native 20-field combined ZJTEL.
 export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,staleMs=350}={}){
@@ -10,15 +11,15 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
  function clear(){rc=null;lastPrint=-Infinity}
  function view(line){
   const value=String(line||'').trim();
-  const frame=/^ZJRC,(AP|STA|USB),(ANDROID|WEB),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+),ARM=([01])$/.exec(value);
-  if(frame){
-   const nums=frame.slice(3,8).map(Number);
-   if(nums.every((n,i)=>Number.isSafeInteger(n)&&(i===0?n>0:n>=1000&&n<=2000)))
-    rc={transport:frame[1],source:frame[2],seq:nums[0],throttle:nums[1],roll:nums[2],pitch:nums[3],yaw:nums[4],armed:frame[8]==='1',at:now()};
-   return null;
+  const decoded=globalThis.ZebjusSerialRcDecoder.parseSerialRc(value);
+  if(decoded?.kind==='frame'){
+   rc={...decoded,armed:decoded.inputArmed,at:now()};
+   if(value.startsWith('ZJRC,'))return null; // Combined ZJTEL still renders the gyro + RC line.
   }
-  if(/^ZJRC,(?:RELEASE|FAILSAFE|STOP),/.test(value)){rc=null;return value+' • input reset • MOTORS OFF'}
-  if(/^ZJRC,CLAIM,/.test(value)){rc=null;return value+' • waiting for input • MOTORS OFF'}
+  if(decoded?.kind==='reset'){rc=null;return value+' • input reset • MOTORS OFF'}
+  if(decoded?.kind==='claim'){rc=null;return value+' • waiting for input • MOTORS OFF'}
+  if(decoded?.kind==='idle')rc=null;
+  if(/^ZJRC,(?:USB|AP|STA),(?:WEB|ANDROID),/.test(value))return null; // Invalid legacy frames never show as verified input.
   if(!value.startsWith('ZJTEL,1,'))return value;
   const f=value.split(',');
   if(![12,20].includes(f.length)||!/^A[12]$/.test(f[2])||!safeInt(f[3])||!safeInt(f[4])||
@@ -26,20 +27,8 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
      !/^(?:READY|NOT_FOUND|READ_ERROR|STARTING)$/.test(f[6]))return value;
   const rates=f.slice(7,10).map(angle);
   if(rates.some(v=>v===null))return value;
-  if(f.length===20){
-   const suffix=f.slice(12);
-   const valid=/^RC=(?:NONE\/IDLE|(?:AP|STA|USB)\/(?:WEB|ANDROID))$/.test(suffix[0])&&/^RCSEQ=\d+$/.test(suffix[1])&&
-    ['T','R','P','Y'].every((label,i)=>new RegExp('^'+label+'=\\d+$').test(suffix[i+2]))&&
-    /^INPUT_ARMED=[01]$/.test(suffix[6])&&suffix[7]==='MOTORS=OFF';
-   if(!valid)return value;
-   if(suffix[0]==='RC=NONE/IDLE')rc=null;
-   else{
-    const [transport,source]=suffix[0].slice(3).split('/');
-    rc={transport,source,seq:Number(suffix[1].slice(6)),throttle:Number(suffix[2].slice(2)),
-     roll:Number(suffix[3].slice(2)),pitch:Number(suffix[4].slice(2)),yaw:Number(suffix[5].slice(2)),
-     armed:suffix[6].endsWith('1'),at:now()};
-   }
-  }
+  // The exact same validated RC frame feeds the dashboard and readable monitor.
+  if(f.length===20&&!['frame','idle'].includes(decoded?.kind))return value;
   const timestamp=now();
   if(timestamp-lastPrint<intervalMs)return null;
   lastPrint=timestamp;

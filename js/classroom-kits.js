@@ -924,8 +924,17 @@ function onSerial(e){
  for(const pending of serialClaims.slice())if(pending.pattern.test(line)){serialClaims=serialClaims.filter(x=>x!==pending);pending.resolve(line)}
  if(!state.connected||state.transport!=='usb')return;
  if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
- const rc=/^ZJRC,(USB|AP|STA),(WEB|ANDROID),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+)(?:,ARM=([01]))?$/.exec(line);
- if(rc){state.rc={...(state.rc||{}),active:true,claimed:true,transport:rc[1],source:rc[2],seq:+rc[3],throttle:+rc[4],roll:+rc[5],pitch:+rc[6],yaw:+rc[7],inputArmed:rc[8]==='1'};state.ackAt=Date.now();render()}
+ // Shared with Readable Serial Monitor: supports RAW ZJRC and 1.4.11+ COMBINED ZJTEL.
+ // Only apply USB frames after this physical USB Kit identity has been verified.
+ const rc=root.ZebjusSerialRcDecoder?.parseSerialRc(line);
+ if(rc?.kind==='frame'){
+  state.rc={...(state.rc||{}),active:true,claimed:true,transport:rc.transport,source:rc.source,seq:rc.seq,
+   throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,inputArmed:rc.inputArmed};
+  state.ackAt=Date.now();render();
+ }else if(rc?.kind==='idle'){
+  state.rc={claimed:false,active:false,seq:0,throttle:1000,roll:1500,pitch:1500,yaw:1500,inputArmed:false,source:'NONE'};
+  state.ackAt=0;render();
+ }
  if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE')&&state.owner)void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
  if(line.startsWith('ZJADMIN,ERR,')||line.startsWith('ZJKIT,ERR,'))audit(line,'error');
  if(line.startsWith('ZJADMIN,AUTH,')){

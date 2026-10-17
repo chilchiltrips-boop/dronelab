@@ -873,7 +873,7 @@ function initSerialTools(){
    writeLine:line=>writePythonSerialLine(String(line))
  };
  const plotCanvas=$('#fwSerialPlotCanvas'),plotLegend=$('#fwSerialPlotLegend');
- import('./js/serial-readable-monitor.js?v=readable-20261017').then(({createReadableKitMonitor})=>{
+ import('./js/serial-readable-monitor.js?v=usb-rc-shared-20261017').then(({createReadableKitMonitor})=>{
   readableKitMonitor=createReadableKitMonitor();
  }).catch(error=>log('Readable USB monitor unavailable; raw messages kept: '+error.message));
  serialPlotterPromise=import('./js/serial-plotter.js').then(({createSerialPlotter})=>{
