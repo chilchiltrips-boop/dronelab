@@ -4,10 +4,32 @@ const u16=(b,i)=>b[i]|b[i+1]<<8;
 const u32=(b,i)=>(b[i]|b[i+1]<<8|b[i+2]<<16|b[i+3]<<24)>>>0;
 export function boardFromChip(catalog,chip){return catalog.boards.find(b=>b.imageChipIds.includes(chip))||null}
 export function imageType(bytes){return bytes.length>APP_OFFSET+32768&&bytes[APP_OFFSET]===0xe9?'factory':'app'}
-// ESP-IDF esp_app_desc_t may contain the Arduino core packaging date,
-// rather than the current FlightCore sketch compilation time. Only the
-// explicit ZJ_BUILD_UTC sketch marker is authoritative for official releases.
+// Only ZJ_BUILD_UTC carries the current FlightCore sketch compiler date. The
+// fallback ESP-IDF app descriptor can contain a precompiled toolchain's old date.
+// The Arduino-ESP32 core app descriptor has the toolchain's build date,
+// sometimes weeks old. Official ZEBJUS releases embed the actual sketch
+// compile-time marker instead, including its explicit UTC interpretation.
+export function imageSketchBuildStamp(bytes,kind='app'){
+ const start=kind==='factory'?APP_OFFSET:0,needle=new TextEncoder().encode('ZJ_BUILD_UTC=');
+ if(!(bytes instanceof Uint8Array)||bytes.length<start+needle.length+22)return'';
+ for(let i=start;i+needle.length+22<bytes.length;i++){
+  if(bytes[i]!==needle[0])continue;
+  let ok=true;for(let n=1;n<needle.length;n++)if(bytes[i+n]!==needle[n]){ok=false;break}
+  if(!ok)continue;
+  let out='',j=i+needle.length;
+  while(j<bytes.length&&bytes[j]!==0&&out.length<24){const ch=bytes[j++];if(ch<32||ch>126)return'';out+=String.fromCharCode(ch)}
+  if(bytes[j]!==0)return'';
+  if(!/^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2}$/.test(out))return'';
+  const m=/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/.exec(out);
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],mon=months.indexOf(m[1]);
+  const d=new Date(Date.UTC(+m[3],mon,+m[2],+m[4],+m[5],+m[6]));
+  if(mon<0||d.getUTCFullYear()!==+m[3]||d.getUTCMonth()!==mon||d.getUTCDate()!==+m[2])return'';
+  return out;
+ }
+ return'';
+}
 export function imageBuildStamp(bytes,kind='app'){
+ const sketch=imageSketchBuildStamp(bytes,kind);if(sketch)return sketch;
  const offset=kind==='factory'?APP_OFFSET:0;
  if(!(bytes instanceof Uint8Array)||bytes.length<offset+144||u32(bytes,offset+32)!==0xabcd5432)return'';
  function ascii(at){
