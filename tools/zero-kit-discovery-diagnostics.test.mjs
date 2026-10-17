@@ -26,7 +26,7 @@ test('0 kits due to browser restriction explains this-computer AP/STA requiremen
 test('reachable but invalid AP identity is not offered as a Kit and explains why',async()=>{
  const api=setup(async url=>({ok:true,status:200,json:async()=>url.includes('192.168.4.1')?
   {kitId:'WRONG-DEVICE',kitCode:'123456',board:'ZFC-A2'}:{} }));
- assert.deepEqual(await api.discoverKits(),[]);
+ assert.equal((await api.discoverKits()).length,0);
  assert.match(api.getDiscoveryHint(),/AP probe: Invalid Kit identity or board/);
  assert.equal(api.getState().connected,false);
 });
