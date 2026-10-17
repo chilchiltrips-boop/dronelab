@@ -16,8 +16,13 @@ try{
  }));
  await page.goto('http://localhost:8765/wix-like-embed-test');
  const frame=page.frameLocator('#wixFrame');
+ await frame.locator('#fwEmbeddedKitAccess').waitFor({state:'attached',timeout:45000});
+ // The inner Devices workspace defaults to an Overview pane. Open its
+ // Connection view just as the Wix visitor would before checking visibility.
+ await frame.locator('[data-tab="firmware"]').click();
+ await frame.locator('[data-dw-view="connection"]').click();
  await frame.locator('#fwEmbeddedKitAccess').waitFor({state:'visible',timeout:45000});
- assert.equal(await frame.locator('#kitEmbeddedKitAccess').isVisible(),true);
+ assert.equal(await frame.locator('#kitEmbeddedKitAccess').evaluate(e=>e.hidden),false);
  const actual=await frame.locator('#fwEmbeddedKitAccess a[data-embed-kit-open]').evaluate(a=>({
   href:a.href,target:a.target,rel:a.rel}));
  assert.equal(actual.href,'https://chilchiltrips-boop.github.io/dronelab/index.html#firmware');
