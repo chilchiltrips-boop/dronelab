@@ -2,6 +2,7 @@
 import argparse, hashlib, json, re, shutil, struct, subprocess, tempfile, time
 from datetime import datetime, timezone
 from pathlib import Path
+from firmware_compile_time import check_compiled_at
 
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'FlightCore_Firmware'
@@ -134,21 +135,27 @@ def main():
             build=td/'build'; build.mkdir()
             print(f'\n=== BUILD {b["id"]} • {b["name"]} • {cfg["fqbn"]} ===',flush=True)
             run(command+['compile','--jobs','2','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
-            verified=verify_build(build,b,version);report['boards'].append(verified)
-            srcbin=find_app_bin(build); dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
+            verified=verify_build(build,b,version)
+            srcbin=find_app_bin(build)
+            embedded_compiled_at=check_compiled_at(srcbin.read_bytes(),built_at)
+            verified['compiledAt']=embedded_compiled_at
+            report['boards'].append(verified)
+            dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
             build_id=f'{version}-{b["id"]}-{digest[:12]}'
-            pkg.update({'available':True,'sha256':digest,'size':dst.stat().st_size,'builtAt':built_at,'buildId':build_id}); b['latest']['builtAt']=built_at
+            pkg.update({'available':True,'sha256':digest,'size':dst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':build_id}); b['latest']['builtAt']=built_at; b['latest']['compiledAt']=embedded_compiled_at
             factory_pkg=b['latest'].get('factory',{}); merged=find_factory_bin(build)
             if merged and factory_pkg.get('file'):
+                if check_compiled_at(merged.read_bytes(),built_at,offset=int(b['appAddress'],0))!=embedded_compiled_at:
+                    raise RuntimeError('Merged FACTORY image compile date differs from its APP')
                 fdst=OUT/factory_pkg['file']; shutil.copy2(merged,fdst); fdigest=sha(fdst)
-                factory_pkg.update({'available':True,'sha256':fdigest,'size':fdst.stat().st_size,'builtAt':built_at,'buildId':f'{version}-{b["id"]}-FACTORY-{fdigest[:12]}'})
+                factory_pkg.update({'available':True,'sha256':fdigest,'size':fdst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':f'{version}-{b["id"]}-FACTORY-{fdigest[:12]}'})
                 print(f'{b["name"]}: {fdst.name} {fdst.stat().st_size} bytes SHA256 {fdigest}')
             else:
                 if factory_pkg.get('file'):
                     stale=OUT/factory_pkg['file']
                     if stale.exists(): stale.unlink()
-                factory_pkg.update({'available':False,'sha256':'','size':0,'builtAt':built_at,'buildId':''})
-            print(f'{b["name"]}: {dst.name} {dst.stat().st_size} bytes SHA256 {digest} buildId {build_id}')
+                factory_pkg.update({'available':False,'sha256':'','size':0,'builtAt':built_at,'compiledAt':'','buildId':''})
+            print(f'{b["name"]}: {dst.name} {dst.stat().st_size} bytes SHA256 {digest} buildId {build_id} COMPILED_AT={embedded_compiled_at}')
     write_metadata(catalog,version,built_at)
     (OUT/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(f'Updated firmware metadata for {version}; Arduino-ESP32 core {CORE_VERSION}')

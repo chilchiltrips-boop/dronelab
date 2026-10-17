@@ -27,6 +27,14 @@ export function imageBuildStamp(bytes,kind='app'){
  if(d.getUTCFullYear()!==year||d.getUTCMonth()!==index||d.getUTCDate()!==day)return'';
  return date+' '+time;
 }
+// Parse the actual firmware embedded UTC compiler timestamp. Never replace it
+// with the time a file was downloaded, cataloged, or flashed.
+export function imageBuildTimeIso(bytes,kind='app'){
+ const raw=imageBuildStamp(bytes,kind),m=/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/.exec(raw);
+ if(!m)return'';
+ const month=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(m[1]);
+ return new Date(Date.UTC(+m[3],month,+m[2],+m[4],+m[5],+m[6])).toISOString().replace('.000Z','Z');
+}
 export function inspectImage(bytes,kind,board,catalog){
   if(!(bytes instanceof Uint8Array)||bytes.length<32768)throw Error('The firmware file is truncated or too small.');
   if(!['app','factory'].includes(kind)||!board)throw Error('Choose a known board and image type.');

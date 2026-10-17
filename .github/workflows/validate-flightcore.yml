@@ -30,6 +30,12 @@ on:
       - lab.html
       - firmware.css
       - firmware-updater.js
+      - js/firmware-image.js
+      - tools/firmware_compile_time.py
+      - tools/build_scanner.py
+      - tools/verify_release.py
+      - tools/firmware-build-time.test.mjs
+      - tools/firmware-compile-time.test.mjs
       - firmware-catalog.json
       - firmware-latest.json
       - FlightCore_Firmware/**

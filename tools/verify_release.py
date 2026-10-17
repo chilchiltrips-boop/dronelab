@@ -2,6 +2,7 @@
 """Validate board-aware I2C scanner + LED release metadata and binaries."""
 from pathlib import Path
 import hashlib,json,struct
+from firmware_compile_time import check_compiled_at
 ROOT=Path(__file__).resolve().parents[1]
 CAT=json.loads((ROOT/'firmware-catalog.json').read_text())
 LATEST=json.loads((ROOT/'firmware-latest.json').read_text())
@@ -44,6 +45,11 @@ for board in CAT['boards']:
  assert (CAT['version']+'\0').encode() in app, 'Catalog firmware version differs from APP'
  assert len(app)==a['size'] and len(factory)==f['size']==4*1024*1024
  assert sha(app)==a['sha256'] and sha(factory)==f['sha256']
+ compiled_utc=check_compiled_at(app,CAT['builtAt'])
+ assert a.get('compiledAt')==compiled_utc and f.get('compiledAt')==compiled_utc, 'Published compiledAt differs from embedded APP/FACTORY binary'
+ assert board['latest'].get('compiledAt')==compiled_utc, 'Latest board compile metadata must match the binary'
+ assert check_compiled_at(factory,CAT['builtAt'],offset=0x10000)==compiled_utc
+ assert next((v.get('compiledAt') for v in report.get('boards',[]) if v.get('boardId')==board['id']),None)==compiled_utc, 'Build report compile stamp differs from image'
  assert chip(app)==chip(factory)==board['imageChipIds'][0]
  assert chip(factory,0x10000)==board['imageChipIds'][0]
  assert struct.unpack_from('<I',app,32)[0]==0xabcd5432
@@ -52,5 +58,5 @@ for board in CAT['boards']:
  else:assert b'Scanning I2C bus...' not in app and b'ZJSCAN,' in app
  assert slots(factory)==[(0x10000,0x1e0000),(0x1f0000,0x1e0000)]
  assert factory[0x10000:0x10000+len(app)]==app
- print('PASS',board['id'],'I2C SCANNER',len(app),'APP',len(factory),'FACTORY',sha(app)[:12])
+ print('PASS',board['id'],'I2C SCANNER',len(app),'APP',len(factory),'FACTORY',sha(app)[:12], 'COMPILED_UTC',compiled_utc)
 print('Scanner + LED + board-specific IMU release metadata verified. Physical USB board not tested.')

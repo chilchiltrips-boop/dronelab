@@ -8,6 +8,8 @@ on:
       - 'FlightCore_Firmware/partitions.csv'
       - 'VERSION.txt'
       - 'tools/build_scanner.py'
+      - 'tools/firmware_compile_time.py'
+      - 'tools/verify_release.py'
       - '.github/workflows/build-ppm-flightcore.yml'
   workflow_dispatch:
 permissions:

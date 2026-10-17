@@ -66,8 +66,11 @@ test('Step 1 reads the binary embedded compile time, never the flash or catalog-
  image[112]=0x58;
  assert.equal(imageBuildStamp(image,'app'),'');
  assert.equal(imageBuildStamp(new Uint8Array(256),'app'),'');
- assert.match(firmware,/const compiledAt=imageBuildStamp\(bytes,type\)/);
+ assert.match(firmware,/const compiledAt=imageBuildStamp\(bytes,type\),compiledIso=imageBuildTimeIso\(bytes,type\)/);
  assert.match(firmware,/fw\.compiledAt\?formatBuildTime\(fw\.compiledAt\):'Not reported in firmware image'/);
+ assert.match(firmware,/Firmware compile date does not match the release build date/);
+ assert.match(firmware,/firmware-image\.js\?v=compile-time-verified-20261017/);
+ assert.match(read('js/firmware-image.js'),/export function imageBuildTimeIso/);
  assert.match(read('index.html'),/Running FW built/);
  assert.match(read('index.html'),/not flash\/upload time/);
 });
