@@ -229,7 +229,7 @@ function session(role,events={}){
   makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,sendNetworkRequest,sendNetworkResponse,setSimulatorReady,sendTelemetry,emergencyStop,
   requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
   status:()=>({role,connected,paired,approved,controller,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
-  get channel(){return channel},get peer(){return peer}
+  get channel(){return channel},get realtimeChannel(){return liveChannel()},get peer(){return peer}
  };
 }
 root.ZebjusP2P={VERSION,pack,unpack,session,randomId,pin};

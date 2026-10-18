@@ -64,7 +64,7 @@ try{
  // Delay/reorder actual receiver feedback before it enters the encrypted
  // channel. Drop every seventh ACK: payloads still come from the real plant.
  await web.evaluate(()=>{
-  const channel=window.__testPeer.channel,send=channel.send.bind(channel);
+  const channel=window.__testPeer.realtimeChannel,send=channel.send.bind(channel);
   window.__feedbackSend=send;window.__feedbackTimers=[];
   channel.send=raw=>{
    const m=JSON.parse(raw);
@@ -84,14 +84,14 @@ try{
  // merely to keep the test armed or confuse STOP with stale mode overwrite.
  if(!delayedState.armed&&(delayedState.throttle!==1000||delayedState.motors.rpm.some(v=>v!==0)||await phone.locator('#flightArm').getAttribute('aria-pressed')!=='false'))throw Error('Jitter did not fail safe');
  measurements.push({feedbackJitterMs:[80,220,300],reorderedAck:true,droppedEverySeventhAck:true,feedback:delayedAck,safetyStopObserved:!delayedState.armed});
- await web.evaluate(()=>{window.__feedbackTimers.forEach(clearTimeout);window.__testPeer.channel.send=window.__feedbackSend});
+ await web.evaluate(()=>{window.__feedbackTimers.forEach(clearTimeout);window.__testPeer.realtimeChannel.send=window.__feedbackSend});
  if(!delayedState.armed){
   await phone.waitForTimeout(180);if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Jitter recovery auto-armed');
   await wait(phone,()=>!document.getElementById('flightArm').disabled);await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
  }
  // Malformed and replayed packets cannot mutate the plant.
  const prior=await web.evaluate(()=>window.ZebjusTraining.snapshot().seq);
- await phone.evaluate(()=>{const p=window.__testPeer;p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:1,sessionId:p.status().sessionId,mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}));p.channel.send('null');p.channel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:999,sessionId:'wrong-session',mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}))});
+ await phone.evaluate(()=>{const p=window.__testPeer;p.realtimeChannel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:1,sessionId:p.status().sessionId,mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}));p.realtimeChannel.send('null');p.realtimeChannel.send(JSON.stringify({v:1,type:'SIM_CONTROL',seq:999,sessionId:'wrong-session',mode:'acro',armed:true,throttle:1900,axes:{roll:1,pitch:0,yaw:0}}))});
  await web.waitForTimeout(100);if(await web.evaluate(()=>window.ZebjusTraining.snapshot().throttle)===1900)throw Error('Replay/wrong session changed state');
  // STOP while captured fingers are down, on either side.
  await event('touchStart',[l]);await event('touchMove',[{...l,x:l.x+30,y:l.y-20}]);await phone.locator('#flightStop').click();
@@ -102,8 +102,8 @@ try{
  await wait(phone,()=>document.getElementById('flightArm').getAttribute('aria-pressed')==='false');await wait(web,()=>!window.ZebjusTraining.snapshot().armed);
  // A paused sender leaves motors off within the receiver's 450ms watchdog.
  await wait(phone,()=>!document.getElementById('flightArm').disabled);await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
- await phone.evaluate(()=>{Object.defineProperty(window.__testPeer.channel,'bufferedAmount',{configurable:true,get:()=>140000});});
- await wait(web,()=>!window.ZebjusTraining.snapshot().armed,2500);await phone.evaluate(()=>{delete window.__testPeer.channel.bufferedAmount});await phone.waitForTimeout(200);
+ await phone.evaluate(()=>{Object.defineProperty(window.__testPeer.realtimeChannel,'bufferedAmount',{configurable:true,get:()=>140000});});
+ await wait(web,()=>!window.ZebjusTraining.snapshot().armed,2500);await phone.evaluate(()=>{delete window.__testPeer.realtimeChannel.bufferedAmount});await phone.waitForTimeout(200);
  if(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed))throw Error('Watchdog auto re-armed');
  measurements.push({backpressureBytes:140000,normalAndCriticalSendsRejected:true,watchdogMs:450});
  await safeShot(phone,'test-output/android-stop.png');

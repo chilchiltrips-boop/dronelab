@@ -96,8 +96,10 @@ test('paired telemetry and control queues are bounded; critical STOP uses existi
 
  test('realtime simulator telemetry uses an unordered non-retransmitting channel while STOP stays reliable',async()=>{
   const r=runtime(),{host,pc}=await connectedHost(r);
+  assert.equal(host.realtimeChannel,pc.dc,'old peers use the reliable fallback');
   assert.deepEqual({...pc.input.options},{ordered:false,maxRetransmits:0});
   pc.input.readyState='open';pc.dc.bufferedAmount=100000;
+  assert.equal(host.realtimeChannel,pc.input);
   assert.equal(host.sendTelemetry({throttle:1200}),true);
   assert.equal(pc.input.sent.at(-1).type,'SIM_TELEMETRY');
   host.emergencyStop('Test');
