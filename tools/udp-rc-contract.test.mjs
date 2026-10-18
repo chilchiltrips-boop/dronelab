@@ -45,7 +45,7 @@ test('app background, source network changes and STOP revoke UDP stream',()=>{
 });
 test('AES-256-GCM index layout round-trips independently in Node crypto',()=>{
  const key=createHmac('sha256','1'.repeat(64)).update('ZJUDP1|ZFC-A1-0123456789AB|0123456789abcdef0123456789abcdef').digest();
- const packet=Buffer.alloc(58);packet.write('ZJU1',0);packet.write('0123456789abcdef','hex'); // no side effect on packet
+ const packet=Buffer.alloc(58);packet.write('ZJU1',0);
  Buffer.from('0123456789abcdef','hex').copy(packet,4);
  packet.writeUInt32BE(13,12);randomBytes(12).copy(packet,16);
  const plain=Buffer.alloc(14);[1000,1500,1500,1500,1000,1000].forEach((v,i)=>plain.writeUInt16BE(v,2*i));plain[12]=1;

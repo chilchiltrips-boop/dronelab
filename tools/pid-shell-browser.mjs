@@ -8,7 +8,13 @@ await context.addInitScript(()=>{
  let api;
  Object.defineProperty(window,'ZebjusP2P',{configurable:true,get:()=>api,set(v){api=v;const original=v.session;v.session=(...args)=>window.__testPeer=original(...args)}});
 });
-const page=await context.newPage(),phone=await context.newPage(),errors=[];
+// Separate browser contexts model a physical phone and desktop. Switching
+// desktop tabs must not background the phone (which correctly releases
+// its own control lease when its own activity is backgrounded).
+const phoneContext=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,
+ serviceWorkers:'block',reducedMotion:'reduce'});
+await configureContext(phoneContext);
+const page=await context.newPage(),phone=await phoneContext.newPage(),errors=[];
 for(const p of [page,phone])p.on('pageerror',e=>errors.push(e.message));
 const until=(p,fn,timeout=19000)=>p.waitForFunction(fn,null,{timeout});
 try{

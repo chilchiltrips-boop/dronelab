@@ -11,7 +11,7 @@ const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
- version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
+ version:'',rc:null,udp:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
@@ -58,6 +58,7 @@ function adoptNetworkStatus(d){
   // Trusted status only; never infer physical LED/motor state from UI input.
   ledOn:typeof d.ledOn==='boolean'?d.ledOn:null,
   motorsDisabled:d.motorsDisabled===true,motorsArmed:typeof d.motorsArmed==='boolean'?d.motorsArmed:null,
+   udp:d.udp&&d.udp.protocol==='ZJUDP1'?d.udp:null,
   partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,otaChunkMaxBytes:supportedOtaChunkSize(d),networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
   staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number.isFinite(Number(d.rssi))?Number(d.rssi):null});
 }
@@ -132,6 +133,15 @@ function render(){
  byId('kitRcAge',Number.isFinite(rc.ageMs)?rc.ageMs+' ms':'—');
  byId('kitRcCounts',(rc.accepted??state.sent)+' / '+(rc.rejected??state.rejected));
  byId('kitRcOrigin',rc.source||state.rcSource||'NONE');
+ const udp=ready&&['ap','sta','android-relay'].includes(state.transport)?state.udp:null;
+ const validUdp=udp&&udp.protocol==='ZJUDP1';
+ byId('kitUdpMetrics',!ready?'UDP: Kit offline':!validUdp?
+  'UDP not supported by this firmware • signed HTTP compatibility mode':
+  'Secure UDP • '+(udp.active?'ACTIVE':'IDLE')+
+  ' • RX '+(udp.received??0)+' • rejected '+(udp.rejected??0)+
+  ' • seq '+(udp.lastSequence??0)+
+  ' • age '+(Number.isFinite(udp.lastPacketAgeMs)?udp.lastPacketAgeMs+' ms':'—')+
+  ' • sender RTT / jitter / missing ACKs: Android Diagnostics export');
  byId('kitRcState',!ready?'OFFLINE':rc.active?(rc.inputArmed?'INPUT ARMED':'RECEIVING • DISARMED'):rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
  if($('kitRememberBrowser'))$('kitRememberBrowser').disabled=ready&&state.transport!=='usb'&&!state.key;
@@ -1727,7 +1737,7 @@ root.ZebjusKits={
  getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };
