@@ -14,7 +14,8 @@ export async function startFirmwareHost(){
    section(source,'static String zjStatus(){','static const char* zjClientTransport(){')+'\n'+
    section(source,'static void zjRpcLoop(){','static void zjNetworkSetup(){')+'\nstatic void setupHostTelemetry(){\n'+
    section(source,' zjHttp.on("/api/health"',' // AP-local Kit identity maintenance')+'\n'+
-   section(source,' zjHttp.on("/api/telemetry"',' zjHttp.on("/api/command"')+'\n}\n';
+   section(source,' zjHttp.on("/api/telemetry"',' zjHttp.on("/api/command"')+'\n'+
+   section(source,' zjHttp.on("/api/rc/snapshot"',' zjHttp.on("/api/ppm/status"')+'\n}\n';
   writeFileSync(join(directory,'udp-network-extract.h'),extract);
   execFileSync('g++',['-std=c++17','-Itools/host-stubs','-I'+directory,'tools/udp-firmware-host.cpp','-lcrypto','-o',join(directory,'firmware')],{stdio:'pipe',timeout:60000});
   child=spawn(join(directory,'firmware'),[],{stdio:['ignore','pipe','pipe']});

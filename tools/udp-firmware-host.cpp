@@ -7,6 +7,7 @@
 #include <chrono>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 static String zjPpmRcChannelsJson(){return "null";}
+static void zjPpmLoop(uint32_t){}
 #include "../FlightCore_Firmware/FlightCoreRpc.h"
 static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;

@@ -31,11 +31,22 @@ try{
  assert.equal(result.state.connected,true);assert.equal(result.state.managementProtocol,'ZJM1');
  assert.equal(result.telemetry.roll,1.25);assert.equal(result.telemetry.managementProtocol,'ZJM1');
  assert.equal(result.pythonGyro.source,'UDP');assert.equal(result.pythonGyro.RatePitch,-2.5);
+ await page.locator('[data-tab="python"]').click();
+ await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:45000});
+ await page.locator('#pythonTarget').selectOption('ap');
+ const program="from zebjus_simple import Drone\ndrone = Drone()\ngyro = await drone.read_gyro(timeout=3000)\nprint('UDP_PYTHON_GYRO', gyro['source'], gyro['RateRoll'], gyro['RatePitch'])\nrc = await drone.read_joystick()\nprint('UDP_PYTHON_JOYSTICK', rc['throttle'], rc['motors_disabled'])\n";
+ await page.evaluate(code=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue(code),program);
+ await page.locator('#runPythonBtn').click();
+ await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('UDP_PYTHON_JOYSTICK 1000 True'),null,{timeout:90000});
+ const pythonOutput=await page.locator('#pythonTerminal').textContent();
+ assert.match(pythonOutput,/UDP_PYTHON_GYRO UDP 1.25 -2.5/);
+ await page.waitForFunction(()=>!document.getElementById('runPythonBtn').disabled);
+ await page.screenshot({path:output+'/python-udp-imu-joystick.png',fullPage:true});
  assert.equal(kitHttp.length,0,'the Kit must receive no HTTP request when UDP bridge is active');
  assert.ok(seen.some(v=>v.route==='/api/auth/local'));assert.ok(seen.some(v=>v.route==='/api/status'));assert.ok(seen.some(v=>v.route==='/api/telemetry'));
  assert.deepEqual(errors,[]);
  await page.locator('[data-tab="firmware"]').click();
  await page.screenshot({path:output+'/udp-imu-connected.png',fullPage:true});
- writeFileSync(output+'/result.json',JSON.stringify({pass:true,transport:'browser-loopback-to-ZJM1',kitHttpRequests:kitHttp.length,requests:seen,telemetry:result.telemetry},null,2));
+ writeFileSync(output+'/result.json',JSON.stringify({pass:true,transport:'browser-loopback-to-ZJM1',kitHttpRequests:kitHttp.length,requests:seen,telemetry:result.telemetry,pythonOutput},null,2));
  console.log('PASS Chromium -> UDP firmware: discovery, enrollment, valid status, IMU, Python gyro, no Kit HTTP');
 }finally{await context.close();await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));fixture.stop()}
