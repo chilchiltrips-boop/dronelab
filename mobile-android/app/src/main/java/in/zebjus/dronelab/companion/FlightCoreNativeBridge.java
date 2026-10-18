@@ -112,6 +112,23 @@ final class FlightCoreNativeBridge {
     void cancelOutstanding(){
         for(String id:outstanding.keySet())cancelRequest(id);
     }
+    // Android 8-12 do not implement InputStream.readNBytes(int) (API 33).
+    // Calling that newer method on POCO X2/Android 11 kills the native worker
+    // with NoSuchMethodError when the first Kit HTTP response arrives.
+    // Read a small bounded response using InputStream.read(byte[],int,int),
+    // supported on every Android version allowed by our minSdk 26.
+    static byte[] readBoundedResponse(InputStream source,int maxBytes) throws java.io.IOException {
+        if(maxBytes<0||maxBytes>16000)throw new IllegalArgumentException("Invalid maximum response size");
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream(Math.min(maxBytes,2048));
+        byte[] buffer=new byte[2048];
+        while(bytes.size()<maxBytes){
+            int n=source.read(buffer,0,Math.min(buffer.length,maxBytes-bytes.size()));
+            if(n<0)break;
+            if(n==0){int one=source.read();if(one<0)break;bytes.write(one);}
+            else bytes.write(buffer,0,n);
+        }
+        return bytes.toByteArray();
+    }
     private void submit(String id,String ip,String method,String route,String form,JSONObject headers){
         if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||
            (form!=null&&form.length()>(route.startsWith("/api/firmware/")?8800:2500))){
@@ -156,8 +173,11 @@ final class FlightCoreNativeBridge {
                 if(state.cancelled)return;
                 int status=connection.getResponseCode();
                 InputStream source=status<400?connection.getInputStream():connection.getErrorStream();
-                byte[] data=source==null?new byte[0]:source.readNBytes(16000);
-                if(source!=null)source.close();
+                byte[] data;
+                if(source==null)data=new byte[0];
+                else try(InputStream response=source){
+                    data=readBoundedResponse(response,16000);
+                }
                 if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"));
             }catch(SocketTimeoutException timeout){
                 if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null);
