@@ -317,7 +317,9 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
-            set -euo pipefail
+            # android-emulator-runner runs inline scripts with /bin/sh.
+            # Avoid Bash-only pipefail; the PASS/RESULT greps remain mandatory.
+            set -eu
             adb wait-for-device
             adb install -r mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
             adb install -r native-test-bundle/app-release-androidTest.apk
