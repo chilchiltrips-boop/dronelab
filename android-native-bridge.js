@@ -14,6 +14,7 @@
   discoverKit:id=>send('discoverKit',id),
   setOtaKeepAwake:active=>send('setOtaKeepAwake',String(!!active)),
   getInstalledVersion:()=>send('getInstalledVersion'),
+  saveDiagnosticLog:(format,content)=>send('saveDiagnosticLog',format,content),
   saveDiagnostic:(requestId,id,credential)=>send('saveDiagnostic',requestId,id,credential),
   loadDiagnostic:(requestId,id)=>send('loadDiagnostic',requestId,id),
   forgetDiagnostic:(requestId,id)=>send('forgetDiagnostic',requestId,id),

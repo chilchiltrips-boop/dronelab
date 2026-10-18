@@ -10,7 +10,7 @@ test('stable Android package ID and strictly monotonic release versionCode',()=>
  const code=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]||0);
  const published=Number(/VersionCode:\s*(\d+)/.exec(read('mobile-apk/ANDROID_RELEASE_META.txt'))?.[1]||0);
  assert.ok(code>=33&&code>published,'stable release cannot regress the published version code');
- assert.match(gradle,/versionName '1\.7\.18-poco-x2-compat'/);
+ assert.match(gradle,/versionName '1\.7\.19-ack-diagnostics'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);
