@@ -60,13 +60,20 @@ try{
  await page.locator('.v2-workspace-tools>summary').click();
  await page.locator('.top-grant-control').click();
  await until(phone,()=>!document.getElementById('flightArm').disabled,14000);
+ // Ensure the test exercises foreground internal PID/Devices navigation.
+ // Backgrounding the entire browser is intentionally fail-closed for control.
+ await page.bringToFront();
+ await until(page,()=>document.visibilityState==='visible');
  const before=await page.evaluate(()=>window.__testPeer.status());
  if(!before.connected||before.controller!=='mobile')throw Error('Host not connected/owned before Devices Mobile navigation');
  await page.locator('[data-tab="pid"]').click();
  await until(page,()=>document.querySelector('#tab-pid')?.classList.contains('active'));
  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="mobile"]').click();
  const after=await page.evaluate(()=>window.__testPeer.status());
- if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile')throw Error('Mobile nav discarded WebRTC session/control lease');
+ if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile'){
+  const visibility=await page.evaluate(()=>document.visibilityState);
+  throw Error('Mobile nav discarded WebRTC session/control lease • '+visibility+' • before='+JSON.stringify({connected:before.connected,controller:before.controller})+' • after='+JSON.stringify({connected:after.connected,controller:after.controller}));
+ }
  await phone.locator('#flightBack').click();
  await phone.locator('#flightArm').click();
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.ZebjusTraining?.snapshot()?.armed);
