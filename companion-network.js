@@ -326,11 +326,16 @@ window.zebjusNativeUdpEvent=data=>{
   return;
  }
  if(data.type==='error'){
+  // Fixed native enum only; never record or display an exception message,
+  // IP, network name or session credential.
+  const reason=typeof data.reason==='string'&&/^UDP_[A-Z0-9_]{2,80}$/.test(data.reason)
+   ?data.reason:'UDP_UNKNOWN';
   trace('udp_error',{transport:link,source:'ANDROID',inputArmed:false,
    sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
-   lastPacketAgeMs:data.lastPacketAgeMs,reason:classify(data.reason),outcome:'fail'});
-  if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error('Native UDP start failed'));}
-  if(udpActive)void releaseRc(data.reason||'UDP_ERROR').catch(()=>{});
+   lastPacketAgeMs:data.lastPacketAgeMs,reason,outcome:'fail'});
+  show('Secure UDP diagnostic input unavailable • '+reason+' • Kit input remains DISARMED','warn');
+  if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error(reason));}
+  if(udpActive)void releaseRc(reason).catch(()=>{});
   return;
  }
  if(!udpActive||!rcSession)return;

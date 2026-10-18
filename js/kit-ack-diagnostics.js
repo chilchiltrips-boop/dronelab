@@ -43,7 +43,7 @@ function clean(data){
   }else if(['rcOwned','inputArmed','apActive','staConnected','connected'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='route'){if(routes.has(v))result.route=v;}
-  else if(key==='reason'){if(reasons.has(v))result.reason=v;}
+  else if(key==='reason'){if(reasons.has(v)||typeof v==='string'&&/^UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)$/.test(v))result.reason=v;}
   else if(key==='transport'){if(['ap','sta','usb','android-relay','none','unknown'].includes(v))result.transport=v;}
   else if(key==='source'){if(['ANDROID','WEB','PPM','USB','NONE'].includes(v))result.source=v;}
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}

@@ -92,33 +92,65 @@ final class FlightCoreUdpStream {
         key=token=prefix=null;
         sequence=0;inputArm=acknowledgedArm=false;lastInputAt=0;lastAckAt=0;
     }
-    synchronized void stop(){clear();}
+
+    // The origin-checked WebMessage callback runs on the Android WebView/UI
+    // thread. Never open, bind or connect sockets there: strict-mode network
+    // policy may reject that before the FIRST datagram is sent.
+    private long startupGeneration=0;
+    synchronized void stop(){startupGeneration++;clear();}
     synchronized void start(String id,String ip,String device,String claim,String keyHex){
+        startupGeneration++;
         clear();
         if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||
-           !device.matches("ZFC-A[12]-[A-F0-9]{12}")||
-           !claim.matches("[a-fA-F0-9]{32}")||!keyHex.matches("[a-fA-F0-9]{64}")){
+           device==null||!device.matches("ZFC-A[12]-[A-F0-9]{12}")||
+           claim==null||!claim.matches("[a-fA-F0-9]{32}")||
+           keyHex==null||!keyHex.matches("[a-fA-F0-9]{64}")){
             report("error","UDP_SESSION_INVALID");return;
         }
-        try{
-            Network net=wifiLink.networkFor(ip,false);
-            if(!wifiLink.isPinnedTo(device))throw new IllegalStateException("UDP_KIT_NOT_PINNED");
-            byte[] secret=hex(keyHex),claimToken=hex(claim.substring(0,16));
-            DatagramSocket ds=new DatagramSocket();
-            try{
-                net.bindSocket(ds);
-                ds.connect(InetAddress.getByName(ip),PORT);
-                ds.setSoTimeout(1);
-            }catch(Exception e){ds.close();throw e;}
-            key=secret;token=claimToken;prefix=new byte[4];random.nextBytes(prefix);
-            socket=ds;active=true;
-            sent=ackCount=estimatedLost=lastRtt=jitter=0;
-            lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
-            lastInputAt=SystemClock.elapsedRealtime();
-            // The native publisher is scheduled independently of all HTTP requests.
-            timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
-            report("start",null);
-        }catch(Exception error){clear();report("error","UDP_START_FAILED");}
+        final long requestGeneration=startupGeneration;
+        // Same single-thread executor subsequently runs the 50Hz sender.
+        // Pending starts cannot resurrect a released or backgrounded session.
+        sender.execute(()->{
+            synchronized(FlightCoreUdpStream.this){
+                if(requestGeneration!=startupGeneration)return;
+                String stage="PINNED_NETWORK";
+                try{
+                    Network net=wifiLink.networkFor(ip,false);
+                    if(!wifiLink.isPinnedTo(device))
+                        throw new IllegalStateException("UDP_KIT_NOT_PINNED");
+                    byte[] secret=hex(keyHex),claimToken=hex(claim.substring(0,16));
+                    DatagramSocket ds=null;
+                    try{
+                        stage="OPEN_SOCKET";
+                        ds=new DatagramSocket();
+                        stage="BIND_SOCKET";
+                        net.bindSocket(ds);
+                        stage="CONNECT_PEER";
+                        ds.connect(InetAddress.getByName(ip),PORT);
+                        ds.setSoTimeout(1);
+                    }catch(Exception e){if(ds!=null)ds.close();throw e;}
+                    stage="START_SENDER";
+                    key=secret;token=claimToken;prefix=new byte[4];random.nextBytes(prefix);
+                    socket=ds;active=true;
+                    sent=ackCount=estimatedLost=lastRtt=jitter=0;
+                    lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
+                    lastInputAt=SystemClock.elapsedRealtime();
+                    timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
+                    report("start",null);
+                }catch(Exception error){
+                    clear();
+                    // No IP, SSID, claim, session key or exception message
+                    // leaves native code. Stage and class identify the failing API.
+                    final String category=error instanceof android.os.NetworkOnMainThreadException
+                        ?"MAIN_THREAD_NETWORK":error instanceof java.net.SocketException
+                        ?"SOCKET":error instanceof SecurityException
+                        ?"PERMISSION":error instanceof IllegalStateException
+                        ?"NETWORK_IDENTITY":error instanceof java.net.UnknownHostException
+                        ?"ADDRESS":"NATIVE";
+                    report("error","UDP_START_"+stage+"_"+category);
+                }
+            }
+        });
     }
     synchronized void offer(String csv,boolean armed){
         if(!active)return;

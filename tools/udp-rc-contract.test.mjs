@@ -55,3 +55,15 @@ test('AES-256-GCM index layout round-trips independently in Node crypto',()=>{
  const decoded=Buffer.concat([dec.update(packet.subarray(28,42)),dec.final()]);
  assert.deepEqual(decoded,plain);assert.equal(decoded.readUInt16BE(0),1000);assert.equal(decoded[12]&1,1);
 });
+
+test('native UDP socket startup stays off the Android WebView/UI thread',()=>{
+ const start=java.slice(java.indexOf('synchronized void start('),java.indexOf('synchronized void offer('));
+ assert.ok(start.indexOf('sender.execute(()->{')>=0);
+ assert.ok(start.indexOf('sender.execute(()->{')<start.indexOf('new DatagramSocket()'));
+ assert.ok(start.indexOf('sender.execute(()->{')<start.indexOf('net.bindSocket(ds)'));
+ assert.match(start,/requestGeneration!=startupGeneration/);
+ assert.match(java,/synchronized void stop\(\)\{startupGeneration\+\+;clear\(\);\}/);
+ assert.match(start,/UDP_START_.*stage/);
+ assert.match(client,/Secure UDP diagnostic input unavailable/);
+ assert.match(read('js/kit-ack-diagnostics.js'),/UDP_START_\(\?:PINNED_NETWORK/);
+});
