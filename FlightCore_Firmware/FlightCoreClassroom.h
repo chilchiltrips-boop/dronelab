@@ -24,6 +24,9 @@ static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
+// Signed diagnostic status contains only a release reason, never owner tokens.
+static String zjRcLastReleaseReason="NONE";
+static uint32_t zjRcLastReleaseAt=0;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
 static const char* zjRcTransport="NONE";
@@ -66,6 +69,7 @@ static void zjRcNeutral(){
 }
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
+ if(had){zjRcLastReleaseReason=reason;zjRcLastReleaseAt=millis();}
  zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
  zjRcSession="";zjRcOwnerId="";zjRcSource="NONE";zjRcTransport="NONE";
  if(had&&Serial.availableForWrite()>70){Serial.print("ZJRC,RELEASE,");Serial.println(reason);}
@@ -121,7 +125,7 @@ static String zjRcState(){
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+zjJson(zjRcLastReleaseReason)+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.
