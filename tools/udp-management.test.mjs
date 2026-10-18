@@ -100,6 +100,8 @@ test('localhost bridge blocks foreign origin, DNS rebinding and public-address p
   assert.equal((await fetch(url+'/rpc',{method:'POST',headers,body:body.replace('192.168.1.70','8.8.8.8')})).status,502);
   const good=await fetch(url+'/rpc',{method:'POST',headers,body});assert.equal(good.status,200);assert.equal(calls.length,1);
   assert.equal((await good.json()).protocol,'ZJM1');
+  const dev=await fetch(url+'/rpc',{method:'POST',headers:{...headers,Origin:'http://localhost:4173'},body});
+  assert.equal(dev.status,200,'documented npm run dev origin can use the UDP helper');
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
 });
 

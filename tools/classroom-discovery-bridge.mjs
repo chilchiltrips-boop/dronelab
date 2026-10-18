@@ -8,7 +8,7 @@ import {pathToFileURL} from 'node:url';
 import {requestUdp,privateIPv4,allowedOperation,HEADER_NAMES} from './flightcore-udp-rpc.mjs';
 
 const SERVICE='_zebjus._tcp.local',MULTICAST='224.0.0.251',PORT=5353;
-const ALLOWED=new Set(['https://chilchiltrips-boop.github.io','http://localhost:8765','http://127.0.0.1:8765','http://localhost:8000','http://127.0.0.1:8000']);
+const ALLOWED=new Set(['https://chilchiltrips-boop.github.io','http://localhost:8765','http://127.0.0.1:8765','http://localhost:8000','http://127.0.0.1:8000','http://localhost:4173','http://127.0.0.1:4173']);
 const MAX_AGE=120000;
 export async function resolveKitHost(host,kits=[]){
  if(privateIPv4(host))return host;

@@ -13,6 +13,7 @@ on:
       - 'companion-network.js'
       - 'pairing-core.js'
       - 'tools/*udp*'
+      - 'tools/classroom-discovery-bridge.mjs'
       - 'tools/UdpRpcInterop.java'
       - 'tools/host-stubs/**'
       - '.github/workflows/udp-management.yml'
