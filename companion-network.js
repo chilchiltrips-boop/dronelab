@@ -5,6 +5,7 @@
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
+const nonRcNativeRequests=new Set();
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null;
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
@@ -33,8 +34,14 @@ function cancelNativePending(reason){
 function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  if(!native?.requestSecure)return Promise.reject(Error('Install the current Android APK for signed Kit Wi-Fi sessions.'));
  if(!validHost(targetIp))return Promise.reject(Error('Use the kit private IPv4 address.'));
+ const rcRoute=route.startsWith('/api/rc/'),authentication=route.startsWith('/api/auth/');
+ // Signed HMAC counters and Android's single HTTP worker MUST preserve
+ // request order. Do not enqueue unrelated reads/writes behind joystick ACKs.
+ // /api/auth/ is allowed for the selected RC session's signed reauthentication.
+ if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy))
+  return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
- return new Promise((resolve,reject)=>{
+ const operation=new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>{
    if(!pending.has(id))return;
    pending.delete(id);
@@ -46,6 +53,13 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
   try{native.requestSecure(id,targetIp,method,route,method==='POST'?form(args):'',JSON.stringify(headers));}
   catch(e){clearTimeout(timer);pending.delete(id);const error=Error('Native request failed: '+e.message);error.uncertain=write;reject(error);}
  });
+ // Claiming input waits for ALREADY-STARTED native traffic, without ever
+ // jumping ahead of an HMAC counter and without cancelling unknown writes.
+ if(!rcRoute&&!authentication){
+  nonRcNativeRequests.add(operation);
+  void operation.finally(()=>nonRcNativeRequests.delete(operation)).catch(()=>{});
+ }
+ return operation;
 }
 // An NSD address is only a candidate. Only a signed Device ID response can
 // authorize a kit, and only the matching Wi-Fi Network/SSID/BSSID may carry writes.
@@ -159,6 +173,10 @@ async function discoverKit(idOverride=''){
 }
 async function request(route,method='GET',args={}){
  if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
+ // Central admission control also covers signed-session calls whose auth is
+ // already open; blocking ONLY nativeTransport would leave a race here.
+ if(!route.startsWith('/api/rc/')&&(rcClaiming||rcSession||previewBusy))
+  throw Error('RC ACK has priority • STOP diagnostic input before Kit requests');
  if(!auth||Date.now()>auth.expiresAt-5000){
   if(!authOpening){
    const epoch=linkEpoch,host=ip,id=verifiedKitId,scope=link==='ap'?'ap_diagnostics':'sta_observer';
@@ -478,6 +496,10 @@ async function onWebRequest(req,peer){
  const grant=grantFor(route,method);
  if(!grant||!el(grant)?.checked)return peer.sendNetworkResponse({id,ok:false,error:'Android has not granted '+(grant||'this operation')});
  if(!online||!onKitLink)return peer.sendNetworkResponse({id,ok:false,error:'Selected Kit Wi-Fi is not verified'});
+ // Paired WebApp reads, Wi-Fi changes and diagnostics may not starve the
+ // Android owner's 100ms RC frames. Emergency STOP is still authorized.
+ if((rcClaiming||rcSession||previewBusy)&&!(method==='POST'&&route==='/api/rc/stop'))
+  return peer.sendNetworkResponse({id,ok:false,error:'Android RC active • release control before requesting Kit data'});
  try{
   const data=await request(route,method,req.args||{});
   peer.sendNetworkResponse({id,ok:true,data});
@@ -497,6 +519,9 @@ async function claimRc(){
   // native single-worker queue. Finish any already-started status transaction
   // before claiming input, and stop starting more while ARM is in progress.
   if(statusInFlight)await statusInFlight.catch(()=>{});
+  // Covers a paired WebApp read, LED command or Wi-Fi operation that was
+  // already submitted before ARM. New non-RC traffic is now rejected.
+  if(nonRcNativeRequests.size)await Promise.allSettled([...nonRcNativeRequests]);
   if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||!online||!onKitLink||document.hidden)
    throw Error('Kit changed or went offline before ARM; reconnect and verify');
   const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode});

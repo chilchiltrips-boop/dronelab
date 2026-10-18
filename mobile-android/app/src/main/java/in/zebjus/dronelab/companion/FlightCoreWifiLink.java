@@ -115,12 +115,17 @@ final class FlightCoreWifiLink {
         }
         if(!pinnedIp.equals(ip))throw new IllegalStateException("Selected Kit IP changed; reconnect and verify again");
         NetworkCapabilities caps=connectivity.getNetworkCapabilities(selected);
-        if(caps==null||!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
+        if(caps==null)throw new IllegalStateException("Wi-Fi capabilities temporarily unavailable; wait for re-verification");
+        if(!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
             clear();throw new IllegalStateException("Pinned Kit Wi-Fi disconnected");
         }
+        // Temporarily redacted/missing WifiInfo is NOT proof the Kit's AP
+        // changed. Fail this request closed, retaining the pin for an updated
+        // location-inclusive callback. Only a VERIFIED mismatch removes it.
         WifiInfo observed=info(selected);
-        if(!pinnedSsid.equals(checkedSsid(observed))||
-           !pinnedBssid.equalsIgnoreCase(checkedBssid(observed))){
+        String ssid=checkedSsid(observed),bssid=checkedBssid(observed);
+        if(!pinnedSsid.equals(ssid)||
+           !pinnedBssid.equalsIgnoreCase(bssid)){
             clear();throw new IllegalStateException("Pinned Wi-Fi SSID/BSSID changed; verify Kit again");
         }
         return selected;
@@ -167,13 +172,25 @@ final class FlightCoreWifiLink {
         if(matches(network)){clear();listener.linkChanged();}
     }
     private synchronized void handleCapabilities(Network network,NetworkCapabilities caps){
-        if(caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)&&
-           caps.getTransportInfo() instanceof WifiInfo)
-            observedWifi.put(network,(WifiInfo)caps.getTransportInfo());
-        else observedWifi.remove(network);
-        if(matches(network)){
-            try{networkFor(pinnedIp,false);}
-            catch(Exception failure){clear();listener.linkChanged();}
+        final boolean wifiAvailable=caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+        final WifiInfo details=wifiAvailable&&caps.getTransportInfo() instanceof WifiInfo
+            ?(WifiInfo)caps.getTransportInfo():null;
+        // Never reuse an old callback identity once the OS hides it.
+        observedWifi.remove(network);
+        if(matches(network)&&caps!=null&&!wifiAvailable){
+            clear();listener.linkChanged();return;
+        }
+        if(details==null)return; // Transient redaction: no false AP disconnect.
+        try{
+            String ssid=checkedSsid(details),bssid=checkedBssid(details);
+            observedWifi.put(network,details);
+            if(matches(network)&&(!pinnedSsid.equals(ssid)||
+                                  !pinnedBssid.equalsIgnoreCase(bssid))){
+                clear();listener.linkChanged(); // A verified different AP: fail closed.
+            }
+        }catch(IllegalStateException redacted){
+            // The next Wi-Fi request fails closed until verified WifiInfo returns;
+            // do not claim the physical Wi-Fi Network was lost.
         }
     }
     private synchronized void releaseMulticast(){

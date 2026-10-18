@@ -34,7 +34,9 @@ final class FlightCoreNativeBridge {
     private final Activity activity;
     static final int OTA_DOCUMENT_PICKER=802;
     private final WebView view;
-    private final ExecutorService worker = new java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,new java.util.concurrent.ArrayBlockingQueue<>(6));
+    // Signed monotonic sequence counters forbid reordering. Bound backlog rather
+    // than adding racing "priority" workers that could invalidate HMAC replay checks.
+    private final ExecutorService worker = new java.util.concurrent.ThreadPoolExecutor(1,1,0L,java.util.concurrent.TimeUnit.MILLISECONDS,new java.util.concurrent.ArrayBlockingQueue<>(3));
     private final FlightCoreWifiLink wifiLink;
     private static final class RequestState {
         volatile boolean cancelled;
@@ -127,7 +129,8 @@ final class FlightCoreNativeBridge {
                 final long elapsed=android.os.SystemClock.elapsedRealtime()-queuedAt;
                 // Never run a queued firmware write after its JS caller gave up.
                 if(elapsed>(firmwareWrite?1500:750))throw new IllegalStateException("Stale native request dropped");
-                if(route.equals("/api/rc/preview")&&elapsed>250)throw new IllegalStateException("Stale input dropped");
+                if(route.equals("/api/rc/preview")&&elapsed>250)
+                    throw new IllegalStateException("Stale RC preview queued "+elapsed+"ms; input disarmed");
                 Network wifi=wifiLink.networkFor(ip,route.equals("/api/identify")||route.startsWith("/api/auth/")||route.equals("/api/status"));
                 if(state.cancelled)return;
                 connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
@@ -158,6 +161,12 @@ final class FlightCoreNativeBridge {
                 if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"));
             }catch(SocketTimeoutException timeout){
                 if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null);
+            }catch(IllegalStateException stale){
+                // Differentiate a queued RC deadline from Wi-Fi disassociation,
+                // without weakening the firmware's 350ms safety watchdog.
+                String msg=stale.getMessage();
+                if(!state.cancelled)reply(id,false,0,"{}",
+                    msg!=null&&msg.startsWith("Stale RC preview queued ")?msg:"Wi-Fi identity not yet verified: "+stale.getClass().getSimpleName(),null);
             }catch(Exception error){
                 if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null);
             }finally{
