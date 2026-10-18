@@ -624,3 +624,11 @@
  #tab-firmware .dw-android-release{padding:4px 6px;gap:5px}
  #tab-firmware .dw-android-release-link{width:auto;min-height:40px;flex:none}
 }
+
+/* Read-only bounded ACK recorder, available when network is offline. */
+.zj-ack-panel{margin:12px 0;padding:10px;border:1px solid #526174;border-radius:9px;min-width:0;max-width:100%;font:inherit;color:inherit}
+.zj-ack-panel summary{cursor:pointer;font-weight:700}
+.zj-ack-panel p{font-size:12px;line-height:1.4;margin:9px 0;overflow-wrap:anywhere}
+.zj-ack-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.zj-ack-buttons button{font:inherit;font-size:12px;padding:7px 10px;cursor:pointer;min-height:35px}
+.zj-ack-panel pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.4;max-height:200px;overflow:auto;padding:8px;background:#101c2b;color:#d8e7f8;border-radius:6px}

@@ -58,6 +58,7 @@ on:
       - 'remote-rtc-config.json'
       - 'js/kit-auth.js'
       - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
       - 'firmware-catalog.json'
       - 'vendor/crypto/**'
   workflow_dispatch:

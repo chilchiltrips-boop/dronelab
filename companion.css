@@ -473,3 +473,11 @@ button{min-height:44px}
 .flight-sim-badge[data-target=kit]{color:#7ee1bc}.flight-sim-badge[data-target=simulator]{color:#91c8ff}.flight-sim-badge[data-target=preview]{color:#afa8b6}
 @media(max-height:440px){.flight-sim-badge{font-size:8px;max-width:52%}}
 @media(max-height:300px){.flight-sim-badge{font-size:7px}}
+
+/* Read-only bounded ACK recorder, available when network is offline. */
+.zj-ack-panel{margin:12px 0;padding:10px;border:1px solid #526174;border-radius:9px;min-width:0;max-width:100%;font:inherit;color:inherit}
+.zj-ack-panel summary{cursor:pointer;font-weight:700}
+.zj-ack-panel p{font-size:12px;line-height:1.4;margin:9px 0;overflow-wrap:anywhere}
+.zj-ack-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.zj-ack-buttons button{font:inherit;font-size:12px;padding:7px 10px;cursor:pointer;min-height:35px}
+.zj-ack-panel pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.4;max-height:200px;overflow:auto;padding:8px;background:#101c2b;color:#d8e7f8;border-radius:6px}

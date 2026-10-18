@@ -47,6 +47,9 @@ public class MainActivity extends Activity {
     private PermissionRequest pendingVideoRequest;
     private ValueCallback<Uri[]> pendingFirmwareFilePicker;
     private static final int SECURE_OTA_FILE_PICKER=802;
+    private static final int ACK_DIAGNOSTIC_SAVE_PICKER=803;
+    private String pendingAckDiagnosticFile;
+    private String pendingAckDiagnosticFormat;
     private FlightCoreWifiLink wifiLink;
     private boolean scopedBridgeReady;
     private boolean otaKeepAwake;
@@ -248,6 +251,29 @@ public class MainActivity extends Activity {
         }catch(Exception e){try{result.put("error","Version unavailable");}catch(Exception ignored){}}
         dispatchToPage("zebjusNativeVersionResult",result);
     }
+    private void saveDiagnosticFile(String format,String contents){
+        // Only this signed, bundled main WebView frame can initiate the system
+        // CREATE_DOCUMENT picker. The user explicitly chooses a destination.
+        if(!"json".equals(format)&&!"csv".equals(format))return;
+        if(contents==null||contents.isEmpty()||contents.length()>180000)return;
+        if(pendingAckDiagnosticFile!=null)return;
+        pendingAckDiagnosticFile=contents;
+        pendingAckDiagnosticFormat=format;
+        Intent save=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        save.addCategory(Intent.CATEGORY_OPENABLE);
+        save.setType("json".equals(format)?"application/json":"text/csv");
+        save.putExtra(Intent.EXTRA_TITLE,"ZEBJUS_ACK_Diagnostics_"+System.currentTimeMillis()+"."+format);
+        try{startActivityForResult(save,ACK_DIAGNOSTIC_SAVE_PICKER);}
+        catch(Exception error){
+            pendingAckDiagnosticFile=null;pendingAckDiagnosticFormat=null;
+            reportDiagnosticSave(false,false);
+        }
+    }
+    private void reportDiagnosticSave(boolean ok,boolean cancelled){
+        JSONObject result=new JSONObject();
+        try{result.put("ok",ok);result.put("cancelled",cancelled);}catch(Exception ignored){}
+        dispatchToPage("zebjusNativeDiagnosticSaveResult",result);
+    }
     private static String arg(JSONArray values,int index){return values==null?"":values.optString(index,"");}
     private void handleNativeMessage(WebMessageCompat message,Uri origin,boolean isMainFrame){
         if(view==null||!LOCAL_PAGE.equals(view.getUrl()))return;
@@ -270,6 +296,9 @@ public class MainActivity extends Activity {
                 case "discoverKit":if(args.length()==1&&wifiLink!=null)wifiLink.discover(arg(args,0));break;
                 case "setOtaKeepAwake":if(args.length()==1)setOtaKeepAwake("true".equals(arg(args,0)));break;
                 case "getInstalledVersion":if(args.length()==0)reportInstalledVersion();break;
+                case "saveDiagnosticLog":
+                    if(args.length()==2)saveDiagnosticFile(arg(args,0),arg(args,1));
+                    break;
                 case "saveDiagnostic":
                 case "loadDiagnostic":
                 case "forgetDiagnostic":
@@ -289,7 +318,7 @@ public class MainActivity extends Activity {
         if (nativeFlightCore != null) nativeFlightCore.cancelOutstanding();
         if (view != null) view.post(() -> {
             if (view != null) view.evaluateJavascript(
-                "window.zebjusNetworkChanged && window.zebjusNetworkChanged()", null);
+                "window.zebjusNativeWifiLinkEvent && window.zebjusNativeWifiLinkEvent();window.zebjusNetworkChanged && window.zebjusNetworkChanged()", null);
         });
     }
     @Override protected void onCreate(Bundle state) {
@@ -424,6 +453,18 @@ public class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==ACK_DIAGNOSTIC_SAVE_PICKER){
+            String contents=pendingAckDiagnosticFile;
+            pendingAckDiagnosticFile=null;pendingAckDiagnosticFormat=null;
+            boolean ok=false;
+            if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null&&contents!=null){
+                try(java.io.OutputStream output=getContentResolver().openOutputStream(data.getData(),"w")){
+                    if(output!=null){output.write(contents.getBytes(StandardCharsets.UTF_8));output.flush();ok=true;}
+                }catch(Exception ignored){}
+            }
+            reportDiagnosticSave(ok,resultCode!=RESULT_OK);
+            return;
+        }
         if(requestCode==SECURE_OTA_FILE_PICKER&&pendingFirmwareFilePicker!=null){
             ValueCallback<Uri[]> callback=pendingFirmwareFilePicker;pendingFirmwareFilePicker=null;
             callback.onReceiveValue(resultCode==RESULT_OK&&data!=null&&data.getData()!=null?new Uri[]{data.getData()}:null);
@@ -448,6 +489,7 @@ public class MainActivity extends Activity {
     }
     @Override protected void onDestroy() {
         setOtaKeepAwake(false);
+        pendingAckDiagnosticFile=null;pendingAckDiagnosticFormat=null;
         if(pendingWifiPermissionRequestId!=null){
             reportWifiPermission(pendingWifiPermissionRequestId,false);
             pendingWifiPermissionRequestId=null;
