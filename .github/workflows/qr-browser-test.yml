@@ -5,6 +5,7 @@ on:
     paths:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
       - 'mobile-android/**'
       - 'companion-flight.js'
       - 'flight-input.js'

@@ -6,6 +6,7 @@ on:
       - 'tools/android-direct-kit*'
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
       - 'mobile-android/**'
       - 'pairing-code.js'
       - 'pairing-qr-ui.js'
