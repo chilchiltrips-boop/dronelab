@@ -4,7 +4,7 @@ The diagnostic input ARM does not arm motors. Firmware's 350 ms input deadman re
 
 ## Reproduce safely
 1. Disconnect propellers and ESC/motors. Install Android 1.7.19 (code 35) when the signed release is published.
-2. Android: Menu → Diagnostics → ACK / Wi-Fi Diagnostic Recorder. WebApp: Devices & Firmware → Selected AERION → ACK / Wi-Fi Diagnostic Recorder.
+2. Android: Menu → More → Diagnostics → ACK / Wi-Fi Diagnostic Recorder. WebApp: Devices & Firmware → Selected AERION → ACK / Wi-Fi Diagnostic Recorder.
 3. Connect the phone to the Kit AP, Connect Kit, ARM and send diagnostic joystick values. When RC ACK failed occurs, leave the app open and press Save / Download JSON. Android displays the system Files destination picker. Save JSON or CSV; the WebApp downloads a file directly.
 4. Record board version, Android OS version, approximate control duration, and whether the phone still shows Kit AP Wi-Fi. Share only the sanitized JSON/CSV file. Files are never uploaded automatically.
 5. If WebApp and phone are on separate networks, logs remain separate. Android direct AP input does not get echoed to WebApp. Export both logs if the WebApp has an independent STA/USB link.

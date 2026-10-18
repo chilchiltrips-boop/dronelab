@@ -437,8 +437,11 @@ async function wifiDirectRequest(ip,key,route,method,args,expected){
 async function deviceRequest(route,method='GET',args={}){
  const started=diagnosticClock();
  try{return await deviceRequestCore(route,method,args)}
- catch(error){trace('request_error',{route,transport:state.transport,reason:classify(error),roundTripMs:Math.round(diagnosticClock()-started),outcome:'fail'});throw error}
- finally{}
+ catch(error){
+  trace('request_error',{route,transport:state.transport,reason:classify(error),
+   roundTripMs:Math.round(diagnosticClock()-started),outcome:'fail'});
+  throw error;
+ }
 }
 async function deviceRequestCore(route,method='GET',args={}){
  if(!state.connected&&route!=='/api/status')throw Error('Kit not connected');
