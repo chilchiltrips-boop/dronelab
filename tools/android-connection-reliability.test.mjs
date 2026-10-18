@@ -83,7 +83,7 @@ test('Android 12+ uses per-Network unredacted WifiInfo after runtime approval',(
  assert.match(wifi,/FLAG_INCLUDE_LOCATION_INFO/);
  assert.match(wifi,/observedWifi\.get\(network\)/);
  assert.match(wifi,/matchingWifi\(expectedSsid\)/);
- assert.match(wifi,/pinnedSsid\.equals\(checkedSsid\(observed\)\)/);
+ assert.match(wifi,/pinnedSsid\.equals\(ssid\)/);
  assert.match(wifi,/Build\.VERSION\.SDK_INT>=31/);
  assert.match(wifi,/return wifi==null\?null:wifi\.getConnectionInfo\(\)/);
 });
@@ -101,4 +101,25 @@ test('Accessible settings groups and live signed OTA outcomes are visible',()=>{
  assert.match(src,/OTA STATE UNCONFIRMED/);
  assert.match(src,/OTA PAUSED/);
  assert.match(src,/waiting for verified controller reboot/);
+});
+
+test('transient missing/redacted WifiInfo retains pin but rejects requests until identity is verified',()=>{
+ assert.match(wifi,/if\(caps==null\)throw new IllegalStateException\("Wi-Fi capabilities temporarily unavailable/);
+ assert.match(wifi,/WifiInfo observed=info\(selected\);\s*String ssid=checkedSsid\(observed\),bssid=checkedBssid\(observed\)/);
+ assert.match(wifi,/observedWifi\.remove\(network\);\s*if\(matches\(network\)&&caps!=null&&!wifiAvailable\)/);
+ assert.match(wifi,/if\(details==null\)return; \/\/ Transient redaction/);
+ assert.match(wifi,/catch\(IllegalStateException redacted\)/);
+ assert.match(wifi,/clear\(\);listener\.linkChanged\(\); \/\/ A verified different AP/);
+ assert.match(wifi,/if\(matches\(network\)\)\{clear\(\);listener\.linkChanged\(\);\}/);
+});
+test('signed RC priority is enforced before native worker and stale ACK errors remain specific',()=>{
+ const bridge=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
+ assert.match(src,/const nonRcNativeRequests=new Set\(\)/);
+ assert.match(src,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
+ assert.match(src,/if\(!route\.startsWith\('\/api\/rc\/'\)&&\(rcClaiming\|\|rcSession\|\|previewBusy\)\)/);
+ assert.match(src,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)\)/);
+ assert.match(bridge,/ArrayBlockingQueue<>\(3\)/);
+ assert.match(bridge,/Stale RC preview queued /);
+ assert.match(bridge,/msg!=null&&msg\.startsWith\("Stale RC preview queued "\)/);
+ assert.match(read('FlightCore_Firmware/FlightCoreClassroom.h'),/ZJ_RC_DEADMAN_MS=350/);
 });

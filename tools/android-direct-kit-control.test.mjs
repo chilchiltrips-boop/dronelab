@@ -139,3 +139,25 @@ test('full IMU telemetry cannot occupy the native queue during diagnostic RC own
  assert.match(source,/if\(rcClaiming\|\|rcSession\|\|previewBusy\)throw Error\('Release diagnostic input before requesting full IMU telemetry/);
  await b.network.releaseRc();
 });
+
+test('paired WebApp requests are denied during claimed Android RC, with emergency STOP still allowed',async()=>{
+ const b=bench();await b.connect();await b.network.armControls();
+ const sent=[];
+ const peer={status:()=>({paired:true}),sendNetworkResponse:m=>sent.push(m)};
+ b.element('kitAllowWeb').checked=true;b.element('kitGrantWifi').checked=true;
+ b.element('kitGrantDiagnostic').checked=true;
+ const before=b.requests.length;
+ await b.network.onWebRequest({id:11,method:'GET',route:'/api/status'},peer);
+ await b.network.onWebRequest({id:12,method:'POST',route:'/api/wifi/mode',args:{mode:'sta'}},peer);
+ assert.equal(b.requests.length,before,'WebApp must not enter signed native request queue during Android RC');
+ assert.ok(sent.every(x=>x.ok===false&&/Android RC active/.test(x.error)));
+ await b.network.onWebRequest({id:13,method:'POST',route:'/api/rc/stop'},peer);
+ assert.ok(b.requests.some(x=>x.route==='/api/rc/stop'),'explicit granted emergency STOP remains permitted');
+ await b.network.releaseRc();
+});
+test('native non-RC promises are drained before ARM claim and new ones are blocked',()=>{
+ assert.match(source,/nonRcNativeRequests\.add\(operation\)/);
+ assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
+ assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
+ assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)\)/);
+});
