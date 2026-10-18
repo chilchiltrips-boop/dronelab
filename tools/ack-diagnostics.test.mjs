@@ -80,3 +80,29 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
  assert.match(read('mobile-android/app/build.gradle'),/versionCode 35\s*versionName '1\.7\.19-ack-diagnostics'/);
 });
+
+test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
+ const b=bench();
+ assert.equal(b.api.reasonClass('not_controller_owner'),'OWNER_STALE');
+ assert.equal(b.api.reasonClass('rc_not_owned_or_invalid_frame'),'FRAME_REJECTED');
+ b.api.record('native_failure',{route:'/api/rc/preview',httpStatus:423,reason:'FRAME_REJECTED',
+   roundTripMs:2261,queueMs:14,bindMs:5,sendMs:7,responseWaitMs:2199,readMs:1,
+   phase:'complete',ip:'192.168.4.1',token:'top-secret'});
+ b.api.record('kit_status',{releaseReason:'ARMED_INPUT_TIMEOUT',lastReleaseAtMs:10420});
+ assert.equal(b.events().at(-2).data.responseWaitMs,2199);
+ assert.equal(b.events().at(-1).data.releaseReason,'ARMED_INPUT_TIMEOUT');
+ for(const x of ['192.168.4.1','top-secret'])assert.ok(!b.api.exportData('json').includes(x));
+ b.api.record('native_failure',{phase:'secret-device-info',reason:'secret'});
+ assert.equal(b.events().at(-1).data.phase,undefined);
+});
+test('stalled Android RC preview is cancelled without relaxing the 350ms firmware watchdog',()=>{
+ const controller=read('companion-flight.js'),link=read('companion-network.js');
+ const native=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
+ const firmware=read('FlightCore_Firmware/FlightCoreClassroom.h');
+ assert.match(controller,/doStop\('ACK_TIMEOUT'\)/);
+ assert.match(link,/function cancelPendingRcPreview\(\)/);
+ assert.match(link,/native\?\.cancelRequest\?\.\(id\)/);
+ assert.match(native,/stages\.put\("responseWaitMs"/);
+ assert.match(firmware,/ZJ_RC_DEADMAN_MS=350/);
+ assert.match(firmware,/zjRcLastReleaseReason/);
+});
