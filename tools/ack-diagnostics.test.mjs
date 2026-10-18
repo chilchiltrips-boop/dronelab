@@ -78,7 +78,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 36\s*versionName '1\.7\.20-ack-stability'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 37\s*versionName '1\.7\.21-secure-udp-diagnostics'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
