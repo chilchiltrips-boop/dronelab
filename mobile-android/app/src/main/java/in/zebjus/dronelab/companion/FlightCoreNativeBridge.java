@@ -112,7 +112,7 @@ final class FlightCoreNativeBridge {
     void cancelOutstanding(){
         for(String id:outstanding.keySet())cancelRequest(id);
     }
-    // Android 8-12 do not implement InputStream.readNBytes(int) (API 33).
+    // Android 8-12 lack the newer InputStream bulk-read overload (API 33).
     // Calling that newer method on POCO X2/Android 11 kills the native worker
     // with NoSuchMethodError when the first Kit HTTP response arrives.
     // Read a small bounded response using InputStream.read(byte[],int,int),
