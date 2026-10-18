@@ -58,10 +58,14 @@ try{const old=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(old))
 let lastWrite=0,lastPaint=0,ackSamples=0,flushTimer=null;
 const panel=()=>document.getElementById('kitAckDiagnostics');
 function summary(){
- const counts={ack:0,loss:0,slow:0,maxRtt:0,latestGap:null};
+ const counts={ack:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
  for(const e of events){
   if(e.event==='rc_ack'||e.event==='web_ack'){counts.ack++;counts.maxRtt=Math.max(counts.maxRtt,e.data.roundTripMs||0);if((e.data.roundTripMs||0)>=180)counts.slow++;if(Number.isFinite(e.data.frameGapMs))counts.latestGap=e.data.frameGapMs;}
   if(['rc_ack_error','web_ack_error','input_disarm'].includes(e.event))counts.loss++;
+  if(['native_response','native_failure'].includes(e.event)){
+   counts.maxNativeWait=Math.max(counts.maxNativeWait,e.data.responseWaitMs||0);
+   counts.maxNativeQueue=Math.max(counts.maxNativeQueue,e.data.queueMs||0);
+  }
  }
  return counts;
 }
@@ -69,7 +73,7 @@ function paint(force=false){
  const at=Date.now();if(!force&&at-lastPaint<800)return;lastPaint=at;
  const p=panel();if(!p)return;
  const s=summary(),label=p.querySelector('[data-diag-summary]');
- if(label)label.textContent=events.length+' events • '+s.ack+' sampled ACKs • '+s.loss+' errors/disarms • max '+s.maxRtt+' ms';
+ if(label)label.textContent=events.length+' events • '+s.ack+' sampled ACKs • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max HTTP wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
  const view=p.querySelector('[data-diag-events]');
  if(view&&p.open)view.textContent=events.slice(-30).reverse().map(e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data)).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
 }
