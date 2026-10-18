@@ -6,6 +6,8 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
+const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
@@ -323,6 +325,7 @@ function showKnown(){
  }
 }
 async function disconnect(reason='Disconnected',{automatic=false}={}){
+ trace('web_disconnect',{transport:state.transport,connected:false,reason:classify(reason)});
  hideAdminApCredentials();
  autoReconnectAllowed=automatic;otaActive=false;
  const priorId=state.kitId;pendingNetworkTarget=null;closeReconnectOffer();
@@ -431,6 +434,12 @@ async function wifiDirectRequest(ip,key,route,method,args,expected){
  }finally{clearTimeout(timeout)}
 }
 async function deviceRequest(route,method='GET',args={}){
+ const started=performance.now();
+ try{return await deviceRequestCore(route,method,args)}
+ catch(error){trace('request_error',{route,transport:state.transport,reason:classify(error),roundTripMs:Math.round(performance.now()-started),outcome:'fail'});throw error}
+ finally{}
+}
+async function deviceRequestCore(route,method='GET',args={}){
  if(!state.connected&&route!=='/api/status')throw Error('Kit not connected');
  if(state.transport==='usb')throw Error('USB uses native Serial commands, not HTTP');
  if(state.transport==='android-relay'){
@@ -537,6 +546,10 @@ async function readStatus(){
   state.heartbeatAt=Date.now();state.linkState='connected';render();return state.usbInfo;
  }
  const d=await deviceRequest('/api/status');
+ trace('web_status',{transport:state.transport,board:d.board,version:d.version,mode:d.mode,
+  apActive:d.apActive,staConnected:d.staConnected,staReason:Number(d.staDisconnectReason)||0,
+  rssi:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
+  ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source});
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  const actualTransport=verifiedTransport(d);
  state.heartbeatAt=Date.now();state.linkState='connected';
@@ -598,11 +611,14 @@ async function claim(source='WEB'){
   state.rcSession=data.session;ownOwnerId=data.ownerId||'';
  }
  if(ticket!==controlTicket||connection!==reconnectTicket||expected!==state.kitId)throw Error('Control request cancelled');
- state.owner=true;state.rcSource=source;state.seq=0;state.frameAt=0;audit('RC claimed by '+source+' • motors OFF','success');render();
+ state.owner=true;state.rcSource=source;state.seq=0;state.frameAt=0;
+ trace('web_claim',{transport:state.transport,source,outcome:'ok'});
+ audit('RC claimed by '+source+' • motors OFF','success');render();
  // Immediately send a safe neutral diagnostic frame so ownership does not idle-expire.
  await sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},source);
 }
 async function releaseRc(){
+ if(state.owner)trace('web_release',{transport:state.transport,source:state.rcSource});
  ++controlTicket;ownOwnerId='';
  const had=state.owner,session=state.rcSession;
  state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};render();
@@ -632,18 +648,21 @@ function toRc(frame){
 async function sendFrame(frame,source='WEB'){
  if(!linkFresh()||!state.owner||state.rcSource!==source||sendBusy||document.hidden)return false;
  const rc=toRc(frame);if(!rc)return false;
- sendBusy=true;
+ sendBusy=true;const start=performance.now();
  try{
   const seq=++state.seq;
   if(state.transport==='usb')await usbWrite('ZJRC,SET,'+[seq,rc.throttle,rc.roll,rc.pitch,rc.yaw,source].join(','));
   else{const ack=await deviceRequest('/api/rc/preview','POST',{session:state.rcSession,source,seq,armed:'false',...rc});
    if(ack?.received!==true||ack.kitId!==state.kitId)throw Error('Kit did not acknowledge the intended hardware Device ID');
    state.ackAt=Date.now();state.rc={...(state.rc||{}),...rc,active:true,claimed:true,source,seq};
+   trace('web_ack',{transport:state.transport,source,seq,roundTripMs:Math.round(performance.now()-start),inputArmed:false});
   }
   // USB writes are not hardware ACKs. Serial ZJRC frames update readouts separately.
   state.frameAt=Date.now();state.sent++;
   render();return true;
- }catch(e){state.rejected++;audit('RC frame rejected: '+e.message,'error');state.owner=false;state.rcSession='';state.rcSource='';tone('RC lost • '+e.message,'error');return false}
+ }catch(e){state.rejected++;trace('web_ack_error',{transport:state.transport,source,seq:state.seq,
+  roundTripMs:Math.round(performance.now()-start),reason:classify(e),outcome:'fail'});
+ audit('RC frame rejected: '+e.message,'error');state.owner=false;state.rcSession='';state.rcSource='';tone('RC lost • '+e.message,'error');return false}
  finally{sendBusy=false}
 }
 function ingestAndroid(frame){

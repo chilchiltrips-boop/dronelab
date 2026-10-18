@@ -4,9 +4,11 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
+const trace=(event,data)=>window.ZebjusAckDiagnostics?.record(event,data);
+const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
-let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null;
+let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
@@ -41,6 +43,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy))
   return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
+ trace('native_request',{route,transport:link,outcome:'pending'});
  const operation=new Promise((resolve,reject)=>{
   const timer=setTimeout(()=>{
    if(!pending.has(id))return;
@@ -49,7 +52,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
    const error=Error((write?'Encrypted firmware write':'Device request')+' timed out at '+route+'; delivery is unconfirmed');
    error.uncertain=write;reject(error);
   },policy?.requestTimeout?.(route,method,link,'android')||(write?18000:6000));
-  pending.set(id,{resolve,reject,timer,raw:true,write});
+  pending.set(id,{resolve,reject,timer,raw:true,write,route,started:performance.now()});
   try{native.requestSecure(id,targetIp,method,route,method==='POST'?form(args):'',JSON.stringify(headers));}
   catch(e){clearTimeout(timer);pending.delete(id);const error=Error('Native request failed: '+e.message);error.uncertain=write;reject(error);}
  });
@@ -305,11 +308,19 @@ async function forgetSavedKit(){
  if(verifiedKitId===id){diagnosticKey='';auth=null;online=false;forgetNativePin()}
  show('Saved diagnostic enrollment deleted; OWNER code was never stored');
 }
-function dropInput(message){++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');}
+function dropInput(message){
+ const wasArmed=rcInputArmed,hadSession=!!rcSession;
+ if(wasArmed||hadSession)trace('input_disarm',{transport:link,reason:classify(message),inputArmed:false});
+ ++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;
+ window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');
+}
 window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;}};
 window.zebjusNativeResult=data=>{
  const item=pending.get(data?.id);if(!item)return;
  clearTimeout(item.timer);pending.delete(data.id);
+ trace(data.ok&&data.status<400?'native_response':'native_failure',
+  {route:item.route,transport:link,roundTripMs:Math.round(performance.now()-item.started),
+   httpStatus:Number(data.status)||0,reason:data.ok?'OTHER':classify(data.error||data.body?.error),outcome:data.ok&&data.status<400?'ok':'fail'});
  if(data.ok&&item.raw)item.resolve({status:data.status,text:data.text||JSON.stringify(data.body||{}),proof:data.proof||''});
  else if(data.ok&&data.status<400)item.resolve(data.body||{});
  else item.reject(Error(data.error||data.body?.error||'Device HTTP '+data.status));
@@ -411,6 +422,10 @@ async function status(){
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
  online=true;lastStatus=Date.now();statusFailures=0;
+ trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
+  apActive:data.apActive,staConnected:data.staConnected,staReason:Number(data.staDisconnectReason)||0,
+  rssi:Number(data.rssi),seq:Number(data.rc?.seq),accepted:Number(data.rc?.accepted),
+  rejected:Number(data.rc?.rejected),ageMs:Number(data.rc?.ageMs),rcOwned:data.rc?.claimed===true});
  inputArmSupported=data.inputArmSupported===true;controlAuthorized=data.controlAuthorized===true;
  if(typeof data.ledOn==='boolean'&&!ledBusy)ledOn=data.ledOn;
  if(el('kitSavedId')&&verifiedKitId)el('kitSavedId').value=verifiedKitId;
@@ -506,7 +521,9 @@ async function onWebRequest(req,peer){
  }catch(e){peer.sendNetworkResponse({id,ok:false,error:String(e.message||e).slice(0,150)})}
 }
 async function releaseRc(){
- const session=rcSession;dropInput('Diagnostic input released • motors disabled');
+ const session=rcSession;
+ if(session)trace('rc_release',{transport:link,inputArmed:false});
+ dropInput('Diagnostic input released • motors disabled');
  if(session&&online)await request('/api/rc/release','POST',{session}).catch(()=>{});
 }
 async function claimRc(){
@@ -531,9 +548,11 @@ async function claimRc(){
    throw Error('ARM cancelled; input released');
   }
   rcSession=d.session;rcSeq=0;firmwareAck=null;
+  trace('rc_claim',{transport:link,source:'ANDROID',outcome:'ok'});
   window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
   show('Android owns input • motors disabled','good');
- }finally{rcClaiming=false}
+ }catch(error){trace('rc_claim_error',{transport:link,reason:classify(error),outcome:'fail'});throw error}
+ finally{rcClaiming=false}
 }
 async function armControls(){
  if(!canArm())throw Error(inputArmSupported?'Verify Kit control permission first':'Update FlightCore firmware for direct ARM');
@@ -559,6 +578,9 @@ function previewControls(m,critical=false){
   if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||rcInputArmed&&d.inputArmed!==true)throw Error('Invalid firmware receive ACK');
   lastStatus=Date.now();statusFailures=0;
   firmwareAck={seq:d.seq,at:Date.now(),rtt:Math.round(performance.now()-at),inputArmed:d.inputArmed===true};
+  trace('rc_ack',{transport:link,source:'ANDROID',seq:d.seq,roundTripMs:firmwareAck.rtt,
+   frameGapMs:firmwareAck.at-(lastAckDiagnosticAt||firmwareAck.at),inputArmed:firmwareAck.inputArmed});
+  lastAckDiagnosticAt=firmwareAck.at;
   if(typeof d.ledOn==='boolean'&&!ledBusy)ledOn=d.ledOn;
   if(el('kitRcAck'))el('kitRcAck').textContent='ESP32 received #'+d.seq+' • '+firmwareAck.rtt+' ms round trip';
  })
@@ -566,6 +588,8 @@ function previewControls(m,critical=false){
   if(session!==rcSession||epoch!==rcEpoch)return;
   // A delayed/rejected RC ACK disarms the diagnostic input, but must not
   // relabel the verified AP Wi-Fi link itself as disconnected.
+  trace('rc_ack_error',{transport:link,source:'ANDROID',seq:frameSeq,
+   roundTripMs:Math.round(performance.now()-at),reason:classify(e),outcome:'fail'});
   dropInput('RC ACK failed • diagnostic input disarmed • '+e.message);
   void request('/api/rc/release','POST',{session}).catch(()=>{});
   if(critical)throw e;
@@ -586,6 +610,7 @@ async function pollConnection(){
   if(epoch!==linkEpoch)return;
   const fatal=error.status===401||error.status===403||/identity|wrong|mismatch|Wi-Fi path|pin|SSID|BSSID/i.test(error.message);
   if(fatal||++statusFailures>=3||Date.now()-lastStatus>=12000){
+   trace('link_change',{transport:link,reason:classify(error),connected:false});
    online=false;dropInput('Kit disconnected • '+error.message+' • retrying same Device ID');
   }else show('Kit response delayed • retrying same connection','warn');
  }finally{if(statusInFlight===task)statusInFlight=null;statusBusy=false;syncHeaderTransport()}
