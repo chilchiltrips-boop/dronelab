@@ -25,7 +25,7 @@ test('Firmware connection JS is valid and exposes kit-select-only controls',()=>
  assert.match(code,/connectDiscoveredKit\(choice\)/);
  assert.match(code,/connectNamedKit\(name\)/);
  assert.match(code,/renameConnectedKit\(newName,reset\)/);
- assert.match(kit,/found\.kitId!==kit\.kitId/);
+ assert.match(kit,/live\.kitId!==kit\.kitId/);
  assert.match(kit,/const results=\[\]/);
  assert.match(kit,/zebjus_drone_.*\.local/);
 });

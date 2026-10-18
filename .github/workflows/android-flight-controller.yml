@@ -35,6 +35,8 @@ on:
       - 'tools/python-lab.test.mjs'
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
       - '.github/workflows/android-flight-controller.yml'
       # Any source edit triggering the signed APK must trigger EVERY exact-SHA
       # publication gate. No check is skipped merely by a path filter.

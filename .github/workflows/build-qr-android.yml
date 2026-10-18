@@ -18,6 +18,8 @@ on:
       - 'tools/native-flight-acceptance.sh'
       - 'tools/configure-native-avd.py'
       - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
       - 'tools/network-transport.test.mjs'
       - 'tools/controls-browser.mjs'
       - 'tools/android-origin-wifi-nsd.test.mjs'
@@ -63,7 +65,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  release_candidate:
+    name: Check whether Android package inputs changed
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.candidate.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Retain an identical published APK or require a newer upgrade
+        id: candidate
+        run: python3 tools/android_release_needed.py
+
   android:
+    needs: release_candidate
+    if: needs.release_candidate.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:

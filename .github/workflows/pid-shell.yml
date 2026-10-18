@@ -41,6 +41,8 @@ on:
       - 'tools/native-flight-acceptance.sh'
       - 'tools/configure-native-avd.py'
       - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
       - 'tools/network-transport.test.mjs'
       - 'tools/controls-browser.mjs'
       - 'tools/android-origin-wifi-nsd.test.mjs'

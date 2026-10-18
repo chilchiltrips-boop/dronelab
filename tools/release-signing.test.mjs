@@ -4,12 +4,17 @@ import {readFileSync} from 'node:fs';
 
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 
-test('stable Android package ID and strictly monotonic release versionCode',()=>{
+test('stable Android source matches the published release or advances its versionCode',()=>{
  const gradle=read('mobile-android/app/build.gradle');
  assert.match(gradle,/applicationId 'in\.zebjus\.dronelab\.companion'/);
  const code=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]||0);
- const published=Number(/VersionCode:\s*(\d+)/.exec(read('mobile-apk/ANDROID_RELEASE_META.txt'))?.[1]||0);
- assert.ok(code>=33&&code>published,'stable release cannot regress the published version code');
+ const metadata=read('mobile-apk/ANDROID_RELEASE_META.txt');
+ const published=Number(/VersionCode:\s*(\d+)/.exec(metadata)?.[1]||0);
+ assert.ok(code>=33&&code>=published,'stable source cannot regress the published version code');
+ if(code===published)assert.equal(/versionName '([^']+)'/.exec(gradle)?.[1],/^Version:\s*(.+)$/m.exec(metadata)?.[1],
+  'equal codes are valid only for the already published version, not a new upgrade');
+ // A new APK build must still strictly advance the installed/published code.
+ assert.ok(read('tools/verify_signed_android_release.py').includes('int(version_code) > int(old_package[2])'));
  assert.match(gradle,/versionName '1\.7\.21-secure-udp-diagnostics'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);

@@ -1,0 +1,40 @@
+name: Verify STA discovery and identity recovery
+on:
+  push:
+    branches: [main, fix/sta-discovery-20261018]
+    paths:
+      - 'js/classroom-kits.js'
+      - 'js/firmware-connect.js'
+      - 'index.html'
+      - 'lab.html'
+      - 'sw.js'
+      - 'tools/sta-discovery-recovery.test.mjs'
+      - 'tools/exclusive-connectivity-browser.mjs'
+      - '.github/workflows/sta-discovery-recovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discovery-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+      - run: npm run verify:firmware
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Verify signed AP/STA and manual IP connection in Chromium
+        run: |
+          node server.cjs --port 8765 >/tmp/sta-discovery-http.log 2>&1 &
+          node tools/exclusive-connectivity-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sta-discovery-browser-evidence
+          path: test-output/exclusive-connectivity/
+          if-no-files-found: warn

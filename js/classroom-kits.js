@@ -1067,18 +1067,23 @@ async function pairAndAuthorizeSelectedKit(){
  tone('USB-verified '+state.transport.toUpperCase()+' Kit authorized • Take Control available • motors OFF','good');
  return true;
 }
-async function probeIdentity(ip,timeoutMs=1550){
+let discoveryReport={attempted:0,verified:0,unreachable:0,timeouts:0,httpErrors:0,invalidIdentity:0,blocked:false};
+async function probeIdentity(ip,timeoutMs=1550,report=null){
+ if(!safeKitHost(ip))return null;
+ if(report)report.attempted++;
+ const count=key=>{if(report)report[key]++};
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs);
  try{
   const response=await fetch('http://'+ip+'/api/identify',{method:'GET',mode:'cors',credentials:'omit',
    redirect:'error',cache:'no-store',signal:ctrl.signal,targetAddressSpace:'local'});
-  if(!response.ok)return null;
+  if(!response.ok){count('httpErrors');return null;}
   const d=await response.json();
   if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(String(d.kitId||''))||!/^\d{6}$/.test(String(d.kitCode||''))||
-     !String(d.kitId).startsWith(String(d.board||'')+'-'))return null;
+     !String(d.kitId).startsWith(String(d.board||'')+'-')){count('invalidIdentity');return null;}
+  count('verified');
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
    simpleConnection:!!d.simpleConnection,adminSessions:!!d.adminSessions,exclusiveWifi:!!d.exclusiveWifi,hostname:d.hostname||'',board:d.board,ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
- }catch{return null}finally{clearTimeout(timer)}
+ }catch(e){count(ctrl.signal.aborted?'timeouts':e instanceof SyntaxError?'invalidIdentity':'unreachable');return null}finally{clearTimeout(timer)}
 }
 function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
@@ -1125,9 +1130,12 @@ async function discoverKits(){
  discoveryPending=scanKitCandidates().finally(()=>{discoveryPending=null});return discoveryPending;
 }
 async function scanKitCandidates(){
+ const report={attempted:0,verified:0,unreachable:0,timeouts:0,httpErrors:0,invalidIdentity:0,blocked:false};
+ discoveryReport=report;
  // A parent Wix/site Permissions-Policy denial cannot be overridden by the
  // child. Do not flood 60+ private LAN hosts from an iframe known to be denied.
  if(root.ZebjusEmbedKitAccess?.scanBlocked){
+  report.blocked=true;
   discoveredKits=[];discovering=false;lastDiscoverAt=Date.now();
   const help=root.ZebjusEmbedKitAccess.getHint();
   audit('Discovery unavailable: the embedding site blocks browser Local Network Access','warn');
@@ -1136,7 +1144,8 @@ async function scanKitCandidates(){
  discovering=true;render();showDiscovered();
  try{
   let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
-  const candidates=new Set(['192.168.4.1']);
+  const candidates=new Set([$('fwKitNameInput')?.value?.trim().toLowerCase(),$('kitIpInput')?.value?.trim().toLowerCase()].filter(safeKitHost));
+  candidates.add('192.168.4.1');
   for(const k of known){
    if(privateIPv4(k.ip))candidates.add(k.ip);
    const id=String(k.id||'').match(/^ZFC-A([12])-([0-9A-F]{12})$/i);
@@ -1155,16 +1164,17 @@ async function scanKitCandidates(){
   const addresses=[...candidates];let cursor=0;const found=new Map();
   await Promise.all(Array.from({length:8},async()=>{
    while(cursor<addresses.length){
-    const addr=addresses[cursor++],kit=await probeIdentity(addr);
+    const addr=addresses[cursor++],kit=await probeIdentity(addr,1550,report);
     if(!kit)continue;
     const prior=found.get(kit.kitId);
-    if(!prior||prior.transport==='ap'&&kit.transport==='sta')found.set(kit.kitId,kit);
+    if(!prior||prior.transport==='ap'&&kit.transport==='sta'||prior.transport===kit.transport&&!privateIPv4(prior.ip)&&privateIPv4(kit.ip))found.set(kit.kitId,kit);
     discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
     showDiscovered();
    }
   }));
   discoveredKits=[...found.values()].sort((a,b)=>a.kitName.localeCompare(b.kitName,undefined,{numeric:true}));
   lastDiscoverAt=Date.now();audit('Discovery completed • '+discoveredKits.length+' live kit(s) • public identity only','info');
+  if(!discoveredKits.length)audit('No verified identity replies • '+report.timeouts+' timeouts • '+report.unreachable+' network/DNS/permission errors • '+(report.httpErrors+report.invalidIdentity)+' unexpected responses','warn');
   await offerRememberedConnection();return discoveredKits;
  }finally{discovering=false;showDiscovered()}
 }
@@ -1687,10 +1697,26 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
 async function connectDiscoveredKit(kit){
  if(!kit?.kitId||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified Kit from discovery.');
  const ticket=reconnectTicket;
- const found=await probeIdentity(kit.ip,2800);
- if(ticket!==reconnectTicket)throw Error('Connection selection cancelled by Disconnect or a newer kit selection.');
- if(!found||found.kitId!==kit.kitId||found.kitCode!==kit.kitCode)
-  throw Error('Kit identity changed since discovery. Rescan the Device ID.');
+ // A hostname/IP can stop responding or be reassigned by DHCP after discovery.
+ // Retry only addresses associated with the selected immutable Device ID, and
+ // verify that ID + selector again before opening any authenticated session.
+ let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+ const related=known.filter(k=>k.id===kit.kitId);
+ const aliases=[kit.ip,...related.map(k=>k.ip),kit.hostname,...related.map(k=>k.hostname),...identityHosts(kit)];
+ const addresses=[...new Set(aliases.filter(safeKitHost))]
+  .filter(host=>kit.transport!=='sta'||host!=='192.168.4.1')
+  .sort((a,b)=>Number(privateIPv4(b))-Number(privateIPv4(a))).slice(0,6);
+ if(!addresses.length)addresses.push(kit.ip);
+ let found=null,mismatch=null;
+ for(const address of addresses){
+  const live=await probeIdentity(address,2800);
+  if(ticket!==reconnectTicket)throw Error('Connection selection cancelled by Disconnect or a newer kit selection.');
+  if(!live)continue;
+  if(live.kitId!==kit.kitId||live.kitCode!==kit.kitCode){mismatch={...live};continue;}
+  found=live;break;
+ }
+ if(!found&&mismatch)throw Error('Device ID or Kit Code mismatch at '+mismatch.ip+'. Selected '+kit.kitId+'; received '+mismatch.kitId+'. Connection blocked; rescan or verify over USB.');
+ if(!found)throw Error('Kit not reachable at its saved IP/hostname. Device ID could not be rechecked. Enter the current STA IP from Android or USB, join the same router and allow browser Local Network Access.');
  if(state.owner)throw Error('Release diagnostic control before switching kits.');
  if(state.connected&&state.kitId!==found.kitId)await disconnect('Switching selected Kit');
  $('kitCodeInput').value=found.kitCode;$('kitTransport').value=found.transport;$('kitIpInput').value=found.ip;
@@ -1700,12 +1726,18 @@ async function connectDiscoveredKit(kit){
 }
 async function connectNamedKit(name){
  const requested=String(name||'').trim().toLowerCase();
+ if(safeKitHost(requested)){
+  const live=await probeIdentity(requested,2800);
+  if(!live)throw Error('Kit not reachable at '+requested+'. Check the current STA IP, same router and browser Local Network Access.');
+  return connectDiscoveredKit(live);
+ }
  if(requested.length<3||requested.length>36||!/^[a-z0-9][a-z0-9 _-]*$/.test(requested))throw Error('Enter a known Kit Name using letters, numbers, spaces, _ or -.');
  const matches=discoveredKits.filter(k=>k.kitName.toLowerCase()===requested);
  if(matches.length>1)throw Error('Duplicate Kit Names. Select the matching Device ID from Available Kits.');
  if(matches.length===1)return connectDiscoveredKit(matches[0]);
  let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
- const candidates=new Set(known.filter(k=>String(k.name||'').toLowerCase()===requested).map(k=>k.ip).filter(safeKitHost));
+ const matching=known.filter(k=>String(k.name||'').toLowerCase()===requested);
+ const candidates=new Set([...matching.map(k=>k.ip),...matching.map(k=>k.hostname),$('kitIpInput')?.value?.trim()].filter(safeKitHost));
  candidates.add('192.168.4.1'); // AP has no mDNS; still verify name and full Device ID.
  candidates.add(requested.replace(/[ _]+/g,'-')+'.local');
  if(/^zebjus_drone_\d{1,2}$/.test(requested))candidates.add(requested+'.local');
@@ -1734,7 +1766,7 @@ async function renameConnectedKit(name='',reset=false){
 root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
- getDiscovered:()=>discoveredKits.map(k=>({...k})),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
