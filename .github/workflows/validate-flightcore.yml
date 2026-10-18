@@ -108,6 +108,7 @@ on:
       - 'companion-menu.js'
       - 'js/kit-auth.js'
       - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
       - 'vendor/crypto/**'
   workflow_dispatch:
 permissions:

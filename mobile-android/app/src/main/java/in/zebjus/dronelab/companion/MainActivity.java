@@ -318,7 +318,7 @@ public class MainActivity extends Activity {
         if (nativeFlightCore != null) nativeFlightCore.cancelOutstanding();
         if (view != null) view.post(() -> {
             if (view != null) view.evaluateJavascript(
-                "window.zebjusNetworkChanged && window.zebjusNetworkChanged()", null);
+                "window.zebjusNativeWifiLinkEvent && window.zebjusNativeWifiLinkEvent();window.zebjusNetworkChanged && window.zebjusNetworkChanged()", null);
         });
     }
     @Override protected void onCreate(Bundle state) {

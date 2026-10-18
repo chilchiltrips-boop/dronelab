@@ -30,7 +30,9 @@ function cancelNativePending(reason){
  for(const [id,item] of pending){
   clearTimeout(item.timer);pending.delete(id);
   try{native?.cancelRequest?.(id)}catch{}
-  const error=Error(reason);error.uncertain=item.write;item.reject(error);
+  const error=Error(reason);error.uncertain=item.write;
+  trace('native_failure',{route:item.route,transport:link,reason:classify(error),outcome:'fail'});
+  item.reject(error);
  }
 }
 function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
@@ -49,6 +51,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
    if(!pending.has(id))return;
    pending.delete(id);
    try{native.cancelRequest?.(id)}catch{}
+   trace('native_failure',{route,transport:link,reason:'TIMEOUT',outcome:'timeout'});
    const error=Error((write?'Encrypted firmware write':'Device request')+' timed out at '+route+'; delivery is unconfirmed');
    error.uncertain=write;reject(error);
   },policy?.requestTimeout?.(route,method,link,'android')||(write?18000:6000));
@@ -314,6 +317,7 @@ function dropInput(message){
  ++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;
  window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');
 }
+window.zebjusNativeWifiLinkEvent=()=>trace('wifi_event',{transport:link,reason:'NETWORK',outcome:'fail'});
 window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;}};
 window.zebjusNativeResult=data=>{
  const item=pending.get(data?.id);if(!item)return;
@@ -547,7 +551,7 @@ async function claimRc(){
    await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
    throw Error('ARM cancelled; input released');
   }
-  rcSession=d.session;rcSeq=0;firmwareAck=null;
+  rcSession=d.session;rcSeq=0;firmwareAck=null;lastAckDiagnosticAt=0;
   trace('rc_claim',{transport:link,source:'ANDROID',outcome:'ok'});
   window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
   show('Android owns input • motors disabled','good');

@@ -15,6 +15,7 @@ const fields=['route','transport','source','mode','board','version','outcome','r
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
+const reasons=new Set(['QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OTHER']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/stale|queue|backlog|busy/.test(s))return 'QUEUE_STALE';
@@ -37,7 +38,7 @@ function clean(data){
   }else if(['rcOwned','inputArmed','apActive','staConnected','connected'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='route'){if(routes.has(v))result.route=v;}
-  else if(key==='reason'){if(typeof v==='string'&&/^[A-Z_]{2,32}$/.test(v))result.reason=v;}
+  else if(key==='reason'){if(reasons.has(v))result.reason=v;}
   else if(key==='transport'){if(['ap','sta','usb','android-relay','none','unknown'].includes(v))result.transport=v;}
   else if(key==='source'){if(['ANDROID','WEB','PPM','USB','NONE'].includes(v))result.source=v;}
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}
