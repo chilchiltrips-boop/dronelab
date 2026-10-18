@@ -9,7 +9,7 @@ import vm from 'node:vm';
 import {request as httpRequest} from 'node:http';
 import {startFirmwareHost} from './udp-firmware-fixture.mjs';
 import {requestUdp,encodeRequest,decodeRequest,fragments,reassembler,privateIPv4} from './flightcore-udp-rpc.mjs';
-import {createBridgeServer} from './classroom-discovery-bridge.mjs';
+import {createBridgeServer,resolveKitHost} from './classroom-discovery-bridge.mjs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const id='ZFC-A1-012345ABCDEF';let directory,process,port,admin,auth,javaAvailable=false;
@@ -101,4 +101,10 @@ test('localhost bridge blocks foreign origin, DNS rebinding and public-address p
   const good=await fetch(url+'/rpc',{method:'POST',headers,body});assert.equal(good.status,200);assert.equal(calls.length,1);
   assert.equal((await good.json()).protocol,'ZJM1');
  }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+});
+
+test('bridge uses bounded mDNS cache lookup and never queues OS DNS scans for arbitrary candidate names',async()=>{
+ assert.equal(await resolveKitHost('zebjus-drone-1.local',[{hostname:'zebjus-drone-1.local',ip:'192.168.1.70'}]),'192.168.1.70');
+ await assert.rejects(resolveKitHost('zebjus-drone-2.local',[]),/numeric STA IP/);
+ await assert.rejects(resolveKitHost('evil.example',[]),/Invalid Kit host/);
 });

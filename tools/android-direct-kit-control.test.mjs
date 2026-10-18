@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../companion-network.js',import.meta.url),'utf8');
 const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-function bench(){
+function bench(udp=false){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
  let failure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true;
  const element=id=>{
@@ -23,19 +23,25 @@ function bench(){
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
     inputArmSupported:true,controlAuthorized:authorized,ledOn:false};
   }
-  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;return {kitId,session:'session-'+requests.length}}
+  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210}:{})}}
   if(route==='/api/rc/preview'){if(delayPreview)await delayPreview;return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'}}
   if(route==='/api/rc/release')return {released:true};
   if(route==='/api/command')return {accepted:true};
+  if(route==='/api/telemetry')return {kitId,gyroReady:true,roll:1.25,pitch:0,yaw:0};
   throw Error('Unexpected route '+route);
  };
- const session=()=>({local:true,scope:transport==='AP'?'ap_diagnostics':'sta_observer',expiresAt:Date.now()+60000,request:response});
+ const session=()=>({local:true,scope:transport==='AP'?'ap_diagnostics':'sta_observer',expiresAt:Date.now()+60000,request:response,udpKey:()=>'1'.repeat(64)});
  const win={dispatchEvent:e=>events.push(e),addEventListener:(type,fn)=>handlers.set('window:'+type,fn),
   ZebjusKitAuth:{local:async()=>session(),label:()=>({deviceId:kitId,secret:'private'}),diagnosticKey:()=> 'diagnostic',open:async()=>session()}};
  win.ZebjusNative={requestSecure(id,host,method,route){
   queueMicrotask(()=>win.zebjusNativeResult({id,ok:true,status:200,text:JSON.stringify({kitId,authVersion:2,simpleConnection:true})}));
  },requestWifiPermission:id=>queueMicrotask(()=>win.zebjusNativeWifiPermissionResult({id,granted:true})),
  pinSelectedNetwork:id=>queueMicrotask(()=>win.zebjusNativePinResult({id,ok:true})),clearSelectedNetwork(){}};
+ if(udp){let seq=0;Object.assign(win.ZebjusNative,{
+  managementProtocol:'ZJM1',
+  startUdp:()=>queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'start'})),
+  offerUdp:(channels,inputArmed)=>queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'ack',seq:++seq,inputArmed,roundTripMs:2})),stopUdp(){}
+ });}
  const document={readyState:'loading',hidden:false,getElementById:element,addEventListener:(type,fn)=>handlers.set('document:'+type,fn)};
  vm.runInNewContext(source,{window:win,document,Date,performance,URLSearchParams,Promise,Set,Map,
   setTimeout:(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();return t},clearTimeout,setInterval:(fn,ms)=>timers.push({fn,ms}),
@@ -160,4 +166,17 @@ test('native non-RC promises are drained before ARM claim and new ones are block
  assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
  assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
  assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
+});
+
+test('UDP input ARM keeps WebApp IMU reads available while Wi-Fi mutation remains blocked',async()=>{
+ const b=bench(true);await b.connect();await b.network.armControls();
+ assert.equal(b.network.inputArmed(),true);
+ const sent=[],peer={status:()=>({paired:true}),sendNetworkResponse:m=>sent.push(m)};
+ b.element('kitAllowWeb').checked=true;b.element('kitGrantWifi').checked=true;
+ await b.network.onWebRequest({id:101,method:'GET',route:'/api/telemetry'},peer);
+ assert.equal(sent[0].ok,true);assert.equal(sent[0].data.roll,1.25);
+ await b.network.onWebRequest({id:102,method:'POST',route:'/api/wifi/mode',args:{mode:'sta'}},peer);
+ assert.equal(sent[1].ok,false);assert.equal(b.network.inputArmed(),true);
+ assert.ok(!b.requests.some(r=>r.route==='/api/rc/preview'),'no management/HTTP preview fallback during binary UDP streaming');
+ await b.network.releaseRc();
 });

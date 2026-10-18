@@ -100,7 +100,7 @@ test('paired telemetry and control queues are bounded; critical STOP uses existi
   pc.input.readyState='open';pc.dc.bufferedAmount=100000;
   assert.equal(host.sendTelemetry({throttle:1200}),true);
   assert.equal(pc.input.sent.at(-1).type,'SIM_TELEMETRY');
-  pc.dc.bufferedAmount=0;host.emergencyStop('Test');
+  host.emergencyStop('Test');
   assert.equal(pc.dc.sent.at(-1).type,'SIM_STOP');
   pc.input.readyState='closed';pc.input.onclose();
   assert.equal(host.status().controller,null);host.close();

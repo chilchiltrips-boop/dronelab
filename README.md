@@ -1,21 +1,25 @@
 # ZEBJUS DroneLab
 
-## Current releases and verification (17 October 2026)
+## Current releases and verification (19 October 2026)
 
 | Component | Published source metadata | Hardware/deployment status |
 | --- | --- | --- |
 | WebApp | 1.8.0 series (live build in `app-version.json`) | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
-| FlightCore A1 (ESP32-C3) | **1.4.12**, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
-| FlightCore A2 (XIAO ESP32-C6) | **1.4.12**, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
-| Android signed companion | Gradle candidate **1.7.16-release-gate**, versionCode **32**; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
+| FlightCore A1 (ESP32-C3) | **1.5.0**, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| FlightCore A2 (XIAO ESP32-C6) | **1.5.0**, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| Android signed companion | Gradle candidate **1.8.0-udp-management**, versionCode **38**; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
 | WebRTC pairing | Local QR/peer simulator pairing uses host/STUN candidates; Kit controls remain local AP/STA/USB | **TURN relay and internet-based physical Kit control intentionally out of scope** |
 | Central Admin | `admin-server.cjs` HTTP API source | Must be deployed behind external HTTPS reverse proxy with private storage |
 
-**Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed local HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
+**Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed UDP management or browser-compatible HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
 
-**No flight motors are controlled by FlightCore 1.4.12.** Diagnostic INPUT ARM differs from MOTOR ARM (motors stay disabled). A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
+**No flight motors are controlled by FlightCore 1.5.0.** Diagnostic INPUT ARM differs from MOTOR ARM (motors stay disabled). A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
 
 **Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and the [optional Central Admin hosting guide](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). TURN and internet-based physical Kit control are excluded from the project.
+
+## UDP management and IMU
+
+Android uses UDP 4210 for 50 Hz joystick/ACK and UDP 4211 for pairing, status, IMU, LED, Wi-Fi and encrypted OTA. Ordinary hosted browsers and browser Python use `npm run discover:lan` as a localhost UDP bridge, or the approved Android WebRTC relay; direct-browser HTTP and USB remain compatibility paths. The new Android APK requires FlightCore 1.5.0+. See [protocol, setup and upgrade notes](docs/UDP_MANAGEMENT_1_5_0.md).
 
 ## Optional Kit AP Wi-Fi settings and teacher recovery
 

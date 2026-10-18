@@ -66,7 +66,7 @@ export function requestUdp(ip,method,route,form='',headers={},options={}){
  if(!privateIPv4(ip)&&!(options.testLoopback&&ip==='127.0.0.1'))return Promise.reject(Error('Use a private Kit IPv4 address'));
  let body;try{body=encodeRequest(method,route,form,headers)}catch(e){return Promise.reject(e)}
  const id=randomBytes(8),packets=fragments(body,id),assemble=reassembler(id),socket=dgram.createSocket('udp4');
- const timeout=options.timeoutMs|| (route.startsWith('/api/firmware/')?14000:4200);
+ const timeout=options.timeoutMs||(route.startsWith('/api/firmware/')?14000:route==='/api/identify'?1200:4200);
  return new Promise((resolve,reject)=>{
   let done=false,retry,timer;
   const finish=(error,value)=>{

@@ -5,7 +5,6 @@
 import http from 'node:http';
 import dgram from 'node:dgram';
 import {pathToFileURL} from 'node:url';
-import {lookup} from 'node:dns/promises';
 import {requestUdp,privateIPv4,allowedOperation,HEADER_NAMES} from './flightcore-udp-rpc.mjs';
 
 const SERVICE='_zebjus._tcp.local',MULTICAST='224.0.0.251',PORT=5353;
@@ -15,7 +14,7 @@ export async function resolveKitHost(host,kits=[]){
  if(privateIPv4(host))return host;
  if(typeof host!=='string'||!(/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.local$/i.test(host)||/^zebjus_drone_\d{1,2}\.local$/i.test(host)))throw Error('Invalid Kit host');
  const known=kits.find(v=>v.hostname===host&&privateIPv4(v.ip));if(known)return known.ip;
- const result=await lookup(host,{family:4});if(!privateIPv4(result.address))throw Error('Kit resolved outside private LAN');return result.address;
+ throw Error('Kit hostname is not in current mDNS results; rescan or enter its numeric STA IP');
 }
 export function createBridgeServer({kits=()=>[],query=()=>{},request=requestUdp}={}){
  let active=0;

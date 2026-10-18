@@ -60,7 +60,7 @@ function session(role,events={}){
  }
  const realtimeTypes=new Set(['SIM_CONTROL','SIM_ACK','SIM_TELEMETRY']);
  const liveChannel=()=>inputChannel?.readyState==='open'?inputChannel:channel;
- function send(m){const target=realtimeTypes.has(m.type)?liveChannel():channel;if(target?.readyState!=='open'||target.bufferedAmount>32768)return false;try{target.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
+ function send(m){const realtime=realtimeTypes.has(m.type),target=realtime?liveChannel():channel;if(target?.readyState!=='open'||realtime&&target.bufferedAmount>32768)return false;try{target.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
  function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
  function sendTelemetry(applied){return role==='host'&&approved&&connected&&liveChannel()?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
  function sendNetworkRequest(m){return role==='host'&&approved&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_REQUEST',sessionId,id:m.id,method:m.method,route:m.route,args:m.args||{}}):false}

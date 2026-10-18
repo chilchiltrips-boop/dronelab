@@ -93,6 +93,14 @@ def write_metadata(catalog,version,built_at):
     top={**sub,'catalog':'firmware-catalog.json'}
     (OUT/'latest.json').write_text(json.dumps(sub,indent=2)+'\n')
     (ROOT/'firmware-latest.json').write_text(json.dumps(top,indent=2)+'\n')
+    # Keep the published UI's firmware label aligned with this catalog without
+    # altering the independently stamped WebApp version or publication time.
+    web_meta=ROOT/'app-version.json'
+    if web_meta.exists():
+        meta=json.loads(web_meta.read_text())
+        meta['features']=[re.sub(r'\bFlightCore \d+\.\d+\.\d+', 'FlightCore '+version, value)
+                          for value in meta.get('features',[])]
+        web_meta.write_text(json.dumps(meta,indent=2)+'\n')
 
 
 def main():

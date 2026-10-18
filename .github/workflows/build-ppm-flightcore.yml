@@ -28,7 +28,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_FACTORY.bin
           git add FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
-          git add FlightCore_Firmware/catalog.json FlightCore_Firmware/latest.json FlightCore_Firmware/build-report.json firmware-catalog.json firmware-latest.json
+          git add FlightCore_Firmware/catalog.json FlightCore_Firmware/latest.json FlightCore_Firmware/build-report.json firmware-catalog.json firmware-latest.json app-version.json
           if git diff --cached --quiet; then echo "Compiled binaries already current"; exit 0; fi
           git commit -m "build: verified FlightCore $(cat VERSION.txt) A1/A2 PPM APP and FACTORY binaries"
           git fetch origin main
