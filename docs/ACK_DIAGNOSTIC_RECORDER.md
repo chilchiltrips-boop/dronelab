@@ -24,3 +24,24 @@ Last 350 events are saved locally on each device in localStorage and persist acr
 - kit_status/web_status shows authenticated firmware counters but NOT the exact ESP32 release reason. Retrieve USB serial ZJRC,RELEASE,... if needed.
 
 Security: Android export is explicit user-approved ACTION_CREATE_DOCUMENT, limited to JSON/CSV; no uploads, unrestricted filesystem writing or authentication bypass. WebApp uses a local Blob. Actual POCO X2 + FlightCore AP timing tests remain necessary.
+
+## 18 October 2026 AP ACK-stall fixes
+
+The Android native bridge now reports bounded `queueMs`, `bindMs`,
+`sendMs`, `responseWaitMs`, `readMs` and a sanitized `phase` field
+on each native HTTP result. A failure with a non-`complete` phase has
+**not** measured later stages; their zero values are not evidence of speed.
+
+On a confirmed diagnostic disarm, the app cancels an in-flight RC
+preview instead of waiting behind that stale request before signed
+release. Late packets cannot re-arm: a fresh low-throttle ARM and a
+new owner claim are still required. HTTP 423 `not_controller_owner`
+is recorded as `OWNER_STALE`; rejected preview frames are
+`FRAME_REJECTED`.
+
+FlightCore's authenticated RC status also exposes
+`lastReleaseReason` and `lastReleaseAtMs` (ESP32 uptime), without
+session or identity secrets. The existing 350 ms firmware deadman
+remains unchanged, as does motor-output disablement. Confirm
+improvement with a propeller-free real phone/FlightCore test; logs
+from old firmware will not contain the new firmware fields.
