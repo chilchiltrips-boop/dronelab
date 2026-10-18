@@ -47,6 +47,8 @@ on:
       - 'js/kit-network-policy.js'
       - 'firmware-catalog.json'
       - 'vendor/crypto/**'
+  # This entire path set is mirrored in the six exact-SHA required workflows.
+  # tools/android-release-gate-triggers.test.mjs guards against drift.
   # Web-only PID changes do not produce a duplicate signed APK. Existing APK
   # releases are immutable; Android UI/package changes require incrementing
   # versionCode and passing the exact-source signed native release gate.

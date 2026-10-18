@@ -82,6 +82,33 @@ on:
       - tools/verify_release.py
       - tools/check.mjs
       - .github/workflows/validate-flightcore.yml
+      # Any source edit triggering the signed APK must trigger EVERY exact-SHA
+      # publication gate. No check is skipped merely by a path filter.
+      - 'tools/android-direct-kit*'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/android-peerjs-menu-regression.test.mjs'
+      - 'tools/flight-ack-priority.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/controls-browser.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
+      - 'tools/android-simple-ap-connect.test.mjs'
+      - 'tools/write_android_release_metadata.py'
+      - 'tools/verify_android_assets.py'
+      - 'tools/wait-release-checks.mjs'
+      - 'companion-network.js'
+      - 'android-native-bridge.js'
+      - 'companion-menu.js'
+      - 'js/kit-auth.js'
+      - 'js/kit-network-policy.js'
+      - 'vendor/crypto/**'
   workflow_dispatch:
 permissions:
   contents: read
