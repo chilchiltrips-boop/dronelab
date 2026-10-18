@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0+378",
+  "version": "1.8.0+381",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -10,6 +10,6 @@
     "FlightCore 1.4.12 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope"
   ],
-  "buildCommit": "4cda6d2ae49c",
-  "publishedAt": "2026-10-18T16:13:31.088110+00:00"
+  "buildCommit": "c45559988465",
+  "publishedAt": "2026-10-18T16:14:30.469986+00:00"
 }
