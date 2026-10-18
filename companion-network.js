@@ -617,7 +617,7 @@ function previewControls(m,critical=false){
   // relabel the verified AP Wi-Fi link itself as disconnected.
   trace('rc_ack_error',{transport:link,source:'ANDROID',seq:frameSeq,
    roundTripMs:Math.round(performance.now()-at),reason:classify(e),outcome:'fail'});
-  dropInput('RC ACK failed • diagnostic input disarmed • '+e.message);
+  dropInput('RC ACK failed • diagnostic input disarmed • '+e.message,classify(e));
   void request('/api/rc/release','POST',{session}).catch(()=>{});
   if(critical)throw e;
  })
