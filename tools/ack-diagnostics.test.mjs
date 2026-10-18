@@ -31,9 +31,9 @@ test('strict diagnostic allowlist never saves Kit ID, IP, SSID, HMAC keys or raw
  const json=b.api.exportData('json'),csv=b.api.exportData('csv');
  for(const value of ['ZFC-A1-AAAAAAAAAAAA','192.168.4.1','School-Secret','0011223344556677','topsecret','SECRETPASSWORD'])
   assert.ok(!json.includes(value)&&!csv.includes(value),value+' must never be exported');
- assert.equal(b.events()[1].data.reason,undefined);
- assert.equal(b.events()[0].data.reason,'TIMEOUT');
- assert.equal(b.events()[0].data.seq,4);
+ assert.equal(b.events()[2].data.reason,undefined);
+ assert.equal(b.events()[1].data.reason,'TIMEOUT');
+ assert.equal(b.events()[1].data.seq,4);
 });
 test('ACK successes are sampled without synchronous storage writes on every joystick packet',()=>{
  const b=bench();
@@ -48,8 +48,9 @@ test('errors auto-persist; recovery survives page reload; cap prevents unbounded
  assert.equal(b.events().length,350);
  const reload=bench('android',b.saved);
  assert.equal(reload.events().length,350);
- assert.equal(reload.events()[0].data.seq,50);
- assert.equal(reload.events().at(-1).data.seq,399);
+ assert.equal(reload.events()[0].data.seq,51);
+ assert.equal(reload.events().at(-2).data.seq,399);
+ assert.equal(reload.events().at(-1).event,'app_start');
 });
 test('Android export uses scoped native Documents save, CSV/JSON represent sanitized values',()=>{
  const b=bench();b.api.record('rc_ack_error',{seq:7,reason:'ACK_INVALID',roundTripMs:450});

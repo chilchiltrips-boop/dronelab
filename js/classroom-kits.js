@@ -8,6 +8,7 @@
 const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
+const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',rc:null,rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
@@ -434,9 +435,9 @@ async function wifiDirectRequest(ip,key,route,method,args,expected){
  }finally{clearTimeout(timeout)}
 }
 async function deviceRequest(route,method='GET',args={}){
- const started=performance.now();
+ const started=diagnosticClock();
  try{return await deviceRequestCore(route,method,args)}
- catch(error){trace('request_error',{route,transport:state.transport,reason:classify(error),roundTripMs:Math.round(performance.now()-started),outcome:'fail'});throw error}
+ catch(error){trace('request_error',{route,transport:state.transport,reason:classify(error),roundTripMs:Math.round(diagnosticClock()-started),outcome:'fail'});throw error}
  finally{}
 }
 async function deviceRequestCore(route,method='GET',args={}){
@@ -648,20 +649,20 @@ function toRc(frame){
 async function sendFrame(frame,source='WEB'){
  if(!linkFresh()||!state.owner||state.rcSource!==source||sendBusy||document.hidden)return false;
  const rc=toRc(frame);if(!rc)return false;
- sendBusy=true;const start=performance.now();
+ sendBusy=true;const start=diagnosticClock();
  try{
   const seq=++state.seq;
   if(state.transport==='usb')await usbWrite('ZJRC,SET,'+[seq,rc.throttle,rc.roll,rc.pitch,rc.yaw,source].join(','));
   else{const ack=await deviceRequest('/api/rc/preview','POST',{session:state.rcSession,source,seq,armed:'false',...rc});
    if(ack?.received!==true||ack.kitId!==state.kitId)throw Error('Kit did not acknowledge the intended hardware Device ID');
    state.ackAt=Date.now();state.rc={...(state.rc||{}),...rc,active:true,claimed:true,source,seq};
-   trace('web_ack',{transport:state.transport,source,seq,roundTripMs:Math.round(performance.now()-start),inputArmed:false});
+   trace('web_ack',{transport:state.transport,source,seq,roundTripMs:Math.round(diagnosticClock()-start),inputArmed:false});
   }
   // USB writes are not hardware ACKs. Serial ZJRC frames update readouts separately.
   state.frameAt=Date.now();state.sent++;
   render();return true;
  }catch(e){state.rejected++;trace('web_ack_error',{transport:state.transport,source,seq:state.seq,
-  roundTripMs:Math.round(performance.now()-start),reason:classify(e),outcome:'fail'});
+  roundTripMs:Math.round(diagnosticClock()-start),reason:classify(e),outcome:'fail'});
  audit('RC frame rejected: '+e.message,'error');state.owner=false;state.rcSession='';state.rcSource='';tone('RC lost • '+e.message,'error');return false}
  finally{sendBusy=false}
 }
