@@ -28,6 +28,7 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  if(!equal(mac(key,'server|'+msg),r.proof))throw Error('Controller identity proof failed');
  let seq=0,tail=Promise.resolve();const created=Date.now();
  const api={deviceId,created,setupUntil:created+(Number(r.setupExpiresMs)||0),expiresAt:created+Math.min(Number(r.expiresMs)||0,1800000),
+   udpKey:claim=>{if(!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("Invalid UDP claim");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={}){
    const run=async()=>{
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Session expired; reconnect this kit.');
@@ -71,6 +72,7 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
  const key=r.key,bootId=r.bootId;
  let seq=0,tail=Promise.resolve();
  const api={deviceId,local:true,scope:r.scope,expiresAt:Date.now()+Math.min(Math.max(Number(r.expiresMs)||0,0),1800000),
+   udpKey:claim=>{if(r.scope!=="ap_diagnostics"||!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("UDP session not authorized");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={}){
    const run=async()=>{
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Local session expired; reconnect Kit Wi-Fi.');

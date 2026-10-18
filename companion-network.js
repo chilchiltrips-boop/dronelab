@@ -9,6 +9,7 @@ const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
+let udpActive=false,udpStarting=false,udpReadyWaiter=null,udpArmWaiter=null,udpStats=null;
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
@@ -311,9 +312,47 @@ async function forgetSavedKit(){
  if(verifiedKitId===id){diagnosticKey='';auth=null;online=false;forgetNativePin()}
  show('Saved diagnostic enrollment deleted; OWNER code was never stored');
 }
+function clearUdpWaiters(reason){
+ const err=Error(reason||'UDP stream stopped');
+ for(const waiter of [udpReadyWaiter,udpArmWaiter])if(waiter){clearTimeout(waiter.timer);waiter.reject(err);}
+ udpReadyWaiter=udpArmWaiter=null;
+}
+window.zebjusNativeUdpEvent=data=>{
+ if(!data||!['start','ack','error'].includes(data.type))return;
+ if(data.type==='start'){
+  const w=udpReadyWaiter;udpReadyWaiter=null;
+  if(w){clearTimeout(w.timer);w.resolve();}
+  return;
+ }
+ if(data.type==='error'){
+  trace('udp_error',{transport:link,source:'ANDROID',inputArmed:false,
+   sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
+   lastPacketAgeMs:data.lastPacketAgeMs,reason:classify(data.reason),outcome:'fail'});
+  if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error('Native UDP start failed'));}
+  if(udpActive)void releaseRc('ACK_TIMEOUT').catch(()=>{});
+  return;
+ }
+ if(!udpActive||!rcSession)return;
+ const now=Date.now(),previous=firmwareAck?.at||now;
+ firmwareAck={seq:Number(data.seq)||0,at:now,rtt:Math.max(0,Number(data.roundTripMs)||0),
+  inputArmed:data.inputArmed===true,protocol:'ZJUDP1'};
+ udpStats={sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,
+  accepted:data.accepted,rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs};
+ lastStatus=now;statusFailures=0;
+ trace('udp_ack',{transport:link,source:'ANDROID',seq:firmwareAck.seq,
+  roundTripMs:firmwareAck.rtt,frameGapMs:now-previous,inputArmed:firmwareAck.inputArmed,
+  sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,accepted:data.accepted,
+  rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,outcome:'ok'});
+ if(udpArmWaiter&&firmwareAck.inputArmed){
+  const w=udpArmWaiter;udpArmWaiter=null;clearTimeout(w.timer);w.resolve(firmwareAck);
+ }
+ if(el('kitRcAck'))el('kitRcAck').textContent='UDP RX #'+firmwareAck.seq+' • '+firmwareAck.rtt+' ms • lost '+(data.lost||0);
+};
 function dropInput(message,reasonOverride=''){
  const wasArmed=rcInputArmed,hadSession=!!rcSession;
  if(wasArmed||hadSession)trace('input_disarm',{transport:link,reason:reasonOverride||classify(message),inputArmed:false});
+ if(udpActive||udpStarting){try{native?.stopUdp?.()}catch{}}
+ clearUdpWaiters('Diagnostic input stopped');udpActive=udpStarting=false;udpStats=null;
  ++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;
  window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');
 }
@@ -568,13 +607,36 @@ async function claimRc(){
   if(nonRcNativeRequests.size)await Promise.allSettled([...nonRcNativeRequests]);
   if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||!online||!onKitLink||document.hidden)
    throw Error('Kit changed or went offline before ARM; reconnect and verify');
-  const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode});
+  const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode,udpProtocol:native?.startUdp?'ZJUDP1':'HTTP'});
   if(d.kitId!==verifiedKitId||!d.session)throw Error('Firmware claim identity failed');
   if(epoch!==rcEpoch||!online||document.hidden){
    await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
    throw Error('ARM cancelled; input released');
   }
   rcSession=d.session;rcSeq=0;firmwareAck=null;lastAckDiagnosticAt=0;
+  if(d.udpProtocol==='ZJUDP1'&&d.udpPort===4210&&native?.startUdp&&auth?.udpKey){
+   udpStarting=true;
+   try{
+    const udpReady=new Promise((resolve,reject)=>{
+     const timer=setTimeout(()=>{udpReadyWaiter=null;reject(Error('UDP receiver start timeout'))},1600);
+     udpReadyWaiter={resolve,reject,timer};
+    });
+    native.startUdp('zju'+(++requestId),ip,verifiedKitId,d.session,auth.udpKey(d.session));
+    await udpReady;
+    if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||document.hidden)
+     throw Error('UDP start cancelled on network change');
+    udpActive=true;
+    trace('udp_start',{transport:link,source:'ANDROID',inputArmed:false,outcome:'ok'});
+   }catch(error){
+    try{native.stopUdp?.()}catch{}
+    udpActive=false;
+    // No silent fallback to an unverified transport once an encrypted
+    // UDP-capable session was granted; old firmware without port uses HTTP.
+    await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
+    rcSession='';
+    throw Error('Secure UDP not ready: '+error.message);
+   }finally{udpStarting=false;}
+  }
   trace('rc_claim',{transport:link,source:'ANDROID',outcome:'ok'});
   window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
   show('Android owns input • motors disabled','good');
@@ -594,6 +656,19 @@ async function armControls(){
 }
 function canArm(){return inputArmSupported&&controlAuthorized&&!otaBusy&&!connecting&&!rcClaiming&&!previewBusy&&online&&onKitLink&&Date.now()-lastStatus<12000;}
 function previewControls(m,critical=false){
+ if(udpActive){
+  if(!rcSession||!online||!onKitLink||document.hidden||!m?.axes)return;
+  const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
+  const values=[Math.max(1000,Math.min(2000,Math.round(m.throttle))),
+   clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),1000,1000];
+  native.offerUdp(values.join(','),rcInputArmed);
+  if(!critical)return true;
+  return new Promise((resolve,reject)=>{
+   if(udpArmWaiter){clearTimeout(udpArmWaiter.timer);udpArmWaiter.reject(Error('UDP ARM superseded'));}
+   const timer=setTimeout(()=>{udpArmWaiter=null;reject(Error('Secure UDP first ACK deadline exceeded'))},650);
+   udpArmWaiter={resolve,reject,timer};
+  });
+ }
  if(otaBusy||!online||!onKitLink||!rcSession||previewBusy||rcClaiming||document.hidden||(!critical&&Date.now()-lastPreview<100))return;
  if(!m?.axes||![m.axes.roll,m.axes.pitch,m.axes.yaw,m.throttle].every(Number.isFinite))return;
  lastPreview=Date.now();previewBusy=true;const at=performance.now(),session=rcSession,epoch=rcEpoch,frameSeq=++rcSeq;

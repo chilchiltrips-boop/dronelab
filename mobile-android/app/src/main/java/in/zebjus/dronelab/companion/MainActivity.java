@@ -44,6 +44,7 @@ public class MainActivity extends Activity {
     private static final String LOCAL_PAGE = LOCAL_ORIGIN + "/assets/companion.html";
     private WebView view;
     private FlightCoreNativeBridge nativeFlightCore;
+    private FlightCoreUdpStream nativeUdp;
     private PermissionRequest pendingVideoRequest;
     private ValueCallback<Uri[]> pendingFirmwareFilePicker;
     private static final int SECURE_OTA_FILE_PICKER=802;
@@ -285,6 +286,13 @@ public class MainActivity extends Activity {
             String op=data.optString("op","");JSONArray args=data.optJSONArray("args");
             if(args==null||args.length()>7)return;
             switch(op){
+                case "startUdp":
+                    if(args.length()==5&&nativeUdp!=null)nativeUdp.start(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4));
+                    break;
+                case "offerUdp":
+                    if(args.length()==2&&nativeUdp!=null)nativeUdp.offer(arg(args,0),"true".equals(arg(args,1)));
+                    break;
+                case "stopUdp":if(args.length()==0&&nativeUdp!=null)nativeUdp.stop();break;
                 case "requestSecure":
                     if(args.length()==6)nativeFlightCore.requestSecure(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4),arg(args,5));
                     break;
@@ -315,6 +323,7 @@ public class MainActivity extends Activity {
         }catch(Exception ignored){}
     }
     private void signalNetworkChange() {
+        if (nativeUdp != null) nativeUdp.stop();
         if (nativeFlightCore != null) nativeFlightCore.cancelOutstanding();
         if (view != null) view.post(() -> {
             if (view != null) view.evaluateJavascript(
@@ -352,6 +361,7 @@ public class MainActivity extends Activity {
             @Override public void discovery(String id,String ip,String error){deliverDiscovery(id,ip,error);}
         });
         nativeFlightCore = new FlightCoreNativeBridge(this,view,wifiLink);
+        nativeUdp = new FlightCoreUdpStream(this,view,wifiLink);
         // Android's addJavascriptInterface is frame-global; never expose it.
         // WebMessageListener enforces this exact HTTPS origin AND main frame.
         scopedBridgeReady=WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER);
@@ -382,6 +392,7 @@ public class MainActivity extends Activity {
             }
             @Override public void onPageStarted(WebView v,String url,android.graphics.Bitmap icon){
                 if(!LOCAL_PAGE.equals(url)){
+                    if(nativeUdp!=null)nativeUdp.stop();
                     if(nativeFlightCore!=null)nativeFlightCore.clearSelectedNetwork();
                 }
             }
@@ -473,6 +484,7 @@ public class MainActivity extends Activity {
     @Override protected void onPause() {
         // The Android permission dialog also pauses this activity. Let its
         // pending getUserMedia request finish rather than cancelling the prompt.
+        if (nativeUdp != null && pendingVideoRequest == null && pendingWifiPermissionRequestId == null) nativeUdp.stop();
         if (nativeFlightCore != null && pendingVideoRequest == null && pendingWifiPermissionRequestId == null) nativeFlightCore.cancelOutstanding();
         if (view != null && pendingVideoRequest == null && pendingWifiPermissionRequestId == null) {
             view.evaluateJavascript("window.zebjusNativeAppPaused && window.zebjusNativeAppPaused();window.zebjusAppPaused && window.zebjusAppPaused()", null);
@@ -495,6 +507,7 @@ public class MainActivity extends Activity {
             pendingWifiPermissionRequestId=null;
         }
         if (wifiLink != null) { wifiLink.shutdown(); wifiLink = null; }
+        if (nativeUdp != null) { nativeUdp.shutdown(); nativeUdp = null; }
         if (nativeFlightCore != null) { nativeFlightCore.shutdown(); nativeFlightCore = null; }
         if (pendingVideoRequest != null) { pendingVideoRequest.deny(); pendingVideoRequest = null; }
         if (pendingFirmwareFilePicker != null) { pendingFirmwareFilePicker.onReceiveValue(null); pendingFirmwareFilePicker = null; }

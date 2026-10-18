@@ -7,12 +7,13 @@ const client=document.getElementById('kitAckDiagnostics')?.dataset?.client==='an
 const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
- 'rc_ack_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
+ 'rc_ack_error','udp_start','udp_ack','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
  'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect']);
 const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
- 'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs'];
+ 'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
+   'sent','ackReceived','lost','jitterMs','lastPacketAgeMs'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
@@ -36,7 +37,7 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs'].includes(key)){
+  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
   }else if(['rcOwned','inputArmed','apActive','staConnected','connected'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
@@ -48,7 +49,7 @@ function clean(data){
   else if(key==='board'){if(['ZFC-A1','ZFC-A2','A1','A2'].includes(v))result.board=v;}
   else if(key==='version'){if(typeof v==='string'&&/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(v))result.version=v;}
   else if(key==='phase'){if(['queued','wifi_bind','send','response','read','complete','queue_busy'].includes(v))result.phase=v;}
-   else if(key==='releaseReason'){if(['NONE','NETWORK_RELEASE','NETWORK_EMERGENCY_STOP','ARMED_INPUT_TIMEOUT','LEASE_TIMEOUT','LEASE_EXPIRED','NETWORK_MODE_CHANGED','USB_STOP','USB_RELEASE','FACTORY_RESET','ENROLLMENT_REVOKED'].includes(v))result.releaseReason=v;}
+   else if(key==='releaseReason'){if(['NONE','NETWORK_RELEASE','NETWORK_EMERGENCY_STOP','ARMED_INPUT_TIMEOUT','UDP_INPUT_TIMEOUT','UDP_STALE_FRAME','UDP_FRAME_REJECTED','LEASE_TIMEOUT','LEASE_EXPIRED','NETWORK_MODE_CHANGED','USB_STOP','USB_RELEASE','FACTORY_RESET','ENROLLMENT_REVOKED'].includes(v))result.releaseReason=v;}
    else if(key==='outcome'){if(statuses.has(v))result.outcome=v;}
  }
  return result;
@@ -60,8 +61,8 @@ const panel=()=>document.getElementById('kitAckDiagnostics');
 function summary(){
  const counts={ack:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
  for(const e of events){
-  if(e.event==='rc_ack'||e.event==='web_ack'){counts.ack++;counts.maxRtt=Math.max(counts.maxRtt,e.data.roundTripMs||0);if((e.data.roundTripMs||0)>=180)counts.slow++;if(Number.isFinite(e.data.frameGapMs))counts.latestGap=e.data.frameGapMs;}
-  if(['rc_ack_error','web_ack_error','input_disarm'].includes(e.event))counts.loss++;
+  if(e.event==='rc_ack'||e.event==='udp_ack'||e.event==='web_ack'){counts.ack++;counts.maxRtt=Math.max(counts.maxRtt,e.data.roundTripMs||0);if((e.data.roundTripMs||0)>=180)counts.slow++;if(Number.isFinite(e.data.frameGapMs))counts.latestGap=e.data.frameGapMs;}
+  if(['rc_ack_error','udp_error','web_ack_error','input_disarm'].includes(e.event))counts.loss++;
   if(['native_response','native_failure'].includes(e.event)){
    counts.maxNativeWait=Math.max(counts.maxNativeWait,e.data.responseWaitMs||0);
    counts.maxNativeQueue=Math.max(counts.maxNativeQueue,e.data.queueMs||0);
@@ -90,13 +91,13 @@ function record(event,data={}){
  const safe=clean(data);
  // Writing to localStorage on every 100ms joystick ACK can create latency;
  // sample every fifth success, but ALWAYS record an outlier or error.
- if(event==='rc_ack'||event==='web_ack'){
+ if(event==='rc_ack'||event==='udp_ack'||event==='web_ack'){
   ackSamples++;
   if(ackSamples%5!==1&&(safe.roundTripMs||0)<180)return;
  }
  events.push({at:Date.now(),event,data:safe});
  if(events.length>LIMIT)events.splice(0,events.length-LIMIT);
- flush(!['rc_ack','web_ack','kit_status','web_status','native_request'].includes(event));
+ flush(!['rc_ack','udp_ack','web_ack','kit_status','web_status','native_request'].includes(event));
  paint();
 }
 function exportData(format){

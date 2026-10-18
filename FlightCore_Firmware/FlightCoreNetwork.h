@@ -65,6 +65,7 @@ static void zjCorsHeaders(){
 static void zjReply(int status,const String& body);
 static bool zjAllow();static const char* zjClientTransport();
 #include "FlightCoreEnrollment.h"
+#include "FlightCoreUdp.h"
 #include "FlightCoreOta.h"
 #include "FlightCoreSetupPortal.h"
 static bool zjAuthenticated(){return zjSessionAuthenticated();}
@@ -118,6 +119,7 @@ static String zjStatus(){
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
  out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
+ out+=",\"udp\":"+zjUdpStatistics();
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
@@ -265,16 +267,24 @@ static void zjSetupHttp(){
   if(!zjRcClaim(source,code,true,zjHttp.client().remoteIP(),zjClientTransport())){
    zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
   }
-  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false}");
+  zjUdpInvalidate();
+  bool udpReady=false;
+  if(source=="ANDROID"&&zjArg("udpProtocol")=="ZJUDP1"&&zjRequestSession>=0){
+   const auto& sc=zjSessions[zjRequestSession];
+   if(!sc.localSta&&uint32_t(millis()-sc.at)<1800000)
+    udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.client().remoteIP());
+  }
+  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpChannels\":7,\"udpAckFields\":5}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
   if(!zjRcOwned||!zjRcNetwork||zjArg("session")!=zjRcSession||
      zjHttp.client().remoteIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
-  zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
+  zjUdpInvalidate();zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
  });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
   if(!zjAllow())return;
+  if(zjUdpEnabled()){zjReply(423,"{\"error\":\"udp_rc_owned_use_udp_or_release\"}");return;}
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
   const String inputArm=zjArg("inputArmed");
   if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
@@ -290,7 +300,7 @@ static void zjSetupHttp(){
   if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
  });
- zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
  zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 
@@ -313,7 +323,7 @@ static void zjSetupHttp(){
   }
   zjReply(404,"{\"error\":\"not_found\"}");
  });
- zjHttp.begin();
+ zjHttp.begin();zjUdpSetup();
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
@@ -417,7 +427,7 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
- zjAuthResetRequest();zjHttp.handleClient();now=millis();
+ zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
  zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
  zjPpmLoop(now);

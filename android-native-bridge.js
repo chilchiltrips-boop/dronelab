@@ -8,6 +8,9 @@
  const send=(op,...args)=>host.postMessage(JSON.stringify({op,args}));
  root.ZebjusNative=Object.freeze({
   requestSecure:(...args)=>send('requestSecure',...args),
+  startUdp:(id,ip,device,claim,derivedKey)=>send('startUdp',id,ip,device,claim,derivedKey),
+  offerUdp:(channels,inputArmed)=>send('offerUdp',channels,String(!!inputArmed)),
+  stopUdp:()=>send('stopUdp'),
   cancelRequest:id=>send('cancelRequest',id),
   pinSelectedNetwork:(...args)=>send('pinSelectedNetwork',...args),
   clearSelectedNetwork:()=>send('clearSelectedNetwork'),
