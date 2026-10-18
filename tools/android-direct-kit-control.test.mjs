@@ -111,9 +111,12 @@ test('AP ARM prioritizes signed RC over background status and keeps AP connectio
  // next RC frame or treat stale RC delivery as Wi-Fi disassociation.
  await b.network.pollConnection();
  assert.equal(b.requests.filter(x=>x.route==='/api/status').length,before);
- b.holdPreview(Promise.reject(Error('Native Wi-Fi queue busy; input dropped')));
+ let rejectPreview;
+ b.holdPreview(new Promise((_,reject)=>{rejectPreview=reject}));
  await new Promise(resolve=>setTimeout(resolve,105));
- await b.network.previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0}});
+ const failedAck=b.network.previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0}});
+ rejectPreview(Error('Native Wi-Fi queue busy; input dropped'));
+ await failedAck;
  assert.equal(b.network.inputArmed(),false,'lost ACK disarms the input');
  assert.equal(b.network.isConnected(),true,'lost RC ACK does not claim the AP Wi-Fi link was lost');
 });
