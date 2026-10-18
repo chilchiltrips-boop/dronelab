@@ -20,6 +20,8 @@ import android.webkit.WebView;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -255,6 +257,26 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         try{
             Intent intent=new Intent(getTargetContext(),MainActivity.class);intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity=startActivitySync(intent);
+            // A real API 30 emulator executes the SAME bounded HTTP reader
+            // used by all Kit responses. Also exercise WebView startup so a
+            // legacy-device linkage failure cannot silently ship in an APK.
+            if(args!=null&&"true".equals(args.getString("legacyReaderOnly"))){
+                awaitCurrentWeb();
+                check("typeof window.ZebjusNative?.requestSecure==='function'");
+                byte[] tiny="{\"kitId\":\"ZFC-A1-test\"}".getBytes(StandardCharsets.UTF_8);
+                byte[] decoded=FlightCoreNativeBridge.readBoundedResponse(new ByteArrayInputStream(tiny),16000);
+                if(!java.util.Arrays.equals(tiny,decoded))throw new AssertionError("Kit JSON response corrupted");
+                byte[] big=new byte[22000];
+                for(int i=0;i<big.length;i++)big[i]=(byte)(i&255);
+                decoded=FlightCoreNativeBridge.readBoundedResponse(new ByteArrayInputStream(big),16000);
+                if(decoded.length!=16000)throw new AssertionError("Response exceeded native 16KB limit");
+                for(int i=0;i<decoded.length;i++)if(decoded[i]!=big[i])throw new AssertionError("Native response content mismatch");
+                if(FlightCoreNativeBridge.readBoundedResponse(new ByteArrayInputStream(new byte[0]),16000).length!=0)
+                    throw new AssertionError("Empty HTTP error stream was not supported");
+                checks+=3;
+                result.putString("stream","PASS API30 network response compatibility: Kit HTTP body, bounded oversized/empty responses, and legacy Android WebView startup; "+checks+" assertions.\n");
+                result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);return;
+            }
             if(args!=null&&"true".equals(args.getString("reverse"))){
                 ActivityMonitor monitor=addMonitor(MainActivity.class.getName(),null,false);
                 runOnMainSync(()->activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE));

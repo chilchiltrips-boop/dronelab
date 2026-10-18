@@ -28,7 +28,7 @@ test('signed release gate verifies APK, pinned signer and native touch before pu
  const wf=read('.github/workflows/build-qr-android.yml');
  assert.match(wf,/verify_signed_android_release\.py "\$RELEASE_APK"/);
  assert.match(wf,/Package exact-source signed native test bundle/);
- assert.match(wf,/needs: \[android, native_touch\]/);
+ assert.match(wf,/needs: \[android, native_touch, legacy_api30\]/);
  assert.match(wf,/Verify exact APK source and prepare native upgrade fixture/);
  assert.match(wf,/write_android_release_metadata\.py mobile-android\/app\/build\.gradle/);
  assert.match(wf,/sha256sum -c mobile-apk\/SHA256SUMS\.txt/);

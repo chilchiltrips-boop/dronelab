@@ -32,5 +32,5 @@ test('every mandatory exact-source signed APK gate fires on every APK source tri
  assert.match(gate,/x\.head_sha===GITHUB_SHA&&x\.event==='push'/,'no branch/SHA bypass');
  assert.match(release,/verify_signed_android_release\.py/,'signer verification required');
  assert.match(release,/sha256sum -c mobile-apk\/SHA256SUMS\.txt/,'artifact checksum required');
- assert.match(release,/needs: \[android, native_touch\]/,'native touch remains a prerequisite');
+ assert.match(release,/needs: \[android, native_touch, legacy_api30\]/,'native touch remains a prerequisite');
 });
