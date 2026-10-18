@@ -639,7 +639,8 @@ async function claimRc(){
   }
   trace('rc_claim',{transport:link,source:'ANDROID',outcome:'ok'});
   window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
-  show('Android owns input • motors disabled','good');
+  show(udpActive?'SECURE UDP 50 Hz • Android owns diagnostic input • motors disabled':
+   'SIGNED HTTP diagnostic input • latency-sensitive fallback • motors disabled','good');
  }catch(error){trace('rc_claim_error',{transport:link,reason:classify(error),outcome:'fail'});throw error}
  finally{rcClaiming=false}
 }
@@ -684,7 +685,7 @@ function previewControls(m,critical=false){
    frameGapMs:firmwareAck.at-(lastAckDiagnosticAt||firmwareAck.at),inputArmed:firmwareAck.inputArmed});
   lastAckDiagnosticAt=firmwareAck.at;
   if(typeof d.ledOn==='boolean'&&!ledBusy)ledOn=d.ledOn;
-  if(el('kitRcAck'))el('kitRcAck').textContent='ESP32 received #'+d.seq+' • '+firmwareAck.rtt+' ms round trip';
+  if(el('kitRcAck'))el('kitRcAck').textContent='HTTP ACK #'+d.seq+' • '+firmwareAck.rtt+' ms round trip • latency-sensitive fallback';
  })
  .catch(e=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
