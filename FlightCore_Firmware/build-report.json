@@ -1,7 +1,7 @@
 {
   "version": "1.4.12",
-  "builtAt": "2026-10-18T16:12:25Z",
-  "sourceCommit": "52d6eac8812de24972b36755eeb778eb7967f2de",
+  "builtAt": "2026-10-18T16:18:10Z",
+  "sourceCommit": "d7c5940618f4126c8282f6ec65eb8ba3e53734f6",
   "sourceSha256": {
     "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "646ebbd576827fce9303fc172afde0f6d2fc6d9031fc98a645ec925ec4e37e11",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
@@ -43,7 +43,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-18T16:13:50Z"
+      "compiledAt": "2026-10-18T16:19:16Z"
     },
     {
       "boardId": "ZFC-A2",
@@ -70,7 +70,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-18T16:14:46Z"
+      "compiledAt": "2026-10-18T16:20:04Z"
     }
   ]
 }
