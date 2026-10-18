@@ -10,14 +10,17 @@ const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_e
  'rc_ack_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
  'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect']);
 const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
- 'accepted','rejected','ageMs','roundTripMs','queueMs','staReason','rssi','rcOwned',
+ 'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
+  'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
-const reasons=new Set(['QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OTHER']);
+const reasons=new Set(['QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_STALE','FRAME_REJECTED','OTHER']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
+ if(/not_controller_owner|controller_locked|owner.*expired/.test(s))return 'OWNER_STALE';
+ if(/rc_not_owned_or_invalid_frame|invalid.*rc.*frame/.test(s))return 'FRAME_REJECTED';
  if(/stale|queue|backlog|busy/.test(s))return 'QUEUE_STALE';
  if(/ack|receive|sequence|seq|replay/.test(s))return 'ACK_INVALID';
  if(/deadline|timeout|timed out|350|failsafe/.test(s))return 'TIMEOUT';
@@ -33,7 +36,7 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','staReason','rssi','httpStatus','frameGapMs'].includes(key)){
+  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
   }else if(['rcOwned','inputArmed','apActive','staConnected','connected'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
@@ -44,7 +47,9 @@ function clean(data){
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}
   else if(key==='board'){if(['ZFC-A1','ZFC-A2','A1','A2'].includes(v))result.board=v;}
   else if(key==='version'){if(typeof v==='string'&&/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(v))result.version=v;}
-  else if(key==='outcome'){if(statuses.has(v))result.outcome=v;}
+  else if(key==='phase'){if(['queued','wifi_bind','send','response','read','complete','queue_busy'].includes(v))result.phase=v;}
+   else if(key==='releaseReason'){if(['NONE','NETWORK_RELEASE','NETWORK_EMERGENCY_STOP','ARMED_INPUT_TIMEOUT','LEASE_TIMEOUT','LEASE_EXPIRED','NETWORK_MODE_CHANGED','USB_STOP','USB_RELEASE','FACTORY_RESET','ENROLLMENT_REVOKED'].includes(v))result.releaseReason=v;}
+   else if(key==='outcome'){if(statuses.has(v))result.outcome=v;}
  }
  return result;
 }
