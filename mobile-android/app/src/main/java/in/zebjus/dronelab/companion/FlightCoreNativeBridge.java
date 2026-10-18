@@ -41,6 +41,8 @@ final class FlightCoreNativeBridge {
     private static final class RequestState {
         volatile boolean cancelled;
         volatile HttpURLConnection connection;
+        volatile long queueMs, bindMs, sendMs, responseWaitMs, readMs;
+        volatile String phase="queued";
     }
     private final ConcurrentHashMap<String,RequestState> outstanding=new ConcurrentHashMap<>();
     FlightCoreNativeBridge(Activity activity, WebView view, FlightCoreWifiLink wifiLink) {
@@ -59,10 +61,23 @@ final class FlightCoreNativeBridge {
         return route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
     }
     private void reply(String id,boolean ok,int status,String body,String error,String proof) {
+        reply(id,ok,status,body,error,proof,null);
+    }
+    private void reply(String id,boolean ok,int status,String body,String error,String proof,RequestState timing) {
         try{
             JSONObject message=new JSONObject();message.put("id",id);message.put("ok",ok);
             message.put("status",status);message.put("text",body==null?"{}":body);message.put("proof",proof==null?"":proof);message.put("body",new JSONObject(body==null||body.isEmpty()?"{}":body));
             if(error!=null)message.put("error",error);
+            if(timing!=null){
+                JSONObject stages=new JSONObject();
+                stages.put("queueMs",timing.queueMs);
+                stages.put("bindMs",timing.bindMs);
+                stages.put("sendMs",timing.sendMs);
+                stages.put("responseWaitMs",timing.responseWaitMs);
+                stages.put("readMs",timing.readMs);
+                stages.put("phase",timing.phase);
+                message.put("timings",stages);
+            }
             String js="window.zebjusNativeResult && window.zebjusNativeResult("+message.toString()+")";
             activity.runOnUiThread(()->{if(view.getParent()!=null)view.evaluateJavascript(js,null);});
         }catch(Exception ignored){}
@@ -141,15 +156,22 @@ final class FlightCoreNativeBridge {
         final long queuedAt=android.os.SystemClock.elapsedRealtime();
         try{worker.execute(()->{
             HttpURLConnection connection=null;
+            boolean completed=false;
             try{
                 if(state.cancelled)return;
                 final long elapsed=android.os.SystemClock.elapsedRealtime()-queuedAt;
+                state.queueMs=elapsed;
                 // Never run a queued firmware write after its JS caller gave up.
                 if(elapsed>(firmwareWrite?1500:750))throw new IllegalStateException("Stale native request dropped");
                 if(route.equals("/api/rc/preview")&&elapsed>250)
                     throw new IllegalStateException("Stale RC preview queued "+elapsed+"ms; input disarmed");
+                state.phase="wifi_bind";
+                long phaseAt=android.os.SystemClock.elapsedRealtime();
                 Network wifi=wifiLink.networkFor(ip,route.equals("/api/identify")||route.startsWith("/api/auth/")||route.equals("/api/status"));
+                state.bindMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
                 if(state.cancelled)return;
+                state.phase="send";
+                phaseAt=android.os.SystemClock.elapsedRealtime();
                 connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
                 state.connection=connection;
                 if(state.cancelled)return;
@@ -171,31 +193,44 @@ final class FlightCoreNativeBridge {
                     try(OutputStream out=connection.getOutputStream()){out.write(data);}
                 }
                 if(state.cancelled)return;
+                state.sendMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
+                state.phase="response";
+                phaseAt=android.os.SystemClock.elapsedRealtime();
                 int status=connection.getResponseCode();
+                state.responseWaitMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
+                state.phase="read";
+                phaseAt=android.os.SystemClock.elapsedRealtime();
                 InputStream source=status<400?connection.getInputStream():connection.getErrorStream();
                 byte[] data;
                 if(source==null)data=new byte[0];
                 else try(InputStream response=source){
                     data=readBoundedResponse(response,16000);
                 }
-                if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"));
+                state.readMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
+                state.phase="complete";
+                completed=true;
+                if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"),state);
             }catch(SocketTimeoutException timeout){
-                if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null);
+                if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null,state);
             }catch(IllegalStateException stale){
                 // Differentiate a queued RC deadline from Wi-Fi disassociation,
                 // without weakening the firmware's 350ms safety watchdog.
                 String msg=stale.getMessage();
                 if(!state.cancelled)reply(id,false,0,"{}",
-                    msg!=null&&msg.startsWith("Stale RC preview queued ")?msg:"Wi-Fi identity not yet verified: "+stale.getClass().getSimpleName(),null);
+                    msg!=null&&msg.startsWith("Stale RC preview queued ")?msg:"Wi-Fi identity not yet verified: "+stale.getClass().getSimpleName(),null,state);
             }catch(Exception error){
-                if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null);
+                if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null,state);
             }finally{
-                if(connection!=null)connection.disconnect();
+                // Reuse successful scoped TCP connections when supported by the Kit.
+                // Failed/cancelled sockets are always closed before the next RC request.
+                if(connection!=null&&(!completed||state.cancelled))connection.disconnect();
                 outstanding.remove(id,state);
             }
         });}catch(java.util.concurrent.RejectedExecutionException busy){
             outstanding.remove(id,state);
-            reply(id,false,0,"{}","Native Wi-Fi queue busy; input dropped",null);
+            state.phase="queue_busy";
+            state.queueMs=android.os.SystemClock.elapsedRealtime()-queuedAt;
+            reply(id,false,0,"{}","Native Wi-Fi queue busy; input dropped",null,state);
         }
     }
     // Called only by the origin-checked WebMessage listener on the main frame.
