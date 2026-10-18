@@ -311,9 +311,9 @@ async function forgetSavedKit(){
  if(verifiedKitId===id){diagnosticKey='';auth=null;online=false;forgetNativePin()}
  show('Saved diagnostic enrollment deleted; OWNER code was never stored');
 }
-function dropInput(message){
+function dropInput(message,reasonOverride=''){
  const wasArmed=rcInputArmed,hadSession=!!rcSession;
- if(wasArmed||hadSession)trace('input_disarm',{transport:link,reason:classify(message),inputArmed:false});
+ if(wasArmed||hadSession)trace('input_disarm',{transport:link,reason:reasonOverride||classify(message),inputArmed:false});
  ++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;
  window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');
 }
@@ -322,9 +322,14 @@ window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',dat
 window.zebjusNativeResult=data=>{
  const item=pending.get(data?.id);if(!item)return;
  clearTimeout(item.timer);pending.delete(data.id);
- trace(data.ok&&data.status<400?'native_response':'native_failure',
+ const timing=data.timings&&typeof data.timings==='object'?data.timings:{};
+ const succeeded=data.ok&&data.status<400;
+ trace(succeeded?'native_response':'native_failure',
   {route:item.route,transport:link,roundTripMs:Math.round(performance.now()-item.started),
-   httpStatus:Number(data.status)||0,reason:data.ok?'OTHER':classify(data.error||data.body?.error),outcome:data.ok&&data.status<400?'ok':'fail'});
+   queueMs:timing.queueMs,bindMs:timing.bindMs,sendMs:timing.sendMs,
+   responseWaitMs:timing.responseWaitMs,readMs:timing.readMs,phase:timing.phase,
+   httpStatus:Number(data.status)||0,reason:succeeded?'OTHER':classify(data.error||data.body?.error||'Device HTTP '+data.status),
+   outcome:succeeded?'ok':'fail'});
  if(data.ok&&item.raw)item.resolve({status:data.status,text:data.text||JSON.stringify(data.body||{}),proof:data.proof||''});
  else if(data.ok&&data.status<400)item.resolve(data.body||{});
  else item.reject(Error(data.error||data.body?.error||'Device HTTP '+data.status));
@@ -429,7 +434,8 @@ async function status(){
  trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
   apActive:data.apActive,staConnected:data.staConnected,staReason:Number(data.staDisconnectReason)||0,
   rssi:Number(data.rssi),seq:Number(data.rc?.seq),accepted:Number(data.rc?.accepted),
-  rejected:Number(data.rc?.rejected),ageMs:Number(data.rc?.ageMs),rcOwned:data.rc?.claimed===true});
+  rejected:Number(data.rc?.rejected),ageMs:Number(data.rc?.ageMs),rcOwned:data.rc?.claimed===true,
+   releaseReason:data.rc?.lastReleaseReason,lastReleaseAtMs:Number(data.rc?.lastReleaseAtMs)});
  inputArmSupported=data.inputArmSupported===true;controlAuthorized=data.controlAuthorized===true;
  if(typeof data.ledOn==='boolean'&&!ledBusy)ledOn=data.ledOn;
  if(el('kitSavedId')&&verifiedKitId)el('kitSavedId').value=verifiedKitId;
@@ -524,11 +530,28 @@ async function onWebRequest(req,peer){
   peer.sendNetworkResponse({id,ok:true,data});
  }catch(e){peer.sendNetworkResponse({id,ok:false,error:String(e.message||e).slice(0,150)})}
 }
-async function releaseRc(){
+function cancelPendingRcPreview(){
+ // A stalled preview must not block signed release on Android's one-worker queue.
+ // Never cancel OTA writes or non-RC operations.
+ for(const [id,item] of pending){
+  if(item.route!=='/api/rc/preview')continue;
+  clearTimeout(item.timer);pending.delete(id);
+  try{native?.cancelRequest?.(id)}catch{}
+  trace('native_failure',{route:item.route,transport:link,reason:'CANCELLED',
+   roundTripMs:Math.round(performance.now()-item.started),outcome:'fail'});
+  item.reject(Error('RC preview cancelled by diagnostic input release'));
+ }
+}
+async function releaseRc(cause='USER_STOP'){
  const session=rcSession;
- if(session)trace('rc_release',{transport:link,inputArmed:false});
- dropInput('Diagnostic input released • motors disabled');
- if(session&&online)await request('/api/rc/release','POST',{session}).catch(()=>{});
+ if(session)trace('rc_release',{transport:link,inputArmed:false,
+  reason:cause==='ACK_TIMEOUT'?'TIMEOUT':'CANCELLED'});
+ dropInput('Diagnostic input released • motors disabled',
+  cause==='ACK_TIMEOUT'?'TIMEOUT':'CANCELLED');
+ if(session){
+  cancelPendingRcPreview();
+  if(online)await request('/api/rc/release','POST',{session}).catch(()=>{});
+ }
 }
 async function claimRc(){
  if(!online||!onKitLink)throw Error('Connect and verify the phone on the selected kit '+link.toUpperCase()+' network first.');
