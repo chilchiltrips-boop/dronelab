@@ -125,7 +125,7 @@ static String zjRcState(){
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+zjJson(zjRcLastReleaseReason)+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.
