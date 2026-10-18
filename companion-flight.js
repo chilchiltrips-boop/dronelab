@@ -127,7 +127,7 @@ function setupStick(side){
 function tick(now){
  if(!loopStarted)return;
  const dt=last?Math.min(.08,Math.max(0,(now-last)/1000)):0;last=now;
- if(kitArmed()&&window.ZebjusNetwork?.feedback?.()&&Date.now()-window.ZebjusNetwork.feedback().at>350){void doStop();updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')}
+ if(kitArmed()&&window.ZebjusNetwork?.feedback?.()&&Date.now()-window.ZebjusNetwork.feedback().at>350){void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')}
  if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
@@ -205,7 +205,7 @@ function onTelemetry(packet){
  if(!isOwned())$('flightAppliedTelemetry').textContent+=' • '+a.throttle+' µs '+a.mode.toUpperCase()+' '+(a.armed?'WEB ARMED':'DISARMED');
 }
 function remoteStop(reason){stopLocally(reason||'WEB STOP • VIRTUAL MOTORS OFF');send(true)}
-function doStop(){const wasKit=directKit()||kitArmPending;++kitArmGeneration;kitArmPending=false;diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.();stopLocally(wasKit?'KIT STOP • INPUT DISARMED • MOTORS OFF':'STOP • VIRTUAL MOTORS OFF');send(true);return released}
+function doStop(cause='USER_STOP'){const wasKit=directKit()||kitArmPending;++kitArmGeneration;kitArmPending=false;diagnosticThrottle=1000;const released=window.ZebjusNetwork?.releaseRc?.(cause);stopLocally(wasKit?'KIT STOP • INPUT DISARMED • MOTORS OFF':'STOP • VIRTUAL MOTORS OFF');send(true);return released}
 function openConnection(){
  // Entering settings releases virtual ARM and Kit diagnostic control, so the
  // duplicate Menu STOP can be hidden without leaving an armed modal.
