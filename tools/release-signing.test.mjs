@@ -15,7 +15,7 @@ test('stable Android source matches the published release or advances its versio
   'equal codes are valid only for the already published version, not a new upgrade');
  // A new APK build must still strictly advance the installed/published code.
  assert.ok(read('tools/verify_signed_android_release.py').includes('int(version_code) > int(old_package[2])'));
- assert.match(gradle,/versionName '1\.7\.21-secure-udp-diagnostics'/);
+ assert.match(gradle,/versionName '1\.8\.0-udp-management'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);

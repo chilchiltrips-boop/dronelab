@@ -132,11 +132,11 @@ test('STOP during a pending status check prevents late ARM of the old session',a
  assert.equal(b.requests.filter(x=>x.route==='/api/rc/claim').length,0);
  assert.equal(b.network.inputArmed(),false);
 });
-test('full IMU telemetry cannot occupy the native queue during diagnostic RC ownership',async()=>{
+test('IMU reads are permitted during independent UDP control and blocked during HTTP fallback',async()=>{
  const b=bench();await b.connect();await b.network.armControls();
  // The UI read operation is gated by pollTelemetry, while a current signed
  // diagnostic session remains owned. Source asserts the fast-path priority.
- assert.match(source,/if\(rcClaiming\|\|rcSession\|\|previewBusy\)throw Error\('Release diagnostic input before requesting full IMU telemetry/);
+ assert.match(source,/if\(\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\('\/api\/telemetry','GET'\)\)throw Error/);
  await b.network.releaseRc();
 });
 
@@ -159,5 +159,5 @@ test('native non-RC promises are drained before ARM claim and new ones are block
  assert.match(source,/nonRcNativeRequests\.add\(operation\)/);
  assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
  assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
- assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)\)/);
+ assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
 });

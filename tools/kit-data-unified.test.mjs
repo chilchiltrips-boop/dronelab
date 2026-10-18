@@ -74,5 +74,5 @@ test('new assets are cached for offline Wix and module versions stay in sync',()
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-ack-diagnostics-20261018/);
+ assert.match(sw,/dronelab-udp-management-20261019/);
 });

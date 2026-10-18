@@ -129,7 +129,7 @@ function render(){
  set('fwLocalLink',live?'LOCAL CONNECTED':'LOCAL READY');
  set('fwKitStateSimple',live?s.kitCode:'NOT SELECTED');
  set('fwControlSimple',live?s.owner?'YOURS':s.rc?.claimed?'BUSY':'AVAILABLE':'--');
- set('fwNetworkSimple',live?s.transport.toUpperCase():'--');
+ set('fwNetworkSimple',live?s.transport.toUpperCase()+(s.managementProtocol==='ZJM1'?' • UDP':''):'--');
  const age=live&&s.heartbeatAt?Date.now()-s.heartbeatAt:Infinity;
  const current=live&&age<=6500;
  set('fwHealthCommand',current?s.rc?.active?'RC LIVE':'LINK OK':demo?'SIMULATED':'LOST');

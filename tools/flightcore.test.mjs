@@ -11,7 +11,7 @@ const css=readFileSync(new URL('./firmware.css',root),'utf8');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const sourceVersion=readFileSync(new URL('./VERSION.txt',root),'utf8').trim();
 test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
- assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.[0-4]\.\d+$/);
+ assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.\d+\.\d+$/);
  assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','ZJSCAN,','scanAddress<127','Wire.endTransmission()','if(!scanRequested)return;','scanAddresses[scanCount++]'])assert.ok(sketch.includes(token),token);

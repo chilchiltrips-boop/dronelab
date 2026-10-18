@@ -45,22 +45,24 @@ function waitIce(pc,timeout=12000){
 }
 function session(role,events={}){
  const emit=(event,detail)=>{try{return events[event]?.(detail)}catch(e){console.error(e);return false}};
- let peer=null,channel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,deviceId=randomId(8),generation=0,lastSimSeq=0,simulatorReady=false;
+ let peer=null,channel=null,inputChannel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,deviceId=randomId(8),generation=0,lastSimSeq=0,simulatorReady=false;
  const error=(err)=>emit('error',String(err?.message||err));
  const state=(s)=>emit('status',s);
  function close(reason='Disconnected'){
   generation++;
   if(role==='host')emit('simStop',{reason});lastSimSeq=0;
   clearInterval(heartbeat);clearTimeout(dropTimer);heartbeat=null;dropTimer=null;
-  const oldChannel=channel,oldPeer=peer;channel=null;peer=null;
-  try{oldChannel?.close()}catch{}try{oldPeer?.close()}catch{}
+  const oldChannel=channel,oldInput=inputChannel,oldPeer=peer;channel=null;inputChannel=null;peer=null;
+  try{oldChannel?.close()}catch{}try{oldInput?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
   controller=null;simulatorReady=false;sessionId=null;code=null;expires=0;lastHeartbeat=0;
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
- function send(m){if(channel?.readyState!=='open')return false;try{channel.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
+ const realtimeTypes=new Set(['SIM_CONTROL','SIM_ACK','SIM_TELEMETRY']);
+ const liveChannel=()=>inputChannel?.readyState==='open'?inputChannel:channel;
+ function send(m){const target=realtimeTypes.has(m.type)?liveChannel():channel;if(target?.readyState!=='open'||target.bufferedAmount>32768)return false;try{target.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
  function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
- function sendTelemetry(applied){return role==='host'&&approved&&connected&&channel?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
+ function sendTelemetry(applied){return role==='host'&&approved&&connected&&liveChannel()?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
  function sendNetworkRequest(m){return role==='host'&&approved&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_REQUEST',sessionId,id:m.id,method:m.method,route:m.route,args:m.args||{}}):false}
   function sendNetworkResponse(m){return role==='mobile'&&paired&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_RESPONSE',sessionId,id:m.id,ok:m.ok===true,data:m.data||{},error:String(m.error||'').slice(0,150)}):false}
   function emergencyStop(reason='Web emergency STOP'){
@@ -88,7 +90,7 @@ function session(role,events={}){
  function sendSimulatorControl(m,critical=false){
   if(role!=='mobile'||!connected||!paired||controller!=='mobile'||channel?.readyState!=='open')return false;
   if(!validSimFrame(m))return false;
-  if(channel.bufferedAmount>(critical?131072:32768))return false;
+  if(liveChannel().bufferedAmount>32768)return false;
   return send({type:'SIM_CONTROL',seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
    throttle:m.throttle,axes:m.axes,...(m.sticks?{sticks:m.sticks}:{})});
  }
@@ -138,6 +140,12 @@ function session(role,events={}){
   }
  }
  function setup(pc,dc){
+  if(dc?.label==='zebjus-input-v1'){
+   inputChannel=dc;
+   dc.onmessage=e=>{if(peer===pc&&dc===inputChannel)onData(e.data)};
+   dc.onclose=()=>{if(peer===pc&&dc===inputChannel){inputChannel=null;dropControl('Realtime input channel closed')}};
+   return;
+  }
   if(dc){channel=dc;dc.onmessage=e=>{if(peer===pc&&dc===channel)onData(e.data)};dc.onopen=()=>{if(peer!==pc)return;connected=true;state(role==='host'?'Connected • approve pairing':'Connected • awaiting web approval');emit('connected');startHeartbeat();if(role==='host'&&approved){send({type:'PAIR_APPROVED'});broadcast()}};dc.onclose=()=>{if(peer!==pc)return;close('DataChannel closed • scan fresh QR')}}
   pc.ondatachannel=e=>{if(peer===pc)setup(pc,e.channel)};
   pc.onconnectionstatechange=()=>{
@@ -161,6 +169,9 @@ function session(role,events={}){
   if(root.ZebjusRemoteRTC?.load)await root.ZebjusRemoteRTC.load();
   if(ticket!==generation)throw Error('Pairing cancelled');
   const pc=makePC(),dc=pc.createDataChannel('zebjus-flight-v1',{ordered:true});setup(pc,dc);
+  // Joystick and IMU/simulator feedback must not wait behind retransmitted
+  // management messages. STOP/pairing/ownership stay on the reliable channel.
+  setup(pc,pc.createDataChannel('zebjus-input-v1',{ordered:false,maxRetransmits:0}));
   const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
   const description=await pc.createOffer();check();await pc.setLocalDescription(description);check();state('Gathering local Wi-Fi connection candidates');
   await waitIce(pc);check();state('Waiting for Android QR response • ICE candidates gathered');

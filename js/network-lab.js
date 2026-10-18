@@ -44,14 +44,16 @@ function telemetryLine(d){
  return 'ZJTEL,1,'+d.board+','+(++frameSeq)+','+d.millis+','+addr+','+(d.gyroReady?'READY':'NOT_FOUND')+','+d.roll+','+d.pitch+','+d.yaw+',1,0';
 }
 async function getTelemetry(){
- const d=await request('/api/telemetry');lastSeen=Date.now();netReady=true;
+ const started=Date.now(),d=await request('/api/telemetry');d.transportAgeMs=Date.now()-started;lastSeen=Date.now();netReady=true;
+ if(d.sampleAgeMs!==undefined&&(d.sampleValid!==true||!Number.isSafeInteger(d.sampleAgeMs)||d.sampleAgeMs<0||d.sampleAgeMs+d.transportAgeMs>1000))
+  d.gyroReady=false; // Keep scanner data usable even when the IMU is absent/stale.
  window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:telemetryLine(d),transport:netMode||'network'}}));
  if(d.scannerRunning===false&&Array.isArray(d.scanner)&&scanSequence!==d.scanSequence){
   scanSequence=d.scanSequence;
   const frame='ZJSCAN,'+d.board+','+d.millis+','+d.scanner.length+d.scanner.map(x=>',0x'+Number(x).toString(16).toUpperCase().padStart(2,'0')).join('');
   window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:frame,transport:netMode||'network'}}));
  }
- const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
+ const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+(d.managementProtocol==='ZJM1'?' • UDP':'')+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
  return d;
 }
 async function writeLine(text){

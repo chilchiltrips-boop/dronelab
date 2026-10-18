@@ -75,6 +75,8 @@ export function parseNetworkGyroTelemetry(data, expectedKitId){
   throw new Error('SensorNotFoundError: '+board+' expected '+spec.sensor+' at '+spec.address+'; reported address '+String(data.address));
  if(data.gyroReady!==true)
   throw new Error('SensorNotFoundError: '+spec.sensor+' '+spec.address+' on '+board+' is NOT_READY. Check power and I2C SDA/SCL wiring.');
+ if(data.sampleAgeMs!==undefined&&(data.sampleValid!==true||!Number.isSafeInteger(data.sampleAgeMs)||data.sampleAgeMs<0||data.sampleAgeMs+(data.transportAgeMs||0)>1000))
+  throw new Error('GyroTelemetryError: IMU sample is stale or unavailable; read a fresh UDP sample.');
  const rates=[data.roll,data.pitch,data.yaw];
  if(!rates.every(v=>typeof v==='number'&&Number.isFinite(v)))
   throw new Error('SensorNotFoundError: '+spec.sensor+' returned invalid angular-rate data.');
@@ -82,7 +84,7 @@ export function parseNetworkGyroTelemetry(data, expectedKitId){
   throw new Error('GyroTelemetryError: Invalid device uptime in authenticated telemetry.');
  return {board,boardId:'ZFC-'+board,sensor:spec.sensor,address:spec.address,
   RateRoll:rates[0],RatePitch:rates[1],RateYaw:rates[2],
-  units:'deg/s',status:'READY',source:'NETWORK',sequence:null,boardMs:data.millis,
+  units:'deg/s',status:'READY',source:data.managementProtocol==='ZJM1'?'UDP':'NETWORK',sequence:data.sampleSequence??null,boardMs:data.millis,
   deviceDrops:null,timestamp:new Date().toISOString(),kitId:data.kitId};
 }
 

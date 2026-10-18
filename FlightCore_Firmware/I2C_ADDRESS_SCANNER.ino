@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.4.12";
+constexpr const char* FW_VERSION="1.5.0";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -212,7 +212,8 @@ constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling; LSM6DS3 ODR
 constexpr const char* GYRO_BOARD="A1",*GYRO_NAME="LSM6DS3";
 #endif
 bool gyroReady=false;
-unsigned long lastGyro=0,lastGyroProbe=0;
+unsigned long lastGyro=0,lastGyroProbe=0,lastGyroSample=0;
+uint32_t gyroSampleSeq=0;
 const char* gyroHealth="STARTING";
 unsigned long legacyLast=0,telemetrySent=0;
 constexpr unsigned long LEGACY_PERIOD_MS=200; // 5 Hz legacy gyro frames; low traffic
@@ -282,6 +283,7 @@ void updateGyro(unsigned long now){
  if(!gyroSignals()){
   gyroReady=false;lastGyroProbe=now;gyroStatus("READ_ERROR");return;
  }
+ lastGyroSample=now;gyroSampleSeq++;
  // Gyro sampling is independent of USB transmission timing.
  // ZJTEL is the sole high-frequency gyro stream.
 }

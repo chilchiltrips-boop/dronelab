@@ -5,7 +5,7 @@ const utf8=v=>new TextEncoder().encode(v),hex=b=>Array.from(b,x=>x.toString(16).
 const unhex=s=>Uint8Array.from(s.match(/../g)||[],v=>parseInt(v,16));
 const mac=(key,msg)=>hex(root.ZfcCrypto.hmac256(utf8(key),utf8(msg)));
 const equal=(a,b)=>{if(typeof a!=='string'||a.length!==b?.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0};
-function decoded(r){let d;try{d=JSON.parse(r.text)}catch{throw Error('Invalid FlightCore response')}
+function decoded(r){let d;try{d=JSON.parse(r.text)}catch{const e=Error('Invalid FlightCore JSON response. Update firmware to 1.5.0 or newer, then reconnect.');e.code='invalid_device_json';throw e}
  if(r.status<200||r.status>=300){const e=Error(d.error||'HTTP '+r.status);e.status=r.status;throw e}return d;
 }
 function sessionAPI(transport,deviceId,bootId,sessionId,key,r){

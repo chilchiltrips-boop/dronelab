@@ -12,7 +12,7 @@ function label(value){
  return {deviceId:match[1].toUpperCase(),secret:match[2].toLowerCase()};
 }
 const diagnosticKey=(secret,id)=>mac(secret,'diagnostic|'+id).slice(0,32);
-function decoded(r){let d;try{d=JSON.parse(r.text)}catch{throw Error('Invalid FlightCore response')}
+function decoded(r){let d;try{d=JSON.parse(r.text)}catch{const e=Error('Invalid FlightCore JSON response. Update firmware to 1.5.0 or newer, then reconnect.');e.code='invalid_device_json';throw e}
  if(r.status<200||r.status>=300){const e=Error(d.error||'HTTP '+r.status);e.status=r.status;throw e}return d;
 }
 async function open(transport,deviceId,credential,kind='diagnostic'){
@@ -101,6 +101,10 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
 }
 function http(host){return async(route,method='GET',args={},headers={})=>{
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
+ // Hosted browser raw UDP uses the exact-origin loopback bridge. Preserve the
+ // signed session across this transport; never retry a failed UDP write in HTTP.
+ if(root.ZebjusKitUdp&&await root.ZebjusKitUdp.available())
+  return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers);
  const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
  const timeoutMs=root.ZebjusKitNetworkPolicy?.requestTimeout(route,method,host.includes('192.168.4.1')?'ap':'sta')||(firmwareWrite?20000:4200);
  const control=new AbortController();let timedOut=false;

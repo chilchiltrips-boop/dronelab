@@ -14,6 +14,7 @@ let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpect
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
+const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
 const diagnosticRoutes=new Set(['POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
@@ -43,7 +44,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  // Signed HMAC counters and Android's single HTTP worker MUST preserve
  // request order. Do not enqueue unrelated reads/writes behind joystick ACKs.
  // /api/auth/ is allowed for the selected RC session's signed reauthentication.
- if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy))
+ if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
   return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
  trace('native_request',{route,transport:link,outcome:'pending'});
@@ -182,7 +183,7 @@ async function request(route,method='GET',args={}){
  if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
  // Central admission control also covers signed-session calls whose auth is
  // already open; blocking ONLY nativeTransport would leave a race here.
- if(!route.startsWith('/api/rc/')&&(rcClaiming||rcSession||previewBusy))
+ if(!route.startsWith('/api/rc/')&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
   throw Error('RC ACK has priority • STOP diagnostic input before Kit requests');
  if(!auth||Date.now()>auth.expiresAt-5000){
   if(!authOpening){
@@ -491,7 +492,7 @@ async function status(){
  if(epoch!==linkEpoch)throw Error('Kit link changed during status');
  syncLedButton();
  const fallback=link==='ap'&&data.mode!=='ap'&&data.phase==='sta_failed_ap_fallback';
- show((fallback?'AP FALLBACK CONNECTED • saved STA unavailable':('Phone → '+data.requestTransport+ (auth?.local?(link==='ap'?' CONNECTED • AP-local signed session':' CONNECTED • STA signed observer'):' VERIFIED signed identity')))+' • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
+ show((fallback?'AP FALLBACK CONNECTED • saved STA unavailable':('Phone → '+data.requestTransport+ (auth?.local?(link==='ap'?' CONNECTED • AP-local signed session':' CONNECTED • STA signed observer'):' VERIFIED signed identity')))+(data.managementProtocol==='ZJM1'?' • UDP management / IMU':'')+' • Router STA '+(data.staConnected?'online':'offline')+' • '+(rcSession?'Android owns diagnostic input':'control released'),'good');
  return data;
 }
 async function scan(){
@@ -549,7 +550,7 @@ async function command(line){
  return request('/api/command','POST',{line});
 }
 async function pollTelemetry(){
- if(rcClaiming||rcSession||previewBusy)throw Error('Release diagnostic input before requesting full IMU telemetry; RC ACK has priority.');
+ if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead('/api/telemetry','GET'))throw Error('Release diagnostic input before requesting full IMU telemetry; RC ACK has priority.');
  const data=await request('/api/telemetry');const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
  window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:mode,device:'android-native'}}));return data;
 }
@@ -560,9 +561,9 @@ async function onWebRequest(req,peer){
  const grant=grantFor(route,method);
  if(!grant||!el(grant)?.checked)return peer.sendNetworkResponse({id,ok:false,error:'Android has not granted '+(grant||'this operation')});
  if(!online||!onKitLink)return peer.sendNetworkResponse({id,ok:false,error:'Selected Kit Wi-Fi is not verified'});
- // Paired WebApp reads, Wi-Fi changes and diagnostics may not starve the
- // Android owner's 100ms RC frames. Emergency STOP is still authorized.
- if((rcClaiming||rcSession||previewBusy)&&!(method==='POST'&&route==='/api/rc/stop'))
+ // The independent 50 Hz UDP sender allows read-only IMU/status access while
+ // armed. Wi-Fi changes and new ownership remain blocked. STOP is authorized.
+ if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!(method==='POST'&&route==='/api/rc/stop'))
   return peer.sendNetworkResponse({id,ok:false,error:'Android RC active • release control before requesting Kit data'});
  try{
   const data=await request(route,method,req.args||{});
@@ -609,6 +610,10 @@ async function claimRc(){
    throw Error('Kit changed or went offline before ARM; reconnect and verify');
   const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode,udpProtocol:native?.startUdp?'ZJUDP1':'HTTP'});
   if(d.kitId!==verifiedKitId||!d.session)throw Error('Firmware claim identity failed');
+  if(native?.managementProtocol==='ZJM1'&&(d.udpProtocol!=='ZJUDP1'||d.udpPort!==4210)){
+   await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
+   throw Error('Kit UDP joystick receiver unavailable. Reconnect or reinstall current FlightCore firmware.');
+  }
   if(epoch!==rcEpoch||!online||document.hidden){
    await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
    throw Error('ARM cancelled; input released');

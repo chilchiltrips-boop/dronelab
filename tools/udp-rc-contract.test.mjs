@@ -28,7 +28,7 @@ test('protocol framing, token, nonce and authenticated ACK have matching sizes',
 });
 test('claim is signed, opted-in, bound to session and old firmware uses HTTP',()=>{
  assert.match(net,/zjArg\("udpProtocol"\)=="ZJUDP1"/);
- assert.match(net,/zjUdpBind\(sc.key,zjRcSession,zjHttp.client\(\).remoteIP\(\)\)/);
+ assert.match(net,/zjUdpBind\(sc.key,zjRcSession,zjHttp.peerIP\(\)\)/);
  assert.match(client,/udpProtocol:native\?\.startUdp\?'ZJUDP1':'HTTP'/);
  assert.match(client,/d\.udpProtocol==='ZJUDP1'&&d\.udpPort===4210/);
  assert.match(client,/await request\('\/api\/rc\/release'/);

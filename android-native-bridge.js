@@ -7,6 +7,7 @@
  if(!host||typeof host.postMessage!=='function')return;
  const send=(op,...args)=>host.postMessage(JSON.stringify({op,args}));
  root.ZebjusNative=Object.freeze({
+  managementProtocol:'ZJM1',
   requestSecure:(...args)=>send('requestSecure',...args),
   startUdp:(id,ip,device,claim,derivedKey)=>send('startUdp',id,ip,device,claim,derivedKey),
   offerUdp:(channels,inputArmed)=>send('offerUdp',channels,String(!!inputArmed)),

@@ -11,7 +11,7 @@ const int HTTP_GET=1,HTTP_POST=2;static IPAddress requestIP(192,168,4,2);
 struct FakeHttp {
  std::map<String,String> headers,args;std::map<String,std::function<void()>> handlers;String path;int verb=HTTP_GET;
  String arg(String n){return args[n];}String header(String n){return headers[n];}String uri(){return path;}int method(){return verb;}
- struct Client {IPAddress remoteIP(){return requestIP;}};Client client(){return {};}
+ IPAddress peerIP(){return requestIP;}
  template<class F>void on(String p,int,F f){handlers[p]=f;}
 } zjHttp;
 static Preferences zjPrefs;static String zjNetKey="ff112233445566778899aabbccddeeff0";

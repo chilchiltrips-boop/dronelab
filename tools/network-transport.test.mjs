@@ -16,13 +16,14 @@ test('Network operations use signed sessions and retired multipart route cannot 
  assert.match(ota,/Update\.begin\(size,U_FLASH\)/);
  assert.ok(!f.includes('ledcWrite(ESC'),'No motor mixer on diagnostics API');
 });
-test('Android local HTTP uses verified Wi-Fi and signed AES-GCM session requests',()=>{
+test('Android UDP management uses verified Wi-Fi and signed AES-GCM session requests',()=>{
  const n=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
  const m=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
  assert.ok(n.includes('@JavascriptInterface public void requestSecure('));
  assert.ok(n.includes('Legacy raw-key requests are disabled.'));
  assert.ok(n.includes('privateIp(')&&n.includes('allowed(method,route)'));
- assert.ok(n.includes('wifi.openConnection(new URL("http://"+ip+route))'));
+ assert.ok(n.includes('FlightCoreUdpRpc.exchange(ip,envelope'));
+ assert.doesNotMatch(n,/HttpURLConnection|wifi\.openConnection/);
  assert.ok(n.includes('"/api/firmware/chunk"'));
  assert.doesNotMatch(n,/multipart\/form-data/);
  assert.ok(m.includes('MIXED_CONTENT_NEVER_ALLOW'));
@@ -75,7 +76,7 @@ test('Android encrypted APP chunks are bound to Wi-Fi, never cellular/system net
  assert.match(pin,/pinnedSsid\.equals\(ssid\)/);
  assert.match(pin,/pinnedBssid\.equalsIgnoreCase/);
  assert.doesNotMatch(body,/connectivity\.getActiveNetwork\(\)/,'never use default/cellular network');
- assert.match(body,/wifi\.openConnection\(new URL/);
+ assert.match(body,/wifi::bindSocket/);
  assert.ok(js.includes("ZebjusKitAuth.open(nativeTransport,id,credential,'admin')"));
  assert.ok(js.includes("'/api/firmware/chunk'"));
  assert.ok(read('FlightCore_Firmware/FlightCoreOta.h').includes('zjSecureOtaAccess(true)'));

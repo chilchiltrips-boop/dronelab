@@ -16,8 +16,6 @@ import android.database.Cursor;
 import android.provider.OpenableColumns;
 import android.net.Uri;
 import java.io.ByteArrayOutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,7 +38,7 @@ final class FlightCoreNativeBridge {
     private final FlightCoreWifiLink wifiLink;
     private static final class RequestState {
         volatile boolean cancelled;
-        volatile HttpURLConnection connection;
+        volatile java.net.DatagramSocket socket;
         volatile long queueMs, bindMs, sendMs, responseWaitMs, readMs;
         volatile String phase="queued";
     }
@@ -66,7 +64,8 @@ final class FlightCoreNativeBridge {
     private void reply(String id,boolean ok,int status,String body,String error,String proof,RequestState timing) {
         try{
             JSONObject message=new JSONObject();message.put("id",id);message.put("ok",ok);
-            message.put("status",status);message.put("text",body==null?"{}":body);message.put("proof",proof==null?"":proof);message.put("body",new JSONObject(body==null||body.isEmpty()?"{}":body));
+            message.put("status",status);message.put("text",body==null?"{}":body);message.put("proof",proof==null?"":proof);try{message.put("body",new JSONObject(body==null||body.isEmpty()?"{}":body));}
+            catch(org.json.JSONException invalid){message.put("body",new JSONObject());}message.put("protocol","ZJM1");
             if(error!=null)message.put("error",error);
             if(timing!=null){
                 JSONObject stages=new JSONObject();
@@ -120,8 +119,8 @@ final class FlightCoreNativeBridge {
         RequestState state=outstanding.get(id);
         if(state!=null){
             state.cancelled=true;
-            HttpURLConnection connection=state.connection;
-            if(connection!=null)connection.disconnect();
+            java.net.DatagramSocket socket=state.socket;
+            if(socket!=null)socket.close();
         }
     }
     void cancelOutstanding(){
@@ -129,7 +128,7 @@ final class FlightCoreNativeBridge {
     }
     // Android 8-12 lack the newer InputStream bulk-read overload (API 33).
     // Calling that newer method on POCO X2/Android 11 kills the native worker
-    // with NoSuchMethodError when the first Kit HTTP response arrives.
+    // with NoSuchMethodError when the first Kit response arrives.
     // Read a small bounded response using InputStream.read(byte[],int,int),
     // supported on every Android version allowed by our minSdk 26.
     static byte[] readBoundedResponse(InputStream source,int maxBytes) throws java.io.IOException {
@@ -155,8 +154,6 @@ final class FlightCoreNativeBridge {
         if(outstanding.putIfAbsent(id,state)!=null)return;
         final long queuedAt=android.os.SystemClock.elapsedRealtime();
         try{worker.execute(()->{
-            HttpURLConnection connection=null;
-            boolean completed=false;
             try{
                 if(state.cancelled)return;
                 final long elapsed=android.os.SystemClock.elapsedRealtime()-queuedAt;
@@ -172,46 +169,16 @@ final class FlightCoreNativeBridge {
                 if(state.cancelled)return;
                 state.phase="send";
                 phaseAt=android.os.SystemClock.elapsedRealtime();
-                connection=(HttpURLConnection)wifi.openConnection(new URL("http://"+ip+route));
-                state.connection=connection;
-                if(state.cancelled)return;
-                connection.setInstanceFollowRedirects(false);
-                // JS watchdogs: OTA 18s, diagnostics 6s. Native always finishes
-                // earlier (queue + connect + read) so no orphaned timeout writes.
-                connection.setConnectTimeout(firmwareWrite?2000:1200);
-                connection.setReadTimeout(firmwareWrite?12000:3000);
-                java.util.Iterator<String> names=headers.keys();
-                while(names.hasNext()){String n=names.next();connection.setRequestProperty(n,headers.getString(n));}
-                connection.setRequestProperty("Accept","application/json");
-                connection.setUseCaches(false);connection.setRequestMethod(method);
-                if(method.equals("POST")){
-                    byte[] data=(form==null?"":form).getBytes(StandardCharsets.UTF_8);
-                    connection.setDoOutput(true);
-                    connection.setRequestProperty("Content-Type","application/x-www-form-urlencoded");
-                    connection.setFixedLengthStreamingMode(data.length);
-                    if(state.cancelled)return;
-                    try(OutputStream out=connection.getOutputStream()){out.write(data);}
-                }
-                if(state.cancelled)return;
-                state.sendMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
-                state.phase="response";
-                phaseAt=android.os.SystemClock.elapsedRealtime();
-                int status=connection.getResponseCode();
+                String[] signedHeaders={headers.optString("X-ZJ-Device"),headers.optString("X-ZJ-Session"),
+                    headers.optString("X-ZJ-Seq"),headers.optString("X-ZJ-Proof")};
+                byte[] envelope=FlightCoreUdpRpc.encode(method,route,form,signedHeaders);
+                FlightCoreUdpRpc.Result result=FlightCoreUdpRpc.exchange(ip,envelope,firmwareWrite?14000:4200,
+                    wifi::bindSocket,socket->state.socket=socket,()->state.cancelled);
                 state.responseWaitMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
-                state.phase="read";
-                phaseAt=android.os.SystemClock.elapsedRealtime();
-                InputStream source=status<400?connection.getInputStream():connection.getErrorStream();
-                byte[] data;
-                if(source==null)data=new byte[0];
-                else try(InputStream response=source){
-                    data=readBoundedResponse(response,16000);
-                }
-                state.readMs=android.os.SystemClock.elapsedRealtime()-phaseAt;
-                state.phase="complete";
-                completed=true;
-                if(!state.cancelled)reply(id,true,status,new String(data,StandardCharsets.UTF_8),null,connection.getHeaderField("X-ZJ-Response"),state);
+                state.phase="complete_udp";
+                if(!state.cancelled)reply(id,true,result.status,result.text,null,result.proof,state);
             }catch(SocketTimeoutException timeout){
-                if(!state.cancelled)reply(id,false,0,"{}","Native Wi-Fi deadline exceeded; operation outcome unconfirmed",null,state);
+                if(!state.cancelled)reply(id,false,0,"{}","UDP management timeout; firmware 1.5.0+ and UDP 4211 required; operation outcome unconfirmed",null,state);
             }catch(IllegalStateException stale){
                 // Differentiate a queued RC deadline from Wi-Fi disassociation,
                 // without weakening the firmware's 350ms safety watchdog.
@@ -221,9 +188,8 @@ final class FlightCoreNativeBridge {
             }catch(Exception error){
                 if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null,state);
             }finally{
-                // Reuse successful scoped TCP connections when supported by the Kit.
-                // Failed/cancelled sockets are always closed before the next RC request.
-                if(connection!=null&&(!completed||state.cancelled))connection.disconnect();
+                java.net.DatagramSocket socket=state.socket;
+                if(socket!=null)socket.close();
                 outstanding.remove(id,state);
             }
         });}catch(java.util.concurrent.RejectedExecutionException busy){

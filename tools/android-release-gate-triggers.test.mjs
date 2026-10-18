@@ -12,6 +12,7 @@ const gates=[
  ['QR WebRTC Browser Pairing Test','.github/workflows/qr-browser-test.yml'],
  ['Tripod PID Simulator Tests','.github/workflows/tripod-simulator.yml'],
  ['Browser Test Python Lab','.github/workflows/browser-python-lab.yml'],
+ ['Verify UDP management, IMU and Python bridge','.github/workflows/udp-management.yml'],
  ['Verify DroneLab FlightCore Firmware Center','.github/workflows/validate-flightcore.yml'],
  ['Unified PID Tuning Shell & Persistent WebRTC','.github/workflows/pid-shell.yml']
 ];

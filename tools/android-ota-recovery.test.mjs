@@ -163,7 +163,7 @@ test('native + JS timers, cancellation and OTA progress contract agree',()=>{
  assert.match(client,/signedProgress\(\)/);
  assert.match(client,/owned\(progress,next\)/);
  assert.match(client,/endAttempted=true/);
- assert.match(bridge,/connection\.setReadTimeout\(firmwareWrite\?12000:3000\)/);
+ assert.match(bridge,/FlightCoreUdpRpc\.exchange\(ip,envelope,firmwareWrite\?14000:4200/);
  assert.match(bridge,/elapsed>\(firmwareWrite\?1500:750\)/);
  assert.match(bridge,/@JavascriptInterface public void cancelRequest\(String id\)/);
  assert.match(activity,/nativeFlightCore\.cancelOutstanding\(\)/);

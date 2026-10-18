@@ -1,0 +1,95 @@
+name: Verify UDP management, IMU and Python bridge
+on:
+  push:
+    branches: [main, fix/udp-management-20261018]
+    paths:
+      - 'FlightCore_Firmware/*.h'
+      - 'FlightCore_Firmware/*.ino'
+      - 'mobile-android/**'
+      - 'js/kit-*.js'
+      - 'js/classroom-kits.js'
+      - 'js/network-lab.js'
+      - 'js/usb-i2c-bridge.js'
+      - 'companion-network.js'
+      - 'pairing-core.js'
+      - 'tools/*udp*'
+      - 'tools/UdpRpcInterop.java'
+      - 'tools/host-stubs/**'
+      - '.github/workflows/udp-management.yml'
+      - 'tools/android-direct-kit*'
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/android-peerjs-menu-regression.test.mjs'
+      - 'tools/flight-ack-priority.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/release-metadata.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/controls-browser.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
+      - 'tools/android-simple-ap-connect.test.mjs'
+      - 'tools/verify_signed_android_release.py'
+      - 'tools/write_android_release_metadata.py'
+      - 'tools/verify_android_assets.py'
+      - 'tools/wait-release-checks.mjs'
+      - '.github/workflows/build-qr-android.yml'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'android-native-bridge.js'
+      - 'companion-flight.js'
+      - 'companion-menu.js'
+      - 'flight-input.js'
+      - 'pairing-code.js'
+      - 'remote-rtc.js'
+      - 'remote-rtc-config.json'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'js/kit-auth.js'
+      - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
+      - 'firmware-catalog.json'
+      - 'vendor/crypto/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  protocol-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm test
+      - run: npm run check
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Verify actual UDP bridge, Python IMU and simulator browser paths
+        run: |
+          node server.cjs --port 8765 >/tmp/udp-browser-http.log 2>&1 &
+          node tools/udp-management-browser.mjs
+          node tools/tripod-browser.mjs
+          node tools/flight-preview-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: udp-management-imu-browser-evidence
+          path: test-output/
+          if-no-files-found: warn

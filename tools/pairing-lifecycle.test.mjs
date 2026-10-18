@@ -11,7 +11,7 @@ function runtime(){
  class PC{
   iceGatheringState='complete';signalingState='stable';connectionState='new';listeners=new Map();
   constructor(){pcs.push(this)}
-  createDataChannel(){return this.dc={readyState:'connecting',bufferedAmount:0,sent:[],send(value){this.sent.push(JSON.parse(value))},close(){this.readyState='closed';this.onclose?.()}}}
+  createDataChannel(label,options){const channel={label,options,readyState:'connecting',bufferedAmount:0,sent:[],send(value){this.sent.push(JSON.parse(value))},close(){this.readyState='closed';this.onclose?.()}};if(label==='zebjus-flight-v1')this.dc=channel;else this.input=channel;return channel;}
   async createOffer(){return {type:'offer',sdp:'v=0\r\na=candidate:test'}}
   async createAnswer(){return {type:'answer',sdp:'v=0\r\na=candidate:test'}}
   async setLocalDescription(d){this.localDescription=d;this.signalingState='have-local-offer'}
@@ -93,3 +93,15 @@ test('paired telemetry and control queues are bounded; critical STOP uses existi
  host.approvePairing();assert.equal(host.sendTelemetry({throttle:1000}),true);assert.equal(dc.sent.at(-1).type,'SIM_TELEMETRY');assert.equal(dc.sent.at(-1).sessionId,host.status().sessionId);
  dc.bufferedAmount=32769;assert.equal(host.sendTelemetry({throttle:1000}),false);dc.bufferedAmount=0;host.emergencyStop('Test STOP');assert.equal(dc.sent.at(-1).type,'SIM_STOP');host.close();
 });
+
+ test('realtime simulator telemetry uses an unordered non-retransmitting channel while STOP stays reliable',async()=>{
+  const r=runtime(),{host,pc}=await connectedHost(r);
+  assert.deepEqual({...pc.input.options},{ordered:false,maxRetransmits:0});
+  pc.input.readyState='open';pc.dc.bufferedAmount=100000;
+  assert.equal(host.sendTelemetry({throttle:1200}),true);
+  assert.equal(pc.input.sent.at(-1).type,'SIM_TELEMETRY');
+  pc.dc.bufferedAmount=0;host.emergencyStop('Test');
+  assert.equal(pc.dc.sent.at(-1).type,'SIM_STOP');
+  pc.input.readyState='closed';pc.input.onclose();
+  assert.equal(host.status().controller,null);host.close();
+ });

@@ -62,12 +62,12 @@ static bool zjSessionAuthenticated(){
  const uint64_t wide=strtoull(counter.c_str(),nullptr,10);if(!wide||wide>0xffffffffULL)return false;
  for(int i=0;i<8;i++){
   auto& s=zjSessions[i];if(s.id!=id||id.isEmpty())continue;
-  if(s.admin&&s.ip!=zjHttp.client().remoteIP())return false;
+  if(s.admin&&s.ip!=zjHttp.peerIP())return false;
    // Larger heap-backed encrypted envelopes are permitted only for an
    // authenticated OWNER session writing a firmware chunk, not generic APIs.
    const bool otaChunk=s.admin&&zjHttp.method()==HTTP_POST&&zjHttp.uri()=="/api/firmware/chunk";
    if(!otaChunk&&payload.length()>ZJ_AUTH_STANDARD_PAYLOAD_HEX_MAX)return false;
-  if(s.local&&(s.ip!=zjHttp.client().remoteIP()||(s.localSta?String(zjClientTransport())!="STA":String(zjClientTransport())!="AP")||!zjLocalDiagnosticRoute()))return false;
+  if(s.local&&(s.ip!=zjHttp.peerIP()||(s.localSta?String(zjClientTransport())!="STA":String(zjClientTransport())!="AP")||!zjLocalDiagnosticRoute()))return false;
   if(uint32_t(millis()-s.at)>1800000||wide<=s.seq)return false;
   const String method=zjHttp.method()==HTTP_GET?"GET":"POST";
   const String msg=method+"|"+zjHttp.uri()+"|"+zjKitId+"|"+zjBootId+"|"+id+"|"+counter+"|"+payload;
@@ -99,7 +99,7 @@ static void zjSetupEnrollmentHttp(){
   const bool ap=String(zjClientTransport())=="AP",sta=String(zjClientTransport())=="STA";
   if(!ap&&!sta){zjReply(403,"{\"error\":\"local_network_required\"}");return;}
   const String client=zjHttp.arg("client");if(!zjHex(client,32)||zjHttp.arg("deviceId")!=zjKitId){zjReply(400,"{\"error\":\"invalid_local_identity\"}");return;}
-  const uint32_t now=millis();const IPAddress ip=zjHttp.client().remoteIP();int slot=-1;
+  const uint32_t now=millis();const IPAddress ip=zjHttp.peerIP();int slot=-1;
   for(int i=0;i<4;i++)if(zjSessions[i].local&&zjSessions[i].client==client&&zjSessions[i].ip==ip){slot=i;break;}
   if(slot<0)for(int i=0;i<4;i++)if(zjSessions[i].id.isEmpty()||uint32_t(now-zjSessions[i].at)>1800000){slot=i;break;}
   if(slot<0){zjReply(429,"{\"error\":\"session_capacity_reached\"}");return;}
@@ -114,13 +114,13 @@ static void zjSetupEnrollmentHttp(){
   if((zjAuthCooldown&&int32_t(now-zjAuthCooldown)<0)||(zjChallengeAt&&uint32_t(now-zjChallengeAt)<300)){zjReply(429,"{\"error\":\"enrollment_rate_limited\"}");return;}
   int slot=-1;for(int i=0;i<4;i++)if(zjChallenges[i].nonce.isEmpty()||uint32_t(now-zjChallenges[i].at)>30000){slot=i;break;}
   if(slot<0){zjReply(429,"{\"error\":\"challenge_busy\"}");return;}
-  auto& c=zjChallenges[slot];c.nonce=zjNewSecret(16);c.at=now;c.ip=zjHttp.client().remoteIP();c.kind=kind;c.client=client;zjChallengeAt=now;
+  auto& c=zjChallenges[slot];c.nonce=zjNewSecret(16);c.at=now;c.ip=zjHttp.peerIP();c.kind=kind;c.client=client;zjChallengeAt=now;
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"nonce\":"+zjJson(c.nonce)+",\"bootId\":"+zjJson(zjBootId)+",\"expiresMs\":30000}");
  });
  zjHttp.on("/api/auth/enroll",HTTP_POST,[](){
   const uint32_t now=millis();if(zjAuthCooldown&&int32_t(now-zjAuthCooldown)<0){zjReply(429,"{\"error\":\"enrollment_rate_limited\"}");return;}
   for(auto& c:zjChallenges){
-   if(c.nonce.isEmpty()||c.nonce!=zjHttp.arg("nonce")||c.ip!=zjHttp.client().remoteIP())continue;
+   if(c.nonce.isEmpty()||c.nonce!=zjHttp.arg("nonce")||c.ip!=zjHttp.peerIP())continue;
    const String nonce=c.nonce,kind=c.kind,client=c.client;c.nonce=""; // consume before verification: no replay
    const String msg="enroll|"+zjKitId+"|"+zjBootId+"|"+nonce+"|"+kind+"|"+client;
    const String credential=kind=="admin"?zjNetKey:kind=="setup"?zjLabelSecret:zjDiagnosticKey;

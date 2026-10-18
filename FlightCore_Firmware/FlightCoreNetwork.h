@@ -1,14 +1,15 @@
 #pragma once
 // FlightCore AP/STA laboratory transport: no motor outputs or flight arming.
-// Native Android or an explicitly trusted local client accesses authenticated HTTP.
+// Native Android/local bridge use UDP; ordinary browsers retain HTTP compatibility.
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <esp_app_desc.h>
+#include "FlightCoreRpc.h"
 
-static WebServer zjHttp(80);
+static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjOtaRebootAt=0,zjLastScanSeq=0;
@@ -118,11 +119,11 @@ static String zjStatus(){
   out+=",\"sha256\":"+zjJson(zjSecureOtaHash);
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
- out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true}";
- out+=",\"udp\":"+zjUdpStatistics();
+ out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true";
+ out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+",\"udpManagementPort\":4211}";
  return out;
 }
-static const char* zjClientTransport(){return zjHttp.client().localIP()==WiFi.softAPIP()?"AP":"STA";}
+static const char* zjClientTransport(){return zjHttp.localIP()==WiFi.softAPIP()?"AP":"STA";}
 static String zjMdnsKitHostname(){
  // Keep the original deterministic address until a custom Kit Name is saved.
  // User-friendly "zebjus_drone_7" becomes DNS-safe "zebjus-drone-7.local".
@@ -167,7 +168,7 @@ static void zjSetupHttp(){
  zjHttp.on("/",HTTP_GET,[](){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send_P(200,"text/html",ZJ_SETUP_PORTAL);});
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
- zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
+ zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"udpManagement\":\"ZJM1\",\"udpManagementPort\":4211,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
  // AP-local Kit identity maintenance; full immutable Device ID is never changed.
  zjHttp.on("/api/kit/name",HTTP_POST,[](){
   if(!zjAllowSetup())return;
@@ -244,6 +245,7 @@ static void zjSetupHttp(){
  zjHttp.on("/api/telemetry",HTTP_GET,[](){
   if(!zjAllow())return;
   String out="{\"kitId\":"+zjJson(zjKitId)+",\"board\":"+zjJson(GYRO_BOARD)+",\"millis\":"+String(millis())+",\"gyroReady\":"+(gyroReady?String("true"):String("false"));
+  out+=",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+",\"sampleValid\":"+((gyroReady&&gyroSampleSeq)?String("true"):String("false"))+",\"sampleSequence\":"+String(gyroSampleSeq)+",\"sampleAgeMs\":"+String(uint32_t(millis()-lastGyroSample));
   out+=",\"address\":"+String(GYRO_ADDR)+",\"roll\":"+String(RateRoll,3)+",\"pitch\":"+String(RatePitch,3)+",\"yaw\":"+String(RateYaw,3);
   out+=",\"scanner\":[";
   for(uint8_t i=0;i<scanCount;i++){if(i)out+=',';out+=String(scanAddresses[i]);}
@@ -264,7 +266,7 @@ static void zjSetupHttp(){
   if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;}
   const String source=zjArg("source"),code=zjArg("kitCode");
   if(code!=zjKitCode){zjReply(404,"{\"error\":\"kit_code_mismatch\"}");return;}
-  if(!zjRcClaim(source,code,true,zjHttp.client().remoteIP(),zjClientTransport())){
+  if(!zjRcClaim(source,code,true,zjHttp.peerIP(),zjClientTransport())){
    zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
   }
   zjUdpInvalidate();
@@ -272,14 +274,14 @@ static void zjSetupHttp(){
   if(source=="ANDROID"&&zjArg("udpProtocol")=="ZJUDP1"&&zjRequestSession>=0){
    const auto& sc=zjSessions[zjRequestSession];
    if(!sc.localSta&&uint32_t(millis()-sc.at)<1800000)
-    udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.client().remoteIP());
+    udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.peerIP());
   }
   zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpChannels\":7,\"udpAckFields\":5}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
   if(!zjRcOwned||!zjRcNetwork||zjArg("session")!=zjRcSession||
-     zjHttp.client().remoteIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
+     zjHttp.peerIP()!=zjRcOwnerIP){zjReply(423,"{\"error\":\"not_controller_owner\"}");return;}
   zjUdpInvalidate();zjRcRelease("NETWORK_RELEASE");zjReply(200,"{\"released\":true}");
  });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
@@ -293,7 +295,7 @@ static void zjSetupHttp(){
   if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
      !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
      (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
-     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.client().remoteIP(),inputArm=="true")){
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.peerIP(),inputArm=="true")){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
   zjRcResponse=response.length()?response:String("Medium");
@@ -323,7 +325,54 @@ static void zjSetupHttp(){
   }
   zjReply(404,"{\"error\":\"not_found\"}");
  });
- zjHttp.begin();zjUdpSetup();
+ zjHttp.begin();zjUdpSetup();zjRpcSetup();
+}
+// Reassemble bounded unicast requests and cache the exact signed response.
+// A lost reply retries the SAME request ID + envelope, never a second OTA write
+// or another auth challenge. Replay/counter/OWNER checks still run in handlers.
+static void zjRpcLoop(){
+ if(!zjRpcReady)return;
+ uint8_t packet[16+ZJ_RPC_FRAGMENT];
+ for(int budget=0;budget<12;budget++){
+  const int n=zjRpcSocket.parsePacket();if(n<=0)break;
+  const IPAddress peer=zjRpcSocket.remoteIP();const uint16_t port=zjRpcSocket.remotePort();
+  if(n<17||n>int(sizeof(packet))||!zjRpcPrivate(peer)){
+   while(zjRpcSocket.available())zjRpcSocket.read();continue;
+  }
+  if(zjRpcSocket.read(packet,n)!=n||memcmp(packet,"ZJM1",4))continue;
+  const uint16_t total=(uint16_t(packet[12])<<8)|packet[13];
+  const uint8_t index=packet[14],count=packet[15];
+  if(!total||total>ZJ_RPC_REQUEST_MAX||count!=(total+ZJ_RPC_FRAGMENT-1)/ZJ_RPC_FRAGMENT||index>=count||
+     n!=int(16+std::min(ZJ_RPC_FRAGMENT,size_t(total)-size_t(index)*ZJ_RPC_FRAGMENT)))continue;
+  const uint32_t now=millis();
+  ZjRpcAssembly* selected=nullptr;
+  for(auto& slot:zjRpcAssembly)if(slot.mask&&slot.peer==peer&&slot.port==port&&slot.total==total&&
+    !memcmp(slot.id,packet+4,8)&&uint32_t(now-slot.at)<=3000){selected=&slot;break;}
+  if(!selected)for(auto& slot:zjRpcAssembly)if(!slot.mask||uint32_t(now-slot.at)>3000){selected=&slot;break;}
+  if(!selected)continue;
+  auto& assembly=*selected;
+  if(!assembly.mask||uint32_t(now-assembly.at)>3000){
+   assembly.peer=peer;assembly.port=port;assembly.total=total;memcpy(assembly.id,packet+4,8);assembly.mask=0;
+  }
+  assembly.at=now;memcpy(assembly.bytes.get()+size_t(index)*ZJ_RPC_FRAGMENT,packet+16,n-16);assembly.mask|=uint16_t(1)<<index;
+  if(assembly.mask!=(uint16_t(1)<<count)-1)continue;
+  uint8_t hash[32];if(mbedtls_sha256(assembly.bytes.get(),total,hash,0)){assembly.mask=0;continue;}
+  bool cached=false;
+  for(const auto& old:zjRpcCache)if(old.port==port&&old.peer==peer&&uint32_t(now-old.at)<20000&&
+    !memcmp(old.id,assembly.id,8)&&!memcmp(old.hash,hash,32)){
+   zjRpcSend(assembly.id,old.response,peer,port);cached=true;break;
+  }
+  if(!cached){
+   String response;zjAuthResetRequest();
+   if(zjHttp.dispatch(assembly.bytes.get(),total,peer,response)){
+    auto& entry=zjRpcCache[zjRpcCacheNext++%2];entry.peer=peer;entry.port=port;entry.at=now;
+    memcpy(entry.id,assembly.id,8);memcpy(entry.hash,hash,32);entry.response=response;
+    zjRpcSend(assembly.id,response,peer,port);
+   }
+   zjAuthResetRequest();
+  }
+  assembly.mask=0;
+ }
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
@@ -427,7 +476,7 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
- zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
+ zjAuthResetRequest();zjRpcLoop();zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
  zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
  zjPpmLoop(now);
