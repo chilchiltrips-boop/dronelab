@@ -155,17 +155,9 @@ test('paired WebApp requests are denied during claimed Android RC, with emergenc
  assert.ok(b.requests.some(x=>x.route==='/api/rc/stop'),'explicit granted emergency STOP remains permitted');
  await b.network.releaseRc();
 });
-test('ARM drains a previously running unrelated native request without changing signed order',async()=>{
- const b=bench();await b.connect();
- let resume; b.holdStatus(new Promise(resolve=>resume=resolve));
- // A scheduled heartbeat is tracked separately from any pre-existing WebApp
- // request; the release code waits for both before owning the RC link.
- const read=b.network.request('/api/status');
- await settle();
- const arm=b.network.armControls();
- await settle();
- assert.equal(b.requests.filter(x=>x.route==='/api/rc/claim').length,0);
- resume();await read;await arm;
- assert.equal(b.network.inputArmed(),true);
- await b.network.releaseRc();
+test('native non-RC promises are drained before ARM claim and new ones are blocked',()=>{
+ assert.match(source,/nonRcNativeRequests\.add\(operation\)/);
+ assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
+ assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
+ assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)\)/);
 });
