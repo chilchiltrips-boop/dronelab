@@ -13,14 +13,16 @@ const fields=['route','transport','source','mode','board','version','outcome','r
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
-   'sent','ackReceived','lost','jitterMs','lastPacketAgeMs'];
+   'sent','ackReceived','lost','jitterMs','lastPacketAgeMs','managementProtocol','udpActive','udpReceived','udpRejected'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
-const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_STALE','FRAME_REJECTED','OTHER']);
+const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
+ 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_UNKNOWN']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
- if(/not_controller_owner|controller_locked|owner.*expired/.test(s))return 'OWNER_STALE';
+ if(/controller_locked|controller locked|controlled by another/.test(s))return 'OWNER_BUSY';
+ if(/not_controller_owner|owner.*expired/.test(s))return 'OWNER_STALE';
  if(/rc_not_owned_or_invalid_frame|invalid.*rc.*frame/.test(s))return 'FRAME_REJECTED';
  if(/udp_input_stale|joystick input paused/.test(s))return 'INPUT_STALE';
  if(/stale|queue|backlog|busy/.test(s))return 'QUEUE_STALE';
@@ -38,13 +40,14 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs'].includes(key)){
+  if(['seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','udpReceived','udpRejected'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
-  }else if(['rcOwned','inputArmed','apActive','staConnected','connected'].includes(key)){
+  }else if(['rcOwned','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='route'){if(routes.has(v))result.route=v;}
   else if(key==='reason'){if(reasons.has(v)||typeof v==='string'&&/^UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)$/.test(v))result.reason=v;}
   else if(key==='transport'){if(['ap','sta','usb','android-relay','none','unknown'].includes(v))result.transport=v;}
+  else if(key==='managementProtocol'){if(['ZJM1','HTTP','USB'].includes(v))result.managementProtocol=v;}
   else if(key==='source'){if(['ANDROID','WEB','PPM','USB','NONE'].includes(v))result.source=v;}
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}
   else if(key==='board'){if(['ZFC-A1','ZFC-A2','A1','A2'].includes(v))result.board=v;}
@@ -75,7 +78,7 @@ function paint(force=false){
  const at=Date.now();if(!force&&at-lastPaint<800)return;lastPaint=at;
  const p=panel();if(!p)return;
  const s=summary(),label=p.querySelector('[data-diag-summary]');
- if(label)label.textContent=events.length+' events • '+s.ack+' sampled ACKs • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max HTTP wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
+ if(label)label.textContent=events.length+' events • '+s.ack+' sampled ACKs • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
  const view=p.querySelector('[data-diag-events]');
  if(view&&p.open)view.textContent=events.slice(-30).reverse().map(e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data)).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
 }

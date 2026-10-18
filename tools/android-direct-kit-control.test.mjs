@@ -7,7 +7,7 @@ const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function bench(udp=false){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
- let failure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true;
+ let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true;
  const element=id=>{
   if(id==='kitRcPreview')return null;
   if(!elements.has(id))elements.set(id,{value:'',checked:false,disabled:false,textContent:'',dataset:{},
@@ -23,7 +23,9 @@ function bench(udp=false){
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
     inputArmSupported:true,controlAuthorized:authorized,ledOn:false};
   }
-  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210}:{})}}
+  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;if(claimFailure)throw claimFailure;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210}:{})}}
+  if(route==='/api/rc/snapshot')return {kitId,claimed:true,source:'WEB',inputArmed:false,seq:20,ageMs:30};
+  if(route==='/api/rc/stop')return {stopped:true,motorsDisabled:true};
   if(route==='/api/rc/preview'){if(delayPreview)await delayPreview;return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'}}
   if(route==='/api/rc/release')return {released:true};
   if(route==='/api/command')return {accepted:true};
@@ -48,7 +50,7 @@ function bench(udp=false){
   CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
  handlers.get('document:DOMContentLoaded')();
  return {win,element,requests,events,document,handlers,timers,network:win.ZebjusNetwork,
-  fail:e=>failure=e,holdStatus:p=>delayStatus=p,holdClaim:p=>delayClaim=p,holdPreview:p=>delayPreview=p,
+  fail:e=>failure=e,failClaim:e=>claimFailure=e,holdStatus:p=>delayStatus=p,holdClaim:p=>delayClaim=p,holdPreview:p=>delayPreview=p,
   async connect(sta=false){if(sta){transport='STA';element('kitLink').value='sta';handlers.get('kitLink:change')();element('kitIp').value='192.168.1.22';handlers.get('kitIp:change')();element('kitKey').value='label'}
    handlers.get('kitConnect:click')();await settle();await settle();assert.equal(win.ZebjusNetwork.isConnected(),true);},
   observer:()=>authorized=false};
@@ -187,4 +189,35 @@ test('native joystick freshness failure disarms input without falsely reporting 
  assert.equal(b.network.inputArmed(),false);assert.equal(b.network.isConnected(),true);
  assert.match(b.element('kitNetStatus').textContent,/Joystick input paused/);
  assert.doesNotMatch(b.element('kitNetStatus').textContent,/ACK.*timeout/i);
+});
+
+test('a busy controller is identified read-only without stealing or stopping its input',async()=>{
+ const b=bench(true);await b.connect();b.failClaim(Error('controller_locked_or_invalid_source'));
+ await assert.rejects(b.network.armControls(),/Controller locked by WEB.*Release control there/);
+ assert.ok(b.requests.some(r=>r.route==='/api/rc/snapshot'));
+ assert.ok(!b.requests.some(r=>r.route==='/api/rc/stop'||r.route==='/api/rc/release'));
+ assert.equal(b.network.isConnected(),true);assert.equal(b.network.inputArmed(),false);
+});
+test('late native stream events cannot start, acknowledge or stop a different ARM attempt',async()=>{
+ const b=bench(true);await b.connect();const ids=[];
+ b.win.ZebjusNative.startUdp=id=>ids.push(id);
+ const first=b.network.armControls();const rejected=assert.rejects(first,/stopped|cancelled/);
+ await settle();await b.network.releaseRc();await rejected;
+ const next=b.network.armControls();await settle();assert.equal(ids.length,2);
+ b.win.zebjusNativeUdpEvent({id:ids[0],type:'start'});
+ b.win.zebjusNativeUdpEvent({id:ids[0],type:'error',reason:'UDP_ACK_TIMEOUT'});
+ await settle();assert.equal(b.network.inputArmed(),false);
+ b.win.zebjusNativeUdpEvent({id:ids[1],type:'start'});await next;
+ assert.equal(b.network.inputArmed(),true);
+ b.win.zebjusNativeUdpEvent({id:ids[0],type:'error',reason:'UDP_INPUT_STALE'});await settle();
+ assert.equal(b.network.inputArmed(),true);await b.network.releaseRc();
+});
+test('granted WebApp STOP cancels the native UDP publisher immediately and clears ARM',async()=>{
+ const b=bench(true);await b.connect();await b.network.armControls();
+ let stopped=0;b.win.ZebjusNative.stopUdp=()=>stopped++;
+ b.element('kitGrantDiagnostic').checked=true;const replies=[];
+ await b.network.onWebRequest({id:200,method:'POST',route:'/api/rc/stop'},
+  {status:()=>({paired:true}),sendNetworkResponse:m=>replies.push(m)});
+ assert.equal(stopped,1);assert.equal(b.network.inputArmed(),false);
+ assert.equal(b.network.hasControl(),false);assert.equal(replies[0].ok,true);
 });

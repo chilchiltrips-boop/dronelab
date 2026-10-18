@@ -29,7 +29,7 @@ struct {size_t writes=0;bool begin(size_t,int){writes=0;return true;}size_t writ
 #include "../FlightCore_Firmware/FlightCoreOta.h"
 static String zjMode="sta",zjPhase="sta_connected",zjApSsid="ZEBJUS",zjWifiTestState="idle",zjSavedSsid="School";
 static bool zjApStarted=true;static int zjStaDisconnectReason=0,zjLastStaFailureReason=0,ledMode=1,LED_OFF=0;
-static const char* FW_VERSION="1.5.0";
+#include "udp-version.h"
 static String zjMdnsKitHostname(){return "zebjus-drone-1";}
 static String zjPpmStatus(){return "{\"active\":false}";}
 static String zjUdpStatistics(){return "{\"protocol\":\"ZJUDP1\",\"active\":false}";}

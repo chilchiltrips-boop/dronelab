@@ -9,6 +9,7 @@ static uint16_t testRpcPort=0;static int testDropReplies=0;
 class WiFiUDP {
  int fd=-1;std::vector<uint8_t> pending,outgoing;uint16_t sourcePort=0,destinationPort=0;
  public:
+ void stop(){if(fd>=0)close(fd);fd=-1;}
  bool begin(uint16_t){
   fd=socket(AF_INET,SOCK_DGRAM,0);sockaddr_in addr{};addr.sin_family=AF_INET;addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);addr.sin_port=htons(testRpcPort);
   if(bind(fd,(sockaddr*)&addr,sizeof(addr)))return false;fcntl(fd,F_SETFL,O_NONBLOCK);

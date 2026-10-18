@@ -31,7 +31,7 @@ test('actual firmware status is valid signed JSON including UDP, RC, PPM and IMU
  const status=await admin.request('/api/status');
  assert.equal(status.kitId,id);assert.equal(status.managementProtocol,'ZJM1');assert.equal(status.udpManagementPort,4211);
  assert.equal(status.udp.protocol,'ZJUDP1');assert.equal(status.motorsDisabled,true);
- assert.equal(status.version,'1.5.0');assert.ok(status.rc&&status.ppm);
+ assert.equal(status.version,read('VERSION.txt').trim());assert.ok(status.rc&&status.ppm);
  const t=await admin.request('/api/telemetry');
  assert.equal(t.managementProtocol,'ZJM1');assert.equal(t.sampleValid,true);assert.equal(t.sampleSequence,1);
  assert.ok(t.sampleAgeMs<100);assert.equal(t.roll,1.25);assert.equal(t.pitch,-2.5);

@@ -559,7 +559,9 @@ async function readStatus(){
  trace('web_status',{transport:state.transport,board:d.board,version:d.version,mode:d.mode,
   apActive:d.apActive,staConnected:d.staConnected,staReason:Number(d.staDisconnectReason)||0,
   rssi:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
-  ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source});
+  ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
+  managementProtocol:d.managementProtocol,udpActive:d.udp?.active===true,
+  udpReceived:Number(d.udp?.received),udpRejected:Number(d.udp?.rejected)});
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  const actualTransport=verifiedTransport(d);
  state.heartbeatAt=Date.now();state.linkState='connected';

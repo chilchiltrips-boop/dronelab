@@ -32,6 +32,19 @@ test('UDP input staleness and missing ACK are distinct, and UDP completion timin
  assert.equal(b.events().at(-1).data.phase,'complete_udp');
  assert.equal(b.events().at(-1).data.reason,'INPUT_STALE');
 });
+test('startup failure enums and active controller ownership remain precise without credentials',()=>{
+ const b=bench();
+ assert.equal(b.api.reasonClass('controller_locked_or_invalid_source'),'OWNER_BUSY');
+ assert.equal(b.api.reasonClass('Controller locked by WEB. Release control there.'),'OWNER_BUSY');
+ assert.equal(b.api.reasonClass('not_controller_owner'),'OWNER_STALE');
+ b.api.record('udp_error',{reason:'UDP_START_BIND_SOCKET_SOCKET',sent:0,ackReceived:0});
+ b.api.record('kit_status',{source:'WEB',inputArmed:false,managementProtocol:'ZJM1',udpActive:false,udpReceived:0,udpRejected:2});
+ assert.equal(b.events().at(-2).data.reason,'UDP_START_BIND_SOCKET_SOCKET');
+ assert.equal(b.events().at(-1).data.source,'WEB');
+ assert.equal(b.events().at(-1).data.udpRejected,2);
+ b.api.record('udp_error',{reason:'UDP_START_BIND_SOCKET_private_secret'});
+ assert.equal(b.events().at(-1).data.reason,undefined);
+});
 test('strict diagnostic allowlist never saves Kit ID, IP, SSID, HMAC keys or raw network errors',()=>{
  const b=bench();
  b.api.record('rc_ack_error',{route:'/api/rc/preview',seq:4,reason:'TIMEOUT',roundTripMs:370,
@@ -88,7 +101,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 39\s*versionName '1\.8\.1-udp-arm-start'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 40\s*versionName '1\.8\.2-udp-arm-recovery'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{

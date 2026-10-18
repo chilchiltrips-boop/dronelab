@@ -17,6 +17,7 @@ export async function startFirmwareHost(){
    section(source,' zjHttp.on("/api/telemetry"',' zjHttp.on("/api/command"')+'\n'+
    section(source,' zjHttp.on("/api/rc/snapshot"',' zjHttp.on("/api/ppm/status"')+'\n}\n';
   writeFileSync(join(directory,'udp-network-extract.h'),extract);
+  writeFileSync(join(directory,'udp-version.h'),'static const char* FW_VERSION="'+read('VERSION.txt').trim()+'";\n');
   execFileSync('g++',['-std=c++17','-Itools/host-stubs','-I'+directory,'tools/udp-firmware-host.cpp','-lcrypto','-o',join(directory,'firmware')],{stdio:'pipe',timeout:60000});
   child=spawn(join(directory,'firmware'),[],{stdio:['ignore','pipe','pipe']});
   const port=await new Promise((resolve,reject)=>{

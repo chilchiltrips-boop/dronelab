@@ -20,6 +20,9 @@ static bool zjUdpActive=false,zjUdpConfigured=false,zjUdpHasPending=false,zjUdpR
 static uint8_t zjUdpKey[32]={},zjUdpToken[8]={},zjUdpOwner[4]={};
 static uint32_t zjUdpLastSeq=0,zjUdpLastRx=0,zjUdpBoundAt=0,zjUdpReceived=0,zjUdpRejected=0;
 static uint32_t zjUdpPendingSeq=0,zjUdpPendingAt=0;
+// A claim/release can run while the receiver authenticates outside the lock.
+// Only that exact grant may publish a frame, rejection or timeout afterward.
+static uint32_t zjUdpGeneration=0;
 static uint16_t zjUdpPendingChannels[6]={};
 static bool zjUdpPendingArmed=false;
 static uint32_t zjUdpGet32(const uint8_t* p){
@@ -46,6 +49,7 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  uint8_t key[32],tag[8];zjUnhex(derived,key);
  zjUnhex(token.substring(0,16),tag);
  portENTER_CRITICAL(&zjUdpMux);
+ ++zjUdpGeneration;
  memcpy(zjUdpKey,key,32);memcpy(zjUdpToken,tag,8);
  for(int i=0;i<4;i++)zjUdpOwner[i]=peer[i];
  zjUdpLastSeq=0;zjUdpLastRx=0;zjUdpBoundAt=millis();zjUdpReceived=zjUdpRejected=0;
@@ -56,6 +60,7 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
 }
 static void zjUdpInvalidate(bool clearConfiguration=true){
  portENTER_CRITICAL(&zjUdpMux);
+ ++zjUdpGeneration;
  zjUdpActive=false;zjUdpHasPending=false;zjUdpRequestedArm=false;
  if(clearConfiguration)zjUdpConfigured=false;
  memset(zjUdpKey,0,sizeof(zjUdpKey));
@@ -84,17 +89,18 @@ static void zjUdpReceiverTask(void*){
   if(n!=int(ZJ_UDP_SIZE)){while(zjUdpSocket.available())zjUdpSocket.read();continue;}
   if(zjUdpSocket.read(packet,ZJ_UDP_SIZE)!=int(ZJ_UDP_SIZE))continue;
   const IPAddress source=zjUdpSocket.remoteIP();
-  bool active;uint32_t previous,received,rejected,last;bool priorArmed;
+  bool active;uint32_t previous,received,rejected,last,generation;bool priorArmed;
   portENTER_CRITICAL(&zjUdpMux);
   active=zjUdpActive&&uint32_t(millis()-zjUdpBoundAt)<1800000;memcpy(key,zjUdpKey,32);memcpy(token,zjUdpToken,8);
   memcpy(owner,zjUdpOwner,4);previous=zjUdpLastSeq;last=zjUdpLastRx;
   priorArmed=zjUdpRequestedArm;
+  generation=zjUdpGeneration;
   portEXIT_CRITICAL(&zjUdpMux);
   bool address=true;for(int i=0;i<4;i++)if(owner[i]!=source[i])address=false;
   if(!active||!address||memcmp(packet,"ZJU1",4)||memcmp(packet+4,token,8))continue;
   const uint32_t seq=zjUdpGet32(packet+12),now=millis();
   if(!seq||(previous&&int32_t(seq-previous)<=0)||!zjUdpGcm(false,key,packet,plain)){
-   portENTER_CRITICAL(&zjUdpMux);++zjUdpRejected;portEXIT_CRITICAL(&zjUdpMux);continue;
+   portENTER_CRITICAL(&zjUdpMux);if(generation==zjUdpGeneration)++zjUdpRejected;portEXIT_CRITICAL(&zjUdpMux);continue;
   }
   uint16_t ch[6];bool valid=true;
   for(int i=0;i<6;i++){ch[i]=(uint16_t(plain[2*i])<<8)|plain[2*i+1];if(ch[i]<1000||ch[i]>2000)valid=false;}
@@ -103,11 +109,11 @@ static void zjUdpReceiverTask(void*){
   // Fail-closed: a late frame cannot resurrect an armed session, even if the
   // main Arduino loop was occupied with an unrelated HTTP response.
   if(priorArmed&&last&&uint32_t(now-last)>ZJ_RC_DEADMAN_MS)valid=false;
-  if(!valid){
-   portENTER_CRITICAL(&zjUdpMux);++zjUdpRejected;zjUdpActive=false;zjUdpHasPending=false;portEXIT_CRITICAL(&zjUdpMux);
-   continue;
-  }
   portENTER_CRITICAL(&zjUdpMux);
+  if(generation!=zjUdpGeneration){portEXIT_CRITICAL(&zjUdpMux);continue;}
+  if(!valid){
+   ++zjUdpRejected;zjUdpActive=false;zjUdpHasPending=false;portEXIT_CRITICAL(&zjUdpMux);continue;
+  }
   if(!zjUdpActive||zjUdpLastSeq&&int32_t(seq-zjUdpLastSeq)<=0){
    ++zjUdpRejected;portEXIT_CRITICAL(&zjUdpMux);continue;
   }

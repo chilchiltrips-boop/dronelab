@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createHmac,createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const firmware=read('FlightCore_Firmware/FlightCoreUdp.h');
@@ -10,6 +14,15 @@ const java=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/F
 const activity=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
 const client=read('companion-network.js');
 const auth=read('js/kit-auth.js');
+
+test('actual firmware UDP receiver rejects old grant packets during claim/release and keeps watchdog',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'zj-rc-'));
+ try{
+  const bin=join(dir,'rc');
+  execFileSync('g++',['-std=c++17','-Itools/host-stubs','tools/udp-rc-host.cpp','-lcrypto','-o',bin],{stdio:'pipe',timeout:60000});
+  assert.match(execFileSync(bin,{encoding:'utf8',timeout:5000}),/PASS actual UDP RC receiver/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
 
 test('seven diagnostic indices preserve 6 channels and never physical motor ARM',()=>{
  assert.match(firmware,/uint16_t ch\[6\]/);

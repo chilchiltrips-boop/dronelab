@@ -1,6 +1,38 @@
-# FlightCore 1.5.0: UDP management and IMU
+# FlightCore 1.5.x: UDP management and IMU
 
 Android 1.8.0-udp-management (versionCode 38) requires FlightCore 1.5.0 or newer.
+
+Current corrective release: **Android 1.8.2-udp-arm-recovery (code 40)** and
+**FlightCore 1.5.1**. Upgrade the matching A1/A2 firmware and install the signed
+APK over the previous app; USB pairing and saved Wi-Fi remain in APP OTA.
+
+## ARM startup and controller ownership fixes
+
+The attached October 18 Android export contains five successful UDP management
+claims followed by native startup errors before any joystick datagram was sent.
+Its recorder reduced the native reason to `OTHER`, so it does not identify the
+exact platform exception. Code inspection found socket startup on the WebView UI
+callback; startup now runs on the independent native worker, with bounded stage
+and exception-class enums. No watchdog is extended to conceal startup failures.
+
+The same export later shows repeated claim rejection while the Kit RC sequence
+continues advancing. This is evidence of an active competing session, rather
+than proof that its ownership is stale. A denied ARM reads the current source
+and asks the user to release it there. It never silently steals that session.
+Diagnostics distinguish `OWNER_BUSY` from a lost owner's `OWNER_STALE` and
+include RC source, input ARM, management protocol and Kit UDP counters.
+
+Native callbacks are tied to their stream ID and generation. STOP cancels queued
+startup and suppresses old UI callbacks; every fresh stream starts with neutral,
+disarmed channels and reset counters. A granted WebApp emergency STOP immediately
+cancels Android's publisher. Invalid AES-GCM ACKs are ignored and cannot count as
+feedback; the existing 350 ms firmware watchdog remains enforced.
+
+Firmware 1.5.1 also binds receiver work to the exact claim generation. A frame
+authenticated while a claim is released cannot update, disarm or contaminate a
+new claim. Tests execute the production Android class with real sockets/AES-GCM
+and the actual C++ receiver with host radio/RTOS doubles, including this race.
+These checks do not constitute a physical ESP/POCO radio test.
 Install the matching A1/A2 firmware first. The 1.4.12 status endpoint emitted
 malformed JSON by appending UDP statistics after the closing brace; discovery
 could find a Kit but connecting reported `Invalid FlightCore response`.

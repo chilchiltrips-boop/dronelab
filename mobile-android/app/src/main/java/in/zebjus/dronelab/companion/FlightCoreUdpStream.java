@@ -21,7 +21,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /** ZJUDP1: diagnostic input only. Physical motors stay firmware-disabled.
- *   58B encrypted frame / 58B encrypted ACK; separate from signed HTTP worker.
+ *   58B encrypted frame / 58B encrypted ACK; separate from management worker.
  *   Index 0..5 = T/R/P/Y/AUX1/AUX2; index 6 = input-arm flag (bit 0).
  */
 final class FlightCoreUdpStream {
@@ -37,6 +37,7 @@ final class FlightCoreUdpStream {
     private boolean active, inputArm, acknowledgedArm;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
     private int sequence, lastAckSequence, accepted, rejected;
+    private String streamId="";
     private final long[] sendTimes=new long[128];
     private final int[] channels={1000,1500,1500,1500,1000,1000};
     FlightCoreUdpStream(Activity activity,WebView view,FlightCoreWifiLink wifiLink){
@@ -67,6 +68,7 @@ final class FlightCoreUdpStream {
     private void report(String type,String reason) {
         try{
             JSONObject o=new JSONObject();
+            o.put("id",streamId);
             o.put("type",type);
             o.put("ok",!"error".equals(type));
             o.put("seq",lastAckSequence);
@@ -76,9 +78,13 @@ final class FlightCoreUdpStream {
             o.put("lastPacketAgeMs",lastAckAt==0?-1:SystemClock.elapsedRealtime()-lastAckAt);
             o.put("inputArmed",acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
+            final long generation=startupGeneration;
             String script="window.zebjusNativeUdpEvent && window.zebjusNativeUdpEvent("+o.toString()+")";
             activity.runOnUiThread(()->{
-                if(view.getParent()!=null)view.evaluateJavascript(script,null);
+                synchronized(FlightCoreUdpStream.this){
+                    if(generation!=startupGeneration)return;
+                    if(view.getParent()!=null)view.evaluateJavascript(script,null);
+                }
             });
         }catch(Exception ignored){}
     }
@@ -101,6 +107,12 @@ final class FlightCoreUdpStream {
     synchronized void start(String id,String ip,String device,String claim,String keyHex){
         startupGeneration++;
         clear();
+        streamId=id;
+        sent=ackCount=estimatedLost=lastRtt=jitter=0;
+        lastUiAt=0;lastAckSequence=accepted=rejected=0;
+        Arrays.fill(sendTimes,0);
+        channels[0]=channels[4]=channels[5]=1000;
+        channels[1]=channels[2]=channels[3]=1500;
         if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||
            device==null||!device.matches("ZFC-A[12]-[A-F0-9]{12}")||
            claim==null||!claim.matches("[a-fA-F0-9]{32}")||
@@ -114,12 +126,13 @@ final class FlightCoreUdpStream {
             synchronized(FlightCoreUdpStream.this){
                 if(requestGeneration!=startupGeneration)return;
                 String stage="PINNED_NETWORK";
+                byte[] secret=null,claimToken=null;
+                DatagramSocket ds=null;
                 try{
                     Network net=wifiLink.networkFor(ip,false);
                     if(!wifiLink.isPinnedTo(device))
                         throw new IllegalStateException("UDP_KIT_NOT_PINNED");
-                    byte[] secret=hex(keyHex),claimToken=hex(claim.substring(0,16));
-                    DatagramSocket ds=null;
+                    secret=hex(keyHex);claimToken=hex(claim.substring(0,16));
                     try{
                         stage="OPEN_SOCKET";
                         ds=new DatagramSocket();
@@ -138,6 +151,9 @@ final class FlightCoreUdpStream {
                     timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
                     report("start",null);
                 }catch(Exception error){
+                    if(ds!=null)ds.close();
+                    if(secret!=null)Arrays.fill(secret,(byte)0);
+                    if(claimToken!=null)Arrays.fill(claimToken,(byte)0);
                     clear();
                     // No IP, SSID, claim, session key or exception message
                     // leaves native code. Stage and class identify the failing API.
@@ -196,7 +212,11 @@ final class FlightCoreUdpStream {
                    incoming[2]!='A'||incoming[3]!='1'||!Arrays.equals(Arrays.copyOfRange(incoming,4,12),token))continue;
                 int ackSeq=get32(incoming,12);
                 if(ackSeq<=lastAckSequence||ackSeq>sequence)continue;
-                byte[] plain=cipher(false,key,incoming,Arrays.copyOfRange(incoming,28,PACKET));
+                byte[] plain;
+                // An unauthenticated ACK is never feedback. Ignore bounded
+                // invalid packets; the unchanged ACK watchdog handles loss.
+                try{plain=cipher(false,key,incoming,Arrays.copyOfRange(incoming,28,PACKET));}
+                catch(javax.crypto.AEADBadTagException invalid){continue;}
                 if(plain.length!=14||get32(plain,0)!=ackSeq||(plain[12]&5)!=5)continue;
                 if(lastAckSequence>0&&ackSeq>lastAckSequence+1)estimatedLost+=ackSeq-lastAckSequence-1;
                 long recorded=sendTimes[ackSeq&127];
