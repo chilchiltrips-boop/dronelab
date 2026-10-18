@@ -7,7 +7,7 @@
     "Header switch changes the physical kit Wi-Fi mode before rediscovery",
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
-    "FlightCore 1.4.12 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
+    "FlightCore 1.5.0 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope"
   ],
   "buildCommit": "f35eb8270917",
