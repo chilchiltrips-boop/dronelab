@@ -640,8 +640,10 @@ async function claimRc(){
      udpReadyWaiter={resolve,reject,timer};
     });
     udpStreamId='zju'+(++requestId);
-    native.startUdp(udpStreamId,ip,verifiedKitId,d.session,auth.udpKey(d.session));
-    await udpReady;
+    // Attach both failure paths before entering the bridge: a synchronous
+    // launch/key error must not leave the startup waiter unhandled.
+    await Promise.all([udpReady,Promise.resolve().then(()=>
+     native.startUdp(udpStreamId,ip,verifiedKitId,d.session,auth.udpKey(d.session)))]);
     if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||document.hidden)
      throw Error('UDP start cancelled on network change');
     udpActive=true;

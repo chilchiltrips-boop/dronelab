@@ -119,6 +119,7 @@ final class FlightCoreUdpStream {
            keyHex==null||!keyHex.matches("[a-fA-F0-9]{64}")){
             report("error","UDP_SESSION_INVALID");return;
         }
+        if(sender.isShutdown()){report("error","UDP_START_START_SENDER_NATIVE");return;}
         final long requestGeneration=startupGeneration;
         // Same single-thread executor subsequently runs the 50Hz sender.
         // Pending starts cannot resurrect a released or backgrounded session.

@@ -198,6 +198,14 @@ test('a busy controller is identified read-only without stealing or stopping its
  assert.ok(!b.requests.some(r=>r.route==='/api/rc/stop'||r.route==='/api/rc/release'));
  assert.equal(b.network.isConnected(),true);assert.equal(b.network.inputArmed(),false);
 });
+test('a synchronous native startup failure releases its claim without an orphaned promise',async()=>{
+ const b=bench(true);await b.connect();
+ b.win.ZebjusNative.startUdp=()=>{throw Error('Native bridge unavailable');};
+ await assert.rejects(b.network.armControls(),/Secure UDP not ready.*Native bridge unavailable/);
+ assert.equal(b.network.hasControl(),false);assert.equal(b.network.isConnected(),true);
+ assert.ok(b.requests.some(r=>r.route==='/api/rc/release'));
+ await settle();
+});
 test('late native stream events cannot start, acknowledge or stop a different ARM attempt',async()=>{
  const b=bench(true);await b.connect();const ids=[];
  b.win.ZebjusNative.startUdp=id=>ids.push(id);
