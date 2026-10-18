@@ -47,6 +47,10 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  await window.ZebjusNetwork.armControls();
  await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(window.ZebjusNetwork.hasControl(),true,'verified STA can claim input');
+ // A signed status read cannot interrupt claimed RC input.
+ await assert.rejects(window.ZebjusNetwork.status(),/RC ACK has priority/);
+ assert.equal(window.ZebjusNetwork.hasControl(),true);
+ await window.ZebjusNetwork.releaseRc();
  reportedTransport='AP';
  await assert.rejects(window.ZebjusNetwork.status(),/responded over AP/);
  assert.equal(window.ZebjusNetwork.hasControl(),false,'wrong request path releases input');

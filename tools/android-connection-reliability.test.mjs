@@ -83,7 +83,7 @@ test('Android 12+ uses per-Network unredacted WifiInfo after runtime approval',(
  assert.match(wifi,/FLAG_INCLUDE_LOCATION_INFO/);
  assert.match(wifi,/observedWifi\.get\(network\)/);
  assert.match(wifi,/matchingWifi\(expectedSsid\)/);
- assert.match(wifi,/pinnedSsid\.equals\(checkedSsid\(observed\)\)/);
+ assert.match(wifi,/pinnedSsid\.equals\(ssid\)/);
  assert.match(wifi,/Build\.VERSION\.SDK_INT>=31/);
  assert.match(wifi,/return wifi==null\?null:wifi\.getConnectionInfo\(\)/);
 });
