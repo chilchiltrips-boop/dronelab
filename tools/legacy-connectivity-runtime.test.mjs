@@ -300,7 +300,7 @@ test('legacy multipart OTA is rejected; encrypted OTA remains the upgrade path',
 test('selection rejects changed hardware before trusting discovery or sending a saved key',async()=>{
  const f=fixture({paired:true});try{
   f.identity(other);
-  await assert.rejects(f.api.connectDiscoveredKit({kitId:id,kitCode:'123456',ip:'192.168.1.20'}),/identity changed/);
+  await assert.rejects(f.api.connectDiscoveredKit({kitId:id,kitCode:'123456',ip:'192.168.1.20'}),/Device ID or Kit Code mismatch/);
   assert.equal(f.api.getState().connected,false);assert.ok(!f.requests.some(r=>r.headers?.['X-ZJ-Key']));
  }finally{f.dispose()}
 });

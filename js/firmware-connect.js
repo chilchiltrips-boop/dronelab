@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0;
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0,lastAutoFilledName='';
 const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -16,10 +16,11 @@ function note(value,isError=false){
  if(isError)line('ERROR  '+value);else line(value);
 }
 function state(){return kit()?.getState?.()||{connected:false}}
+function fillKitName(name){if($('fwKitNameInput')){$('fwKitNameInput').value=name;lastAutoFilledName=name;}}
 function select(device){
  if(!device?.kitId)return;
  selectedId=device.kitId;
- if($('fwKitNameInput'))$('fwKitNameInput').value=device.kitName;
+ fillKitName(device.kitName);
  if($('fwKitCachedIp')){$('fwKitCachedIp').value=state().connected&&state().kitId===device.kitId?state().ip||state().staIp||'':'';$('fwKitCachedIp').title='Filled only after the selected Device ID returns a verified status'}
  if($('fwKitSelect'))$('fwKitSelect').value=device.kitId;
  renderAvailable(discovered,false);
@@ -33,7 +34,8 @@ function renderAvailable(kits=[],inProgress=false){
   let remembered;try{remembered=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
   const auto=discovered.find(k=>k.kitId===remembered?.id)||discovered[0];
   selectedId=auto.kitId;
-  if($('fwKitNameInput'))$('fwKitNameInput').value=auto.kitName;
+  const typed=$('fwKitNameInput')?.value||'';
+  if(!typed||typed===lastAutoFilledName)fillKitName(auto.kitName);
   if($('fwKitCachedIp'))$('fwKitCachedIp').value='';
  }
  const dropdown=$('fwKitSelect'),list=$('fwDiscoveryResults');
@@ -66,6 +68,12 @@ async function scan(){
   if(discovered.length===1&&!selectedId)select(discovered[0]);
   renderAvailable(discovered,false);
   line('Discovery complete • '+discovered.length+' candidate kit(s) • identity verification still required');
+  if(!discovered.length&&!state().connected){
+   const report=kit().getDiscoveryReport?.();
+   if(report)line('Probe results • '+report.attempted+' addresses • '+report.timeouts+' timeout • '+report.unreachable+' network/DNS/permission errors');
+   set('fwConnectionHint',report?.blocked?'Local Network Access is blocked by the embedding site.':
+    'No Kit replied. If STA is connected, its AP is off. Join the same router, allow Local Network Access, then enter the current STA IP in Kit name / STA IP and Connect.');
+  }
  }catch(e){note('Discovery failed: '+e.message,true)}
  finally{scanning=false;lastScanAt=Date.now();renderAvailable(discovered,false)}
 }
@@ -75,12 +83,12 @@ async function guarded(fn){
  finally{requesting=false;render()}
 }
 async function connectSelected(){
+ const name=String($('fwKitNameInput')?.value||'').trim();
  const choice=discovered.find(k=>k.kitId===selectedId);
- if(choice){
+ if(choice&&(!name||name.toLowerCase()===choice.kitName.toLowerCase())){
   await kit().connectDiscoveredKit(choice);
  }else{
-  const name=String($('fwKitNameInput')?.value||'').trim();
-  if(!name)throw Error('Select a discovered Kit or type its known Kit Name.');
+  if(!name)throw Error('Select a discovered Kit or type its known Kit Name / current STA IP.');
   await kit().connectNamedKit(name);
  }
  const s=state();
@@ -89,7 +97,7 @@ async function connectSelected(){
  const latest=kit().getDiscovered?.().find(k=>k.kitId===s.kitId);
  if(latest)discovered=[latest,...discovered.filter(k=>k.kitId!==s.kitId)];
  if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||latest?.ip||'';
- if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
+ fillKitName(s.kitName);
  line('Verified connect • '+s.kitName+' • '+s.transport.toUpperCase()+' • '+s.kitId);
  renderAvailable(discovered,false);
 }
@@ -104,7 +112,7 @@ async function changeName(reset){
  if(!s.connected||!['ap','sta'].includes(s.transport)||!s.setupAuthorized)throw Error('Use AP Setup or authorize this USB-paired STA connection before changing its name.');
  const newName=reset?'':String($('fwRenameInput')?.value||'').trim();
  const result=await kit().renameConnectedKit(newName,reset);
- if($('fwKitNameInput'))$('fwKitNameInput').value=result;
+ fillKitName(result);
  if($('fwRenameInput'))$('fwRenameInput').value=result;
  set('fwRenameMessage','Saved on the physical Kit: '+result+' • immutable Device ID unchanged.');
  line('Kit Name confirmed by firmware • '+result);
@@ -164,7 +172,7 @@ function render(){
   $('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized||s.authorizationRetryAt>Date.now();
   $('fwAuthorizeUpdates').title=s.authorizationNotice||'Verify the pairing saved from this physical USB kit';
  }
- if(changed&&live){if($('fwKitNameInput'))$('fwKitNameInput').value=s.kitName;
+ if(changed&&live){fillKitName(s.kitName);
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}
 }
 async function sampleHealth(){

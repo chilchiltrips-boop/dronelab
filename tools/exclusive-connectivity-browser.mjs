@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 const id='ZFC-A1-012345ABCDEF',key='a1'.repeat(16),oldKey='b2'.repeat(16),boot='c3'.repeat(16);
 const hmac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
-const challenges=new Map(),sessions=new Map();let mode='ap',computer='ap',proofFailures=0,adminEnrollments=0,statusRequests=0;
+const challenges=new Map(),sessions=new Map();let mode='ap',computer='ap',proofFailures=0,adminEnrollments=0,statusRequests=0,mdnsUnavailable=false;
 const result=(body,status=200,secret='',seq='')=>{const text=JSON.stringify(body);return {status,text,proof:secret?hmac(secret,['response',seq,status,text].join('|')):''}};
 function device(url,options={}){
  const u=new URL(url),ap=u.hostname==='192.168.4.1';
+ if(mdnsUnavailable&&u.hostname.endsWith('.local'))return result({error:'simulated_mdns_unavailable'},404);
  if(computer!==mode||ap!==(mode==='ap'))return result({error:'unreachable'},404);
  const route=u.pathname,args=Object.fromEntries(new URLSearchParams(options.body||'')),headers=options.headers||{};
  if(route==='/api/identify')return result({kitId:id,kitCode:'123456',name:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A1',simpleConnection:true,adminSessions:true,exclusiveWifi:true});
@@ -93,6 +94,21 @@ try{
  assert.equal(await page.locator('#fwApIndicator').textContent(),'OFF');assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),true);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
  await page.screenshot({path:output+'/sta-only.png',fullPage:true});
+ // The radio remains on STA while hostname resolution fails. Editing the
+ // visible field must beat the stale dropdown and connect using signed status.
+ mdnsUnavailable=true;
+ await page.evaluate(()=>window.ZebjusKits.disconnect('Test STA numeric-IP recovery'));
+ await page.locator('[data-dw-view="connection"]').click();
+ await page.locator('#fwKitNameInput').fill('192.168.1.20');
+ await page.locator('#fwKitConnectSelected').click();
+ await wait(()=>window.ZebjusKits.getState().connected);
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'sta');
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().kitId),'ZFC-A1-012345ABCDEF');
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
+ assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.1.20');
+ await page.screenshot({path:output+'/sta-ip-without-mdns.png',fullPage:true});
+ mdnsUnavailable=false;
+
  // New tab has no sessionStorage key; the encrypted IndexedDB pairing survives.
  await page.close();page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  const prior=statusRequests;await page.goto('http://127.0.0.1:8765/');await page.locator('#kitReconnectDialog').waitFor({state:'visible',timeout:45000});
@@ -106,7 +122,7 @@ try{
  assert.equal(proofFailures,1,'The rejected saved key must never be replayed');
  await page.setViewportSize({width:360,height:900});await page.screenshot({path:output+'/ap-only-360.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
- assert.deepEqual(errors,[]);writeFileSync(output+'/result.json',JSON.stringify({result:'PASS',proofFailures,adminEnrollments,statusRequests,persistentPairing:true,reconnectConsent:true,exclusiveModes:true,errors},null,2));
+ assert.deepEqual(errors,[]);writeFileSync(output+'/result.json',JSON.stringify({result:'PASS',proofFailures,adminEnrollments,statusRequests,persistentPairing:true,reconnectConsent:true,exclusiveModes:true,manualStaIpWithoutMdns:true,errors},null,2));
  console.log('PASS exclusive AP/STA UI: rejected key recovery, encrypted mode commands, saved pairing across tabs, Connect/Later consent, no automatic ownership');
 }catch(e){await page.screenshot({path:output+'/failure.png',fullPage:true}).catch(()=>{});console.error(e);console.error('Kit state',await page.evaluate(()=>window.ZebjusKits?.getState()).catch(()=>null));console.error('Page errors',errors);process.exitCode=1}
 finally{await browser.close()}
