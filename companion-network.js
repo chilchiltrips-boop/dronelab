@@ -5,7 +5,7 @@
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
-let statusBusy=false,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null;
+let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null;
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
@@ -466,7 +466,9 @@ async function command(line){
  if(typeof line!=='string'||line.length>160||!/^(ZJI2C,SCAN|ZJINFO,GET|ZJLED,[0-9]+,(?:STOP|KEEP|SET|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Command is not allowed on the network bridge');
  return request('/api/command','POST',{line});
 }
-async function pollTelemetry(){const data=await request('/api/telemetry');const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
+async function pollTelemetry(){
+ if(rcClaiming||rcSession||previewBusy)throw Error('Release diagnostic input before requesting full IMU telemetry; RC ACK has priority.');
+ const data=await request('/api/telemetry');const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
  window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:mode,device:'android-native'}}));return data;
 }
 async function onWebRequest(req,peer){
@@ -488,9 +490,15 @@ async function releaseRc(){
 async function claimRc(){
  if(!online||!onKitLink)throw Error('Connect and verify the phone on the selected kit '+link.toUpperCase()+' network first.');
  if(rcClaiming)throw Error('ARM request is already in progress');
- const epoch=rcEpoch;
+ const epoch=rcEpoch,networkEpoch=linkEpoch,id=verifiedKitId;
  rcClaiming=true;
  try{
+  // A periodic signed GET and RC CLAIM share the same monotonic session and
+  // native single-worker queue. Finish any already-started status transaction
+  // before claiming input, and stop starting more while ARM is in progress.
+  if(statusInFlight)await statusInFlight.catch(()=>{});
+  if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||!online||!onKitLink||document.hidden)
+   throw Error('Kit changed or went offline before ARM; reconnect and verify');
   const d=await request('/api/rc/claim','POST',{source:'ANDROID',kitCode});
   if(d.kitId!==verifiedKitId||!d.session)throw Error('Firmware claim identity failed');
   if(epoch!==rcEpoch||!online||document.hidden){
@@ -531,25 +539,31 @@ function previewControls(m,critical=false){
  })
  .catch(e=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
-  dropInput('Input stopped: '+e.message);void request('/api/rc/release','POST',{session}).catch(()=>{});
+  // A delayed/rejected RC ACK disarms the diagnostic input, but must not
+  // relabel the verified AP Wi-Fi link itself as disconnected.
+  dropInput('RC ACK failed • diagnostic input disarmed • '+e.message);
+  void request('/api/rc/release','POST',{session}).catch(()=>{});
   if(critical)throw e;
  })
  .finally(()=>{previewBusy=false});
 }
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
- // Signed input ACKs already prove this exact Kit/path is alive. Do not put
- // periodic status queries ahead of the 10 Hz joystick stream.
- if(rcSession&&firmwareAck&&Date.now()-firmwareAck.at<350)return;
+ // Never queue expensive signed status/SSID verification ahead of ARM/RC.
+ // A missing RC ACK is handled by the flight UI and the 350ms firmware
+ // watchdog; it is NOT evidence that the AP Wi-Fi association is gone.
+ // Poll only after diagnostic control is released, even when ACK is stale.
+ if(rcClaiming||rcSession||previewBusy)return;
  const epoch=linkEpoch;statusBusy=true;
- try{await status()}
+ const task=status();statusInFlight=task;
+ try{await task}
  catch(error){
   if(epoch!==linkEpoch)return;
   const fatal=error.status===401||error.status===403||/identity|wrong|mismatch|Wi-Fi path|pin|SSID|BSSID/i.test(error.message);
   if(fatal||++statusFailures>=3||Date.now()-lastStatus>=12000){
    online=false;dropInput('Kit disconnected • '+error.message+' • retrying same Device ID');
   }else show('Kit response delayed • retrying same connection','warn');
- }finally{statusBusy=false;syncHeaderTransport()}
+ }finally{if(statusInFlight===task)statusInFlight=null;statusBusy=false;syncHeaderTransport()}
 }
 // Secure Android OTA v1.7.3 uses the same admin-enrolled AES-GCM/HMAC session as the
 // WebApp, never the legacy raw X-ZJ-Key multipart endpoint. No credentials are

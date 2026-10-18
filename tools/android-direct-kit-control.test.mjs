@@ -93,3 +93,46 @@ test('native pause disarms immediately; foreground re-verifies without auto ARM'
  assert.equal(b.network.inputArmed(),false);assert.equal(b.network.isConnected(),false);
  b.win.zebjusNativeAppResumed();await settle();assert.equal(b.network.isConnected(),true);assert.equal(b.network.inputArmed(),false);
 });
+
+// Test the real request scheduler path, not merely the ACK success stub.
+test('AP ARM prioritizes signed RC over background status and keeps AP connection after a lost ACK',async()=>{
+ const b=bench();await b.connect();
+ // A slow status already in flight must finish before RC CLAIM is queued.
+ let finishStatus;
+ b.holdStatus(new Promise(resolve=>finishStatus=resolve));
+ const polling=b.network.pollConnection();await settle();
+ const arm=b.network.armControls();await settle();
+ assert.equal(b.requests.filter(x=>x.route==='/api/rc/claim').length,0,
+  'do not queue ARM behind an already-active signed status transaction');
+ finishStatus();await polling;await arm;
+ assert.equal(b.network.inputArmed(),true);
+ const before=b.requests.filter(x=>x.route==='/api/status').length;
+ // ACK may be older than the short watchdog. A status poll must not block the
+ // next RC frame or treat stale RC delivery as Wi-Fi disassociation.
+ await b.network.pollConnection();
+ assert.equal(b.requests.filter(x=>x.route==='/api/status').length,before);
+ b.holdPreview(Promise.reject(Error('Native Wi-Fi queue busy; input dropped')));
+ await new Promise(resolve=>setTimeout(resolve,105));
+ await b.network.previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0}});
+ assert.equal(b.network.inputArmed(),false,'lost ACK disarms the input');
+ assert.equal(b.network.isConnected(),true,'lost RC ACK does not claim the AP Wi-Fi link was lost');
+});
+test('STOP during a pending status check prevents late ARM of the old session',async()=>{
+ const b=bench();await b.connect();
+ let finishStatus;
+ b.holdStatus(new Promise(resolve=>finishStatus=resolve));
+ const polling=b.network.pollConnection();await settle();
+ const pendingArm=b.network.armControls();await settle();
+ await b.network.releaseRc();
+ finishStatus();await polling;
+ await assert.rejects(pendingArm,/changed or went offline before ARM/);
+ assert.equal(b.requests.filter(x=>x.route==='/api/rc/claim').length,0);
+ assert.equal(b.network.inputArmed(),false);
+});
+test('full IMU telemetry cannot occupy the native queue during diagnostic RC ownership',async()=>{
+ const b=bench();await b.connect();await b.network.armControls();
+ // The UI read operation is gated by pollTelemetry, while a current signed
+ // diagnostic session remains owned. Source asserts the fast-path priority.
+ assert.match(source,/if\(rcClaiming\|\|rcSession\|\|previewBusy\)throw Error\('Release diagnostic input before requesting full IMU telemetry/);
+ await b.network.releaseRc();
+});
