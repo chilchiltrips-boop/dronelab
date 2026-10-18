@@ -22,6 +22,16 @@ function bench(client='android',seed){
  vm.runInNewContext(source,ctx);
  return {root,saved,buttons,downloads,api:root.ZebjusAckDiagnostics,events:()=>JSON.parse(root.ZebjusAckDiagnostics.exportData('json')).events};
 }
+test('UDP input staleness and missing ACK are distinct, and UDP completion timings survive export',()=>{
+ const b=bench();
+ assert.equal(b.api.reasonClass('UDP_INPUT_STALE'),'INPUT_STALE');
+ assert.equal(b.api.reasonClass('UDP_ACK_TIMEOUT'),'TIMEOUT');
+ assert.equal(b.api.reasonClass('UDP_NO_ACK'),'TIMEOUT');
+ assert.equal(b.api.reasonClass('Invalid receive ACK'),'ACK_INVALID');
+ b.api.record('native_response',{phase:'complete_udp',reason:'INPUT_STALE'});
+ assert.equal(b.events().at(-1).data.phase,'complete_udp');
+ assert.equal(b.events().at(-1).data.reason,'INPUT_STALE');
+});
 test('strict diagnostic allowlist never saves Kit ID, IP, SSID, HMAC keys or raw network errors',()=>{
  const b=bench();
  b.api.record('rc_ack_error',{route:'/api/rc/preview',seq:4,reason:'TIMEOUT',roundTripMs:370,

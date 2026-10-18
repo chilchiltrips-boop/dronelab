@@ -330,7 +330,7 @@ window.zebjusNativeUdpEvent=data=>{
    sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
    lastPacketAgeMs:data.lastPacketAgeMs,reason:classify(data.reason),outcome:'fail'});
   if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error('Native UDP start failed'));}
-  if(udpActive)void releaseRc('ACK_TIMEOUT').catch(()=>{});
+  if(udpActive)void releaseRc(data.reason||'UDP_ERROR').catch(()=>{});
   return;
  }
  if(!udpActive||!rcSession)return;
@@ -584,10 +584,12 @@ function cancelPendingRcPreview(){
 }
 async function releaseRc(cause='USER_STOP'){
  const session=rcSession;
+ const reason=['ACK_TIMEOUT','UDP_ACK_TIMEOUT','UDP_NO_ACK'].includes(cause)?'TIMEOUT':cause==='USER_STOP'?'CANCELLED':classify(cause);
+ const message={ACK_TIMEOUT:'Kit ACK timed out',UDP_ACK_TIMEOUT:'Kit UDP ACK timed out',UDP_NO_ACK:'Kit UDP ACK not received',
+  UDP_INPUT_STALE:'Joystick input paused',UDP_SEND_OR_AUTH_FAILED:'UDP send or authentication failed'}[cause];
  if(session)trace('rc_release',{transport:link,inputArmed:false,
-  reason:cause==='ACK_TIMEOUT'?'TIMEOUT':'CANCELLED'});
- dropInput('Diagnostic input released • motors disabled',
-  cause==='ACK_TIMEOUT'?'TIMEOUT':'CANCELLED');
+  reason});
+ dropInput((message||'Diagnostic input released')+' • motors disabled',reason);
  if(session){
   cancelPendingRcPreview();
   if(online)await request('/api/rc/release','POST',{session}).catch(()=>{});

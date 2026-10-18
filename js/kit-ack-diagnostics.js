@@ -17,14 +17,15 @@ const fields=['route','transport','source','mode','board','version','outcome','r
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
-const reasons=new Set(['QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_STALE','FRAME_REJECTED','OTHER']);
+const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_STALE','FRAME_REJECTED','OTHER']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/not_controller_owner|controller_locked|owner.*expired/.test(s))return 'OWNER_STALE';
  if(/rc_not_owned_or_invalid_frame|invalid.*rc.*frame/.test(s))return 'FRAME_REJECTED';
+ if(/udp_input_stale|joystick input paused/.test(s))return 'INPUT_STALE';
  if(/stale|queue|backlog|busy/.test(s))return 'QUEUE_STALE';
+ if(/deadline|timeout|timed out|350|failsafe|udp_no_ack/.test(s))return 'TIMEOUT';
  if(/ack|receive|sequence|seq|replay/.test(s))return 'ACK_INVALID';
- if(/deadline|timeout|timed out|350|failsafe/.test(s))return 'TIMEOUT';
  if(/identity|device id|wrong kit|mismatch/.test(s))return 'IDENTITY';
  if(/session|401|403|authorization|authenticate|permission|scope/.test(s))return 'AUTH';
  if(/wi.fi|ssid|bssid|network|disconnected|offline|link|unreachable|fetch|socket/.test(s))return 'NETWORK';
@@ -48,7 +49,7 @@ function clean(data){
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}
   else if(key==='board'){if(['ZFC-A1','ZFC-A2','A1','A2'].includes(v))result.board=v;}
   else if(key==='version'){if(typeof v==='string'&&/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(v))result.version=v;}
-  else if(key==='phase'){if(['queued','wifi_bind','send','response','read','complete','queue_busy'].includes(v))result.phase=v;}
+  else if(key==='phase'){if(['queued','wifi_bind','send','response','read','complete','complete_udp','queue_busy'].includes(v))result.phase=v;}
    else if(key==='releaseReason'){if(['NONE','NETWORK_RELEASE','NETWORK_EMERGENCY_STOP','ARMED_INPUT_TIMEOUT','UDP_INPUT_TIMEOUT','UDP_STALE_FRAME','UDP_FRAME_REJECTED','LEASE_TIMEOUT','LEASE_EXPIRED','NETWORK_MODE_CHANGED','USB_STOP','USB_RELEASE','FACTORY_RESET','ENROLLMENT_REVOKED'].includes(v))result.releaseReason=v;}
    else if(key==='outcome'){if(statuses.has(v))result.outcome=v;}
  }

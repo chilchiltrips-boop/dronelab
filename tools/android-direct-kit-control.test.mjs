@@ -180,3 +180,11 @@ test('UDP input ARM keeps WebApp IMU reads available while Wi-Fi mutation remain
  assert.ok(!b.requests.some(r=>r.route==='/api/rc/preview'),'no management/HTTP preview fallback during binary UDP streaming');
  await b.network.releaseRc();
 });
+
+test('native joystick freshness failure disarms input without falsely reporting an ACK timeout or Wi-Fi disconnect',async()=>{
+ const b=bench(true);await b.connect();await b.network.armControls();
+ b.win.zebjusNativeUdpEvent({type:'error',reason:'UDP_INPUT_STALE'});await settle();
+ assert.equal(b.network.inputArmed(),false);assert.equal(b.network.isConnected(),true);
+ assert.match(b.element('kitNetStatus').textContent,/Joystick input paused/);
+ assert.doesNotMatch(b.element('kitNetStatus').textContent,/ACK.*timeout/i);
+});
