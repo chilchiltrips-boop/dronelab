@@ -36,6 +36,7 @@ final class FlightCoreUdpStream {
     private byte[] key, token, prefix;
     private boolean active, inputArm, acknowledgedArm;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
+    private long lastSendAt, maxSendGapMs, maxAckGapMs;
     private int sequence, lastAckSequence, accepted, rejected;
     private String streamId="";
     private final long[] sendTimes=new long[128];
@@ -75,8 +76,10 @@ final class FlightCoreUdpStream {
             o.put("sent",sent);o.put("ackReceived",ackCount);
             o.put("lost",estimatedLost);o.put("rejected",rejected);o.put("accepted",accepted);
             o.put("roundTripMs",lastRtt);o.put("jitterMs",jitter);
-            o.put("lastPacketAgeMs",lastAckAt==0?-1:SystemClock.elapsedRealtime()-lastAckAt);
-            o.put("inputArmed",acknowledgedArm);o.put("motorsArmed",false);
+            o.put("lastPacketAgeMs",lastAckAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastAckAt));
+            o.put("inputAgeMs",lastInputAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastInputAt));
+            o.put("maxSendGapMs",maxSendGapMs);o.put("maxAckGapMs",maxAckGapMs);
+            o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
             String script="window.zebjusNativeUdpEvent && window.zebjusNativeUdpEvent("+o.toString()+")";
@@ -110,6 +113,7 @@ final class FlightCoreUdpStream {
         streamId=id;
         sent=ackCount=estimatedLost=lastRtt=jitter=0;
         lastUiAt=0;lastAckSequence=accepted=rejected=0;
+        lastSendAt=maxSendGapMs=maxAckGapMs=0;
         Arrays.fill(sendTimes,0);
         channels[0]=channels[4]=channels[5]=1000;
         channels[1]=channels[2]=channels[3]=1500;
@@ -148,6 +152,7 @@ final class FlightCoreUdpStream {
                     socket=ds;active=true;
                     sent=ackCount=estimatedLost=lastRtt=jitter=0;
                     lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
+                    lastSendAt=maxSendGapMs=maxAckGapMs=0;
                     lastInputAt=SystemClock.elapsedRealtime();
                     timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
                     report("start",null);
@@ -188,7 +193,10 @@ final class FlightCoreUdpStream {
     private synchronized void tick(){
         if(!active)return;
         final long now=SystemClock.elapsedRealtime();
-        if(now-lastInputAt>300){clear();report("error","UDP_INPUT_STALE");return;}
+        if(now-lastInputAt>300){
+            // Snapshot the actual stalled input age before zeroing session state.
+            report("error","UDP_INPUT_STALE");clear();return;
+        }
         try{
             int seq=++sequence;
             byte[] header=new byte[PACKET];
@@ -204,6 +212,9 @@ final class FlightCoreUdpStream {
             System.arraycopy(encrypted,0,header,28,30);
             sendTimes[seq&127]=now;
             socket.send(new DatagramPacket(header,PACKET));
+            final long sendAt=SystemClock.elapsedRealtime();
+            if(lastSendAt>0)maxSendGapMs=Math.max(maxSendGapMs,sendAt-lastSendAt);
+            lastSendAt=sendAt;
             sent++;
             for(int i=0;i<8;i++){
                 // One extra byte detects an oversized datagram instead of
@@ -225,18 +236,21 @@ final class FlightCoreUdpStream {
                 long recorded=sendTimes[ackSeq&127];
                 long newRtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;
                 if(ackCount>0)jitter=(jitter*7+Math.abs(newRtt-lastRtt))/8;
-                lastRtt=newRtt;lastAckAt=SystemClock.elapsedRealtime();
+                lastRtt=newRtt;
+                final long ackAt=SystemClock.elapsedRealtime();
+                if(lastAckAt>0)maxAckGapMs=Math.max(maxAckGapMs,ackAt-lastAckAt);
+                lastAckAt=ackAt;
                 lastAckSequence=ackSeq;ackCount++;
                 acknowledgedArm=(plain[12]&2)!=0;
                 accepted=get32(plain,4);rejected=get32(plain,8);
                 if(lastAckAt-lastUiAt>=80){lastUiAt=lastAckAt;report("ack",null);}
             }
             if(inputArm&&lastAckAt>0&&now-lastAckAt>350){
-                clear();report("error","UDP_ACK_TIMEOUT");
+                report("error","UDP_ACK_TIMEOUT");clear();
             }else if(inputArm&&lastAckAt==0&&sent>17){
-                clear();report("error","UDP_NO_ACK");
+                report("error","UDP_NO_ACK");clear();
             }
-        }catch(Exception error){clear();report("error","UDP_SEND_OR_AUTH_FAILED");}
+        }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
     }
     void shutdown(){stop();sender.shutdownNow();}
 }
