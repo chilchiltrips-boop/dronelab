@@ -1,1 +1,1 @@
-39abb6e422e17461cc755dd0c0e8a8910b868bab6d07f3c2fedd27b9ff09d11a  mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
+6a1bdb4cdf2cfa8261bef52a792ae206093ca0e636fd21f2247a4aeccff2d3a8  mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk
