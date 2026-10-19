@@ -17,6 +17,7 @@ static volatile uint16_t zjPpmBuilding[ZJ_PPM_CHANNELS]={};
 static volatile uint16_t zjPpmReady[ZJ_PPM_CHANNELS]={};
 static volatile uint8_t zjPpmIndex=0;
 static volatile bool zjPpmFrameReady=false;
+static volatile uint32_t zjPpmReadyAt=0;
 static volatile uint32_t zjPpmIsrFrames=0,zjPpmFaults=0;
 static uint16_t zjPpmRaw[ZJ_PPM_CHANNELS]={},zjPpmValues[ZJ_PPM_CHANNELS]={};
 static uint16_t zjPpmMin[ZJ_PPM_CHANNELS],zjPpmMid[ZJ_PPM_CHANNELS],zjPpmMax[ZJ_PPM_CHANNELS];
@@ -32,8 +33,11 @@ static void IRAM_ATTR zjPpmInterrupt(){
  const uint32_t gap=at-zjPpmLastEdge;
  zjPpmLastEdge=at;
  if(gap>=ZJ_PPM_SYNC_US&&gap<=ZJ_PPM_MAX_GAP_US){
-  if(zjPpmIndex==ZJ_PPM_CHANNELS&&!zjPpmFrameReady){
+  if(zjPpmIndex==ZJ_PPM_CHANNELS){
    for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++)zjPpmReady[i]=zjPpmBuilding[i];
+   // Always publish the latest complete frame and its actual arrival time.
+   // Processing an old mailbox entry must never renew the signal-loss timer.
+   zjPpmReadyAt=millis();
    zjPpmFrameReady=true;++zjPpmIsrFrames;
   }else if(zjPpmIndex&&zjPpmIndex!=ZJ_PPM_CHANNELS)++zjPpmFaults;
   zjPpmIndex=0;
@@ -108,13 +112,24 @@ static String zjPpmStatus(){
 }
 static void zjPpmLoop(uint32_t now){
  uint16_t captured[ZJ_PPM_CHANNELS];
+ uint32_t receivedAt=0;
  bool newFrame=false;
  portENTER_CRITICAL(&zjPpmMux);
  if(zjPpmFrameReady){
   for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++)captured[i]=zjPpmReady[i];
+  receivedAt=zjPpmReadyAt;
   zjPpmFrameReady=false;newFrame=true;
  }
  portEXIT_CRITICAL(&zjPpmMux);
+ // Snapshot the clock after the ISR mailbox, then expire the PREVIOUS input
+ // before accepting a resumed frame. A high ARM switch cannot hide a gap.
+ now=millis();
+ if(zjPpmInputAvailable&&!zjPpmSignalFresh(now)){
+  zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
+  zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+  if(zjRcOwned&&zjRcSource=="PPM")zjRcRelease("PPM_SIGNAL_LOST");
+ }
+ if(newFrame&&uint32_t(now-receivedAt)>ZJ_PPM_LOST_MS)newFrame=false;
  if(newFrame){
   // Process each complete frame once. PPM has no authentication; physical
   // ownership must be established at throttle-low and arm-switch-low.
@@ -125,7 +140,7 @@ static void zjPpmLoop(uint32_t now){
    for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++){
     zjPpmRaw[i]=captured[i];zjPpmValues[i]=zjPpmScaled(captured[i],i);
    }
-   zjPpmLastFrameAt=now;++zjPpmFrameSeq;zjPpmInputAvailable=true;
+   zjPpmLastFrameAt=receivedAt;++zjPpmFrameSeq;zjPpmInputAvailable=true;
    const int t=zjPpmValues[zjPpmMap[2]],r=zjPpmValues[zjPpmMap[0]],
     p=zjPpmValues[zjPpmMap[1]],y=zjPpmValues[zjPpmMap[3]];
    const bool armHigh=zjPpmValues[zjPpmMap[4]]>=1700;
@@ -136,24 +151,19 @@ static void zjPpmLoop(uint32_t now){
     if(!armHigh)zjPpmInputSwitchArmed=false;
     zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
     zjRcInputArmed=zjPpmInputSwitchArmed&&armHigh;zjRcHasFrame=true;
-    zjRcLast=now;zjRcLeaseAt=now;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
+    zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
    }else if(!zjRcOwned){
     if(armLow&&t<=1050)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
     else zjPpmSafeFrames=0;
     if(zjPpmSafeFrames>=3){
      zjRcOwned=true;zjRcNetwork=false;zjRcSource="PPM";zjRcTransport="PPM";
-     zjRcSession="";zjRcOwnerId="PPM";zjRcLast=now;zjRcLeaseAt=now;
+     zjRcSession="";zjRcOwnerId="PPM";zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;
      zjRcInputArmed=false;zjPpmInputSwitchArmed=false;zjPpmArmingLowSeen=true;
      zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;zjRcHasFrame=true;
      zjRcSeq=1;++zjRcAccepted;
     }
    }else zjPpmSafeFrames=0; // Never steal a currently owned WEB/ANDROID session.
   }
- }
- if(zjPpmInputAvailable&&!zjPpmSignalFresh(now)){
-  zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
-  zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
-  if(zjRcOwned&&zjRcSource=="PPM")zjRcRelease("PPM_SIGNAL_LOST");
  }
  if(uint32_t(now-zjPpmReportAt)>=ZJ_PPM_LOG_MS&&Serial.availableForWrite()>145){
   zjPpmReportAt=now;

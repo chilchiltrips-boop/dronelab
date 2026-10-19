@@ -13,7 +13,7 @@ static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;
 static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",zjPhase="boot",zjPendingSsid,zjPendingPass;
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjOtaRebootAt=0,zjLastScanSeq=0;
-static bool zjNetTesting=false,zjOtaAuthorized=false,zjOtaComplete=false,zjOtaFailed=false;
+static bool zjNetTesting=false,zjOtaAuthorized=false;
 static volatile uint8_t zjStaDisconnectReason=0,zjLastStaFailureReason=0;
 static volatile uint32_t zjAssociationEpoch=0;static uint32_t zjTestAssociationEpoch=0;
 static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
@@ -311,7 +311,7 @@ static void zjSetupHttp(){
  // signature verification / Secure Boot is a separate production requirement.
  // Raw-key multipart OTA is retired: authenticated encrypted chunk OTA only.
  zjHttp.on("/api/ota",HTTP_POST,[](){zjReply(410,"{\"error\":\"legacy_ota_disabled_use_encrypted_session\"}");},[](){
-  if(zjHttp.upload().status==UPLOAD_FILE_START)zjOtaFailed=true;
+  // Deliberately consume no upload data; this disabled route never writes flash.
  });
  zjHttp.on("/api/reboot",HTTP_POST,[](){
   if(!zjAllow())return;
