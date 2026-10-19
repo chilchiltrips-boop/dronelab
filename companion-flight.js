@@ -127,7 +127,13 @@ function setupStick(side){
 function tick(now){
  if(!loopStarted)return;
  const dt=last?Math.min(.08,Math.max(0,(now-last)/1000)):0;last=now;
- if(kitArmed()&&window.ZebjusNetwork?.feedback?.()&&Date.now()-window.ZebjusNetwork.feedback().at>350){void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')}
+ // UDP ACK/INPUT watchdogs run against monotonic time in the native sender.
+  // A congested WebView/UI callback queue is NOT proof the Kit missed ACKs.
+  // Keep the legacy HTTP feedback watchdog until that fallback is removed.
+  const kitFeedback=window.ZebjusNetwork?.feedback?.();
+  if(kitArmed()&&kitFeedback&&kitFeedback.protocol!=='ZJUDP1'&&Date.now()-kitFeedback.at>350){
+   void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')
+  }
  if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
