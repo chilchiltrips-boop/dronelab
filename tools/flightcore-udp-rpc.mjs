@@ -2,11 +2,13 @@
  * Authentication is end-to-end: this module forwards signed encrypted envelopes
  * and response proofs. It has no credential store and grants no Kit permissions. */
 import dgram from 'node:dgram';
+import {isIP} from 'node:net';
 import {randomBytes} from 'node:crypto';
 export const RPC_PORT=4211,FRAGMENT=1024,REQUEST_MAX=9216,RESPONSE_MAX=16000;
 export const HEADER_NAMES=['X-ZJ-Device','X-ZJ-Session','X-ZJ-Seq','X-ZJ-Proof'];
 export function privateIPv4(ip){
- if(typeof ip!=='string'||!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip))return false;
+ // Reject legacy/octal aliases before any OS resolver sees the destination.
+ if(typeof ip!=='string'||isIP(ip)!==4)return false;
  const p=ip.split('.').map(Number);return p.every(v=>v<=255)&&(p[0]===10||p[0]===192&&p[1]===168||p[0]===172&&p[1]>=16&&p[1]<=31);
 }
 const READ=new Set(['health','identify','status','telemetry','rc/snapshot','wifi/scan','wifi/saved','ppm/status']);

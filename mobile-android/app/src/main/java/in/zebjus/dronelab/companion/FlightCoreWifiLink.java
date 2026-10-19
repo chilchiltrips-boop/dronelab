@@ -32,6 +32,9 @@ final class FlightCoreWifiLink {
     private NsdManager.DiscoveryListener discovery;
     private WifiManager.MulticastLock multicastLock;
     private final AtomicBoolean discoveryFinished=new AtomicBoolean(true);
+    static final class PendingIdentityException extends IllegalStateException {
+        PendingIdentityException(String message){super(message);}
+    }
 
     FlightCoreWifiLink(Activity activity,Listener listener){
         this.activity=activity;this.listener=listener;
@@ -40,7 +43,7 @@ final class FlightCoreWifiLink {
         nsd=(NsdManager)activity.getSystemService(Context.NSD_SERVICE);
     }
     static boolean privateIp(String text){
-        if(text==null||!text.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))return false;
+        if(text==null||!text.matches("(?:0|[1-9][0-9]{0,2})(?:\\.(?:0|[1-9][0-9]{0,2})){3}"))return false;
         String[] p=text.split("\\.");int[] n=new int[4];
         for(int i=0;i<4;i++){n[i]=Integer.parseInt(p[i]);if(n[i]>255)return false;}
         return n[0]==10||(n[0]==192&&n[1]==168)||(n[0]==172&&n[1]>=16&&n[1]<=31);
@@ -57,7 +60,7 @@ final class FlightCoreWifiLink {
             // Only location-inclusive NetworkCallback objects contain unredacted
             // WifiInfo on Android 12+, and the data belongs to THIS Network.
             WifiInfo observed=observedWifi.get(network);
-            if(observed==null)throw new IllegalStateException("Waiting for verified Wi-Fi network details; enable Location Services and retry.");
+            if(observed==null)throw new PendingIdentityException("Waiting for verified Wi-Fi network details; enable Location Services and retry.");
             return observed;
         }
         NetworkCapabilities caps=connectivity.getNetworkCapabilities(network);
@@ -70,13 +73,13 @@ final class FlightCoreWifiLink {
     private static String checkedSsid(WifiInfo info){
         String value=clean(info==null?null:info.getSSID());
         if(value.isEmpty()||value.equalsIgnoreCase("<unknown ssid>"))
-            throw new IllegalStateException("Wi-Fi SSID hidden. Enable precise Location and Location Services.");
+            throw new PendingIdentityException("Wi-Fi SSID hidden. Enable precise Location and Location Services.");
         return value;
     }
     private static String checkedBssid(WifiInfo info){
         String value=clean(info==null?null:info.getBSSID());
         if(value.isEmpty()||value.equalsIgnoreCase("02:00:00:00:00:00"))
-            throw new IllegalStateException("Wi-Fi BSSID hidden. Enable precise Location and Location Services.");
+            throw new PendingIdentityException("Wi-Fi BSSID hidden. Enable precise Location and Location Services.");
         return value;
     }
     private Network onlyWifi(){
@@ -115,7 +118,7 @@ final class FlightCoreWifiLink {
         }
         if(!pinnedIp.equals(ip))throw new IllegalStateException("Selected Kit IP changed; reconnect and verify again");
         NetworkCapabilities caps=connectivity.getNetworkCapabilities(selected);
-        if(caps==null)throw new IllegalStateException("Wi-Fi capabilities temporarily unavailable; wait for re-verification");
+        if(caps==null)throw new PendingIdentityException("Wi-Fi capabilities temporarily unavailable; wait for re-verification");
         if(!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)){
             clear();throw new IllegalStateException("Pinned Kit Wi-Fi disconnected");
         }

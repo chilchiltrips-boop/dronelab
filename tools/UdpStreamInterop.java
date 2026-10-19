@@ -13,7 +13,7 @@ import javax.crypto.spec.*;
 public final class UdpStreamInterop {
  static final String DEVICE="ZFC-A2-012345ABCDEF",CLAIM="11".repeat(16),KEY="22".repeat(32);
  static final byte[] key=new byte[32];
- static volatile boolean serving=true,mute=false,injectBad=true;
+ static volatile boolean serving=true,mute=false,injectBad=true,oversizeOnly=false;
  static volatile Throwable peerFailure;
  static final List<byte[]> frames=new CopyOnWriteArrayList<>();
  static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
@@ -42,7 +42,8 @@ public final class UdpStreamInterop {
    byte[] body=new byte[14];System.arraycopy(packet,12,body,0,4);body[12]=(byte)(5+((clear[12]&1)==1?2:0));
    byte[] encoded=crypto(true,ack,body);System.arraycopy(encoded,0,ack,28,30);
    if(injectBad){byte[] bad=ack.clone();bad[57]^=1;server.send(new DatagramPacket(bad,58,p.getAddress(),p.getPort()));injectBad=false;}
-   server.send(new DatagramPacket(ack,58,p.getAddress(),p.getPort()));
+   byte[] sent=oversizeOnly?Arrays.copyOf(ack,59):ack;
+   server.send(new DatagramPacket(sent,sent.length,p.getAddress(),p.getPort()));
   }}catch(Throwable error){if(serving)peerFailure=error;}
  }
  public static void main(String[] args)throws Exception{
@@ -77,7 +78,7 @@ public final class UdpStreamInterop {
    int binds=Network.binds;stream.start("cancelled","127.0.0.1",DEVICE,CLAIM,KEY);stream.stop();resume.countDown();Thread.sleep(60);activity.drain();
    require(Network.binds==binds&&view.events.isEmpty(),"STOP must cancel a queued startup");
    stream.start("timeout","127.0.0.1",DEVICE,CLAIM,KEY);waitFor(activity,view,"\"inputArmed\":true",stream,true);
-   mute=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream,true);
+   oversizeOnly=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream,true);
    require(peerFailure==null,"Encrypted Kit peer failed: "+peerFailure);
    System.out.println("PASS actual Android UDP stream: worker startup, encrypted ARM/ACK, bad ACK, neutral restart, STOP cancellation, input/ACK watchdogs");
   }finally{stream.shutdown();serving=false;server.close();peer.join(1000);}

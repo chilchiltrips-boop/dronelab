@@ -57,7 +57,7 @@ test('WebApp checks official binary compiledAt, catalog build start, and version
  assert.match(fw,/compiled<built-15\*60\*1000/);
  assert.match(fw,/embedded in verified \.bin/);
  assert.match(img,/export function imageBuildTimeIso/);
- assert.match(sw,/dronelab-udp-arm-recovery-20261019/);
+ assert.match(sw,/dronelab-udp-session-guard-20261019/);
  for(const p of [read('index.html'),read('lab.html'),sw])assert.match(p,/firmware-updater\.js\?v=compile-time-verified-20261017/);
  assert.match(sw,/firmware-image\.js\?v=compile-time-verified-20261017/);
  assert.equal(read('index.html'),read('lab.html'));

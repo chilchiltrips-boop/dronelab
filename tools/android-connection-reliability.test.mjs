@@ -104,7 +104,7 @@ test('Accessible settings groups and live signed OTA outcomes are visible',()=>{
 });
 
 test('transient missing/redacted WifiInfo retains pin but rejects requests until identity is verified',()=>{
- assert.match(wifi,/if\(caps==null\)throw new IllegalStateException\("Wi-Fi capabilities temporarily unavailable/);
+ assert.match(wifi,/if\(caps==null\)throw new PendingIdentityException\("Wi-Fi capabilities temporarily unavailable/);
  assert.match(wifi,/WifiInfo observed=info\(selected\);\s*String ssid=checkedSsid\(observed\),bssid=checkedBssid\(observed\)/);
  assert.match(wifi,/observedWifi\.remove\(network\);\s*if\(matches\(network\)&&caps!=null&&!wifiAvailable\)/);
  assert.match(wifi,/if\(details==null\)return; \/\/ Transient redaction/);
@@ -120,6 +120,6 @@ test('signed RC priority is enforced before native worker and stale ACK errors r
  assert.match(src,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
  assert.match(bridge,/ArrayBlockingQueue<>\(3\)/);
  assert.match(bridge,/Stale RC preview queued /);
- assert.match(bridge,/msg!=null&&msg\.startsWith\("Stale RC preview queued "\)/);
+ assert.match(bridge,/msg!=null&&\(msg\.startsWith\("Stale RC preview queued "\)\|\|msg\.equals\("Stale native request dropped"\)\)/);
  assert.match(read('FlightCore_Firmware/FlightCoreClassroom.h'),/ZJ_RC_DEADMAN_MS=350/);
 });

@@ -19,6 +19,11 @@ static portMUX_TYPE zjUdpMux=portMUX_INITIALIZER_UNLOCKED;
 static bool zjUdpActive=false,zjUdpConfigured=false,zjUdpHasPending=false,zjUdpRequestedArm=false;
 static uint8_t zjUdpKey[32]={},zjUdpToken[8]={},zjUdpOwner[4]={};
 static uint32_t zjUdpLastSeq=0,zjUdpLastRx=0,zjUdpBoundAt=0,zjUdpReceived=0,zjUdpRejected=0;
+static uint32_t zjUdpLifetime=0;
+// Only the main loop reads these String-valued authentication references.
+// The receiver task uses the copied, bounded remaining lifetime instead.
+static int zjUdpAuthSlot=-1;
+static String zjUdpAuthId;
 static uint32_t zjUdpPendingSeq=0,zjUdpPendingAt=0;
 // A claim/release can run while the receiver authenticates outside the lock.
 // Only that exact grant may publish a frame, rejection or timeout afterward.
@@ -44,15 +49,19 @@ static bool zjUdpGcm(bool encrypt,const uint8_t key[32],const uint8_t* source,ui
 }
 static bool zjUdpBind(const String& signedKey,const String& token,const IPAddress& peer){
  if(!zjUdpTaskHandle||signedKey.length()!=64||token.length()!=32)return false;
+ if(zjRequestSession<0||zjRequestSession>=8)return false;
+ const auto& parent=zjSessions[zjRequestSession];const uint32_t now=millis(),age=uint32_t(now-parent.at);
+ if(parent.id.isEmpty()||parent.key!=signedKey||parent.localSta||age>=1800000)return false;
  const String derived=zjHmac(signedKey,"ZJUDP1|"+zjKitId+"|"+token);
  if(!zjHex(derived,64)||!zjHex(token,32))return false;
  uint8_t key[32],tag[8];zjUnhex(derived,key);
  zjUnhex(token.substring(0,16),tag);
+ zjUdpAuthSlot=zjRequestSession;zjUdpAuthId=parent.id;
  portENTER_CRITICAL(&zjUdpMux);
  ++zjUdpGeneration;
  memcpy(zjUdpKey,key,32);memcpy(zjUdpToken,tag,8);
  for(int i=0;i<4;i++)zjUdpOwner[i]=peer[i];
- zjUdpLastSeq=0;zjUdpLastRx=0;zjUdpBoundAt=millis();zjUdpReceived=zjUdpRejected=0;
+ zjUdpLastSeq=0;zjUdpLastRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;zjUdpReceived=zjUdpRejected=0;
  zjUdpHasPending=false;zjUdpRequestedArm=false;zjUdpActive=true;zjUdpConfigured=true;
  portEXIT_CRITICAL(&zjUdpMux);
  memset(key,0,sizeof(key));
@@ -65,6 +74,7 @@ static void zjUdpInvalidate(bool clearConfiguration=true){
  if(clearConfiguration)zjUdpConfigured=false;
  memset(zjUdpKey,0,sizeof(zjUdpKey));
  portEXIT_CRITICAL(&zjUdpMux);
+ zjUdpAuthSlot=-1;zjUdpAuthId="";
 }
 static bool zjUdpEnabled(){
  portENTER_CRITICAL(&zjUdpMux);const bool active=zjUdpActive;portEXIT_CRITICAL(&zjUdpMux);
@@ -91,7 +101,7 @@ static void zjUdpReceiverTask(void*){
   const IPAddress source=zjUdpSocket.remoteIP();
   bool active;uint32_t previous,received,rejected,last,generation;bool priorArmed;
   portENTER_CRITICAL(&zjUdpMux);
-  active=zjUdpActive&&uint32_t(millis()-zjUdpBoundAt)<1800000;memcpy(key,zjUdpKey,32);memcpy(token,zjUdpToken,8);
+  active=zjUdpActive&&uint32_t(millis()-zjUdpBoundAt)<zjUdpLifetime;memcpy(key,zjUdpKey,32);memcpy(token,zjUdpToken,8);
   memcpy(owner,zjUdpOwner,4);previous=zjUdpLastSeq;last=zjUdpLastRx;
   priorArmed=zjUdpRequestedArm;
   generation=zjUdpGeneration;
@@ -117,7 +127,7 @@ static void zjUdpReceiverTask(void*){
   if(!zjUdpActive||zjUdpLastSeq&&int32_t(seq-zjUdpLastSeq)<=0){
    ++zjUdpRejected;portEXIT_CRITICAL(&zjUdpMux);continue;
   }
-  if(uint32_t(now-zjUdpBoundAt)>=1800000){zjUdpActive=false;portEXIT_CRITICAL(&zjUdpMux);continue;}
+  if(uint32_t(now-zjUdpBoundAt)>=zjUdpLifetime){zjUdpActive=false;portEXIT_CRITICAL(&zjUdpMux);continue;}
   zjUdpLastSeq=seq;zjUdpLastRx=now;zjUdpRequestedArm=armed;++zjUdpReceived;
   zjUdpPendingSeq=seq;zjUdpPendingAt=now;
   for(int i=0;i<6;i++)zjUdpPendingChannels[i]=ch[i];
@@ -159,6 +169,13 @@ static void zjUdpLoop(uint32_t now){
   zjUdpHasPending=false;
  }
  portEXIT_CRITICAL(&zjUdpMux);
+ if(configured&&(zjUdpAuthSlot<0||zjUdpAuthSlot>=8||
+    zjSessions[zjUdpAuthSlot].id!=zjUdpAuthId||
+    uint32_t(now-zjSessions[zjUdpAuthSlot].at)>=1800000)){
+  zjUdpInvalidate();
+  if(zjRcOwned&&zjRcSource=="ANDROID")zjRcRelease("UDP_AUTH_EXPIRED");
+  return;
+ }
  if(!active){if(configured&&zjRcOwned&&zjRcSource=="ANDROID"){zjRcRelease("UDP_INPUT_TIMEOUT");zjUdpInvalidate();}return;}
  if(!zjRcOwned||!zjRcNetwork||zjRcSource!="ANDROID"||zjRcTransport==nullptr){zjUdpInvalidate();return;}
  if(seq){

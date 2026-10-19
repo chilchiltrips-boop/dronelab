@@ -273,7 +273,16 @@ public final class FlightTouchInstrumentation extends Instrumentation {
                 for(int i=0;i<decoded.length;i++)if(decoded[i]!=big[i])throw new AssertionError("Native response content mismatch");
                 if(FlightCoreNativeBridge.readBoundedResponse(new ByteArrayInputStream(new byte[0]),16000).length!=0)
                     throw new AssertionError("Empty HTTP error stream was not supported");
-                checks+=3;
+                if(!"Stale native request dropped".equals(FlightCoreNativeBridge.stateFailure(new IllegalStateException("Stale native request dropped"))))
+                    throw new AssertionError("Queue congestion was mislabeled as Wi-Fi identity failure");
+                String pending=FlightCoreNativeBridge.stateFailure(new FlightCoreWifiLink.PendingIdentityException("private network detail"));
+                if(!pending.equals("Wi-Fi details pending; retry the verified link"))
+                    throw new AssertionError("Transient Wi-Fi details lost safe retry classification");
+                if(FlightCoreWifiLink.privateIp("010.0.0.1")||FlightCoreWifiLink.privateIp("172.016.0.1"))
+                    throw new AssertionError("Ambiguous IPv4 alias accepted for a Kit");
+                if(!FlightCoreWifiLink.privateIp("192.168.4.1")||!FlightCoreWifiLink.privateIp("172.16.0.1"))
+                    throw new AssertionError("Canonical private Kit IPv4 rejected");
+                checks+=7;
                 result.putString("stream","PASS API30 network response compatibility: Kit HTTP body, bounded oversized/empty responses, and legacy Android WebView startup; "+checks+" assertions.\n");
                 result.putInt("numtests",checks);finish(Activity.RESULT_OK,result);return;
             }

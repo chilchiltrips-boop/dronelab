@@ -76,6 +76,15 @@ test('one status timeout preserves connected UI; three consecutive failures disc
  await b.network.pollConnection();assert.equal(b.network.isConnected(),false);
  b.fail(null);await b.network.pollConnection();assert.equal(b.network.isConnected(),true);assert.equal(b.network.inputArmed(),false);
 });
+for(const message of ['Stale native request dropped','Wi-Fi details pending; retry the verified link'])
+test('transient native failure preserves the selected connection: '+message,async()=>{
+ const b=bench();await b.connect();b.fail(Error(message));
+ await b.network.pollConnection();assert.equal(b.network.isConnected(),true);
+ b.fail(null);await b.network.pollConnection();assert.equal(b.network.isConnected(),true);
+ assert.equal(b.network.inputArmed(),false);
+ b.fail(Error('Wi-Fi identity not yet verified: IllegalStateException'));
+ await b.network.pollConnection();assert.equal(b.network.isConnected(),false,'a real identity failure still disconnects immediately');
+});
 test('ordinary status poll never disables AP/STA button and stale response cannot restore old network',async()=>{
  const b=bench();await b.connect();let finish;
  b.holdStatus(new Promise(resolve=>finish=resolve));const reading=b.network.pollConnection();await settle();

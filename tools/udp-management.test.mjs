@@ -88,6 +88,13 @@ test('binary codec rejects excessive lengths, wrong IDs and malformed fragments;
  assert.throws(()=>encodeRequest('POST','/api/reboot','x'.repeat(8801)),/limit/);
  for(const ip of ['127.0.0.1','8.8.8.8','192.168.1.999','10.0.0.1.evil'])assert.equal(privateIPv4(ip),false);
 });
+test('private Kit destinations reject octal aliases and malformed IPv4 before opening a socket',async()=>{
+ for(const ip of ['010.0.0.1','10.00.0.1','172.016.0.1','192.168.001.1','172.15.0.1','172.32.0.1','192.169.0.1','10.0.0.256','10.0.0.1\n']){
+  assert.equal(privateIPv4(ip),false,ip);
+  await assert.rejects(requestUdp(ip,'GET','/api/identify'),/private Kit IPv4/);
+ }
+ for(const ip of ['10.0.0.1','172.16.0.1','172.31.255.254','192.168.4.1'])assert.equal(privateIPv4(ip),true,ip);
+});
 test('localhost bridge blocks foreign origin, DNS rebinding and public-address proxying',async()=>{
  const calls=[],server=createBridgeServer({request:async(...args)=>{calls.push(args);return {status:200,text:'{}',proof:'',protocol:'ZJM1'}}});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

@@ -19,6 +19,8 @@ static int xTaskCreate(void(*)(void*),const char*,int,void*,int,TaskHandle_t* ta
 static int peerSocket;
 static void newGrant(){
  zjUdpInvalidate();zjRcRelease("NETWORK_RELEASE");clockMs+=20;
+ auto& auth=zjSessions[7];auth=ZjSession();auth.id=String(std::string(32,'b'));
+ auth.key=String(std::string(64,'a'));auth.at=clockMs;zjRequestSession=7;
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
  assert(zjUdpBind(String(std::string(64,'a')),zjRcSession,IPAddress(192,168,4,2)));
 }
@@ -57,6 +59,19 @@ int main(){
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);assert(zjRcInputArmed);
  clockMs+=351;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed&&zjRcThrottle==1000);
+ // Closing the parent authentication session revokes its UDP grant immediately.
+ newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
+ zjSessions[7]=ZjSession();zjUdpLoop(clockMs);
+ assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
+ newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
+ zjSessions[7].id=String(std::string(32,'c'));zjUdpLoop(clockMs);
+ assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
+ // A claim near authentication expiry must inherit only the remaining time.
+ newGrant();zjUdpInvalidate();zjSessions[7].at=clockMs-1799950;
+ assert(zjUdpBind(zjSessions[7].key,zjRcSession,IPAddress(192,168,4,2)));
+ deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
+ clockMs+=51;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
+ assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
  close(peerSocket);zjUdpSocket.stop();
- std::cout<<"PASS actual UDP RC receiver: encrypted ARM, ACK, grant race rejection, watchdog"<<std::endl;
+ std::cout<<"PASS actual UDP RC receiver: encrypted ARM, ACK, grant race rejection, parent close/replacement/expiry, watchdog"<<std::endl;
 }

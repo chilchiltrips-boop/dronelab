@@ -48,10 +48,7 @@ final class FlightCoreNativeBridge {
         this.wifiLink=wifiLink;
     }
     private static boolean privateIp(String text) {
-        if(text==null||!text.matches("(?:[0-9]{1,3}\\.){3}[0-9]{1,3}"))return false;
-        String[] p=text.split("\\.");int[] n=new int[4];
-        for(int i=0;i<4;i++){n[i]=Integer.parseInt(p[i]);if(n[i]>255)return false;}
-        return n[0]==10||(n[0]==192&&n[1]==168)||(n[0]==172&&n[1]>=16&&n[1]<=31);
+        return FlightCoreWifiLink.privateIp(text);
     }
     private static boolean allowed(String method,String route) {
         if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/wifi/saved")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
@@ -143,6 +140,13 @@ final class FlightCoreNativeBridge {
         }
         return bytes.toByteArray();
     }
+    static String stateFailure(IllegalStateException error){
+        if(error instanceof FlightCoreWifiLink.PendingIdentityException)
+            return "Wi-Fi details pending; retry the verified link";
+        String msg=error.getMessage();
+        if(msg!=null&&(msg.startsWith("Stale RC preview queued ")||msg.equals("Stale native request dropped")))return msg;
+        return "Wi-Fi identity not yet verified: "+error.getClass().getSimpleName();
+    }
     private void submit(String id,String ip,String method,String route,String form,JSONObject headers){
         if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||!privateIp(ip)||!allowed(method,route)||
            (form!=null&&form.length()>(route.startsWith("/api/firmware/")?8800:2500))){
@@ -182,9 +186,7 @@ final class FlightCoreNativeBridge {
             }catch(IllegalStateException stale){
                 // Differentiate a queued RC deadline from Wi-Fi disassociation,
                 // without weakening the firmware's 350ms safety watchdog.
-                String msg=stale.getMessage();
-                if(!state.cancelled)reply(id,false,0,"{}",
-                    msg!=null&&msg.startsWith("Stale RC preview queued ")?msg:"Wi-Fi identity not yet verified: "+stale.getClass().getSimpleName(),null,state);
+                if(!state.cancelled)reply(id,false,0,"{}",stateFailure(stale),null,state);
             }catch(Exception error){
                 if(!state.cancelled)reply(id,false,0,"{}","Wi-Fi device unavailable: "+error.getClass().getSimpleName(),null,state);
             }finally{

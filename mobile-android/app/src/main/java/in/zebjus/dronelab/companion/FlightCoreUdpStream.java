@@ -206,8 +206,10 @@ final class FlightCoreUdpStream {
             socket.send(new DatagramPacket(header,PACKET));
             sent++;
             for(int i=0;i<8;i++){
-                byte[] incoming=new byte[PACKET];
-                DatagramPacket packet=new DatagramPacket(incoming,PACKET);
+                // One extra byte detects an oversized datagram instead of
+                // accepting its silently truncated authenticated prefix.
+                byte[] incoming=new byte[PACKET+1];
+                DatagramPacket packet=new DatagramPacket(incoming,incoming.length);
                 try{socket.receive(packet);}catch(java.net.SocketTimeoutException empty){break;}
                 if(packet.getLength()!=PACKET||incoming[0]!='Z'||incoming[1]!='J'||
                    incoming[2]!='A'||incoming[3]!='1'||!Arrays.equals(Arrays.copyOfRange(incoming,4,12),token))continue;
@@ -218,7 +220,7 @@ final class FlightCoreUdpStream {
                 // invalid packets; the unchanged ACK watchdog handles loss.
                 try{plain=cipher(false,key,incoming,Arrays.copyOfRange(incoming,28,PACKET));}
                 catch(javax.crypto.AEADBadTagException invalid){continue;}
-                if(plain.length!=14||get32(plain,0)!=ackSeq||(plain[12]&5)!=5)continue;
+                if(plain.length!=14||get32(plain,0)!=ackSeq||(plain[12]&5)!=5||(plain[12]&~7)!=0)continue;
                 if(lastAckSequence>0&&ackSeq>lastAckSequence+1)estimatedLost+=ackSeq-lastAckSequence-1;
                 long recorded=sendTimes[ackSeq&127];
                 long newRtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;

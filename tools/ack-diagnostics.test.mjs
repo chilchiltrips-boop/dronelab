@@ -42,6 +42,8 @@ test('startup failure enums and active controller ownership remain precise witho
  assert.equal(b.events().at(-2).data.reason,'UDP_START_BIND_SOCKET_SOCKET');
  assert.equal(b.events().at(-1).data.source,'WEB');
  assert.equal(b.events().at(-1).data.udpRejected,2);
+ b.api.record('kit_status',{releaseReason:'UDP_AUTH_EXPIRED'});
+ assert.equal(b.events().at(-1).data.releaseReason,'UDP_AUTH_EXPIRED');
  b.api.record('udp_error',{reason:'UDP_START_BIND_SOCKET_private_secret'});
  assert.equal(b.events().at(-1).data.reason,undefined);
 });
@@ -101,7 +103,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 40\s*versionName '1\.8\.2-udp-arm-recovery'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 41\s*versionName '1\.8\.3-udp-session-guard'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
