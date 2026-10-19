@@ -169,6 +169,10 @@ static void zjUdpLoop(uint32_t now){
   zjUdpHasPending=false;
  }
  portEXIT_CRITICAL(&zjUdpMux);
+ // The receiver may publish after NetworkLoop captured its `now` argument.
+ // Refresh AFTER the mailbox snapshot so a fresh timestamp cannot underflow
+ // unsigned age arithmetic and be mistaken for a stale packet.
+ now=millis();
  if(configured&&(zjUdpAuthSlot<0||zjUdpAuthSlot>=8||
     zjSessions[zjUdpAuthSlot].id!=zjUdpAuthId||
     uint32_t(now-zjSessions[zjUdpAuthSlot].at)>=1800000)){

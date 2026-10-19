@@ -48,6 +48,10 @@ int main(){
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";clockMs=1000;zjUdpSetup();assert(zjUdpTaskHandle);
  peerSocket=socket(AF_INET,SOCK_DGRAM,0);timeval timeout{0,30000};setsockopt(peerSocket,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
  newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);assert(zjRcInputArmed&&zjRcSeq==1);
+ // The receiver can publish one millisecond after NetworkLoop captured now.
+ // This fresh packet must not underflow an unsigned packet-age subtraction.
+ newGrant();clockMs+=20;deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs-1);
+ assert(zjRcOwned&&zjRcInputArmed&&zjRcSeq==1);
  // An old authenticated frame must not publish into a new claim while crypto
  // ran outside the receiver's critical section, or invalidate that claim.
  auto old=frame(2,true);replaceAtNextCommit();deliver(old);expectAck(false);

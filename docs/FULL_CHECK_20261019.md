@@ -5,12 +5,13 @@ Baseline: main `0a5fa89`, Android 1.8.2/code 40, FlightCore 1.5.1. Baseline
 GitHub Pages deployment passed. The previous signed release's seven exact-source
 gates and API30/native upgrade/touch workflows were successful.
 
-Corrective release: **Android 1.8.3-udp-session-guard/code 41**, **FlightCore 1.5.2**.
+Corrective release: **Android 1.8.4-udp-freshness-guard/code 42**, **FlightCore 1.5.3**.
 
 ## Confirmed fixes
 
 | Finding | Result |
 | --- | --- |
+| A worker could publish a fresh packet after NetworkLoop captured its timestamp; unsigned subtraction then treated it as very old and released input. | Refresh the clock after the mailbox snapshot, before age/expiry checks. A production C++ test reproduces the one-millisecond interleaving; the genuine 350 ms stale-packet watchdog remains enforced. |
 | Android received ACKs into a 58-byte buffer; an oversized datagram with a valid 58-byte prefix was silently truncated and accepted. | Receive one extra byte and reject every non-58-byte ACK; reject reserved flag bits. Production Java socket/AES-GCM test reproduced the old acceptance and verifies the unchanged watchdog now stops on oversized-only replies. |
 | UDP RC grants lived for 30 minutes after claim even when their parent authentication session had less time remaining. Closing or replacing that session did not revoke the UDP grant. | Bind the grant to the exact parent slot/session ID and remaining lifetime. Main-loop checks revoke closed/replaced sessions; the receiver independently rejects packets after the inherited deadline. Production C++ receiver tests cover close, replacement, expiry, ownership races and the 350 ms watchdog. |
 | Native queue expiry was returned as a Wi-Fi identity failure. Temporarily unavailable/redacted Wi-Fi details also triggered immediate UI disconnect. | Preserve queue errors and introduce a typed pending-details exception. Pending requests remain blocked; ordinary bounded connection recovery applies. Verified identity mismatch, missing permission and changed networks remain fail-closed. API30 tests execute the real error classifier; controller tests check recovery and fatal mismatch separately. |
