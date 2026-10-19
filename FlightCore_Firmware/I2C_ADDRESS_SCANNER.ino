@@ -204,7 +204,7 @@ void updateLedEffect(unsigned long now){
 
 // Board-specific USB gyroscope telemetry. Sensor reads only; no actuation or PID logic.
 // A1: LSM6DS3 @ 0x6B; A2: MPU6050 @ 0x68.
-// The serial frame is ZJGYRO,DATA,A1|A2,SENSOR,0xADDR,X,Y,Z (degrees/second).
+// Canonical ZJTEL records carry sensor health and X/Y/Z rates (degrees/second).
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t GYRO_ADDR=0x68;
 constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling independent of USB telemetry
