@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.8.2-udp-arm-recovery
-VersionCode: 40
+Version: 1.8.4-udp-freshness-guard
+VersionCode: 42
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: b6d93b94be45e553b0a1486ad699a397560ea046
+Source commit: db5b7935e0078ca30e11e6289d0aa959abd60104
