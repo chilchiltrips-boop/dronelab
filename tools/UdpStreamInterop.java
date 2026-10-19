@@ -84,6 +84,10 @@ public final class UdpStreamInterop {
    require(Network.binds==binds&&view.events.isEmpty(),"STOP must cancel a queued startup");
    stream.start("timeout","127.0.0.1",DEVICE,CLAIM,KEY);waitFor(activity,view,"\"inputArmed\":true",stream,true);
    oversizeOnly=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream,true);
+   String timeout=view.events.stream().filter(e->e.contains("UDP_ACK_TIMEOUT")).reduce((a,b)->b).orElse("");
+   require(!timeout.contains("\"lastPacketAgeMs\":-1"),"Timeout log must retain actual last authenticated ACK age");
+   require(timeout.contains("\"inputAgeMs\":")&&timeout.contains("\"maxSendGapMs\":")&&timeout.contains("\"maxAckGapMs\":"),
+    "Timeout diagnostics must distinguish WebView input stalling, sender timing, and missing ACKs");
    require(peerFailure==null,"Encrypted Kit peer failed: "+peerFailure);
    System.out.println("PASS actual Android UDP stream: worker startup, encrypted ARM/ACK, bad ACK, neutral restart, STOP cancellation, input/ACK watchdogs");
   }finally{stream.shutdown();serving=false;server.close();peer.join(1000);}

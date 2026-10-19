@@ -45,3 +45,38 @@ session or identity secrets. The existing 350 ms firmware deadman
 remains unchanged, as does motor-output disablement. Confirm
 improvement with a propeller-free real phone/FlightCore test; logs
 from old firmware will not contain the new firmware fields.
+
+
+## 19 October 2026 native UDP ACK watchdog ownership
+
+Android FlightCore ZJUDP1 transmits encrypted diagnostic frames at 50 Hz on a
+native scheduled worker. Its monotonic watchdog stops input after 300 ms without
+fresh WebView joystick updates, or 350 ms without a verified Kit ACK while
+diagnostic input is armed. **These safety deadlines have not been extended.**
+
+The flight screen previously applied another 350 ms ACK watchdog to the
+`window.zebjusNativeUdpEvent` callback timestamp. A busy Android WebView
+could delay the callback even though the native socket was still receiving
+authenticated ACKs. For ZJUDP1 only, the duplicate *UI-thread* watchdog is
+removed. Native timeout/error callbacks still immediately release diagnostic
+input. Legacy signed HTTP input retains its own ACK watchdog.
+
+The ACK recorder now captures, while still valid and before native stream
+state resets:
+
+- `lastPacketAgeMs`: monotonic elapsed time since the last authenticated ACK.
+- `inputAgeMs`: time since the WebView last submitted fresh stick values.
+- `maxSendGapMs`: greatest spacing between native sends in this session.
+- `maxAckGapMs`: greatest spacing between accepted ACKs in this session.
+
+Interpret: `UDP_INPUT_STALE` with high input age suggests a WebView/UI pause;
+`UDP_ACK_TIMEOUT` with normal send spacing suggests a missing/delayed Kit ACK,
+Wi-Fi loss or firmware responsiveness. Large send spacing points to native
+scheduling or Android OS interruptions. An encrypted ACK means received, not
+necessarily applied to the Kit's main-loop input state: compare signed
+`/api/status` after disarm and USB serial release reason where possible.
+
+Reproduce on a propeller-free A1/A2 Kit; export a **fresh** Android JSON after
+the failure. Older logs from firmware 1.5.0 predate the current UDP stream and
+cannot confirm the cause of a present-day ZJUDP1 timeout. Do not disable the
+native 300/350 ms failsafe or accept unauthenticated UDP ACKs.

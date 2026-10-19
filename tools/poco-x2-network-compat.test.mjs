@@ -27,5 +27,5 @@ test('POCO X2 API30 emulator must pass BEFORE the signed release can publish',()
  assert.match(release,/PASS API30 network response compatibility/);
  assert.match(release,/script: \|\s*# android-emulator-runner runs inline scripts with \/bin\/sh\.[\s\S]*?set -eu\s*adb wait-for-device/);
  assert.match(release,/needs: \[android, native_touch, legacy_api30\]/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 43\s*versionName '1\.8\.5-failsafe-diagnostics'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 44\s*versionName '1\.8\.6-udp-ack-watchdog'/);
 });
