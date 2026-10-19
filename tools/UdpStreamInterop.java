@@ -48,6 +48,11 @@ public final class UdpStreamInterop {
  }
  public static void main(String[] args)throws Exception{
   Arrays.fill(key,(byte)0x22);Network.uiThread=Thread.currentThread();
+  // Host JCE provider/class loading can exceed the real 300 ms input deadline
+  // under parallel CI compilation. Prepare the loopback peer before starting
+  // timed production streaming; all input/ACK watchdogs remain unchanged.
+  byte[] warmHeader=new byte[58],warmBody=new byte[14];
+  require(crypto(false,warmHeader,crypto(true,warmHeader,warmBody)).length==14,"Host crypto preparation failed");
   Activity activity=new Activity();WebView view=new WebView();FlightCoreWifiLink wifi=new FlightCoreWifiLink();
   FlightCoreUdpStream stream=new FlightCoreUdpStream(activity,view,wifi);
   DatagramSocket server=new DatagramSocket(4210,InetAddress.getLoopbackAddress());server.setSoTimeout(50);

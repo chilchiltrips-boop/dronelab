@@ -57,6 +57,9 @@ and switch thresholds with the receiver on a bench.
   control. Conversely, WEB/ANDROID may not claim while PPM owns the Kit.
 - After acquisition, CH5 must have been low and then move high at throttle
   <=1050 to assert *diagnostic INPUT ARM*. That is **NOT motor ARM**.
+- Complete frames retain their ISR arrival timestamp; the mailbox keeps the latest
+  complete frame. Stale pending frames are discarded. The previous input expires
+  before any resumed frame is processed, so a high ARM switch cannot hide a gap.
 - On 150ms PPM signal loss, the PPM owner releases, channels return neutral,
   diagnostic input is disarmed. The existing 350ms/1800ms network/USB
   RC deadman/lease protections remain unchanged.

@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 const code=readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8');
 const id='ZFC-A1-012345ABCDEF',other='ZFC-A1-FFFFFFFFFFFF',key='a1'.repeat(16);
 function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclusive=false}={}){
- const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[];let ready,disposed=false;
+ const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[],diagnostics=[];let ready,disposed=false;
  let savedKey=paired?key:'',enrollmentError='',enrollmentGate=null,authAttempts=0,now=Date.now();
  class Clock extends Date{static now(){return now}}
  const element=()=>({value:'',checked:false,textContent:'',dataset:{},style:{},disabled:false,listeners:{},children:[],
@@ -43,6 +43,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   throw Error('Unexpected request '+route);
  };
  const window={addEventListener:(name,fn)=>listeners.set(name,fn),dispatchEvent:e=>events.push(e),ZebjusKitPairingStore:{fromSession:()=>savedKey,restore:async()=>savedKey,saveSession:(_id,k)=>{savedKey=k},remember:async(_id,k)=>{savedKey=k;requests.push({route:'vault:remember'})},forget:async()=>{savedKey=''}},
+  ZebjusAckDiagnostics:{record:(event,data)=>diagnostics.push({event,data}),reasonClass:()=> 'OTHER'},
   ZfcCrypto:{sha256:bytes=>createHash('sha256').update(bytes).digest()},
   ZebjusKitAuth:{http:base=>base,openLocal:async()=>{
    status={...status,setupAuthorized:status.requestTransport==='AP',otaAuthorized:false,controlAuthorized:status.requestTransport==='AP'};
@@ -75,7 +76,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  vm.runInNewContext(code,{window,document,localStorage,fetch,URL,URLSearchParams,AbortController,XMLHttpRequest:XHR,Uint8Array,Blob,FormData,TextEncoder,Option:class{constructor(text,value){this.text=text;this.value=value}},
   setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},Date:Clock,confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
- return {api:window.ZebjusKits,elements,requests,events,storage,blockClaim:p=>claimGate=p,identity:value=>identityOverride=value,
+ return {api:window.ZebjusKits,elements,requests,events,diagnostics,storage,blockClaim:p=>claimGate=p,identity:value=>identityOverride=value,
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
@@ -93,6 +94,16 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   serialLine:line=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line}}),
   reachable:hosts=>reachableHosts=new Set(hosts),blockIdentity:p=>identityGate=p,status:patch=>status={...status,...patch},dispose:()=>{disposed=true;for(const t of timers)clearTimeout(t)}};
 }
+test('WebApp status forwards firmware release reason and time to the diagnostic recorder',async()=>{
+ const f=fixture();try{
+  await f.api.connect();
+  f.status({rc:{claimed:false,active:false,lastReleaseReason:'PPM_SIGNAL_LOST',lastReleaseAtMs:12345}});
+  await f.api.read();
+  const event=f.diagnostics.filter(e=>e.event==='web_status').at(-1);
+  assert.equal(event.data.releaseReason,'PPM_SIGNAL_LOST');
+  assert.equal(event.data.lastReleaseAtMs,12345);
+ }finally{f.dispose()}
+});
 test('rejected saved pairing falls back to verified STA monitoring and never replays that credential',async()=>{
  const f=fixture({paired:true,encrypted:true});try{
   f.enrollmentError('enrollment_proof_invalid_or_expired');await f.api.connect();

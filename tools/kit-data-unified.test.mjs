@@ -74,5 +74,5 @@ test('new assets are cached for offline Wix and module versions stay in sync',()
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-udp-freshness-guard-20261019/);
+ assert.match(sw,/dronelab-failsafe-diagnostics-20261019/);
 });

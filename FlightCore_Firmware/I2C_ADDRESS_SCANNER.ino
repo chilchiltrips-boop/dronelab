@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.3";
+constexpr const char* FW_VERSION="1.5.4";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -29,7 +29,7 @@ struct LedStep {uint8_t brightness;uint16_t duration;};
 enum LedMode:uint8_t {LED_OFF,LED_MANUAL,LED_BLINK,LED_FADE,LED_SAFE,LED_WARNING,LED_SOS,LED_PATTERN};
 LedMode ledMode=LED_OFF;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
-unsigned long effectStart=0,leaseStart=0,lastScan=0,telLast=0;
+unsigned long effectStart=0,leaseStart=0,telLast=0;
 uint16_t telRateHz=20;
 // COMBINED (default): one full IMU+RC line; RAW is the legacy two-stream protocol.
 // Defined once by FlightCoreClassroom.h; works in the standalone firmware-host build too.
@@ -157,6 +157,9 @@ void readLedCommands(){
  }
 }
 void updateLedEffect(unsigned long now){
+ // A USB command can renew the lease after loop() captured its clock.
+ // Read time after command processing so a fresh lease cannot underflow.
+ now=millis();
  if(ledMode==LED_OFF)return;
  if(now-leaseStart>LED_LEASE_MS){ledOff();Serial.println("ZJLED,STATUS,TIMEOUT");return;}
  const unsigned long elapsed=now-effectStart;
@@ -201,7 +204,7 @@ void updateLedEffect(unsigned long now){
 
 // Board-specific USB gyroscope telemetry. Sensor reads only; no actuation or PID logic.
 // A1: LSM6DS3 @ 0x6B; A2: MPU6050 @ 0x68.
-// The serial frame is ZJGYRO,DATA,A1|A2,SENSOR,0xADDR,X,Y,Z (degrees/second).
+// Canonical ZJTEL records carry sensor health and X/Y/Z rates (degrees/second).
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t GYRO_ADDR=0x68;
 constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling independent of USB telemetry
@@ -215,8 +218,6 @@ bool gyroReady=false;
 unsigned long lastGyro=0,lastGyroProbe=0,lastGyroSample=0;
 uint32_t gyroSampleSeq=0;
 const char* gyroHealth="STARTING";
-unsigned long legacyLast=0,telemetrySent=0;
-constexpr unsigned long LEGACY_PERIOD_MS=200; // 5 Hz legacy gyro frames; low traffic
 float RateRoll=0,RatePitch=0,RateYaw=0;
 
 bool gyroWrite(uint8_t reg,uint8_t value){
@@ -288,7 +289,7 @@ void updateGyro(unsigned long now){
  // ZJTEL is the sole high-frequency gyro stream.
 }
 
-// Non-blocking I2C scan: up to 3 addresses per pass; once per 5 seconds or on request.
+// Non-blocking I2C scan: up to 3 addresses per pass.
 // Scan once on boot or after ZJI2C,SCAN; no periodic bus probing during telemetry.
 uint8_t scanAddress=1,scanCount=0,scanAddresses[126]={0};
 bool scanActive=false,scanRequested=true;
@@ -329,14 +330,6 @@ void selectI2cBus(){
  Wire.begin(BUS_SDA,BUS_SCL);Wire.setClock(400000);
  activeSda=BUS_SDA;activeScl=BUS_SCL;ledAvailable=true;
 }
-void emitLegacyGyro(unsigned long now){
- if(!gyroReady||now-legacyLast<LEGACY_PERIOD_MS||Serial.availableForWrite()<65)return;
- legacyLast=now;
- Serial.print("ZJGYRO,DATA,");Serial.print(GYRO_BOARD);Serial.print(',');
- Serial.print(GYRO_NAME);Serial.print(",0x");Serial.print(GYRO_ADDR,HEX);Serial.print(',');
- Serial.print(RateRoll,2);Serial.print(',');Serial.print(RatePitch,2);Serial.print(',');
- Serial.println(RateYaw,2);
-}
 #include "FlightCoreNetwork.h"
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
@@ -375,7 +368,6 @@ void emitTelemetry(unsigned long now){
   Serial.print(",MOTORS=OFF");
  }
  Serial.println();
- telemetrySent++;
 }
 // Network code can access verified scanner/gyro state and existing serial commands.
 void setup(){

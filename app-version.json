@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0+402",
+  "version": "1.8.0+403",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -7,9 +7,9 @@
     "Header switch changes the physical kit Wi-Fi mode before rediscovery",
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
-    "FlightCore 1.5.3 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
+    "FlightCore 1.5.4 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope"
   ],
-  "buildCommit": "db5b7935e007",
-  "publishedAt": "2026-10-19T04:52:06.594888+00:00"
+  "buildCommit": "e785b72005ff",
+  "publishedAt": "2026-10-19T18:13:58.940237+00:00"
 }

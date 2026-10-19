@@ -2,8 +2,8 @@
 
 Android 1.8.0-udp-management (versionCode 38) requires FlightCore 1.5.0 or newer.
 
-Current corrective release: **Android 1.8.4-udp-freshness-guard (code 42)** and
-**FlightCore 1.5.3**. Upgrade the matching A1/A2 firmware and install the signed
+Current corrective release: **Android 1.8.5-failsafe-diagnostics (code 43)** and
+**FlightCore 1.5.4**. Upgrade the matching A1/A2 firmware and install the signed
 APK over the previous app; USB pairing and saved Wi-Fi remain in APP OTA.
 
 The [19 October full audit](FULL_CHECK_20261019.md) adds race-safe packet-age checks, exact ACK framing,

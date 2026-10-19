@@ -1,4 +1,4 @@
-# ZEBJUS FlightCore v1.3.0 — Hardware / USB / Python Lab
+# ZEBJUS FlightCore v1.5.4 — Hardware / USB / Python Lab
 
 ## Current supported hardware (IMPORTANT)
 
@@ -7,11 +7,11 @@
 | ZEBJUS FlightCore A1 SuperMini | `ZFC-A1`, ESP32-C3 | LSM6DS3, address `0x6B` | **SDA GPIO4 / SCL GPIO5** | GPIO8, active-low, usable for Python LED effects |
 | ZEBJUS FlightCore A2 C6 | `ZFC-A2`, XIAO ESP32-C6 | MPU6050, address `0x68` | **SDA GPIO22 / SCL GPIO23** (XIAO D4/D5) | GPIO15, current board wiring |
 
-Connect sensor VCC to **3V3** and GND to GND. **A1 firmware v1.3.0 does NOT use Arduino's default GPIO8/GPIO9 I2C pins.** Physically disconnect any sensor SDA/SCL leads from GPIO8/GPIO9 before installation; connect to GPIO4/GPIO5. GPIO8 remains LED only; GPIO9 is the ESP32-C3 BOOT strap. The user previously found LSM6DS3 at `0x6B` with `Wire.begin()`; that is evidence that the older wiring worked, *not* evidence that the new GPIO4/5 wiring has yet been checked in hardware.
+Connect sensor VCC to **3V3** and GND to GND. **A1 firmware v1.5.4 does NOT use Arduino's default GPIO8/GPIO9 I2C pins.** Physically disconnect any sensor SDA/SCL leads from GPIO8/GPIO9 before installation; connect to GPIO4/GPIO5. GPIO8 remains LED only; GPIO9 is the ESP32-C3 BOOT strap. The user previously found LSM6DS3 at `0x6B` with `Wire.begin()`; that is evidence that the older wiring worked, *not* evidence that the new GPIO4/5 wiring has yet been checked in hardware.
 
 ## USB installation
 
-Open **Firmware** in desktop Chrome/Edge and select **Connect USB**. ROM chip ID `5` selects A1; chip ID `13` selects A2. A1/C3 and A2/C6 USB VID/PID may be the same — never identify a board by VID/PID alone. Check the selected board profile. Use **Factory image** (`0x0`) on first install or when migrating from Arduino's default partitions; **APP** at `0x10000` requires a matching existing dual-OTA partition layout. Verify current firmware version `1.3.0`, `LOADED`, and USB bootloader + flash verified before pressing **Flash over USB**. Leave BOOT and press RESET after flashing if the controller stays in ROM DOWNLOAD. Open USB Serial Monitor at 115200 baud; it identifies the actual running firmware using `ZJINFO,FW,...`.
+Open **Firmware** in desktop Chrome/Edge and select **Connect USB**. ROM chip ID `5` selects A1; chip ID `13` selects A2. A1/C3 and A2/C6 USB VID/PID may be the same — never identify a board by VID/PID alone. Check the selected board profile. Use **Factory image** (`0x0`) on first install or when migrating from Arduino's default partitions; **APP** at `0x10000` requires a matching existing dual-OTA partition layout. Verify current firmware version `1.5.4`, `LOADED`, and USB bootloader + flash verified before pressing **Flash over USB**. Leave BOOT and press RESET after flashing if the controller stays in ROM DOWNLOAD. Open USB Serial Monitor at 115200 baud; it identifies the actual running firmware using `ZJINFO,FW,...`.
 
 The built-in USB flashing page validates the selected profile, detected ROM chip, firmware ESP image header, SHA-256 catalog integrity and flash capacity. This is chip-family protection, *not* unique manufacturer board authentication.
 
@@ -19,7 +19,7 @@ The built-in USB flashing page validates the selected profile, detected ROM chip
 
 Both boards sample gyro at **50 Hz** (20 ms). The USB telemetry stream defaults to **20 Hz** (50 ms), configurable to **10 / 20 / 50 Hz** in the Serial Monitor toolbar. These settings change *transport frequency*, not IMU sampling rate or a motor-control loop.
 
-Versioned canonical frame (12 CSV fields):
+Canonical prefix (12 CSV fields, followed by RC fields in COMBINED mode):
 
 ```text
 ZJTEL,1,A1,42,8120,0x6B,READY,-0.12,0.55,1.46,LED_READY,0
@@ -30,13 +30,24 @@ Fields in order: prefix, version, board A1/A2, monotonic sequence, board millise
 
 Select 10/20/50 Hz or send `ZJTEL,RATE,10\n`, `ZJTEL,RATE,20\n`, `ZJTEL,RATE,50\n`; firmware replies `ZJTEL,ACK,RATE,20` etc. No `delay(20)` / `delay(50)` in the main loop. USB writer skips and counts frames when insufficient TX buffer space is available.
 
-**Compatibility:** The prior `ZJGYRO,DATA` frame is retained at low rate (5 Hz), and the original human-readable I2C scan output remains for `zebjus_simple.Drone().i2c_scan()`. Full address scanning is split over multiple loop passes, at most **3 addresses per pass**, every **5 seconds** or via `ZJI2C,SCAN\n`. Do not scan all 126 addresses on every 20 ms telemetry tick.
+**Current serial formats:** COMBINED is the default. It appends accepted RC source,
+sequence, throttle/roll/pitch/yaw, diagnostic input ARM and `MOTORS=OFF` to the
+same `ZJTEL` record. `ZJTEL,FORMAT,RAW` selects separate legacy-style RC records;
+`ZJTEL,FORMAT,COMBINED` restores the unified stream. The unused duplicate
+`ZJGYRO,DATA` emitter has been removed; client parsers may still read older boards.
+
+I2C scanning runs once on boot or after `ZJI2C,SCAN`, with at most **three
+addresses per loop pass**. Output is the structured `ZJSCAN` summary consumed
+by WebApp/Python. It does not repeat periodically during gyro telemetry.
 
 ## Python Lab, LED, and error handling
 
 `from zebjus_simple import Drone`, `drone=Drone()`, `drone.led_blink(250,250)` uses USB Serial commands `ZJLED,id,...`. A1 dedicated GPIO4/5 wiring permits onboard GPIO8 LED control. Unsupported commands or hardware `PIN_CONFLICT` acknowledgements terminate the **running** Python worker, safely send LED STOP, and show an error. USB disconnect interrupts hardware-target Python execution.
 
 **Check Syntax** runs Python `ast.parse()` inside the isolated Pyodide worker without executing the project. Runtime Python exceptions show original traceback plus explanations and Monaco editor line markers. Autocomplete lists known `Drone` methods and Python snippets. Monaco is not a complete static type checker; exceptions inside user `try/except` blocks may be intentionally handled by the student's code rather than treated as failures. Automatically applying code edits is intentionally disabled.
+
+The internal LED uses a 4-second renewable lease. USB SET/KEEP commands use a
+fresh clock after command processing, avoiding a false immediate timeout.
 
 ## Test and release checklist
 

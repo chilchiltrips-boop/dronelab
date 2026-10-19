@@ -32,6 +32,18 @@ test('UDP input staleness and missing ACK are distinct, and UDP completion timin
  assert.equal(b.events().at(-1).data.phase,'complete_udp');
  assert.equal(b.events().at(-1).data.reason,'INPUT_STALE');
 });
+test('PPM loss reason survives Android and WebApp JSON/CSV exports without permitting arbitrary text',()=>{
+ for(const client of ['android','web']){
+  const b=bench(client);
+  b.api.record('kit_status',{source:'PPM',releaseReason:'PPM_SIGNAL_LOST',lastReleaseAtMs:12345});
+  assert.equal(b.events().at(-1).data.releaseReason,'PPM_SIGNAL_LOST');
+  assert.equal(b.events().at(-1).data.lastReleaseAtMs,12345);
+  assert.match(b.api.exportData('json'),/PPM_SIGNAL_LOST/);
+  assert.match(b.api.exportData('csv'),/PPM_SIGNAL_LOST/);
+  b.api.record('kit_status',{releaseReason:'PRIVATE_DEVICE_OR_PASSWORD'});
+  assert.equal(b.events().at(-1).data.releaseReason,undefined);
+ }
+});
 test('startup failure enums and active controller ownership remain precise without credentials',()=>{
  const b=bench();
  assert.equal(b.api.reasonClass('controller_locked_or_invalid_source'),'OWNER_BUSY');
@@ -103,7 +115,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 42\s*versionName '1\.8\.4-udp-freshness-guard'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 43\s*versionName '1\.8\.5-failsafe-diagnostics'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
