@@ -334,7 +334,8 @@ window.zebjusNativeUdpEvent=data=>{
    ?data.reason:'UDP_UNKNOWN';
   trace('udp_error',{transport:link,source:'ANDROID',inputArmed:false,
    sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
-   lastPacketAgeMs:data.lastPacketAgeMs,reason,outcome:'fail'});
+   lastPacketAgeMs:data.lastPacketAgeMs,inputAgeMs:data.inputAgeMs,
+    maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,reason,outcome:'fail'});
   show('Secure UDP diagnostic input unavailable • '+reason+' • Kit input remains DISARMED','warn');
   if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error(reason));}
   if(udpActive)void releaseRc(reason).catch(()=>{});
@@ -345,12 +346,14 @@ window.zebjusNativeUdpEvent=data=>{
  firmwareAck={seq:Number(data.seq)||0,at:now,rtt:Math.max(0,Number(data.roundTripMs)||0),
   inputArmed:data.inputArmed===true,protocol:'ZJUDP1'};
  udpStats={sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,
-  accepted:data.accepted,rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs};
+  accepted:data.accepted,rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,
+   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs};
  lastStatus=now;statusFailures=0;
  trace('udp_ack',{transport:link,source:'ANDROID',seq:firmwareAck.seq,
   roundTripMs:firmwareAck.rtt,frameGapMs:now-previous,inputArmed:firmwareAck.inputArmed,
   sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,accepted:data.accepted,
-  rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,outcome:'ok'});
+  rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,
+   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,outcome:'ok'});
  if(udpArmWaiter&&firmwareAck.inputArmed){
   const w=udpArmWaiter;udpArmWaiter=null;clearTimeout(w.timer);w.resolve(firmwareAck);
  }
