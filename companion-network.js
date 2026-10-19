@@ -957,6 +957,7 @@ function syncHeaderTransport(){
  b.setAttribute('aria-checked',String(link==='sta'));
  b.setAttribute('aria-label','Selected FlightCore request connection: '+link.toUpperCase()+'. Tap to select '+(link==='ap'?'STA':'AP'));
  b.dataset.transport=link;
+ const kitBadge=el('flightKitConnection');if(kitBadge){const verified=online&&onKitLink&&Date.now()-lastStatus<12000;kitBadge.textContent=verified?'KIT '+link.toUpperCase()+' CONNECTED':'KIT OFFLINE';kitBadge.dataset.ready=String(verified);kitBadge.title='FlightCore Wi-Fi '+link.toUpperCase()+' • separate from WebRTC simulator receiver';}
  b.disabled=otaBusy||connecting||!native?.requestSecure;
  syncLedButton();
  for(const id of ['kitLink','kitIp','kitKey','kitSavedId','kitConnect','kitConnectSaved','kitDiscover','kitForgetSaved'])if(el(id))el(id).disabled=otaBusy||connecting;
