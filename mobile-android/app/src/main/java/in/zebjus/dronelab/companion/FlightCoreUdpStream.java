@@ -21,11 +21,13 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 /** ZJUDP1: diagnostic input only. Physical motors stay firmware-disabled.
- *   58B encrypted frame / 58B encrypted ACK; separate from management worker.
+ *   58B encrypted input; negotiated legacy 58B or v2 72B encrypted feedback.
+ *   Separate from management worker; new frames only, no joystick retransmission.
  *   Index 0..5 = T/R/P/Y/AUX1/AUX2; index 6 = input-arm flag (bit 0).
  */
 final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
+    static final int FEEDBACK_PACKET=72;
     private final Activity activity;
     private final WebView view;
     private final FlightCoreWifiLink wifiLink;
@@ -37,6 +39,9 @@ final class FlightCoreUdpStream {
     private boolean active, inputArm, acknowledgedArm;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
     private long lastSendAt, maxSendGapMs, maxAckGapMs;
+    private int feedbackVersion=1,lastAppliedSeq,receiveAgeMs=-1,applyAgeMs=-1;
+    private long feedbackCounter,lastFeedbackAt,lastAppliedProgressAt,firstRxAckAt,appliedAckCount;
+    private String ackKind="LEGACY_RX_ACK",nackReason="NONE";
     private int sequence, lastAckSequence, accepted, rejected;
     private String streamId="";
     private final long[] sendTimes=new long[128];
@@ -79,6 +84,11 @@ final class FlightCoreUdpStream {
             o.put("lastPacketAgeMs",lastAckAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastAckAt));
             o.put("inputAgeMs",lastInputAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastInputAt));
             o.put("maxSendGapMs",maxSendGapMs);o.put("maxAckGapMs",maxAckGapMs);
+            o.put("feedbackVersion",feedbackVersion);o.put("ackKind",ackKind);o.put("nackReason",nackReason);
+            o.put("lastRxSeq",lastAckSequence);o.put("lastAppliedSeq",lastAppliedSeq);
+            o.put("receiveAgeMs",receiveAgeMs<0?-1:receiveAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
+            o.put("applyAgeMs",applyAgeMs<0?-1:applyAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
+            o.put("appliedKnown",feedbackVersion==2&&lastAppliedSeq>0);o.put("appliedAckCount",appliedAckCount);
             o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
@@ -108,16 +118,22 @@ final class FlightCoreUdpStream {
     private long startupGeneration=0;
     synchronized void stop(){startupGeneration++;clear();}
     synchronized void start(String id,String ip,String device,String claim,String keyHex){
+        start(id,ip,device,claim,keyHex,1);
+    }
+    synchronized void start(String id,String ip,String device,String claim,String keyHex,int feedback){
         startupGeneration++;
         clear();
         streamId=id;
         sent=ackCount=estimatedLost=lastRtt=jitter=0;
         lastUiAt=0;lastAckSequence=accepted=rejected=0;
         lastSendAt=maxSendGapMs=maxAckGapMs=0;
+        feedbackVersion=feedback;lastAppliedSeq=0;receiveAgeMs=applyAgeMs=-1;
+        feedbackCounter=lastFeedbackAt=lastAppliedProgressAt=firstRxAckAt=appliedAckCount=0;
+        ackKind=feedback==2?"RX_ACK":"LEGACY_RX_ACK";nackReason="NONE";
         Arrays.fill(sendTimes,0);
         channels[0]=channels[4]=channels[5]=1000;
         channels[1]=channels[2]=channels[3]=1500;
-        if(id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||
+        if((feedback!=1&&feedback!=2)||id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||
            device==null||!device.matches("ZFC-A[12]-[A-F0-9]{12}")||
            claim==null||!claim.matches("[a-fA-F0-9]{32}")||
            keyHex==null||!keyHex.matches("[a-fA-F0-9]{64}")){
@@ -217,40 +233,82 @@ final class FlightCoreUdpStream {
             lastSendAt=sendAt;
             sent++;
             for(int i=0;i<8;i++){
-                // One extra byte detects an oversized datagram instead of
-                // accepting its silently truncated authenticated prefix.
-                byte[] incoming=new byte[PACKET+1];
+                // One extra byte detects truncated-prefix/oversized datagrams.
+                byte[] incoming=new byte[FEEDBACK_PACKET+1];
                 DatagramPacket packet=new DatagramPacket(incoming,incoming.length);
                 try{socket.receive(packet);}catch(java.net.SocketTimeoutException empty){break;}
-                if(packet.getLength()!=PACKET||incoming[0]!='Z'||incoming[1]!='J'||
-                   incoming[2]!='A'||incoming[3]!='1'||!Arrays.equals(Arrays.copyOfRange(incoming,4,12),token))continue;
-                int ackSeq=get32(incoming,12);
-                if(ackSeq<=lastAckSequence||ackSeq>sequence)continue;
-                byte[] plain;
-                // An unauthenticated ACK is never feedback. Ignore bounded
-                // invalid packets; the unchanged ACK watchdog handles loss.
-                try{plain=cipher(false,key,incoming,Arrays.copyOfRange(incoming,28,PACKET));}
-                catch(javax.crypto.AEADBadTagException invalid){continue;}
-                if(plain.length!=14||get32(plain,0)!=ackSeq||(plain[12]&5)!=5||(plain[12]&~7)!=0)continue;
-                if(lastAckSequence>0&&ackSeq>lastAckSequence+1)estimatedLost+=ackSeq-lastAckSequence-1;
-                long recorded=sendTimes[ackSeq&127];
-                long newRtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;
-                if(ackCount>0)jitter=(jitter*7+Math.abs(newRtt-lastRtt))/8;
-                lastRtt=newRtt;
-                final long ackAt=SystemClock.elapsedRealtime();
-                if(lastAckAt>0)maxAckGapMs=Math.max(maxAckGapMs,ackAt-lastAckAt);
-                lastAckAt=ackAt;
-                lastAckSequence=ackSeq;ackCount++;
-                acknowledgedArm=(plain[12]&2)!=0;
-                accepted=get32(plain,4);rejected=get32(plain,8);
-                if(lastAckAt-lastUiAt>=80){lastUiAt=lastAckAt;report("ack",null);}
+                if(!receiveFeedback(incoming,packet.getLength()))return;
             }
-            if(inputArm&&lastAckAt>0&&now-lastAckAt>350){
+            final long watchdogNow=SystemClock.elapsedRealtime();
+            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>350){
                 report("error","UDP_ACK_TIMEOUT");clear();
             }else if(inputArm&&lastAckAt==0&&sent>17){
                 report("error","UDP_NO_ACK");clear();
+            }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
+               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>350){
+                report("error","UDP_APPLY_TIMEOUT");clear();
             }
         }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
+    }
+    private static int get16(byte[] b,int at){return ((b[at]&255)<<8)|(b[at+1]&255);}
+    private void markReceived(int rx){
+        if(rx<=lastAckSequence)return;
+        if(lastAckSequence>0&&rx>lastAckSequence+1)estimatedLost+=rx-lastAckSequence-1;
+        long recorded=sendTimes[rx&127];
+        long rtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;
+        if(ackCount>0)jitter=(jitter*7+Math.abs(rtt-lastRtt))/8;
+        lastRtt=rtt;final long at=SystemClock.elapsedRealtime();
+        if(lastAckAt>0)maxAckGapMs=Math.max(maxAckGapMs,at-lastAckAt);
+        if(firstRxAckAt==0)firstRxAckAt=at;
+        lastAckAt=at;lastAckSequence=rx;ackCount++;
+    }
+    private boolean receiveFeedback(byte[] packet,int length)throws Exception{
+        final boolean wasArmed=acknowledgedArm;
+        final int expected=feedbackVersion==2?FEEDBACK_PACKET:PACKET;
+        if(length!=expected||packet[0]!='Z'||packet[1]!='J'||packet[2]!='A'||
+           packet[3]!=(feedbackVersion==2?'2':'1')||!Arrays.equals(Arrays.copyOfRange(packet,4,12),token))return true;
+        int echo=get32(packet,12);if(echo<1||echo>sequence)return true;
+        byte[] plain;
+        try{plain=cipher(false,key,packet,Arrays.copyOfRange(packet,28,expected));}
+        catch(javax.crypto.AEADBadTagException invalid){return true;}
+        if(feedbackVersion==1){
+            if(echo<=lastAckSequence||plain.length!=14||get32(plain,0)!=echo||(plain[12]&5)!=5||(plain[12]&~7)!=0)return true;
+            markReceived(echo);acknowledgedArm=(plain[12]&2)!=0;
+            accepted=get32(plain,4);rejected=get32(plain,8);ackKind="LEGACY_RX_ACK";
+            receiveAgeMs=plain[13]&255;lastFeedbackAt=SystemClock.elapsedRealtime();
+        }else{
+            if(plain.length!=28||plain[27]!=0||packet[24]!='F'||packet[25]!='B'||packet[26]!='K'||packet[27]!='2')return true;
+            final long counter=Integer.toUnsignedLong(get32(packet,20));
+            final int rx=get32(plain,0),applied=get32(plain,4),flags=plain[24]&255,kind=plain[25]&255,reason=plain[26]&255;
+            final int receiveAge=get16(plain,8),applyAge=get16(plain,10);
+            final boolean terminal=(flags&16)!=0;
+            if(counter==0||counter<=feedbackCounter||(flags&~31)!=0||(flags&4)==0||
+               rx<lastAckSequence||rx<0||rx>sequence||applied<lastAppliedSeq||applied<0||applied>rx||
+               ((flags&1)!=0)!=(rx>0)||((flags&8)!=0)!=(applied>0)||((flags&2)!=0&&applied==0)||
+               (receiveAge==65535)!=(rx==0)||(applyAge==65535)!=(applied==0)||
+               kind<1||kind>3||reason>5||(kind!=3&&(reason!=0||terminal||rx==0))||
+               (kind==1&&echo!=rx)||(kind==2&&(applied==0||echo!=applied))||
+               (kind==3&&(reason==0||(reason!=2&&!terminal))))return true;
+            final int received=get32(plain,12),appliedCount=get32(plain,16),rejectCount=get32(plain,20);
+            if(received<0||appliedCount<0||appliedCount>received||rejectCount<0)return true;
+            feedbackCounter=counter;lastFeedbackAt=SystemClock.elapsedRealtime();
+            receiveAgeMs=receiveAge==65535?-1:receiveAge;applyAgeMs=applyAge==65535?-1:applyAge;
+            accepted=appliedCount;rejected=rejectCount;
+            if(applied>lastAppliedSeq){lastAppliedSeq=applied;lastAppliedProgressAt=lastFeedbackAt;appliedAckCount++;}
+            acknowledgedArm=(flags&2)!=0&&applied>0;
+            ackKind=kind==1?"RX_ACK":kind==2?"APPLIED_ACK":"NACK";
+            if(kind==3){
+                final String[] reasons={"NONE","INVALID_FRAME","STALE","OWNER_CONFLICT","APPLY_STALLED","AUTH_EXPIRED"};
+                nackReason=reasons[reason];report("nack",null);
+                if(terminal){report("error","UDP_NACK_"+nackReason);clear();return false;}
+                // NACKs never renew RX heartbeat or trigger retransmission.
+                return true;
+            }
+            markReceived(rx);
+        }
+        final long at=SystemClock.elapsedRealtime();
+        if(at-lastUiAt>=80||(!wasArmed&&acknowledgedArm)){lastUiAt=at;report("ack",null);}
+        return true;
     }
     void shutdown(){stop();sender.shutdownNow();}
 }

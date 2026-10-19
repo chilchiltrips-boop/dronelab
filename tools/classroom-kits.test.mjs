@@ -42,3 +42,28 @@ test('Offline bundle includes new UI so an AP-only classroom can reuse the cache
  const sw=read('sw.js');
  for(const u of ['./classroom-kits.css?v=embed-clean-20261017','./js/classroom-kits.js?v=kit-transport-unified-20261017'])assert.ok(sw.includes(u),u);
 });
+test('WebApp observes Android RX/APPLIED diagnostics without claiming its controller',async()=>{
+ const kitId='ZFC-A2-012345ABCDEF',kitCode='432198',records=[],routes=[];
+ const elements={kitCodeInput:{value:''},kitTransport:{value:'sta'},kitIpInput:{value:''},kitKeyInput:{value:''}};
+ const udp={protocol:'ZJUDP1',feedbackVersion:2,active:true,received:12,applied:9,rejected:1,
+  lastRxSeq:12,lastAppliedSeq:11,receiveAgeMs:3,applyAgeMs:19,nackReason:'STALE'};
+ const status={kitId,kitCode,board:'ZFC-A2',version:'1.5.5',requestTransport:'AP',mode:'ap',
+  apActive:true,staConnected:false,setupAuthorized:true,udp,managementProtocol:'ZJM1',
+  rc:{claimed:true,source:'ANDROID',inputArmed:true,motorsDisabled:true}};
+ const window={addEventListener(){},dispatchEvent(){},
+  ZebjusKitPairingStore:{fromSession:()=>'',restore:async()=>''},
+  ZebjusAckDiagnostics:{record:(...entry)=>records.push(entry)},
+  ZebjusKitAuth:{http:()=>({}),openLocal:async()=>({expiresAt:Date.now()+60000,
+   request:async route=>{routes.push(route);assert.equal(route,'/api/status');return status;}})}};
+ const document={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
+ vm.runInNewContext(kit,{window,document,localStorage:{getItem:()=>null,setItem(){}},
+  fetch:async()=>({ok:true,json:async()=>({kitId,kitCode,board:'ZFC-A2',simpleConnection:true})}),
+  setTimeout,clearTimeout,AbortController,URLSearchParams,console,CustomEvent:class{}});
+ await window.ZebjusKits.findKitAp();await window.ZebjusKits.read();
+ assert.equal(window.ZebjusKits.getState().owner,false);
+ assert.equal(window.ZebjusKits.getState().rc.source,'ANDROID');
+ assert.equal(window.ZebjusKits.getState().udp.lastAppliedSeq,11);
+ const event=records.filter(([kind])=>kind==='web_status').at(-1)[1];
+ for(const field of ['feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','nackReason'])assert.equal(event[field],udp[field]);
+ assert.ok(routes.every(route=>route==='/api/status'),'observer never claims, releases or publishes a frame');
+});

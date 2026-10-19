@@ -288,6 +288,8 @@ public class MainActivity extends Activity {
             switch(op){
                 case "startUdp":
                     if(args.length()==5&&nativeUdp!=null)nativeUdp.start(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4));
+                    else if(args.length()==6&&nativeUdp!=null&&("1".equals(arg(args,5))||"2".equals(arg(args,5))))
+                        nativeUdp.start(arg(args,0),arg(args,1),arg(args,2),arg(args,3),arg(args,4),Integer.parseInt(arg(args,5)));
                     break;
                 case "offerUdp":
                     if(args.length()==2&&nativeUdp!=null)nativeUdp.offer(arg(args,0),"true".equals(arg(args,1)));

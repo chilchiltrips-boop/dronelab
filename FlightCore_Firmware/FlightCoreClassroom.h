@@ -24,6 +24,8 @@ static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
+// UDP has independent receive/apply deadlines; other transports use zjRcLoop.
+static bool zjRcUdpOwned=false;
 // Signed diagnostic status contains only a release reason, never owner tokens.
 static String zjRcLastReleaseReason="NONE";
 static uint32_t zjRcLastReleaseAt=0;
@@ -70,7 +72,7 @@ static void zjRcNeutral(){
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
  if(had){zjRcLastReleaseReason=reason;zjRcLastReleaseAt=millis();}
- zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
+ zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcUdpOwned=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
  zjRcSession="";zjRcOwnerId="";zjRcSource="NONE";zjRcTransport="NONE";
  if(had&&Serial.availableForWrite()>70){Serial.print("ZJRC,RELEASE,");Serial.println(reason);}
 }
@@ -89,10 +91,10 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  const uint32_t now=millis();
  // A late packet must never re-arm a timed-out input session. The user must
  // press ARM again, which obtains a fresh ownership token at low throttle.
- if(zjRcInputArmed&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS)zjRcRelease("ARMED_INPUT_TIMEOUT");
+ if(!zjRcUdpOwned&&zjRcInputArmed&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS)zjRcRelease("ARMED_INPUT_TIMEOUT");
  if(!zjRcOwned||zjRcNetwork!=network||zjRcSource!=source||now-zjRcLeaseAt>ZJ_RC_LEASE_MS||
     (network&&(session!=zjRcSession||ip!=zjRcOwnerIP))||
-    (zjRcHasFrame&&uint32_t(now-zjRcLast)<20)||seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
+    seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
     t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000||
     (inputArmed&&!zjRcInputArmed&&t>1050)){
   ++zjRcRejected;return false;
@@ -109,6 +111,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
+ if(zjRcUdpOwned)return; // UDP worker/main check separate receive/apply ages.
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
   zjRcNeutral();

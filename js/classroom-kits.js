@@ -140,8 +140,9 @@ function render(){
   'UDP not supported by this firmware • signed HTTP compatibility mode':
   'Secure UDP • '+(udp.active?'ACTIVE':'IDLE')+
   ' • RX '+(udp.received??0)+' • rejected '+(udp.rejected??0)+
-  ' • seq '+(udp.lastSequence??0)+
-  ' • age '+(Number.isFinite(udp.lastPacketAgeMs)?udp.lastPacketAgeMs+' ms':'—')+
+  ' • RX #'+(udp.lastRxSeq??udp.lastSequence??0)+' / APPLIED '+(udp.feedbackVersion===2?'#'+(udp.lastAppliedSeq??0):'unknown (legacy)')+
+  ' • receive age '+(Number.isFinite(udp.receiveAgeMs??udp.lastPacketAgeMs)?(udp.receiveAgeMs??udp.lastPacketAgeMs)+' ms':'—')+
+  ' / apply age '+(Number.isFinite(udp.applyAgeMs)?udp.applyAgeMs+' ms':'—')+' • NACK '+(udp.nackReason||'NONE')+
   ' • management / IMU '+(state.managementProtocol==='ZJM1'?'UDP 4211':'HTTP compatibility')+' • sender RTT / jitter / missing ACKs: Android Diagnostics export');
  byId('kitRcState',!ready?'OFFLINE':rc.active?(rc.inputArmed?'INPUT ARMED':'RECEIVING • DISARMED'):rc.claimed?'LOCKED / INPUT IDLE':'AVAILABLE');
  const rcBadge=$('kitRcState');if(rcBadge)rcBadge.dataset.tone=!ready?'offline':rc.active?'good':rc.claimed?'locked':'info';
@@ -562,6 +563,8 @@ async function readStatus(){
   ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
   managementProtocol:d.managementProtocol,udpActive:d.udp?.active===true,
   udpReceived:Number(d.udp?.received),udpRejected:Number(d.udp?.rejected),
+  feedbackVersion:d.udp?.feedbackVersion,lastRxSeq:Number(d.udp?.lastRxSeq),lastAppliedSeq:Number(d.udp?.lastAppliedSeq),
+  receiveAgeMs:d.udp?.receiveAgeMs==null?-1:Number(d.udp.receiveAgeMs),applyAgeMs:d.udp?.applyAgeMs==null?-1:Number(d.udp.applyAgeMs),nackReason:d.udp?.nackReason,
   releaseReason:d.rc?.lastReleaseReason,lastReleaseAtMs:Number(d.rc?.lastReleaseAtMs)});
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  const actualTransport=verifiedTransport(d);

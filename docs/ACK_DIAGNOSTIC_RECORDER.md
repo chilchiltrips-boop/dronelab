@@ -14,7 +14,7 @@ The diagnostic input ARM does not arm motors. Firmware's 350 ms input deadman re
 - HTTP failures are classified into QUEUE_STALE, ACK_INVALID, TIMEOUT, IDENTITY, AUTH, NETWORK, CANCELLED or OTHER. No raw response bodies.
 - NOT captured: Wi-Fi passwords, SSIDs, private addresses, Device IDs, Kit Codes, OWNER credentials, cryptographic keys, sessions, tokens, raw requests or camera data.
 
-Last 350 events are saved locally on each device in localStorage and persist across restarts. Normal ACK successes are sampled every fifth frame; slow ACKs (180 ms+), errors, disarms and link changes are retained. The recorder does not issue extra polls, open sessions or alter physical safety rules.
+Last 350 events are saved locally on each device in localStorage and persist across restarts. Normal ACK successes are sampled every fifth frame; input ARM transitions, slow ACKs (180 ms+), errors, disarms and link changes are retained. The recorder does not issue extra polls, open sessions or alter physical safety rules.
 
 ## Interpretation
 - rc_ack_error / QUEUE_STALE and large native RTT suggests app-side queue congestion.
@@ -72,11 +72,20 @@ state resets:
 Interpret: `UDP_INPUT_STALE` with high input age suggests a WebView/UI pause;
 `UDP_ACK_TIMEOUT` with normal send spacing suggests a missing/delayed Kit ACK,
 Wi-Fi loss or firmware responsiveness. Large send spacing points to native
-scheduling or Android OS interruptions. An encrypted ACK means received, not
-necessarily applied to the Kit's main-loop input state: compare signed
-`/api/status` after disarm and USB serial release reason where possible.
+scheduling or Android OS interruptions. Legacy encrypted ACKs mean received; negotiated v2 feedback distinguishes received and applied state as described below.
 
 Reproduce on a propeller-free A1/A2 Kit; export a **fresh** Android JSON after
 the failure. Older logs from firmware 1.5.0 predate the current UDP stream and
 cannot confirm the cause of a present-day ZJUDP1 timeout. Do not disable the
 native 300/350 ms failsafe or accept unauthenticated UDP ACKs.
+
+
+## 20 October 2026 RX / APPLIED feedback
+
+Firmware 1.5.5 + Android 1.8.7 negotiate feedback v2 on the existing ZJUDP1 input stream. RX_ACK acknowledges validation and mailbox storage. APPLIED_ACK follows a successful main-loop RC update. Every authenticated feedback body includes `lastRxSeq`, `lastAppliedSeq`, `receiveAgeMs`, `applyAgeMs` and applied input ARM, so a later RX_ACK can also report a previously completed apply if its dedicated APPLIED_ACK was lost. Applied input ARM never denotes motor ARM.
+
+The Android live ACK line and WebApp Kit UDP section show these sequences and ages separately. JSON/CSV exports retain the fields, feedback version, ACK kind, applied-known flag and fixed NACK reason enums. Unknown ages are `-1` in Android/export, `null` in firmware status, and a dash in the display. Legacy firmware has unknown applied state.
+
+Authenticated nonterminal STALE notices report reordered/duplicate packets without stopping input or renewing the receive watchdog. Terminal `INVALID_FRAME`, `STALE`, `OWNER_CONFLICT`, `APPLY_STALLED`, and `AUTH_EXPIRED` notices stop the matching stream. Missing feedback still triggers the native watchdog; live RX with stalled apply separately reports `UDP_APPLY_TIMEOUT`. No joystick packet is retransmitted.
+
+See [wire format and regression coverage](UDP_RX_APPLIED_1_5_5.md). Real AP/STA testing with both ESP boards and a handset remains necessary; host sockets and native emulator checks do not establish RF reliability.

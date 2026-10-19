@@ -10,7 +10,7 @@ test('50 Hz encrypted UDP owns its native watchdog; WebView ACK delivery cannot 
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
  assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>350/);
  assert.match(network,/inputArmed:data\.inputArmed===true,protocol:'ZJUDP1'/);
- assert.match(native,/if\(inputArm&&lastAckAt>0&&now-lastAckAt>350\)/);
+ assert.match(native,/if\(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>350\)/);
  assert.match(native,/if\(now-lastInputAt>300\)/);
  assert.match(native,/report\("error","UDP_ACK_TIMEOUT"\);clear\(\);/);
  assert.match(native,/report\("error","UDP_INPUT_STALE"\);clear\(\);/);

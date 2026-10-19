@@ -37,7 +37,8 @@ test('actual Android UDP stream starts off UI, authenticates ACKs, neutralizes r
  try{
   for(const [path,body] of Object.entries(doubles)){const file=join(dir,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,body);}
   execFileSync('javac',['-d',dir,...Object.keys(doubles).map(p=>join(dir,p)),
-   'mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java','tools/UdpStreamInterop.java'],{stdio:'pipe',timeout:30000});
+   'mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java','tools/UdpStreamInterop.java','tools/UdpFeedbackInterop.java'],{stdio:'pipe',timeout:30000});
   assert.match(execFileSync('java',['-cp',dir,'in.zebjus.dronelab.companion.UdpStreamInterop'],{encoding:'utf8',timeout:15000}),/PASS actual Android UDP stream/);
+  assert.match(execFileSync('java',['-cp',dir,'in.zebjus.dronelab.companion.UdpFeedbackInterop'],{encoding:'utf8',timeout:20000}),/PASS production Android feedback v2/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

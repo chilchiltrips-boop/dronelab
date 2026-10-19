@@ -271,12 +271,13 @@ static void zjSetupHttp(){
   }
   zjUdpInvalidate();
   bool udpReady=false;
+  const uint8_t feedbackVersion=zjArg("udpFeedbackVersion")=="2"?2:1;
   if(source=="ANDROID"&&zjArg("udpProtocol")=="ZJUDP1"&&zjRequestSession>=0){
    const auto& sc=zjSessions[zjRequestSession];
    if(!sc.localSta&&uint32_t(millis()-sc.at)<1800000)
-    udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.peerIP());
+    udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.peerIP(),feedbackVersion);
   }
-  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpChannels\":7,\"udpAckFields\":5}");
+  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpFeedbackVersion\":"+String(udpReady?feedbackVersion:0)+",\"udpChannels\":7,\"udpAckFields\":"+String(feedbackVersion==2?12:5)+"}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
@@ -286,7 +287,7 @@ static void zjSetupHttp(){
  });
  zjHttp.on("/api/rc/preview",HTTP_POST,[](){
   if(!zjAllow())return;
-  if(zjUdpEnabled()){zjReply(423,"{\"error\":\"udp_rc_owned_use_udp_or_release\"}");return;}
+  if(zjRcUdpOwned||zjUdpEnabled()){zjReply(423,"{\"error\":\"udp_rc_owned_use_udp_or_release\"}");return;}
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
   const String inputArm=zjArg("inputArmed");
   if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
@@ -476,7 +477,9 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
- zjAuthResetRequest();zjRpcLoop();zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
+ // Service due input before/between management work, not only after HTTP.
+ zjUdpLoop(millis());zjAuthResetRequest();zjRpcLoop();zjUdpLoop(millis());
+ zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
  zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
  zjPpmLoop(now);

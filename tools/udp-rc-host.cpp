@@ -17,16 +17,19 @@ static int xTaskCreate(void(*)(void*),const char*,int,void*,int,TaskHandle_t* ta
 #include "../FlightCore_Firmware/FlightCoreUdp.h"
 
 static int peerSocket;
-static void newGrant(){
+static uint8_t testGrantKey[32];
+static uint32_t testFeedbackCounter=0;
+static void newGrant(uint8_t version=1){
  zjUdpInvalidate();zjRcRelease("NETWORK_RELEASE");clockMs+=20;
  auto& auth=zjSessions[7];auth=ZjSession();auth.id=String(std::string(32,'b'));
  auth.key=String(std::string(64,'a'));auth.at=clockMs;zjRequestSession=7;
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
- assert(zjUdpBind(String(std::string(64,'a')),zjRcSession,IPAddress(192,168,4,2)));
+ assert(zjUdpBind(String(std::string(64,'a')),zjRcSession,IPAddress(192,168,4,2),version));
+ memcpy(testGrantKey,zjUdpKey,32);testFeedbackCounter=0;
 }
-static std::vector<uint8_t> frame(uint32_t seq,bool arm,int throttle=1000){
+static std::vector<uint8_t> frame(uint32_t seq,bool arm,int throttle=1000,int roll=1500){
  std::vector<uint8_t> packet(58);memcpy(packet.data(),"ZJU1",4);memcpy(packet.data()+4,zjUdpToken,8);zjUdpPut32(packet.data()+12,seq);zjUdpPut32(packet.data()+20,seq);memcpy(packet.data()+24,"ANDR",4);
- uint8_t body[30]={};const int channels[6]={throttle,1500,1500,1500,1000,1000};
+ uint8_t body[30]={};const int channels[6]={throttle,roll,1500,1500,1000,1000};
  for(int i=0;i<6;i++){body[2*i]=channels[i]>>8;body[2*i+1]=channels[i];}body[12]=arm?1:0;
  assert(zjUdpGcm(true,zjUdpKey,packet.data(),body));memcpy(packet.data()+28,body,30);return packet;
 }
@@ -42,7 +45,66 @@ static void expectAck(bool expected){
 }
 static void replaceAtNextCommit(){
  int* calls=new int(0);
- criticalHook=[calls](){if(++*calls==2){criticalHook=nullptr;newGrant();delete calls;}};
+ // Flush snapshot + timer + grant snapshot precede the post-decryption commit.
+ criticalHook=[calls](){if(++*calls==4){criticalHook=nullptr;newGrant();delete calls;}};
+}
+static void pump(){try{zjUdpReceiverTask(nullptr);}catch(const Idle&) {}}
+static std::vector<uint8_t> feedback(uint8_t kind,uint8_t reason=0,bool terminal=false){
+ uint8_t packet[73],plain[28];int n=recv(peerSocket,packet,sizeof(packet),0);
+ assert(n==72&&!memcmp(packet,"ZJA2",4));assert(zjUdpGcm(false,testGrantKey,packet,plain,28));
+ const uint32_t counter=zjUdpGet32(packet+20);assert(counter>testFeedbackCounter);testFeedbackCounter=counter;
+ assert(plain[25]==kind&&plain[26]==reason&&bool(plain[24]&16)==terminal&&plain[27]==0);
+ return std::vector<uint8_t>(plain,plain+28);
+}
+static void feedbackTests(){
+ newGrant(2);deliver(frame(1,true));auto rx=feedback(1);
+ assert(zjUdpGet32(rx.data())==1&&zjUdpGet32(rx.data()+4)==0&&!(rx[24]&2));
+ zjUdpLoop(clockMs);pump();auto applied=feedback(2);
+ assert(zjUdpGet32(applied.data()+4)==1&&(applied[24]&10)==10);
+ const uint32_t rejected=zjRcRejected;
+ clockMs+=19;deliver(frame(2,true,1000,1600));feedback(1);zjUdpLoop(clockMs);
+ assert(zjUdpHasPending&&zjRcSeq==1&&zjRcRejected==rejected);
+ deliver(frame(3,true,1000,1800));feedback(1);zjUdpLoop(clockMs);assert(zjRcSeq==1);
+ clockMs++;zjUdpLoop(clockMs);pump();applied=feedback(2);
+ assert(zjRcSeq==3&&zjRcRoll==1800&&zjUdpAppliedCount==2&&zjRcRejected==rejected);
+ assert(((applied[8]<<8)|applied[9])==1&&((applied[10]<<8)|applied[11])==0);
+ const uint32_t lastRx=zjUdpLastRx;
+ auto bad=frame(4,true);bad[57]^=1;clockMs+=2;deliver(bad);expectAck(false);
+ assert(zjUdpLastRx==lastRx&&zjUdpLastSeq==3);
+ deliver(frame(2,true));feedback(3,ZJ_UDP_STALE);assert(zjUdpActive&&zjUdpLastRx==lastRx);
+ clockMs+=20;deliver(frame(4,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ deliver(frame(5,true,2500));feedback(3,ZJ_UDP_INVALID_FRAME,true);zjUdpLoop(clockMs);
+ assert(!zjRcOwned&&!zjRcInputArmed);
+ // An old armed/high-throttle frame after a successful DISARM is stale,
+ // rather than an invalid attempt to re-arm. It cannot change the mailbox.
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ clockMs+=20;auto oldArmed=frame(2,true,1400);deliver(oldArmed);feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ deliver(frame(3,false));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);assert(!zjRcInputArmed);
+ const auto disarmedRx=zjUdpLastRx;clockMs+=2;deliver(oldArmed);feedback(3,ZJ_UDP_STALE);
+ assert(zjUdpActive&&!zjUdpHasPending&&zjUdpLastRx==disarmedRx&&!zjRcInputArmed);
+ // A slow claim handshake cannot consume the first armed apply deadline.
+ newGrant(2);clockMs+=1200;deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ assert(zjRcOwned&&zjRcInputArmed);
+ // Invalid packets and NACK traffic cannot renew the receive watchdog.
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ clockMs+=351;pump();auto timeout=feedback(3,ZJ_UDP_STALE,true);
+ assert(((timeout[8]<<8)|timeout[9])==351);zjUdpLoop(clockMs);assert(!zjRcOwned);
+ // Fresh RX acknowledgements cannot mask an apply loop that stopped progressing.
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ for(int i=2;i<=6;i++){clockMs+=70;deliver(frame(i,true));feedback(1);}
+ clockMs++;pump();feedback(3,ZJ_UDP_APPLY_STALLED,true);zjUdpLoop(clockMs);
+ assert(!zjRcOwned&&zjRcLastReleaseReason=="UDP_APPLY_TIMEOUT");
+ // A different owner remains intact; only the old grant gets the terminal NACK.
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ zjRcRelease("USB_STOP");assert(zjRcClaim("WEB",zjKitCode,false,IPAddress(),"USB"));
+ zjUdpLoop(clockMs);pump();feedback(3,ZJ_UDP_OWNER_CONFLICT,true);
+ assert(zjRcOwned&&zjRcSource=="WEB"&&!zjRcInputArmed);zjRcRelease("USB_STOP");
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ zjSessions[7]=ZjSession();zjUdpLoop(clockMs);pump();feedback(3,ZJ_UDP_AUTH_EXPIRED,true);
+ assert(!zjRcOwned&&!zjUdpEnabled());
+ // New claims discard queued old-session terminal notices.
+ newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ zjRcRelease("USB_STOP");zjUdpLoop(clockMs);newGrant(2);pump();expectAck(false);
 }
 int main(){
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";clockMs=1000;zjUdpSetup();assert(zjUdpTaskHandle);
@@ -76,6 +138,6 @@ int main(){
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
  clockMs+=51;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
- close(peerSocket);zjUdpSocket.stop();
+ feedbackTests();close(peerSocket);zjUdpSocket.stop();
  std::cout<<"PASS actual UDP RC receiver: encrypted ARM, ACK, grant race rejection, parent close/replacement/expiry, watchdog"<<std::endl;
 }

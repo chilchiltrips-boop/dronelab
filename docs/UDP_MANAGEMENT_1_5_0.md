@@ -2,8 +2,8 @@
 
 Android 1.8.0-udp-management (versionCode 38) requires FlightCore 1.5.0 or newer.
 
-Current corrective release: **Android 1.8.5-failsafe-diagnostics (code 43)** and
-**FlightCore 1.5.4**. Upgrade the matching A1/A2 firmware and install the signed
+Current corrective release: **Android 1.8.7-rx-applied-feedback (code 45)** and
+**FlightCore 1.5.5**. Upgrade the matching A1/A2 firmware and install the signed
 APK over the previous app; USB pairing and saved Wi-Fi remain in APP OTA.
 
 The [19 October full audit](FULL_CHECK_20261019.md) adds race-safe packet-age checks, exact ACK framing,
@@ -47,7 +47,7 @@ profiles and pairing; use the Firmware Center's board-aware USB procedure.
 
 | Path | Protocol |
 | --- | --- |
-| Android joystick / input ARM / receive ACK | ZJUDP1, UDP 4210, 50 Hz |
+| Android joystick / input ARM / RX and APPLIED feedback | ZJUDP1, UDP 4210, 50 Hz |
 | Android identify, pairing, status, LED, Wi-Fi, ownership, STOP/release | ZJM1, UDP 4211 |
 | Android / bridge IMU telemetry | ZJM1, UDP 4211 |
 | Android / bridge encrypted APP OTA | ZJM1, UDP 4211 |

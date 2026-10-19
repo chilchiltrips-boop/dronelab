@@ -5,7 +5,7 @@ import vm from 'node:vm';
 const source=readFileSync(new URL('../companion-network.js',import.meta.url),'utf8');
 const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-function bench(udp=false){
+function bench(udp=false,feedbackVersion=1){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
  let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true;
  const element=id=>{
@@ -23,7 +23,7 @@ function bench(udp=false){
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
     inputArmSupported:true,controlAuthorized:authorized,ledOn:false};
   }
-  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;if(claimFailure)throw claimFailure;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210}:{})}}
+  if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;if(claimFailure)throw claimFailure;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210,udpFeedbackVersion:feedbackVersion}:{})}}
   if(route==='/api/rc/snapshot')return {kitId,claimed:true,source:'WEB',inputArmed:false,seq:20,ageMs:30};
   if(route==='/api/rc/stop')return {stopped:true,motorsDisabled:true};
   if(route==='/api/rc/preview'){if(delayPreview)await delayPreview;return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'}}
@@ -237,4 +237,32 @@ test('granted WebApp STOP cancels the native UDP publisher immediately and clear
   {status:()=>({paired:true}),sendNetworkResponse:m=>replies.push(m)});
  assert.equal(stopped,1);assert.equal(b.network.inputArmed(),false);
  assert.equal(b.network.hasControl(),false);assert.equal(replies[0].ok,true);
+});
+
+test('feedback negotiation preserves legacy firmware compatibility',async()=>{
+ for(const version of [1,2]){
+  const b=bench(true,version);await b.connect();let args;
+  b.win.ZebjusNative.udpFeedbackVersion=2;
+  b.win.ZebjusNative.startUdp=(...values)=>{args=values;queueMicrotask(()=>b.win.zebjusNativeUdpEvent({id:values[0],type:'start'}));};
+  await b.network.armControls();
+  assert.equal(b.requests.find(r=>r.route==='/api/rc/claim').args.udpFeedbackVersion,'2');
+  assert.equal(args[5],version,'use v2 only when firmware explicitly negotiates it');
+  await b.network.releaseRc();
+ }
+});
+test('RX-only feedback cannot confirm ARM; APPLIED feedback does, and reorder NACK does not release',async()=>{
+ const b=bench(true,2);await b.connect();b.win.ZebjusNative.udpFeedbackVersion=2;
+ b.win.ZebjusNative.offerUdp=()=>{};
+ let finished=false;const arming=b.network.armControls().then(()=>finished=true);await settle();await settle();
+ const feedback={type:'ack',feedbackVersion:2,lastRxSeq:1,seq:1,lastAppliedSeq:0,
+  receiveAgeMs:1,applyAgeMs:-1,appliedKnown:false,inputArmed:true,ackKind:'RX_ACK'};
+ b.win.zebjusNativeUdpEvent(feedback);await settle();
+ assert.equal(finished,false);assert.equal(b.network.inputArmed(),false);
+ b.win.zebjusNativeUdpEvent({...feedback,lastAppliedSeq:1,applyAgeMs:1,appliedKnown:true,ackKind:'APPLIED_ACK'});
+ await arming;assert.equal(b.network.inputArmed(),true);
+ b.win.zebjusNativeUdpEvent({...feedback,type:'nack',ackKind:'NACK',nackReason:'STALE'});await settle();
+ assert.equal(b.network.inputArmed(),true);assert.ok(!b.requests.some(r=>r.route==='/api/rc/release'));
+ b.win.zebjusNativeUdpEvent({...feedback,type:'error',reason:'UDP_NACK_APPLY_STALLED'});await settle();
+ assert.equal(b.network.inputArmed(),false);assert.equal(b.network.isConnected(),true);
+ assert.ok(b.requests.some(r=>r.route==='/api/rc/release'));
 });

@@ -16,6 +16,7 @@ on:
       - 'tools/classroom-discovery-bridge.mjs'
       - 'tools/UdpRpcInterop.java'
       - 'tools/UdpStreamInterop.java'
+      - 'tools/UdpFeedbackInterop.java'
       - 'tools/host-stubs/**'
       - '.github/workflows/udp-management.yml'
       - 'tools/android-direct-kit*'

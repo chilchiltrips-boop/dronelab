@@ -30,6 +30,7 @@ on:
       - 'tools/ppm-host.test.mjs'
       - 'tools/led-failsafe.test.mjs'
       - 'tools/UdpStreamInterop.java'
+      - 'tools/UdpFeedbackInterop.java'
       - 'tools/network-transport.test.mjs'
       - 'tools/classroom-kits.test.mjs'
       - 'tools/wifi-onboarding-recovery.test.mjs'

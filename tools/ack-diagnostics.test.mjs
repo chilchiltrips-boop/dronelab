@@ -79,6 +79,26 @@ test('ACK successes are sampled without synchronous storage writes on every joys
  b.api.record('rc_ack',{seq:51,roundTripMs:200});
  assert.equal(b.events().at(-1).data.roundTripMs,200,'slow ACK is always recorded');
 });
+test('RX/APPLIED ages and authenticated NACK enums survive exports; ARM transitions bypass sampling',()=>{
+ for(const client of ['android','web']){
+  const b=bench(client);
+  b.api.record('udp_ack',{feedbackVersion:2,ackKind:'RX_ACK',lastRxSeq:10,lastAppliedSeq:9,
+   receiveAgeMs:2,applyAgeMs:18,appliedKnown:true,inputArmed:false});
+  b.api.record('udp_ack',{feedbackVersion:2,ackKind:'APPLIED_ACK',lastRxSeq:11,lastAppliedSeq:11,
+   receiveAgeMs:1,applyAgeMs:0,appliedKnown:true,inputArmed:true});
+  assert.equal(b.events().at(-1).data.inputArmed,true,'ARM transition must not be sampled away');
+  b.api.record('udp_nack',{ackKind:'NACK',nackReason:'STALE',lastRxSeq:11,lastAppliedSeq:11,receiveAgeMs:30,applyAgeMs:30});
+  const exported=JSON.parse(b.api.exportData('json'));
+  assert.equal(exported.summary.nack,1);assert.equal(exported.summary.lastAppliedSeq,11);
+  assert.match(b.api.exportData('csv'),/receiveAgeMs,applyAgeMs/);
+  assert.equal(b.events().at(-1).data.nackReason,'STALE');
+  for(const reason of ['UDP_NACK_INVALID_FRAME','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED']){
+   b.api.record('udp_error',{reason});assert.equal(b.events().at(-1).data.reason,reason);
+  }
+  b.api.record('udp_nack',{nackReason:'secret device',ackKind:'secret ack',key:'secret key'});
+  assert.deepEqual(b.events().at(-1).data,{});
+ }
+});
 test('errors auto-persist; recovery survives page reload; cap prevents unbounded storage growth',()=>{
  const b=bench();
  for(let i=0;i<400;i++)b.api.record('rc_ack_error',{seq:i,reason:'TIMEOUT'});
@@ -115,7 +135,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 44\s*versionName '1\.8\.6-udp-ack-watchdog'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 45\s*versionName '1\.8\.7-rx-applied-feedback'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
