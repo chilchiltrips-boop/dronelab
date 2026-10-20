@@ -328,7 +328,14 @@ function clearUdpWaiters(reason){
  udpReadyWaiter=udpArmWaiter=null;
 }
 window.zebjusNativeUdpEvent=data=>{
- if(!data||!['start','ack','nack','error'].includes(data.type))return;
+ if(!data||!['start','ack','nack','warning','error'].includes(data.type))return;
+ if(data.type==='warning'){
+  if(udpActive&&rcSession)trace('udp_warning',{transport:link,source:'ANDROID',
+   reason:'UDP_FEEDBACK_DELAY',lastRxSeq:data.lastRxSeq,lastAppliedSeq:data.lastAppliedSeq,
+   receiveAgeMs:data.receiveAgeMs,applyAgeMs:data.applyAgeMs,
+   lastPacketAgeMs:data.lastPacketAgeMs,firmwareDeadmanMs:data.firmwareDeadmanMs});
+  return; // Warning only; native bounded watchdog remains authoritative.
+ }
  // A delayed callback from a stopped native stream cannot resolve a new ARM.
  if(data.id&&data.id!==udpStreamId)return;
  if(data.type==='start'){
@@ -345,7 +352,7 @@ window.zebjusNativeUdpEvent=data=>{
  if(data.type==='error'){
   // Fixed native enum only; never record or display an exception message,
   // IP, network name or session credential.
-  const reason=typeof data.reason==='string'&&/^(?:UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)|UDP_(?:SESSION_INVALID|START_FAILED|INPUT_STALE|ACK_TIMEOUT|APPLY_TIMEOUT|NO_ACK|SEND_OR_AUTH_FAILED|NACK_(?:INVALID_FRAME|STALE|OWNER_CONFLICT|APPLY_STALLED|AUTH_EXPIRED)))$/.test(data.reason)
+  const reason=typeof data.reason==='string'&&/^(?:UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)|UDP_(?:SESSION_INVALID|START_FAILED|INPUT_STALE|ACK_TIMEOUT|APPLY_TIMEOUT|FIRMWARE_RX_STALE|FIRMWARE_APPLY_STALE|NO_ACK|SEND_OR_AUTH_FAILED|NACK_(?:INVALID_FRAME|STALE|OWNER_CONFLICT|APPLY_STALLED|AUTH_EXPIRED)))$/.test(data.reason)
    ?data.reason:'UDP_UNKNOWN';
   trace('udp_error',{transport:link,source:'ANDROID',inputArmed:false,
    sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
@@ -752,7 +759,7 @@ function previewControls(m,critical=false){
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
  // Never queue expensive signed status/SSID verification ahead of ARM/RC.
- // A missing RC ACK is handled by the flight UI and the 350ms firmware
+ // A missing RC ACK is handled by native UDP and the 500ms firmware
  // watchdog; it is NOT evidence that the AP Wi-Fi association is gone.
  // Poll only after diagnostic control is released, even when ACK is stale.
  if(rcClaiming||rcSession||previewBusy)return;
