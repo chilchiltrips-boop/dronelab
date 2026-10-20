@@ -7,7 +7,7 @@ const client=document.getElementById('kitAckDiagnostics')?.dataset?.client==='an
 const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
- 'rc_ack_error','udp_start','udp_ack','udp_nack','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
+ 'rc_ack_error','udp_start','udp_ack','udp_nack','udp_warning','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
  'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect']);
 const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
@@ -15,12 +15,12 @@ const fields=['route','transport','source','mode','board','version','outcome','r
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
    'feedbackVersion','ackKind','nackReason','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
- 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'];
+ 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
- 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+ 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/udp_nack_owner_conflict/.test(s))return 'OWNER_BUSY';
