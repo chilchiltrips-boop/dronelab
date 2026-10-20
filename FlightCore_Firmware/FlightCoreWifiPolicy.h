@@ -17,7 +17,7 @@ static void zjEnsureAP(){
 static void zjEnsureSTA(){
  WiFi.setAutoReconnect(false);
  if(zjApStarted||(WiFi.getMode()&WIFI_AP))WiFi.softAPdisconnect(true);
- zjApStarted=false;WiFi.mode(WIFI_STA);WiFi.disconnect(false,false);
+ zjApStarted=false;WiFi.mode(WIFI_STA);WiFi.setSleep(false);WiFi.disconnect(false,false);
 }
 static void zjConnectSaved(bool reset=true){
  if(!zjSavedSsid.length()){zjPhase="ap_no_saved_wifi";zjEnsureAP();return;}
