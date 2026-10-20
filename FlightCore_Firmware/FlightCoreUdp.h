@@ -25,7 +25,12 @@ static uint32_t zjUdpLastSeq=0,zjUdpLastRx=0,zjUdpFirstRx=0,zjUdpBoundAt=0,zjUdp
 static uint32_t zjUdpLastAppliedSeq=0,zjUdpLastAppliedAt=0,zjUdpAppliedCount=0,zjUdpNotifiedApplied=0;
 static uint32_t zjUdpFeedbackCounter=0,zjUdpFeedbackSalt=0,zjUdpLastNackAt=0;
 // The old Python controller sent 50 Hz with independent RX; retain encrypted feedback at bounded rate.
+#if defined(ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK)
+// Existing host interop fixture expects every applied transition synchronously.
+static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
+#else
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
+#endif
 static uint32_t zjUdpLastAppliedNoticeAt=0;
 static bool zjUdpNotifiedArm=false;
 static uint32_t zjUdpAckAttempted[4]={},zjUdpAckSent[4]={},zjUdpAckFailed[4]={};
