@@ -88,8 +88,8 @@ static void feedbackTests(){
  assert(zjRcOwned&&zjRcInputArmed);
  // Invalid packets and NACK traffic cannot renew the receive watchdog.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- clockMs+=351;pump();auto timeout=feedback(3,ZJ_UDP_STALE,true);
- assert(((timeout[8]<<8)|timeout[9])==351);zjUdpLoop(clockMs);assert(!zjRcOwned);
+ clockMs+=501;pump();auto timeout=feedback(3,ZJ_UDP_STALE,true);
+ assert(((timeout[8]<<8)|timeout[9])==501);zjUdpLoop(clockMs);assert(!zjRcOwned);
  // Fresh RX acknowledgements cannot mask an apply loop that stopped progressing.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
  for(int i=2;i<=6;i++){clockMs+=70;deliver(frame(i,true));feedback(1);}
@@ -124,7 +124,7 @@ int main(){
  old=frame(1,true);old[57]^=1;replaceAtNextCommit();deliver(old);expectAck(false);
  assert(zjUdpActive&&zjUdpRejected==0);
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);assert(zjRcInputArmed);
- clockMs+=351;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
+ clockMs+=501;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed&&zjRcThrottle==1000);
  // Closing the parent authentication session revokes its UDP grant immediately.
  newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
