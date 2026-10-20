@@ -223,7 +223,7 @@ static void zjUdpReceiverTask(void*){
    if(terminal){zjUdpActive=zjUdpHasPending=false;zjUdpEndReason=reason;}
   }else{
    // Report first valid input, arm/disarm transitions immediately, otherwise every
-   // 50 ms. Every valid frame still refreshes firmware RX freshness and mailbox.
+   // 100 ms. Every valid frame still refreshes firmware RX freshness and mailbox.
    notify=!zjUdpLastSeq||armed!=zjUdpNotifiedRxArm||
     uint32_t(now-zjUdpLastRxNoticeAt)>=ZJ_UDP_RX_FEEDBACK_MS;
    if(notify){zjUdpLastRxNoticeAt=now;zjUdpNotifiedRxArm=armed;}
