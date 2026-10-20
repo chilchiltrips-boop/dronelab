@@ -98,12 +98,28 @@ function initLiveInputs(){
   window.ZebjusDevicesWorkspace?.active?.()==='inputs'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
  function wipe(){sample=null;usbPpm=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
+ // Use firmware-accepted RC from a newer authenticated /api/status response
+ // when the dedicated faster /api/rc/snapshot read is temporarily unavailable.
+ function reuseVerifiedStatus(kit){
+  const rc=kit.rc,at=Number(kit.rcAt),now=Date.now();
+  if(!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||
+     !rc||rc.kitId!==kit.kitId||!Number.isFinite(at)||at<=0||
+     at<=Number(sample?.at||0)||now-at>SNAPSHOT_TTL_MS||
+     !channels.every(field=>finitePulse(rc[field])))return;
+  const previous=sample;
+  const sequenceAt=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source?
+   previous.sequenceAt??previous.at:at;
+  sample={kitId:kit.kitId,rc:{...rc},at,sequenceAt,
+   rateHz:rate.observe(kit.kitId,rc,at),ledOn:kit.ledOn,
+   motorsOff:rc.motorsDisabled===true||rc.motorsArmed===false};
+ }
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
   if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot){
    wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;
   }
+  reuseVerifiedStatus(kit);
   const v=normalizeAcceptedInput(kit,sample);
   card.dataset.liveState=v.state;
   write('liLiveState',v.state.toUpperCase());
