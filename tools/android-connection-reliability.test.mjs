@@ -121,5 +121,5 @@ test('signed RC priority is enforced before native worker and stale ACK errors r
  assert.match(bridge,/ArrayBlockingQueue<>\(3\)/);
  assert.match(bridge,/Stale RC preview queued /);
  assert.match(bridge,/msg!=null&&\(msg\.startsWith\("Stale RC preview queued "\)\|\|msg\.equals\("Stale native request dropped"\)\)/);
- assert.match(read('FlightCore_Firmware/FlightCoreClassroom.h'),/ZJ_RC_DEADMAN_MS=350/);
+ assert.match(read('FlightCore_Firmware/FlightCoreClassroom.h'),/ZJ_RC_DEADMAN_MS=500/);
 });
