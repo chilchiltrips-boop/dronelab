@@ -24,6 +24,12 @@ static uint8_t zjUdpKey[32]={},zjUdpToken[8]={},zjUdpOwner[4]={},zjUdpFeedbackVe
 static uint32_t zjUdpLastSeq=0,zjUdpLastRx=0,zjUdpFirstRx=0,zjUdpBoundAt=0,zjUdpReceived=0,zjUdpRejected=0;
 static uint32_t zjUdpLastAppliedSeq=0,zjUdpLastAppliedAt=0,zjUdpAppliedCount=0,zjUdpNotifiedApplied=0;
 static uint32_t zjUdpFeedbackCounter=0,zjUdpFeedbackSalt=0,zjUdpLastNackAt=0;
+// The old Python controller sent 50 Hz with independent RX; retain encrypted feedback at bounded rate.
+static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
+static uint32_t zjUdpLastAppliedNoticeAt=0;
+static bool zjUdpNotifiedArm=false;
+static uint32_t zjUdpAckAttempted[4]={},zjUdpAckSent[4]={},zjUdpAckFailed[4]={};
+static uint32_t zjUdpMaxTxUs=0,zjUdpMaxRxToAckUs=0;
 static uint8_t zjUdpLastNack=0,zjUdpEndReason=0;
 static uint16_t zjUdpOwnerPort=0;
 static uint32_t zjUdpLifetime=0;
@@ -33,7 +39,7 @@ static String zjUdpAuthId,zjUdpRcId;
 static uint32_t zjUdpPendingSeq=0,zjUdpPendingAt=0,zjUdpGeneration=0;
 static uint16_t zjUdpPendingChannels[6]={};
 static bool zjUdpPendingArmed=false;
-struct ZjUdpFeedback {uint8_t bytes[ZJ_UDP_FEEDBACK_SIZE]={},peer[4]={};uint16_t port=0;uint32_t generation=0;};
+struct ZjUdpFeedback {uint8_t bytes[ZJ_UDP_FEEDBACK_SIZE]={},peer[4]={};uint16_t port=0;uint32_t generation=0;uint8_t kind=0;uint32_t rxAt=0;};
 // Only the receiver writes sockets. Main queues ciphertext, never an auth key.
 static ZjUdpFeedback zjUdpTerminal;
 static bool zjUdpTerminalPending=false;
@@ -62,6 +68,8 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
  zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
+ zjUdpLastAppliedNoticeAt=0;zjUdpNotifiedArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
+ for(int i=0;i<4;i++)zjUdpAckAttempted[i]=zjUdpAckSent[i]=zjUdpAckFailed[i]=0;
  zjUdpHasPending=zjUdpRequestedArm=zjUdpAppliedArm=zjUdpTerminalPending=zjUdpTerminalReported=false;
  zjUdpEndReason=zjUdpLastNack=0;zjUdpLastNackAt=0;zjUdpActive=zjUdpConfigured=true;
  portEXIT_CRITICAL(&zjUdpMux);memset(key,0,sizeof(key));zjRcUdpOwned=true;return true;
@@ -79,9 +87,9 @@ static bool zjUdpBuildFeedback(ZjUdpFeedback& out,uint8_t kind,uint32_t seq,uint
  uint8_t key[32],body[44]={};uint32_t rx,applied,rxAt,appliedAt,counter,salt,received,count,rejected;bool armed;
  portENTER_CRITICAL(&zjUdpMux);
  if(!zjUdpConfigured||zjUdpFeedbackVersion!=2||!zjUdpOwnerPort||zjUdpFeedbackCounter==0xffffffff){portEXIT_CRITICAL(&zjUdpMux);return false;}
- out.generation=zjUdpGeneration;out.port=zjUdpOwnerPort;memcpy(out.peer,zjUdpOwner,4);
+ out.generation=zjUdpGeneration;out.port=zjUdpOwnerPort;out.kind=kind;memcpy(out.peer,zjUdpOwner,4);
  memcpy(key,zjUdpKey,32);memcpy(out.bytes+4,zjUdpToken,8);
- rx=zjUdpLastSeq;applied=zjUdpLastAppliedSeq;rxAt=zjUdpLastRx;appliedAt=zjUdpLastAppliedAt;
+ rx=zjUdpLastSeq;applied=zjUdpLastAppliedSeq;rxAt=zjUdpLastRx;appliedAt=zjUdpLastAppliedAt;out.rxAt=rxAt;
  received=zjUdpReceived;count=zjUdpAppliedCount;rejected=zjUdpRejected;armed=zjUdpAppliedArm;
  counter=++zjUdpFeedbackCounter;salt=zjUdpFeedbackSalt;portEXIT_CRITICAL(&zjUdpMux);
  const uint32_t now=millis();memcpy(out.bytes,"ZJA2",4);zjUdpPut32(out.bytes+12,seq);
@@ -96,8 +104,23 @@ static bool zjUdpBuildFeedback(ZjUdpFeedback& out,uint8_t kind,uint32_t seq,uint
 static bool zjUdpEmit(const ZjUdpFeedback& out){
  portENTER_CRITICAL(&zjUdpMux);const bool current=out.generation==zjUdpGeneration;portEXIT_CRITICAL(&zjUdpMux);
  if(!current||!out.port)return false;
- zjUdpSocket.beginPacket(IPAddress(out.peer[0],out.peer[1],out.peer[2],out.peer[3]),out.port);
- zjUdpSocket.write(out.bytes,ZJ_UDP_FEEDBACK_SIZE);return zjUdpSocket.endPacket()!=0;
+ const uint32_t start=micros();
+ const bool ok=zjUdpSocket.beginPacket(IPAddress(out.peer[0],out.peer[1],out.peer[2],out.peer[3]),out.port)!=0&&
+  zjUdpSocket.write(out.bytes,ZJ_UDP_FEEDBACK_SIZE)==ZJ_UDP_FEEDBACK_SIZE&&zjUdpSocket.endPacket()!=0;
+ const uint32_t elapsed=micros()-start;
+ portENTER_CRITICAL(&zjUdpMux);
+ if(out.kind>=1&&out.kind<=3){
+  ++zjUdpAckAttempted[out.kind];
+  if(ok)++zjUdpAckSent[out.kind];else ++zjUdpAckFailed[out.kind];
+ }
+ if(elapsed>zjUdpMaxTxUs)zjUdpMaxTxUs=elapsed;
+ if(out.kind==1&&out.rxAt){
+  // Receive time is captured in millis(): this is a coarse, bounded estimate.
+  const uint32_t delay=micros()-out.rxAt*1000UL;
+  if(delay>zjUdpMaxRxToAckUs&&delay<10000000UL)zjUdpMaxRxToAckUs=delay;
+ }
+ portEXIT_CRITICAL(&zjUdpMux);
+ return ok;
 }
 static void zjUdpStop(uint8_t reason){
  bool report;uint32_t seq;
@@ -118,10 +141,13 @@ static uint8_t zjUdpCheckTimers(){
  portEXIT_CRITICAL(&zjUdpMux);return reason;
 }
 static void zjUdpFlushFeedback(){
- ZjUdpFeedback terminal;bool queued=false;uint32_t applied=0,rx=0;
+ ZjUdpFeedback terminal;bool queued=false;uint32_t applied=0,rx=0;bool appliedArm=false;
  portENTER_CRITICAL(&zjUdpMux);
  if(zjUdpTerminalPending){terminal=zjUdpTerminal;zjUdpTerminalPending=false;queued=true;}
- if(zjUdpActive&&zjUdpFeedbackVersion==2&&zjUdpLastAppliedSeq!=zjUdpNotifiedApplied)applied=zjUdpLastAppliedSeq;
+ if(zjUdpActive&&zjUdpFeedbackVersion==2&&zjUdpLastAppliedSeq!=zjUdpNotifiedApplied&&
+  (!zjUdpNotifiedApplied||zjUdpAppliedArm!=zjUdpNotifiedArm||uint32_t(millis()-zjUdpLastAppliedNoticeAt)>=ZJ_UDP_APPLIED_FEEDBACK_MS)){
+  applied=zjUdpLastAppliedSeq;appliedArm=zjUdpAppliedArm;
+ }
  rx=zjUdpLastSeq;portEXIT_CRITICAL(&zjUdpMux);
  if(queued)zjUdpEmit(terminal);
  const uint8_t timeout=zjUdpCheckTimers();
@@ -129,14 +155,17 @@ static void zjUdpFlushFeedback(){
   portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration)zjUdpTerminalReported=true;portEXIT_CRITICAL(&zjUdpMux);
  }return;}
  if(applied){ZjUdpFeedback job;if(zjUdpBuildFeedback(job,2,applied,0,false)&&zjUdpEmit(job)){
-  portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration)zjUdpNotifiedApplied=applied;portEXIT_CRITICAL(&zjUdpMux);
+  portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration){zjUdpNotifiedApplied=applied;zjUdpNotifiedArm=appliedArm;zjUdpLastAppliedNoticeAt=millis();}portEXIT_CRITICAL(&zjUdpMux);
  }}
 }
 static String zjUdpStatistics(){
  uint32_t recv,rej,seq,rx,applied,at,count;uint8_t version,nack;bool active;
+ uint32_t rxSent,rxFailed,appliedSent,appliedFailed,nackSent,nackFailed,maxTxUs,maxRxToAckUs;
  portENTER_CRITICAL(&zjUdpMux);
  recv=zjUdpReceived;rej=zjUdpRejected;seq=zjUdpLastSeq;rx=zjUdpLastRx;active=zjUdpActive;
  applied=zjUdpLastAppliedSeq;at=zjUdpLastAppliedAt;count=zjUdpAppliedCount;version=zjUdpFeedbackVersion;nack=zjUdpLastNack;
+ rxSent=zjUdpAckSent[1];rxFailed=zjUdpAckFailed[1];appliedSent=zjUdpAckSent[2];appliedFailed=zjUdpAckFailed[2];
+ nackSent=zjUdpAckSent[3];nackFailed=zjUdpAckFailed[3];maxTxUs=zjUdpMaxTxUs;maxRxToAckUs=zjUdpMaxRxToAckUs;
  portEXIT_CRITICAL(&zjUdpMux);const uint32_t now=millis();
  return String("{\"protocol\":\"ZJUDP1\",\"port\":")+String(ZJ_UDP_PORT)+",\"feedbackVersion\":"+String(version)+
   ",\"active\":"+(active?"true":"false")+",\"received\":"+String(recv)+",\"applied\":"+String(count)+
@@ -144,6 +173,10 @@ static String zjUdpStatistics(){
   ",\"lastAppliedSeq\":"+String(applied)+",\"lastPacketAgeMs\":"+(seq?String(uint32_t(now-rx)):String("null"))+
   ",\"receiveAgeMs\":"+(seq?String(uint32_t(now-rx)):String("null"))+
   ",\"applyAgeMs\":"+(applied?String(uint32_t(now-at)):String("null"))+
+  ",\"rxAckSent\":"+String(rxSent)+",\"rxAckFailed\":"+String(rxFailed)+
+  ",\"appliedAckSent\":"+String(appliedSent)+",\"appliedAckFailed\":"+String(appliedFailed)+
+  ",\"nackSent\":"+String(nackSent)+",\"nackFailed\":"+String(nackFailed)+
+  ",\"maxAckTxUs\":"+String(maxTxUs)+",\"maxRxToAckUs\":"+String(maxRxToAckUs)+
   ",\"nackReason\":\""+String(zjUdpReason(nack))+"\",\"motorsDisabled\":true}";
 }
 static void zjUdpReceiverTask(void*){
