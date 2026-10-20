@@ -30,7 +30,7 @@ final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
     // Independent native receive/feedback watchdog. Firmware safety remains unchanged.
-    static final long ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
+    static final long ACK_TIMEOUT_MS=750, FEEDBACK_NEUTRAL_MS=300, INPUT_STALE_MS=300;
     static final int NO_ACK_SENT_LIMIT=25;
     private final Activity activity;
     private final WebView view;
@@ -42,7 +42,7 @@ final class FlightCoreUdpStream {
     private ScheduledFuture<?> timer;
     private DatagramSocket socket;
     private byte[] key, token, prefix;
-    private boolean active, inputArm, acknowledgedArm;
+    private boolean active, inputArm, acknowledgedArm, feedbackNeutralized;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
     private long lastSendAt, maxSendGapMs, maxAckGapMs;
     private int feedbackVersion=1,lastAppliedSeq,receiveAgeMs=-1,applyAgeMs=-1;
@@ -95,6 +95,7 @@ final class FlightCoreUdpStream {
             o.put("receiveAgeMs",receiveAgeMs<0?-1:receiveAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
             o.put("applyAgeMs",applyAgeMs<0?-1:applyAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
             o.put("appliedKnown",feedbackVersion==2&&lastAppliedSeq>0);o.put("appliedAckCount",appliedAckCount);
+            o.put("feedbackNeutralized",feedbackNeutralized);
             o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
@@ -115,7 +116,7 @@ final class FlightCoreUdpStream {
         if(prefix!=null)Arrays.fill(prefix,(byte)0);
         if(token!=null)Arrays.fill(token,(byte)0);
         key=token=prefix=null;
-        sequence=0;inputArm=acknowledgedArm=false;lastInputAt=0;lastAckAt=0;
+        sequence=0;inputArm=acknowledgedArm=feedbackNeutralized=false;lastInputAt=0;lastAckAt=0;
     }
 
     // The origin-checked WebMessage callback runs on the Android WebView/UI
@@ -136,6 +137,7 @@ final class FlightCoreUdpStream {
         feedbackVersion=feedback;lastAppliedSeq=0;receiveAgeMs=applyAgeMs=-1;
         feedbackCounter=lastFeedbackAt=lastAppliedProgressAt=firstRxAckAt=appliedAckCount=0;
         ackKind=feedback==2?"RX_ACK":"LEGACY_RX_ACK";nackReason="NONE";
+        feedbackNeutralized=false;
         Arrays.fill(sendTimes,0);
         channels[0]=channels[4]=channels[5]=1000;
         channels[1]=channels[2]=channels[3]=1500;
@@ -210,6 +212,7 @@ final class FlightCoreUdpStream {
                 if(next[i]<1000||next[i]>2000)return;
             }
         }catch(NumberFormatException invalid){return;}
+        if(feedbackNeutralized&&armed)return; // explicit new claim required after degraded link
         if(armed&&!inputArm&&next[0]>1050)return;
         System.arraycopy(next,0,channels,0,6);
         inputArm=armed;lastInputAt=SystemClock.elapsedRealtime();
@@ -220,6 +223,15 @@ final class FlightCoreUdpStream {
         if(now-lastInputAt>INPUT_STALE_MS){
             // Snapshot the actual stalled input age before zeroing session state.
             report("error","UDP_INPUT_STALE");clear();return;
+        }
+        final long feedbackGap=lastAckAt>0?now-lastAckAt:sent*20;
+        if(inputArm&&feedbackGap>FEEDBACK_NEUTRAL_MS){
+            // Fail closed before the firmware 500 ms deadman: no stale
+            // throttle or ARM during a delayed return ACK path.
+            inputArm=false;acknowledgedArm=false;feedbackNeutralized=true;
+            channels[0]=channels[4]=channels[5]=1000;
+            channels[1]=channels[2]=channels[3]=1500;
+            report("status","UDP_FEEDBACK_DEGRADED");
         }
         try{
             int seq=++sequence;
@@ -241,11 +253,11 @@ final class FlightCoreUdpStream {
             lastSendAt=sendAt;
             sent++;
             final long watchdogNow=SystemClock.elapsedRealtime();
-            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>ACK_TIMEOUT_MS){
+            if((inputArm||feedbackNeutralized)&&lastAckAt>0&&watchdogNow-lastAckAt>ACK_TIMEOUT_MS){
                 report("error","UDP_ACK_TIMEOUT");clear();
-            }else if(inputArm&&lastAckAt==0&&sent>NO_ACK_SENT_LIMIT){
+            }else if((inputArm||feedbackNeutralized)&&lastAckAt==0&&sent>NO_ACK_SENT_LIMIT*2){
                 report("error","UDP_NO_ACK");clear();
-            }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
+            }else if(feedbackVersion==2&&(inputArm||feedbackNeutralized)&&firstRxAckAt>0&&
                watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>ACK_TIMEOUT_MS){
                 report("error","UDP_APPLY_TIMEOUT");clear();
             }
