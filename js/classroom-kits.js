@@ -454,7 +454,9 @@ async function deviceRequest(route,method='GET',args={}){
    readScheduler?.clear();
    return await deviceRequestCore(route,method,args);
   }
-  if(!readScheduler)return await deviceRequestCore(route,method,args);
+  // Never coalesce authorization, identity changes or argument-dependent reads.
+  if(!readScheduler||!['/api/rc/snapshot','/api/status','/api/telemetry'].includes(route)||Object.keys(args||{}).length)
+   return await deviceRequestCore(route,method,args);
   const key=reconnectTicket+'|'+state.kitId+'|'+state.transport+'|'+route;
   return await readScheduler.read(key,async()=>{
    const reply=await deviceRequestCore(route,method,args);
