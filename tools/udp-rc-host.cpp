@@ -14,6 +14,7 @@ static void portENTER_CRITICAL(portMUX_TYPE*){auto hook=criticalHook;if(hook)hoo
 static void portEXIT_CRITICAL(portMUX_TYPE*){}
 struct Idle{};static void vTaskDelay(int){throw Idle{};}
 static int xTaskCreate(void(*)(void*),const char*,int,void*,int,TaskHandle_t* task){*task=reinterpret_cast<void*>(1);return pdPASS;}
+#define ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK
 #include "../FlightCore_Firmware/FlightCoreUdp.h"
 
 static int peerSocket;

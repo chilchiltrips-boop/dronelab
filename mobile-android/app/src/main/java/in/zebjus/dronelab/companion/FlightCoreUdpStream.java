@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -28,10 +29,15 @@ import javax.crypto.spec.SecretKeySpec;
 final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
+    // Independent native receive/feedback watchdog. Firmware safety remains unchanged.
+    static final long ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
+    static final int NO_ACK_SENT_LIMIT=25;
     private final Activity activity;
     private final WebView view;
     private final FlightCoreWifiLink wifiLink;
     private final ScheduledExecutorService sender=Executors.newSingleThreadScheduledExecutor();
+    // Like the proven Python DroneWiFiRX/DroneWiFiTX split: feedback cannot block 50 Hz sends.
+    private final ExecutorService receiver=Executors.newSingleThreadExecutor();
     private final SecureRandom random=new SecureRandom();
     private ScheduledFuture<?> timer;
     private DatagramSocket socket;
@@ -161,7 +167,7 @@ final class FlightCoreUdpStream {
                         net.bindSocket(ds);
                         stage="CONNECT_PEER";
                         ds.connect(InetAddress.getByName(ip),PORT);
-                        ds.setSoTimeout(1);
+                        ds.setSoTimeout(40);
                     }catch(Exception e){if(ds!=null)ds.close();throw e;}
                     stage="START_SENDER";
                     key=secret;token=claimToken;prefix=new byte[4];random.nextBytes(prefix);
@@ -170,6 +176,8 @@ final class FlightCoreUdpStream {
                     lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
                     lastSendAt=maxSendGapMs=maxAckGapMs=0;
                     lastInputAt=SystemClock.elapsedRealtime();
+                    final DatagramSocket receiveSocket=ds;
+                    receiver.execute(()->receiveLoop(requestGeneration,receiveSocket));
                     timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
                     report("start",null);
                 }catch(Exception error){
@@ -209,7 +217,7 @@ final class FlightCoreUdpStream {
     private synchronized void tick(){
         if(!active)return;
         final long now=SystemClock.elapsedRealtime();
-        if(now-lastInputAt>300){
+        if(now-lastInputAt>INPUT_STALE_MS){
             // Snapshot the actual stalled input age before zeroing session state.
             report("error","UDP_INPUT_STALE");clear();return;
         }
@@ -232,23 +240,50 @@ final class FlightCoreUdpStream {
             if(lastSendAt>0)maxSendGapMs=Math.max(maxSendGapMs,sendAt-lastSendAt);
             lastSendAt=sendAt;
             sent++;
-            for(int i=0;i<8;i++){
-                // One extra byte detects truncated-prefix/oversized datagrams.
-                byte[] incoming=new byte[FEEDBACK_PACKET+1];
-                DatagramPacket packet=new DatagramPacket(incoming,incoming.length);
-                try{socket.receive(packet);}catch(java.net.SocketTimeoutException empty){break;}
-                if(!receiveFeedback(incoming,packet.getLength()))return;
-            }
             final long watchdogNow=SystemClock.elapsedRealtime();
-            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>350){
+            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>ACK_TIMEOUT_MS){
                 report("error","UDP_ACK_TIMEOUT");clear();
-            }else if(inputArm&&lastAckAt==0&&sent>17){
+            }else if(inputArm&&lastAckAt==0&&sent>NO_ACK_SENT_LIMIT){
                 report("error","UDP_NO_ACK");clear();
             }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
-               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>350){
+               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>ACK_TIMEOUT_MS){
                 report("error","UDP_APPLY_TIMEOUT");clear();
             }
         }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
+    }
+    /** Only this worker blocks in receive(); socket closing or session change ends it. */
+    private void receiveLoop(long generation,DatagramSocket readingSocket){
+        while(!Thread.currentThread().isInterrupted()){
+            synchronized(this){
+                if(generation!=startupGeneration||!active||socket!=readingSocket)return;
+            }
+            // Fresh DatagramPacket each read: packet length must never truncate later feedback.
+            byte[] bytes=new byte[FEEDBACK_PACKET+1];
+            DatagramPacket packet=new DatagramPacket(bytes,bytes.length);
+            try{
+                readingSocket.receive(packet);
+                synchronized(this){
+                    if(generation!=startupGeneration||!active||socket!=readingSocket)return;
+                    if(!receiveFeedback(bytes,packet.getLength()))return;
+                }
+            }catch(java.net.SocketTimeoutException expected){
+                // Timeouts are normal and do NOT refresh authenticated ACK freshness.
+            }catch(java.net.SocketException closed){
+                synchronized(this){
+                    if(generation==startupGeneration&&active&&socket==readingSocket){
+                        report("error","UDP_RX_SOCKET_FAILED");clear();
+                    }
+                }
+                return;
+            }catch(Exception failure){
+                synchronized(this){
+                    if(generation==startupGeneration&&active&&socket==readingSocket){
+                        report("error","UDP_RX_AUTH_OR_IO_FAILED");clear();
+                    }
+                }
+                return;
+            }
+        }
     }
     private static int get16(byte[] b,int at){return ((b[at]&255)<<8)|(b[at+1]&255);}
     private void markReceived(int rx){
@@ -310,5 +345,5 @@ final class FlightCoreUdpStream {
         if(at-lastUiAt>=80||(!wasArmed&&acknowledgedArm)){lastUiAt=at;report("ack",null);}
         return true;
     }
-    void shutdown(){stop();sender.shutdownNow();}
+    void shutdown(){stop();sender.shutdownNow();receiver.shutdownNow();}
 }

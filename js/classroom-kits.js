@@ -563,6 +563,13 @@ async function readStatus(){
   ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
   managementProtocol:d.managementProtocol,udpActive:d.udp?.active===true,
   udpReceived:Number(d.udp?.received),udpRejected:Number(d.udp?.rejected),
+  rxAckSent:Number(d.udp?.rxAckSent),rxAckFailed:Number(d.udp?.rxAckFailed),
+  appliedAckSent:Number(d.udp?.appliedAckSent),appliedAckFailed:Number(d.udp?.appliedAckFailed),
+  nackSent:Number(d.udp?.nackSent),nackFailed:Number(d.udp?.nackFailed),
+  maxAckTxUs:Number(d.udp?.maxAckTxUs),maxRxToAckUs:Number(d.udp?.maxRxToAckUs),
+  rpcMaxLoopUs:Number(d.rpcMaxLoopUs),rpcMaxDispatchUs:Number(d.rpcMaxDispatchUs),
+  apClientCount:Number(d.apClientCount),apJoinEvents:Number(d.apJoinEvents),
+  apLeaveEvents:Number(d.apLeaveEvents),apLastLeaveReason:Number(d.apLastLeaveReason),
   feedbackVersion:d.udp?.feedbackVersion,lastRxSeq:Number(d.udp?.lastRxSeq),lastAppliedSeq:Number(d.udp?.lastAppliedSeq),
   receiveAgeMs:d.udp?.receiveAgeMs==null?-1:Number(d.udp.receiveAgeMs),applyAgeMs:d.udp?.applyAgeMs==null?-1:Number(d.udp.applyAgeMs),nackReason:d.udp?.nackReason,
   releaseReason:d.rc?.lastReleaseReason,lastReleaseAtMs:Number(d.rc?.lastReleaseAtMs)});

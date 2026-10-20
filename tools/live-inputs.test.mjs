@@ -86,14 +86,15 @@ test('packet-rate tracker uses accepted counters and ignores polling without new
  assert.equal(tracker.observe(kit.kitId,{...a,active:false},2400),null);
  assert.equal(tracker.observe(kit.kitId,{...a,seq:1,accepted:101,source:'WEB'},3000),null);
 });
-test('Live Inputs is on Kit Connection, read-only, responsive and reachable in Wix offline shell',()=>{
+test('Live Inputs is a standalone workspace, read-only, responsive and reachable in Wix offline shell',()=>{
  const html=read('index.html'),lab=read('lab.html'),workspace=read('js/devices-workspace.js'),
   script=read('js/live-inputs.js'),style=read('live-inputs.css'),sw=read('sw.js');
  assert.equal(html,lab);
  for(const id of ['fwLiveInputs','liKitName','liInputSource','liKitTransport','liLiveState',
   'liLeftDot','liRightDot','liThrottle','liRoll','liPitch','liYaw','liRate','liAge','liCounts',
   'liInputArm','liLed','liMotors','liHelp'])assert.ok(html.includes('id="'+id+'"'),id);
- assert.match(workspace,/relocate\('\.fw-live-inputs-card','connection'\)/);
+ assert.ok(workspace.includes("relocate('.fw-live-inputs-card','inputs')"));
+ assert.ok(workspace.includes("relocate('#kitAckDiagnostics','diagnostics')"));
  assert.match(script,/request\('\/api\/rc\/snapshot'\)/);
  assert.match(script,/reply\?\.kitId!==id/);
  assert.match(script,/ZebjusSerialRcDecoder/);

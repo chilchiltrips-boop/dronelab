@@ -23,7 +23,11 @@ class String {std::string v;public:
  friend bool operator==(const String&a,const String&b){return a.v==b.v;}friend bool operator!=(const String&a,const String&b){return !(a==b);}friend bool operator<(const String&a,const String&b){return a.v<b.v;}
 };
 struct IPAddress {uint32_t value;IPAddress(uint32_t v=0):value(v){}IPAddress(int a,int b,int c,int d):value((a<<24)|(b<<16)|(c<<8)|d){}uint8_t operator[](int i)const{return value>>((3-i)*8);}String toString()const{return String((*this)[0])+"."+String((*this)[1])+"."+String((*this)[2])+"."+String((*this)[3]);}friend bool operator==(IPAddress a,IPAddress b){return a.value==b.value;}friend bool operator!=(IPAddress a,IPAddress b){return !(a==b);}};
-static uint32_t clockMs=0,randomValue=200;static uint32_t millis(){return clockMs;}static uint32_t esp_random(){return ++randomValue;}
+static uint32_t clockMs=0,randomValue=200;static uint32_t millis(){return clockMs;}
+#ifndef ZJ_SHIM_EXTERNAL_MICROS
+static uint32_t micros(){return clockMs*1000UL;}
+#endif
+static uint32_t esp_random(){return ++randomValue;}
 struct {uint64_t getEfuseMac(){return 0x123456abcdefULL;}} ESP;
 struct {int availableForWrite(){return 512;}template<class... T>void print(T...){}template<class... T>void println(T...){}template<class... T>void printf(T...){} } Serial;
 const char* FC_BOARD="ZFC-A1",*FC_LABEL="TEST KIT";

@@ -1,4 +1,5 @@
 // Execute the production PPM ISR, mailbox, ownership and loss handling.
+#define ZJ_SHIM_EXTERNAL_MICROS
 #include "host-stubs/ArduinoShim.h"
 #include <cassert>
 #include <iostream>
