@@ -36,7 +36,11 @@ jobs:
         run: npm test
       - name: Validate offline bundle and project
         run: npm run check
+      # Pull requests may edit firmware source without publishing new binaries.
+      # Firmware build job below recompiles both boards and verifies its artifacts.
+      # Never compare unreleased PR source against the committed stable binary hashes.
       - name: Verify existing firmware catalog and binary release
+        if: github.event_name != 'pull_request'
         run: npm run verify:firmware
 
   browser-v2:
