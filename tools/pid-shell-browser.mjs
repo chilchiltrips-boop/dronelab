@@ -2,7 +2,11 @@ import {chromium} from 'playwright';
 import {mkdirSync} from 'node:fs';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 mkdirSync('test-output',{recursive:true});
-const browser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1440,height:900},hasTouch:true,serviceWorkers:'block',reducedMotion:'reduce'});
+// Model a physical laptop and phone as independent browser processes. Sharing
+// one Chromium process can background the mock phone when laptop tabs change,
+// triggering its *correct* visibility failsafe and a false WebRTC regression.
+const browser=await chromium.launch(browserOptions),phoneBrowser=await chromium.launch(browserOptions);
+const context=await browser.newContext({viewport:{width:1440,height:900},hasTouch:true,serviceWorkers:'block',reducedMotion:'reduce'});
 await configureContext(context);
 await context.addInitScript(()=>{
  let api;
@@ -11,7 +15,7 @@ await context.addInitScript(()=>{
 // Separate browser contexts model a physical phone and desktop. Switching
 // desktop tabs must not background the phone (which correctly releases
 // its own control lease when its own activity is backgrounded).
-const phoneContext=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,
+const phoneContext=await phoneBrowser.newContext({viewport:{width:390,height:844},hasTouch:true,
  serviceWorkers:'block',reducedMotion:'reduce'});
 await configureContext(phoneContext);
 const page=await context.newPage(),phone=await phoneContext.newPage(),errors=[];
@@ -78,7 +82,8 @@ try{
  const after=await page.evaluate(()=>window.__testPeer.status());
  if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile'){
   const visibility=await page.evaluate(()=>document.visibilityState);
-  throw Error('Mobile nav discarded WebRTC session/control lease • '+visibility+' • before='+JSON.stringify({connected:before.connected,controller:before.controller})+' • after='+JSON.stringify({connected:after.connected,controller:after.controller}));
+  const phoneVisibility=await phone.evaluate(()=>document.visibilityState);
+  throw Error('Mobile nav discarded WebRTC session/control lease • host='+visibility+' phone='+phoneVisibility+' • before='+JSON.stringify({connected:before.connected,controller:before.controller})+' • after='+JSON.stringify({connected:after.connected,controller:after.controller}));
  }
  await phone.locator('#flightBack').click();
  await phone.locator('#flightArm').click();
@@ -102,4 +107,4 @@ try{
  await page.screenshot({path:'test-output/pid-shell-error-web.png',fullPage:true}).catch(()=>{});
  await phone.screenshot({path:'test-output/pid-shell-error-phone.png',fullPage:true}).catch(()=>{});
  process.exitCode=1;
-}finally{await browser.close()}
+}finally{await Promise.allSettled([browser.close(),phoneBrowser.close()])}
