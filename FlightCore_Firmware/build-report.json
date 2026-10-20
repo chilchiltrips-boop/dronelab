@@ -1,9 +1,9 @@
 {
-  "version": "1.5.5",
-  "builtAt": "2026-10-20T04:59:02Z",
-  "sourceCommit": "5b28a426a6d99cf7a221af3f2c9c4a161c57a3e7",
+  "version": "1.5.6",
+  "builtAt": "2026-10-20T05:11:28Z",
+  "sourceCommit": "cc481082442a12554dd998525ea4c647a1dbb9ba",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "15eb8b3a709e48bf5b3d96a23ed80540513060aaf5b70c718b5f44bd81250861",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "c8abbb28595fba745fc525211eed05a35c8f283de9237dbca38bd8e99da9b9e2",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreClassroom.h": "6874ad54955b0c3799d005eba1d36b5feed2fceec3176524744511428e8dc164",
     "FlightCore_Firmware/FlightCoreEnrollment.h": "c336f4c3acae4fcd5dc0637b311b443345b04eacf84ce895d257d54a467bf589",
@@ -45,7 +45,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-20T05:00:12Z"
+      "compiledAt": "2026-10-20T05:12:44Z"
     },
     {
       "boardId": "ZFC-A2",
@@ -72,7 +72,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-20T05:01:07Z"
+      "compiledAt": "2026-10-20T05:13:40Z"
     }
   ]
 }
