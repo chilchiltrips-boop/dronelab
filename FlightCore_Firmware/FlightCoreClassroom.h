@@ -20,7 +20,7 @@ static String zjEffectiveApPassword(){
 static bool zjKitAutoName=false;
 // Arduino sketch and standalone firmware-host use the same default telemetry mode.
 bool zjTelemetryRaw=false;
-static constexpr uint32_t ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
+static constexpr uint32_t ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
