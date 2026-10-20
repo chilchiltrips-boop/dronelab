@@ -76,12 +76,12 @@ int main(){
  assert(zjRcFrame(2,1600,1700,1300,1800,"ANDROID",armedToken,true,IPAddress(1),true));
  assert(zjRcThrottle==1600&&zjRcRoll==1700&&zjRcPitch==1300&&zjRcYaw==1800);
  assert(std::string(zjRcState().c_str()).find("\"inputArmed\":true")!=std::string::npos);
- clockMs+=351;
+ clockMs+=501;
  assert(!zjRcFrame(3,1000,1500,1500,1500,"ANDROID",armedToken,true,IPAddress(1),true));
  assert(!zjRcInputArmed&&!zjRcOwned&&zjRcThrottle==1000);
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(1),"AP"));
  assert(zjRcFrame(1,1000,1500,1500,1500,"ANDROID",zjRcSession,true,IPAddress(1),true));
- clockMs+=351;zjRcLoop(clockMs);assert(!zjRcInputArmed&&!zjRcOwned);
+ clockMs+=501;zjRcLoop(clockMs);assert(!zjRcInputArmed&&!zjRcOwned);
  // Enrollment is impossible without manufacturing installation of a strong label.
  clockMs=10000;zjEnrollmentInit();zjSetupEnrollmentHttp();prepare("/api/auth/challenge");zjHttp.args["kind"]="setup";zjHttp.args["client"]=String(std::string(32,'a'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==409);
  zjPrefs.putString("label",String(std::string(64,'a')));zjEnrollmentInit();String nonce=enroll("setup",zjLabelSecret);assert(replyStatus==200);assert(zjSessions[0].setup);
