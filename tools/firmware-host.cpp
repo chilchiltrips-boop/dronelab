@@ -7,6 +7,7 @@
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 // Host-only stub: no physical PPM receiver is attached to native C++ unit tests.
 static String zjPpmRcChannelsJson(){return String("null");}
+static String zjPpmRcSignalJson(){return String("\"UNKNOWN\"");}
 const int HTTP_GET=1,HTTP_POST=2;static IPAddress requestIP(192,168,4,2);
 struct FakeHttp {
  std::map<String,String> headers,args;std::map<String,std::function<void()>> handlers;String path;int verb=HTTP_GET;

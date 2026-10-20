@@ -4,7 +4,8 @@
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
-const trace=(event,data)=>window.ZebjusAckDiagnostics?.record(event,data);
+let diagnosticCorrelationId='';
+const trace=(event,data)=>window.ZebjusAckDiagnostics?.record(event,{diagnosticId:diagnosticCorrelationId,...data});
 const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
@@ -328,9 +329,10 @@ function clearUdpWaiters(reason){
  udpReadyWaiter=udpArmWaiter=null;
 }
 window.zebjusNativeUdpEvent=data=>{
- if(!data||!['start','ack','nack','error'].includes(data.type))return;
+ if(!data||!['start','ack','nack','error','state'].includes(data.type))return;
  // A delayed callback from a stopped native stream cannot resolve a new ARM.
  if(data.id&&data.id!==udpStreamId)return;
+ if(data.type==='state'){trace('udp_ack',{transport:link,linkState:data.linkState,outcome:'pending'});return;}
  if(data.type==='start'){
   const w=udpReadyWaiter;udpReadyWaiter=null;
   if(w){clearTimeout(w.timer);w.resolve();}
@@ -345,12 +347,12 @@ window.zebjusNativeUdpEvent=data=>{
  if(data.type==='error'){
   // Fixed native enum only; never record or display an exception message,
   // IP, network name or session credential.
-  const reason=typeof data.reason==='string'&&/^(?:UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)|UDP_(?:SESSION_INVALID|START_FAILED|INPUT_STALE|ACK_TIMEOUT|APPLY_TIMEOUT|NO_ACK|SEND_OR_AUTH_FAILED|NACK_(?:INVALID_FRAME|STALE|OWNER_CONFLICT|APPLY_STALLED|AUTH_EXPIRED)))$/.test(data.reason)
+  const reason=typeof data.reason==='string'&&/^(?:UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)|UDP_(?:SESSION_INVALID|START_FAILED|INPUT_STALE|ACK_TIMEOUT|APPLY_TIMEOUT|NO_ACK|SEND_OR_AUTH_FAILED|RECEIVE_FAILED|SEQUENCE_EXHAUSTED|NACK_(?:INVALID_FRAME|STALE|OWNER_CONFLICT|APPLY_STALLED|AUTH_EXPIRED)))$/.test(data.reason)
    ?data.reason:'UDP_UNKNOWN';
   trace('udp_error',{transport:link,source:'ANDROID',inputArmed:false,
    sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,jitterMs:data.jitterMs,
    lastPacketAgeMs:data.lastPacketAgeMs,inputAgeMs:data.inputAgeMs,
-    maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,...udpFeedback(data),reason,outcome:'fail'});
+    maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,sendGapMs:data.sendGapMs,ackGapMs:data.ackGapMs,feedbackAgeMs:data.feedbackAgeMs,receiverWakeGapMs:data.receiverWakeGapMs,linkState:data.linkState,diagnosticId:diagnosticCorrelationId,...udpFeedback(data),reason,outcome:'fail'});
   show('Secure UDP diagnostic input unavailable • '+reason+' • Kit input remains DISARMED','warn');
   if(udpReadyWaiter){const w=udpReadyWaiter;udpReadyWaiter=null;clearTimeout(w.timer);w.reject(Error(reason));}
   if(udpActive)void releaseRc(reason).catch(()=>{});
@@ -363,13 +365,13 @@ window.zebjusNativeUdpEvent=data=>{
  if(firmwareAck.feedbackVersion===2&&(!firmwareAck.appliedKnown||firmwareAck.lastAppliedSeq<1))firmwareAck.inputArmed=false;
  udpStats={sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,
   accepted:data.accepted,rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,
-   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,...udpFeedback(data)};
+   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,sendGapMs:data.sendGapMs,ackGapMs:data.ackGapMs,feedbackAgeMs:data.feedbackAgeMs,receiverWakeGapMs:data.receiverWakeGapMs,linkState:data.linkState,diagnosticId:diagnosticCorrelationId,...udpFeedback(data)};
  lastStatus=now;statusFailures=0;
  trace('udp_ack',{transport:link,source:'ANDROID',seq:firmwareAck.seq,
   roundTripMs:firmwareAck.rtt,frameGapMs:now-previous,inputArmed:firmwareAck.inputArmed,
   sent:data.sent,ackReceived:data.ackReceived,lost:data.lost,accepted:data.accepted,
   rejected:data.rejected,jitterMs:data.jitterMs,lastPacketAgeMs:data.lastPacketAgeMs,
-   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,...udpFeedback(data),outcome:'ok'});
+   inputAgeMs:data.inputAgeMs,maxSendGapMs:data.maxSendGapMs,maxAckGapMs:data.maxAckGapMs,sendGapMs:data.sendGapMs,ackGapMs:data.ackGapMs,feedbackAgeMs:data.feedbackAgeMs,receiverWakeGapMs:data.receiverWakeGapMs,linkState:data.linkState,diagnosticId:diagnosticCorrelationId,...udpFeedback(data),outcome:'ok'});
  if(udpArmWaiter&&firmwareAck.inputArmed){
   const w=udpArmWaiter;udpArmWaiter=null;clearTimeout(w.timer);w.resolve(firmwareAck);
  }
@@ -383,6 +385,7 @@ function dropInput(message,reasonOverride=''){
  ++rcEpoch;rcInputArmed=false;rcSession='';firmwareAck=null;
  window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:false}}));show(message,'warn');
 }
+window.zebjusNativeWifiDiagnostic=data=>trace('wifi_event',{transport:link,wifiEvent:data?.wifiEvent});
 window.zebjusNativeWifiLinkEvent=()=>trace('wifi_event',{transport:link,reason:'NETWORK',outcome:'fail'});
 window.zebjusNativeOtaResult=data=>{show(data?.message||'OTA status unknown',data?.ok?'good':'warn');if(data?.ok){online=false;}};
 window.zebjusNativeResult=data=>{
@@ -497,10 +500,10 @@ async function status(){
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
  online=true;lastStatus=Date.now();statusFailures=0;
- trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
+ trace('kit_status',{...window.ZebjusAckDiagnostics?.firmwareFields?.(data),transport:link,board:data.board,version:data.version,mode:data.mode,
   apActive:data.apActive,staConnected:data.staConnected,staReason:Number(data.staDisconnectReason)||0,
-  rssi:Number(data.rssi),seq:Number(data.rc?.seq),accepted:Number(data.rc?.accepted),
-  rejected:Number(data.rc?.rejected),ageMs:Number(data.rc?.ageMs),rcOwned:data.rc?.claimed===true,
+  rssi:data.rssi==null?undefined:Number(data.rssi),seq:Number(data.rc?.seq),accepted:Number(data.rc?.accepted),
+  rejected:Number(data.rc?.rejected),ageMs:data.rc?.ageMs==null?undefined:Number(data.rc.ageMs),rcOwned:data.rc?.claimed===true,
   source:data.rc?.source,inputArmed:data.rc?.inputArmed===true,
   managementProtocol:data.managementProtocol,udpActive:data.udp?.active===true,
   udpReceived:Number(data.udp?.received),udpRejected:Number(data.udp?.rejected),...udpFeedback(data.udp),
@@ -650,6 +653,7 @@ async function claimRc(){
    await request('/api/rc/release','POST',{session:d.session}).catch(()=>{});
    throw Error('ARM cancelled; input released');
   }
+  diagnosticCorrelationId=/^[A-Fa-f0-9]{16}$/.test(d.diagnosticId||'')?d.diagnosticId:'';
   rcSession=d.session;rcSeq=0;firmwareAck=null;lastAckDiagnosticAt=0;
   if(d.udpProtocol==='ZJUDP1'&&d.udpPort===4210&&native?.startUdp&&auth?.udpKey){
    udpStarting=true;

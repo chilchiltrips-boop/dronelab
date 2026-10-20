@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Device-ID + SSID + BSSID + Android Network binding; never fall back to cellular. */
 final class FlightCoreWifiLink {
-    interface Listener { void linkChanged(); void discovery(String kitId,String ip,String error); }
+    interface Listener { default void diagnostic(String event){} void linkChanged(); void discovery(String kitId,String ip,String error); }
     private final Activity activity;
     private final ConnectivityManager connectivity;
     private final WifiManager wifi;
@@ -140,6 +140,7 @@ final class FlightCoreWifiLink {
         Network n=matchingWifi(expectedSsid);
         WifiInfo observed=info(n);
         String bssid=checkedBssid(observed);
+        listener.diagnostic("IDENTITY_VERIFIED");
         selected=n;pinnedId=id;pinnedIp=ip;pinnedSsid=checkedSsid(observed);pinnedBssid=bssid;
     }
     synchronized boolean isPinned(){return selected!=null;}
@@ -160,10 +161,14 @@ final class FlightCoreWifiLink {
         if(connectivity==null)return;
         callback=Build.VERSION.SDK_INT>=31
             ?new ConnectivityManager.NetworkCallback(ConnectivityManager.NetworkCallback.FLAG_INCLUDE_LOCATION_INFO){
+                @Override public void onAvailable(Network network){listener.diagnostic("AVAILABLE");}
+                @Override public void onLinkPropertiesChanged(Network network,android.net.LinkProperties properties){if(matches(network))listener.diagnostic("ROUTE_CHANGED");}
                 @Override public void onLost(Network network){handleLost(network);}
                 @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps){handleCapabilities(network,caps);}
              }
             :new ConnectivityManager.NetworkCallback(){
+                @Override public void onAvailable(Network network){listener.diagnostic("AVAILABLE");}
+                @Override public void onLinkPropertiesChanged(Network network,android.net.LinkProperties properties){if(matches(network))listener.diagnostic("ROUTE_CHANGED");}
                 @Override public void onLost(Network network){handleLost(network);}
                 @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps){handleCapabilities(network,caps);}
              };
@@ -171,10 +176,11 @@ final class FlightCoreWifiLink {
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(),callback);
     }
     private synchronized void handleLost(Network network){
-        observedWifi.remove(network);
+        observedWifi.remove(network);listener.diagnostic("LOST");
         if(matches(network)){clear();listener.linkChanged();}
     }
     private synchronized void handleCapabilities(Network network,NetworkCapabilities caps){
+        listener.diagnostic("CAPABILITIES");
         final boolean wifiAvailable=caps!=null&&caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
         final WifiInfo details=wifiAvailable&&caps.getTransportInfo() instanceof WifiInfo
             ?(WifiInfo)caps.getTransportInfo():null;
@@ -183,7 +189,7 @@ final class FlightCoreWifiLink {
         if(matches(network)&&caps!=null&&!wifiAvailable){
             clear();listener.linkChanged();return;
         }
-        if(details==null)return; // Transient redaction: no false AP disconnect.
+        if(details==null){listener.diagnostic("IDENTITY_REDACTED");return;} // Transient redaction: no false AP disconnect.
         try{
             String ssid=checkedSsid(details),bssid=checkedBssid(details);
             observedWifi.put(network,details);

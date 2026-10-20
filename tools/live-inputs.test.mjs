@@ -68,7 +68,7 @@ test('a current HTTP reply cannot resurrect a stale firmware RC packet or frozen
 test('visible polling is 5-10Hz capped, single-flight, and exponential backoff on failures',()=>{
  const js=read('js/live-inputs.js');
  const period=Number(/NETWORK_POLL_MS=(\d+)/.exec(js)?.[1]);
- assert.ok(period>=100&&period<=200,'fast monitor poll cap expected 5-10Hz');
+ assert.ok(period>=250&&period<=400,'fast monitor poll cap expected 5-10Hz');
  assert.match(js,/!inFlight&&Date\.now\(\)>=nextPollAt/);
  assert.match(js,/current\.physicalLink!==physicalLink/);
  assert.match(js,/token!==requestGeneration/);
@@ -86,21 +86,31 @@ test('packet-rate tracker uses accepted counters and ignores polling without new
  assert.equal(tracker.observe(kit.kitId,{...a,active:false},2400),null);
  assert.equal(tracker.observe(kit.kitId,{...a,seq:1,accepted:101,source:'WEB'},3000),null);
 });
-test('Live Inputs is on Kit Connection, read-only, responsive and reachable in Wix offline shell',()=>{
+test('Live Inputs is a dedicated workspace, read-only, responsive and reachable in Wix offline shell',()=>{
  const html=read('index.html'),lab=read('lab.html'),workspace=read('js/devices-workspace.js'),
   script=read('js/live-inputs.js'),style=read('live-inputs.css'),sw=read('sw.js');
  assert.equal(html,lab);
  for(const id of ['fwLiveInputs','liKitName','liInputSource','liKitTransport','liLiveState',
   'liLeftDot','liRightDot','liThrottle','liRoll','liPitch','liYaw','liRate','liAge','liCounts',
   'liInputArm','liLed','liMotors','liHelp'])assert.ok(html.includes('id="'+id+'"'),id);
- assert.match(workspace,/relocate\('\.fw-live-inputs-card','connection'\)/);
+ assert.match(workspace,/relocate\('\.fw-live-inputs-card','live'\)/);
  assert.match(script,/request\('\/api\/rc\/snapshot'\)/);
  assert.match(script,/reply\?\.kitId!==id/);
  assert.match(script,/ZebjusSerialRcDecoder/);
  assert.doesNotMatch(script,/\.claim\(|\.sendFrame\(|\/api\/rc\/preview|\.toggleControl\(/);
  assert.match(style,/@media\(max-width:580px\)/);
- for(const asset of ['live-inputs.css?v=ppm-ch8-20261017','js/live-inputs.js?v=ppm-ch8-20261017']){
+ for(const asset of ['live-inputs.css\?v=ack-reliability-20261020','js/live-inputs.js\?v=ack-reliability-20261020']){
   assert.ok(html.includes(asset),asset+' HTML');assert.ok(sw.includes('./'+asset),asset+' offline');
  }
  assert.match(html,/INPUT ARM is diagnostic only/);
+});
+
+test('active network input with unknown firmware age cannot be presented as LIVE',()=>{
+ const model=normalizeAcceptedInput(kit,{...snap(),rc:{...rc(),ageMs:null}},{now:1000});
+ assert.notEqual(model.state,'live');assert.equal(model.values,null);
+});
+
+test('genuine PPM loss is explicit even after firmware releases its PPM owner',()=>{
+ const sample=snap('PPM');sample.rc={...sample.rc,active:false,source:'NONE',inputArmed:false,ppmSignal:'LOST',channels:null};
+ const v=normalizeAcceptedInput(kit,sample,{now:1000});assert.equal(v.ppmSignal,'LOST');assert.equal(v.ppmChannels,null);assert.equal(v.inputArm,'DISARMED');
 });

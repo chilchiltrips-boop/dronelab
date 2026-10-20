@@ -34,15 +34,16 @@ test('Overview telemetry is not requested by other tabs or during STA/AP/OTA ope
  assert.ok(a>=0&&b>a);
  let kitStatus={connected:true,kitId:'ZFC-A1-012345ABCDEF'},view='overview',calls=0;
  const nodes={'tab-firmware':{classList:{contains:()=>true}},fwKitDemoMode:{checked:false}};
- const context={state:()=>kitStatus,root:{ZebjusDevicesWorkspace:{active:()=>view}},
+ const context={document:{hidden:false},state:()=>kitStatus,root:{ZebjusDevicesWorkspace:{active:()=>view}},
   $:id=>nodes[id],kit:()=>({request:async()=>{calls++;return{kitId:kitStatus.kitId,gyroReady:true}}}),
-  line(){},telemetry:null,telemetryTime:0,healthAt:0,Date};
+  line(){},telemetry:null,telemetryTime:0,healthAt:0,healthPending:false,Date};
  vm.runInNewContext(src.slice(a,b)+';globalThis.runSample=sampleHealth;',context);
  view='firmware';await context.runSample();assert.equal(calls,0);
  view='wifi';await context.runSample();assert.equal(calls,0);
  view='overview';kitStatus={...kitStatus,otaInProgress:true};await context.runSample();assert.equal(calls,0);
  kitStatus={...kitStatus,otaInProgress:false,working:true};await context.runSample();assert.equal(calls,0);
- kitStatus={...kitStatus,working:false};await context.runSample();assert.equal(calls,1);
+ kitStatus={...kitStatus,working:false};context.document.hidden=true;await context.runSample();assert.equal(calls,0);
+ context.document.hidden=false;await context.runSample();assert.equal(calls,1);
 });
 test('Closing embedded WebRTC connection settings preserves originating navigation',()=>{
  const src=read('pairing-web.js');

@@ -12,7 +12,7 @@ import javax.crypto.spec.*;
 public final class UdpFeedbackInterop {
  static final String DEVICE="ZFC-A2-012345ABCDEF",CLAIM="11".repeat(16),KEY="22".repeat(32);
  static final byte[] key=new byte[32];
- static volatile boolean serving=true,apply=true,staleOnce=false,oversize=false,replay=false,seenArmed=false;
+ static volatile boolean serving=true,apply=true,dedicated=true,staleOnce=false,oversize=false,replay=false,seenArmed=false;
  static volatile int forceReason=0;
  static volatile Throwable failure;
  static int rx=0,applied=0,received=0,appliedCount=0,counter=0,salt=80;
@@ -56,7 +56,7 @@ public final class UdpFeedbackInterop {
    require(seq==rx+1,"Joystick packets must advance without retransmitting old sequences");
    rx=seq;rxAt=now();received++;
    reply(server,in,packet,seq,1,0,false);
-   if(apply){applied=seq;appliedAt=now();appliedCount++;appliedArm=(body[12]&1)!=0;reply(server,in,packet,seq,2,0,false);}
+   if(apply){applied=seq;appliedAt=now();appliedCount++;appliedArm=(body[12]&1)!=0;if(dedicated)reply(server,in,packet,seq,2,0,false);}
   }}catch(Throwable error){if(serving)failure=error;}
  }
  static boolean has(WebView view,String text){return view.events.stream().anyMatch(s->s.contains(text));}
@@ -84,10 +84,15 @@ public final class UdpFeedbackInterop {
    require(has(view,"\"appliedKnown\":true")&&has(view,"\"lastAppliedSeq\":"),"Applied confirmation must be explicit");
    staleOnce=true;waitFor(activity,view,"\"nackReason\":\"STALE\"",stream);
    require(!has(view,"\"type\":\"error\""),"Reordered STALE NACK must keep control alive");
-   apply=false;waitFor(activity,view,"UDP_APPLY_TIMEOUT",stream);stream.shutdown();
+   dedicated=false;long healthyUntil=now()+650;
+   while(now()<healthyUntil){stream.offer("1000,1500,1500,1500,1000,1000",true);activity.drain();Thread.sleep(10);}
+   require(!has(view,"\"type\":\"error\""),"RX embedded applied state must prevent a false apply timeout");
+   dedicated=true;apply=false;long lostApplyAt=now();waitFor(activity,view,"UDP_APPLY_TIMEOUT",stream);
+   require(now()-lostApplyAt>=FlightCoreUdpStream.APPLY_TIMEOUT_MS-60,"500ms apply deadline");stream.shutdown();
    activity=new Activity();view=new WebView();apply=true;oversize=false;replay=false;
    stream=start(activity,view,"oversized");waitFor(activity,view,"\"inputArmed\":true",stream);
-   oversize=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream);stream.shutdown();
+   oversize=true;long lostFeedbackAt=now();waitFor(activity,view,"UDP_ACK_TIMEOUT",stream);
+   require(now()-lostFeedbackAt>=FlightCoreUdpStream.ACK_TIMEOUT_MS-60,"500ms ACK deadline");stream.shutdown();
    activity=new Activity();view=new WebView();oversize=false;
    stream=start(activity,view,"replayed");waitFor(activity,view,"\"inputArmed\":true",stream);
    replay=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream);stream.shutdown();replay=false;

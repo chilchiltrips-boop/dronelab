@@ -28,6 +28,11 @@ static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=
 static bool zjRcUdpOwned=false;
 // Signed diagnostic status contains only a release reason, never owner tokens.
 static String zjRcLastReleaseReason="NONE";
+// Non-secret random label, generated independently of authorization credentials.
+static String zjRcDiagnosticId="";
+static uint32_t zjRcLastValidAt=0;
+static bool zjRcNullConfirmed=true;
+static constexpr uint32_t ZJ_RC_NULL_CONFIRM_MS=2000;
 static uint32_t zjRcLastReleaseAt=0;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
@@ -81,6 +86,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  const uint32_t now=millis();
  if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");
+ zjRcDiagnosticId=zjRcNewSession().substring(0,16);zjRcNullConfirmed=true;zjRcLastValidAt=0;
  zjRcOwned=true;zjRcNetwork=network;zjRcSource=source;zjRcOwnerIP=ip;
  zjRcTransport=transport;zjRcSession=zjRcNewSession();zjRcOwnerId=zjRcNewSession().substring(0,12);zjRcSeq=0;
  zjRcLast=0;zjRcLeaseAt=now;zjRcNeutral();
@@ -99,6 +105,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
     (inputArmed&&!zjRcInputArmed&&t>1050)){
   ++zjRcRejected;return false;
  }
+ zjRcLastValidAt=now;zjRcNullConfirmed=false;
  zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
  zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
  // RAW mode logs separate RC packets for legacy tools; COMBINED includes RC in ZJTEL.
@@ -111,6 +118,10 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
+ // Secondary confirmation never extends the independent 350ms deadman.
+ if(!zjRcNullConfirmed&&zjRcLastValidAt&&uint32_t(now-zjRcLastValidAt)>=ZJ_RC_NULL_CONFIRM_MS&&!zjRcOwned){
+  zjRcNeutral();zjRcNullConfirmed=true;
+ }
  if(zjRcUdpOwned)return; // UDP worker/main check separate receive/apply ages.
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
@@ -120,15 +131,16 @@ static void zjRcLoop(uint32_t now){
  if(zjRcOwned&&int32_t(now-zjRcLeaseAt)>=0&&uint32_t(now-zjRcLeaseAt)>ZJ_RC_LEASE_MS)zjRcRelease("LEASE_TIMEOUT");
 }
 static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
+static String zjPpmRcSignalJson();
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
- return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
+ return String("{\"diagnosticId\":\"")+zjRcDiagnosticId+"\",\"nullStateConfirmed\":"+(zjRcNullConfirmed?"true":"false")+",\"highLevelLandingSupported\":false,\"kitId\":\""+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
   ",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"ppmSignal\":"+zjPpmRcSignalJson()+",\"channels\":"+zjPpmRcChannelsJson()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.

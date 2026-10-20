@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <vector>
+static int testBeginResult=1,testEndResult=1;static size_t testWriteLimit=20000;
 static uint16_t testRpcPort=0;static int testDropReplies=0;
 class WiFiUDP {
  int fd=-1;std::vector<uint8_t> pending,outgoing;uint16_t sourcePort=0,destinationPort=0;
@@ -21,11 +22,13 @@ class WiFiUDP {
   pending.assign(data,data+n);sourcePort=ntohs(addr.sin_port);return n;
  }
  int available(){return pending.size();}int read(){if(pending.empty())return -1;const int b=pending.front();pending.erase(pending.begin());return b;}
+ void clear(){pending.clear();}
  int read(uint8_t* p,size_t n){n=std::min(n,pending.size());memcpy(p,pending.data(),n);pending.erase(pending.begin(),pending.begin()+n);return n;}
  IPAddress remoteIP(){return IPAddress(192,168,4,2);}uint16_t remotePort(){return sourcePort;}
- int beginPacket(IPAddress,uint16_t port){destinationPort=port;outgoing.clear();return 1;}
- size_t write(const uint8_t* p,size_t n){outgoing.insert(outgoing.end(),p,p+n);return n;}
+ int beginPacket(IPAddress,uint16_t port){destinationPort=port;outgoing.clear();return testBeginResult;}
+ size_t write(const uint8_t* p,size_t n){n=std::min(n,testWriteLimit);outgoing.insert(outgoing.end(),p,p+n);return n;}
  int endPacket(){
+  if(!testEndResult)return 0;
   if(testDropReplies>0){testDropReplies--;return 1;}
   sockaddr_in addr{};addr.sin_family=AF_INET;addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);addr.sin_port=htons(destinationPort);
   return sendto(fd,outgoing.data(),outgoing.size(),0,(sockaddr*)&addr,sizeof(addr))>=0;

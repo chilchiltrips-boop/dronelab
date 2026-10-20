@@ -10,10 +10,10 @@ test('50 Hz encrypted UDP owns its native watchdog; WebView ACK delivery cannot 
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
  assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>350/);
  assert.match(network,/inputArmed:data\.inputArmed===true,protocol:'ZJUDP1'/);
- assert.match(native,/if\(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>350\)/);
- assert.match(native,/if\(now-lastInputAt>300\)/);
- assert.match(native,/report\("error","UDP_ACK_TIMEOUT"\);clear\(\);/);
- assert.match(native,/report\("error","UDP_INPUT_STALE"\);clear\(\);/);
+ assert.match(native,/ACK_TIMEOUT_MS=500, APPLY_TIMEOUT_MS=500/);
+ assert.match(native,/if\(now-lastInputAt>INPUT_STALE_MS\)/);
+ assert.match(native,/fail\(lastAckAt>0\?"UDP_ACK_TIMEOUT":"UDP_NO_ACK"\)/);
+ assert.match(native,/fail\("UDP_INPUT_STALE"\)/);
 });
 
 test('ACK recorder retains bounded native timing evidence without credential or identity fields',()=>{

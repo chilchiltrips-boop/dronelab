@@ -4,9 +4,9 @@
  * Serial Monitor's shared frame decoder. PPM is display-only until firmware
  * actually advertises it in an authenticated RC snapshot.
  */
-// At most ~6 read requests/s while this pane is visible; never stack slow Wi-Fi/WebRTC requests.
+// At most ~3 read requests/s while this pane is visible; never stack slow Wi-Fi/WebRTC requests.
 const SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800;
-const NETWORK_POLL_MS=140, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
+const NETWORK_POLL_MS=300, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
 const channels=['throttle','roll','pitch','yaw'];
 const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
 const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
@@ -15,16 +15,18 @@ const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
 export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
- const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
+ const base={kitName:name,transport:connected?transport:'—',source:'NONE',inputTransport:'—',state:'offline',
   seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
-  inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
+  ppmSignal:'UNKNOWN',inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
+ if(!kit.kitId)return {...base,state:'unverified'};
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
   motors:network&&(kit.motorsDisabled===true||kit.motorsArmed===false)?'DISABLED':'NOT REPORTED'};
  if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
  const rc=sample.rc;
  if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
+ if(network&&rc.active===true&&rc.ageMs==null)return {...m,state:'waiting'};
  const valid=channels.every(field=>finitePulse(rc[field]));
  if(!valid)return {...m,state:'waiting'};
  const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
@@ -39,11 +41,12 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
  const armed=active&&rc.inputArmed===true;
  return {...m,
-  source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
   ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
    rc.channels.every(finitePulse)?rc.channels.slice():null,
+  ppmSignal:['PRESENT','LOST','WAITING'].includes(rc.ppmSignal)?rc.ppmSignal:rc.lastReleaseReason==='PPM_SIGNAL_LOST'?'LOST':'UNKNOWN',
   ageMs:Math.round(ageMs),rateHz:recent&&Number.isFinite(sample.rateHz)?sample.rateHz:null,
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
@@ -81,26 +84,33 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- const getKit=()=>window.ZebjusKits?.getState?.()||{connected:false};
+ let monitorChoice='auto',selectionReason='';
+ const getKit=()=>{
+  const kit=window.ZebjusKits?.getState?.()||{connected:false};
+  const selected=window.ZebjusKitData.selectMonitorPath(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
+  selectionReason=selected.reason;
+  return selected.path?{...kit,connected:true,transport:selected.path.transport}:{...kit,connected:false};
+ };
  const rate=createInputRateTracker();
  let sample=null,usbPpm=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
-  nextPollAt=0,readFailures=0,requestGeneration=0;
+  nextPollAt=0,readFailures=0,requestGeneration=0,lastBoot='';
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
-  window.ZebjusDevicesWorkspace?.active?.()==='connection'&&!document.hidden&&
+  window.ZebjusDevicesWorkspace?.active?.()==='live'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
  function wipe(){sample=null;usbPpm=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
-  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink){
-   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;
+  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot){
+   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;
   }
   const v=normalizeAcceptedInput(kit,sample);
   card.dataset.liveState=v.state;
   write('liLiveState',v.state.toUpperCase());
   $('liLiveState').dataset.state=v.state;
   write('liKitName',v.kitName);
-  write('liInputSource',v.source);
+  write('liInputSource',v.source);write('liInputTransport',v.inputTransport);write('liBoardVersion',[kit.board,kit.version].filter(Boolean).join(' • ')||'—');write('liSelectionReason',selectionReason);
+  if(!kit.connected&&kit.kitId&&monitorChoice!=='auto'){write('liLiveState','UNVERIFIED');card.dataset.liveState='unverified';}
   write('liKitTransport',kit.transport==='android-relay'?'RELAY • '+String(kit.physicalLink||'KIT').toUpperCase():v.transport);
   write('liPacketNumber',v.seq??'—');
   write('liAge',v.ageMs===null?'—':v.ageMs+' ms');
@@ -134,7 +144,7 @@ function initLiveInputs(){
   write('liHelp',message+' INPUT ARM is diagnostic only; motors are never armed by this monitor.');
   const ppmActive=v.source==='PPM'&&v.ppmChannels!==null;
   write('liPpmHealth',ppmActive?(v.state==='live'?'RECEIVER LIVE': 'RECEIVER STALE'):
-   'No accepted PPM channels');
+   v.ppmSignal==='LOST'?'RECEIVER SIGNAL LOST':v.ppmSignal==='PRESENT'?'SIGNAL PRESENT • not the control owner':v.ppmSignal==='WAITING'?'WAITING FOR RECEIVER SIGNAL':'PPM signal not reported');
   for(let i=0;i<8;i++){
    const n=ppmActive?v.ppmChannels[i]:null;
    write('liCh'+(i+1),n??'—');
@@ -146,22 +156,23 @@ function initLiveInputs(){
   const kit=getKit();
   if(!visible()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
-  const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,token=requestGeneration,
+  const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,bootId=kit.bootId,token=requestGeneration,
    startedAt=Date.now();
   try{
    const reply=await window.ZebjusKits.request('/api/rc/snapshot');
    const current=getKit();
    if(token!==requestGeneration||!visible()||!current.connected||current.kitId!==id||
-      current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id)return;
-   const at=Date.now();
+      current.transport!==transport||current.bootId!==bootId||current.physicalLink!==physicalLink||reply?.kitId!==id)return;
+   const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
    const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source;
    const sequenceAt=seqChanged?at:prev.sequenceAt??prev.at;
+   if(prev?.rc?.active&&reply.active&&prev.rc.source===reply.source&&prev.rc.diagnosticId===reply.diagnosticId&&Number(reply.seq)<Number(prev.rc.seq))return;
    const hz=rate.observe(id,reply,at);
    // Period is measured start-to-start; network wait already consumes budget.
    // A single in-flight request still caps load when ESP32/WRTC is slow.
-   readFailures=0;nextPollAt=Math.max(at,startedAt+NETWORK_POLL_MS);
-   sample={kitId:id,rc:reply,at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
+   readFailures=0;nextPollAt=Math.max(at,startedAt+(reply.claimed===true?350:NETWORK_POLL_MS));
+   sample={kitId:id,rc:{...reply,ageMs:reply.ageMs==null?null:Number(reply.ageMs)+Math.max(0,at-startedAt)},at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
     motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
    display();
   }catch{
@@ -185,22 +196,23 @@ function initLiveInputs(){
    }
    return;
   }
-  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;return;}
+  if(line==='ZJPPM,1,LOST,0,ARM=0'){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(visible())display();return;}
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
   if(received.kind==='frame'){
-   const hz=rate.observe(kit.kitId,received,at);
    const prev=sample;
+   if(prev?.rc?.active&&prev.rc.source===received.source&&Number(received.seq)<Number(prev.rc.seq))return;
+   const hz=rate.observe(kit.kitId,received,at);
    const seqChanged=!prev||prev.rc?.seq!==received.seq||prev.rc?.source!==received.source;
    const confirmed=received.source==='PPM'&&usbPpm?.owner===true&&
       at-usbPpm.at<=300?usbPpm.channels:null;
-   sample={kitId:kit.kitId,rc:confirmed?{...received,channels:confirmed}:received,
+   sample={kitId:kit.kitId,rc:confirmed?{...received,channels:confirmed,ppmSignal:'PRESENT'}:{...received,ppmSignal:sample?.rc?.ppmSignal||'UNKNOWN'},
     at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
     rateHz:hz,motorsOff:motorReported};
-  }else if(received.kind==='idle'||received.kind==='reset'){
+  }else if(received.kind==='idle'||received.kind==='reset'||received.kind==='claim'){
    rate.reset();
-   sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
+   sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false,ppmSignal:sample?.rc?.ppmSignal||'UNKNOWN'},
     at,rateHz:null,motorsOff:motorReported};
   }
   if(visible())display();
@@ -211,6 +223,8 @@ function initLiveInputs(){
   ++requestGeneration;nextPollAt=0;readFailures=0;rate.reset();display();
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
+ $('liMonitorSelect')?.addEventListener('change',event=>{monitorChoice=event.target.value;wipe();display();});
+ window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
  function tick(){display();if(visible()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
  setInterval(tick,UI_TICK_MS);

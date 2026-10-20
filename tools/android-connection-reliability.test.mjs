@@ -107,7 +107,7 @@ test('transient missing/redacted WifiInfo retains pin but rejects requests until
  assert.match(wifi,/if\(caps==null\)throw new PendingIdentityException\("Wi-Fi capabilities temporarily unavailable/);
  assert.match(wifi,/WifiInfo observed=info\(selected\);\s*String ssid=checkedSsid\(observed\),bssid=checkedBssid\(observed\)/);
  assert.match(wifi,/observedWifi\.remove\(network\);\s*if\(matches\(network\)&&caps!=null&&!wifiAvailable\)/);
- assert.match(wifi,/if\(details==null\)return; \/\/ Transient redaction/);
+ assert.match(wifi,/if\(details==null\)\{listener\.diagnostic\("IDENTITY_REDACTED"\);return;\}/);
  assert.match(wifi,/catch\(IllegalStateException redacted\)/);
  assert.match(wifi,/clear\(\);listener\.linkChanged\(\); \/\/ A verified different AP/);
  assert.match(wifi,/if\(matches\(network\)\)\{clear\(\);listener\.linkChanged\(\);\}/);

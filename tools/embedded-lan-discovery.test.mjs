@@ -44,7 +44,7 @@ test('remove persistent iframe banners, buttons and direct URLs on both WebApp l
  assert.doesNotMatch(css,/kit-embed-notice/);
  assert.doesNotMatch(read('js/embed-kit-access.js'),/getElementById|postMessage\s*\(|directUrl|pairingKey/);
  for(const name of ['js/embed-kit-access.js','js/classroom-kits.js','js/firmware-connect.js','classroom-kits.css']){
-  const marker=name+'?v='+(name==='js/classroom-kits.js'?'kit-transport-unified-20261017':'embed-clean-20261017');
+  const marker=name+'?v='+(['js/classroom-kits.js','js/firmware-connect.js'].includes(name)?'ack-reliability-20261020':'embed-clean-20261017');
   assert.ok(html.includes(marker),'missing page version: '+marker);
   assert.ok(sw.includes('./'+marker),'missing offline version: '+marker);
  }
@@ -72,4 +72,15 @@ test('legacy Wix iframe copies are cleaned by independently refreshed metadata h
  assert.deepEqual(removed,['fwEmbeddedAccessNotice','kitEmbeddedAccessNotice']);
  assert.doesNotMatch(hint.textContent,/Open DroneLab Directly/);
  assert.match(read('styles.css'),/\.kit-embed-notice\{display:none!important\}/);
+});
+
+test('only an explicitly blocked iframe discovery offers the official direct-open recovery',()=>{
+ const children=[],documentRef={createElement:()=>({}),permissionsPolicy:{allowedFeatures:()=>['local-network'],allowsFeature:()=>false}};
+ const info=initEmbedKitAccess({host:{self:{},top:{}},documentRef});
+ assert.equal(children.length,0,'no persistent injected banner');
+ assert.equal(info.appendRecovery({append:n=>children.push(n)}),true);
+ assert.equal(children[0].href,'https://chilchiltrips-boop.github.io/dronelab/index.html');
+ assert.equal(children[0].rel,'noopener noreferrer');
+ const self={};const top=initEmbedKitAccess({host:{self,top:self},documentRef});
+ assert.equal(top.appendRecovery({append:()=>assert.fail('top-level recovery must stay hidden')}),false);
 });

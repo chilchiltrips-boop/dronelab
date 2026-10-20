@@ -7,7 +7,9 @@
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <esp_app_desc.h>
+#include <esp_wifi.h>
 #include "FlightCoreRpc.h"
+#include "FlightCoreDiagnostics.h"
 
 static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;
@@ -100,7 +102,7 @@ static String zjStatus(){
  out+=",\"apSsid\":"+zjJson(zjApSsid)+",\"apIp\":"+zjJson(WiFi.softAPIP().toString());
  out+=",\"apActive\":"+(zjApStarted&&(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?String("true"):String("false"));
  out+=",\"scanActive\":"+(WiFi.scanComplete()==WIFI_SCAN_RUNNING?String("true"):String("false"))+",\"rcPreviewActive\":"+(zjRcHasFrame?String("true"):String("false"));
- out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
+ out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+(sta?String(WiFi.RSSI()):String("null"))+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState)+",\"exclusiveWifi\":true";
@@ -120,6 +122,9 @@ static String zjStatus(){
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
  out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true";
+ out+=",\"wifiDiagnostics\":"+zjWifiStatistics()+",\"rpc\":"+zjRpcStatistics()+",\"maxMainLoopGapMs\":"+String(zjMaxMainLoopGapMs);
+ out+=",\"gyroReady\":"+(gyroReady?String("true"):String("false"))+",\"gyroAddress\":"+String(GYRO_ADDR);
+ out+=",\"httpDiagnostics\":{\"deferred\":"+String(zjHttp.httpDeferred)+",\"dropped\":"+String(zjHttp.httpDropped)+",\"maxProcessingMs\":"+String(zjHttp.httpMaxDurationMs)+"}";
  out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+",\"udpManagementPort\":4211}";
  return out;
 }
@@ -161,7 +166,23 @@ static void zjChooseNetworkName(bool verification=false){
   zjKitName=next;zjKitAutoName=true;zjKitPrefs.putString("autoName","1");
  }
 }
+static bool zjControlManagementAdmission(){
+  if(!zjRcOwned)return true;
+  const String path=zjHttp.uri();
+  // Only bounded reads, signed input/safety operations and in-memory session
+  // handshakes may run during control. No NVS, scans, rename, reboot or flash.
+  if(path=="/api/status"||path=="/api/telemetry"||path=="/api/health"||path=="/api/identify"||
+     path=="/api/rc/snapshot"||path=="/api/ppm/status"||path=="/api/rc/preview"||
+     path=="/api/rc/stop"||path=="/api/rc/release"||path=="/api/rc/claim"||
+     path=="/api/auth/local"||path=="/api/auth/challenge"||path=="/api/auth/enroll"||path=="/api/auth/close")return true;
+  if(path=="/api/command"){if(!zjAllow())return false;if(zjArg("line").startsWith("ZJLED,"))return true;}
+  // Authenticate before signing a busy response; never bypass authorization.
+  if(zjAllow())zjReply(409,"{\"error\":\"control_active_management_deferred\"}");return false;
+
+}
 static void zjSetupHttp(){
+ zjHttp.controlActive=[](){return zjRcOwned;};
+ zjHttp.admit=zjControlManagementAdmission;
  const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7); // raw-key header is collected only to reject it
  zjSetupEnrollmentHttp();
  zjSetupSecureOtaHttp();
@@ -277,7 +298,7 @@ static void zjSetupHttp(){
    if(!sc.localSta&&uint32_t(millis()-sc.at)<1800000)
     udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.peerIP(),feedbackVersion);
   }
-  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpFeedbackVersion\":"+String(udpReady?feedbackVersion:0)+",\"udpChannels\":7,\"udpAckFields\":"+String(feedbackVersion==2?12:5)+"}");
+  zjReply(200,"{\"diagnosticId\":"+zjJson(zjRcDiagnosticId)+",\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpFeedbackVersion\":"+String(udpReady?feedbackVersion:0)+",\"udpChannels\":7,\"udpAckFields\":"+String(feedbackVersion==2?12:5)+"}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
@@ -334,11 +355,13 @@ static void zjSetupHttp(){
 static void zjRpcLoop(){
  if(!zjRpcReady)return;
  uint8_t packet[16+ZJ_RPC_FRAGMENT];
- for(int budget=0;budget<12;budget++){
-  const int n=zjRpcSocket.parsePacket();if(n<=0)break;
+ const uint32_t loopAt=millis();uint8_t handled=0;
+ for(int budget=0;budget<ZJ_RPC_PACKET_BUDGET&&uint32_t(millis()-loopAt)<ZJ_RPC_BUDGET_MS;budget++){
+  if(zjRpcControlTick)zjRpcControlTick();
+  const int n=zjRpcSocket.parsePacket();if(n<=0)break;++handled;
   const IPAddress peer=zjRpcSocket.remoteIP();const uint16_t port=zjRpcSocket.remotePort();
   if(n<17||n>int(sizeof(packet))||!zjRpcPrivate(peer)){
-   while(zjRpcSocket.available())zjRpcSocket.read();continue;
+   zjRpcSocket.clear();continue;
   }
   if(zjRpcSocket.read(packet,n)!=n||memcmp(packet,"ZJM1",4))continue;
   const uint16_t total=(uint16_t(packet[12])<<8)|packet[13];
@@ -374,11 +397,19 @@ static void zjRpcLoop(){
   }
   assembly.mask=0;
  }
+ zjRpcFlush(loopAt);const uint32_t duration=millis()-loopAt;
+ zjRpcLastDurationMs=duration;zjRpcLastPacketsPerLoop=handled;
+ if(duration>zjRpcMaxDurationMs)zjRpcMaxDurationMs=duration;
+ if(handled>zjRpcMaxPacketsPerLoop)zjRpcMaxPacketsPerLoop=handled;
+ if(duration>=ZJ_RPC_BUDGET_MS)++zjRpcBudgetExhausted;
 }
 static void zjNetworkSetup(){
+ zjRpcControlTick=[](){zjUdpLoop(millis());};
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
-  if(event==ARDUINO_EVENT_WIFI_AP_START)zjApStarted=true;
-  if(event==ARDUINO_EVENT_WIFI_AP_STOP)zjApStarted=false;
+  if(event==ARDUINO_EVENT_WIFI_AP_START){zjApStarted=true;zjApStartCount=zjApStartCount+1;zjWifiLastEventAt=millis();}
+  if(event==ARDUINO_EVENT_WIFI_AP_STOP){zjApStarted=false;zjApStopCount=zjApStopCount+1;zjWifiLastEventAt=millis();}
+  if(event==ARDUINO_EVENT_WIFI_AP_STACONNECTED){zjApJoinCount=zjApJoinCount+1;zjApClientJoined(info.wifi_ap_staconnected.mac);zjWifiLastEventAt=millis();}
+  if(event==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){zjApLeaveCount=zjApLeaveCount+1;zjWifiLastEventAt=millis();zjApDisconnectReason=info.wifi_ap_stadisconnected.reason;}
   if(event==ARDUINO_EVENT_WIFI_STA_GOT_IP){zjAssociationEpoch=zjAssociationEpoch+1;zjStaDisconnectReason=0;}
   if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
    zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
@@ -477,6 +508,16 @@ static bool zjNetSerialCommand(char* line){
  return false;
 }
 static void zjNetworkLoop(uint32_t now){
+ if(zjMainLoopAt&&uint32_t(now-zjMainLoopAt)>zjMaxMainLoopGapMs)zjMaxMainLoopGapMs=now-zjMainLoopAt;
+ zjMainLoopAt=now;const uint8_t mode=uint8_t(WiFi.getMode());
+ if(zjLastWifiMode!=mode){zjLastWifiMode=mode;++zjWifiModeChanges;}
+ zjApClientCount=WiFi.softAPgetStationNum();
+ if(uint32_t(now-zjApSignalAt)>=1000){
+  zjApSignalAt=now;zjApClientRssi=-128;wifi_sta_list_t clients={};
+  if(zjApClientCount&&esp_wifi_ap_get_sta_list(&clients)==ESP_OK){
+   for(int i=0;i<clients.num;i++)if(clients.sta[i].rssi<0&&(zjApClientRssi==-128||clients.sta[i].rssi<zjApClientRssi))zjApClientRssi=clients.sta[i].rssi;
+  }
+ }
  // Service due input before/between management work, not only after HTTP.
  zjUdpLoop(millis());zjAuthResetRequest();zjRpcLoop();zjUdpLoop(millis());
  zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);

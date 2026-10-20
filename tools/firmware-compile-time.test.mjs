@@ -57,8 +57,8 @@ test('WebApp checks official binary compiledAt, catalog build start, and version
  assert.match(fw,/compiled<built-15\*60\*1000/);
  assert.match(fw,/embedded in verified \.bin/);
  assert.match(img,/export function imageBuildTimeIso/);
- assert.match(sw,/dronelab-rx-applied-feedback-20261020/);
- for(const p of [read('index.html'),read('lab.html'),sw])assert.match(p,/firmware-updater\.js\?v=compile-time-verified-20261017/);
+ assert.match(sw,/dronelab-ack-reliability-20261020/);
+ for(const p of [read('index.html'),read('lab.html'),sw])assert.match(p,/firmware-updater\.js\?v=ack-reliability-20261020/);
  assert.match(sw,/firmware-image\.js\?v=compile-time-verified-20261017/);
  assert.equal(read('index.html'),read('lab.html'));
 });
@@ -69,4 +69,14 @@ test('invalid ESP32 descriptor never receives a fabricated timestamp',()=>{
  b.set(Buffer.from('02:45:35'),112);b.set(Buffer.from('Sep 17 2026'),128);
  assert.equal(imageBuildStamp(b,'app'),'Sep 17 2026 02:45:35');
  assert.equal(imageBuildTimeIso(b,'app'),'2026-09-17T02:45:35Z');
+});
+
+test('compiler uses UTC even when its host uses a local timezone',()=>{
+ const result=spawnSync('python3',['-c',`import os,sys
+sys.path.insert(0,'tools')
+import build_scanner
+os.environ['TZ']='America/New_York'
+build_scanner.run([sys.executable,'-c',"import os; assert os.environ['TZ']=='UTC'"])
+`],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);
 });

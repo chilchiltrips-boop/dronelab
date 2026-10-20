@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 test('FlightCore A1/A2 firmware advertises bench AP/STA and persists Wi-Fi only after association',()=>{
  const f=read('FlightCore_Firmware/FlightCoreNetwork.h')+read('FlightCore_Firmware/FlightCoreWifiPolicy.h'),ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
@@ -101,4 +102,19 @@ test('Python Network Lab reports actual authenticated AP request even while STA 
  await assert.rejects(window.DroneLabNetwork.read(),/Device ID mismatch/);
  response.kitId=undefined;
  await assert.rejects(window.DroneLabNetwork.read(),/Device ID mismatch/);
+});
+
+test('opt-in Python telemetry pauses when hidden, slows during control and backs off without timer buildup',async()=>{
+ let kit={connected:true,kitId:'ZFC-A1-012345ABCDEF',transport:'ap',rc:{claimed:true}},calls=0,fail=false;
+ const document={readyState:'loading',hidden:false,addEventListener(){},getElementById:()=>null};
+ const timers=new Map();let next=0;
+ const window={ZebjusKits:{getState:()=>kit,request:async()=>{calls++;if(fail)throw Error('congestion');return{kitId:kit.kitId,board:'A1',address:107,millis:1,roll:0,pitch:0,yaw:0}}},dispatchEvent(){}};
+ const transport={};runInNewContext(read('js/kit-data-interface.js'),transport);window.ZebjusKitData=transport.ZebjusKitData;
+ runInNewContext(read('js/network-lab.js'),{window,document,Date,Math,performance:{now:()=>1},CustomEvent:class{},setTimeout:(f,ms)=>{const id=++next;timers.set(id,{f,ms});return id},clearTimeout:id=>timers.delete(id)});
+ const tick=async()=>{assert.equal(timers.size,1);const [id,item]=timers.entries().next().value;timers.delete(id);await item.f();};
+ window.DroneLabNetwork.stream(true);await tick();assert.equal(calls,1);assert.equal([...timers.values()][0].ms,700);
+ document.hidden=true;await tick();assert.equal(calls,1);assert.equal([...timers.values()][0].ms,1500);
+ document.hidden=false;fail=true;await tick();assert.equal(calls,2);assert.equal([...timers.values()][0].ms,1400);
+ await tick();assert.equal([...timers.values()][0].ms,2800);
+ window.DroneLabNetwork.stream(false);assert.equal(timers.size,0);
 });

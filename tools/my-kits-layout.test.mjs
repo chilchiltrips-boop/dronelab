@@ -14,14 +14,15 @@ test('My Kits is consolidated into one icon navigated Devices & Firmware tab',()
    for(const prefix of ['dw-panel-','dw-tab-'])assert.ok(h.includes('id="'+prefix+view+'"'),path+' '+prefix+view);
   for(const id of ['fwNetworkFlashBtn','fwUsbFlashBtn','kitWifiScan','kitWifiSave','kitSavedRefresh','kitAdmin','kitMobilePairDetails','connectionDialog','kitConnect'])
    assert.equal(h.split('id="'+id+'"').length-1,1,path+' '+id+' unique control');
-  assert.match(h,/src=".\/js\/devices-workspace.js\?v=kit-live-inputs-20261017"/);
+  assert.match(h,/src=".\/js\/devices-workspace.js\?v=ack-reliability-20261020"/);
  }
 });
 test('existing controls are moved, never cloned, and keep their kit and WebRTC handlers',()=>{
  const source=read('js/devices-workspace.js');
  for(const selector of ['.firmware-grid','#kitNetworkSettings','#kitAdmin','#kitMobilePairDetails','#kitCenter','#fwSerialMonitorPane'])
   assert.ok(source.includes(selector),'preserved '+selector);
- assert.ok(source.includes('target.append(node)'));
+ assert.match(source,/diagnosticGroup\(node\)/);
+ assert.match(source,/\.append\(node\);return node/);
  assert.match(read('pairing-web.js'),/ZebjusDevicesWorkspace\?\.open\('mobile'/);
  assert.match(read('js/classroom-kits.js'),/ZebjusDevicesWorkspace\?\.open\('connection'/);
  assert.match(read('js/firmware-connect.js'),/ZebjusDevicesWorkspace\?\.open\('wifi'/);

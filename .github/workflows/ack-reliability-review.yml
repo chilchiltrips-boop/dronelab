@@ -1,0 +1,35 @@
+name: ACK reliability review (no publication)
+on:
+  pull_request:
+    paths: ['FlightCore_Firmware/**', 'mobile-android/**', 'js/**', 'tools/**', '*.html', '*.js', '*.css', 'VERSION.txt', '.github/workflows/ack-reliability-review.yml']
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - run: npm test && npm run check && python3 tools/verify_release.py
+      - run: npm install --no-save --no-package-lock playwright@1.56.1 && npx playwright install --with-deps chromium
+      - name: Chromium workspace and persistence acceptance
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/http.log 2>&1 &
+          node tools/ack-reliability-browser.mjs
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - run: python3 tools/build_scanner.py && python3 tools/verify_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-only-firmware-a1-a2
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
