@@ -51,7 +51,7 @@ test('Web and Python expose distinct USB/AP/STA paths without claiming motor sup
 test('AERION classroom six-digit code persists and never acts as the control password',()=>{
  const k=read('FlightCore_Firmware/FlightCoreClassroom.h'),f=read('FlightCore_Firmware/FlightCoreNetwork.h');
  const ino=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
- for(const t of ['zjKitPrefs.getString("code"','zjKitPrefs.putString("code"','ZJKIT,CODE,','ZJKIT,ID,','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,STOP','ZJ_RC_DEADMAN_MS=350','ZJ_RC_LEASE_MS=1800','ZJRC,FAILSAFE,INPUT_TIMEOUT','zjRcFrame(','zjRcClaim(','zjRcRelease(','zjRcOwned','zjRcSession','Serial.availableForWrite()>100'])assert.ok(k.includes(t),t);
+ for(const t of ['zjKitPrefs.getString("code"','zjKitPrefs.putString("code"','ZJKIT,CODE,','ZJKIT,ID,','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,STOP','ZJ_RC_DEADMAN_MS=500','ZJ_RC_LEASE_MS=1800','ZJRC,FAILSAFE,INPUT_TIMEOUT','zjRcFrame(','zjRcClaim(','zjRcRelease(','zjRcOwned','zjRcSession','Serial.availableForWrite()>100'])assert.ok(k.includes(t),t);
  for(const t of ['zjApPass=zjEffectiveApPassword()','ZEBJUS-AERION-','/api/identify','MDNS.addService','MDNS.addServiceTxt','zjClientTransport','zjRcClaim(','zjRcFrame(','zjRcRelease("NETWORK_MODE_CHANGED")'])assert.ok(f.includes(t),t);
  assert.ok(ino.includes('zjKitSetup();')&&ino.includes('zjRcLoop(now);'));
  assert.ok(ino.includes('ZEBJUS AERION A1')&&ino.includes('ZEBJUS AERION A2'));
