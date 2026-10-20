@@ -165,7 +165,7 @@ function initLiveInputs(){
    const reply=await window.ZebjusKits.request('/api/rc/snapshot');
    const current=getKit();
    if(token!==requestGeneration||!visible()||!current.connected||current.kitId!==id||
-      current.transport!==transport||current.physicalLink!==physicalLink||current.bootId!==bootId||reply?.kitId!==id)return;
+      current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id||current.bootId!==bootId)return;
    const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
    if(prev?.rc?.active&&reply.active&&prev.rc.source===reply.source&&prev.rc.diagnosticId===reply.diagnosticId&&Number(reply.seq)<Number(prev.rc.seq))return;
