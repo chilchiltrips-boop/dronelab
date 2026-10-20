@@ -16,7 +16,19 @@ test('actual Android UDP stream starts off UI, authenticates ACKs, neutralizes r
  const doubles={
   'android/app/Activity.java':`package android.app; import java.util.concurrent.*;
    public class Activity {public final ConcurrentLinkedQueue<Runnable> ui=new ConcurrentLinkedQueue<>();
+    public android.content.Context getApplicationContext(){return new android.content.Context();}
     public void runOnUiThread(Runnable r){ui.add(r);}public void drain(){Runnable r;while((r=ui.poll())!=null)r.run();}}`,
+  'android/content/Context.java':`package android.content; public class Context {
+    public static final String WIFI_SERVICE="wifi";
+    public Object getSystemService(String name){return new android.net.wifi.WifiManager();}}`,
+  'android/net/wifi/WifiManager.java':`package android.net.wifi; public class WifiManager {
+    public static final int WIFI_MODE_FULL_LOW_LATENCY=4,WIFI_MODE_FULL_HIGH_PERF=3;
+    public WifiLock createWifiLock(int mode,String tag){return new WifiLock();}
+    public static class WifiLock {private boolean held;
+      public void setReferenceCounted(boolean ref){} public void acquire(){held=true;}
+      public void release(){held=false;} public boolean isHeld(){return held;}}}`,
+  'android/os/Build.java':`package android.os; public class Build {public static class VERSION {
+    public static final int SDK_INT=30;}}`,
   'android/webkit/WebView.java':`package android.webkit; import java.util.*;
    public class WebView {public final List<String> events=new ArrayList<>();public Object getParent(){return this;}
     public void evaluateJavascript(String s,Object cb){events.add(s);}}`,
