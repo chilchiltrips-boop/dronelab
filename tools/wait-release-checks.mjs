@@ -9,7 +9,9 @@ while(Date.now()<deadline){
  if(!r.ok)throw Error('Cannot read mandatory checks: '+r.status);
  const runs=(await r.json()).workflow_runs.filter(x=>x.head_sha===GITHUB_SHA&&x.event==='push');
  const latest=required.map(name=>runs.filter(x=>x.name===name).sort((a,b)=>b.id-a.id)[0]);
- if(latest.some(x=>x?.status==='completed'&&x.conclusion!=='success'))throw Error('Mandatory source check failed; APK publication blocked');
+ const failed=latest.flatMap((run,i)=>run?.status==='completed'&&run.conclusion!=='success'?
+  [required[i]+': '+run.conclusion+' '+run.html_url]:[]);
+ if(failed.length)throw Error('Mandatory exact-source checks failed; signed APK blocked: '+failed.join(' | '));
  if(latest.every(x=>x?.status==='completed'&&x.conclusion==='success')){console.log('PASS exact-source mandatory release checks:',required.join(', '));process.exit(0)}
  console.log('Waiting for mandatory source checks:',latest.map((x,i)=>required[i]+': '+(x?.status||'not found')).join(' | '));
  await new Promise(resolve=>setTimeout(resolve,15000));
