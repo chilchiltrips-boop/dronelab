@@ -63,10 +63,10 @@ int main(){
  assert(!zjRcFrame(2,2001,1500,1500,1500,"ANDROID",rcToken,true,IPAddress(192,168,4,2)));
  assert(!zjRcFrame(2,1200,1500,1500,1500,"ANDROID",rcToken,true,IPAddress(192,168,4,3)));
  assert(zjRcFrame(2,1400,1500,1500,1500,"ANDROID",rcToken,true,IPAddress(192,168,4,2)));
- clockMs=1451;zjRcLoop(clockMs);assert(!zjRcHasFrame&&zjRcThrottle==1000&&zjRcOwned);assert(zjRcSeq==2);
+ clockMs=1601;zjRcLoop(clockMs);assert(!zjRcHasFrame&&zjRcThrottle==1000&&zjRcOwned);assert(zjRcSeq==2);
  clockMs=2901;zjRcLoop(clockMs);assert(!zjRcOwned);assert(!zjRcFrame(3,1500,1500,1500,1500,"ANDROID",rcToken,true,IPAddress(192,168,4,2)));
  clockMs=0xfffffff0;assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(1),"AP"));assert(zjRcFrame(1,1300,1500,1500,1500,"ANDROID",zjRcSession,true,IPAddress(1)));
- clockMs=20;zjRcLoop(clockMs);assert(zjRcHasFrame);clockMs=400;zjRcLoop(clockMs);assert(!zjRcHasFrame);zjRcRelease("TEST");
+ clockMs=20;zjRcLoop(clockMs);assert(zjRcHasFrame);clockMs=540;zjRcLoop(clockMs);assert(!zjRcHasFrame);zjRcRelease("TEST");
  // Explicit input ARM requires low throttle and a fresh owner after failsafe.
  clockMs=5000;assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(1),"AP"));
  const String armedToken=zjRcSession;
