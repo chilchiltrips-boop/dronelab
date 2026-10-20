@@ -74,5 +74,5 @@ test('new assets are cached for offline Wix and module versions stay in sync',()
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-rx-applied-feedback-20261020/);
+ assert.match(sw,/dronelab-threaded-udp-live-inputs-20261020/);
 });
