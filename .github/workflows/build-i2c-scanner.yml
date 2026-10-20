@@ -67,6 +67,12 @@ jobs:
             echo 'rebuild=true' >> "$GITHUB_OUTPUT"
             echo 'Source or firmware changed; compile both boards and refresh manifest'
           fi
+      # Prevent wasting A1/A2 compile resources on stale Android release test
+      # expectations. This also keeps the versioned firmware publication gated.
+      - name: Preflight source and release regression contracts
+        if: steps.firmware_integrity.outputs.rebuild == 'true'
+        run: |
+          node --test tools/ack-diagnostics.test.mjs tools/android-camera-permission.test.mjs tools/connection-freshness-recovery.test.mjs tools/poco-x2-network-compat.test.mjs
       - uses: arduino/setup-arduino-cli@v2
         if: steps.firmware_integrity.outputs.rebuild == 'true'
       - name: Compile board-specific FlightCore A1/A2 (Scanner, LED, Gyro, USB CDC)
