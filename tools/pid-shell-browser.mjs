@@ -2,16 +2,16 @@ import {chromium} from 'playwright';
 import {mkdirSync} from 'node:fs';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 mkdirSync('test-output',{recursive:true});
-const browser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1440,height:900},hasTouch:true,serviceWorkers:'block',reducedMotion:'reduce'});
+const browser=await chromium.launch(browserOptions),phoneBrowser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1440,height:900},hasTouch:true,serviceWorkers:'block',reducedMotion:'reduce'});
 await configureContext(context);
 await context.addInitScript(()=>{
  let api;
  Object.defineProperty(window,'ZebjusP2P',{configurable:true,get:()=>api,set(v){api=v;const original=v.session;v.session=(...args)=>window.__testPeer=original(...args)}});
 });
-// Separate browser contexts model a physical phone and desktop. Switching
-// desktop tabs must not background the phone (which correctly releases
-// its own control lease when its own activity is backgrounded).
-const phoneContext=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,
+// Separate browser processes model a physical phone and desktop. A desktop
+// bringToFront must not background/throttle the phone on Chromium versions that
+// share activation across contexts. Production background/heartbeat safety stays intact.
+const phoneContext=await phoneBrowser.newContext({viewport:{width:390,height:844},hasTouch:true,
  serviceWorkers:'block',reducedMotion:'reduce'});
 await configureContext(phoneContext);
 const page=await context.newPage(),phone=await phoneContext.newPage(),errors=[];
@@ -44,6 +44,9 @@ try{
  await until(page,()=>document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpRun'));
  if(!(await iframe.locator('#tpRun').isVisible()))throw Error('PID Tuning cockpit not visible');
  if(await iframe.locator('.tp-header').isVisible())throw Error('Duplicate topbar inside embedded simulator');
+ // Warm the software-rendered simulator before acquiring the real test lease.
+ // Cold high-quality shader compilation is not a phone/desktop network event.
+ await iframe.locator('#tpQuality').selectOption('low');
  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="mobile"]').click();
  await until(page,()=>document.querySelector('#tab-firmware')?.classList.contains('active')&&!document.querySelector('#dw-panel-mobile')?.hidden);
  if(!await page.locator('.topbar').evaluate(el=>el===window.__testHeader))throw Error('Header was replaced across tabs');
@@ -78,7 +81,8 @@ try{
  const after=await page.evaluate(()=>window.__testPeer.status());
  if(!after.connected||after.sessionId!==before.sessionId||after.controller!=='mobile'){
   const visibility=await page.evaluate(()=>document.visibilityState);
-  throw Error('Mobile nav discarded WebRTC session/control lease • '+visibility+' • before='+JSON.stringify({connected:before.connected,controller:before.controller})+' • after='+JSON.stringify({connected:after.connected,controller:after.controller}));
+  const phoneDiagnostics=await phone.evaluate(()=>({visibility:document.visibilityState,status:document.getElementById('appConnection')?.textContent,detail:document.getElementById('heartbeatDetail')?.textContent,command:document.getElementById('commandStatus')?.textContent}));
+  throw Error('Mobile nav discarded WebRTC session/control lease • '+visibility+' • before='+JSON.stringify({connected:before.connected,controller:before.controller})+' • after='+JSON.stringify({connected:after.connected,controller:after.controller})+' • phone='+JSON.stringify(phoneDiagnostics));
  }
  await phone.locator('#flightBack').click();
  await phone.locator('#flightArm').click();
@@ -102,4 +106,4 @@ try{
  await page.screenshot({path:'test-output/pid-shell-error-web.png',fullPage:true}).catch(()=>{});
  await phone.screenshot({path:'test-output/pid-shell-error-phone.png',fullPage:true}).catch(()=>{});
  process.exitCode=1;
-}finally{await browser.close()}
+}finally{await phoneBrowser.close();await browser.close()}
