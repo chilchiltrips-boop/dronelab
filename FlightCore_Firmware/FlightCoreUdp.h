@@ -31,6 +31,11 @@ static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
 #else
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
 #endif
+// 20 Hz authenticated RX summaries, plus immediate input ARM/DISARM and NACK.
+static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=50;
+static uint32_t zjUdpLastRxNoticeAt=0;
+static bool zjUdpLastRxNoticeArm=false,zjUdpHaveRxNotice=false;
+static uint32_t zjUdpRxSuppressed=0;
 static uint32_t zjUdpLastAppliedNoticeAt=0;
 static bool zjUdpNotifiedArm=false;
 static uint32_t zjUdpAckAttempted[4]={},zjUdpAckSent[4]={},zjUdpAckFailed[4]={};
@@ -73,7 +78,9 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
  zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
- zjUdpLastAppliedNoticeAt=0;zjUdpNotifiedArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
+ zjUdpLastAppliedNoticeAt=zjUdpLastRxNoticeAt=0;
+ zjUdpNotifiedArm=zjUdpLastRxNoticeArm=zjUdpHaveRxNotice=false;zjUdpRxSuppressed=0;
+ zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
  for(int i=0;i<4;i++)zjUdpAckAttempted[i]=zjUdpAckSent[i]=zjUdpAckFailed[i]=0;
  zjUdpHasPending=zjUdpRequestedArm=zjUdpAppliedArm=zjUdpTerminalPending=zjUdpTerminalReported=false;
  zjUdpEndReason=zjUdpLastNack=0;zjUdpLastNackAt=0;zjUdpActive=zjUdpConfigured=true;
@@ -165,12 +172,13 @@ static void zjUdpFlushFeedback(){
 }
 static String zjUdpStatistics(){
  uint32_t recv,rej,seq,rx,applied,at,count;uint8_t version,nack;bool active;
- uint32_t rxSent,rxFailed,appliedSent,appliedFailed,nackSent,nackFailed,maxTxUs,maxRxToAckUs;
+ uint32_t rxSent,rxFailed,appliedSent,appliedFailed,nackSent,nackFailed,maxTxUs,maxRxToAckUs,rxSuppressed;
  portENTER_CRITICAL(&zjUdpMux);
  recv=zjUdpReceived;rej=zjUdpRejected;seq=zjUdpLastSeq;rx=zjUdpLastRx;active=zjUdpActive;
  applied=zjUdpLastAppliedSeq;at=zjUdpLastAppliedAt;count=zjUdpAppliedCount;version=zjUdpFeedbackVersion;nack=zjUdpLastNack;
  rxSent=zjUdpAckSent[1];rxFailed=zjUdpAckFailed[1];appliedSent=zjUdpAckSent[2];appliedFailed=zjUdpAckFailed[2];
  nackSent=zjUdpAckSent[3];nackFailed=zjUdpAckFailed[3];maxTxUs=zjUdpMaxTxUs;maxRxToAckUs=zjUdpMaxRxToAckUs;
+ rxSuppressed=zjUdpRxSuppressed;
  portEXIT_CRITICAL(&zjUdpMux);const uint32_t now=millis();
  return String("{\"protocol\":\"ZJUDP1\",\"port\":")+String(ZJ_UDP_PORT)+",\"feedbackVersion\":"+String(version)+
   ",\"active\":"+(active?"true":"false")+",\"received\":"+String(recv)+",\"applied\":"+String(count)+
@@ -179,6 +187,7 @@ static String zjUdpStatistics(){
   ",\"receiveAgeMs\":"+(seq?String(uint32_t(now-rx)):String("null"))+
   ",\"applyAgeMs\":"+(applied?String(uint32_t(now-at)):String("null"))+
   ",\"rxAckSent\":"+String(rxSent)+",\"rxAckFailed\":"+String(rxFailed)+
+  ",\"rxAckSuppressed\":"+String(rxSuppressed)+
   ",\"appliedAckSent\":"+String(appliedSent)+",\"appliedAckFailed\":"+String(appliedFailed)+
   ",\"nackSent\":"+String(nackSent)+",\"nackFailed\":"+String(nackFailed)+
   ",\"maxAckTxUs\":"+String(maxTxUs)+",\"maxRxToAckUs\":"+String(maxRxToAckUs)+
@@ -225,9 +234,25 @@ static void zjUdpReceiverTask(void*){
    zjUdpPendingArmed=armed;zjUdpHasPending=true;
   }
   zjUdpOwnerPort=zjUdpSocket.remotePort();received=zjUdpReceived;rejected=zjUdpRejected;portEXIT_CRITICAL(&zjUdpMux);
-  if(version==2){ZjUdpFeedback job;
-   if(notify&&zjUdpBuildFeedback(job,reason?3:1,seq,reason,terminal)&&zjUdpEmit(job)&&terminal){
-    portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration)zjUdpTerminalReported=true;portEXIT_CRITICAL(&zjUdpMux);
+  if(version==2){
+   // ACK every 50 ms instead of every 20 ms, without weakening authenticated
+   // receive timestamps or anti-replay. ARM state changes always get feedback.
+   bool emit=notify;
+   if(!reason){
+    portENTER_CRITICAL(&zjUdpMux);
+    const bool fresh=generation==zjUdpGeneration&&zjUdpActive;
+    emit=fresh&&(!zjUdpHaveRxNotice||armed!=zjUdpLastRxNoticeArm||
+      uint32_t(now-zjUdpLastRxNoticeAt)>=ZJ_UDP_RX_FEEDBACK_MS);
+    if(fresh&&!emit)++zjUdpRxSuppressed;
+    portEXIT_CRITICAL(&zjUdpMux);
+   }
+   ZjUdpFeedback job;
+   if(emit&&zjUdpBuildFeedback(job,reason?3:1,seq,reason,terminal)&&zjUdpEmit(job)){
+    if(!reason){portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration){
+       zjUdpHaveRxNotice=true;zjUdpLastRxNoticeAt=now;zjUdpLastRxNoticeArm=armed;
+    }portEXIT_CRITICAL(&zjUdpMux);}
+    if(terminal){
+    portENTER_CRITICAL(&zjUdpMux);if(job.generation==zjUdpGeneration)zjUdpTerminalReported=true;portEXIT_CRITICAL(&zjUdpMux);}
    }
   }else if(!reason){uint8_t ack[ZJ_UDP_SIZE]={},body[30]={};
    memcpy(ack,"ZJA1",4);memcpy(ack+4,token,8);zjUdpPut32(ack+12,seq);
