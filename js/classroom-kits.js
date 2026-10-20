@@ -11,7 +11,7 @@ const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
- version:'',rc:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
+ version:'',rc:null,rcObservedAt:0,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let usbMonitorPacketAt=0;let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
@@ -151,7 +151,7 @@ function render(){
  if($('kitFindSaved'))$('kitFindSaved').disabled=state.working;
  const top=$('kitTopConnect');if(top)top.textContent=ready?'⚙ Kit':'＋ Kit';
  const switcher=$('kitTopNetworkSwitch');
- if(switcher){switcher.disabled=state.working||state.owner||!!state.rc?.claimed||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.dataset.link=ready?state.transport:'offline';switcher.title='Selected '+headerNetworkChoice.toUpperCase()+' • live link '+(ready?state.transport.toUpperCase():'OFFLINE')+' • controller mode '+String(state.mode||'?').toUpperCase()+' • one active Wi-Fi connection';}
+ if(switcher){switcher.disabled=state.working||state.owner||headerModePending;switcher.setAttribute('aria-checked',String(headerNetworkChoice==='ap'));switcher.dataset.link=ready?state.transport:'offline';switcher.title=state.rc?.claimed?'Controller input active: DISARM and release Android/PPM before changing Kit Wi-Fi mode.':'Selected '+headerNetworkChoice.toUpperCase()+' • live link '+(ready?state.transport.toUpperCase():'OFFLINE')+' • controller mode '+String(state.mode||'?').toUpperCase()+' • one active Wi-Fi connection';}
  const wifiButton=$('kitTopWifiConnect');if(wifiButton){wifiButton.disabled=state.working||headerModePending;wifiButton.textContent=ready&&state.transport===headerNetworkChoice?'✓ '+headerNetworkChoice.toUpperCase():headerNetworkChoice.toUpperCase()+' Connect';}
  const controlButton=$('kitTopControl');
  if(controlButton){controlButton.disabled=!ready||!['usb','ap','sta'].includes(state.transport)||state.working||(!state.owner&&(!state.controlAuthorized&&state.transport!=='usb'||!!state.rc?.claimed));
@@ -594,7 +594,7 @@ async function readStatus(){
  state.physicalLink=actualTransport;state.apIp=d.apIp||'';
  const priorName=state.kitName,priorAddress=state.staIp;
  if(state.owner&&(!d.rc?.claimed||ownOwnerId&&d.rc.ownerId!==ownOwnerId||d.rc?.source!==state.rcSource)){state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId=''}
- state.rc=d.rc||null;state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ state.rc=d.rc||null;state.rcObservedAt=Date.now();state.version=d.version||state.version;state.mode=d.mode||state.mode;
  const wasSetupAuthorized=state.setupAuthorized;
  state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
  if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Ready: Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
@@ -1282,7 +1282,8 @@ async function switchKitNetworkMode(mode){
    else await usbWrite('ZJNET,GET');
    return true;
   }
-  if(!state.setupAuthorized)await authorizeNetwork();
+  // Mode changes allow scoped AP setup / paired STA observer; firmware enforces permission.
+   // Do not require the broader OTA/admin USB authorization just to change mode.
   const result=await deviceRequest('/api/wifi/mode','POST',{mode});
   if(ticket!==reconnectTicket||result.kitId&&result.kitId!==target.kitId||result.mode!==mode)throw Error('Mode change was not acknowledged by the selected kit');
   await beginNetworkHandover(target,mode==='ap'?'ap':'sta','Kit accepted '+mode.toUpperCase()+' mode. Waiting for its new Wi-Fi link.');
@@ -1366,6 +1367,7 @@ async function authorizeNetworkAccess(){
 function goKits(){window.ZebjusDevicesWorkspace?.open('connection',{scroll:true})}
 async function toggleHeaderNetwork(){
  if(state.working||headerModePending||state.owner)throw Error('Release diagnostic control before selecting a connection');
+  if(state.rc?.claimed)throw Error('Android/PPM owns Kit input. DISARM and release it in the controller before switching Wi-Fi; the Kit cannot change radio mode during active input.');
  const mode=headerNetworkChoice==='ap'?'sta':'ap';
  if(linkFresh())return switchKitNetworkMode(mode);
  headerNetworkChoice=mode;render();
@@ -1816,7 +1818,7 @@ root.ZebjusKits={
  getMonitorPaths,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

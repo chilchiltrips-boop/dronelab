@@ -78,6 +78,16 @@ test('visible polling is 5-10Hz capped, single-flight, and exponential backoff o
  assert.match(js,/sequenceAt:seqChanged\?at:prev\.sequenceAt\?\?prev\.at/);
  assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
 });
+test('monitor can display accepted RC from a newer verified status without claiming input',()=>{
+ const display=read('js/live-inputs.js'),kits=read('js/classroom-kits.js');
+ assert.match(display,/function reuseVerifiedStatus\(kit\)/);
+ assert.match(display,/rc\.kitId!==kit\.kitId/);
+ assert.match(display,/now-at>SNAPSHOT_TTL_MS/);
+ assert.match(display,/at<=Number\(sample\?\.at\|\|0\)/);
+ assert.match(kits,/state\.rcObservedAt=Date\.now\(\)/);
+ assert.match(kits,/rcAt:state\.transport==='usb'\?state\.ackAt:state\.rcObservedAt/);
+ assert.doesNotMatch(display,/\/api\/rc\/claim|\/api\/rc\/preview/);
+});
 test('packet-rate tracker uses accepted counters and ignores polling without new accepted RC frames',()=>{
  const tracker=createInputRateTracker();const a=rc();
  assert.equal(tracker.observe(kit.kitId,a,1000),null);

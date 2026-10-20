@@ -5,7 +5,7 @@
 constexpr int WIFI_AP=2,WIFI_STA=1,WL_CONNECTED=3;
 struct Wifi {
  int modeValue=0,link=0,clients=0;bool ap=false;std::vector<String> attempts;
- void setAutoReconnect(bool){}void disconnect(bool=false,bool=false){link=0;}
+ void setSleep(bool){}void setAutoReconnect(bool){}void disconnect(bool=false,bool=false){link=0;}
  int getMode(){return modeValue;}int status(){return link;}
  bool mode(int next){modeValue=next;ap=next&WIFI_AP;return true;}
  IPAddress softAPIP(){return ap?IPAddress(192,168,4,1):IPAddress();}

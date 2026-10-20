@@ -1,6 +1,9 @@
 package in.zebjus.dronelab.companion;
 
 import android.app.Activity;
+import android.content.Context;
+import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.net.Network;
 import android.os.SystemClock;
 import android.webkit.WebView;
@@ -44,6 +47,22 @@ final class FlightCoreUdpStream {
     private final SecureRandom random=new SecureRandom();
     private ScheduledFuture<?> timer;
     private DatagramSocket socket;
+    private WifiManager.WifiLock radioLock;
+    private void releaseRadioLock(){
+        if(radioLock!=null){
+            try{if(radioLock.isHeld())radioLock.release();}catch(RuntimeException ignored){}
+            radioLock=null;
+        }
+    }
+    private void acquireRadioLock(){
+        // The foreground authenticated RC session owns the radio hint only.
+        WifiManager wifi=(WifiManager)activity.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        if(wifi==null)return;
+        int mode=Build.VERSION.SDK_INT>=29?WifiManager.WIFI_MODE_FULL_LOW_LATENCY:WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+        WifiManager.WifiLock lock=wifi.createWifiLock(mode,"ZEBJUS:UDP-RC");
+        lock.setReferenceCounted(false);
+        lock.acquire();radioLock=lock;
+    }
     private byte[] key, token, prefix;
     private boolean active, inputArm, acknowledgedArm;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
@@ -120,6 +139,7 @@ final class FlightCoreUdpStream {
         active=false;
         if(timer!=null){timer.cancel(false);timer=null;}
         if(socket!=null){socket.close();socket=null;}
+        releaseRadioLock();
         if(key!=null)Arrays.fill(key,(byte)0);
         if(prefix!=null)Arrays.fill(prefix,(byte)0);
         if(token!=null)Arrays.fill(token,(byte)0);
@@ -180,6 +200,8 @@ final class FlightCoreUdpStream {
                         ds.setSoTimeout(40);
                     }catch(Exception e){if(ds!=null)ds.close();throw e;}
                     stage="START_SENDER";
+                    // Best-effort latency hint: no safety bypass if OEM rejects it.
+                    try{acquireRadioLock();}catch(RuntimeException unsupported){releaseRadioLock();}
                     key=secret;token=claimToken;prefix=new byte[4];random.nextBytes(prefix);
                     socket=ds;active=true;
                     sent=ackCount=estimatedLost=lastRtt=jitter=0;
