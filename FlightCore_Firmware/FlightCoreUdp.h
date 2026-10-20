@@ -28,11 +28,14 @@ static uint32_t zjUdpFeedbackCounter=0,zjUdpFeedbackSalt=0,zjUdpLastNackAt=0;
 #if defined(ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK)
 // Existing host interop fixture expects every applied transition synchronously.
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
+static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=0;
 #else
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
+// RX_ACK at 10 Hz + APPLIED_ACK at 10 Hz (about 20 Hz total) while Android sends at 50 Hz.
+static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=100;
 #endif
-static uint32_t zjUdpLastAppliedNoticeAt=0;
-static bool zjUdpNotifiedArm=false;
+static uint32_t zjUdpLastAppliedNoticeAt=0,zjUdpLastRxNoticeAt=0;
+static bool zjUdpNotifiedArm=false,zjUdpNotifiedRxArm=false;
 static uint32_t zjUdpAckAttempted[4]={},zjUdpAckSent[4]={},zjUdpAckFailed[4]={};
 static uint32_t zjUdpMaxTxUs=0,zjUdpMaxRxToAckUs=0;
 static uint8_t zjUdpLastNack=0,zjUdpEndReason=0;
@@ -73,7 +76,8 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
  zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
- zjUdpLastAppliedNoticeAt=0;zjUdpNotifiedArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
+ zjUdpLastAppliedNoticeAt=zjUdpLastRxNoticeAt=0;
+ zjUdpNotifiedArm=zjUdpNotifiedRxArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
  for(int i=0;i<4;i++)zjUdpAckAttempted[i]=zjUdpAckSent[i]=zjUdpAckFailed[i]=0;
  zjUdpHasPending=zjUdpRequestedArm=zjUdpAppliedArm=zjUdpTerminalPending=zjUdpTerminalReported=false;
  zjUdpEndReason=zjUdpLastNack=0;zjUdpLastNackAt=0;zjUdpActive=zjUdpConfigured=true;
@@ -218,6 +222,11 @@ static void zjUdpReceiverTask(void*){
    zjUdpLastNack=reason;if(notify)zjUdpLastNackAt=now;
    if(terminal){zjUdpActive=zjUdpHasPending=false;zjUdpEndReason=reason;}
   }else{
+   // Report first valid input, arm/disarm transitions immediately, otherwise every
+   // 100 ms. Every valid frame still refreshes firmware RX freshness and mailbox.
+   notify=!zjUdpLastSeq||armed!=zjUdpNotifiedRxArm||
+    uint32_t(now-zjUdpLastRxNoticeAt)>=ZJ_UDP_RX_FEEDBACK_MS;
+   if(notify){zjUdpLastRxNoticeAt=now;zjUdpNotifiedRxArm=armed;}
    if(!zjUdpLastSeq)zjUdpFirstRx=now;
    zjUdpLastSeq=seq;zjUdpLastRx=now;zjUdpRequestedArm=armed;++zjUdpReceived;
    zjUdpPendingSeq=seq;zjUdpPendingAt=now;

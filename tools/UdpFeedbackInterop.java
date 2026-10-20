@@ -84,7 +84,7 @@ public final class UdpFeedbackInterop {
    require(has(view,"\"appliedKnown\":true")&&has(view,"\"lastAppliedSeq\":"),"Applied confirmation must be explicit");
    staleOnce=true;waitFor(activity,view,"\"nackReason\":\"STALE\"",stream);
    require(!has(view,"\"type\":\"error\""),"Reordered STALE NACK must keep control alive");
-   apply=false;waitFor(activity,view,"UDP_APPLY_TIMEOUT",stream);stream.shutdown();
+   apply=false;waitFor(activity,view,"UDP_FIRMWARE_APPLY_STALE",stream);stream.shutdown();
    activity=new Activity();view=new WebView();apply=true;oversize=false;replay=false;
    stream=start(activity,view,"oversized");waitFor(activity,view,"\"inputArmed\":true",stream);
    oversize=true;waitFor(activity,view,"UDP_ACK_TIMEOUT",stream);stream.shutdown();

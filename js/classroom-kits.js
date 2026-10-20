@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,m
 const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
-const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
+const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',rc:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};

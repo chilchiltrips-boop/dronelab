@@ -131,7 +131,7 @@ function tick(now){
   // A congested WebView/UI callback queue is NOT proof the Kit missed ACKs.
   // Keep the legacy HTTP feedback watchdog until that fallback is removed.
   const kitFeedback=window.ZebjusNetwork?.feedback?.();
-  if(kitArmed()&&kitFeedback&&kitFeedback.protocol!=='ZJUDP1'&&Date.now()-kitFeedback.at>350){
+  if(kitArmed()&&kitFeedback&&kitFeedback.protocol!=='ZJUDP1'&&Date.now()-kitFeedback.at>500){
    void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')
   }
  if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;

@@ -14,7 +14,8 @@ static void portENTER_CRITICAL(portMUX_TYPE*){auto hook=criticalHook;if(hook)hoo
 static void portEXIT_CRITICAL(portMUX_TYPE*){}
 struct Idle{};static void vTaskDelay(int){throw Idle{};}
 static int xTaskCreate(void(*)(void*),const char*,int,void*,int,TaskHandle_t* task){*task=reinterpret_cast<void*>(1);return pdPASS;}
-#define ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK
+#define ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK // Synchronous legacy v2 fixture
+// ZJ_UDP_RX_FEEDBACK_MS uses the same host fixture flag; production is 50ms.
 #include "../FlightCore_Firmware/FlightCoreUdp.h"
 
 static int peerSocket;
@@ -88,12 +89,13 @@ static void feedbackTests(){
  assert(zjRcOwned&&zjRcInputArmed);
  // Invalid packets and NACK traffic cannot renew the receive watchdog.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- clockMs+=351;pump();auto timeout=feedback(3,ZJ_UDP_STALE,true);
- assert(((timeout[8]<<8)|timeout[9])==351);zjUdpLoop(clockMs);assert(!zjRcOwned);
+ clockMs+=501;pump();auto timeout=feedback(3,ZJ_UDP_STALE,true);
+ assert(((timeout[8]<<8)|timeout[9])==501);zjUdpLoop(clockMs);assert(!zjRcOwned);
  // Fresh RX acknowledgements cannot mask an apply loop that stopped progressing.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- for(int i=2;i<=6;i++){clockMs+=70;deliver(frame(i,true));feedback(1);}
- clockMs++;pump();feedback(3,ZJ_UDP_APPLY_STALLED,true);zjUdpLoop(clockMs);
+ for(int i=2;i<=5;i++){clockMs+=110;deliver(frame(i,true));feedback(1);}
+ // Apply age passes 500 ms while latest authenticated RX is only 61 ms old.
+ clockMs+=61;pump();feedback(3,ZJ_UDP_APPLY_STALLED,true);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&zjRcLastReleaseReason=="UDP_APPLY_TIMEOUT");
  // A different owner remains intact; only the old grant gets the terminal NACK.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
@@ -124,7 +126,7 @@ int main(){
  old=frame(1,true);old[57]^=1;replaceAtNextCommit();deliver(old);expectAck(false);
  assert(zjUdpActive&&zjUdpRejected==0);
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);assert(zjRcInputArmed);
- clockMs+=351;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
+ clockMs+=501;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed&&zjRcThrottle==1000);
  // Closing the parent authentication session revokes its UDP grant immediately.
  newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);

@@ -7,20 +7,20 @@ const client=document.getElementById('kitAckDiagnostics')?.dataset?.client==='an
 const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
- 'rc_ack_error','udp_start','udp_ack','udp_nack','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
+ 'rc_ack_error','udp_start','udp_ack','udp_nack','udp_warning','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
  'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect']);
 const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
-   'feedbackVersion','ackKind','nackReason','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
+   'feedbackVersion','ackKind','nackReason','feedbackHealth','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
- 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'];
+ 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
- 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+ 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/udp_nack_owner_conflict/.test(s))return 'OWNER_BUSY';
@@ -32,7 +32,7 @@ function reasonClass(error){
  if(/rc_not_owned_or_invalid_frame|invalid.*rc.*frame/.test(s))return 'FRAME_REJECTED';
  if(/udp_input_stale|joystick input paused/.test(s))return 'INPUT_STALE';
  if(/stale|queue|backlog|busy/.test(s))return 'QUEUE_STALE';
- if(/deadline|timeout|timed out|350|failsafe|udp_no_ack/.test(s))return 'TIMEOUT';
+ if(/deadline|timeout|timed out|350|500|750|failsafe|udp_no_ack/.test(s))return 'TIMEOUT';
  if(/ack|receive|sequence|seq|replay/.test(s))return 'ACK_INVALID';
  if(/identity|device id|wrong kit|mismatch/.test(s))return 'IDENTITY';
  if(/session|401|403|authorization|authenticate|permission|scope/.test(s))return 'AUTH';
@@ -47,12 +47,13 @@ function clean(data){
   const v=data[key];
   if(v===undefined||v===null)continue;
   if(['feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected','rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed',
-   'nackSent','nackFailed','maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs',
+   'nackSent','nackFailed','maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs',
    'apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
   }else if(['appliedKnown','rcOwned','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='ackKind'){if(['RX_ACK','APPLIED_ACK','NACK','LEGACY_RX_ACK'].includes(v))result.ackKind=v;}
+  else if(key==='feedbackHealth'){if(['HEALTHY','DEGRADED','WAITING_RX','STOPPED','UNKNOWN'].includes(v))result.feedbackHealth=v;}
   else if(key==='nackReason'){if(['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(v))result.nackReason=v;}
   else if(key==='route'){if(routes.has(v))result.route=v;}
   else if(key==='reason'){if(reasons.has(v)||typeof v==='string'&&/^UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)$/.test(v))result.reason=v;}

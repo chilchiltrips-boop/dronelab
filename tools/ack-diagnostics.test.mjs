@@ -135,7 +135,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 46\s*versionName '1\.8\.8-udp-ack-reliability'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 47\s*versionName '1\.8\.9-udp-feedback-20hz'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
@@ -152,7 +152,7 @@ test('AP native phase timings and firmware release reason are sanitized in CSV/J
  b.api.record('native_failure',{phase:'secret-device-info',reason:'secret'});
  assert.equal(b.events().at(-1).data.phase,undefined);
 });
-test('stalled Android RC preview is cancelled without relaxing the 350ms firmware watchdog',()=>{
+test('stalled Android RC preview is cancelled without relaxing the 500ms firmware watchdog',()=>{
  const controller=read('companion-flight.js'),link=read('companion-network.js');
  const native=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
  const firmware=read('FlightCore_Firmware/FlightCoreClassroom.h');
@@ -160,6 +160,6 @@ test('stalled Android RC preview is cancelled without relaxing the 350ms firmwar
  assert.match(link,/function cancelPendingRcPreview\(\)/);
  assert.match(link,/native\?\.cancelRequest\?\.\(id\)/);
  assert.match(native,/stages\.put\("responseWaitMs"/);
- assert.match(firmware,/ZJ_RC_DEADMAN_MS=350/);
+ assert.match(firmware,/ZJ_RC_DEADMAN_MS=500/);
  assert.match(firmware,/zjRcLastReleaseReason/);
 });
