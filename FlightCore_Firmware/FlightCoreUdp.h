@@ -191,9 +191,8 @@ static String zjUdpStatistics(){
 static void zjUdpReceiverTask(void*){
  uint8_t packet[ZJ_UDP_SIZE+4],plain[14],key[32],token[8],owner[4];
  for(;;){
-  // Prioritize new RC ingress over routine authenticated feedback generation.
-  const int n=zjUdpSocket.parsePacket();
-  if(n<=0){zjUdpFlushFeedback();vTaskDelay(pdMS_TO_TICKS(2));continue;}
+  zjUdpFlushFeedback();const int n=zjUdpSocket.parsePacket();
+  if(n<=0){vTaskDelay(pdMS_TO_TICKS(2));continue;}
   if(n!=int(ZJ_UDP_SIZE)){while(zjUdpSocket.available())zjUdpSocket.read();continue;}
   if(zjUdpSocket.read(packet,ZJ_UDP_SIZE)!=int(ZJ_UDP_SIZE))continue;
   const IPAddress source=zjUdpSocket.remoteIP();bool active,appliedArm;uint32_t generation;uint8_t version;
