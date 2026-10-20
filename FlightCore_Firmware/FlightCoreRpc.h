@@ -8,12 +8,27 @@
 #include <memory>
 #include <new>
 #include <mbedtls/sha256.h>
+#include "FlightCoreHttpBudget.h"
+#ifdef ARDUINO
+#include <lwip/sockets.h>
+#endif
 
 class ZjNetworkServer : public WebServer {
  struct Route {String path;HTTPMethod verb;std::function<void()> run;};
  Route routes[40];size_t routeCount=0;
  bool rpc=false;HTTPMethod rpcMethod=HTTP_GET;String rpcPath,rpcForm,rpcHeaders[4];
  IPAddress rpcPeer;int rpcStatus=500;String rpcBody,rpcProof;
+#ifdef ARDUINO
+ std::unique_ptr<char[]> httpBuffer{new(std::nothrow) char[ZJ_HTTP_RESPONSE_MAX]};
+ NetworkClient responseClient;size_t responseSize=0,responseSent=0;
+ uint32_t requestAt=0,responseAt=0;bool queueHttp=false,httpOverflow=false;
+ size_t _currentClientWrite(const char* bytes,size_t size)override{
+  if(!queueHttp)return WebServer::_currentClientWrite(bytes,size);
+  if(!httpBuffer||responseSize+size>ZJ_HTTP_RESPONSE_MAX){httpOverflow=true;return 0;}
+  responseClient=_currentClient;memcpy(httpBuffer.get()+responseSize,bytes,size);responseSize+=size;return size;
+ }
+ size_t _currentClientWrite_P(PGM_P bytes,size_t size)override{return _currentClientWrite(bytes,size);}
+#endif
  static String decode(const String& in){
   String out;for(size_t i=0;i<in.length();i++){
    if(in[i]=='+')out+=' ';
@@ -23,14 +38,43 @@ class ZjNetworkServer : public WebServer {
   }return out;
  }
  public:
+ bool (*controlActive)()=nullptr;bool (*admit)()=nullptr;
+ uint32_t httpDeferred=0,httpDropped=0,httpMaxDurationMs=0;
  explicit ZjNetworkServer(int port):WebServer(port){}
+ #ifdef ARDUINO
+ void handleClient()override{
+  // TCP send() is nonblocking and each iteration emits at most 1024 bytes.
+  // Keep a socket reference after WebServer finishes its request callback.
+  if(responseSize){
+   if(httpOverflow||uint32_t(millis()-responseAt)>ZJ_HTTP_PEER_MS){responseClient.stop();++httpDropped;responseSize=responseSent=0;return;}
+   const int n=::send(responseClient.fd(),httpBuffer.get()+responseSent,std::min(ZJ_HTTP_SEND_CHUNK,responseSize-responseSent),MSG_DONTWAIT);
+   if(n>0)responseSent+=size_t(n);
+   if(responseSent==responseSize){responseClient.stop();responseSize=responseSent=0;}
+   return;
+  }
+  if(!controlActive||!controlActive()){WebServer::handleClient();return;}
+  if(!httpBuffer){++httpDropped;return;}
+  if(!_currentClient){_currentClient=_server.accept();if(!_currentClient)return;
+   requestAt=millis();_currentStatus=HC_WAIT_READ;_statusChange=requestAt;}
+  const int n=::recv(_currentClient.fd(),httpBuffer.get(),ZJ_HTTP_REQUEST_MAX,MSG_PEEK|MSG_DONTWAIT);
+  const int length=n>0?zjHttpRequestLength(httpBuffer.get(),size_t(n)):0;
+  if(length<0||n==0||uint32_t(millis()-requestAt)>ZJ_HTTP_PEER_MS){_currentClient.stop();_currentStatus=HC_NONE;++httpDropped;return;}
+  if(!length||n<length){++httpDeferred;return;}
+  // All headers/body are present; parser cannot wait for a trickling peer.
+  queueHttp=true;httpOverflow=false;responseSize=responseSent=0;responseAt=millis();
+  WebServer::handleClient();queueHttp=false;
+  const uint32_t duration=millis()-responseAt;if(duration>httpMaxDurationMs)httpMaxDurationMs=duration;
+  if(httpOverflow){responseClient.stop();responseSize=responseSent=0;++httpDropped;}
+ }
+ #endif
  void on(const char* path,HTTPMethod verb,std::function<void()> run){
-  WebServer::on(path,verb,run);
-  if(routeCount<40&&String(path).startsWith("/api/"))routes[routeCount++]={String(path),verb,run};
+  const auto guarded=[this,run](){if(!admit||admit())run();};
+  WebServer::on(path,verb,guarded);
+  if(routeCount<40&&String(path).startsWith("/api/"))routes[routeCount++]={String(path),verb,guarded};
  }
  void on(const char* path,HTTPMethod verb,std::function<void()> run,std::function<void()> upload){
   // Retired multipart OTA is deliberately HTTP-only and always returns 410.
-  WebServer::on(path,verb,run,upload);
+  WebServer::on(path,verb,[this,run](){if(!admit||admit())run();},upload);
  }
  bool isRpc()const{return rpc;}
  IPAddress peerIP(){return rpc?rpcPeer:WebServer::client().remoteIP();}
@@ -97,15 +141,45 @@ static ZjRpcAssembly zjRpcAssembly[2];
 struct ZjRpcCached {uint8_t id[8]={},hash[32]={};IPAddress peer;uint16_t port=0;uint32_t at=0;String response;};
 static ZjRpcCached zjRpcCache[2];static uint8_t zjRpcCacheNext=0;
 static bool zjRpcPrivate(const IPAddress& p){return p[0]==10||(p[0]==192&&p[1]==168)||(p[0]==172&&p[1]>=16&&p[1]<=31);}
+static constexpr uint32_t ZJ_RPC_BUDGET_MS=3;
+static constexpr uint8_t ZJ_RPC_PACKET_BUDGET=3,ZJ_RPC_RESPONSE_BURST=2;
+static void (*zjRpcControlTick)()=nullptr;
+struct ZjRpcResponse {uint8_t id[8]={};String body;IPAddress peer;uint16_t port=0;size_t next=0;uint32_t at=0;};
+static ZjRpcResponse zjRpcResponses[2];
+static uint32_t zjRpcMaxDurationMs=0,zjRpcMaxResponseDurationMs=0,zjRpcMaxPacketsPerLoop=0;
+static uint32_t zjRpcResponseFailures=0,zjRpcQueueDrops=0,zjRpcBudgetExhausted=0;
+static uint32_t zjRpcLastDurationMs=0,zjRpcLastPacketsPerLoop=0;
 static void zjRpcSend(const uint8_t* id,const String& response,const IPAddress& peer,uint16_t port){
- const size_t n=response.length(),count=(n+ZJ_RPC_FRAGMENT-1)/ZJ_RPC_FRAGMENT;
- uint8_t packet[16+ZJ_RPC_FRAGMENT];memcpy(packet,"ZJR1",4);memcpy(packet+4,id,8);
- packet[12]=n>>8;packet[13]=n;packet[15]=count;
- for(size_t i=0;i<count;i++){
-  const size_t bytes=std::min(ZJ_RPC_FRAGMENT,n-i*ZJ_RPC_FRAGMENT);packet[14]=i;
-  memcpy(packet+16,response.c_str()+i*ZJ_RPC_FRAGMENT,bytes);
-  zjRpcSocket.beginPacket(peer,port);zjRpcSocket.write(packet,16+bytes);zjRpcSocket.endPacket();
+ for(auto& job:zjRpcResponses)if(job.port==port&&job.peer==peer&&!memcmp(job.id,id,8))return;
+ for(auto& job:zjRpcResponses)if(!job.port){memcpy(job.id,id,8);job.body=response;job.peer=peer;job.port=port;job.next=0;job.at=millis();return;}
+ ++zjRpcQueueDrops; // Handler result is already cached; retry must not repeat an OTA write.
+}
+static void zjRpcFlush(uint32_t loopAt){
+ uint8_t packet[16+ZJ_RPC_FRAGMENT];uint8_t sent=0;
+ for(auto& job:zjRpcResponses){
+  if(!job.port)continue;
+  const size_t n=job.body.length(),count=(n+ZJ_RPC_FRAGMENT-1)/ZJ_RPC_FRAGMENT;
+  memcpy(packet,"ZJR1",4);memcpy(packet+4,job.id,8);packet[12]=n>>8;packet[13]=n;packet[15]=count;
+  while(job.next<count&&sent<ZJ_RPC_RESPONSE_BURST&&uint32_t(millis()-loopAt)<ZJ_RPC_BUDGET_MS){
+   const size_t bytes=std::min(ZJ_RPC_FRAGMENT,n-job.next*ZJ_RPC_FRAGMENT);packet[14]=job.next;
+   memcpy(packet+16,job.body.c_str()+job.next*ZJ_RPC_FRAGMENT,bytes);
+   const bool began=zjRpcSocket.beginPacket(job.peer,job.port)!=0;
+   const bool wrote=began&&zjRpcSocket.write(packet,16+bytes)==16+bytes;
+   const bool ended=began&&zjRpcSocket.endPacket()!=0;
+   if(!began||!wrote||!ended)++zjRpcResponseFailures;
+   ++job.next;++sent;if(zjRpcControlTick)zjRpcControlTick();
+  }
+  if(job.next==count){const uint32_t duration=millis()-job.at;
+   if(duration>zjRpcMaxResponseDurationMs)zjRpcMaxResponseDurationMs=duration;job.port=0;job.body="";}
  }
+}
+static String zjRpcStatistics(){
+ uint8_t depth=0;for(const auto& job:zjRpcResponses)if(job.port)++depth;
+ return String("{\"maxProcessingMs\":")+String(zjRpcMaxDurationMs)+",\"maxPacketsPerLoop\":"+String(zjRpcMaxPacketsPerLoop)+
+  ",\"processingMs\":"+String(zjRpcLastDurationMs)+",\"packetsPerLoop\":"+String(zjRpcLastPacketsPerLoop)+
+  ",\"responseQueueDepth\":"+String(depth)+",\"maxResponseDurationMs\":"+String(zjRpcMaxResponseDurationMs)+
+  ",\"responseSendFailures\":"+String(zjRpcResponseFailures)+",\"responseQueueDrops\":"+String(zjRpcQueueDrops)+
+  ",\"budgetExhausted\":"+String(zjRpcBudgetExhausted)+",\"budgetMs\":3,\"packetBudget\":3}";
 }
 static void zjRpcSetup(){
  bool allocated=true;

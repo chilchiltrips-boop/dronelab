@@ -3,12 +3,12 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-test('Live Inputs runs bounded 5–10Hz when visible, not the 2.2-second Kit health check',()=>{
+test('Live Inputs runs bounded 3Hz when visible, not the 2.2-second Kit health check',()=>{
  const live=read('js/live-inputs.js'),kit=read('js/classroom-kits.js');
  assert.match(kit,/\},2200\)/);
- assert.match(live,/const NETWORK_POLL_MS=140, UI_TICK_MS=70/);
+ assert.match(live,/const NETWORK_POLL_MS=300, UI_TICK_MS=70/);
  assert.match(live,/!inFlight&&Date\.now\(\)>=nextPollAt/);
- assert.match(live,/nextPollAt=Math\.max\(at,startedAt\+NETWORK_POLL_MS\)/);
+ assert.match(live,/nextPollAt=Math\.max\(at,startedAt\+\(reply\.claimed===true\?350:NETWORK_POLL_MS\)\)/);
  assert.match(live,/if\(!visible\(\)\|\|!kit\.connected/);
  assert.match(live,/readFailures=Math\.min\(5,readFailures\+1\)/);
  assert.match(live,/MAX_RETRY_BACKOFF_MS=2400/);
@@ -74,7 +74,7 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  const current=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
  assert.ok(current>=32&&previous>0&&current>=previous);
- assert.match(gradle,/versionName '1\.8\.7-rx-applied-feedback'/);
+ assert.match(gradle,/versionName '1\.8\.8-ack-reliability'/);
 });
 
 test('minimized STA tab does not tear down selected Kit on throttled network polls',()=>{

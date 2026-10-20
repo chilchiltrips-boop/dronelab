@@ -4,12 +4,13 @@
 (function(root){
 'use strict';
 const client=document.getElementById('kitAckDiagnostics')?.dataset?.client==='android'?'android':'web';
-const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
+const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=6000,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
  'rc_ack_error','udp_start','udp_ack','udp_nack','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
  'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect']);
-const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
+const metricFields=['apClientRssiDbm','reconnectCount','receiverWakeGapMs','ackQueueDelayMs','maxAckQueueDelayMs','sendGapMs','ackGapMs','feedbackAgeMs', 'rxAckAttempted', 'rxAckSent', 'rxAckFailed', 'appliedAckAttempted', 'appliedAckSent', 'appliedAckFailed', 'nackAttempted', 'nackSent', 'nackFailed', 'ackQueueDepth', 'ackQueueHighWatermark', 'rxToAckDelayMs', 'maxRxToAckDelayMs', 'ackSendDurationMs', 'maxAckSendDurationMs', 'maxApplyLatencyMs', 'maxMainLoopGapMs', 'rpcProcessingMs','rpcPacketsPerLoop','wifiLastEventAtMs','rpcMaxProcessingMs', 'rpcMaxResponseDurationMs', 'rpcResponseQueueDepth', 'rpcResponseSendFailures', 'apJoins', 'apLeaves', 'apStarts', 'apStops', 'apDisconnectReason', 'activeApClients', 'modeTransitions'];
+const fields=[...metricFields,'diagnosticId','recordingId','linkState','wifiEvent','route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
@@ -18,7 +19,7 @@ const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
- 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+ 'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_RECEIVE_FAILED','UDP_SEQUENCE_EXHAUSTED','UDP_UNKNOWN']);
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/udp_nack_owner_conflict/.test(s))return 'OWNER_BUSY';
@@ -44,9 +45,12 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(['feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected'].includes(key)){
-   if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
-  }else if(['appliedKnown','rcOwned','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
+  if(metricFields.includes(key)||['feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected'].includes(key)){
+   if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(4294967295,Math.round(v)));
+  }else if((key==='diagnosticId'||key==='recordingId')){if(typeof v==='string'&&/^[A-Fa-f0-9]{16}$/.test(v))result[key]=v.toUpperCase();}
+  else if(key==='linkState'){if(['HEALTHY','LINK_DEGRADED','CONTROL_LOST','RELEASED'].includes(v))result[key]=v;}
+  else if(key==='wifiEvent'){if(['AVAILABLE','LOST','CAPABILITIES','IDENTITY_VERIFIED','IDENTITY_REDACTED','ROUTE_CHANGED'].includes(v))result[key]=v;}
+  else if(['appliedKnown' ,'rcOwned','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='ackKind'){if(['RX_ACK','APPLIED_ACK','NACK','LEGACY_RX_ACK'].includes(v))result.ackKind=v;}
   else if(key==='nackReason'){if(['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(v))result.nackReason=v;}
@@ -65,9 +69,11 @@ function clean(data){
  return result;
 }
 let events=[];
-try{const old=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(old))events=old.filter(x=>x&&allowedEvents.has(x.event)&&Number.isFinite(x.at)&&x.data&&typeof x.data==='object').slice(-LIMIT).map(x=>({at:x.at,event:x.event,data:clean(x.data)}))}catch{}
+try{const saved=JSON.parse(localStorage.getItem(KEY)||'[]');const old=Array.isArray(saved)?saved:saved.events;if(Array.isArray(old))events=old.filter(x=>x&&allowedEvents.has(x.event)&&Number.isFinite(x.at)&&x.data&&typeof x.data==='object').slice(-LIMIT).map(x=>({at:x.at,event:x.event,data:clean(x.data)}))}catch{}
 let lastWrite=0,lastPaint=0,ackSamples=0,lastRecordedArm,flushTimer=null;
 const panel=()=>document.getElementById('kitAckDiagnostics');
+const control=selector=>panel()?.querySelector(selector)||document.querySelector?.(selector);
+const recordingId=Array.from({length:16},()=>Math.floor(Math.random()*16).toString(16)).join('').toUpperCase();
 function summary(){
  const counts={ack:0,nack:0,lastRxSeq:0,lastAppliedSeq:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
  for(const e of events){
@@ -88,20 +94,70 @@ function paint(force=false){
  const p=panel();if(!p)return;
  const s=summary(),label=p.querySelector('[data-diag-summary]');
  if(label)label.textContent=events.length+' events • '+s.ack+' sampled ACKs • '+s.nack+' NACKs • RX #'+s.lastRxSeq+' / APPLIED #'+s.lastAppliedSeq+' • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
- const view=p.querySelector('[data-diag-events]');
- if(view&&p.open)view.textContent=events.slice(-30).reverse().map(e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data)).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
+ const view=control('[data-diag-events]');
+ const search=String(p.querySelector('[data-diag-search]')?.value||'').toLowerCase(),filter=p.querySelector('[data-diag-filter]')?.value||'all';
+ if(view&&(p.open||view.closest?.('#diagSectionHistory'))){
+  const visible=events.filter(e=>(filter!=='errors'||/error|failure|disarm|release/.test(e.event)||e.data.outcome==='fail')&&(filter!=='feedback'||/ack/.test(e.event))&&JSON.stringify(e).toLowerCase().includes(search)).slice(-150);
+  const label=e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data);
+  if(typeof view.replaceChildren==='function'){
+   const rows=[];let group='';
+   for(const e of visible){const id=e.data.diagnosticId||e.data.recordingId||'previous recording';
+    if(id!==group){group=id;const heading=document.createElement('div');heading.className='diag-session-heading';heading.textContent=(e.data.diagnosticId?'Control correlation ':'Recording ')+id;rows.push(heading);}
+    const row=document.createElement('div');row.textContent=label(e);if(/error|failure|disarm|disconnect/.test(e.event)||e.data.outcome==='fail')row.className='diag-event-error';rows.push(row);
+   }view.replaceChildren(...rows);
+  }
+  else view.textContent=visible.map(label).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
+ }
+}
+const PRE_MS=60000,POST_MS=30000,MAX_INCIDENTS=8,MAX_STORE_BYTES=2*1024*1024;
+let incidents=[],db=null,storageEpoch=0;
+const monotonicStart=typeof performance!=='undefined'?performance.now():0;
+function storageNotice(text){const e=panel()?.querySelector('[data-diag-storage]');if(e)e.textContent=text}
+function prune(){
+ events=events.filter(e=>e.at>=Date.now()-PRE_MS).slice(-LIMIT);
+ incidents=incidents.filter(i=>Date.now()-i.triggerAt<7*86400000).slice(-MAX_INCIDENTS);
+ for(const i of incidents)if(i.events.length>LIMIT)i.events.splice(0,i.events.length-LIMIT);
+}
+function persist(){
+ prune();
+ while(incidents.length&&JSON.stringify({events,incidents}).length*2>MAX_STORE_BYTES)incidents.shift();
+ while(events.length>1&&JSON.stringify({events,incidents}).length*2>MAX_STORE_BYTES)events.splice(0,Math.max(1,Math.floor(events.length/8)));
+ const snapshot={events,incidents};
+ if(db){try{const tx=db.transaction('recordings','readwrite');tx.objectStore('recordings').put(snapshot,client);
+  tx.oncomplete=()=>{try{localStorage.removeItem(KEY)}catch{}storageNotice('Saved on this device • 60 s pre-error / 30 s post-error • '+incidents.length+' incidents')};
+  tx.onerror=()=>storageNotice('Storage unavailable; export this session before closing');
+ }catch{storageNotice('Storage unavailable; export this session before closing')}}
+ else {try{localStorage.setItem(KEY,JSON.stringify(snapshot))}catch{storageNotice('Storage unavailable; export this session before closing')}}
 }
 function flush(force=false){
- const at=Date.now();
- if(!force&&at-lastWrite<FLUSH_MS){
-  if(!flushTimer)flushTimer=setTimeout(()=>{flushTimer=null;flush(true)},FLUSH_MS);
-  return;
- }
- lastWrite=at;try{localStorage.setItem(KEY,JSON.stringify(events))}catch{}
+ if(flushTimer&&!force)return;if(flushTimer)clearTimeout(flushTimer);
+ flushTimer=setTimeout(()=>{flushTimer=null;lastWrite=Date.now();persist()},force?0:FLUSH_MS);
+}
+function sanitizedEntry(e){return {at:e.at,event:e.event,data:clean(e.data),relativeMs:Number.isFinite(e.relativeMs)?e.relativeMs:null}}
+function openStorage(){
+ if(!root.indexedDB){storageNotice('Asynchronous fallback recording • persistent database unavailable');return}
+ const epoch=storageEpoch,request=root.indexedDB.open('zebjus-diagnostics-v2',1);
+ request.onupgradeneeded=()=>request.result.createObjectStore('recordings');
+ request.onerror=()=>storageNotice('Persistent database unavailable; fallback recording enabled');
+ request.onsuccess=()=>{
+  db=request.result;const read=db.transaction('recordings').objectStore('recordings').get(client);
+  read.onsuccess=()=>{
+   if(epoch!==storageEpoch)return;const old=read.result;
+   if(old){events=[...(old.events||[]).filter(e=>allowedEvents.has(e.event)&&Number.isFinite(e.at)).map(sanitizedEntry),...events].sort((a,b)=>a.at-b.at).slice(-LIMIT);
+    incidents=(old.incidents||[]).filter(i=>Number.isFinite(i.triggerAt)&&Number.isFinite(i.endAt)).slice(-MAX_INCIDENTS).map(i=>({triggerAt:i.triggerAt,endAt:i.endAt,events:(i.events||[]).slice(-LIMIT).filter(e=>allowedEvents.has(e.event)&&Number.isFinite(e.at)).map(sanitizedEntry)}));}
+   prune();paint(true);flush();
+  };
+ };
+}
+function clearSaved(){
+ ++storageEpoch;events=[];incidents=[];if(flushTimer){clearTimeout(flushTimer);flushTimer=null}
+ try{localStorage.removeItem(KEY)}catch{}
+ if(db)db.transaction('recordings','readwrite').objectStore('recordings').delete(client);
+ paint(true);
 }
 function record(event,data={}){
  if(!allowedEvents.has(event))return;
- const safe=clean(data);
+ const safe=clean({...data,recordingId});
  // Writing to localStorage on every 100ms joystick ACK can create latency;
  // sample every fifth success, but ALWAYS record an outlier or error.
  if(event==='rc_ack'||event==='udp_ack'||event==='web_ack'){
@@ -109,7 +165,12 @@ function record(event,data={}){
   if(ackSamples%5!==1&&(safe.roundTripMs||0)<180&&safe.inputArmed===lastRecordedArm)return;
   lastRecordedArm=safe.inputArmed;
  }
- events.push({at:Date.now(),event,data:safe});
+ const at=Date.now(),entry={at,event,data:safe,relativeMs:typeof performance!=='undefined'?Math.round(performance.now()-monotonicStart):null};
+ events.push(entry);
+ const activeIncident=incidents.find(i=>at<=i.endAt);
+ if(activeIncident)activeIncident.events.push(entry);
+ else if(/error|failure|disarm|disconnect/.test(event)||safe.outcome==='fail'||safe.connected===false||safe.wifiEvent==='LOST'||safe.releaseReason&&safe.releaseReason!=='NONE')incidents.push({triggerAt:at,endAt:at+POST_MS,events:events.filter(e=>e.at>=at-PRE_MS)});
+ prune();
  if(events.length>LIMIT)events.splice(0,events.length-LIMIT);
  flush(!['rc_ack','udp_ack','udp_nack','web_ack','kit_status','web_status','native_request'].includes(event));
  paint();
@@ -117,11 +178,13 @@ function record(event,data={}){
 function exportData(format){
  const s=summary();
  if(format==='json')return JSON.stringify({schema:'zebjus-ack-diagnostics-v1',client,generatedAt:new Date().toISOString(),
-  notes:'Local diagnostic input only; motor outputs disabled. ACK success is sampled every fifth frame or on slow RTT. No credentials/Device ID/SSID/IP are included.',
-  summary:s,events},null,2);
- const columns=['at','event',...fields];
+  notes:'Sequence gaps are estimates, not measured radio loss. Correlate diagnosticId/sequence; wall clocks may differ. recordingId is a non-secret local recording label. Local diagnostic input only; motor outputs disabled. ACK success is sampled every fifth frame or on slow RTT. No credentials/Device ID/SSID/IP are included.',
+  summary:s,events,incidents},null,2);
+ const columns=['at','event','relativeMs',...fields];
+ const exported=new Map();for(const e of [...incidents.flatMap(i=>i.events),...events])exported.set(JSON.stringify(e),e);
+ const timeline=[...exported.values()].sort((a,b)=>a.at-b.at);
  const quote=v=>'"'+String(v===undefined||v===null?'':v).replace(/"/g,'""')+'"';
- return [columns.join(','),...events.map(e=>columns.map(k=>quote(k==='at'?new Date(e.at).toISOString():k==='event'?e.event:e.data[k])).join(','))].join('\r\n');
+ return [columns.join(','),...timeline.map(e=>columns.map(k=>quote(k==='at'?new Date(e.at).toISOString():k==='event'?e.event:k==='relativeMs'?e.relativeMs:e.data[k])).join(','))].join('\r\n');
 }
 function save(format){
  flush(true);
@@ -136,21 +199,29 @@ function save(format){
 }
 function init(){
  const p=panel();if(!p)return;
- p.querySelectorAll('[data-diag-export]').forEach(b=>b.addEventListener('click',()=>{
+ (document.querySelectorAll?.('[data-diag-export]')||p.querySelectorAll('[data-diag-export]')).forEach(b=>b.addEventListener('click',()=>{
   try{save(b.dataset.diagExport)}catch{const output=p.querySelector('[data-diag-summary]');if(output)output.textContent='Export unavailable; your local log remains saved.'}
  }));
- const clear=p.querySelector('[data-diag-clear]');
+ const clear=control('[data-diag-clear]');
  clear?.addEventListener('click',()=>{if(!confirm('Erase locally saved ACK diagnostics from this device?'))return;
-  events=[];try{localStorage.removeItem(KEY)}catch{}paint(true);
+  clearSaved();
  });
- p.addEventListener('toggle',()=>paint(true));
+ p.querySelector('[data-diag-search]')?.addEventListener('input',()=>paint(true));
+ p.querySelector('[data-diag-filter]')?.addEventListener('change',()=>paint(true));
+ control('[data-diag-incident]')?.addEventListener('click',()=>save('json'));
+ p.addEventListener('toggle',()=>paint(true));openStorage();
  root.addEventListener('pagehide',()=>flush(true));
  paint(true);record('app_start');
 }
 root.zebjusNativeDiagnosticSaveResult=data=>{
- const status=panel()?.querySelector('[data-diag-export-status]');
+ const status=control('[data-diag-export-status]');
  if(status)status.textContent=data?.ok?'Diagnostic file saved in chosen location':data?.cancelled?'Export cancelled; local diagnostics retained':'Export failed; local diagnostics retained';
 };
-root.ZebjusAckDiagnostics=Object.freeze({record,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
+function firmwareFields(status){
+ const udp=status?.udp||{},wifi=status?.wifiDiagnostics||{},rpc=status?.rpc||{};
+ return clean({...Object.fromEntries(metricFields.map(k=>[k,udp[k]??wifi[k]])),diagnosticId:status?.rc?.diagnosticId,maxMainLoopGapMs:status?.maxMainLoopGapMs,
+  rpcProcessingMs:rpc.processingMs,rpcPacketsPerLoop:rpc.packetsPerLoop,wifiLastEventAtMs:wifi.lastEventAtMs,rpcMaxProcessingMs:rpc.maxProcessingMs,rpcMaxResponseDurationMs:rpc.maxResponseDurationMs,rpcResponseQueueDepth:rpc.responseQueueDepth,rpcResponseSendFailures:rpc.responseSendFailures});
+}
+root.ZebjusAckDiagnostics=Object.freeze({record,firmwareFields,clearSaved,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(window);

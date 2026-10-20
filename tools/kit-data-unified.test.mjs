@@ -52,7 +52,7 @@ test('Python target includes Relay without implying privileged Wi-Fi credential 
  assert.equal(html,lab);
  assert.match(html,/<option value="android-relay">FlightCore • Android WebRTC Relay<\/option>/);
  assert.match(net,/Wi-Fi credential provisioning over Android Relay is not supported/);
- const iface='js/kit-data-interface.js?v=kit-transport-unified-20261017';
+ const iface='js/kit-data-interface.js\?v=ack-reliability-20261020';
  assert.ok(html.includes(iface));
  assert.ok(html.indexOf(iface)<html.indexOf('js/network-lab.js?v=kit-transport-unified-20261017'));
 });
@@ -70,9 +70,34 @@ test('Android controller names actual Kit versus WebRTC simulator, never claims 
 test('new assets are cached for offline Wix and module versions stay in sync',()=>{
  const html=read('index.html'),sw=read('sw.js');
  for(const path of ['js/kit-data-interface.js','js/network-lab.js','js/classroom-kits.js','js/python-lab.js','js/live-inputs.js']){
-  const full=path+'?v='+(path==='js/live-inputs.js'?'ppm-ch8-20261017':'kit-transport-unified-20261017');
+  const full=path+'?v='+(['js/kit-data-interface.js','js/classroom-kits.js','js/live-inputs.js'].includes(path)?'ack-reliability-20261020':'kit-transport-unified-20261017');
   assert.ok(html.includes(full),full+' HTML');
   assert.ok(sw.includes('./'+full),full+' SW');
  }
- assert.match(sw,/dronelab-rx-applied-feedback-20261020/);
+ assert.match(sw,/dronelab-ack-reliability-20261020/);
+});
+
+test('AUTO chooses only verified paths for the same Kit and preserves manual selection',()=>{
+ const context={};vm.runInNewContext(read('js/kit-data-interface.js'),context);
+ const select=context.ZebjusKitData.selectMonitorPath,kit={kitId:'same'};
+ const path=(transport,kitId='same')=>({transport,kitId,verified:true,available:true,fresh:true,lastPacketAt:1000});
+ assert.equal(select(kit,[path('ap'),path('usb')],'auto',1100).path.transport,'usb');
+ assert.equal(select(kit,[path('sta'),path('usb','other')],'auto',1100).path.transport,'sta');
+ assert.equal(select(kit,[path('sta'),path('usb')],'sta',1100).path.transport,'sta');
+ assert.equal(select(kit,[{...path('ap'),verified:false}],'auto',1100).path,null);
+ assert.equal(select(kit,[{...path('usb'),lastPacketAt:0},path('ap')],'auto',1100).path.transport,'ap');
+ assert.equal(select(kit,[path('android-relay')],'auto',1100).path,null);
+ assert.equal(select(kit,[path('sta')],'ap',1100).path,null);
+});
+
+test('read scheduler deduplicates pending work and rejects results after identity invalidation',async()=>{
+ const context={};vm.runInNewContext(read('js/kit-data-interface.js'),context);
+ let at=1000,calls=0,resolve;
+ const cache=context.ZebjusKitData.createReadScheduler({now:()=>at});
+ const load=()=>{calls++;return new Promise(r=>resolve=r)};
+ const first=cache.read('kit|status',load,500),second=cache.read('kit|status',load,500);
+ assert.equal(first,second);await Promise.resolve();assert.equal(calls,1);resolve({seq:10});await first;
+ assert.equal((await cache.read('kit|status',load,500)).seq,10);assert.equal(calls,1);
+ at+=501;const stale=cache.read('kit|status',load,500);await Promise.resolve();cache.clear();resolve({seq:11});
+ await assert.rejects(stale,/generation changed/);
 });

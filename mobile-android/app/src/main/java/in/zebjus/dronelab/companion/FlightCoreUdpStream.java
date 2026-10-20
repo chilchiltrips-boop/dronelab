@@ -12,7 +12,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.ArrayDeque;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +31,12 @@ import javax.crypto.spec.SecretKeySpec;
 final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
+    static final long ACK_TIMEOUT_MS=500, APPLY_TIMEOUT_MS=500, INPUT_STALE_MS=300, DEGRADED_MS=250;
+    enum LinkState { HEALTHY, LINK_DEGRADED, CONTROL_LOST, RELEASED }
+    private LinkState linkState=LinkState.RELEASED;
+    private long armedAt,receiverWakeGapMs,lastReceiveAt;
+    private final ExecutorService receiver=Executors.newSingleThreadExecutor();
+    private Future<?> receiveWorker;
     private final Activity activity;
     private final WebView view;
     private final FlightCoreWifiLink wifiLink;
@@ -38,7 +47,7 @@ final class FlightCoreUdpStream {
     private byte[] key, token, prefix;
     private boolean active, inputArm, acknowledgedArm;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
-    private long lastSendAt, maxSendGapMs, maxAckGapMs;
+    private long lastSendAt, maxSendGapMs, maxAckGapMs,sendGapMs,ackGapMs;
     private int feedbackVersion=1,lastAppliedSeq,receiveAgeMs=-1,applyAgeMs=-1;
     private long feedbackCounter,lastFeedbackAt,lastAppliedProgressAt,firstRxAckAt,appliedAckCount;
     private String ackKind="LEGACY_RX_ACK",nackReason="NONE";
@@ -71,11 +80,26 @@ final class FlightCoreUdpStream {
         c.updateAAD(packet,0,16);
         return c.doFinal(data);
     }
+    private static final class UiNotice {
+        final long generation;final String script;final boolean normal;
+        UiNotice(long generation,String script,boolean normal){this.generation=generation;this.script=script;this.normal=normal;}
+    }
+    private final ArrayDeque<UiNotice> uiNotices=new ArrayDeque<>();
+    private boolean uiScheduled=false;
+    private void deliverUi(){
+        synchronized(this){
+            uiScheduled=false;
+            while(!uiNotices.isEmpty()){
+                UiNotice notice=uiNotices.removeFirst();
+                if(notice.generation==startupGeneration&&view.getParent()!=null)view.evaluateJavascript(notice.script,null);
+            }
+        }
+    }
     private void report(String type,String reason) {
         try{
             JSONObject o=new JSONObject();
             o.put("id",streamId);
-            o.put("type",type);
+            o.put("type",type);o.put("linkState",linkState.name());o.put("receiverWakeGapMs",receiverWakeGapMs);
             o.put("ok",!"error".equals(type));
             o.put("seq",lastAckSequence);
             o.put("sent",sent);o.put("ackReceived",ackCount);
@@ -84,6 +108,8 @@ final class FlightCoreUdpStream {
             o.put("lastPacketAgeMs",lastAckAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastAckAt));
             o.put("inputAgeMs",lastInputAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastInputAt));
             o.put("maxSendGapMs",maxSendGapMs);o.put("maxAckGapMs",maxAckGapMs);
+            o.put("sendGapMs",sendGapMs);o.put("ackGapMs",ackGapMs);
+            o.put("feedbackAgeMs",lastFeedbackAt==0?-1:Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
             o.put("feedbackVersion",feedbackVersion);o.put("ackKind",ackKind);o.put("nackReason",nackReason);
             o.put("lastRxSeq",lastAckSequence);o.put("lastAppliedSeq",lastAppliedSeq);
             o.put("receiveAgeMs",receiveAgeMs<0?-1:receiveAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
@@ -91,20 +117,28 @@ final class FlightCoreUdpStream {
             o.put("appliedKnown",feedbackVersion==2&&lastAppliedSeq>0);o.put("appliedAckCount",appliedAckCount);
             o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
-            final long generation=startupGeneration;
             String script="window.zebjusNativeUdpEvent && window.zebjusNativeUdpEvent("+o.toString()+")";
-            activity.runOnUiThread(()->{
-                synchronized(FlightCoreUdpStream.this){
-                    if(generation!=startupGeneration)return;
-                    if(view.getParent()!=null)view.evaluateJavascript(script,null);
+            synchronized(this){
+                final boolean normal="ack".equals(type)||"state".equals(type);
+                uiNotices.removeIf(n->n.generation!=startupGeneration||(normal&&n.normal));
+                // One posted UI task and at most four notices, even if the
+                // WebView is blocked. Keep start and terminal reasons over ACKs.
+                if(uiNotices.size()==4){
+                    UiNotice disposable=null;for(UiNotice n:uiNotices)if(n.normal){disposable=n;break;}
+                    if(disposable!=null)uiNotices.remove(disposable);else uiNotices.removeFirst();
                 }
-            });
+                uiNotices.addLast(new UiNotice(startupGeneration,script,normal));
+                if(!uiScheduled){uiScheduled=true;activity.runOnUiThread(this::deliverUi);}
+            }
         }catch(Exception ignored){}
     }
     private void clear(){
         active=false;
         if(timer!=null){timer.cancel(false);timer=null;}
         if(socket!=null){socket.close();socket=null;}
+        if(receiveWorker!=null){receiveWorker.cancel(true);receiveWorker=null;}
+        Arrays.fill(channels,1500);channels[0]=channels[4]=channels[5]=1000;
+        armedAt=0;linkState=LinkState.RELEASED;
         if(key!=null)Arrays.fill(key,(byte)0);
         if(prefix!=null)Arrays.fill(prefix,(byte)0);
         if(token!=null)Arrays.fill(token,(byte)0);
@@ -126,7 +160,7 @@ final class FlightCoreUdpStream {
         streamId=id;
         sent=ackCount=estimatedLost=lastRtt=jitter=0;
         lastUiAt=0;lastAckSequence=accepted=rejected=0;
-        lastSendAt=maxSendGapMs=maxAckGapMs=0;
+        lastSendAt=maxSendGapMs=maxAckGapMs=sendGapMs=ackGapMs=0;
         feedbackVersion=feedback;lastAppliedSeq=0;receiveAgeMs=applyAgeMs=-1;
         feedbackCounter=lastFeedbackAt=lastAppliedProgressAt=firstRxAckAt=appliedAckCount=0;
         ackKind=feedback==2?"RX_ACK":"LEGACY_RX_ACK";nackReason="NONE";
@@ -161,15 +195,18 @@ final class FlightCoreUdpStream {
                         net.bindSocket(ds);
                         stage="CONNECT_PEER";
                         ds.connect(InetAddress.getByName(ip),PORT);
-                        ds.setSoTimeout(1);
+                        ds.setSoTimeout(100);ds.setReceiveBufferSize(8192);
                     }catch(Exception e){if(ds!=null)ds.close();throw e;}
                     stage="START_SENDER";
                     key=secret;token=claimToken;prefix=new byte[4];random.nextBytes(prefix);
-                    socket=ds;active=true;
+                    socket=ds;active=true;linkState=LinkState.HEALTHY;
+                    lastReceiveAt=receiverWakeGapMs=armedAt=0;
                     sent=ackCount=estimatedLost=lastRtt=jitter=0;
                     lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
-                    lastSendAt=maxSendGapMs=maxAckGapMs=0;
+                    lastSendAt=maxSendGapMs=maxAckGapMs=sendGapMs=ackGapMs=0;
                     lastInputAt=SystemClock.elapsedRealtime();
+                    final DatagramSocket sessionSocket=ds;
+                    receiveWorker=receiver.submit(()->receiveLoop(sessionSocket,requestGeneration));
                     timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
                     report("start",null);
                 }catch(Exception error){
@@ -204,61 +241,90 @@ final class FlightCoreUdpStream {
         }catch(NumberFormatException invalid){return;}
         if(armed&&!inputArm&&next[0]>1050)return;
         System.arraycopy(next,0,channels,0,6);
+        if(armed&&!inputArm)armedAt=SystemClock.elapsedRealtime();
         inputArm=armed;lastInputAt=SystemClock.elapsedRealtime();
     }
-    private synchronized void tick(){
-        if(!active)return;
-        final long now=SystemClock.elapsedRealtime();
-        if(now-lastInputAt>300){
-            // Snapshot the actual stalled input age before zeroing session state.
-            report("error","UDP_INPUT_STALE");clear();return;
+    private void tick(){
+        final DatagramSocket sessionSocket;final long generation,now;final int seq;
+        final byte[] sessionKey,sessionToken,sessionPrefix;final int[] latest;final boolean armed;
+        synchronized(this){
+            if(!active)return;
+            now=SystemClock.elapsedRealtime();checkWatchdogs(now);if(!active)return;
+            if(now-lastInputAt>INPUT_STALE_MS){fail("UDP_INPUT_STALE");return;}
+            if(lastSendAt>0&&now-lastSendAt<10)return; // Skip executor catch-up bursts.
+            if(sequence==Integer.MAX_VALUE){fail("UDP_SEQUENCE_EXHAUSTED");return;}
+            seq=++sequence;generation=startupGeneration;sessionSocket=socket;
+            sessionKey=key.clone();sessionToken=token.clone();sessionPrefix=prefix.clone();
+            latest=channels.clone();armed=inputArm;sendTimes[seq&127]=now;
         }
         try{
-            int seq=++sequence;
             byte[] header=new byte[PACKET];
             System.arraycopy(new byte[]{'Z','J','U','1'},0,header,0,4);
-            System.arraycopy(token,0,header,4,8);put32(header,12,seq);
-            System.arraycopy(prefix,0,header,16,4);put32(header,20,seq);
+            System.arraycopy(sessionToken,0,header,4,8);put32(header,12,seq);
+            System.arraycopy(sessionPrefix,0,header,16,4);put32(header,20,seq);
             System.arraycopy(new byte[]{'A','N','D','R'},0,header,24,4);
             byte[] values=new byte[14];
-            for(int i=0;i<6;i++){values[2*i]=(byte)(channels[i]>>>8);values[2*i+1]=(byte)channels[i];}
-            values[12]=(byte)(inputArm?1:0);
-            byte[] encrypted=cipher(true,key,header,values);
+            for(int i=0;i<6;i++){values[2*i]=(byte)(latest[i]>>>8);values[2*i+1]=(byte)latest[i];}
+            values[12]=(byte)(armed?1:0);
+            byte[] encrypted=cipher(true,sessionKey,header,values);
             if(encrypted.length!=30)throw new IllegalStateException("UDP_CIPHER_LENGTH");
             System.arraycopy(encrypted,0,header,28,30);
-            sendTimes[seq&127]=now;
-            socket.send(new DatagramPacket(header,PACKET));
-            final long sendAt=SystemClock.elapsedRealtime();
-            if(lastSendAt>0)maxSendGapMs=Math.max(maxSendGapMs,sendAt-lastSendAt);
-            lastSendAt=sendAt;
-            sent++;
-            for(int i=0;i<8;i++){
-                // One extra byte detects truncated-prefix/oversized datagrams.
-                byte[] incoming=new byte[FEEDBACK_PACKET+1];
-                DatagramPacket packet=new DatagramPacket(incoming,incoming.length);
-                try{socket.receive(packet);}catch(java.net.SocketTimeoutException empty){break;}
-                if(!receiveFeedback(incoming,packet.getLength()))return;
+            sessionSocket.send(new DatagramPacket(header,PACKET)); // No UI/mailbox monitor held.
+            synchronized(this){
+                if(generation!=startupGeneration||!active||socket!=sessionSocket)return;
+                final long sendAt=SystemClock.elapsedRealtime();
+                sendGapMs=lastSendAt>0?sendAt-lastSendAt:0;maxSendGapMs=Math.max(maxSendGapMs,sendGapMs);
+                lastSendAt=sendAt;sent++;checkWatchdogs(sendAt);
             }
-            final long watchdogNow=SystemClock.elapsedRealtime();
-            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>350){
-                report("error","UDP_ACK_TIMEOUT");clear();
-            }else if(inputArm&&lastAckAt==0&&sent>17){
-                report("error","UDP_NO_ACK");clear();
-            }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
-               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>350){
-                report("error","UDP_APPLY_TIMEOUT");clear();
+        }catch(Exception error){
+            synchronized(this){if(generation==startupGeneration&&active)fail("UDP_SEND_OR_AUTH_FAILED");}
+        }finally{Arrays.fill(sessionKey,(byte)0);}
+    }
+    private void fail(String reason){linkState=LinkState.CONTROL_LOST;report("error",reason);clear();}
+    private void checkWatchdogs(long now){
+        if(!inputArm)return;
+        long ackAge=now-(lastAckAt>0?lastAckAt:armedAt);
+        if(ackAge>=ACK_TIMEOUT_MS){fail(lastAckAt>0?"UDP_ACK_TIMEOUT":"UDP_NO_ACK");return;}
+        if(feedbackVersion==2&&firstRxAckAt>0&&now-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>=APPLY_TIMEOUT_MS){
+            fail("UDP_APPLY_TIMEOUT");return;
+        }
+        LinkState next=ackAge>=DEGRADED_MS?LinkState.LINK_DEGRADED:LinkState.HEALTHY;
+        if(next!=linkState){linkState=next;report("state",null);}
+    }
+    private void receiveLoop(DatagramSocket sessionSocket,long generation){
+        byte[] incoming=new byte[FEEDBACK_PACKET+1];
+        DatagramPacket packet=new DatagramPacket(incoming,incoming.length);
+        while(!Thread.currentThread().isInterrupted()&&!sessionSocket.isClosed()){
+            try{
+                packet.setLength(incoming.length);
+                sessionSocket.receive(packet); // Blocking receive never holds the session monitor.
+                synchronized(this){
+                    if(!active||generation!=startupGeneration||socket!=sessionSocket)return;
+                    long now=SystemClock.elapsedRealtime();
+                    if(lastReceiveAt>0)receiverWakeGapMs=Math.max(receiverWakeGapMs,now-lastReceiveAt);
+                    lastReceiveAt=now;checkWatchdogs(now);if(!active)return;
+                    if(!receiveFeedback(incoming,packet.getLength()))return;
+                    checkWatchdogs(now);
+                }
+            }catch(java.net.SocketTimeoutException empty){
+                synchronized(this){if(generation!=startupGeneration||!active)return;checkWatchdogs(SystemClock.elapsedRealtime());}
+            }catch(Exception error){
+                synchronized(this){if(generation==startupGeneration&&active)fail("UDP_RECEIVE_FAILED");}
+                return;
             }
-        }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
+        }
     }
     private static int get16(byte[] b,int at){return ((b[at]&255)<<8)|(b[at+1]&255);}
     private void markReceived(int rx){
         if(rx<=lastAckSequence)return;
-        if(lastAckSequence>0&&rx>lastAckSequence+1)estimatedLost+=rx-lastAckSequence-1;
         long recorded=sendTimes[rx&127];
-        long rtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;
+        long rtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):Long.MAX_VALUE;
+        if(rtt>=ACK_TIMEOUT_MS)return;
+        if(lastAckSequence>0&&rx>lastAckSequence+1)estimatedLost+=rx-lastAckSequence-1;
         if(ackCount>0)jitter=(jitter*7+Math.abs(rtt-lastRtt))/8;
         lastRtt=rtt;final long at=SystemClock.elapsedRealtime();
-        if(lastAckAt>0)maxAckGapMs=Math.max(maxAckGapMs,at-lastAckAt);
+        ackGapMs=lastAckAt>0?at-lastAckAt:0;
+        maxAckGapMs=Math.max(maxAckGapMs,ackGapMs);
         if(firstRxAckAt==0)firstRxAckAt=at;
         lastAckAt=at;lastAckSequence=rx;ackCount++;
     }
@@ -267,7 +333,7 @@ final class FlightCoreUdpStream {
         final int expected=feedbackVersion==2?FEEDBACK_PACKET:PACKET;
         if(length!=expected||packet[0]!='Z'||packet[1]!='J'||packet[2]!='A'||
            packet[3]!=(feedbackVersion==2?'2':'1')||!Arrays.equals(Arrays.copyOfRange(packet,4,12),token))return true;
-        int echo=get32(packet,12);if(echo<1||echo>sequence)return true;
+        int echo=get32(packet,12);if(echo<1||echo>sequence||sequence-echo>=sendTimes.length)return true;
         byte[] plain;
         try{plain=cipher(false,key,packet,Arrays.copyOfRange(packet,28,expected));}
         catch(javax.crypto.AEADBadTagException invalid){return true;}
@@ -294,13 +360,18 @@ final class FlightCoreUdpStream {
             feedbackCounter=counter;lastFeedbackAt=SystemClock.elapsedRealtime();
             receiveAgeMs=receiveAge==65535?-1:receiveAge;applyAgeMs=applyAge==65535?-1:applyAge;
             accepted=appliedCount;rejected=rejectCount;
-            if(applied>lastAppliedSeq){lastAppliedSeq=applied;lastAppliedProgressAt=lastFeedbackAt;appliedAckCount++;}
+            if(applied>lastAppliedSeq){
+                lastAppliedSeq=applied;appliedAckCount++;
+                long appliedSentAt=sendTimes[applied&127];
+                if(sequence-applied<sendTimes.length&&applyAge<APPLY_TIMEOUT_MS&&appliedSentAt>0&&lastFeedbackAt-appliedSentAt<APPLY_TIMEOUT_MS)
+                    lastAppliedProgressAt=lastFeedbackAt;
+            }
             acknowledgedArm=(flags&2)!=0&&applied>0;
             ackKind=kind==1?"RX_ACK":kind==2?"APPLIED_ACK":"NACK";
             if(kind==3){
                 final String[] reasons={"NONE","INVALID_FRAME","STALE","OWNER_CONFLICT","APPLY_STALLED","AUTH_EXPIRED"};
                 nackReason=reasons[reason];report("nack",null);
-                if(terminal){report("error","UDP_NACK_"+nackReason);clear();return false;}
+                if(terminal){fail("UDP_NACK_"+nackReason);return false;}
                 // NACKs never renew RX heartbeat or trigger retransmission.
                 return true;
             }
@@ -310,5 +381,5 @@ final class FlightCoreUdpStream {
         if(at-lastUiAt>=80||(!wasArmed&&acknowledgedArm)){lastUiAt=at;report("ack",null);}
         return true;
     }
-    void shutdown(){stop();sender.shutdownNow();}
+    void shutdown(){stop();sender.shutdownNow();receiver.shutdownNow();}
 }

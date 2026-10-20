@@ -12,6 +12,7 @@ export async function startFirmwareHost(){
   const source=read('FlightCore_Firmware/FlightCoreNetwork.h');
   const extract=section(source,'static String zjJson(', '\n#include "FlightCoreWifiProfiles.h"')+'\n'+
    section(source,'static String zjStatus(){','static const char* zjClientTransport(){')+'\n'+
+   section(source,'static bool zjControlManagementAdmission(){','static void zjSetupHttp(){')+'\n'+
    section(source,'static void zjRpcLoop(){','static void zjNetworkSetup(){')+'\nstatic void setupHostTelemetry(){\n'+
    section(source,' zjHttp.on("/api/health"',' // AP-local Kit identity maintenance')+'\n'+
    section(source,' zjHttp.on("/api/telemetry"',' zjHttp.on("/api/command"')+'\n'+

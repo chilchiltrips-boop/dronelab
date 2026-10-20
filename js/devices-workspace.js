@@ -9,13 +9,14 @@
  if(!shell)return;
  const names={
   overview:'Overview',connection:'Kit Connection',wifi:'Wi-Fi & Network',
-  firmware:'Firmware Flash',mobile:'Mobile Controller',
+  firmware:'Firmware Flash',mobile:'Mobile Controller',live:'Live Inputs',
   diagnostics:'Diagnostics',security:'Security & Admin'
  };
  let selected='overview',ready=false,securityVisited=false;
  const viewScroll=new Map();
  let layoutFrame=0;
  const body=name=>$('dw-body-'+name);
+ const diagnosticGroup=node=>({kitAckDiagnostics:'diagSectionAck',kitUdpMetrics:'diagSectionAck',fwSerialMonitorPane:'diagSectionSerial',fwSerialPlotterPane:'diagSectionSerial',fwSerialMonitorBtn:'diagSectionSerial',fwSerialClearBtn:'diagSectionSerial'}[node.id]|| (node.classList.contains('fw-serial-head')||node.classList.contains('fw-serial-toolbar')?'diagSectionSerial':'diagSectionNetwork'));
  // The GitHub main branch can contain an unreleased APK build. Show ONLY the
  // version in published stable release metadata, never the source APK version.
  const expectedAndroidCert='F1B86575B3590734654F638E4E0D68056D37B2E8884AC7D6C24636FE9B516894';
@@ -31,7 +32,7 @@
      !/^[0-9][A-Za-z0-9._-]{0,79}$/.test(version||'')||!/^[1-9][0-9]{0,9}$/.test(code||'')||
      !Number.isSafeInteger(Number(code)))
    throw Error('Official signed Android release metadata unavailable or invalid');
-  return 'Android APK • '+version.split('-')[0]+' (code '+code+')';
+  return 'Android APK • '+version.split('-')[0];
  }
  function updatePublishedAndroidRelease(){
   const labels=document.querySelectorAll('[data-dw-android-version]');
@@ -77,11 +78,20 @@
  function relocate(selector,name){
   const node=document.querySelector(selector),target=body(name);
   if(!node||!target)throw Error('Missing Devices workspace element '+selector);
-  target.append(node);return node;
+  (name==='diagnostics'?$(diagnosticGroup(node)):target).append(node);return node;
  }
  function summary(){
   const state=root.ZebjusKits?.getState?.()||{};
   const linked=state.connected===true;
+  const d=state.diagnostics||{},rc=d.rc||state.rc||{},udp=d.udp||state.udp||{};
+  if($('diagOverview'))$('diagOverview').textContent=[state.kitName||'No Kit',linked?'Identity verified • '+state.transport:'Offline / stale',state.board,state.version,'Source '+(rc.source||'NONE'),'Input '+(rc.inputArmed?'ARMED (diagnostic only)':'DISARMED'),'Release '+(rc.lastReleaseReason||'NONE')].filter(Boolean).join(' • ');
+  if($('diagHealth'))$('diagHealth').textContent='Motors disabled • Build '+(state.firmwareBuiltAt||'unknown')+' • RX #'+(udp.lastRxSeq??'—')+' / APPLIED #'+(udp.lastAppliedSeq??'—')+' • RX/apply age '+(udp.receiveAgeMs??'—')+'/'+(udp.applyAgeMs??'—')+' ms • Main-loop max '+(d.maxMainLoopGapMs??'—')+' ms • ACK failures '+(udp.rxAckFailed??'—');
+  if($('diagFreshness'))$('diagFreshness').textContent='Monitor '+String(state.transport||'unknown').toUpperCase()+' • Link '+(linked?'verified':'offline / stale')+' • Heartbeat age '+(state.heartbeatAt?Math.max(0,Date.now()-state.heartbeatAt)+' ms':'unknown')+' • Input age '+(rc.ageMs??'unknown')+' ms';
+  const lastFailure=root.ZebjusAckDiagnostics?.getEvents?.().filter(e=>/error|failure|disarm|disconnect/.test(e.event)||e.data?.outcome==='fail').at(-1);
+  if($('diagLastError'))$('diagLastError').textContent='Last error: '+(lastFailure?.data?.reason||lastFailure?.data?.nackReason||lastFailure?.event||'NONE')+' • Failsafe/release: '+(rc.lastReleaseReason||'NONE');
+  const health=d.health||{};
+  if($('diagSensors'))$('diagSensors').textContent='IMU '+(health.gyroReady===true?'READY':health.gyroReady===false?'NOT READY':'unknown')+' • I²C '+(Number.isFinite(health.address)?'0x'+health.address.toString(16):'unknown')+' • Input watchdog '+(rc.failsafe===true?'FAILSAFE':rc.inputValid===true?'fresh valid input':'unknown')+' • Null confirmed '+(rc.nullStateConfirmed===true?'YES':rc.nullStateConfirmed===false?'NO':'unknown');
+  if($('diagNetwork'))$('diagNetwork').textContent='AP joins/leaves '+(d.wifi?.apJoins??'—')+'/'+(d.wifi?.apLeaves??'—')+' • Disconnect reason '+(d.wifi?.apDisconnectReason??'unknown')+' • RPC max '+(d.rpc?.maxProcessingMs??'—')+' ms • Correlation '+(rc.diagnosticId||'unavailable');
   const ota=state.otaInProgress===true;
   const kit=linked||ota?state.kitName||'AERION Kit':'No hardware connected';
   const mode=state.transport?String(state.transport).toUpperCase():'—';
@@ -135,6 +145,8 @@
    // Validate dependencies before any node is relocated.
    const required=[
     '.fw-kit-detail-card','.fw-connect-card','.fw-available-card',
+    '#diagSectionOverview','#diagSectionAck','#diagSectionNetwork','#diagSectionSerial',
+    '#diagSectionHealth','#diagSectionHistory','#diagSectionExports','.fw-live-inputs-card','#kitAckDiagnostics',
     '.fw-rename-card','.fw-network-card','.firmware-grid',
     '.firmware-safety-strip','#kitCenter','#kitNetworkSettings','#kitAdmin',
     '#kitMobilePairDetails','.settings-heading','.kit-legacy-network',
@@ -158,7 +170,14 @@
    overview.insertBefore(controlActions,overviewContent);
 
    relocate('.fw-connect-card','connection');
-   relocate('.fw-live-inputs-card','connection');
+   relocate('.fw-live-inputs-card','live');
+   relocate('#kitAckDiagnostics','diagnostics');relocate('#kitUdpMetrics','diagnostics');
+   const networkDiagnostics=$('kitNetworkMonitor')?.closest('details');if(networkDiagnostics)$('diagSectionNetwork').append(networkDiagnostics);
+   const hardwareTest=$('kitSourceSelect')?.closest('.kit-card');if(hardwareTest)$('diagSectionHealth').append(hardwareTest);
+   const acceptedReadouts=document.querySelector('.kit-selected-card');if(acceptedReadouts)$('diagSectionHealth').append(acceptedReadouts);
+   const recorder=$('kitAckDiagnostics');
+   for(const node of [recorder.querySelector('.zj-ack-buttons'),recorder.querySelector('[data-diag-incident]'),recorder.querySelector('[data-diag-export-status]')])if(node)$('diagSectionExports').append(node);
+   const eventRows=recorder.querySelector('[data-diag-events]');if(eventRows)$('diagSectionHistory').append(eventRows);
    relocate('.fw-available-card','connection');
    relocate('.fw-rename-card','connection');
    relocate('.fw-network-card','wifi');
@@ -170,15 +189,15 @@
    relocate('.settings-heading','mobile');
    relocate('#kitMobilePairDetails','mobile');
    const events=$('kitEvents').closest('details');
-   if(events)body('diagnostics').append(events);
+   if(events)$('diagSectionHistory').append(events);
    relocate('.fw-serial-head','diagnostics');
    relocate('.fw-serial-toolbar','diagnostics');
    relocate('#fwSerialMonitorBtn','diagnostics');
    relocate('#fwSerialClearBtn','diagnostics');
    // Preserve original serial/USB event handlers by MOVING existing nodes.
    // Group Open Serial Port and Clear Output so they never stack separately.
-   const serialToolbar=document.querySelector('#dw-body-diagnostics>.fw-serial-toolbar');
-   const serialHeader=document.querySelector('#dw-body-diagnostics>.fw-serial-head');
+   const serialToolbar=document.querySelector('#diagSectionSerial>.fw-serial-toolbar');
+   const serialHeader=document.querySelector('#diagSectionSerial>.fw-serial-head');
    const openSerial=$('fwSerialMonitorBtn'),clearSerial=$('fwSerialClearBtn');
    if(!serialToolbar||!serialHeader||!openSerial||!clearSerial)throw Error('Serial toolbar controls unavailable');
    serialToolbar.prepend(serialHeader);
@@ -194,7 +213,7 @@
    legacy.className='dw-legacy-kit kit-accordion';
    legacy.id='dwLegacyConnection';
    const heading=document.createElement('summary');
-   heading.textContent='Advanced • Manual Kit connection, recovery and controller diagnostics';
+   heading.textContent='Advanced • Manual Kit connection and recovery';
    legacy.append(heading,document.querySelector('#kitCenter'));
    // The previous My Kits page already nests manual tools inside its own
    // Advanced details. The unified page has an outer Advanced section, so

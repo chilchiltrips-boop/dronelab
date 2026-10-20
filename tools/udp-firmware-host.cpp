@@ -5,10 +5,14 @@
 #include "host-stubs/WebServer.h"
 #include <iostream>
 #include <chrono>
+#include <cassert>
+#include <vector>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 static String zjPpmRcChannelsJson(){return "null";}
+static String zjPpmRcSignalJson(){return "\"UNKNOWN\"";}
 static void zjPpmLoop(uint32_t){}
 #include "../FlightCore_Firmware/FlightCoreRpc.h"
+#include "../FlightCore_Firmware/FlightCoreDiagnostics.h"
 static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;
 static String zjNetKey="ff112233445566778899aabbccddeeff0";
@@ -46,6 +50,22 @@ int main(){
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  setupHostTelemetry();int commands=0;
  zjHttp.on("/api/command",HTTP_POST,[&](){if(!zjAllow())return;commands++;testDropReplies=1;zjReply(200,"{\"count\":"+String(commands)+"}");});
+ // Execute the actual admission function with signed requests, not only regex contracts.
+ zjHttp.admit=zjControlManagementAdmission;
+ int unsafeRuns=0;zjHttp.on("/api/wifi/scan",HTTP_GET,[&](){++unsafeRuns;zjReply(200,"{}");});
+ auto& observer=zjSessions[7];observer=ZjSession();observer.id=String(std::string(32,'d'));observer.key=String(std::string(64,'e'));observer.at=clockMs;
+ zjRcOwned=true;
+ const auto admissionRequest=[&](const String& path,int sequence,bool signedRequest){
+  const String counter=String(sequence),proof=signedRequest?zjHmac(observer.key,"GET|"+path+"|"+zjKitId+"|"+zjBootId+"|"+observer.id+"|"+counter+"|"):String("");
+  const String fields[]={path,"",zjKitId,observer.id,counter,proof};std::vector<uint8_t> bytes{1};
+  for(const auto& field:fields){bytes.push_back(field.length()>>8);bytes.push_back(field.length()&255);bytes.insert(bytes.end(),field.c_str(),field.c_str()+field.length());}
+  zjAuthResetRequest();String response;assert(zjHttp.dispatch(bytes.data(),bytes.size(),IPAddress(192,168,4,2),response));
+  return (uint8_t(response[0])<<8)|uint8_t(response[1]);
+ };
+ assert(admissionRequest("/api/status",1,true)==200);
+ assert(admissionRequest("/api/wifi/scan",2,true)==409&&unsafeRuns==0);
+ assert(admissionRequest("/api/wifi/scan",3,false)==401&&unsafeRuns==0);
+ zjRcOwned=false;observer=ZjSession();zjAuthResetRequest();
  zjRpcSetup();if(!zjRpcReady)return 2;
  std::cout<<testRpcPort<<std::endl;
  const auto start=std::chrono::steady_clock::now();

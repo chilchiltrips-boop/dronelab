@@ -50,7 +50,7 @@ function renderAvailable(kits=[],inProgress=false){
  set('fwDiscoveryCount',(inProgress?'Scanning • ':'')+discovered.length+' kit'+(discovered.length===1?'':'s'));
  if(!list)return;
  list.replaceChildren();
- if(!discovered.length){const p=document.createElement('p');p.className='micro-note';p.textContent=inProgress?'Scanning saved addresses, zebjus_drone_1… and current AERION mDNS names…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit found. This computer must join Kit AP or same STA router and allow browser Local Network Access; optional mDNS bridge for new kits.';list.append(p);return}
+ if(!discovered.length){const p=document.createElement('p');p.className='micro-note';p.textContent=inProgress?'Scanning saved addresses, zebjus_drone_1… and current AERION mDNS names…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit found. This computer must join Kit AP or same STA router and allow browser Local Network Access; optional mDNS bridge for new kits.';list.append(p);if(!inProgress)root.ZebjusEmbedKitAccess?.appendRecovery?.(list);return}
  for(const d of discovered){
   const row=document.createElement('button');row.type='button';row.className='kit-known-item';
   row.dataset.kitId=d.kitId;row.setAttribute('aria-pressed',String(d.kitId===selectedId));
@@ -175,17 +175,18 @@ function render(){
  if(changed&&live){fillKitName(s.kitName);
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}
 }
+let healthPending=false;
 async function sampleHealth(){
  const s=state();
  // Overview is the only consumer of this telemetry. Don't send additional
  // signed requests while AP/STA mode changes, OTA or pairing is in progress.
- if(!s.connected||s.working||s.otaInProgress||$('fwKitDemoMode')?.checked||
+ if(document.hidden||healthPending||!s.connected||s.working||s.otaInProgress||$('fwKitDemoMode')?.checked||
     !$('tab-firmware')?.classList.contains('active')||
     root.ZebjusDevicesWorkspace?.active?.()!=='overview')return;
  try{
-  const t=await kit().request('/api/telemetry');
+  healthPending=true;const t=await kit().request('/api/telemetry');
   if(t.kitId===s.kitId){telemetry=t;telemetryTime=Date.now();healthAt=telemetryTime}
- }catch(e){line('Telemetry unavailable • '+e.message)}
+ }catch(e){line('Telemetry unavailable • '+e.message)}finally{healthPending=false}
 }
 function init(){
  if(!$('fwConnectionWorkspace')||!kit())return;
@@ -215,7 +216,7 @@ function init(){
  document.querySelector('[data-tab="firmware"]')?.addEventListener('click',()=>{if(Date.now()-lastScanAt>20000)void scan()});
  renderAvailable(kit().getDiscovered?.()||[],false);render();
  if($('tab-firmware')?.classList.contains('active'))void scan();
- setInterval(render,1200);setInterval(()=>{if($('tab-firmware')?.classList.contains('active')&&Date.now()-lastScanAt>65000)void scan()},18000);
+ setInterval(render,1200);setInterval(()=>{if(!document.hidden&&!state().connected&&root.ZebjusDevicesWorkspace?.active?.()==='connection'&&Date.now()-lastScanAt>65000)void scan()},18000);
  setInterval(()=>void sampleHealth(),4200);
 }
 root.ZebjusFirmwareConnect={renderAvailable,scan,select,selected:()=>discovered.find(k=>k.kitId===selectedId)||null};

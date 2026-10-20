@@ -118,10 +118,25 @@ async function readJoystick(){
  joystickPending=operation().finally(()=>{joystickPending=null});return joystickPending;
 }
 
+let streamGeneration=0;
 function stream(on=true){
- if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
- if(on)pollTimer=setInterval(async()=>{if(pollBusy||!window.ZebjusKits?.isConnected?.())return;pollBusy=true;try{await getTelemetry()}catch{netReady=false;lastSeen=0}finally{pollBusy=false}},170);
+ const generation=++streamGeneration;
+ if(pollTimer){clearTimeout(pollTimer);pollTimer=null;}
+ if(!on)return;
+ let failures=0;
+ const tick=async()=>{
+  if(generation!==streamGeneration)return;
+  const kit=window.ZebjusKits?.getState?.();
+  let interval=kit?.rc?.claimed?700:300;
+  if(!document.hidden&&!pollBusy&&kit?.connected&&!kit.working&&!kit.otaInProgress){
+   pollBusy=true;
+   try{await getTelemetry();failures=0}catch{netReady=false;lastSeen=0;failures=Math.min(4,failures+1)}finally{pollBusy=false}
+  }
+  if(generation===streamGeneration)pollTimer=setTimeout(tick,document.hidden?1500:Math.min(4800,interval*2**failures));
+ };
+ pollTimer=setTimeout(tick,0);
 }
+
 function bindAction(id,callback){$(id)?.addEventListener('click',()=>Promise.resolve().then(callback).catch(e=>output(e.message,'warn')))}
 function init(){
  if(!$('netResult'))return;

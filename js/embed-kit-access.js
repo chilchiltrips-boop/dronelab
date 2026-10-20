@@ -1,6 +1,6 @@
 // Embedded AP/STA discovery policy guard. This file exposes only the capability
-// assessment used by scanning; it deliberately renders no persistent iframe banner,
-// direct-link button, or pairing/authorization data into the embedding website.
+// assessment used by scanning. Recovery appears only in a denied discovery result;
+// no persistent banner or pairing/authorization data is injected into the host.
 export function assessEmbedEnvironment({embedded=false,localNetworkAllowed=null}={}){
  const denied=embedded===true&&localNetworkAllowed===false;
  return {
@@ -39,7 +39,13 @@ export function initEmbedKitAccess({
  const publicInfo=Object.freeze({
   embedded:environment.embedded,localNetworkAllowed,
   scanBlocked:embedScanBlocked({embedded,localNetworkAllowed}),
-  getHint:()=>embeddedDiscoveryHint(environment)
+  getHint:()=>embeddedDiscoveryHint(environment),
+  appendRecovery:container=>{
+   if(!container||!embedScanBlocked({embedded,localNetworkAllowed}))return false;
+   const link=documentRef.createElement('a');link.className='btn ghost small';
+   link.textContent='Open DroneLab directly';link.href='https://chilchiltrips-boop.github.io/dronelab/index.html';
+   link.target='_blank';link.rel='noopener noreferrer';container.append(link);return true;
+  }
  });
  host.ZebjusEmbedKitAccess=publicInfo;
  return publicInfo;

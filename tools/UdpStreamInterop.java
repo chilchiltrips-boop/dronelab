@@ -63,6 +63,10 @@ public final class UdpStreamInterop {
    waitFor(activity,view,"\"inputArmed\":true",stream,true);
    require(!has(view,"UDP_SEND_OR_AUTH_FAILED"),"A bad-tag ACK must not terminate the stream");
    require(Network.binds==1&&!frames.isEmpty(),"Worker must bind and transmit actual datagrams");
+   int beforeHold=frames.size();long holdUntil=System.nanoTime()+TimeUnit.MILLISECONDS.toNanos(700);
+   while(System.nanoTime()<holdUntil){stream.offer("1000,1500,1500,1500,1000,1000",true);Thread.sleep(15);}
+   require(activity.ui.size()<=1,"Blocked UI must have at most one pending native notification task");
+   require(frames.size()-beforeHold>=20,"Sender and receiver must progress while UI reporting is stalled");activity.drain();
    stream.offer("1700,1600,1400,1800,1000,1000",true);Thread.sleep(35);stream.stop();
    int prior=view.events.size();activity.drain();
    require(prior==view.events.size(),"Stopped stream UI callbacks must be discarded");

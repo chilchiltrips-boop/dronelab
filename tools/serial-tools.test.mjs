@@ -42,7 +42,7 @@ test('Read Running Firmware refreshes the physical pairing even while an AP sess
  const start=source.indexOf('async function openSerialMonitor('),end=source.indexOf('async function toggleSerialMonitor(',start);
  const commands=[],selected={connected:true,transport:'ap',kitId:'ZFC-A1-012345ABCDEF'};
  const port={open:async()=>{},setSignals:async()=>{},readable:{getReader:()=>({read:()=>new Promise(()=>{}),releaseLock(){}})}};
- const context={monitorStarting:false,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
+ const context={monitorStarting:false,monitorGeneration:0,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
   window:{ZebjusKits:{getState:()=>selected}},usbPortInfo:()=>({}),serialBaud:()=>115200,serialUi(){},kitStatus(){},TextDecoder,
   serialIdleWatch(){},setUsbTelemetryRate:async()=>{},$:()=>({value:20}),writePythonSerialLine:async line=>{commands.push(line)}};
  vm.runInNewContext(source.slice(start,end)+';globalThis.open=openSerialMonitor;',context);
@@ -80,7 +80,7 @@ test('USB Flash button explains disabled state and validates loaded board/type b
  const els=new Map([['#fwBoardProfile',{value:'ZFC-A1'}],['#fwImageType',{value:'factory'}],['#fwUsbFlashBtn',{disabled:false,title:''}],['#fwUsbFlashHelp',{textContent:'',classList:{toggle(){}}}]]);
  const ctx={
   navigator:{serial:{}},isSecureContext:true,
-  busy:false,loader:null,monitorPort:null,fw:null,usbBoardId:'',
+  busy:false,loader:null,monitorGeneration:0,monitorPort:null,fw:null,usbBoardId:'',
   catalog:{defaultBoardId:'ZFC-A1'},school:()=>null,
   $:selector=>els.get(selector)||null,boardName:id=>id
  };
@@ -126,7 +126,7 @@ test('running firmware identity and native ROM download are distinct serial stat
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  const start=source.indexOf('function readUsbTelemetry('),end=source.indexOf('function pushSerialLines(',start);
  assert.ok(start>0&&end>start);
- const logs=[],ctx={lastVerifiedRuntime:null,lastVerifiedAt:0,usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,busy:false,monitorPort:null,monitorPendingScan:false,text(){},log:x=>logs.push(x),kitStatus(){},badge(){},syncUsbBoardSelection(){}};
+ const logs=[],ctx={lastVerifiedRuntime:null,lastVerifiedAt:0,usbRuntimeInfo:null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbRomDownload:false,busy:false,monitorGeneration:0,monitorPort:null,monitorPendingScan:false,text(){},log:x=>logs.push(x),kitStatus(){},badge(){},syncUsbBoardSelection(){}};
  vm.runInNewContext(source.slice(start,end)+';globalThis.read=readUsbTelemetry;',ctx);
  ctx.read('waiting for download');assert.equal(ctx.usbRomDownload,true);assert.equal(ctx.usbRuntimeInfo,null);
  ctx.read('ZJINFO,FW,ZFC-A1,1.2.2,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
@@ -151,7 +151,7 @@ test('Step 3 reflects physical USB chip separately from firmware identity and Wi
  const st=src.indexOf('function kitStatus(){'),en=src.indexOf('\nasync function refreshKit(',st);
  assert.ok(st>0&&en>st);
  const ui=new Map(),catalog=[{id:'ZFC-A1',name:'ZEBJUS FlightCore A1 SuperMini'},{id:'ZFC-A2',name:'ZEBJUS FlightCore A2 C6'}];
- const ctx={lastVerifiedRuntime:null,lastVerifiedAt:0,monitorPort:null,usbRuntimeInfo:null,usbRomDownload:false,loader:null,usbBoardId:'',catalog:{boards:[]},boardById:()=>null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbBusMode:'--',liveFirmwareBuiltAt:'',school:()=>({getSelectedDevice:()=>({online:false})}),boardName:id=>catalog.find(x=>x.id===id)?.name||id||'Unknown',verifiedUsbConnection:()=>!!ctx.loader&&!!ctx.usbBoardId,$:id=>ui.get(id)||null,text:(id,val)=>ui.set(id,{textContent:val}),textTitle:(id,val)=>ui.set(id,{textContent:val,title:val}),formatBuildTime:x=>x};
+ const ctx={lastVerifiedRuntime:null,lastVerifiedAt:0,monitorGeneration:0,monitorPort:null,usbRuntimeInfo:null,usbRomDownload:false,loader:null,usbBoardId:'',catalog:{boards:[]},boardById:()=>null,usbSensorState:'',usbBusPins:'--',usbLedState:'--',usbBusMode:'--',liveFirmwareBuiltAt:'',school:()=>({getSelectedDevice:()=>({online:false})}),boardName:id=>catalog.find(x=>x.id===id)?.name||id||'Unknown',verifiedUsbConnection:()=>!!ctx.loader&&!!ctx.usbBoardId,$:id=>ui.get(id)||null,text:(id,val)=>ui.set(id,{textContent:val}),textTitle:(id,val)=>ui.set(id,{textContent:val,title:val}),formatBuildTime:x=>x};
  vm.runInNewContext(src.slice(st,en)+';globalThis.runStatus=kitStatus;',ctx);
  ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'OFFLINE');
  ctx.loader={};ctx.usbBoardId='ZFC-A1';ctx.runStatus();

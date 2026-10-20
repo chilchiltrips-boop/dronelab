@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('js/kit-ack-diagnostics.js');
-function bench(client='android',seed){
+function bench(client='android',seed,clock={}){
  const saved=new Map(seed||[]),buttons={},panel={
   open:true,dataset:{client},addEventListener(){},
   querySelector(sel){return sel==='[data-diag-summary]'?{set textContent(v){this.text=v}}:
@@ -18,7 +18,7 @@ function bench(client='android',seed){
  const root={ZebjusNative:{saveDiagnosticLog:(kind,body)=>downloads.push({kind,body})},addEventListener(){}};
  const ctx={window:root,localStorage:{getItem:key=>saved.get(key)||null,setItem:(k,v)=>saved.set(k,v),removeItem:k=>saved.delete(k)},
   document:{getElementById:id=>id==='kitAckDiagnostics'?panel:null,readyState:'complete'},
-  Date,Math,JSON,Blob,URL,setTimeout,clearTimeout,confirm:()=>true};
+  Date:clock.Date||Date,performance:clock.performance,Math,JSON,Blob,URL,setTimeout,clearTimeout,confirm:()=>true};
  vm.runInNewContext(source,ctx);
  return {root,saved,buttons,downloads,api:root.ZebjusAckDiagnostics,events:()=>JSON.parse(root.ZebjusAckDiagnostics.exportData('json')).events};
 }
@@ -96,16 +96,18 @@ test('RX/APPLIED ages and authenticated NACK enums survive exports; ARM transiti
    b.api.record('udp_error',{reason});assert.equal(b.events().at(-1).data.reason,reason);
   }
   b.api.record('udp_nack',{nackReason:'secret device',ackKind:'secret ack',key:'secret key'});
-  assert.deepEqual(b.events().at(-1).data,{});
+  assert.deepEqual(Object.keys(b.events().at(-1).data),['recordingId']);
+  assert.match(b.events().at(-1).data.recordingId,/^[A-F0-9]{16}$/);
  }
 });
-test('errors auto-persist; recovery survives page reload; cap prevents unbounded storage growth',()=>{
+test('incident history persists asynchronously across reload',async()=>{
  const b=bench();
  for(let i=0;i<400;i++)b.api.record('rc_ack_error',{seq:i,reason:'TIMEOUT'});
- assert.equal(b.events().length,350);
+ assert.equal(b.events().length,401);
+ await new Promise(r=>setTimeout(r,20));
  const reload=bench('android',b.saved);
- assert.equal(reload.events().length,350);
- assert.equal(reload.events()[0].data.seq,51);
+ assert.equal(reload.events().length,402);
+ assert.equal(reload.events()[1].data.seq,0);
  assert.equal(reload.events().at(-2).data.seq,399);
  assert.equal(reload.events().at(-1).event,'app_start');
 });
@@ -135,7 +137,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 45\s*versionName '1\.8\.7-rx-applied-feedback'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 46\s*versionName '1\.8\.8-ack-reliability'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
@@ -162,4 +164,29 @@ test('stalled Android RC preview is cancelled without relaxing the 350ms firmwar
  assert.match(native,/stages\.put\("responseWaitMs"/);
  assert.match(firmware,/ZJ_RC_DEADMAN_MS=350/);
  assert.match(firmware,/zjRcLastReleaseReason/);
+});
+
+test('incident retains real 60 s pre-window and fixed 30 s recovery window with strict byte/retention bounds',async()=>{
+ let at=100000;
+ const b=bench('web',undefined,{Date:class extends Date{static now(){return at}},performance:{now:()=>at-100000}});
+ for(let i=0;i<70;i++){at=100000+i*1000;b.api.record('web_status',{seq:i,diagnosticId:'ABCDEF0123456789'});}
+ at=170000;b.api.record('udp_error',{reason:'UDP_ACK_TIMEOUT',diagnosticId:'ABCDEF0123456789'});
+ at=190000;b.api.record('connect_ok',{connected:true,diagnosticId:'ABCDEF0123456789'});
+ at=201000;b.api.record('web_status',{seq:201,diagnosticId:'ABCDEF0123456789'});
+ let data=JSON.parse(b.api.exportData('json')),incident=data.incidents[0];
+ assert.equal(incident.endAt,200000);
+ assert.ok(incident.events.some(e=>e.data.seq===10));assert.ok(!incident.events.some(e=>e.data.seq===9));
+ assert.ok(incident.events.some(e=>e.event==='connect_ok'));assert.ok(!incident.events.some(e=>e.data.seq===201));
+ assert.equal(incident.events.at(-1).relativeMs,90000);
+ for(let i=0;i<12;i++){at+=31000;b.api.record('udp_error',{reason:'UDP_NO_ACK'});}
+ assert.ok(JSON.parse(b.api.exportData('json')).incidents.length<=8);
+ await new Promise(r=>setTimeout(r,20));
+ assert.ok([...b.saved.values()].every(x=>x.length*2<=2*1024*1024));
+ b.api.clearSaved();assert.equal(b.events().length,0);assert.equal(JSON.parse(b.api.exportData('json')).incidents.length,0);
+});
+test('association loss starts an incident, and send/feedback/queue timings remain sanitized',()=>{
+ const b=bench('web');b.api.record('wifi_event',{wifiEvent:'LOST',sendGapMs:21,ackGapMs:42,feedbackAgeMs:500,ackQueueDelayMs:17,maxAckQueueDelayMs:30});
+ const data=JSON.parse(b.api.exportData('json'));assert.equal(data.incidents.length,1);
+ assert.equal(data.events.at(-1).data.ackQueueDelayMs,17);
+ assert.match(b.api.exportData('csv'),/sendGapMs,ackGapMs,feedbackAgeMs/);
 });

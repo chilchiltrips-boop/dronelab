@@ -38,7 +38,7 @@ test('The displayed Android version comes from signed published metadata, not pe
  const parse=runInNewContext('const expectedAndroidCert='+JSON.stringify(cert)+';'+workspace.slice(start,end)+';parsePublishedAndroidRelease;', {Map,Number,Error});
  const official=parse(metadata);
  assert.match(official,/Android APK • /);
- assert.match(official,/code [1-9][0-9]*\)/);
+ assert.doesNotMatch(official,/code [0-9]/);
  const publishedVersion=metadata.match(/^Version:\s*(\S+)/m)?.[1];
  assert.ok(publishedVersion&&official.includes(publishedVersion.split('-')[0]),'No hardcoded release version');
  assert.throws(()=>parse(metadata.replace(/^App:.*$/m,'App: example.fake.app')),/invalid/);
@@ -50,8 +50,8 @@ test('The Hardware Center script refreshes release details without touching Kit/
  assert.match(workspace,/name==='overview'\|\|name==='mobile'\)updatePublishedAndroidRelease\(\)/);
  assert.match(workspace,/releaseChecking\|\|Date\.now\(\)-releaseLastChecked<300000/);
  assert.match(workspace,/releaseVersion\|\|/);
- assert.match(html,/devices-workspace\.css\?v=compact-scroll-header-20261016/);
- assert.match(html,/devices-workspace\.js\?v=kit-live-inputs-20261017/);
+ assert.match(html,/devices-workspace\.css\?v=ack-reliability-20261020/);
+ assert.match(html,/devices-workspace\.js\?v=ack-reliability-20261020/);
 });
 
 test('Android download occupies one small row, not the old full marketing card',()=>{

@@ -43,7 +43,7 @@ test('large Python plotting wheels and Factory images cache on first demand and 
 });
 test('AP-only cache-busted scripts/styles load while firmware version keys stay exact',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./firmware-updater.js?v=pair-138','./js/python-lab.js?v=kit-transport-unified-20261017','./python-ide-workspace.css?v=compact-run-20261011']){
+ for(const path of ['./firmware-updater.js\?v=ack-reliability-20261020','./js/python-lab.js?v=kit-transport-unified-20261017','./python-ide-workspace.css?v=compact-run-20261011']){
   const response=await r.request(path);assert.equal(response.ok,true,path);assert.ok((await response.text()).length>100);
  }
  assert.equal((await r.request('./FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A1_APP.bin?v=unpublished')).ok,false);
@@ -69,7 +69,7 @@ test('reachability probe bypasses Service Worker even when version metadata is c
 
 test('unified Devices & Firmware sidebar loads offline with its exact versioned script and CSS',async()=>{
  const r=runtime();await r.install();r.setOffline();
- for(const path of ['./devices-workspace.css?v=unified-devices-firmware-method-20261015','./js/devices-workspace.js?v=one-click-advanced-secure-ota-20261015']){
+ for(const path of ['./devices-workspace.css\?v=ack-reliability-20261020','./js/devices-workspace.js\?v=ack-reliability-20261020']){
   const response=await r.request(path);
   assert.equal(response.ok,true,path);
   assert.ok((await response.text()).length>100,path);
@@ -78,7 +78,7 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
 
 test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
  const page=readFileSync(new URL('index.html',root),'utf8'),sw=source;
- const versions=[['pairing-web.js','phase1-remote-20261017'],['firmware-updater.js','compile-time-verified-20261017'],['js/firmware-connect.js','embed-clean-20261017-udp-management-20261019'],['js/classroom-kits.js','kit-transport-unified-20261017-udp-management-20261019']];
+ const versions=[['pairing-web.js','phase1-remote-20261017'],['firmware-updater.js','ack-reliability-20261020'],['js/firmware-connect.js','ack-reliability-20261020'],['js/classroom-kits.js','ack-reliability-20261020']];
  for(const [asset,version] of versions){
   assert.ok(page.includes(asset+'?v='+version),asset+' page source');
   assert.ok(sw.includes(asset+'?v='+version),asset+' offline precache');

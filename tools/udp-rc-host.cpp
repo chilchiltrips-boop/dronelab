@@ -65,20 +65,26 @@ static void feedbackTests(){
  clockMs+=19;deliver(frame(2,true,1000,1600));feedback(1);zjUdpLoop(clockMs);
  assert(zjUdpHasPending&&zjRcSeq==1&&zjRcRejected==rejected);
  deliver(frame(3,true,1000,1800));feedback(1);zjUdpLoop(clockMs);assert(zjRcSeq==1);
- clockMs++;zjUdpLoop(clockMs);pump();applied=feedback(2);
+ clockMs++;zjUdpLoop(clockMs);pump();expectAck(false);
+ clockMs++;deliver(frame(4,true));applied=feedback(1);
  assert(zjRcSeq==3&&zjRcRoll==1800&&zjUdpAppliedCount==2&&zjRcRejected==rejected);
- assert(((applied[8]<<8)|applied[9])==1&&((applied[10]<<8)|applied[11])==0);
+ assert(zjUdpGet32(applied.data()+4)==3);
  const uint32_t lastRx=zjUdpLastRx;
- auto bad=frame(4,true);bad[57]^=1;clockMs+=2;deliver(bad);expectAck(false);
- assert(zjUdpLastRx==lastRx&&zjUdpLastSeq==3);
+ auto bad=frame(5,true);bad[57]^=1;clockMs+=2;deliver(bad);expectAck(false);
+ assert(zjUdpLastRx==lastRx&&zjUdpLastSeq==4);
  deliver(frame(2,true));feedback(3,ZJ_UDP_STALE);assert(zjUdpActive&&zjUdpLastRx==lastRx);
- clockMs+=20;deliver(frame(4,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- deliver(frame(5,true,2500));feedback(3,ZJ_UDP_INVALID_FRAME,true);zjUdpLoop(clockMs);
+ clockMs+=100;deliver(frame(5,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ deliver(frame(6,true,2500));feedback(3,ZJ_UDP_INVALID_FRAME,true);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed);
+ assert(zjUdpMetrics.rxAckAttempted==zjUdpMetrics.rxAckSent+zjUdpMetrics.rxAckFailed);
+ assert(zjUdpMetrics.appliedAckSent<zjUdpReceived);
+ std::cout<<"HOST_FEEDBACK rxAckAttempted="<<zjUdpMetrics.rxAckAttempted<<" rxAckSent="<<zjUdpMetrics.rxAckSent<<" rxAckFailed="<<zjUdpMetrics.rxAckFailed
+  <<" appliedAckAttempted="<<zjUdpMetrics.appliedAckAttempted<<" appliedAckSent="<<zjUdpMetrics.appliedAckSent<<" appliedAckFailed="<<zjUdpMetrics.appliedAckFailed<<std::endl;
+ clockMs+=2000;zjRcLoop(clockMs);assert(zjRcNullConfirmed&&zjRcThrottle==1000&&!zjRcInputArmed);
  // An old armed/high-throttle frame after a successful DISARM is stale,
  // rather than an invalid attempt to re-arm. It cannot change the mailbox.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- clockMs+=20;auto oldArmed=frame(2,true,1400);deliver(oldArmed);feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ clockMs+=100;auto oldArmed=frame(2,true,1400);deliver(oldArmed);feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
  deliver(frame(3,false));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);assert(!zjRcInputArmed);
  const auto disarmedRx=zjUdpLastRx;clockMs+=2;deliver(oldArmed);feedback(3,ZJ_UDP_STALE);
  assert(zjUdpActive&&!zjUdpHasPending&&zjUdpLastRx==disarmedRx&&!zjRcInputArmed);
@@ -138,6 +144,28 @@ int main(){
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
  clockMs+=51;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
- feedbackTests();close(peerSocket);zjUdpSocket.stop();
+ feedbackTests();
+ // The 32-bit protocol comparison accepts forward wrap (zero is reserved),
+ // rejects a previous-epoch frame, and independently handles clock wrap.
+ newGrant(2);deliver(frame(0xfffffffe,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ clockMs+=20;deliver(frame(0xffffffff,true));feedback(1);zjUdpLoop(clockMs);
+ clockMs+=20;deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);
+ assert(zjRcSeq==1&&zjUdpLastAppliedSeq==1);
+ const auto wrapRx=zjUdpLastRx;deliver(frame(0xffffffff,true));feedback(3,ZJ_UDP_STALE);
+ assert(zjUdpLastRx==wrapRx&&zjUdpLastSeq==1);
+ clockMs=0xffffffd0;newGrant(2);
+ deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
+ clockMs+=30;deliver(frame(2,true));feedback(1);zjUdpLoop(clockMs);assert(zjRcSeq==2);
+ zjRcRelease("USB_STOP");zjUdpLoop(clockMs);clockMs+=17;pump();feedback(3,ZJ_UDP_OWNER_CONFLICT,true);
+ assert(zjUdpMetrics.ackQueueDelayMs==17&&zjUdpMetrics.maxAckQueueDelayMs==17);
+ newGrant(2);testBeginResult=0;deliver(frame(1,true));expectAck(false);
+ assert(zjUdpMetrics.rxAckAttempted==1&&zjUdpMetrics.rxAckFailed==1&&zjUdpMetrics.rxAckSent==0);
+ testBeginResult=1;newGrant(2);testEndResult=0;deliver(frame(1,true));expectAck(false);
+ assert(zjUdpMetrics.rxAckAttempted==1&&zjUdpMetrics.rxAckFailed==1);
+ testEndResult=1;newGrant(2);testWriteLimit=20;deliver(frame(1,true));
+ uint8_t partial[80];assert(recv(peerSocket,partial,sizeof(partial),0)==20);
+ assert(zjUdpMetrics.rxAckAttempted==1&&zjUdpMetrics.rxAckFailed==1&&zjUdpMetrics.rxAckSent==0);
+ std::cout<<"HOST_PARTIAL_WRITE attempted="<<zjUdpMetrics.rxAckAttempted<<" sent="<<zjUdpMetrics.rxAckSent<<" failed="<<zjUdpMetrics.rxAckFailed<<std::endl;
+ testWriteLimit=20000;close(peerSocket);zjUdpSocket.stop();
  std::cout<<"PASS actual UDP RC receiver: encrypted ARM, ACK, grant race rejection, parent close/replacement/expiry, watchdog"<<std::endl;
 }

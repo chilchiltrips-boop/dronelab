@@ -95,6 +95,9 @@ static String zjPpmRcChannelsJson(){
  return zjRcOwned&&zjRcSource=="PPM"&&zjRcHasFrame&&zjPpmSignalFresh(millis())?
   zjPpmChannelsJson():String("null");
 }
+static String zjPpmRcSignalJson(){
+ return zjPpmSignalFresh(millis())?String("\"PRESENT\""):zjPpmLostCount?String("\"LOST\""):String("\"WAITING\"");
+}
 static String zjPpmStatus(){
  const uint32_t now=millis();const bool good=zjPpmSignalFresh(now);
  String output=String("{\"pin\":")+String(ZJ_PPM_PIN)+",\"board\":"+String("\"")+FC_BOARD+"\"";

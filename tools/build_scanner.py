@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, hashlib, json, re, shutil, struct, subprocess, tempfile, time
+import argparse, hashlib, json, os, re, shutil, struct, subprocess, tempfile, time
 from datetime import datetime, timezone
 from pathlib import Path
 from firmware_compile_time import check_compiled_at
@@ -17,7 +17,7 @@ def run(cmd, label='command', attempts=1):
     for attempt in range(1, attempts + 1):
         print('+', ' '.join(map(str, cmd)), flush=True)
         try:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, env={**os.environ, 'TZ': 'UTC'})
             return
         except subprocess.CalledProcessError as error:
             if attempt == attempts:

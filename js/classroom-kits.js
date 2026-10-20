@@ -6,7 +6,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
+const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,{diagnosticId:state.rc?.diagnosticId,...data});
 const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=350,RC_INTERVAL=110,codePattern=/^\d{6}$/;
@@ -14,7 +14,7 @@ const state={connected:false,working:false,transport:'none',mode:'usb',board:'',
  version:'',rc:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
-const usbCandidate={};let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
+const usbCandidate={};let usbMonitorPacketAt=0;let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 let apRevealTimer=null;
 function hideAdminApCredentials(){
  if(apRevealTimer){clearTimeout(apRevealTimer);apRevealTimer=null}
@@ -29,6 +29,7 @@ function adminApNotice(msg){const el=$('kitAdminApMessage');if(el)el.textContent
 const EVENTS_MAX=70;
 const localKitHosts=new Map(),authSessions=new Map(),secureIds=new Set();try{for(const id of JSON.parse(localStorage.getItem('zebjus.kit.v2.ids')||'[]'))secureIds.add(id)}catch{}let setupStep=0;
 const adminKitHosts=new Map();
+const readScheduler=root.ZebjusKitData?.createReadScheduler?.();
 const networkTails=new Map(),rejectedPairings=new Map(),enrollmentCooldowns=new Map(),authorizationNotices=new Map();
 const rememberedWrites=new Map(),offeredConnections=new Set();
 let reconnectOffer=null,pendingNetworkTarget=null,offerPending=null;
@@ -61,7 +62,7 @@ function adoptNetworkStatus(d){
    udp:d.udp&&d.udp.protocol==='ZJUDP1'?d.udp:null,
    managementProtocol:d.managementProtocol==='ZJM1'?'ZJM1':'HTTP',
   partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,otaChunkMaxBytes:supportedOtaChunkSize(d),networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
-  staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number.isFinite(Number(d.rssi))?Number(d.rssi):null});
+  staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:d.rssi!=null&&Number.isFinite(Number(d.rssi))?Number(d.rssi):null});
 }
 function nameHosts(name){
  const normalized=String(name||'').trim().toLowerCase().replace(/[ _]+/g,'-');
@@ -446,9 +447,15 @@ async function wifiDirectRequest(ip,key,route,method,args,expected){
   throw e;
  }finally{clearTimeout(timeout)}
 }
-async function deviceRequest(route,method='GET',args={}){
+function deviceRequest(route,method='GET',args={}){
+ if(method!=='GET'){readScheduler?.invalidate();return deviceRequestMeasured(route,method,args).finally(()=>readScheduler?.invalidate())}
+ const key=reconnectTicket+'|'+state.kitId+'|'+state.transport+'|'+route;
+ if(!readScheduler)return deviceRequestMeasured(route,method,args);
+ return readScheduler.read(key,()=>deviceRequestMeasured(route,method,args),route==='/api/rc/snapshot'?180:0);
+}
+async function deviceRequestMeasured(route,method='GET',args={}){
  const started=diagnosticClock();
- try{return await deviceRequestCore(route,method,args)}
+ try{const result=await deviceRequestCore(route,method,args);return {...result,__observedAt:Date.now()}}
  catch(error){
   trace('request_error',{route,transport:state.transport,reason:classify(error),
    roundTripMs:Math.round(diagnosticClock()-started),outcome:'fail'});
@@ -486,7 +493,7 @@ async function connectNetwork(code,mode,ticket=reconnectTicket,expectedId=''){
   if($('kitRememberBrowser')?.checked)try{await pairing()?.remember?.(access.kitId,key)}catch(e){audit('Trusted browser storage not available: '+e.message,'warn')}
  }
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before network verification');
- Object.assign(state,verified,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:!!d.otaAuthorized,ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',staIp:d.ip||'',staConnected:!!d.staConnected,apActive:!!d.apActive,staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number(d.rssi)||null,physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
+ Object.assign(state,verified,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:!!d.otaAuthorized,ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',staIp:d.ip||'',staConnected:!!d.staConnected,apActive:!!d.apActive,staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:d.rssi==null?undefined:Number(d.rssi)||null,physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
  if(mode!=='android-relay')state.transport=verifiedTransport(d);
  state.physicalLink=String(d.requestTransport||'').toLowerCase()||state.physicalLink;
@@ -557,10 +564,10 @@ async function readStatus(){
   state.heartbeatAt=Date.now();state.linkState='connected';render();return state.usbInfo;
  }
  const d=await deviceRequest('/api/status');
- trace('web_status',{transport:state.transport,board:d.board,version:d.version,mode:d.mode,
+ trace('web_status',{...root.ZebjusAckDiagnostics?.firmwareFields?.(d),transport:state.transport,board:d.board,version:d.version,mode:d.mode,
   apActive:d.apActive,staConnected:d.staConnected,staReason:Number(d.staDisconnectReason)||0,
-  rssi:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
-  ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
+  rssi:d.rssi==null?undefined:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
+  ageMs:d.rc?.ageMs==null?undefined:Number(d.rc.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
   managementProtocol:d.managementProtocol,udpActive:d.udp?.active===true,
   udpReceived:Number(d.udp?.received),udpRejected:Number(d.udp?.rejected),
   feedbackVersion:d.udp?.feedbackVersion,lastRxSeq:Number(d.udp?.lastRxSeq),lastAppliedSeq:Number(d.udp?.lastAppliedSeq),
@@ -568,6 +575,7 @@ async function readStatus(){
   releaseReason:d.rc?.lastReleaseReason,lastReleaseAtMs:Number(d.rc?.lastReleaseAtMs)});
  if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
  const actualTransport=verifiedTransport(d);
+ state.diagnostics={wifi:d.wifiDiagnostics,rpc:d.rpc,http:d.httpDiagnostics,health:{gyroReady:d.gyroReady,address:d.gyroAddress},maxMainLoopGapMs:d.maxMainLoopGapMs,rc:d.rc,udp:d.udp};
  state.heartbeatAt=Date.now();state.linkState='connected';
  if(state.transport!=='android-relay')state.transport=actualTransport;
  state.physicalLink=actualTransport;state.apIp=d.apIp||'';
@@ -579,7 +587,7 @@ async function readStatus(){
  if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Ready: Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
  if(wasSetupAuthorized&&!state.setupAuthorized&&state.transport==='ap')setupHint('AP setup access lost. Reconnect the Kit AP and retry.');
  if(state.tone==='error'){state.tone='good';state.lastError=''}
- state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
+ state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=d.rssi!=null&&Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
  adoptNetworkStatus(d);
  if(priorName!==state.kitName||priorAddress!==state.staIp){
   for(const kit of discoveredKits)if(kit.kitId===state.kitId){kit.kitName=state.kitName;kit.hostname=state.hostname;}
@@ -624,7 +632,7 @@ async function claim(source='WEB'){
    if(connection===reconnectTicket)await deviceRequest('/api/rc/release','POST',{session:data.session}).catch(()=>{});
    throw Error('Control request cancelled');
   }
-  state.rcSession=data.session;ownOwnerId=data.ownerId||'';
+  state.rcSession=data.session;ownOwnerId=data.ownerId||'';state.rc={...(state.rc||{}),diagnosticId:data.diagnosticId};
  }
  if(ticket!==controlTicket||connection!==reconnectTicket||expected!==state.kitId)throw Error('Control request cancelled');
  state.owner=true;state.rcSource=source;state.seq=0;state.frameAt=0;
@@ -917,7 +925,8 @@ function onSerial(e){
  // Network telemetry is a remote readout; it must never impersonate a physical USB kit.
  if(e.detail?.transport&&e.detail.transport!=='usb')return;
  const line=String(e.detail?.line||'').trim();
- if(line.startsWith('ZJKIT,ID,')){if(usbCandidate.kitId!==line.slice(9))for(const key of Object.keys(usbCandidate))delete usbCandidate[key];usbCandidate.kitId=line.slice(9);usbCandidate.identityAt=Date.now();}
+ if(root.ZebjusSerialRcDecoder?.parseSerialRc(line))usbMonitorPacketAt=Date.now();
+ if(line.startsWith('ZJKIT,ID,')){usbMonitorPacketAt=0;if(usbCandidate.kitId!==line.slice(9))for(const key of Object.keys(usbCandidate))delete usbCandidate[key];usbCandidate.kitId=line.slice(9);usbCandidate.identityAt=Date.now();usbCandidate.serialGeneration=serial()?.generation?.();}
  if(line.startsWith('ZJNET,PAIR,')){
   const f=line.split(',');if(/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
     (f[2]===state.kitId||f[2]===usbCandidate.kitId)){
@@ -982,7 +991,7 @@ function onSerial(e){
   state.rc={...(state.rc||{}),active:true,claimed:true,transport:rc.transport,source:rc.source,seq:rc.seq,
    throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,inputArmed:rc.inputArmed};
   state.ackAt=Date.now();render();
- }else if(rc?.kind==='idle'){
+ }else if(rc?.kind==='idle'||rc?.kind==='claim'){
   state.rc={claimed:false,active:false,seq:0,throttle:1000,roll:1500,pitch:1500,yaw:1500,inputArmed:false,source:'NONE'};
   state.ackAt=0;render();
  }
@@ -1028,7 +1037,7 @@ async function recoverVerifiedLink(old){
    if(reconnectTicket!==ticket)return false;
    Object.assign(state,verified,{connected:true,ip:address,key:connectionKey,setupAuthorized:!!d.setupAuthorized,otaAuthorized:!!d.otaAuthorized,transport:old.transport,
     mode:d.mode||'',apActive:!!d.apActive,staConnected:!!d.staConnected,staIp:d.ip||'',staDisconnectReason:Number(d.staDisconnectReason)||0,
-    heartbeatAt:Date.now(),linkState:'connected',rssi:Number(d.rssi)||null,rc:d.rc||null,owner:false,rcSource:'',rcSession:'',since:Date.now()});
+    heartbeatAt:Date.now(),linkState:'connected',rssi:d.rssi==null?undefined:Number(d.rssi)||null,rc:d.rc||null,owner:false,rcSource:'',rcSession:'',since:Date.now()});
    adoptNetworkStatus(d);recoveryTarget=null;pollErrors=0;headerNetworkChoice=old.transport;recordKnown();tone('Wi-Fi recovered • same Device ID verified • Take Control again','good');
    root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,transport:old.transport,kitId:old.kitId}}));
    return true;
@@ -1101,7 +1110,7 @@ function showDiscovered(){
   }
   target.replaceChildren();
   if(!discoveredKits.length){const empty=document.createElement('p');empty.className='kit-hint';
-   empty.textContent=discovering?'Scanning saved IPs, Kit names and local bridge…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit verified. Join the same AP/STA Wi-Fi on this computer and allow browser Local Network Access; optionally use the mDNS bridge.';target.append(empty);continue}
+   empty.textContent=discovering?'Scanning saved IPs, Kit names and local bridge…':root.ZebjusEmbedKitAccess?.embedded?root.ZebjusEmbedKitAccess.getHint():'No Kit verified. Join the same AP/STA Wi-Fi on this computer and allow browser Local Network Access; optionally use the mDNS bridge.';target.append(empty);if(!discovering)root.ZebjusEmbedKitAccess?.appendRecovery?.(target);continue}
   for(const k of discoveredKits){
    const btn=document.createElement('button');btn.type='button';btn.className='kit-known-item';btn.title='Select '+k.kitId+' • identity verified by live /api/identify; AP diagnostics connects without a private label; protected settings require trusted access';
    const label=document.createElement('b');label.textContent=k.kitName+' • '+k.kitCode;
@@ -1604,7 +1613,7 @@ function init(){
  root.addEventListener('online',()=>{if(!document.hidden&&autoReconnectAllowed){if(state.connected)void refreshConnection().catch(()=>{});else void restoreLastKit().catch(()=>{})}else void checkWebReachability()});
  root.addEventListener('offline',()=>{state.internet='offline';render()});
  void checkWebReachability();setInterval(()=>{if(!document.hidden)void checkWebReachability();render()},30000);
- setInterval(()=>{if(!document.hidden&&!discovering&&Date.now()-lastDiscoverAt>60000)void discoverKits().catch(()=>{})},45000);
+ setInterval(()=>{if(!document.hidden&&!state.connected&&!discovering&&Date.now()-lastDiscoverAt>60000)void discoverKits().catch(()=>{})},45000);
  audit('MY KITS loaded • no hardware connected');
 }
 // Verified APP-only OTA via the already authenticated direct STA/AP session.
@@ -1775,9 +1784,14 @@ root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ getMonitorPaths:()=>{
+  const same=usbCandidate.kitId===state.kitId&&usbCandidate.board===state.board&&usbCandidate.kitCode===state.kitCode&&usbCandidate.serialGeneration===serial()?.generation?.();
+  return [{kitId:usbCandidate.kitId,transport:'usb',verified:same,available:same&&!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),lastPacketAt:usbMonitorPacketAt},
+   {kitId:state.kitId,transport:state.transport,verified:!!state.kitId,available:linkFresh(),fresh:linkFresh(),permitted:state.transport==='android-relay'&&!!relay()?.request}];
+ },
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,diagnostics:state.diagnostics,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:0,physicalLink:state.physicalLink||'',mode:state.mode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

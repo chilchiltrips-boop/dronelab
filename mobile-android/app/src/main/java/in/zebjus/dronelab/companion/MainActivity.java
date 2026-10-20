@@ -256,7 +256,7 @@ public class MainActivity extends Activity {
         // Only this signed, bundled main WebView frame can initiate the system
         // CREATE_DOCUMENT picker. The user explicitly chooses a destination.
         if(!"json".equals(format)&&!"csv".equals(format))return;
-        if(contents==null||contents.isEmpty()||contents.length()>180000)return;
+        if(contents==null||contents.isEmpty()||contents.length()>4*1024*1024)return;
         if(pendingAckDiagnosticFile!=null)return;
         pendingAckDiagnosticFile=contents;
         pendingAckDiagnosticFormat=format;
@@ -359,6 +359,10 @@ public class MainActivity extends Activity {
         view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         enrollmentVault=new FlightCoreKitVault(this);
         wifiLink=new FlightCoreWifiLink(this,new FlightCoreWifiLink.Listener(){
+            @Override public void diagnostic(String event){
+                JSONObject detail=new JSONObject();try{detail.put("wifiEvent",event);}catch(Exception ignored){}
+                dispatchToPage("zebjusNativeWifiDiagnostic",detail);
+            }
             @Override public void linkChanged(){signalNetworkChange();}
             @Override public void discovery(String id,String ip,String error){deliverDiscovery(id,ip,error);}
         });

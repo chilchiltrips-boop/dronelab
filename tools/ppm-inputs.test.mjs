@@ -75,7 +75,7 @@ test('UI and service worker expose responsive CH1–CH8 without enabling motors 
  for(let i=1;i<=8;i++){assert.ok(html.includes('id="liCh'+i+'"'));assert.ok(html.includes('id="liCh'+i+'Bar"'))}
  assert.match(js,/parsePpmChannels/);assert.match(js,/validSource==='PPM'/);
  assert.match(css,/li-ppm-grid/);assert.match(css,/@media\(max-width:580px\)/);
- for(const asset of ['live-inputs.css?v=ppm-ch8-20261017','js/live-inputs.js?v=ppm-ch8-20261017','js/serial-rc-decoder.js?v=ppm-ch8-20261017']){
+ for(const asset of ['live-inputs.css\?v=ack-reliability-20261020','js/live-inputs.js\?v=ack-reliability-20261020','js/serial-rc-decoder.js?v=ppm-ch8-20261017']){
   assert.ok(html.includes(asset),asset);assert.ok(sw.includes('./'+asset),asset);
  }
  assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
