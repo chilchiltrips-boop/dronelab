@@ -16,6 +16,14 @@ public final class UdpStreamInterop {
  static volatile boolean serving=true,mute=false,injectBad=true,oversizeOnly=false;
  static volatile Throwable peerFailure;
  static final List<byte[]> frames=new CopyOnWriteArrayList<>();
+ // Keep the authenticated input's nonce alongside its decrypted values so a
+ // late datagram from a stopped session cannot be mistaken for a fresh ARM.
+ static final class ObservedFrame {
+  final byte[] prefix,control;final int sequence;
+  ObservedFrame(byte[] p,byte[] clear){prefix=Arrays.copyOfRange(p,16,20);
+   control=clear;sequence=((p[12]&255)<<24)|((p[13]&255)<<16)|((p[14]&255)<<8)|(p[15]&255);}
+ }
+ static final List<ObservedFrame> observed=new CopyOnWriteArrayList<>();
  static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
  static byte[] crypto(boolean encrypt,byte[] header,byte[] body)throws Exception{
   Cipher c=Cipher.getInstance("AES/GCM/NoPadding");
@@ -36,7 +44,8 @@ public final class UdpStreamInterop {
   try{while(serving){
    byte[] packet=new byte[58];DatagramPacket p=new DatagramPacket(packet,58);
    try{server.receive(p);}catch(SocketTimeoutException empty){continue;}
-   byte[] clear=crypto(false,packet,Arrays.copyOfRange(packet,28,58));frames.add(clear);
+   byte[] clear=crypto(false,packet,Arrays.copyOfRange(packet,28,58));
+   observed.add(new ObservedFrame(packet,clear));frames.add(clear);
    if(mute)continue;
    byte[] ack=packet.clone();ack[2]='A';System.arraycopy(new byte[]{'K','I','T','!'},0,ack,24,4);
    byte[] body=new byte[14];System.arraycopy(packet,12,body,0,4);body[12]=(byte)(5+((clear[12]&1)==1?2:0));
@@ -66,11 +75,23 @@ public final class UdpStreamInterop {
    stream.offer("1700,1600,1400,1800,1000,1000",true);Thread.sleep(35);stream.stop();
    int prior=view.events.size();activity.drain();
    require(prior==view.events.size(),"Stopped stream UI callbacks must be discarded");
-   frames.clear();view.events.clear();
+   require(!observed.isEmpty(),"Initial encrypted stream must have transmitted");
+   final byte[] stoppedPrefix=observed.get(0).prefix.clone();
+   frames.clear();observed.clear();view.events.clear();
    stream.start("fresh","127.0.0.1",DEVICE,CLAIM,KEY);
    waitFor(activity,view,"\"type\":\"start\"",stream,false);
-   long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(1);while(frames.isEmpty()&&System.nanoTime()<until)Thread.sleep(5);
-   require(!frames.isEmpty()&&((frames.get(0)[0]&255)<<8|(frames.get(0)[1]&255))==1000&&frames.get(0)[12]==0,"Restart must begin neutral and disarmed");
+   // The previous UDP peer can still process datagrams already delivered to
+   // its socket when stop() closes the sender. Those are NOT the restart.
+   // Require the first sequence of the *new* encrypted stream to be neutral.
+   ObservedFrame firstFresh=null;
+   long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
+   while(firstFresh==null&&System.nanoTime()<until){
+    for(ObservedFrame p:observed)if(!Arrays.equals(p.prefix,stoppedPrefix)&&p.sequence==1){firstFresh=p;break;}
+    if(firstFresh==null)Thread.sleep(5);
+   }
+   require(firstFresh!=null,"New encrypted stream never sent sequence 1");
+   require(((firstFresh.control[0]&255)<<8|(firstFresh.control[1]&255))==1000&&firstFresh.control[12]==0,
+    "Restart must begin neutral and disarmed");
    waitFor(activity,view,"UDP_INPUT_STALE",stream,false);stream.stop();
    view.events.clear();wifi.deny=true;stream.start("denied","127.0.0.1",DEVICE,CLAIM,KEY);
    waitFor(activity,view,"UDP_START_PINNED_NETWORK_NETWORK_IDENTITY",stream,false);
