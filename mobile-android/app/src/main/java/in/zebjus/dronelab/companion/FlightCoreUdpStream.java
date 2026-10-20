@@ -29,9 +29,12 @@ import javax.crypto.spec.SecretKeySpec;
 final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
-    // Independent native receive/feedback watchdog. Firmware safety remains unchanged.
-    static final long ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
-    static final int NO_ACK_SENT_LIMIT=25;
+    // Fresh local input and firmware 500 ms receive/apply deadman are independent
+    // of return-path ACK delivery. Bounded 750 ms v2 feedback outage permits
+    // brief radio jitter but never stale local joystick input or unbounded throttle.
+    static final long FW_DEADMAN_MS=500, ACK_WARN_MS=350, ACK_TIMEOUT_MS=750;
+    static final long LEGACY_ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
+    static final int NO_ACK_SENT_LIMIT=38;
     private final Activity activity;
     private final WebView view;
     private final FlightCoreWifiLink wifiLink;
@@ -47,6 +50,7 @@ final class FlightCoreUdpStream {
     private long lastSendAt, maxSendGapMs, maxAckGapMs;
     private int feedbackVersion=1,lastAppliedSeq,receiveAgeMs=-1,applyAgeMs=-1;
     private long feedbackCounter,lastFeedbackAt,lastAppliedProgressAt,firstRxAckAt,appliedAckCount;
+    private boolean feedbackDelayWarned=false;
     private String ackKind="LEGACY_RX_ACK",nackReason="NONE";
     private int sequence, lastAckSequence, accepted, rejected;
     private String streamId="";
@@ -95,6 +99,11 @@ final class FlightCoreUdpStream {
             o.put("receiveAgeMs",receiveAgeMs<0?-1:receiveAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
             o.put("applyAgeMs",applyAgeMs<0?-1:applyAgeMs+Math.max(0,SystemClock.elapsedRealtime()-lastFeedbackAt));
             o.put("appliedKnown",feedbackVersion==2&&lastAppliedSeq>0);o.put("appliedAckCount",appliedAckCount);
+            o.put("feedbackHealth",!active?"STOPPED":
+                lastAckAt==0?"WAITING_RX":
+                SystemClock.elapsedRealtime()-lastAckAt>ACK_WARN_MS?"DEGRADED":"HEALTHY");
+            o.put("firmwareDeadmanMs",FW_DEADMAN_MS);
+            o.put("feedbackWarnMs",ACK_WARN_MS);o.put("feedbackStopMs",ACK_TIMEOUT_MS);
             o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
@@ -135,6 +144,7 @@ final class FlightCoreUdpStream {
         lastSendAt=maxSendGapMs=maxAckGapMs=0;
         feedbackVersion=feedback;lastAppliedSeq=0;receiveAgeMs=applyAgeMs=-1;
         feedbackCounter=lastFeedbackAt=lastAppliedProgressAt=firstRxAckAt=appliedAckCount=0;
+        feedbackDelayWarned=false;
         ackKind=feedback==2?"RX_ACK":"LEGACY_RX_ACK";nackReason="NONE";
         Arrays.fill(sendTimes,0);
         channels[0]=channels[4]=channels[5]=1000;
@@ -174,6 +184,7 @@ final class FlightCoreUdpStream {
                     socket=ds;active=true;
                     sent=ackCount=estimatedLost=lastRtt=jitter=0;
                     lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
+                    feedbackDelayWarned=false;
                     lastSendAt=maxSendGapMs=maxAckGapMs=0;
                     lastInputAt=SystemClock.elapsedRealtime();
                     final DatagramSocket receiveSocket=ds;
@@ -241,12 +252,29 @@ final class FlightCoreUdpStream {
             lastSendAt=sendAt;
             sent++;
             final long watchdogNow=SystemClock.elapsedRealtime();
-            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>ACK_TIMEOUT_MS){
+            final long ackStopMs=feedbackVersion==2?ACK_TIMEOUT_MS:LEGACY_ACK_TIMEOUT_MS;
+            final long feedbackAge=lastAckAt>0?watchdogNow-lastAckAt:0;
+            final long appliedProgressAge=lastAppliedProgressAt>0?
+                    watchdogNow-lastAppliedProgressAt:watchdogNow-firstRxAckAt;
+            final boolean recentV2=feedbackVersion==2&&lastFeedbackAt>0&&
+                    watchdogNow-lastFeedbackAt<=ACK_WARN_MS;
+            // A fresh authenticated Kit response can prove that firmware RX or
+            // apply has already stalled. A silent return path proves neither.
+            if(inputArm&&recentV2&&receiveAgeMs>=FW_DEADMAN_MS){
+                report("error","UDP_FIRMWARE_RX_STALE");clear();
+            }else if(inputArm&&recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS){
+                report("error","UDP_FIRMWARE_APPLY_STALE");clear();
+            }else if(inputArm&&feedbackVersion==2&&lastAckAt>0&&
+                    feedbackAge>ACK_WARN_MS&&!feedbackDelayWarned){
+                feedbackDelayWarned=true;
+                report("warning","UDP_FEEDBACK_DELAY");
+            }else if(inputArm&&lastAckAt>0&&feedbackAge>ackStopMs){
                 report("error","UDP_ACK_TIMEOUT");clear();
-            }else if(inputArm&&lastAckAt==0&&sent>NO_ACK_SENT_LIMIT){
+            }else if(inputArm&&lastAckAt==0&&sent>(feedbackVersion==2?
+                    NO_ACK_SENT_LIMIT:25)){
                 report("error","UDP_NO_ACK");clear();
             }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
-               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>ACK_TIMEOUT_MS){
+                    appliedProgressAge>ACK_TIMEOUT_MS){
                 report("error","UDP_APPLY_TIMEOUT");clear();
             }
         }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
@@ -288,14 +316,17 @@ final class FlightCoreUdpStream {
     private static int get16(byte[] b,int at){return ((b[at]&255)<<8)|(b[at+1]&255);}
     private void markReceived(int rx){
         if(rx<=lastAckSequence)return;
-        if(lastAckSequence>0&&rx>lastAckSequence+1)estimatedLost+=rx-lastAckSequence-1;
+        // v2 intentionally samples RX_ACK at 20 Hz; skipped sequence numbers
+        // are NOT packet loss. Only legacy per-packet ACKs permit this heuristic.
+        if(feedbackVersion==1&&lastAckSequence>0&&rx>lastAckSequence+1)
+            estimatedLost+=rx-lastAckSequence-1;
         long recorded=sendTimes[rx&127];
         long rtt=recorded>0?Math.max(0,SystemClock.elapsedRealtime()-recorded):0;
         if(ackCount>0)jitter=(jitter*7+Math.abs(rtt-lastRtt))/8;
         lastRtt=rtt;final long at=SystemClock.elapsedRealtime();
         if(lastAckAt>0)maxAckGapMs=Math.max(maxAckGapMs,at-lastAckAt);
         if(firstRxAckAt==0)firstRxAckAt=at;
-        lastAckAt=at;lastAckSequence=rx;ackCount++;
+        lastAckAt=at;lastAckSequence=rx;ackCount++;feedbackDelayWarned=false;
     }
     private boolean receiveFeedback(byte[] packet,int length)throws Exception{
         final boolean wasArmed=acknowledgedArm;
@@ -340,6 +371,9 @@ final class FlightCoreUdpStream {
                 return true;
             }
             markReceived(rx);
+            // From authenticated aggregate RX counter, not gaps between
+            // deliberately rate-limited ACK sequence numbers (estimate only).
+            estimatedLost=Math.max(0,(long)rx-(long)received);
         }
         final long at=SystemClock.elapsedRealtime();
         if(at-lastUiAt>=80||(!wasArmed&&acknowledgedArm)){lastUiAt=at;report("ack",null);}
