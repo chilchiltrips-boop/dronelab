@@ -93,8 +93,9 @@ static void feedbackTests(){
  assert(((timeout[8]<<8)|timeout[9])==501);zjUdpLoop(clockMs);assert(!zjRcOwned);
  // Fresh RX acknowledgements cannot mask an apply loop that stopped progressing.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
- for(int i=2;i<=6;i++){clockMs+=110;deliver(frame(i,true));feedback(1);}
- clockMs++;pump();feedback(3,ZJ_UDP_APPLY_STALLED,true);zjUdpLoop(clockMs);
+ for(int i=2;i<=5;i++){clockMs+=110;deliver(frame(i,true));feedback(1);}
+ // Apply age passes 500 ms while latest authenticated RX is only 61 ms old.
+ clockMs+=61;pump();feedback(3,ZJ_UDP_APPLY_STALLED,true);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&zjRcLastReleaseReason=="UDP_APPLY_TIMEOUT");
  // A different owner remains intact; only the old grant gets the terminal NACK.
  newGrant(2);deliver(frame(1,true));feedback(1);zjUdpLoop(clockMs);pump();feedback(2);
