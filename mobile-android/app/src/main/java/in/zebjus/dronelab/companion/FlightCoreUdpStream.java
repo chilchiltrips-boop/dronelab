@@ -30,7 +30,7 @@ final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
     // Independent native receive/feedback watchdog. Firmware safety remains unchanged.
-    static final long ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
+    static final long ACK_TIMEOUT_MS=500, HEALTHY_V2_FEEDBACK_GRACE_MS=150, INPUT_STALE_MS=300;
     static final int NO_ACK_SENT_LIMIT=25;
     private final Activity activity;
     private final WebView view;
@@ -241,12 +241,19 @@ final class FlightCoreUdpStream {
             lastSendAt=sendAt;
             sent++;
             final long watchdogNow=SystemClock.elapsedRealtime();
-            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>ACK_TIMEOUT_MS){
+            // Only recent authenticated v2 receive/apply health permits bounded feedback jitter.
+            // The firmware still enforces its independent 500 ms input deadman.
+            final boolean recentHealthyApply=feedbackVersion==2&&lastAppliedSeq>0&&
+                receiveAgeMs>=0&&receiveAgeMs<250&&applyAgeMs>=0&&applyAgeMs<250&&
+                lastAppliedProgressAt>0&&lastFeedbackAt>0&&
+                lastFeedbackAt-lastAppliedProgressAt<=ACK_TIMEOUT_MS;
+            final long feedbackDeadline=ACK_TIMEOUT_MS+(recentHealthyApply?HEALTHY_V2_FEEDBACK_GRACE_MS:0);
+            if(inputArm&&lastAckAt>0&&watchdogNow-lastAckAt>feedbackDeadline){
                 report("error","UDP_ACK_TIMEOUT");clear();
             }else if(inputArm&&lastAckAt==0&&sent>NO_ACK_SENT_LIMIT){
                 report("error","UDP_NO_ACK");clear();
             }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
-               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>ACK_TIMEOUT_MS){
+               watchdogNow-(lastAppliedProgressAt>0?lastAppliedProgressAt:firstRxAckAt)>feedbackDeadline){
                 report("error","UDP_APPLY_TIMEOUT");clear();
             }
         }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
