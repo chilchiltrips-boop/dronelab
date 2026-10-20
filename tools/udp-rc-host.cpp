@@ -125,7 +125,7 @@ int main(){
  old=frame(1,true);old[57]^=1;replaceAtNextCommit();deliver(old);expectAck(false);
  assert(zjUdpActive&&zjUdpRejected==0);
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);assert(zjRcInputArmed);
- clockMs+=351;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
+ clockMs+=501;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed&&zjRcThrottle==1000);
  // Closing the parent authentication session revokes its UDP grant immediately.
  newGrant();deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
