@@ -8,7 +8,7 @@ test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and
  const flight=source('companion-flight.js');
  const network=source('companion-network.js');
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
- assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>350/);
+ assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>500/);
  assert.match(network,/inputArmed:data\.inputArmed===true,protocol:'ZJUDP1'/);
  assert.match(native,/FW_DEADMAN_MS=500, ACK_WARN_MS=350, ACK_TIMEOUT_MS=750/);
  assert.match(native,/LEGACY_ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300/);
