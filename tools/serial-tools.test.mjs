@@ -42,7 +42,7 @@ test('Read Running Firmware refreshes the physical pairing even while an AP sess
  const start=source.indexOf('async function openSerialMonitor('),end=source.indexOf('async function toggleSerialMonitor(',start);
  const commands=[],selected={connected:true,transport:'ap',kitId:'ZFC-A1-012345ABCDEF'};
  const port={open:async()=>{},setSignals:async()=>{},readable:{getReader:()=>({read:()=>new Promise(()=>{}),releaseLock(){}})}};
- const context={monitorStarting:false,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
+ const context={monitorGeneration:0,monitorStarting:false,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
   window:{ZebjusKits:{getState:()=>selected}},usbPortInfo:()=>({}),serialBaud:()=>115200,serialUi(){},kitStatus(){},TextDecoder,
   serialIdleWatch(){},setUsbTelemetryRate:async()=>{},$:()=>({value:20}),writePythonSerialLine:async line=>{commands.push(line)}};
  vm.runInNewContext(source.slice(start,end)+';globalThis.open=openSerialMonitor;',context);
