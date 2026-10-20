@@ -461,7 +461,7 @@ async function deviceRequest(route,method='GET',args={}){
   return await readScheduler.read(key,async()=>{
    const reply=await deviceRequestCore(route,method,args);
    return {...reply,__observedAt:Date.now()};
-  },route==='/api/rc/snapshot'?180:0);
+  },0); // Never cache a completed RC snapshot: STOP/failsafe must be visible immediately.
  }
  catch(error){
   trace('request_error',{route,transport:state.transport,reason:classify(error),
