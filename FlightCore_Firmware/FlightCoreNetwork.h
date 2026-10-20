@@ -27,6 +27,10 @@ static String zjAdvertisedName;
 static uint32_t zjNameVerifyAt=0;
 static bool zjNameVerified=false;
 static volatile bool zjApStarted=false;
+static volatile uint32_t zjApJoinEvents=0,zjApLeaveEvents=0;
+static volatile uint8_t zjApLastLeaveReason=0;
+// Main-loop RPC processing measurements: a bounded number of datagrams AND time budget.
+static uint32_t zjRpcMaxLoopUs=0,zjRpcMaxDispatchUs=0;
 // Kit AP router setup is available to AP-local signed sessions; RC and OTA remain separate.
 
 
@@ -104,6 +108,9 @@ static String zjStatus(){
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState)+",\"exclusiveWifi\":true";
+ out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
+  ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
+  ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
  out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
  out+=",\"inputArmSupported\":true,\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"));
@@ -120,7 +127,8 @@ static String zjStatus(){
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
  out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true";
- out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+",\"udpManagementPort\":4211}";
+ out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+
+  ",\"rpcMaxLoopUs\":"+String(zjRpcMaxLoopUs)+",\"rpcMaxDispatchUs\":"+String(zjRpcMaxDispatchUs)+",\"udpManagementPort\":4211}";
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.localIP()==WiFi.softAPIP()?"AP":"STA";}
@@ -334,7 +342,11 @@ static void zjSetupHttp(){
 static void zjRpcLoop(){
  if(!zjRpcReady)return;
  uint8_t packet[16+ZJ_RPC_FRAGMENT];
+ const uint32_t started=micros();
  for(int budget=0;budget<12;budget++){
+  // A large burst is deferred to the next main-loop iteration, preserving RC apply slots.
+  // A single blocking handler still needs its own operation-specific bounds.
+  if(budget>0&&uint32_t(micros()-started)>=2000)break;
   const int n=zjRpcSocket.parsePacket();if(n<=0)break;
   const IPAddress peer=zjRpcSocket.remoteIP();const uint16_t port=zjRpcSocket.remotePort();
   if(n<17||n>int(sizeof(packet))||!zjRpcPrivate(peer)){
@@ -364,21 +376,27 @@ static void zjRpcLoop(){
    zjRpcSend(assembly.id,old.response,peer,port);cached=true;break;
   }
   if(!cached){
-   String response;zjAuthResetRequest();
+   String response;zjAuthResetRequest();const uint32_t dispatchAt=micros();
    if(zjHttp.dispatch(assembly.bytes.get(),total,peer,response)){
     auto& entry=zjRpcCache[zjRpcCacheNext++%2];entry.peer=peer;entry.port=port;entry.at=now;
     memcpy(entry.id,assembly.id,8);memcpy(entry.hash,hash,32);entry.response=response;
     zjRpcSend(assembly.id,response,peer,port);
    }
+   const uint32_t dispatchUs=micros()-dispatchAt;
+   if(dispatchUs>zjRpcMaxDispatchUs)zjRpcMaxDispatchUs=dispatchUs;
    zjAuthResetRequest();
   }
   assembly.mask=0;
  }
+ const uint32_t loopUs=micros()-started;
+ if(loopUs>zjRpcMaxLoopUs)zjRpcMaxLoopUs=loopUs;
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
   if(event==ARDUINO_EVENT_WIFI_AP_START)zjApStarted=true;
   if(event==ARDUINO_EVENT_WIFI_AP_STOP)zjApStarted=false;
+  if(event==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++zjApJoinEvents;
+  if(event==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++zjApLeaveEvents;zjApLastLeaveReason=info.wifi_ap_stadisconnected.reason;}
   if(event==ARDUINO_EVENT_WIFI_STA_GOT_IP){zjAssociationEpoch=zjAssociationEpoch+1;zjStaDisconnectReason=0;}
   if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
    zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
