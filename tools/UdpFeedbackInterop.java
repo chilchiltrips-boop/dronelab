@@ -13,7 +13,8 @@ public final class UdpFeedbackInterop {
  static final String DEVICE="ZFC-A2-012345ABCDEF",CLAIM="11".repeat(16),KEY="22".repeat(32);
  static final byte[] key=new byte[32];
  static volatile boolean serving=true,apply=true,staleOnce=false,oversize=false,replay=false,seenArmed=false;
- static volatile int forceReason=0;
+ static volatile int forceReason=0,totalInputs=0;
+ static volatile boolean mute=false;
  static volatile Throwable failure;
  static int rx=0,applied=0,received=0,appliedCount=0,counter=0,salt=80;
  static long rxAt=0,appliedAt=0;
@@ -49,7 +50,8 @@ public final class UdpFeedbackInterop {
    byte[] next=Arrays.copyOfRange(packet,16,20);
    if(!Arrays.equals(prefix,next)){prefix=next;rx=applied=received=appliedCount=counter=0;rxAt=appliedAt=0;appliedArm=false;lastReply=null;salt++;}
    int seq=u32(packet,12);byte[] body=crypto(false,packet,Arrays.copyOfRange(packet,28,58));
-   seenArmed|=(body[12]&1)!=0;
+   seenArmed|=(body[12]&1)!=0;totalInputs++;
+   if(mute)continue;
    if(replay&&lastReply!=null){server.send(new DatagramPacket(lastReply,lastReply.length,in.getAddress(),in.getPort()));continue;}
    if(forceReason!=0){reply(server,in,packet,seq,3,forceReason,true);continue;}
    if(staleOnce&&rx>0){staleOnce=false;reply(server,in,packet,rx,3,2,false);}
@@ -65,6 +67,21 @@ public final class UdpFeedbackInterop {
   while(System.nanoTime()<end){activity.drain();if(has(view,text))return;require(failure==null,"Peer failed: "+failure);
    stream.offer("1000,1500,1500,1500,1000,1000",true);Thread.sleep(10);}
   throw new AssertionError("Missing "+text+": "+view.events);
+ }
+ static void pump(Activity activity,WebView view,FlightCoreUdpStream stream,long duration)throws Exception{
+  int before=totalInputs;long until=now()+duration;
+  while(now()<until){
+   stream.offer("1000,1500,1500,1500,1000,1000",true);activity.drain();
+   require(failure==null,"Peer failed: "+failure);
+   require(!has(view,"\"type\":\"error\""),"AP stream stopped on feedback: "+view.events);
+   Thread.sleep(10);
+  }
+  activity.drain();require(totalInputs-before>=duration/40,"AP sender must keep transmitting new encrypted input");
+ }
+ static void waitWithoutInput(Activity activity,WebView view,String marker)throws Exception{
+  long until=now()+3000;
+  while(now()<until){activity.drain();if(has(view,marker))return;Thread.sleep(10);}
+  throw new AssertionError("Missing "+marker+": "+view.events);
  }
  static FlightCoreUdpStream start(Activity activity,WebView view,String id){
   FlightCoreUdpStream stream=new FlightCoreUdpStream(activity,view,new FlightCoreWifiLink());
@@ -97,8 +114,39 @@ public final class UdpFeedbackInterop {
     stream=start(activity,view,"nack_"+reason);waitFor(activity,view,"UDP_NACK_"+reasons[reason],stream);
     require(!has(view,"\"inputArmed\":true"),"Terminal NACK cannot ARM");stream.shutdown();
    }
+   forceReason=0;mute=true;oversize=replay=false;
+   for(int version:new int[]{1,2}){
+    activity=new Activity();view=new WebView();
+    stream=new FlightCoreUdpStream(activity,view,new FlightCoreWifiLink());
+    stream.start("ap_silent_"+version,"127.0.0.1",DEVICE,CLAIM,KEY,version,true);
+    waitFor(activity,view,"\"type\":\"start\"",stream);
+    pump(activity,view,stream,1200);
+    require(has(view,"\"ackRequired\":false")&&has(view,"\"type\":\"tx\""),"AP reports local sends and optional ACK policy");
+    require(!has(view,"\"inputArmed\":true"),"Local AP sends cannot invent firmware ARM confirmation");
+    waitWithoutInput(activity,view,"UDP_INPUT_STALE");stream.shutdown();
+   }
+   mute=false;apply=true;
+   activity=new Activity();view=new WebView();
+   stream=new FlightCoreUdpStream(activity,view,new FlightCoreWifiLink());
+   stream.start("ap_delayed","127.0.0.1",DEVICE,CLAIM,KEY,2,true);
+   waitFor(activity,view,"\"inputArmed\":true",stream);
+   oversize=true;pump(activity,view,stream,1100);oversize=false;
+   stream.shutdown();
+   activity=new Activity();view=new WebView();
+   stream=new FlightCoreUdpStream(activity,view,new FlightCoreWifiLink());
+   stream.start("ap_replay","127.0.0.1",DEVICE,CLAIM,KEY,2,true);
+   waitFor(activity,view,"\"inputArmed\":true",stream);
+   replay=true;pump(activity,view,stream,1100);stream.shutdown();replay=false;
+   activity=new Activity();view=new WebView();apply=false;
+   stream=new FlightCoreUdpStream(activity,view,new FlightCoreWifiLink());
+   stream.start("ap_rx_only","127.0.0.1",DEVICE,CLAIM,KEY,2,true);
+   waitFor(activity,view,"\"ackKind\":\"RX_ACK\"",stream);
+   pump(activity,view,stream,1100);
+   require(!has(view,"\"inputArmed\":true"),"RX-only telemetry is not applied ARM");
+   forceReason=4;waitFor(activity,view,"UDP_NACK_APPLY_STALLED",stream);
+   stream.shutdown();forceReason=0;
    require(failure==null,"Peer failed: "+failure);
-   System.out.println("PASS production Android feedback v2: RX/APPLIED separation, ages, NACKs, replay/size checks, receive/apply watchdogs, no retransmission");
+   System.out.println("PASS production Android feedback v2: AP silent/delayed/replayed/RX-only streaming, local-input expiry, terminal NACK,  RX/APPLIED separation, ages, NACKs, replay/size checks, receive/apply watchdogs, no retransmission");
   }finally{if(stream!=null)stream.shutdown();serving=false;server.close();worker.join(1000);}
  }
 }

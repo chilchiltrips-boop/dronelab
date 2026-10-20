@@ -10,10 +10,13 @@ const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='aut
 const nonRcNativeRequests=new Set();
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
 let udpActive=false,udpStarting=false,udpReadyWaiter=null,udpArmWaiter=null,udpStats=null,udpStreamId='';
+const apStreaming=()=>udpActive&&link==='ap'&&native?.apStreamingVersion===1;
+const controlLinkFresh=()=>Date.now()-lastStatus<12000||apStreaming();
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
 const policy=window.ZebjusKitNetworkPolicy;
 const udpFeedback=data=>({
+ ackRequired:data?.ackRequired!==false,requestedInputArmed:data?.requestedInputArmed===true,sentSeq:Number(data?.sentSeq)||0,
  feedbackVersion:data?.feedbackVersion===2?2:1,
  lastRxSeq:Number(data?.lastRxSeq??data?.seq)||0,lastAppliedSeq:Number(data?.lastAppliedSeq)||0,
  receiveAgeMs:data?.receiveAgeMs==null?-1:Number(data.receiveAgeMs),applyAgeMs:data?.applyAgeMs==null?-1:Number(data.applyAgeMs),
@@ -332,19 +335,29 @@ function clearUdpWaiters(reason){
  udpReadyWaiter=udpArmWaiter=null;
 }
 window.zebjusNativeUdpEvent=data=>{
- if(!data||!['start','ack','nack','warning','error'].includes(data.type))return;
+ if(!data||!['start','tx','ack','nack','warning','error'].includes(data.type))return;
  if(data.type==='warning'){
   if(udpActive&&rcSession)trace('udp_warning',{transport:link,source:'ANDROID',
    reason:'UDP_FEEDBACK_DELAY',lastRxSeq:data.lastRxSeq,lastAppliedSeq:data.lastAppliedSeq,
    receiveAgeMs:data.receiveAgeMs,applyAgeMs:data.applyAgeMs,
    lastPacketAgeMs:data.lastPacketAgeMs,firmwareDeadmanMs:data.firmwareDeadmanMs});
-  return; // Warning only; native bounded watchdog remains authoritative.
+  return; // Diagnostic only; AP streaming does not depend on return-path ACKs.
  }
  // A delayed callback from a stopped native stream cannot resolve a new ARM.
  if(data.id&&data.id!==udpStreamId)return;
  if(data.type==='start'){
   const w=udpReadyWaiter;udpReadyWaiter=null;
   if(w){clearTimeout(w.timer);w.resolve();}
+  return;
+ }
+ if(data.type==='tx'){
+  if(!apStreaming()||!rcSession)return;
+  // A local send is not a Kit receive/apply ACK. Keep RX sequence/time intact.
+  firmwareAck={seq:0,at:0,rtt:0,inputArmed:false,protocol:'ZJUDP1',...firmwareAck,
+   ackRequired:false,requestedInputArmed:rcInputArmed,sentSeq:Number(data.sentSeq)||0};
+  udpStats={...(udpStats||{}),sent:data.sent,ackReceived:data.ackReceived,...udpFeedback(data)};
+  trace('udp_tx',{transport:link,source:'ANDROID',sent:data.sent,...udpFeedback(data),outcome:'ok'});
+  if(el('kitRcAck'))el('kitRcAck').textContent='AP STREAM TX #'+firmwareAck.sentSeq+' • RX '+(firmwareAck.seq?'#'+firmwareAck.seq:'unconfirmed');
   return;
  }
  if(data.type==='nack'){
@@ -673,7 +686,7 @@ async function claimRc(){
     // Attach both failure paths before entering the bridge: a synchronous
     // launch/key error must not leave the startup waiter unhandled.
     await Promise.all([udpReady,Promise.resolve().then(()=>
-     native.startUdp(udpStreamId,ip,verifiedKitId,d.session,auth.udpKey(d.session),d.udpFeedbackVersion===2&&native?.udpFeedbackVersion===2?2:1))]);
+     native.startUdp(udpStreamId,ip,verifiedKitId,d.session,auth.udpKey(d.session),d.udpFeedbackVersion===2&&native?.udpFeedbackVersion===2?2:1,link.toUpperCase()))]);
     if(epoch!==rcEpoch||networkEpoch!==linkEpoch||id!==verifiedKitId||document.hidden)
      throw Error('UDP start cancelled on network change');
     udpActive=true;
@@ -712,7 +725,7 @@ async function armControls(){
  rcInputArmed=true;
  try{
   await previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'},true);
-  if(!rcInputArmed||!firmwareAck?.inputArmed)throw Error('Kit did not acknowledge ARM');
+  if(!rcInputArmed||!apStreaming()&&!firmwareAck?.inputArmed)throw Error('Kit did not acknowledge ARM');
  }catch(error){await releaseRc();throw error;}
  return firmwareAck;
 }
@@ -724,6 +737,12 @@ function previewControls(m,critical=false){
   const values=[Math.max(1000,Math.min(2000,Math.round(m.throttle))),
    clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),1000,1000];
   native.offerUdp(values.join(','),rcInputArmed);
+  if(apStreaming()){
+   if(!firmwareAck)firmwareAck={seq:0,at:0,rtt:0,inputArmed:false,protocol:'ZJUDP1',
+    ackRequired:false,requestedInputArmed:rcInputArmed,sentSeq:0};
+   // ARM begins sending low-throttle input immediately; telemetry may confirm it later.
+   return critical?Promise.resolve(firmwareAck):true;
+  }
   if(!critical)return true;
   return new Promise((resolve,reject)=>{
    if(udpArmWaiter){clearTimeout(udpArmWaiter.timer);udpArmWaiter.reject(Error('UDP ARM superseded'));}
@@ -763,8 +782,8 @@ function previewControls(m,critical=false){
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
  // Never queue expensive signed status/SSID verification ahead of ARM/RC.
- // A missing RC ACK is handled by native UDP and the 500ms firmware
- // watchdog; it is NOT evidence that the AP Wi-Fi association is gone.
+ // AP feedback is optional; native local-input expiry and the firmware
+ // receive/apply watchdog enforce freshness. ACK silence does not prove Wi-Fi loss.
  // Poll only after diagnostic control is released, even when ACK is stale.
  if(rcClaiming||rcSession||previewBusy)return;
  const epoch=linkEpoch;statusBusy=true;
@@ -1101,6 +1120,6 @@ window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
- window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,inputArmed:()=>rcInputArmed&&!!firmwareAck?.inputArmed,scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&Date.now()-lastStatus<12000,feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&Date.now()-lastStatus<12000,mode:()=>mode};
+ window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

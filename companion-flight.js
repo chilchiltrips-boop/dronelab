@@ -5,6 +5,11 @@ let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',
 let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0;
 const directKit=()=>!peer?.status()?.connected&&!!window.ZebjusNetwork?.isConnected?.();
 const kitArmed=()=>directKit()&&!!window.ZebjusNetwork?.inputArmed?.();
+const kitInputState=()=>{
+ const f=window.ZebjusNetwork?.feedback?.();
+ if(!kitArmed())return 'KIT DISARMED';
+ return f?.inputArmed&&f.at>0&&Date.now()-f.at<=500?'KIT INPUT ARMED':'ARM STREAMING • KIT UNCONFIRMED';
+};
 let lastControlSentAt=0,lastControlAttemptAt=0,lastRejectedAt=0,acceptedFrames=0,rejectedFrames=0;
 function controlLinkDiagnostic(now=performance.now()){
  const ackAge=lastAckAt?Math.round(now-lastAckAt):-1;
@@ -69,7 +74,7 @@ function refreshConnectionLabel(){
 function updateStatus(message){
  $('flightWarning').textContent=message;
  refreshConnectionLabel();
- $('flightOwner').textContent=directKit()?(kitArmed()?'ANDROID KIT INPUT ARMED':'KIT CONNECTED • PRESS ARM'):isOwned()?'ANDROID OWNS CONTROLS':peer?.status().controller==='web'?'WEB OWNS CONTROLS':'INPUT PREVIEW • NO FLIGHT COMMAND';
+ $('flightOwner').textContent=directKit()?(kitArmed()?'ANDROID • '+kitInputState():'KIT CONNECTED • PRESS ARM'):isOwned()?'ANDROID OWNS CONTROLS':peer?.status().controller==='web'?'WEB OWNS CONTROLS':'INPUT PREVIEW • NO FLIGHT COMMAND';
 }
 function stickRender(side,position){
  const pad=$(side==='left'?'flightLeftZone':'flightRightZone'),ring=$(side==='left'?'flightLeftRing':'flightRightRing'),knob=$(side==='left'?'flightLeftKnob':'flightRightKnob'),label=$(side==='left'?'flightLeftTouch':'flightRightTouch');
@@ -81,7 +86,7 @@ function stickRender(side,position){
 }
 function render(){
  refreshConnectionLabel();
- if(directKit())$('flightOwner').textContent=kitArmed()?'ANDROID KIT INPUT ARMED':window.ZebjusNetwork?.canArm?.()?'KIT CONNECTED • PRESS ARM':'KIT CONNECTED • CHECK CONTROL PERMISSION / FIRMWARE';
+ if(directKit())$('flightOwner').textContent=kitArmed()?'ANDROID • '+kitInputState():window.ZebjusNetwork?.canArm?.()?'KIT CONNECTED • PRESS ARM':'KIT CONNECTED • CHECK CONTROL PERMISSION / FIRMWARE';
  const preview=current(),a=isOwned()&&armed&&lastApplied?.armed?lastApplied:null;
  const now=performance.now();if(a||kitArmed()){if(!clockAt)clockAt=now;clockElapsed=now-clockAt}else if(clockAt){clockElapsed=now-clockAt;clockAt=0}
  const seconds=Math.floor(clockElapsed/1000);$('flightTimer').textContent=String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');
@@ -96,13 +101,25 @@ function render(){
  $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
- const diagnostic=window.ZebjusNetwork?.feedback?.();if(diagnostic){$('flightFeedback').textContent='ESP32 RX #'+diagnostic.seq+' • '+diagnostic.rtt+' ms • '+(Date.now()-diagnostic.at>350?'STALE':diagnostic.inputArmed?'INPUT ARMED • MOTORS OFF':'DISARMED • MOTORS OFF');$('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';if(directKit()){$('flightLatency').textContent=diagnostic.rtt+' ms';$('flightModeState').textContent=(diagnostic.inputArmed?'KIT INPUT ARMED':'KIT DISARMED')+' • '+mode.toUpperCase();}}
+ const diagnostic=window.ZebjusNetwork?.feedback?.();
+ if(diagnostic){
+  if(diagnostic.ackRequired===false){
+   $('flightFeedback').textContent='AP STREAM TX #'+(diagnostic.sentSeq||0)+' • RX '+(diagnostic.seq?'#'+diagnostic.seq:'unconfirmed')+' • '+kitInputState()+' • MOTORS OFF';
+  }else{
+   $('flightFeedback').textContent='ESP32 RX #'+diagnostic.seq+' • '+diagnostic.rtt+' ms • '+(Date.now()-diagnostic.at>350?'STALE':diagnostic.inputArmed?'INPUT ARMED • MOTORS OFF':'DISARMED • MOTORS OFF');
+  }
+  $('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';
+  if(directKit()){
+   $('flightLatency').textContent=diagnostic.seq?diagnostic.rtt+' ms':'—';
+   $('flightModeState').textContent=kitInputState()+' • '+mode.toUpperCase();
+  }
+ }
  $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
- $('flightSent').textContent='#'+(directKit()?diagnostic?.seq||0:seq);
- if(directKit())$('flightAppliedControls').textContent=diagnostic?'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED')+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
+ $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
+ if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
  for(const side of ['left','right'])stickRender(side,drag[side]);
 }
@@ -127,7 +144,8 @@ function setupStick(side){
 function tick(now){
  if(!loopStarted)return;
  const dt=last?Math.min(.08,Math.max(0,(now-last)/1000)):0;last=now;
- // UDP ACK/INPUT watchdogs run against monotonic time in the native sender.
+ // Local-input expiry runs against monotonic time in the native sender.
+ // AP ACK feedback is optional; STA retains its native feedback watchdog.
   // A congested WebView/UI callback queue is NOT proof the Kit missed ACKs.
   // Keep the legacy HTTP feedback watchdog until that fallback is removed.
   const kitFeedback=window.ZebjusNetwork?.feedback?.();
@@ -236,7 +254,7 @@ function bind(){
    try{
     await window.ZebjusNetwork.armControls();
     if(generation!==kitArmGeneration)return;
-    clockAt=clockElapsed=0;updateStatus('KIT INPUT ARMED • MOTORS OFF');
+    clockAt=clockElapsed=0;updateStatus(kitInputState()+' • MOTORS OFF');
    }catch(error){if(generation===kitArmGeneration)updateStatus('KIT ARM: '+error.message)}
    finally{if(generation===kitArmGeneration){kitArmPending=false;render()}}
    return;

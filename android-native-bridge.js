@@ -9,8 +9,9 @@
  root.ZebjusNative=Object.freeze({
   managementProtocol:'ZJM1',
   udpFeedbackVersion:2,
+  apStreamingVersion:1,
   requestSecure:(...args)=>send('requestSecure',...args),
-  startUdp:(id,ip,device,claim,derivedKey,feedbackVersion=1)=>send('startUdp',id,ip,device,claim,derivedKey,String(feedbackVersion)),
+  startUdp:(id,ip,device,claim,derivedKey,feedbackVersion=1,transport='STA')=>send('startUdp',id,ip,device,claim,derivedKey,String(feedbackVersion),transport),
   offerUdp:(channels,inputArmed)=>send('offerUdp',channels,String(!!inputArmed)),
   stopUdp:()=>send('stopUdp'),
   cancelRequest:id=>send('cancelRequest',id),

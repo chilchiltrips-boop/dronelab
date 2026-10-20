@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 
 const source=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 
-test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and independent 500 ms firmware safety; WebView cannot duplicate it',()=>{
+test('50 Hz AP UDP feedback is optional; STA retains bounded feedback checks and firmware input safety stays independent',()=>{
  const flight=source('companion-flight.js');
  const network=source('companion-network.js');
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
@@ -22,6 +22,9 @@ test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and
  assert.match(native,/now-lastInputAt>INPUT_STALE_MS/);
  assert.match(native,/report\("error","UDP_ACK_TIMEOUT"\);clear\(\);/);
  assert.match(native,/ACK_TIMEOUT_MS=750/);
+ assert.match(native,/if\(!apStreaming\)\{/);
+ assert.match(native,/o\.put\("feedbackStopMs",apStreaming\?0:ACK_TIMEOUT_MS\)/);
+ assert.match(network,/const apStreaming=\(\)=>udpActive&&link==='ap'&&native\?\.apStreamingVersion===1/);
  assert.match(native,/if\(feedbackVersion==1&&lastAckSequence>0/);
  const client=source('companion-network.js');
  assert.match(client,/data\.type==='warning'/);
