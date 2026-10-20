@@ -176,7 +176,8 @@ final class FlightCoreUdpStream {
                     lastAckAt=lastUiAt=0;sequence=lastAckSequence=accepted=rejected=0;
                     lastSendAt=maxSendGapMs=maxAckGapMs=0;
                     lastInputAt=SystemClock.elapsedRealtime();
-                    receiver.execute(()->receiveLoop(requestGeneration,ds));
+                    final DatagramSocket receiveSocket=ds;
+                    receiver.execute(()->receiveLoop(requestGeneration,receiveSocket));
                     timer=sender.scheduleAtFixedRate(this::tick,0,20,TimeUnit.MILLISECONDS);
                     report("start",null);
                 }catch(Exception error){
