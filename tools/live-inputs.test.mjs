@@ -93,8 +93,8 @@ test('Live Inputs is a standalone workspace, read-only, responsive and reachable
  for(const id of ['fwLiveInputs','liKitName','liInputSource','liKitTransport','liLiveState',
   'liLeftDot','liRightDot','liThrottle','liRoll','liPitch','liYaw','liRate','liAge','liCounts',
   'liInputArm','liLed','liMotors','liHelp'])assert.ok(html.includes('id="'+id+'"'),id);
- assert.match(workspace,/relocate\\('\\.fw-live-inputs-card','inputs'\\)/);
- assert.match(workspace,/relocate\\('#kitAckDiagnostics','diagnostics'\\)/);
+ assert.ok(workspace.includes("relocate('.fw-live-inputs-card','inputs')"));
+ assert.ok(workspace.includes("relocate('#kitAckDiagnostics','diagnostics')"));
  assert.match(script,/request\('\/api\/rc\/snapshot'\)/);
  assert.match(script,/reply\?\.kitId!==id/);
  assert.match(script,/ZebjusSerialRcDecoder/);
