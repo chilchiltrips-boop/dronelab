@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 
 const source=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 
-test('50 Hz encrypted UDP owns its native watchdog; WebView ACK delivery cannot trigger a second 350ms STOP',()=>{
+test('50 Hz encrypted UDP keeps independent 500 ms feedback watchdog; WebView cannot duplicate it',()=>{
  const flight=source('companion-flight.js');
  const network=source('companion-network.js');
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
