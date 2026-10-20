@@ -10,7 +10,7 @@ test('My Kits is consolidated into one icon navigated Devices & Firmware tab',()
   assert.ok(!h.includes('data-tab="settings" title="MY KITS"'));
   assert.match(h,/id="devicesWorkspace"/);
   assert.match(h,/href="#dw-icon-wifi"/);
-  for(const view of ['overview','connection','wifi','firmware','mobile','diagnostics','security'])
+  for(const view of ['overview','connection','wifi','firmware','mobile','inputs','diagnostics','security'])
    for(const prefix of ['dw-panel-','dw-tab-'])assert.ok(h.includes('id="'+prefix+view+'"'),path+' '+prefix+view);
   for(const id of ['fwNetworkFlashBtn','fwUsbFlashBtn','kitWifiScan','kitWifiSave','kitSavedRefresh','kitAdmin','kitMobilePairDetails','connectionDialog','kitConnect'])
    assert.equal(h.split('id="'+id+'"').length-1,1,path+' '+id+' unique control');
