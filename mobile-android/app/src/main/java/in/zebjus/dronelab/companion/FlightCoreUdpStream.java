@@ -212,7 +212,7 @@ final class FlightCoreUdpStream {
                 if(next[i]<1000||next[i]>2000)return;
             }
         }catch(NumberFormatException invalid){return;}
-        if(feedbackNeutralized&&armed)return; // explicit new claim required after degraded link
+        if(feedbackNeutralized)return; // require new authenticated claim after degraded link
         if(armed&&!inputArm&&next[0]>1050)return;
         System.arraycopy(next,0,channels,0,6);
         inputArm=armed;lastInputAt=SystemClock.elapsedRealtime();
