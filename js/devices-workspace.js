@@ -9,7 +9,7 @@
  if(!shell)return;
  const names={
   overview:'Overview',connection:'Kit Connection',wifi:'Wi-Fi & Network',
-  firmware:'Firmware Flash',mobile:'Mobile Controller',
+  firmware:'Firmware Flash',mobile:'Mobile Controller',inputs:'Live Inputs',
   diagnostics:'Diagnostics',security:'Security & Admin'
  };
  let selected='overview',ready=false,securityVisited=false;
@@ -140,7 +140,7 @@
     '#kitMobilePairDetails','.settings-heading','.kit-legacy-network',
     '.kit-browser-access','#kitTrustHelp','.fw-serial-head',
     '.fw-serial-toolbar','#fwSerialMonitorPane','#fwSerialPlotterPane',
-    '#fwSerialMonitorBtn','#fwSerialClearBtn','#kitEvents'
+    '#fwSerialMonitorBtn','#fwSerialClearBtn','#kitEvents','#kitAckDiagnostics','#kitNetworkMonitor'
    ];
    const missing=required.filter(selector=>!document.querySelector(selector));
    if(missing.length)throw Error('Missing controls: '+missing.join(', '));
@@ -158,7 +158,7 @@
    overview.insertBefore(controlActions,overviewContent);
 
    relocate('.fw-connect-card','connection');
-   relocate('.fw-live-inputs-card','connection');
+   relocate('.fw-live-inputs-card','inputs');
    relocate('.fw-available-card','connection');
    relocate('.fw-rename-card','connection');
    relocate('.fw-network-card','wifi');
@@ -169,7 +169,11 @@
    relocate('#kitAdmin','security');
    relocate('.settings-heading','mobile');
    relocate('#kitMobilePairDetails','mobile');
-   const events=$('kitEvents').closest('details');
+   // Move the exact existing nodes (not clones): preserve recorder storage and listeners.
+   relocate('#kitAckDiagnostics','diagnostics');
+   const networkEvents=$('kitNetworkMonitor')?.closest('details');
+   if(networkEvents)body('diagnostics').append(networkEvents);
+   const events=$('kitEvents')?.closest('details');
    if(events)body('diagnostics').append(events);
    relocate('.fw-serial-head','diagnostics');
    relocate('.fw-serial-toolbar','diagnostics');
