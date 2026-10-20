@@ -708,13 +708,14 @@ function setupSerialConveniences(){
 }
 function clearSerialOutput(){const out=$('#fwSerialOutput');if(out)out.textContent='';readableKitMonitor?.clear();serialDisplayBuffer='';monitorLineBuffer='';telMissed=0;telRxSeq=null;diagnosticRenderedSeq=null;renderLiveDiagnosticLine()}
 function clearMonitorTimer(){if(monitorIdleTimer){clearTimeout(monitorIdleTimer);monitorIdleTimer=null}}
+let monitorGeneration=0;
 async function closeSerialMonitor(keepWanted=false){
  if(!keepWanted)monitorWanted=false;
  readableKitMonitor?.clear();
  clearMonitorTimer();
  const reader=monitorReader,port=monitorPort,task=monitorTask;
  usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
- monitorPort=null;monitorReader=null;monitorTask=null;usbRuntimeInfo=null;usbRomDownload=false;
+ ++monitorGeneration;monitorPort=null;monitorReader=null;monitorTask=null;usbRuntimeInfo=null;usbRomDownload=false;
  kitStatus();
  try{await reader?.cancel()}catch{}
  try{await task}catch{}
@@ -797,7 +798,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
       catch(error){usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open original or re-enumerated USB Serial port: '+String(error?.message||error))}
     }else{usbLastPort=null;serialUi(false,'Port unavailable • reconnect USB');throw Error('Cannot open serial port. Close Arduino IDE Serial Monitor and reconnect/select the device. '+e.message)}
    }
-  monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
+  ++monitorGeneration;monitorPort=port;monitorReceivedBytes=0;monitorAutoReset=false;monitorLineBuffer='';
   diagnosticSample=null;diagnosticAt=0;diagnosticError='';diagnosticRenderedSeq=null;
   usbRuntimeInfo=null;usbRomDownload=false;usbSensorState='Waiting for sensor status';usbBusPins='--';usbLedState='--';usbBusMode='--';kitStatus();
   // Native CDC firmware often waits for DTR before delivering Serial.println() messages.
@@ -819,7 +820,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
    }catch(e){if(monitorPort===port)log('Serial stream ended: '+e.message)}
    finally{
     try{reader.releaseLock()}catch{}
-    if(monitorPort===port){monitorPort=null;monitorReader=null;monitorTask=null;clearMonitorTimer();usbRuntimeInfo=null;usbRomDownload=false;try{await port.close()}catch{}kitStatus();serialUi(false,monitorWanted?'USB stream lost • reconnect board':'Disconnected')}
+    if(monitorPort===port){++monitorGeneration;monitorPort=null;monitorReader=null;monitorTask=null;clearMonitorTimer();usbRuntimeInfo=null;usbRomDownload=false;try{await port.close()}catch{}kitStatus();serialUi(false,monitorWanted?'USB stream lost • reconnect board':'Disconnected')}
    }
   })();
   serialIdleWatch(port,0);
@@ -881,6 +882,7 @@ function initSerialTools(){
    disconnect:()=>closeSerialMonitor(),
    reset:()=>resetSerialBoard(),
    isOpen:()=>!!monitorPort,
+   generation:()=>monitorGeneration,
    isFlashing:()=>!!busy,
    baud:()=>serialBaud(),
    status:()=>monitorPort?'connected':busy?'busy':'disconnected',
