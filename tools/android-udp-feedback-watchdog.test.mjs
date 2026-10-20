@@ -21,6 +21,11 @@ test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and
  assert.ok(native.includes("receiver.execute(()->receiveLoop("));
  assert.match(native,/now-lastInputAt>INPUT_STALE_MS/);
  assert.match(native,/report\("error","UDP_ACK_TIMEOUT"\);clear\(\);/);
+ assert.match(native,/ACK_TIMEOUT_MS=750/);
+ assert.match(native,/if\(feedbackVersion==1&&lastAckSequence>0/);
+ const client=source('companion-network.js');
+ assert.match(client,/data\.type==='warning'/);
+ assert.match(client,/UDP_FIRMWARE_RX_STALE/);
  assert.match(native,/report\("error","UDP_INPUT_STALE"\);clear\(\);/);
 });
 
