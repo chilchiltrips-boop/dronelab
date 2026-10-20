@@ -7,7 +7,8 @@
 // At most ~6 read requests/s while this pane is visible; never stack slow Wi-Fi/WebRTC requests.
 const SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800;
 // Monitor-only HTTP/RPC reads are rate-limited; native UDP command streaming stays at 50 Hz.
-const NETWORK_POLL_MS=250, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
+const NETWORK_POLL_MS=140, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
+const ACTIVE_CONTROL_POLL_MS=250;
 const channels=['throttle','roll','pitch','yaw'];
 const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
 const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
@@ -161,7 +162,7 @@ function initLiveInputs(){
    const hz=rate.observe(id,reply,at);
    // Period is measured start-to-start; network wait already consumes budget.
    // A single in-flight request still caps load when ESP32/WRTC is slow.
-   readFailures=0;nextPollAt=Math.max(at,startedAt+NETWORK_POLL_MS);
+   readFailures=0;nextPollAt=Math.max(at,startedAt+(current.rc?.active===true?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS));
    sample={kitId:id,rc:reply,at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
     motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
    display();
