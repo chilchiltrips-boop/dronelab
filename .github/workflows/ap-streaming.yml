@@ -36,3 +36,11 @@ jobs:
         run: |
           npm test
           npm run check
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Check AP touchscreen control without ACKs
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/ap-stream-http.log 2>&1 &
+          node tools/ap-streaming-browser.mjs
