@@ -578,6 +578,7 @@ async function readStatus(){
   managementProtocol:d.managementProtocol,udpActive:d.udp?.active===true,
   udpReceived:Number(d.udp?.received),udpRejected:Number(d.udp?.rejected),
   rxAckSent:Number(d.udp?.rxAckSent),rxAckFailed:Number(d.udp?.rxAckFailed),
+  rxAckSuppressed:Number(d.udp?.rxAckSuppressed),
   appliedAckSent:Number(d.udp?.appliedAckSent),appliedAckFailed:Number(d.udp?.appliedAckFailed),
   nackSent:Number(d.udp?.nackSent),nackFailed:Number(d.udp?.nackFailed),
   maxAckTxUs:Number(d.udp?.maxAckTxUs),maxRxToAckUs:Number(d.udp?.maxRxToAckUs),
