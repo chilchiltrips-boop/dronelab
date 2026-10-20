@@ -31,7 +31,8 @@ static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
 #else
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
 #endif
-static uint32_t zjUdpLastAppliedNoticeAt=0;
+static uint32_t zjUdpLastAppliedNoticeAt=0,zjUdpLastRxNoticeAt=0;
+static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=50; // 20 Hz on feedback v2
 static bool zjUdpNotifiedArm=false;
 static uint32_t zjUdpAckAttempted[4]={},zjUdpAckSent[4]={},zjUdpAckFailed[4]={};
 static uint32_t zjUdpMaxTxUs=0,zjUdpMaxRxToAckUs=0;
@@ -73,7 +74,7 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
  zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
- zjUdpLastAppliedNoticeAt=0;zjUdpNotifiedArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
+ zjUdpLastAppliedNoticeAt=zjUdpLastRxNoticeAt=0;zjUdpNotifiedArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
  for(int i=0;i<4;i++)zjUdpAckAttempted[i]=zjUdpAckSent[i]=zjUdpAckFailed[i]=0;
  zjUdpHasPending=zjUdpRequestedArm=zjUdpAppliedArm=zjUdpTerminalPending=zjUdpTerminalReported=false;
  zjUdpEndReason=zjUdpLastNack=0;zjUdpLastNackAt=0;zjUdpActive=zjUdpConfigured=true;
@@ -218,7 +219,11 @@ static void zjUdpReceiverTask(void*){
    zjUdpLastNack=reason;if(notify)zjUdpLastNackAt=now;
    if(terminal){zjUdpActive=zjUdpHasPending=false;zjUdpEndReason=reason;}
   }else{
-   if(!zjUdpLastSeq)zjUdpFirstRx=now;
+   // First RX and ARM/DISARM transitions notify immediately; otherwise 20 Hz.
+    notify=version!=2||!zjUdpLastSeq||armed!=zjUdpRequestedArm||
+      uint32_t(now-zjUdpLastRxNoticeAt)>=ZJ_UDP_RX_FEEDBACK_MS;
+    if(version==2&&notify)zjUdpLastRxNoticeAt=now;
+    if(!zjUdpLastSeq)zjUdpFirstRx=now;
    zjUdpLastSeq=seq;zjUdpLastRx=now;zjUdpRequestedArm=armed;++zjUdpReceived;
    zjUdpPendingSeq=seq;zjUdpPendingAt=now;
    for(int i=0;i<6;i++)zjUdpPendingChannels[i]=ch[i];
