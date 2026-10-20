@@ -161,4 +161,9 @@ try{
  writeFileSync('test-output/network/result.json',JSON.stringify({result:'PASS',execution:'Chromium + real Pyodide; simulated native bridge and ESP32 HTTP',accepted,requests:calls.length,errors},null,2));
  console.log('PASS simulated network integration: USB-free direct AP Wi-Fi setup → Test & Save → read-only same-ID STA handover; actual Android touch → signed AP frames → STA → actual Pyodide read_joystick; STOP neutral, no Python ownership');
 }catch(e){await web.screenshot({path:'test-output/network/failure.png'}).catch(()=>{});console.error('Page errors:',errors);console.error(e);console.error('Requests:',calls.filter(c=>/rc\/(claim|release|stop)/.test(c.path)));console.error('Terminal:',await web.locator('#pythonTerminal').textContent().catch(()=>''));console.error('Web:',await web.locator('#kitMessage').textContent().catch(()=>''),'Phone:',await phone.locator('#kitNetStatus').textContent().catch(()=>''));process.exitCode=1}
-finally{await browser.close()}
+finally{
+ // Pending read-only GET routes may still be active when a simulated Kit test
+ // ends. Unregister them before closing Chromium to avoid TargetClosedError.
+ await laptop.unrouteAll({behavior:'ignoreErrors'}).catch(()=>{});
+ await browser.close();
+}
