@@ -1,0 +1,46 @@
+name: AP UDP Streaming Regression
+on:
+  push:
+    branches: [work/ap-ack-free-stream-20261020, main]
+    paths:
+      - 'companion-network.js'
+      - 'companion-flight.js'
+      - 'android-native-bridge.js'
+      - 'js/kit-ack-diagnostics.js'
+      - 'mobile-android/**'
+      - 'tools/**'
+      - '.github/workflows/ap-streaming.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Check AP streaming, native UDP feedback and firmware receiver
+        run: |
+          node --check companion-network.js
+          node --check companion-flight.js
+          node --check android-native-bridge.js
+          node --test tools/udp-stream.test.mjs tools/android-direct-kit-control.test.mjs tools/android-udp-feedback-watchdog.test.mjs tools/udp-rc-contract.test.mjs
+      - name: Run repository regressions
+        run: |
+          npm test
+          npm run check
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Check AP touchscreen control without ACKs
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/ap-stream-http.log 2>&1 &
+          node tools/ap-streaming-browser.mjs

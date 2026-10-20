@@ -33,8 +33,8 @@ final class FlightCoreUdpStream {
     static final int PORT=4210, PACKET=58;
     static final int FEEDBACK_PACKET=72;
     // Fresh local input and firmware 500 ms receive/apply deadman are independent
-    // of return-path ACK delivery. Bounded 750 ms v2 feedback outage permits
-    // brief radio jitter but never stale local joystick input or unbounded throttle.
+    // of return-path ACK delivery. AP sends without an ACK watchdog; STA/legacy
+    // callers retain their existing bounded feedback policy.
     static final long FW_DEADMAN_MS=500, ACK_WARN_MS=350, ACK_TIMEOUT_MS=750;
     static final long LEGACY_ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300;
     static final int NO_ACK_SENT_LIMIT=38;
@@ -64,7 +64,8 @@ final class FlightCoreUdpStream {
         lock.acquire();radioLock=lock;
     }
     private byte[] key, token, prefix;
-    private boolean active, inputArm, acknowledgedArm;
+    private boolean active, inputArm, acknowledgedArm, apStreaming;
+    private long lastTxUiAt;
     private long lastInputAt, lastAckAt, lastUiAt, sent, ackCount, estimatedLost, lastRtt, jitter;
     private long lastSendAt, maxSendGapMs, maxAckGapMs;
     private int feedbackVersion=1,lastAppliedSeq,receiveAgeMs=-1,applyAgeMs=-1;
@@ -106,7 +107,8 @@ final class FlightCoreUdpStream {
             o.put("id",streamId);
             o.put("type",type);
             o.put("ok",!"error".equals(type));
-            o.put("seq",lastAckSequence);
+            o.put("seq",lastAckSequence);o.put("sentSeq",sequence);
+            o.put("ackRequired",!apStreaming);o.put("requestedInputArmed",inputArm);
             o.put("sent",sent);o.put("ackReceived",ackCount);
             o.put("lost",estimatedLost);o.put("rejected",rejected);o.put("accepted",accepted);
             o.put("roundTripMs",lastRtt);o.put("jitterMs",jitter);
@@ -122,7 +124,7 @@ final class FlightCoreUdpStream {
                 lastAckAt==0?"WAITING_RX":
                 SystemClock.elapsedRealtime()-lastAckAt>ACK_WARN_MS?"DEGRADED":"HEALTHY");
             o.put("firmwareDeadmanMs",FW_DEADMAN_MS);
-            o.put("feedbackWarnMs",ACK_WARN_MS);o.put("feedbackStopMs",ACK_TIMEOUT_MS);
+            o.put("feedbackWarnMs",ACK_WARN_MS);o.put("feedbackStopMs",apStreaming?0:ACK_TIMEOUT_MS);
             o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
@@ -156,9 +158,12 @@ final class FlightCoreUdpStream {
         start(id,ip,device,claim,keyHex,1);
     }
     synchronized void start(String id,String ip,String device,String claim,String keyHex,int feedback){
+        start(id,ip,device,claim,keyHex,feedback,false);
+    }
+    synchronized void start(String id,String ip,String device,String claim,String keyHex,int feedback,boolean apStream){
         startupGeneration++;
         clear();
-        streamId=id;
+        streamId=id;apStreaming=apStream;lastTxUiAt=0;
         sent=ackCount=estimatedLost=lastRtt=jitter=0;
         lastUiAt=0;lastAckSequence=accepted=rejected=0;
         lastSendAt=maxSendGapMs=maxAckGapMs=0;
@@ -273,31 +278,39 @@ final class FlightCoreUdpStream {
             if(lastSendAt>0)maxSendGapMs=Math.max(maxSendGapMs,sendAt-lastSendAt);
             lastSendAt=sendAt;
             sent++;
-            final long watchdogNow=SystemClock.elapsedRealtime();
-            final long ackStopMs=feedbackVersion==2?ACK_TIMEOUT_MS:LEGACY_ACK_TIMEOUT_MS;
-            final long feedbackAge=lastAckAt>0?watchdogNow-lastAckAt:0;
-            final long appliedProgressAge=lastAppliedProgressAt>0?
-                    watchdogNow-lastAppliedProgressAt:watchdogNow-firstRxAckAt;
-            final boolean recentV2=feedbackVersion==2&&lastFeedbackAt>0&&
-                    watchdogNow-lastFeedbackAt<=ACK_WARN_MS;
-            // A fresh authenticated Kit response can prove that firmware RX or
-            // apply has already stalled. A silent return path proves neither.
-            if(inputArm&&recentV2&&receiveAgeMs>=FW_DEADMAN_MS){
-                report("error","UDP_FIRMWARE_RX_STALE");clear();
-            }else if(inputArm&&recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS){
-                report("error","UDP_FIRMWARE_APPLY_STALE");clear();
-            }else if(inputArm&&feedbackVersion==2&&lastAckAt>0&&
-                    feedbackAge>ACK_WARN_MS&&!feedbackDelayWarned){
-                feedbackDelayWarned=true;
-                report("warning","UDP_FEEDBACK_DELAY");
-            }else if(inputArm&&lastAckAt>0&&feedbackAge>ackStopMs){
-                report("error","UDP_ACK_TIMEOUT");clear();
-            }else if(inputArm&&lastAckAt==0&&sent>(feedbackVersion==2?
-                    NO_ACK_SENT_LIMIT:25)){
-                report("error","UDP_NO_ACK");clear();
-            }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
-                    appliedProgressAge>ACK_TIMEOUT_MS){
-                report("error","UDP_APPLY_TIMEOUT");clear();
+            // AP control follows a continuous latest-value stream. Feedback is
+            // diagnostic only: missing/delayed RX or APPLIED ACK cannot stop TX.
+            // Local input expiry, explicit STOP and firmware terminal NACK remain.
+            if(!apStreaming){
+                final long watchdogNow=SystemClock.elapsedRealtime();
+                final long ackStopMs=feedbackVersion==2?ACK_TIMEOUT_MS:LEGACY_ACK_TIMEOUT_MS;
+                final long feedbackAge=lastAckAt>0?watchdogNow-lastAckAt:0;
+                final long appliedProgressAge=lastAppliedProgressAt>0?
+                        watchdogNow-lastAppliedProgressAt:watchdogNow-firstRxAckAt;
+                final boolean recentV2=feedbackVersion==2&&lastFeedbackAt>0&&
+                        watchdogNow-lastFeedbackAt<=ACK_WARN_MS;
+                // A fresh authenticated Kit response can prove that firmware RX or
+                // apply has already stalled. A silent return path proves neither.
+                if(inputArm&&recentV2&&receiveAgeMs>=FW_DEADMAN_MS){
+                    report("error","UDP_FIRMWARE_RX_STALE");clear();
+                }else if(inputArm&&recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS){
+                    report("error","UDP_FIRMWARE_APPLY_STALE");clear();
+                }else if(inputArm&&feedbackVersion==2&&lastAckAt>0&&
+                        feedbackAge>ACK_WARN_MS&&!feedbackDelayWarned){
+                    feedbackDelayWarned=true;
+                    report("warning","UDP_FEEDBACK_DELAY");
+                }else if(inputArm&&lastAckAt>0&&feedbackAge>ackStopMs){
+                    report("error","UDP_ACK_TIMEOUT");clear();
+                }else if(inputArm&&lastAckAt==0&&sent>(feedbackVersion==2?
+                        NO_ACK_SENT_LIMIT:25)){
+                    report("error","UDP_NO_ACK");clear();
+                }else if(feedbackVersion==2&&inputArm&&firstRxAckAt>0&&
+                        appliedProgressAge>ACK_TIMEOUT_MS){
+                    report("error","UDP_APPLY_TIMEOUT");clear();
+                }
+            }
+            if(active&&apStreaming&&sendAt-lastTxUiAt>=100){
+                lastTxUiAt=sendAt;report("tx",null);
             }
         }catch(Exception error){report("error","UDP_SEND_OR_AUTH_FAILED");clear();}
     }

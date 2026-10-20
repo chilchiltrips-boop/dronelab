@@ -7,7 +7,8 @@ const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function bench(udp=false,feedbackVersion=1){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
- let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true;
+ let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0;
+ const Clock=class extends Date{static now(){return Date.now()+clockOffset}};
  const element=id=>{
   if(id==='kitRcPreview')return null;
   if(!elements.has(id))elements.set(id,{value:'',checked:false,disabled:false,textContent:'',dataset:{},
@@ -45,7 +46,7 @@ function bench(udp=false,feedbackVersion=1){
   offerUdp:(channels,inputArmed)=>queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'ack',seq:++seq,inputArmed,roundTripMs:2})),stopUdp(){}
  });}
  const document={readyState:'loading',hidden:false,getElementById:element,addEventListener:(type,fn)=>handlers.set('document:'+type,fn)};
- vm.runInNewContext(source,{window:win,document,Date,performance,URLSearchParams,Promise,Set,Map,
+ vm.runInNewContext(source,{window:win,document,Date:Clock,performance,URLSearchParams,Promise,Set,Map,
   setTimeout:(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();return t},clearTimeout,setInterval:(fn,ms)=>timers.push({fn,ms}),
   CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
  handlers.get('document:DOMContentLoaded')();
@@ -53,7 +54,7 @@ function bench(udp=false,feedbackVersion=1){
   fail:e=>failure=e,failClaim:e=>claimFailure=e,holdStatus:p=>delayStatus=p,holdClaim:p=>delayClaim=p,holdPreview:p=>delayPreview=p,
   async connect(sta=false){if(sta){transport='STA';element('kitLink').value='sta';handlers.get('kitLink:change')();element('kitIp').value='192.168.1.22';handlers.get('kitIp:change')();element('kitKey').value='label'}
    handlers.get('kitConnect:click')();await settle();await settle();assert.equal(win.ZebjusNetwork.isConnected(),true);},
-  observer:()=>authorized=false};
+  observer:()=>authorized=false,advance:ms=>clockOffset+=ms};
 }
 for(const sta of [false,true])test(`direct ${sta?'STA':'AP'} ARM claims and ACKs without diagnostic toggle; STOP releases`,async()=>{
  const b=bench();await b.connect(sta);assert.equal(b.network.canArm(),true);
@@ -265,4 +266,59 @@ test('RX-only feedback cannot confirm ARM; APPLIED feedback does, and reorder NA
  b.win.zebjusNativeUdpEvent({...feedback,type:'error',reason:'UDP_NACK_APPLY_STALLED'});await settle();
  assert.equal(b.network.inputArmed(),false);assert.equal(b.network.isConnected(),true);
  assert.ok(b.requests.some(r=>r.route==='/api/rc/release'));
+});
+
+test('AP ARM streams immediately without ACKs and stays usable after 12 seconds without inventing Kit confirmation',async()=>{
+ const b=bench(true,2);b.win.ZebjusNative.apStreamingVersion=1;b.win.ZebjusNative.udpFeedbackVersion=2;
+ let startup;const offers=[];
+ b.win.ZebjusNative.startUdp=(...args)=>{startup=args;queueMicrotask(()=>b.win.zebjusNativeUdpEvent({id:args[0],type:'start'}));};
+ b.win.ZebjusNative.offerUdp=(channels,inputArmed)=>offers.push({channels,inputArmed});
+ await b.connect();await b.network.armControls();
+ assert.equal(startup[6],'AP');assert.equal(b.network.inputArmed(),true);
+ assert.equal(b.network.feedback().inputArmed,false);
+ assert.equal(b.network.feedback().seq,0);assert.equal(b.network.feedback().at,0);
+ assert.equal(b.network.feedback().ackRequired,false);
+ b.advance(13000);
+ assert.equal(b.network.hasControl(),true);assert.equal(b.network.isConnected(),true);
+ assert.equal(b.network.previewControls({throttle:1350,axes:{roll:.4,pitch:-.2,yaw:.6}}),true);
+ assert.equal(offers.at(-1).channels,'1350,1700,1400,1800,1000,1000');
+ b.win.zebjusNativeUdpEvent({id:startup[0],type:'tx',sent:700,sentSeq:700,ackRequired:false,requestedInputArmed:true});
+ assert.equal(b.network.feedback().sentSeq,700);
+ assert.equal(b.network.feedback().seq,0);assert.equal(b.network.feedback().at,0);
+ assert.equal(b.network.feedback().inputArmed,false,'TX cannot masquerade as firmware-applied ARM');
+ assert.equal(b.requests.filter(x=>x.route==='/api/rc/release').length,0);
+ const feedback={id:startup[0],type:'ack',seq:701,lastRxSeq:701,feedbackVersion:2,
+  lastAppliedSeq:0,appliedKnown:false,inputArmed:true,ackRequired:false,requestedInputArmed:true};
+ b.win.zebjusNativeUdpEvent(feedback);
+ assert.equal(b.network.feedback().inputArmed,false,'RX-only ACK cannot confirm applied ARM');
+ b.win.zebjusNativeUdpEvent({...feedback,lastAppliedSeq:701,appliedKnown:true});
+ const ackAt=b.network.feedback().at;
+ assert.equal(b.network.feedback().inputArmed,true);
+ b.advance(2000);
+ b.win.zebjusNativeUdpEvent({id:startup[0],type:'tx',sent:800,sentSeq:800,ackRequired:false,requestedInputArmed:true});
+ assert.equal(b.network.feedback().at,ackAt,'Local sends cannot refresh RX freshness');
+ await b.network.releaseRc();
+ assert.equal(b.network.inputArmed(),false);assert.equal(b.network.hasControl(),false);
+});
+test('STA keeps its ACK-based ARM policy when AP streaming capability is installed',async()=>{
+ const b=bench(true,2);b.win.ZebjusNative.apStreamingVersion=1;b.win.ZebjusNative.udpFeedbackVersion=2;
+ b.win.ZebjusNative.offerUdp=()=>{};
+ await b.connect(true);
+ let resolved=false;const pending=b.network.armControls().then(()=>resolved=true);
+ await settle();await settle();
+ assert.equal(resolved,false);assert.equal(b.network.inputArmed(),false);
+ b.win.zebjusNativeUdpEvent({type:'ack',seq:1,lastRxSeq:1,lastAppliedSeq:1,feedbackVersion:2,
+  appliedKnown:true,inputArmed:true,ackRequired:true});
+ await pending;assert.equal(b.network.inputArmed(),true);
+ await b.network.releaseRc();
+});
+test('AP local-input expiry and firmware terminal NACK still release streaming control',async()=>{
+ for(const reason of ['UDP_INPUT_STALE','UDP_NACK_APPLY_STALLED']){
+  const b=bench(true,2);b.win.ZebjusNative.apStreamingVersion=1;
+  b.win.ZebjusNative.offerUdp=()=>{};
+  await b.connect();await b.network.armControls();
+  b.win.zebjusNativeUdpEvent({type:'error',reason});await settle();
+  assert.equal(b.network.inputArmed(),false);assert.equal(b.network.hasControl(),false);
+  assert.ok(b.requests.some(x=>x.route==='/api/rc/release'));
+ }
 });
