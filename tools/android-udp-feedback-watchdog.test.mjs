@@ -14,8 +14,8 @@ test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and
  assert.match(native,/LEGACY_ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300/);
  assert.match(native,/recentV2&&receiveAgeMs>=FW_DEADMAN_MS/);
  assert.match(native,/recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS/);
- assert.match(native,/report\\("warning","UDP_FEEDBACK_DELAY"\\)/);
- assert.match(native,/estimatedLost=Math.max\\(0,\\(long\\)rx-\\(long\\)received\\)/);
+ assert.ok(native.includes('report("warning","UDP_FEEDBACK_DELAY")'));
+ assert.ok(native.includes("estimatedLost=Math.max(0,(long)rx-(long)received)"));
  assert.match(native,/feedbackAge>ackStopMs/);
  assert.ok(native.includes("private void receiveLoop("));
  assert.ok(native.includes("receiver.execute(()->receiveLoop("));
