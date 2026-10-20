@@ -32,7 +32,11 @@ static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
 #endif
 // 20 Hz authenticated RX summaries, plus immediate input ARM/DISARM and NACK.
+#if defined(ZJ_UDP_HOST_IMMEDIATE_RX_ACK)
+static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=0;
+#else
 static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=50;
+#endif
 static uint32_t zjUdpLastRxNoticeAt=0;
 static bool zjUdpLastRxNoticeArm=false,zjUdpHaveRxNotice=false;
 static uint32_t zjUdpRxSuppressed=0;
