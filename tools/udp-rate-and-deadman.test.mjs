@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const fw=read('FlightCore_Firmware/FlightCoreUdp.h');
+const rc=read('FlightCore_Firmware/FlightCoreClassroom.h');
+const android=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
+const network=read('companion-network.js');
+const flight=read('companion-flight.js');
+test('20 Hz total steady-state encrypted feedback; 50 Hz fresh authenticated input',()=>{
+ assert.match(fw,/ZJ_UDP_RX_FEEDBACK_MS=100/);
+ assert.match(fw,/ZJ_UDP_APPLIED_FEEDBACK_MS=100/);
+ assert.match(fw,/armed!=zjUdpNotifiedRxArm/);
+ assert.match(fw,/notify=!zjUdpLastSeq/);
+ assert.match(fw,/zjUdpLastSeq=seq;zjUdpLastRx=now;zjUdpRequestedArm=armed;/);
+ assert.match(fw,/if\(notify&&zjUdpBuildFeedback\(job,reason\?3:1/);
+ assert.match(fw,/zjUdpGcm\(false,key,packet,plain\)/);
+ assert.match(fw,/ZJ_UDP_INVALID_FRAME/);
+ assert.match(android,/scheduleAtFixedRate\(this::tick,0,20,TimeUnit\.MILLISECONDS\)/);
+ assert.match(android,/receiver\.execute\(\(\)->receiveLoop/);
+});
+test('500 ms firmware receive and apply deadline independent from Android ACK',()=>{
+ assert.match(rc,/ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800/);
+ assert.match(rc,/zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500/);
+ assert.match(rc,/zjRcHasFrame=false;zjRcInputArmed=false/);
+ assert.match(fw,/now-zjUdpLastRx\)>ZJ_RC_DEADMAN_MS/);
+ assert.match(fw,/ZJ_UDP_APPLY_STALLED/);
+ assert.match(fw,/zjUdpPendingSeq=seq;zjUdpPendingAt=now/);
+ assert.match(fw,/zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis\(\)/);
+ assert.doesNotMatch(fw,/zjUdpLastRx=now;.*ACK/);
+});
+test('authenticated RX and applied feedback age gate bounded Android stop',()=>{
+ assert.match(android,/FW_DEADMAN_MS=500, ACK_WARN_MS=350, ACK_TIMEOUT_MS=750/);
+ assert.match(android,/INPUT_STALE_MS=300/);
+ assert.match(android,/recentV2&&receiveAgeMs>=FW_DEADMAN_MS/);
+ assert.match(android,/recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS/);
+ assert.match(android,/feedbackAge>ackStopMs/);
+ assert.match(android,/lastFeedbackAt>0/);
+ assert.match(android,/estimatedLost=Math\.max\(0,\(long\)rx-\(long\)received\)/);
+ assert.match(android,/\bsequence=lastAckSequence/);
+ assert.match(network,/data\.type==='warning'/);
+ assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>500/);
+});
