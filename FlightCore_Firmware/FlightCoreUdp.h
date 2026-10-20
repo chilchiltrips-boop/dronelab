@@ -31,7 +31,7 @@ static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=0;
 static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=0;
 #else
 static constexpr uint32_t ZJ_UDP_APPLIED_FEEDBACK_MS=100;
-// Cap accepted input feedback at 20 Hz while Android continues sending fresh values at 50 Hz.
+// RX_ACK at 10 Hz + APPLIED_ACK at 10 Hz (about 20 Hz total) while Android sends at 50 Hz.
 static constexpr uint32_t ZJ_UDP_RX_FEEDBACK_MS=100;
 #endif
 static uint32_t zjUdpLastAppliedNoticeAt=0,zjUdpLastRxNoticeAt=0;
