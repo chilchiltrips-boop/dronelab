@@ -37,8 +37,9 @@
   const usb=verified.find(p=>p.transport==='usb'&&at-(p.lastPacketAt||0)<=900);
   const direct=verified.find(p=>['ap','sta'].includes(p.transport)&&p.fresh===true);
   const relay=verified.find(p=>p.transport==='android-relay'&&p.permitted===true&&p.fresh===true);
-  const selected=choice==='auto'?(usb||direct||relay):
-   verified.find(p=>p.transport===choice&&(choice==='usb'||p.fresh===true));
+  const selected=choice==='auto'?(usb||direct||relay||verified.find(p=>p.transport==='usb')):
+   verified.find(p=>p.transport===choice&&(choice==='usb'||p.fresh===true)&&
+    (choice!=='android-relay'||p.permitted===true));
   return {path:selected||null,reason:selected?
    (choice==='auto'?'AUTO • verified '+selected.transport.toUpperCase():'Manual • verified '+choice.toUpperCase()):
    'No verified '+(choice==='auto'?'monitor path':choice.toUpperCase()+' path')+' available'};
