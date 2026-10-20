@@ -4,13 +4,18 @@ import {readFileSync} from 'node:fs';
 
 const source=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 
-test('50 Hz encrypted UDP keeps independent 500 ms feedback watchdog; WebView cannot duplicate it',()=>{
+test('50 Hz encrypted UDP keeps independent bounded 750 ms feedback watchdog and independent 500 ms firmware safety; WebView cannot duplicate it',()=>{
  const flight=source('companion-flight.js');
  const network=source('companion-network.js');
  const native=source('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreUdpStream.java');
  assert.match(flight,/kitFeedback\.protocol!=='ZJUDP1'&&Date\.now\(\)-kitFeedback\.at>350/);
  assert.match(network,/inputArmed:data\.inputArmed===true,protocol:'ZJUDP1'/);
- assert.match(native,/static final long ACK_TIMEOUT_MS=500/);
+ assert.match(native,/FW_DEADMAN_MS=500, ACK_WARN_MS=350, ACK_TIMEOUT_MS=750/);
+ assert.match(native,/LEGACY_ACK_TIMEOUT_MS=500, INPUT_STALE_MS=300/);
+ assert.match(native,/recentV2&&receiveAgeMs>=FW_DEADMAN_MS/);
+ assert.match(native,/recentV2&&lastAppliedSeq>0&&applyAgeMs>=FW_DEADMAN_MS/);
+ assert.match(native,/report\\("warning","UDP_FEEDBACK_DELAY"\\)/);
+ assert.match(native,/estimatedLost=Math.max\\(0,\\(long\\)rx-\\(long\\)received\\)/);
  assert.match(native,/watchdogNow-lastAckAt>ACK_TIMEOUT_MS/);
  assert.ok(native.includes("private void receiveLoop("));
  assert.ok(native.includes("receiver.execute(()->receiveLoop("));
