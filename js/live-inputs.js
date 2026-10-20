@@ -18,7 +18,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
-  seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
+  inputTransport:'—',seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
   inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
@@ -41,7 +41,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
  const armed=active&&rc.inputArmed===true;
  return {...m,
-  source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
   ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
@@ -83,10 +83,17 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- const getKit=()=>window.ZebjusKits?.getState?.()||{connected:false};
+ let monitorChoice='auto',selectionReason='';
+ const getKit=()=>{
+  const kit=window.ZebjusKits?.getState?.()||{connected:false};
+  const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
+  selectionReason=selected?.reason||'No verified monitor connection';
+  return selected?.path?{...kit,connected:true,transport:selected.path.transport,
+   physicalLink:selected.path.transport==='usb'?'usb':kit.physicalLink}:{...kit,connected:false};
+ };
  const rate=createInputRateTracker();
  let sample=null,usbPpm=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
-  nextPollAt=0,readFailures=0,requestGeneration=0;
+  nextPollAt=0,readFailures=0,requestGeneration=0,lastBoot='';
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
   window.ZebjusDevicesWorkspace?.active?.()==='inputs'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
@@ -94,8 +101,8 @@ function initLiveInputs(){
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
-  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink){
-   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;
+  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot){
+   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;
   }
   const v=normalizeAcceptedInput(kit,sample);
   card.dataset.liveState=v.state;
@@ -103,6 +110,10 @@ function initLiveInputs(){
   $('liLiveState').dataset.state=v.state;
   write('liKitName',v.kitName);
   write('liInputSource',v.source);
+  write('liInputTransport',v.inputTransport);
+  write('liSelectionReason',selectionReason);
+  write('liBoardVersion',[kit.board,kit.version].filter(Boolean).join(' • ')||'—');
+  if(!kit.connected&&kit.kitId&&monitorChoice!=='auto'){write('liLiveState','UNVERIFIED');card.dataset.liveState='unverified';}
   write('liKitTransport',kit.transport==='android-relay'?'RELAY • '+String(kit.physicalLink||'KIT').toUpperCase():v.transport);
   write('liPacketNumber',v.seq??'—');
   write('liAge',v.ageMs===null?'—':v.ageMs+' ms');
@@ -148,15 +159,16 @@ function initLiveInputs(){
   const kit=getKit();
   if(!visible()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
-  const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,token=requestGeneration,
+  const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,bootId=kit.bootId,token=requestGeneration,
    startedAt=Date.now();
   try{
    const reply=await window.ZebjusKits.request('/api/rc/snapshot');
    const current=getKit();
    if(token!==requestGeneration||!visible()||!current.connected||current.kitId!==id||
-      current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id)return;
-   const at=Date.now();
+      current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id||current.bootId!==bootId)return;
+   const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
+   if(prev?.rc?.active&&reply.active&&prev.rc.source===reply.source&&prev.rc.diagnosticId===reply.diagnosticId&&Number(reply.seq)<Number(prev.rc.seq))return;
    const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source;
    const sequenceAt=seqChanged?at:prev.sequenceAt??prev.at;
    const hz=rate.observe(id,reply,at);
@@ -187,11 +199,12 @@ function initLiveInputs(){
    }
    return;
   }
-  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;return;}
+  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(visible())display();return;}
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
   if(received.kind==='frame'){
+   if(sample?.rc?.active&&sample.rc.source===received.source&&Number(received.seq)<Number(sample.rc.seq))return;
    const hz=rate.observe(kit.kitId,received,at);
    const prev=sample;
    const seqChanged=!prev||prev.rc?.seq!==received.seq||prev.rc?.source!==received.source;
@@ -213,6 +226,8 @@ function initLiveInputs(){
   ++requestGeneration;nextPollAt=0;readFailures=0;rate.reset();display();
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
+ $('liMonitorSelect')?.addEventListener('change',e=>{monitorChoice=e.target.value;wipe();display();});
+ window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
  function tick(){display();if(visible()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
  setInterval(tick,UI_TICK_MS);
