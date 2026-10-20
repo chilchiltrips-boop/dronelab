@@ -16,7 +16,7 @@ test('RC bench lease and deadman must not expire immediately after the claim / f
  const rc=read('FlightCore_Firmware/FlightCoreClassroom.h');
  assert.match(rc,/int32_t\(now-zjRcLeaseAt\)>=0&&uint32_t\(now-zjRcLeaseAt\)>ZJ_RC_LEASE_MS/);
  assert.match(rc,/int32_t\(now-zjRcLast\)>=0&&uint32_t\(now-zjRcLast\)>ZJ_RC_DEADMAN_MS/);
- assert.match(rc,/ZJ_RC_DEADMAN_MS=350,ZJ_RC_LEASE_MS=1800/);
+ assert.match(rc,/ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800/);
 });
 test('intentional STA_LEAVING 36 is not treated as password error and firmware requires confirmed association before save',()=>{
  const fw=read('FlightCore_Firmware/FlightCoreNetwork.h');
