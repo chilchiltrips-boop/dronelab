@@ -9,6 +9,40 @@
  const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
  const safePulse=value=>Number.isSafeInteger(value)&&value>=1000&&value<=2000;
  function isNetwork(transport){return network.has(String(transport||'').toLowerCase())}
+ // Single-flight diagnostic GETs; no control or mutation request may be queued here.
+ function createReadScheduler({now=()=>Date.now(),limit=16}={}){
+  const entries=new Map();let epoch=0;
+  const clear=()=>{++epoch;entries.clear()};
+  function read(key,load,ttl=0){
+   const old=entries.get(key);
+   if(old?.pending)return old.pending;
+   if(old&&now()-old.at<ttl)return Promise.resolve(old.value);
+   if(entries.size>=limit&&[...entries.values()].every(v=>v.pending))return Promise.reject(Error('Read queue full'));
+   const generation=epoch,entry={at:0};
+   entry.pending=Promise.resolve().then(load).then(value=>{
+    if(generation!==epoch)throw Error('Read generation changed');
+    entry.value=value;entry.at=now();return value;
+   }).catch(error=>{if(entries.get(key)===entry)entries.delete(key);throw error})
+    .finally(()=>{entry.pending=null});
+   entries.set(key,entry);
+   for(const [id,e] of entries){if(entries.size<=limit)break;if(!e.pending)entries.delete(id)}
+   return entry.pending;
+  }
+  const invalidate=()=>{for(const [id,e] of entries)if(!e.pending)entries.delete(id)};
+  return {read,clear,invalidate};
+ }
+ // A monitoring path is usable only after physical/Kit ID verification.
+ function selectMonitorPath(kit,paths,choice='auto',at=Date.now()){
+  const verified=(Array.isArray(paths)?paths:[]).filter(p=>p.verified===true&&p.available===true&&p.kitId===kit?.kitId);
+  const usb=verified.find(p=>p.transport==='usb'&&at-(p.lastPacketAt||0)<=900);
+  const direct=verified.find(p=>['ap','sta'].includes(p.transport)&&p.fresh===true);
+  const relay=verified.find(p=>p.transport==='android-relay'&&p.permitted===true&&p.fresh===true);
+  const selected=choice==='auto'?(usb||direct||relay):
+   verified.find(p=>p.transport===choice&&(choice==='usb'||p.fresh===true));
+  return {path:selected||null,reason:selected?
+   (choice==='auto'?'AUTO • verified '+selected.transport.toUpperCase():'Manual • verified '+choice.toUpperCase()):
+   'No verified '+(choice==='auto'?'monitor path':choice.toUpperCase()+' path')+' available'};
+ }
  function matchesTarget(kit,target){
   if(!kit?.connected||!kit.kitId)return false;
   if(target==='usb')return kit.transport==='usb';
@@ -38,5 +72,5 @@
    accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:true,motors_disabled:true,
    motorsArmed:false,readSource:'verified-usb-serial'};
  }
- root.ZebjusKitData=Object.freeze({isNetwork,matchesTarget,validateReply,usbJoystick});
+ root.ZebjusKitData=Object.freeze({createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,validateReply,usbJoystick});
 })(globalThis);
