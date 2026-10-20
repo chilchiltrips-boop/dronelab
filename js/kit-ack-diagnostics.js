@@ -12,7 +12,7 @@ const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_e
 const fields=['route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
- 'feedbackNeutralized','feedbackNeutralized','inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
+ 'feedbackNeutralized','inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
    'feedbackVersion','ackKind','nackReason','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
  'rxAckSent','rxAckFailed','rxAckSuppressed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
  'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'];
@@ -50,7 +50,7 @@ function clean(data){
    'nackSent','nackFailed','rxAckSuppressed','maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs',
    'apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
-  }else if(['appliedKnown','rcOwned','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
+  }else if(['appliedKnown','rcOwned','feedbackNeutralized','inputArmed','apActive','staConnected','connected','udpActive'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
   }else if(key==='ackKind'){if(['RX_ACK','APPLIED_ACK','NACK','LEGACY_RX_ACK'].includes(v))result.ackKind=v;}
   else if(key==='nackReason'){if(['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(v))result.nackReason=v;}
