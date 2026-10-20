@@ -27,6 +27,10 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
  const rc=sample.rc;
  if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
+ // A network observation is fresh only when firmware reports a valid packet age.
+ // USB frames use their locally observed serial arrival time instead.
+ if(network&&rc.active===true&&(typeof rc.ageMs!=='number'||!Number.isFinite(rc.ageMs)||rc.ageMs<0))
+  return {...m,state:'waiting'};
  const valid=channels.every(field=>finitePulse(rc[field]));
  if(!valid)return {...m,state:'waiting'};
  const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
@@ -229,8 +233,8 @@ function initLiveInputs(){
    sample={kitId:kit.kitId,rc:confirmed?{...received,channels:confirmed}:received,
     at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
     rateHz:hz,motorsOff:motorReported};
-  }else if(received.kind==='idle'||received.kind==='reset'){
-   rate.reset();
+  }else if(received.kind==='idle'||received.kind==='reset'||received.kind==='claim'){
+   usbPpm=null;rate.reset();
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
     at,rateHz:null,motorsOff:motorReported};
   }

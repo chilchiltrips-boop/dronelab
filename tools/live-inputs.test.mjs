@@ -115,3 +115,19 @@ test('Live Inputs is a standalone workspace, read-only, responsive and reachable
  }
  assert.match(html,/INPUT ARM is diagnostic only/);
 });
+
+test('unknown or invalid network packet age never confirms LIVE or INPUT ARM',()=>{
+ for(const ageMs of [null,undefined,-1,NaN,Infinity,'25',false]){
+  const out=normalizeAcceptedInput(kit,{...snap(),rc:{...rc(),ageMs}},{now:1010});
+  assert.equal(out.state,'waiting',String(ageMs));
+  assert.equal(out.values,null);assert.notEqual(out.inputArm,'ARMED');
+ }
+ const fresh=normalizeAcceptedInput(kit,{...snap(),rc:{...rc(),ageMs:0}},{now:1010});
+ assert.equal(fresh.state,'live');
+});
+
+test('legacy USB serial uses local arrival freshness when firmware age is absent',()=>{
+ const {ageMs,...frame}=rc();
+ const out=normalizeAcceptedInput({...kit,transport:'usb'},{...snap(),rc:frame},{now:1010});
+ assert.equal(out.state,'live');assert.equal(out.ageMs,10);
+});
