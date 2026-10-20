@@ -20,7 +20,11 @@ const udpFeedback=data=>({
  appliedKnown:data?.appliedKnown===true||Number(data?.lastAppliedSeq)>0,
  appliedAckCount:Number(data?.appliedAckCount)||0,
  ackKind:['RX_ACK','APPLIED_ACK','NACK','LEGACY_RX_ACK'].includes(data?.ackKind)?data.ackKind:'LEGACY_RX_ACK',
- nackReason:['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(data?.nackReason)?data.nackReason:'NONE'
+ nackReason:['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(data?.nackReason)?data.nackReason:'NONE',
+ feedbackHealth:['HEALTHY','DEGRADED','WAITING_RX','STOPPED'].includes(data?.feedbackHealth)?data.feedbackHealth:'UNKNOWN',
+ firmwareDeadmanMs:Number.isFinite(data?.firmwareDeadmanMs)?data.firmwareDeadmanMs:500,
+ feedbackWarnMs:Number.isFinite(data?.feedbackWarnMs)?data.feedbackWarnMs:350,
+ feedbackStopMs:Number.isFinite(data?.feedbackStopMs)?data.feedbackStopMs:750
 });
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
