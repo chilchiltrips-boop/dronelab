@@ -193,7 +193,7 @@ function initLiveInputs(){
  async function poll(){
   const kit=getKit();
   if(!monitoring()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||
-    pidVisible()&&!['ap','sta'].includes(String(kit.transport).toLowerCase())||
+    pidVisible()&&!['ap','sta','android-relay'].includes(String(kit.transport).toLowerCase())||
     kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
   const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,bootId=kit.bootId,token=requestGeneration,
