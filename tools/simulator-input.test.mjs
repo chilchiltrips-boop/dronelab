@@ -87,7 +87,7 @@ test('verified AP Kit accepted Android RC feeds Auto simulator only after explic
 test('Kit input rejects idle, stale, non-Android, unverified, malformed and repeated frames',()=>{
  const b=bench();b.store.setPeer({connected:false});
  for(const modify of [
-   p=>{p.kit.connected=false},p=>{p.kit.transport='usb'},
+   p=>{p.kit.connected=false},p=>{p.kit.transport='ble'},
    p=>{p.input.source='WEB'},p=>{p.input.state='stale'},
    p=>{p.input.ageMs=401},p=>{p.input.values.roll=2001}
  ]){
@@ -159,4 +159,24 @@ test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read
  b.input.setChoice('web');state=b.input.snapshot();
  assert.equal(state.activeSource,'web');
  assert.equal(state.input,null);
+});
+
+test('verified USB serial RC mirrors throttle, axes and input ARM only to virtual PID',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const received=verifiedKit(11,{throttle:1000,roll:1700,pitch:1400,yaw:1600});
+ received.kit.transport='usb';received.input.source='WEB';
+ assert.equal(b.store.acceptKit(received),true);
+ assert.equal(b.input.setChoice('usb'),true);
+ assert.equal(b.input.snapshot().activeSource,'usb');
+ assert.equal(b.input.snapshot().input.transport,'usb');
+ assert.equal(b.input.start().accepted,true);
+ const next=verifiedKit(12,{throttle:1275,roll:1700,pitch:1400,yaw:1600});
+ next.kit.transport='usb';next.input.source='WEB';
+ assert.equal(b.store.acceptKit(next),true);
+ assert.equal(b.s.throttle,1275);
+ assert.equal(b.s.cmdRoll,.4);
+ assert.equal(b.s.cmdPitch,-.2);
+ assert.equal(b.s.cmdYaw,.2);
+ b.input.stop();
+ assert.equal(b.s.running,false);
 });
