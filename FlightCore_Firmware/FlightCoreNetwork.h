@@ -178,15 +178,16 @@ static void zjSetupHttp(){
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  zjHttp.on("/api/flight/mode",HTTP_POST,[](){
   if(!zjAllow())return;
-  // Save classroom flight-mode selection, never arm motor outputs.
+  // Classroom-only mode metadata: diagnostic INPUT ARM never enables physical motors.
+  // Persist authorized changes even during a signed RC input session, not during OTA.
   // STA observer sessions have no write permission.
   if(zjRequestSession<0||(!zjAuthAdmin&&zjSessions[zjRequestSession].localSta)){
    zjReply(403,"{\"error\":\"flight_mode_requires_authorized_controller\"}");return;
   }
   const String next=zjArg("flightMode");
   if(next!="angle"&&next!="acro"){zjReply(400,"{\"error\":\"invalid_flight_mode\"}");return;}
-  if(zjRcOwned||zjRcInputArmed||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
-   zjReply(409,"{\"error\":\"disarm_and_release_input_before_mode_change\"}");return;
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   zjReply(409,"{\"error\":\"flight_mode_save_unavailable_during_network_or_ota\"}");return;
   }
   if(zjPrefs.putString("flightMode",next)!=next.length()){
    zjReply(500,"{\"error\":\"flight_mode_save_failed\"}");return;
