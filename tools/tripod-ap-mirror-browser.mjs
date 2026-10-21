@@ -14,9 +14,9 @@ try{
  await page.goto('http://127.0.0.1:8765/index.html#pid');
  await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusKitData&&window.ZebjusTraining?.isReady?.(),null,{timeout:30000});
  await page.evaluate(()=>{
-  const kit={connected:true,transport:'ap',kitId:'TEST-VERIFIED-A2',kitName:'Test verified AP',bootId:'boot-1',
+  const kit={connected:true,transport:'ap',kitId:'TEST-VERIFIED-A2',kitName:'Test verified AP',bootId:'boot-1',flightMode:'acro',
     working:false,otaInProgress:false,apActive:true,motorsArmed:false};
-  window.__pidTest={kit,channels:{throttle:1000,roll:1500,pitch:1500,yaw:1500},seq:0,requests:[]};
+  window.__pidTest={kit,inputArmed:true,channels:{throttle:1000,roll:1500,pitch:1500,yaw:1500},seq:0,requests:[]};
   window.ZebjusKits.getState=()=>({...kit});
   window.ZebjusKits.getMonitorPaths=()=>kit.connected?[{kitId:kit.kitId,transport:'ap',
     verified:true,available:true,fresh:true}]:[];
@@ -25,7 +25,7 @@ try{
    if(path!=='/api/rc/snapshot'||method!=='GET')throw Error('Unexpected hardware request '+method+' '+path);
    if(!kit.connected)throw Error('Kit link lost');
    const s=window.__pidTest;return {kitId:kit.kitId,source:'ANDROID',transport:'ap',
-    seq:++s.seq,active:true,inputValid:true,failsafe:false,inputArmed:true,ageMs:15,
+    seq:++s.seq,active:true,inputValid:true,failsafe:false,inputArmed:s.inputArmed!==false,flightMode:s.kit.flightMode,ageMs:15,
     ...s.channels,__observedAt:Date.now()};
   };
  });
@@ -36,6 +36,12 @@ try{
  check((await iframe.locator('#tpInputStatus').textContent()).includes('VERIFIED KIT RC'),'Source should say Kit RC not WebRTC');
  check(!(await page.evaluate(()=>window.ZebjusSimulatorInputs.snapshot().peer.approved)),'Kit path must not claim WebRTC pairing');
  check((await iframe.locator('#tpCameraView').inputValue())==='back','Initial view should face opposite direction');
+ await page.waitForFunction(()=>document.querySelector('#pidFrame')?.contentWindow?.document.querySelector('#tpMode')?.value==='acro');
+ check((await iframe.locator('#tpKitMode').textContent())==='KIT ACRO','Saved FlightCore mode missing in tripod');
+ check((await iframe.locator('#tpInputArm').textContent())==='INPUT ARMED','Kit input ARM status not shown');
+ check((await page.locator('#liFlightMode').textContent())==='ACRO','Live Inputs must show FlightCore ACRO');
+ const before=await iframe.locator('#tpLeftKnob').boundingBox();
+ const headerBefore=await iframe.locator('.tp-sticks>.panel-title').boundingBox();
  await iframe.locator('#tpRun').click();
  try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot()?.armed===true,null,{timeout:7000})}
  catch(error){
@@ -50,10 +56,18 @@ try{
   throw Error('AP Run did not stay active: '+JSON.stringify(debug)+' • '+error.message);
  }
  check(await iframe.locator('#tpInputSource').isDisabled(),'Source must lock during Run');
- await page.evaluate(()=>Object.assign(window.__pidTest.channels,{throttle:1350,roll:1800,pitch:1250,yaw:1700}));
+ await page.evaluate(()=>Object.assign(window.__pidTest.channels,{throttle:1919,roll:1800,pitch:1250,yaw:1700}));
  await page.waitForFunction(()=>{
-   const s=window.ZebjusTraining.snapshot();return s?.armed&&s.throttle===1350&&s.axes.roll>.5&&s.axes.pitch<-.4&&s.axes.yaw>.3;
+   const s=window.ZebjusTraining.snapshot();return s?.armed&&s.throttle===1919&&s.axes.roll>.5&&s.axes.pitch<-.4&&s.axes.yaw>.3;
  },null,{timeout:12000});
+
+ const after=await iframe.locator('#tpLeftKnob').boundingBox();
+ const headerAfter=await iframe.locator('.tp-sticks>.panel-title').boundingBox();
+ check(after.y<before.y-25,'Android throttle 1919µs must move left knob upward');
+ check(Math.abs(headerBefore.height-headerAfter.height)<=1&&Math.abs(headerBefore.y-headerAfter.y)<=1,
+  'Joystick heading reflowed when RC values changed');
+ await page.evaluate(()=>window.__pidTest.inputArmed=false);
+ await page.waitForFunction(()=>document.querySelector('#pidFrame')?.contentWindow?.document.querySelector('#tpInputArm')?.textContent==='INPUT DISARMED');
  const active=await page.evaluate(()=>window.ZebjusTraining.snapshot());
  check(active.motors.rpm.some(n=>n>0),'Mirrored AP joystick should drive virtual motor response');
  await page.screenshot({path:'test-output/pid-ap-mirror-running.png',fullPage:true});
