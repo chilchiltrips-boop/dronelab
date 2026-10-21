@@ -13,7 +13,7 @@ on:
       - 'mobile-android/**'
       - '.github/workflows/simulator-input-mirror.yml'
   push:
-    branches: [feat/tripod-ap-input-mirror-20261021, main]
+    branches: [feat/tripod-ap-input-mirror-20261021, main, feature/authoritative-status-integration-20261021]
     paths:
       - 'companion*'
       - 'flight-input.js'

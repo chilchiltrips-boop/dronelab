@@ -55,14 +55,25 @@
   const text=String(line??'').trim();
   if(!text.startsWith('ZJSTATE,1,')||text.length>2048)return null;
   try{
-   const d=JSON.parse(text.slice(10)),m=d.flightModeState,rc=d.rc;
+   let d;
+   if(text[10]==='{')d=JSON.parse(text.slice(10));
+   else{
+    const p=text.split(',');
+    if(p.length!==21||!p.slice(6,12).every(pulse)||!p.slice(12,17).every(decimal)||
+     !/^[01]$/.test(p[17])||!/^(WEB|ANDROID|PPM|NONE)$/.test(p[18])||!/^(USB|AP|STA|PPM|NONE)$/.test(p[19])||!/^[01]$/.test(p[20])||Number(p[12])>7)return null;
+    d={kitId:p[2],flightModeState:{supported:true,stabilizationSupported:false,saved:p[3],active:p[4],pending:p[5]==='none'?null:p[5]},
+     ledOn:Number(p[12])!==0,ledEffect:Number(p[12]),rc:{kitId:p[2],throttle:Number(p[6]),roll:Number(p[7]),pitch:Number(p[8]),yaw:Number(p[9]),
+      ch5:Number(p[10]),ch6:Number(p[11]),seq:Number(p[13]),ageMs:Number(p[14]),accepted:Number(p[15]),rejected:Number(p[16]),
+      inputArmed:p[17]==='1',source:p[18],transport:p[19],active:p[20]==='1',inputValid:p[20]==='1',motorsArmed:false,motorsDisabled:true,flightMode:p[4]}};
+   }
+   const m=d.flightModeState,rc=d.rc;
    if(!/^ZFC-A[12]-[A-F0-9]{12}$/.test(d.kitId||'')||!m||m.supported!==true||
     !['angle','acro'].includes(m.saved)||!['angle','acro'].includes(m.active)||
     !(m.pending===null||m.pending===m.saved)||(m.pending===null)!==(m.saved===m.active)||
     typeof d.ledOn!=='boolean'||!rc||rc.kitId!==d.kitId||
     !['throttle','roll','pitch','yaw','ch5','ch6'].every(k=>Number.isInteger(rc[k])&&rc[k]>=1000&&rc[k]<=2000)||
     !Number.isInteger(rc.seq)||rc.seq<0||rc.seq>4294967295||
-    typeof rc.active!=='boolean'||typeof rc.inputArmed!=='boolean'||rc.motorsArmed!==false||rc.motorsDisabled!==true)return null;
+    typeof rc.active!=='boolean'||rc.active&&rc.seq===0||typeof rc.inputArmed!=='boolean'||rc.motorsArmed!==false||rc.motorsDisabled!==true)return null;
    return d;
   }catch{return null}
  }

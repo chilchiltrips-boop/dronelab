@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.9";
+constexpr const char* FW_VERSION="1.5.10";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -402,13 +402,14 @@ void loop(){
  zjRcLoop(now);
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;
- if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>128){
+ if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>=108){
   lastState=millis();
-  Serial.print("ZJSTATE,1,{\"kitId\":\"");Serial.print(zjKitId);
-  Serial.print("\",\"flightModeState\":");Serial.print(zjFlightModeState());
-  Serial.print(",\"ledOn\":");Serial.print(ledMode!=LED_OFF?"true":"false");
-  Serial.print(",\"ledEffect\":");Serial.print(int(ledMode));
-  Serial.print(",\"rc\":");Serial.print(zjRcState());Serial.println('}');
+  // Compact record avoids repeating the large network JSON on a 115200-baud link.
+  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u\n",
+   zjKitId.c_str(),zjSavedFlightMode.c_str(),zjFlightMode.c_str(),zjFlightModePending?zjSavedFlightMode.c_str():"none",
+   zjRcThrottle,zjRcRoll,zjRcPitch,zjRcYaw,zjRcCh5,zjRcCh6,unsigned(ledMode),
+   (unsigned long)zjRcSeq,(unsigned long)(zjRcSeq?uint32_t(millis()-zjRcLast):0),(unsigned long)zjRcAccepted,(unsigned long)zjRcRejected,
+   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U);
  }
  // Legacy ZJGYRO duplicates are disabled.
 }

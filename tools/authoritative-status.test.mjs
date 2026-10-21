@@ -15,6 +15,8 @@ const record={kitId,flightModeState:mode,ledOn:true,ledEffect:2,rc};
 test('versioned USB extension preserves actual auxiliary, mode and motor state; malformed/foreign records are rejected',()=>{
  const decode=context.ZebjusSerialRcDecoder.parseSerialStatus;
  const d=decode('ZJSTATE,1,'+JSON.stringify(record));
+ const compact=decode('ZJSTATE,1,'+kitId+',acro,angle,acro,1000,1600,1400,1500,1725,1280,2,1,12,22,3,0,WEB,USB,1');
+ assert.equal(compact.rc.ch5,1725);assert.equal(compact.flightModeState.pending,'acro');assert.equal(compact.rc.accepted,22);assert.equal(compact.ledEffect,2);
  assert.equal(d.rc.ch5,1725);assert.equal(d.rc.inputArmed,false);assert.equal(d.rc.motorsArmed,false);
  assert.equal(d.flightModeState.active,'angle');assert.equal(d.flightModeState.pending,'acro');
  for(const bad of [{...record,rc:{...rc,ch6:2001}}, {...record,kitId:'OTHER'},
