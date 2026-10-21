@@ -97,6 +97,8 @@ static void zjReply(int status,const String& body){
 static const char* zjClientTransport();
 static String zjMdnsKitHostname();
 static String zjStatus(){
+ // Expire stale input/apply safe pending mode before emitting a single coherent snapshot.
+ zjRcLoop(millis());
  const bool sta=WiFi.status()==WL_CONNECTED;
  String out="{\"board\":"+zjJson(FC_BOARD)+",\"version\":"+zjJson(FW_VERSION)+",\"mode\":"+zjJson(zjMode);
  out+=",\"phase\":"+zjJson(zjPhase)+",\"staConnected\":"+(sta?String("true"):String("false"));
