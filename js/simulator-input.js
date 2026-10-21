@@ -55,26 +55,38 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   const id=String(kit?.kitId||'');
   const vals=input?.values;
   const actual=kit?.flightModeState?.active||kit?.flightMode;
+  const priorMode=kitMode;
   kitMode=kit?.connected===true&&['usb','ap','sta'].includes(transport)&&id&&['angle','acro'].includes(actual)?
    {kitId:id,transport,active:actual,saved:kit.flightModeState?.saved||actual,pending:kit.flightModeState?.pending||null}:null;
+  const modeChanged=JSON.stringify(priorMode)!==JSON.stringify(kitMode);
   const key=id+'|'+transport+'|'+String(kit?.bootId||'')+'|'+String(input?.ownerId||'');
   // A transient delayed poll is not a new packet; let the Kit freshness clock
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
-     input?.state==='stale'&&(input?.source==='ANDROID'||transport==='usb'))return false;
+     input?.state==='stale'&&(input?.source==='ANDROID'||transport==='usb')){
+   if(modeChanged)notify();
+   return false;
+  }
   const valid=kit?.connected===true&&['usb','ap','sta'].includes(transport)&&
    id.length>0&&id.length<=80&&input?.state==='live'&&(input?.source==='ANDROID'||transport==='usb'&&['WEB','PPM'].includes(input?.source))&&
    Number.isSafeInteger(input?.seq)&&input.seq>0&&
    Number.isFinite(input?.ageMs)&&input.ageMs>=0&&input.ageMs<=400&&
    vals&&['throttle','roll','pitch','yaw'].every(field=>validPulse(vals[field]));
-  if(!valid){const mode=kitMode;clearKit();kitMode=mode;return false;}
+  if(!valid){
+   // Keep trusted Kit mode visible even without a live accepted RC packet.
+   // Do not briefly announce mode=null to subscribers during a source loss.
+   const hadSample=kitSample!==null;
+   kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
+   if(hadSample||modeChanged)notify();
+   return false;
+  }
   if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;kitAccepted=null;kitEpoch=0;}
   const accepted=Number.isSafeInteger(input.accepted)?input.accepted:null;
   if(input.seq<=kitSeq){
    // Compact USB telemetry may omit ownerId. An advancing firmware accepted
    // counter proves that a reset sequence belongs to a new accepted producer.
    if(accepted!==null&&kitAccepted!==null&&accepted>kitAccepted){++kitEpoch;kitSeq=0;}
-   else return false;
+   else{if(modeChanged)notify();return false;}
   }
   kitAccepted=accepted; // Polling the same accepted packet cannot refresh freshness.
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;

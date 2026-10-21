@@ -1,0 +1,33 @@
+name: School production physical acceptance gate
+
+# This gate is deliberately separate from normal bench WebApp releases.
+# Never promote a school-production tag on the strength of simulated CI.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'school-production-*'
+
+permissions:
+  contents: read
+
+jobs:
+  physical-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check software source, protocol and image identity
+        run: |
+          npm test
+          npm run check
+          npm run verify:firmware
+      - name: Reject unwitnessed physical acceptance
+        run: |
+          npm run verify:acceptance:strict
+      - name: Record verification boundary
+        run: |
+          echo 'Strict evidence is metadata validation only. Independent real A1/A2 and handset observations are still required.'

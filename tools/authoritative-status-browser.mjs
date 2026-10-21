@@ -56,16 +56,56 @@ try{
  await page.setViewportSize({width:1366,height:900});
  await page.locator('[data-tab="pid"]').first().click();
  await sim.locator('#tpInputSource').selectOption('usb');
- await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='usb'&&window.ZebjusTraining.snapshot().input.fresh);
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='usb'&&window.ZebjusTraining.snapshot().input?.fresh);
+ // A single fresh browser snapshot is not proof that the USB producer
+ // continues advancing. Wait for an actual newer accepted frame after the
+ // source selector settles, without retrying Run or softening any watchdog.
+ const initialSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
+ await page.waitForFunction(previous=>{
+  const state=window.ZebjusTraining.snapshot();
+  return state.activeSource==='usb'&&state.input?.fresh&&state.input.origin==='kit'&&
+   state.throttle===1000&&state.seq>previous&&state.kitMode?.active==='angle'&&!state.armed;
+ },initialSeq,{timeout:10000});
  check(await sim.locator('#tpMode').isDisabled(),'Connected Kit must own simulator mode');
  await sim.locator('#tpRun').click();
- await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed);
+ try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000})}
+ catch(error){
+  const diagnostic=await page.evaluate(()=>{
+   const frame=document.getElementById('pidFrame')?.contentDocument;
+   return {snapshot:window.ZebjusTraining?.snapshot?.(),status:frame?.getElementById('tpStatus')?.textContent,
+    runDisabled:frame?.getElementById('tpRun')?.disabled,tab:document.querySelector('.tab.active')?.id,
+    fixture:{...window.__statusFixture,kit:window.__statusFixture?.kit},
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+  });
+  console.error('USB VIRTUAL RUN DIAGNOSTIC '+JSON.stringify(diagnostic));
+  throw error;
+ }
  await page.evaluate(()=>{const f=window.__statusFixture;f.kit.flightMode='acro';Object.assign(f.kit.flightModeState,{saved:'acro',active:'acro',pending:null})});
- await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpKitMode').textContent.includes('SYNC PENDING'));
+ try{
+  await page.waitForFunction(()=>document.getElementById('pidFrame')?.contentDocument?.getElementById('tpKitMode')?.textContent.includes('SYNC PENDING'),null,{timeout:5000});
+ }catch(error){
+  const diagnostic=await page.evaluate(()=>{
+   const frame=document.getElementById('pidFrame')?.contentDocument;
+   return {snapshot:window.ZebjusTraining?.snapshot?.(),modeText:frame?.getElementById('tpKitMode')?.textContent,
+    selectedMode:frame?.getElementById('tpMode')?.value,runStatus:frame?.getElementById('tpStatus')?.textContent,
+    fixtureMode:{...window.__statusFixture.kit.flightModeState},
+    connection:document.getElementById('liConnectionState')?.textContent,
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+  });
+  console.error('USB KIT MODE SYNC DIAGNOSTIC '+JSON.stringify(diagnostic));
+  throw error;
+ }
  check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
  await sim.locator('#tpStop').click();
  await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpMode').value==='acro');
+ const stoppedSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
+ await page.waitForFunction(previous=>{
+  const state=window.ZebjusTraining.snapshot();
+  return !state.armed&&state.activeSource==='usb'&&state.input?.fresh&&
+   state.throttle===1000&&state.seq>previous&&state.kitMode?.active==='acro';
+ },stoppedSeq,{timeout:10000});
  await sim.locator('#tpRun').click();
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000});
  await page.evaluate(()=>window.__statusFixture.kit.connected=false);
  await page.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed,null,{timeout:5000});
  await page.evaluate(()=>window.__statusFixture.kit.connected=true);
