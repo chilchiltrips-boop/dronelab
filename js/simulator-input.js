@@ -3,6 +3,10 @@
  */
 import {startSimulator,stopSimulator,resetSimulator,getSnapshot} from './tripod-physics.js';
 export const INPUT_MAX_AGE_MS=450;
+// Read-only verified Kit HTTP RC snapshots arrive slower than paired WebRTC.
+// Simulator-only 1s grace absorbs Wi-Fi/browser rendering jitter; it never
+// changes firmware failsafes, physical motors, or the 450ms WebRTC policy.
+export const KIT_MIRROR_MAX_AGE_MS=1000;
 const axesOf=c=>Object.fromEntries(['roll','pitch','yaw'].map(k=>[k,(c[k]-1500)/500]));
 const neutral=()=>({throttle:1000,roll:1500,pitch:1500,yaw:1500});
 const validPulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
@@ -48,13 +52,17 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   const transport=String(kit?.transport||'').toLowerCase();
   const id=String(kit?.kitId||'');
   const vals=input?.values;
+  const key=id+'|'+transport+'|'+String(kit?.bootId||'');
+  // A transient delayed poll is not a new packet; let the Kit freshness clock
+  // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
+  if(kit?.connected===true&&kitSample&&kitKey===key&&
+     input?.state==='stale'&&input?.source==='ANDROID')return false;
   const valid=kit?.connected===true&&['ap','sta'].includes(transport)&&
    id.length>0&&id.length<=80&&input?.state==='live'&&input?.source==='ANDROID'&&
    Number.isSafeInteger(input?.seq)&&input.seq>0&&
    Number.isFinite(input?.ageMs)&&input.ageMs>=0&&input.ageMs<=400&&
    vals&&['throttle','roll','pitch','yaw'].every(field=>validPulse(vals[field]));
   if(!valid){clearKit();return false;}
-  const key=id+'|'+transport+'|'+String(kit.bootId||'');
   if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;}
   if(input.seq<=kitSeq)return false; // Polling the same accepted packet cannot refresh freshness.
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
@@ -69,7 +77,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   return {peer:{...peer},sample:sample?{...sample,channels:{...sample.channels}}:null,ageMs,rateHz,rejected,
    fresh:!!sample&&peer.connected&&peer.approved&&peer.supported&&ageMs<=INPUT_MAX_AGE_MS,
    kit:{sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
-    ageMs:kitAgeMs,rateHz:kitRateHz,fresh:!!kitSample&&kitAgeMs<=INPUT_MAX_AGE_MS}};
+    ageMs:kitAgeMs,rateHz:kitRateHz,fresh:!!kitSample&&kitAgeMs<=KIT_MIRROR_MAX_AGE_MS}};
  }
  return {setPeer,accept,acceptKit,clearKit,snapshot,subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn)}};
 }
