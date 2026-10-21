@@ -15,21 +15,25 @@ export function validMirrorFrame(m){
   ['throttle','roll','pitch','yaw'].every(k=>validPulse(m.channels[k]));
 }
 export function createInputStore({now=()=>performance.now()}={}){
- let peer={connected:false,approved:false,supported:false,sessionId:'',deviceId:''},sample=null,receivedAt=0,lastSeq=0,previousAt=null,rateHz=null,rejected=0;
+ let peer={connected:false,approved:false,supported:false,sessionId:'',deviceId:''},sample=null,receivedAt=0,lastSeq=0,arrivals=[],rateHz=null,rejected=0;
  const listeners=new Set();
  const notify=()=>{for(const fn of listeners)fn()};
  function setPeer(value){
   const next={connected:value?.connected===true,approved:value?.approved===true,
    supported:value?.supported===true,sessionId:value?.sessionId||'',deviceId:value?.deviceId||''};
   const changed=JSON.stringify(next)!==JSON.stringify(peer);
-  if(!next.connected||!next.approved||next.sessionId!==peer.sessionId||next.deviceId!==peer.deviceId){sample=null;receivedAt=0;lastSeq=0;previousAt=null;rateHz=null;}
+  if(!next.connected||!next.approved||next.sessionId!==peer.sessionId||next.deviceId!==peer.deviceId){sample=null;receivedAt=0;lastSeq=0;arrivals=[];rateHz=null;}
   peer=next;if(changed)notify();
  }
  function accept(m){
   if(!peer.connected||!peer.approved||!peer.supported||!validMirrorFrame(m)||m.sessionId!==peer.sessionId||m.seq<=lastSeq){rejected++;return false;}
   const at=now();
-  if(previousAt!==null&&at>previousAt){const hz=1000/(at-previousAt);rateHz=rateHz===null?hz:.8*rateHz+.2*hz;}
-  previousAt=at;lastSeq=m.seq;receivedAt=at;
+  // Count arrivals over a bounded window: inverse inter-packet intervals make
+  // normal WebRTC delivery bursts look like thousands of updates per second.
+  arrivals=arrivals.filter(t=>at-t<=1000);arrivals.push(at);
+  if(arrivals.length>128)arrivals.splice(0,arrivals.length-128);
+  const span=at-arrivals[0];rateHz=span>=250?1000*(arrivals.length-1)/span:null;
+  lastSeq=m.seq;receivedAt=at;
   sample={...m,channels:{...m.channels}};notify();return true;
  }
  function snapshot(){

@@ -53,3 +53,12 @@ test('old APK has a clear update-required state and cannot become an Auto Androi
  const {store,input}=bench();store.setPeer({connected:true,approved:true,supported:false,sessionId:frame().sessionId});
  assert.equal(store.accept(frame()),false);assert.equal(input.snapshot().activeSource,'web');input.setChoice('android');assert.match(input.start().reason,/update required/);
 });
+test('receive rate measures a window instead of inflating WebRTC arrival bursts',()=>{
+ const {store,advance}=bench();store.accept(frame());
+ assert.equal(store.snapshot().rateHz,null);
+ for(let seq=2;seq<=21;seq++){advance(50);store.accept(frame(seq));}
+ assert.equal(store.snapshot().rateHz,20);
+ for(let seq=22;seq<=31;seq++){advance(.01);store.accept(frame(seq));}
+ assert.ok(store.snapshot().rateHz>=20&&store.snapshot().rateHz<40);
+ store.setPeer({connected:false});assert.equal(store.snapshot().rateHz,null);
+});

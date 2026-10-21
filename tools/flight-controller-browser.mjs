@@ -60,7 +60,11 @@ try{
  await wait(web,()=>window.ZebjusSimulatorInputs.snapshot().fresh);assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed),false);
  evidence.staleStopsOnlySimulator=true;
  await phone.locator('#flightStop').click();await wait(phone,()=>!window.ZebjusNetwork.hasControl());
- await wait(web,()=>window.ZebjusTraining.snapshot().input?.kind==='android-preview');
+ // Releasing a long AP session can expire its old status snapshot. Wait for
+ // the independent observer refresh and the matching preview before Run;
+ // a Kit identity/transport transition must still stop an active simulator.
+ await wait(phone,()=>window.ZebjusNetwork.isConnected()&&!window.ZebjusNetwork.hasControl());
+ await wait(web,()=>{const v=window.ZebjusTraining.snapshot().input;return v?.fresh&&v.kind==='android-preview'&&v.transport==='ap'&&v.kitId==='ZFC-A2-012345ABCDEF'});
  const stopped=await phone.evaluate(()=>({requests:window.__apManagement.length,stops:window.__apStops}));
  await web.locator('#tpRun').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
  assert.equal(await phone.evaluate(()=>window.ZebjusNetwork.hasControl()),false);
@@ -76,5 +80,5 @@ try{
  assert.deepEqual(errors,[]);
  writeFileSync('test-output/webrtc-applied-evidence.json',JSON.stringify({transport:'Real Chromium DTLS/SCTP WebRTC, native AP boundary double',...evidence,errors},null,2));
  console.log('PASS read-only AP mirror: concurrent AP stream, exact throttle, Web-only Run/Stop/mode/PID, source lock, no ARM requirement, bounded backpressure, stale local stop, independent Web source');
-}catch(e){console.error(e.stack||e);console.error(errors);await safeShot(web,'test-output/flight-error-web.png').catch(()=>{});await safeShot(phone,'test-output/flight-error-phone.png').catch(()=>{});process.exitCode=1}
+}catch(e){console.error(e.stack||e);console.error(errors);console.error('Simulator state',await web.evaluate(()=>window.ZebjusTraining?.snapshot()).catch(()=>null));await safeShot(web,'test-output/flight-error-web.png').catch(()=>{});await safeShot(phone,'test-output/flight-error-phone.png').catch(()=>{});process.exitCode=1}
 finally{await browser.close()}
