@@ -22,6 +22,8 @@ static bool zjKitAutoName=false;
 bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
+// Classroom-selected flight mode is saved metadata, NOT a hardware flight-control loop.
+static String zjFlightMode="angle";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
 // UDP has independent 500 ms receive/apply deadlines; other transports use zjRcLoop.
