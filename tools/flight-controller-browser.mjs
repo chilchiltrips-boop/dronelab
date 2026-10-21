@@ -35,7 +35,7 @@ try{
  const hardware=await phone.evaluate(()=>window.__apFrames.at(-1));
  await web.waitForFunction(c=>{const v=window.ZebjusTraining.snapshot();return v.input.channels.throttle===c[0]&&v.throttle===c[0]},hardware.channels);
  evidence.heldThrottle=hardware.channels[0];
- const count=await phone.evaluate(()=>window.__apManagement.length);
+ const count=await phone.evaluate(()=>window.__apManagement.filter(route=>route!=='/api/status').length);
  await web.locator('#tpMode').selectOption('acro');
  await web.locator('#tpPidP').fill('1.1');await web.locator('#tpApplyPid').click();
  assert.equal(await phone.locator('#flightMode').inputValue(),'angle','Web simulator mode leaked to Android');
@@ -44,7 +44,7 @@ try{
  assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().throttle),before,'Web joystick fought Android source');
  await web.locator('#tpStop').click();await wait(web,()=>!window.ZebjusTraining.snapshot().armed);
  assert.equal(await phone.evaluate(()=>window.ZebjusNetwork.inputArmed()),true,'Web Stop disarmed physical input');
- assert.equal(await phone.evaluate(()=>window.__apManagement.length),count,'Simulator controls issued Kit management requests');
+ assert.equal(await phone.evaluate(()=>window.__apManagement.filter(route=>route!=='/api/status').length),count,'Simulator controls issued a Kit mutation; independent authoritative status reads are permitted');
  assert.equal(await phone.evaluate(()=>window.__apFrames.at(-1).channels[0]),evidence.heldThrottle);
  await phone.waitForTimeout(200);assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed),false,'Fresh mirror restarted stopped simulator');
  await web.locator('#tpRun').click();assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed),false,'High-throttle Run must wait for low throttle');
@@ -65,10 +65,10 @@ try{
  // a Kit identity/transport transition must still stop an active simulator.
  await wait(phone,()=>window.ZebjusNetwork.isConnected()&&!window.ZebjusNetwork.hasControl());
  await wait(web,()=>{const v=window.ZebjusTraining.snapshot().input;return v?.fresh&&v.kind==='android-preview'&&v.transport==='ap'&&v.kitId==='ZFC-A2-012345ABCDEF'});
- const stopped=await phone.evaluate(()=>({requests:window.__apManagement.length,stops:window.__apStops}));
+ const stopped=await phone.evaluate(()=>({requests:window.__apManagement.filter(route=>route!=='/api/status').length,stops:window.__apStops}));
  await web.locator('#tpRun').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
  assert.equal(await phone.evaluate(()=>window.ZebjusNetwork.hasControl()),false);
- assert.deepEqual(await phone.evaluate(()=>({requests:window.__apManagement.length,stops:window.__apStops})),stopped);
+ assert.deepEqual(await phone.evaluate(()=>({requests:window.__apManagement.filter(route=>route!=='/api/status').length,stops:window.__apStops})),stopped);
  await web.locator('#tpStop').click();await web.locator('#tpInputSource').selectOption('web');await web.locator('#tpRun').click();
  await web.evaluate(()=>{window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',bubbles:true}));window.dispatchEvent(new KeyboardEvent('keyup',{key:'w',bubbles:true}))});
  await wait(web,()=>window.ZebjusTraining.snapshot().throttle===1025);

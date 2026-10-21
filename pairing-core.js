@@ -103,12 +103,13 @@ function session(role,events={},options={}){
   if(role!=='mobile'||inputMirrorVersion!==1||!connected||!paired||inputChannel?.readyState!=='open'||inputChannel.bufferedAmount>4096)return false;
   if(!validInputMirror(m))return false;
   return send({type:'INPUT_MIRROR',mirrorVersion:1,sessionId,seq:m.seq,channels:m.channels,
-   kitId:m.kitId,transport:m.transport,kind:m.kind,inputAgeMs:m.inputAgeMs});
+   kitId:m.kitId,transport:m.transport,kind:m.kind,inputAgeMs:m.inputAgeMs,...(m.aux?{aux:{...m.aux}}:{})});
  }
  function validInputMirror(m){
   return m&&m.mirrorVersion===1&&m.sessionId===sessionId&&Number.isSafeInteger(m.seq)&&m.seq>0&&
    ['ap','sta','preview'].includes(m.transport)&&['android-command','android-preview'].includes(m.kind)&&
    typeof m.kitId==='string'&&m.kitId.length<=80&&Number.isFinite(m.inputAgeMs)&&m.inputAgeMs>=0&&m.inputAgeMs<=250&&
+   (!m.aux||Object.keys(m.aux).length===2&&['ch5','ch6'].every(k=>Number.isInteger(m.aux[k])&&m.aux[k]>=1000&&m.aux[k]<=2000))&&
    m.channels&&Object.keys(m.channels).length===4&&['throttle','roll','pitch','yaw'].every(k=>Number.isInteger(m.channels[k])&&m.channels[k]>=1000&&m.channels[k]<=2000);
  }
  function onData(raw){

@@ -29,6 +29,12 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    status={...status,staConnected:true,ip:'192.168.1.41',ssid:args.ssid,wifiTestState:'saved',networkState:'AP_STA_COEXISTENCE'};
    return {state:'testing',saved:false};
   }
+  if(route==='/api/flight/mode'){
+   if(!status.flightModeState)throw Error('unsupported');
+   const active=status.rc.inputArmed?status.flightModeState.active:args.flightMode;
+   status.flightModeState={supported:true,stabilizationSupported:false,saved:args.flightMode,active,pending:active===args.flightMode?null:args.flightMode};status.flightMode=active;
+   return {kitId:id,saved:true,motorsArmed:false,flightMode:active,flightModeState:{...status.flightModeState}};
+  }
   if(route==='/api/wifi/mode')return {kitId:id,mode:args.mode,state:'switching'};
   if(route==='/api/rc/claim'){
    if(claimGate)await claimGate;
@@ -54,6 +60,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    assert.equal(kind,'admin');status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
    const session={expiresAt:now+600000,request:(route,_method,args)=>handler(route,args)};sessions.push(session);return session;
   }}};
+ const shared={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
   if(u.pathname==='/api/identify'){
@@ -380,5 +387,21 @@ test('USB not attached leaves read-only STA Take Control disabled and mode chang
   assert.equal(f.elements.get('kitTakeControl').disabled,true);
   await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/USB Serial/);
   assert.equal(f.requests.some(v=>String(v.route).startsWith('USB:')),false);
+ }finally{f.dispose()}
+});
+
+for(const mode of ['ap','sta'])test('WebApp '+mode+' mode writes verify read-back without changing armed input ownership',async()=>{
+ const f=fixture({mode,paired:true,encrypted:true});try{
+  f.status({flightMode:'angle',flightModeState:{supported:true,stabilizationSupported:false,saved:'angle',active:'angle',pending:null},rc:{claimed:true,inputArmed:true,source:'ANDROID'}});
+  await f.api.connect();const actual=await f.api.setFlightMode('acro');
+  assert.equal(actual.saved,'acro');assert.equal(actual.active,'angle');assert.equal(actual.pending,'acro');
+  assert.equal(f.api.getState().flightMode,'angle');assert.equal(f.api.getState().flightModeState.pending,'acro');
+  assert.equal(f.requests.filter(x=>['/api/rc/claim','/api/rc/release','/api/rc/stop'].includes(x.route)).length,0);
+  assert.equal(f.requests.filter(x=>x.route==='/api/status').at(-1).route,'/api/status');
+ }finally{f.dispose()}
+});
+test('WebApp old firmware fails with an actionable unsupported status and never sends a mode write',async()=>{
+ const f=fixture({mode:'ap'});try{await f.api.connect();await assert.rejects(f.api.setFlightMode('acro'),/UNSUPPORTED/);
+  assert.equal(f.requests.some(x=>x.route==='/api/flight/mode'),false);
  }finally{f.dispose()}
 });

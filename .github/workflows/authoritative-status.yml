@@ -1,0 +1,46 @@
+name: Authoritative status integration
+on:
+  push:
+    branches: [feature/authoritative-status-integration-20261021, main]
+    paths: ['FlightCore_Firmware/**', 'companion*', 'js/**', 'tools/**', 'tripod*', 'index.html', 'lab.html', 'live-inputs.css', 'mobile-android/**', '.github/workflows/authoritative-status.yml']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/simulator-input.test.mjs
+  browser:
+    needs: protocol
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Exercise verified fixture transports, modes and all required viewports
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/authoritative-status-http.log 2>&1 &
+          node tools/authoritative-status-browser.mjs
+          node tools/tripod-compact-browser.mjs
+          node tools/tripod-ap-mirror-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: authoritative-status-browser-evidence
+          path: test-output/

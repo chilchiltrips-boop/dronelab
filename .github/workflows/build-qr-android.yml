@@ -1,7 +1,7 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [fix/kit-control-20261017, fix/android-full-height-menu-panel-20261016, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main]
+    branches: [fix/kit-control-20261017, fix/android-full-height-menu-panel-20261016, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main, feature/authoritative-status-integration-20261021]
     paths:
       - 'tools/android-direct-kit*'
       - 'vendor/peerjs*'
@@ -62,7 +62,8 @@ permissions:
   actions: read
 concurrency:
   group: zebjus-android-release-${{ github.ref_name }}
-  cancel-in-progress: false
+  # Superseded review candidates may stop; production releases always finish their gates.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   release_candidate:
@@ -144,7 +145,7 @@ jobs:
         run: gradle -p mobile-android :app:assembleDebug --no-daemon
 
       - name: Load PRIVATE signing key from encrypted GitHub secrets
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_KEYSTORE_B64: ${{ secrets.ZEBJUS_ANDROID_KEYSTORE_B64 }}
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
@@ -161,13 +162,13 @@ jobs:
           echo "ZEBJUS_ANDROID_RELEASE_KEYSTORE_FILE=$KEYFILE" >> "$GITHUB_ENV"
 
       - name: Assemble permanently signed non-debug release APK
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
         run: gradle -p mobile-android :app:assembleRelease --stacktrace --no-daemon
 
       - name: Refuse wrong APK certificate or app identity
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           RELEASE_APK="mobile-android/app/build/outputs/apk/release/app-release.apk"
@@ -182,7 +183,7 @@ jobs:
           echo "Verified release APK size: $(stat -c %s "$RELEASE_APK") bytes"
 
       - name: Package one stable Android APK update URL
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk "$RUNNER_TEMP/zebjus-previous.apk"
@@ -194,7 +195,7 @@ jobs:
           python3 tools/write_android_release_metadata.py mobile-android/app/build.gradle mobile-apk/ANDROID_RELEASE_META.txt "$GITHUB_SHA"
 
       - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/testing/audit-compact-pairing-v1.4.5' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         with:
           name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}
           path: |
@@ -205,14 +206,14 @@ jobs:
           if-no-files-found: error
 
       - name: Build production-signed native touchscreen instrumentation
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         env:
           ZEBJUS_ANDROID_SIGNING_PASSWORD: ${{ secrets.ZEBJUS_ANDROID_SIGNING_PASSWORD }}
           ZEBJUS_TEST_RELEASE: '1'
         run: gradle -p mobile-android :app:assembleReleaseAndroidTest --no-daemon
 
       - name: Package exact-source signed native test bundle
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         run: |
           set -euo pipefail
           mkdir -p native-test-bundle
@@ -220,7 +221,7 @@ jobs:
           cp "$RUNNER_TEMP/zebjus-previous.apk" native-test-bundle/
 
       - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+        if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
         with:
           name: ZEBJUS_NATIVE_TOUCH_TEST_BUNDLE
           path: native-test-bundle/
@@ -236,7 +237,7 @@ jobs:
   native_touch:
     name: Native Android touch (16x9 REQUIRED)
     needs: android
-    if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+    if: github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021') || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -305,7 +306,7 @@ jobs:
   legacy_api30:
     name: POCO X2 legacy Android API 30 networking
     needs: android
-    if: github.ref == 'refs/heads/main'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/authoritative-status-integration-20261021')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -318,7 +319,7 @@ jobs:
           packages: 'platform-tools'
       - uses: actions/download-artifact@v4
         with:
-          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_release
+          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}
           path: mobile-apk/
       - uses: actions/download-artifact@v4
         with:

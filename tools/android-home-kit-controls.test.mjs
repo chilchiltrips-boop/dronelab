@@ -13,7 +13,7 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 function harness(){
  const handlers=new Map(),elements=new Map(),sent=[],expectedSsid='zebjus_drone_1';
- let denyMode=false;
+ let denyMode=false,appliedLed=false;
  const element=id=>{
   if(!elements.has(id))elements.set(id,{
    value:'',checked:false,disabled:false,textContent:'',dataset:{},attrs:{},
@@ -27,9 +27,9 @@ function harness(){
   sent.push({route,method,args});
   if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',mode:'ap',
    apActive:true,staConnected:false,requestTransport:'AP',apSsid:expectedSsid,
-   staCredentialsSaved:true,apIp:'192.168.4.1',ip:''};
+   staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
   if(route==='/api/wifi/saved')return {preferred:'School_Router',networks:[{ssid:'School_Router',preferred:true}]};
-  if(route==='/api/command')return {kitId,accepted:true};
+  if(route==='/api/command'){appliedLed=args.line.endsWith(',100');return {kitId,accepted:true,ledOn:appliedLed};}
   if(route==='/api/wifi/mode'){
    if(denyMode)throw Error('setup_authorization_required');
    return {kitId,mode:args.mode,state:'switching'};
@@ -74,10 +74,10 @@ test('Home LED uses authenticated SET 100/0; saved STA SSID loads without exposi
  assert.equal(h.element('flightLedToggle').disabled,false);
  await h.win.ZebjusNetwork.toggleLed();
  assert.equal(h.element('flightLedToggle').attrs['aria-pressed'],'true');
- assert.match(h.sent.at(-1).args.line,/^ZJLED,\d+,SET,100$/);
+ assert.match(h.sent.filter(x=>x.route==='/api/command').at(-1).args.line,/^ZJLED,\d+,SET,100$/);
  await h.win.ZebjusNetwork.toggleLed();
  assert.equal(h.element('flightLedToggle').attrs['aria-pressed'],'false');
- assert.match(h.sent.at(-1).args.line,/^ZJLED,\d+,SET,0$/);
+ assert.match(h.sent.filter(x=>x.route==='/api/command').at(-1).args.line,/^ZJLED,\d+,SET,0$/);
 });
 
 test('AP/STA command remains on verified AP until signed switch ACK; failures leave AP connected',async()=>{

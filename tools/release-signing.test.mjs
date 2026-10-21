@@ -15,7 +15,7 @@ test('stable Android source matches the published release or advances its versio
   'equal codes are valid only for the already published version, not a new upgrade');
  // A new APK build must still strictly advance the installed/published code.
  assert.ok(read('tools/verify_signed_android_release.py').includes('int(version_code) > int(old_package[2])'));
- assert.match(gradle,/versionName '1\.8\.13-flight-mode'/);
+ assert.match(gradle,/versionName '1\.8\.14-authoritative-status'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);
@@ -54,4 +54,14 @@ test('API30 SDK mirror retry verifies a real image and retains mandatory signed 
  assert.match(yaml,/grep -F 'PASS API30 network response compatibility'/);
  assert.match(yaml,/grep -F 'INSTRUMENTATION_CODE: -1'/);
  assert.match(yaml,/needs: \[android, native_touch, legacy_api30\]/);
+});
+
+test('staging API30 consumes the same review artifact as signing and never weakens publication prerequisites',()=>{
+ const yaml=read('.github/workflows/build-qr-android.yml');
+ const legacy=yaml.slice(yaml.indexOf('  legacy_api30:'),yaml.indexOf('  publish:'));
+ assert.ok(legacy.includes("name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}"));
+ const publish=yaml.slice(yaml.indexOf('  publish:'));
+ assert.match(publish,/needs: \[android, native_touch, legacy_api30\]/);
+ assert.match(publish,/if: github.ref == 'refs\/heads\/main'/);
+ assert.ok(yaml.includes("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}"));
 });

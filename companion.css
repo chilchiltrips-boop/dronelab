@@ -481,3 +481,5 @@ button{min-height:44px}
 .zj-ack-buttons{display:flex;gap:6px;flex-wrap:wrap}
 .zj-ack-buttons button{font:inherit;font-size:12px;padding:7px 10px;cursor:pointer;min-height:35px}
 .zj-ack-panel pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.4;max-height:200px;overflow:auto;padding:8px;background:#101c2b;color:#d8e7f8;border-radius:6px}
+
+.flight-options input[type="range"]{min-height:44px;max-width:100%;width:100%}.flight-options output{font-variant-numeric:tabular-nums;font-size:.8rem}

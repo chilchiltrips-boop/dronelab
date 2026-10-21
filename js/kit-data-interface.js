@@ -8,6 +8,11 @@
  const network=new Set(['ap','sta','android-relay']);
  const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
  const safePulse=value=>Number.isSafeInteger(value)&&value>=1000&&value<=2000;
+ function flightModeState(d){
+  const m=d?.flightModeState;
+  return m?.supported===true&&['angle','acro'].includes(m.saved)&&['angle','acro'].includes(m.active)&&
+   (m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active))?{...m}:null;
+ }
  function isNetwork(transport){return network.has(String(transport||'').toLowerCase())}
  // Single-flight diagnostic GETs; no control or mutation request may be queued here.
  function createReadScheduler({now=()=>Date.now(),limit=16}={}){
@@ -61,7 +66,7 @@
  function usbJoystick(kit,now=Date.now()){
   if(!matchesTarget(kit,'usb'))throw Error('USBDisconnectedError: connect and verify the physical USB Kit.');
   const rc=kit.rc||{},source=['WEB','ANDROID','PPM'].includes(rc.source)?rc.source:'NONE';
-  const age=kit.rcAt?Math.max(0,now-kit.rcAt):null;
+  const age=kit.rcAt?Math.max(0,now-kit.rcAt)+(Number.isFinite(rc.ageMs)?rc.ageMs:0):null;
   const fresh=rc.active===true&&source!=='NONE'&&age!==null&&age<=350&&
    ['throttle','roll','pitch','yaw'].every(c=>safePulse(rc[c]));
   const seq=Number.isSafeInteger(rc.seq)&&rc.seq>=0?rc.seq:0;
@@ -70,8 +75,9 @@
    failsafe:!fresh,inputArmed:fresh&&rc.inputArmed===true,
    throttle:fresh?rc.throttle:neutral.throttle,roll:fresh?rc.roll:neutral.roll,
    pitch:fresh?rc.pitch:neutral.pitch,yaw:fresh?rc.yaw:neutral.yaw,
+   ch5:safePulse(rc.ch5)?rc.ch5:null,ch6:safePulse(rc.ch6)?rc.ch6:null,flightMode:kit.flightMode||null,flightModeState:kit.flightModeState||null,
    accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:true,motors_disabled:true,
    motorsArmed:false,readSource:'verified-usb-serial'};
  }
- root.ZebjusKitData=Object.freeze({createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,validateReply,usbJoystick});
+ root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,validateReply,usbJoystick});
 })(globalThis);

@@ -116,8 +116,8 @@ test('signed RC priority is enforced before native worker and stale ACK errors r
  const bridge=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
  assert.match(src,/const nonRcNativeRequests=new Set\(\)/);
  assert.match(src,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
- assert.match(src,/if\(!route\.startsWith\('\/api\/rc\/'\)&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
- assert.match(src,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
+ assert.match(src,/if\(!route\.startsWith\('\/api\/rc\/'\)&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)&&!modeTraffic\(route,method\)\)/);
+ assert.match(src,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)&&!modeTraffic\(route,method\)\)/);
  assert.match(bridge,/ArrayBlockingQueue<>\(3\)/);
  assert.match(bridge,/Stale RC preview queued /);
  assert.match(bridge,/msg!=null&&\(msg\.startsWith\("Stale RC preview queued "\)\|\|msg\.equals\("Stale native request dropped"\)\)/);

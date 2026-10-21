@@ -44,11 +44,11 @@ test('out-of-range and missing pulse values never display as kit-accepted inputs
   assert.equal(m.state,'waiting',String(bad));assert.equal(m.values,null);
  }
 });
-test('USB combined telemetry can report motors OFF but never invent an LED state',()=>{
+test('USB uses verified status extensions for LED/motor state and preserves unknown legacy status',()=>{
  const usb={...kit,transport:'usb',ledOn:true,motorsDisabled:true,motorsArmed:false};
  const m=normalizeAcceptedInput(usb,{...snap('WEB'),rc:{...rc('WEB'),transport:'USB'},motorsOff:true},{now:1100});
- assert.equal(m.state,'live');assert.equal(m.transport,'USB');assert.equal(m.led,'NOT REPORTED');assert.equal(m.motors,'DISABLED');
- const raw=normalizeAcceptedInput(usb,{...snap('WEB'),motorsOff:false},{now:1100});
+ assert.equal(m.state,'live');assert.equal(m.transport,'USB');assert.equal(m.led,'ON');assert.equal(m.motors,'DISABLED');
+ const raw=normalizeAcceptedInput({...usb,ledOn:undefined,motorsDisabled:false,motorsArmed:undefined},{...snap('WEB'),motorsOff:false},{now:1100});
  assert.equal(raw.motors,'NOT REPORTED','legacy RAW USB does not report physical motor state');
 });
 test('a current HTTP reply cannot resurrect a stale firmware RC packet or frozen sequence',()=>{

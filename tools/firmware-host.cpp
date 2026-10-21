@@ -42,6 +42,18 @@ static String enroll(String kind,String credential,uint32_t delay=0){
  clockMs+=delay;prepare("/api/auth/enroll");zjHttp.args["nonce"]=nonce;zjHttp.args["deviceId"]=zjKitId;zjHttp.args["proof"]=zjHmac(credential,msg);zjHttp.handlers[zjHttp.path]();return nonce;
 }
 int main(){
+ Preferences modePrefs;zjLoadFlightMode(modePrefs);assert(zjFlightMode=="angle");
+ assert(!zjSaveFlightMode(modePrefs,"sta"));assert(modePrefs.writes==0);
+ assert(zjSaveFlightMode(modePrefs,"angle"));assert(modePrefs.writes==0);
+ assert(zjSaveFlightMode(modePrefs,"acro"));assert(zjFlightMode=="acro"&&modePrefs.writes==1);
+ assert(zjSaveFlightMode(modePrefs,"acro"));assert(modePrefs.writes==1);
+ zjRcInputArmed=true;assert(zjSaveFlightMode(modePrefs,"angle"));
+ assert(zjFlightMode=="acro"&&zjFlightModePending&&zjSavedFlightMode=="angle");
+ modePrefs.failNextWrite=true;assert(!zjSaveFlightMode(modePrefs,"acro"));assert(zjSavedFlightMode=="angle"&&zjFlightMode=="acro");
+ zjRcNeutral();assert(zjFlightMode=="angle"&&!zjFlightModePending);
+ zjFlightMode="acro";zjLoadFlightMode(modePrefs);assert(zjFlightMode=="angle");
+ modePrefs.putString("flightMode","invalid");zjLoadFlightMode(modePrefs);assert(zjFlightMode=="angle");
+
  // Exercise the production profile codec, five-entry bound, preference, removal,
  // legacy migration and failure preservation using an NVS double.
  zjSavedSsid="Legacy";zjSavedPass="password0";zjLoadProfiles();assert(zjWifiCount==1);
@@ -75,9 +87,14 @@ int main(){
  assert(zjRcInputArmed);clockMs+=100;
  assert(zjRcFrame(2,1600,1700,1300,1800,"ANDROID",armedToken,true,IPAddress(1),true));
  assert(zjRcThrottle==1600&&zjRcRoll==1700&&zjRcPitch==1300&&zjRcYaw==1800);
+ assert(zjRcFrame(3,1600,1700,1300,1800,"ANDROID",armedToken,true,IPAddress(1),false,1720,1280));
+ assert(zjRcCh5==1720&&zjRcCh6==1280&&!zjRcInputArmed);
+ assert(!zjRcFrame(4,1600,1700,1300,1800,"ANDROID",armedToken,true,IPAddress(1),false,2001,1280));
+ assert(zjRcCh5==1720);
+ assert(zjRcFrame(4,1000,1500,1500,1500,"ANDROID",armedToken,true,IPAddress(1),true));
  assert(std::string(zjRcState().c_str()).find("\"inputArmed\":true")!=std::string::npos);
  clockMs+=501;
- assert(!zjRcFrame(3,1000,1500,1500,1500,"ANDROID",armedToken,true,IPAddress(1),true));
+ assert(!zjRcFrame(5,1000,1500,1500,1500,"ANDROID",armedToken,true,IPAddress(1),true));
  assert(!zjRcInputArmed&&!zjRcOwned&&zjRcThrottle==1000);
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(1),"AP"));
  assert(zjRcFrame(1,1000,1500,1500,1500,"ANDROID",zjRcSession,true,IPAddress(1),true));

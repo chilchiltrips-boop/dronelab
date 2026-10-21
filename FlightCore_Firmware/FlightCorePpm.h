@@ -151,6 +151,7 @@ static void zjPpmLoop(uint32_t now){
     if(!armHigh)zjPpmInputSwitchArmed=false;
     zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
     zjRcInputArmed=zjPpmInputSwitchArmed&&armHigh;zjRcHasFrame=true;
+    zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
     zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
    }else if(!zjRcOwned){
     if(armLow&&t<=1050)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
@@ -160,6 +161,7 @@ static void zjPpmLoop(uint32_t now){
      zjRcSession="";zjRcOwnerId="PPM";zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;
      zjRcInputArmed=false;zjPpmInputSwitchArmed=false;zjPpmArmingLowSeen=true;
      zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;zjRcHasFrame=true;
+     zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
      zjRcSeq=1;++zjRcAccepted;
     }
    }else zjPpmSafeFrames=0; // Never steal a currently owned WEB/ANDROID session.

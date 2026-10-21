@@ -276,7 +276,7 @@ static void zjUdpLoop(uint32_t now){
  }
  portEXIT_CRITICAL(&zjUdpMux);now=millis();if(!seq)return;
  if(uint32_t(now-receivedAt)>ZJ_RC_DEADMAN_MS){zjUdpStop(ZJ_UDP_STALE);zjRcRelease("UDP_STALE_FRAME");return;}
- if(!zjRcFrame(seq,ch[0],ch[1],ch[2],ch[3],"ANDROID",zjRcSession,true,zjRcOwnerIP,arm)){
+ if(!zjRcFrame(seq,ch[0],ch[1],ch[2],ch[3],"ANDROID",zjRcSession,true,zjRcOwnerIP,arm,ch[4],ch[5])){
   zjUdpStop(ZJ_UDP_INVALID_FRAME);zjRcRelease("UDP_FRAME_REJECTED");return;
  }
  portENTER_CRITICAL(&zjUdpMux);const bool current=generation==zjUdpGeneration&&zjUdpActive;

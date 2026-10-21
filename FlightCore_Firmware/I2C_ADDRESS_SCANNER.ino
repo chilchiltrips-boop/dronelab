@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.9";
+constexpr const char* FW_VERSION="1.5.10";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -28,6 +28,7 @@ constexpr unsigned long LED_LEASE_MS=4000;
 struct LedStep {uint8_t brightness;uint16_t duration;};
 enum LedMode:uint8_t {LED_OFF,LED_MANUAL,LED_BLINK,LED_FADE,LED_SAFE,LED_WARNING,LED_SOS,LED_PATTERN};
 LedMode ledMode=LED_OFF;
+bool ledCommandOk=false;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,telLast=0;
 uint16_t telRateHz=20;
@@ -64,7 +65,7 @@ void printFirmwareInfo(){
  Serial.println(",DEDICATED_4_5");
 #endif
 }
-void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
+void ledAck(const char* id,const char* status){ledCommandOk=!strcmp(status,"OK");Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
  if(!text||!*text)return false;
  char* end=nullptr;const long n=strtol(text,&end,10);
@@ -77,6 +78,7 @@ bool readLong(char*& state,long low,long high,long& result){
 #include "FlightCoreClassroom.h"
 #include "FlightCorePpm.h"
 void ledCommand(char* line){
+ ledCommandOk=false;
  if(strncmp(line,"ZJLED,",6)!=0)return;
  char* state=nullptr;
  char* id=strtok_r(line+6,",",&state);
@@ -398,5 +400,16 @@ void loop(){
  emitTelemetry(now);
  zjNetworkLoop(now);
  zjRcLoop(now);
+ // Versioned extension leaves the legacy ZJTEL record unchanged.
+ static uint32_t lastState=0;
+ if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>=108){
+  lastState=millis();
+  // Compact record avoids repeating the large network JSON on a 115200-baud link.
+  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u\n",
+   zjKitId.c_str(),zjSavedFlightMode.c_str(),zjFlightMode.c_str(),zjFlightModePending?zjSavedFlightMode.c_str():"none",
+   zjRcThrottle,zjRcRoll,zjRcPitch,zjRcYaw,zjRcCh5,zjRcCh6,unsigned(ledMode),
+   (unsigned long)zjRcSeq,(unsigned long)(zjRcSeq?uint32_t(millis()-zjRcLast):0),(unsigned long)zjRcAccepted,(unsigned long)zjRcRejected,
+   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U);
+ }
  // Legacy ZJGYRO duplicates are disabled.
 }

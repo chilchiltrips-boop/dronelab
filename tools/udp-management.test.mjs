@@ -36,6 +36,15 @@ test('actual firmware status is valid signed JSON including UDP, RC, PPM and IMU
  assert.equal(t.managementProtocol,'ZJM1');assert.equal(t.sampleValid,true);assert.equal(t.sampleSequence,1);
  assert.ok(t.sampleAgeMs<100);assert.equal(t.roll,1.25);assert.equal(t.pitch,-2.5);
 });
+test('signed flight mode saves and reads back; invalid and unsigned requests cannot corrupt it',async()=>{
+ const ack=await admin.request('/api/flight/mode','POST',{flightMode:'acro'});
+ assert.equal(ack.saved,true);assert.equal(ack.flightModeState.saved,'acro');
+ const status=await admin.request('/api/status');assert.equal(status.flightModeState.active,'acro');
+ assert.equal(status.flightModeState.pending,null);assert.equal(status.flightModeState.stabilizationSupported,false);
+ await assert.rejects(admin.request('/api/flight/mode','POST',{flightMode:'sta'}),/invalid_flight_mode/);
+ const unsigned=await transport('/api/flight/mode','POST',{flightMode:'angle'});assert.equal(unsigned.status,401);
+ assert.equal((await admin.request('/api/status')).flightModeState.saved,'acro');
+});
 test('a lost UDP response retries the same write and returns its cached proof exactly once',async()=>{
  const result=await admin.request('/api/command','POST',{line:'ZJLED,1,SET,1'});
  assert.equal(result.count,1,'production replay cache must return ACK without invoking handler twice');
