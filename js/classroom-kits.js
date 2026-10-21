@@ -449,12 +449,15 @@ async function wifiDirectRequest(ip,key,route,method,args,expected){
 }
 async function setFlightMode(desired,expectedId,expectedTransport){
  if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
- if(!linkFresh()||!expectedId||state.kitId!==expectedId||state.transport!==expectedTransport)
-  throw Error('Connect and verify the selected physical Kit before changing mode');
+ const selectedUsb=expectedTransport==='usb'&&getMonitorPaths().some(p=>
+  p.transport==='usb'&&p.verified===true&&p.available===true&&p.kitId===expectedId);
+ if(!linkFresh()||!expectedId||state.kitId!==expectedId||
+   !(state.transport===expectedTransport||selectedUsb))
+  throw Error('Connect and verify the selected physical Kit and requested transport before changing mode');
  if(state.otaInProgress||otaActive||state.working)throw Error('Kit update in progress');
  const ticket=reconnectTicket;
  let result;
- if(state.transport==='usb'){
+ if(selectedUsb||state.transport==='usb'&&expectedTransport==='usb'){
   if(!serial()?.isOpen?.()||serial()?.isFlashing?.())
    throw Error('Open USB Serial Monitor at 115200 baud');
   const pending=waitSerial(/^ZJFLIGHT,MODE,ZFC-A[12]-[A-Fa-f0-9]{12},(angle|acro),SAVED$/,3500);
@@ -463,12 +466,12 @@ async function setFlightMode(desired,expectedId,expectedTransport){
   const line=await pending;
   const parts=line.split(',');
   result={kitId:parts[2],flightMode:parts[3],saved:parts[4]==='SAVED',motorsArmed:false};
- }else if(['ap','sta'].includes(state.transport)){
+ }else if(['ap','sta'].includes(expectedTransport)&&state.transport===expectedTransport){
   if(!state.controlAuthorized)throw Error('This Kit is read-only; pair and authorize before changing flight mode');
   result=await deviceRequest('/api/flight/mode','POST',{flightMode:desired});
  }else throw Error('Select verified direct USB, AP or STA to change flight mode');
  if(ticket!==reconnectTicket||!linkFresh()||state.kitId!==expectedId||
-  state.transport!==expectedTransport||result?.kitId!==expectedId||result?.flightMode!==desired||
+  !(state.transport===expectedTransport||selectedUsb&&getMonitorPaths().some(p=>p.transport==='usb'&&p.kitId===expectedId&&p.verified===true&&p.available===true))||result?.kitId!==expectedId||result?.flightMode!==desired||
   result?.saved!==true||result?.motorsArmed!==false)
   throw Error('Mode save response or physical Kit identity not verified');
  state.flightMode=desired;
