@@ -51,5 +51,20 @@
   return {kind:'frame',transport:link[2],source:link[3],seq:Number(seq),
    throttle,roll,pitch,yaw,inputArmed,active:true,claimed:true};
  }
- root.ZebjusSerialRcDecoder=Object.freeze({parseSerialRc,parsePpmChannels});
+ function parseSerialStatus(line){
+  const text=String(line??'').trim();
+  if(!text.startsWith('ZJSTATE,1,')||text.length>2048)return null;
+  try{
+   const d=JSON.parse(text.slice(10)),m=d.flightModeState,rc=d.rc;
+   if(!/^ZFC-A[12]-[A-F0-9]{12}$/.test(d.kitId||'')||!m||m.supported!==true||
+    !['angle','acro'].includes(m.saved)||!['angle','acro'].includes(m.active)||
+    !(m.pending===null||m.pending===m.saved)||(m.pending===null)!==(m.saved===m.active)||
+    typeof d.ledOn!=='boolean'||!rc||rc.kitId!==d.kitId||
+    !['throttle','roll','pitch','yaw','ch5','ch6'].every(k=>Number.isInteger(rc[k])&&rc[k]>=1000&&rc[k]<=2000)||
+    !Number.isInteger(rc.seq)||rc.seq<0||rc.seq>4294967295||
+    typeof rc.active!=='boolean'||typeof rc.inputArmed!=='boolean'||rc.motorsArmed!==false||rc.motorsDisabled!==true)return null;
+   return d;
+  }catch{return null}
+ }
+ root.ZebjusSerialRcDecoder=Object.freeze({parseSerialRc,parsePpmChannels,parseSerialStatus});
 })(globalThis);

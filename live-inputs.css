@@ -63,3 +63,12 @@
 .li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
 #liSelectionReason{flex:1 1 230px;min-width:160px}
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
+
+/* Explicit colors keep native option popups readable in both browser themes. */
+.li-monitor-toolbar select,.li-mode-toolbar select{background:#f6f8fc;color:#172331;color-scheme:light;min-height:44px;border:1px solid #8295aa}
+.li-monitor-toolbar select option,.li-mode-toolbar select option{background:#f6f8fc;color:#172331}
+.li-monitor-toolbar select:focus-visible,.li-mode-toolbar select:focus-visible{outline:3px solid #2277db;outline-offset:2px}
+.li-mode-toolbar,.li-status-detail{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 0;min-width:0}
+.li-mode-toolbar select{border-radius:8px;padding:6px 10px}.li-mode-toolbar span{flex:1 1 240px;overflow-wrap:anywhere;font-size:.8rem}
+.li-status-detail{font-size:.8rem;font-variant-numeric:tabular-nums}.li-status-detail span{min-width:0;overflow-wrap:anywhere}
+@media(prefers-color-scheme:dark){.li-monitor-toolbar select,.li-mode-toolbar select,.li-monitor-toolbar select option,.li-mode-toolbar select option{background:#162333;color:#edf4ff;color-scheme:dark}}

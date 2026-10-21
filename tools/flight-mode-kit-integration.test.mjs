@@ -10,9 +10,9 @@ test('FlightCore saves authenticated Angle/Acro independently from Wi-Fi mode, d
  assert.match(firmware,/if\(!zjAllow\(\)\)return/);
  assert.match(firmware,/localSta/);
  assert.match(firmware,/next!="angle"&&next!="acro"/);
- assert.match(firmware,/zjRcOwned\|\|zjRcInputArmed/);
- assert.match(firmware,/zjPrefs\.putString\("flightMode",next\)/);
- assert.match(firmware,/zjPrefs\.getString\("flightMode","angle"\)/);
+ assert.match(firmware,/zjSaveFlightMode\(zjPrefs,next\)/);
+ assert.match(rc,/next!=zjSavedFlightMode/);
+ assert.match(rc,/prefs\.getString\("flightMode","angle"\)/);
  assert.match(firmware,/zjJson\(zjFlightMode\)/);
  assert.match(enrolled,/path=="\/api\/flight\/mode"/);
  assert.match(rc,/static String zjFlightMode="angle"/);
@@ -23,12 +23,14 @@ test('Android mode selection verifies kit ID and signed saved result; never trea
  const net=read('companion-network.js'),app=read('companion-flight.js');
  assert.match(net,/async function setSavedFlightMode\(desired\)/);
  assert.match(net,/request\('\/api\/flight\/mode','POST',\{flightMode:desired\}\)/);
- assert.match(net,/data\?\.flightMode!==desired\|\|data\?\.saved!==true/);
- assert.match(net,/rcSession\|\|rcClaiming\|\|rcInputArmed/);
- assert.match(net,/kitFlightModeVerified=\['angle','acro'\]\.includes\(data\.flightMode\)/);
+ assert.match(net,/ack.saved!==desired/);
+ assert.match(net,/check=await request\('\/api\/status'\)/);
+ assert.doesNotMatch(net.slice(net.indexOf('async function setSavedFlightMode'),net.indexOf('async function setMode(')),/Disarm and release/);
+ assert.match(net,/kitModeState=modeStatus\(data\)/);
  assert.match(app,/mode='angle'/);
  assert.match(app,/await window\.ZebjusNetwork\.setSavedFlightMode\(desired\)/);
- assert.match(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
+ assert.doesNotMatch(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
+ assert.match(app,/PENDING UNTIL KIT DISARM/);
 });
 test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1000-2000µs',()=>{
  const live=read('js/live-inputs.js'),mirror=read('js/simulator-input.js'),

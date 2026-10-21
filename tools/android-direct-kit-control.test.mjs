@@ -7,7 +7,7 @@ const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function bench(udp=false,feedbackVersion=1){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
- let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0;
+ let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0,modeData=null,modeDelay=null,modeError=null,acceptedArm=false;
  const Clock=class extends Date{static now(){return Date.now()+clockOffset}};
  const element=id=>{
   if(id==='kitRcPreview')return null;
@@ -22,13 +22,18 @@ function bench(udp=false,feedbackVersion=1){
    if(failure)throw failure;
    return {kitId,kitCode:'123456',board:'ZFC-A2',mode:transport.toLowerCase(),requestTransport:transport,
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
-    inputArmSupported:true,controlAuthorized:authorized,ledOn:false};
+    inputArmSupported:true,controlAuthorized:authorized,ledOn:false,...(modeData?{flightMode:modeData.active,flightModeState:{...modeData}}:{})};
+  }
+  if(route==='/api/flight/mode'){
+   if(modeDelay)await modeDelay;if(modeError)throw modeError;
+   modeData={supported:true,stabilizationSupported:false,saved:args.flightMode,active:acceptedArm?modeData.active:args.flightMode,pending:acceptedArm&&args.flightMode!==modeData.active?args.flightMode:null};
+   return {kitId,saved:true,motorsArmed:false,flightMode:modeData.active,flightModeState:{...modeData}};
   }
   if(route==='/api/rc/claim'){if(delayClaim)await delayClaim;if(claimFailure)throw claimFailure;return {kitId,session:udp?'a'.repeat(32):'session-'+requests.length,...(udp?{udpProtocol:'ZJUDP1',udpPort:4210,udpFeedbackVersion:feedbackVersion}:{})}}
   if(route==='/api/rc/snapshot')return {kitId,claimed:true,source:'WEB',inputArmed:false,seq:20,ageMs:30};
   if(route==='/api/rc/stop')return {stopped:true,motorsDisabled:true};
-  if(route==='/api/rc/preview'){if(delayPreview)await delayPreview;return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'}}
-  if(route==='/api/rc/release')return {released:true};
+  if(route==='/api/rc/preview'){if(delayPreview)await delayPreview;acceptedArm=args.inputArmed==='true';return {kitId,received:true,seq:args.seq,inputArmed:acceptedArm}}
+  if(route==='/api/rc/release'){acceptedArm=false;if(modeData)modeData={...modeData,active:modeData.saved,pending:null};return {released:true};}
   if(route==='/api/command')return {accepted:true};
   if(route==='/api/telemetry')return {kitId,gyroReady:true,roll:1.25,pitch:0,yaw:0};
   throw Error('Unexpected route '+route);
@@ -43,7 +48,7 @@ function bench(udp=false,feedbackVersion=1){
  if(udp){let seq=0;Object.assign(win.ZebjusNative,{
   managementProtocol:'ZJM1',
   startUdp:()=>queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'start'})),
-  offerUdp:(channels,inputArmed)=>queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'ack',seq:++seq,inputArmed,roundTripMs:2})),stopUdp(){}
+  offerUdp:(channels,inputArmed)=>{acceptedArm=inputArmed;queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'ack',seq:++seq,inputArmed,roundTripMs:2}))},stopUdp(){}
  });}
  const document={readyState:'loading',hidden:false,getElementById:element,addEventListener:(type,fn)=>handlers.set('document:'+type,fn)};
  vm.runInNewContext(source,{window:win,document,Date:Clock,performance,URLSearchParams,Promise,Set,Map,
@@ -54,6 +59,8 @@ function bench(udp=false,feedbackVersion=1){
   fail:e=>failure=e,failClaim:e=>claimFailure=e,holdStatus:p=>delayStatus=p,holdClaim:p=>delayClaim=p,holdPreview:p=>delayPreview=p,
   async connect(sta=false){if(sta){transport='STA';element('kitLink').value='sta';handlers.get('kitLink:change')();element('kitIp').value='192.168.1.22';handlers.get('kitIp:change')();element('kitKey').value='label'}
    handlers.get('kitConnect:click')();await settle();await settle();assert.equal(win.ZebjusNetwork.isConnected(),true);},
+  withMode:(active='angle')=>modeData={supported:true,stabilizationSupported:false,saved:active,active,pending:null},
+  delayMode:p=>modeDelay=p,modeError:e=>modeError=e,
   observer:()=>authorized=false,advance:ms=>clockOffset+=ms};
 }
 for(const sta of [false,true])test(`direct ${sta?'STA':'AP'} ARM claims and ACKs without diagnostic toggle; STOP releases`,async()=>{
@@ -177,7 +184,7 @@ test('native non-RC promises are drained before ARM claim and new ones are block
  assert.match(source,/nonRcNativeRequests\.add\(operation\)/);
  assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
  assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
- assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
+ assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)&&!modeTraffic\(route,method\)\)/);
 });
 
 test('UDP input ARM keeps WebApp IMU reads available while Wi-Fi mutation remains blocked',async()=>{
@@ -321,4 +328,44 @@ test('AP local-input expiry and firmware terminal NACK still release streaming c
   assert.equal(b.network.inputArmed(),false);assert.equal(b.network.hasControl(),false);
   assert.ok(b.requests.some(x=>x.route==='/api/rc/release'));
  }
+});
+
+test('Android armed mode request verifies saved/pending without interrupting the RC owner',async()=>{
+ const b=bench(true);b.withMode();await b.connect();await b.network.armControls();
+ const before=b.requests.filter(x=>x.route==='/api/rc/release').length;
+ const actual=await b.network.setSavedFlightMode('acro');
+ assert.equal(actual.saved,'acro');assert.equal(actual.active,'angle');assert.equal(actual.pending,'acro');
+ assert.equal(b.network.hasControl(),true);assert.equal(b.network.inputArmed(),true);
+ assert.equal(b.requests.filter(x=>x.route==='/api/rc/release').length,before);
+ assert.equal(b.requests.at(-1).route,'/api/status','success requires independent read-back');
+ await b.network.releaseRc();await b.network.status();
+ assert.equal(b.network.flightModeState().active,'acro');assert.equal(b.network.flightModeState().pending,null);
+ b.withMode('angle');await b.network.status();assert.equal(b.network.savedFlightMode(),'angle','external client state is authoritative');
+});
+test('Android old firmware and rejected commands cannot report mode success',async()=>{
+ const old=bench();await old.connect();await assert.rejects(old.network.setSavedFlightMode('acro'),/firmware update/);
+ const b=bench();b.withMode();await b.connect();b.modeError(Error('authorization_required'));
+ await assert.rejects(b.network.setSavedFlightMode('acro'),/authorization_required/);
+ assert.equal(b.network.savedFlightMode(),'angle');
+});
+test('Android rapid mode toggles serialize and reject superseded requests',async()=>{
+ const b=bench(true);b.withMode();await b.connect();let finish;
+ b.delayMode(new Promise(r=>finish=r));
+ const first=assert.rejects(b.network.setSavedFlightMode('acro'),/request changed|superseded/);
+ await settle();const second=b.network.setSavedFlightMode('angle');finish();
+ await first;assert.equal((await second).saved,'angle');assert.equal(b.network.savedFlightMode(),'angle');
+});
+test('disarmed Android movement claims only preview and carries CH5/CH6 without input ARM',async()=>{
+ const b=bench();await b.connect();
+ await b.network.previewControls({throttle:1400,axes:{roll:.4,pitch:-.2,yaw:.1},ch5:1700,ch6:1300});
+ const frame=b.requests.find(x=>x.route==='/api/rc/preview');assert.ok(frame);
+ assert.equal(frame.args.inputArmed,'false');assert.equal(frame.args.throttle,1400);
+ assert.equal(frame.args.ch5,1700);assert.equal(frame.args.ch6,1300);assert.equal(b.network.inputArmed(),false);
+ await b.network.releaseRc();
+});
+test('mode response from a previous Android connection cannot restore its status',async()=>{
+ const b=bench();b.withMode();await b.connect();let finish;
+ b.delayMode(new Promise(r=>finish=r));const rejected=assert.rejects(b.network.setSavedFlightMode('acro'),/Kit or mode request changed/);
+ await settle();b.network.networkChanged();finish();await rejected;
+ assert.equal(b.network.flightModeState(),null);
 });

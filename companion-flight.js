@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
 let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
 let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0,kitModePending=false;
-let mirrorSeq=0,lastMirrorAt=-Infinity;
+let mirrorSeq=0,lastMirrorAt=-Infinity,modeUiSeq=0;
 const mirroring=()=>peer?.status()?.inputMirrorVersion===1;
 const directKit=()=>(!peer?.status()?.connected||mirroring())&&!!window.ZebjusNetwork?.isConnected?.();
 const kitArmed=()=>directKit()&&!!window.ZebjusNetwork?.inputArmed?.();
@@ -33,7 +33,7 @@ function recordControlLinkTimeout(now){
   ' • sent '+detail.lastSentAgeMs+'ms ago • queue '+detail.bufferedBytes+'B';
 }
 
-const diagnosticInput=()=>{const m=current();return {throttle:diagnosticThrottle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},responseMode:preset}};
+const diagnosticInput=()=>{const m=current();return {throttle:diagnosticThrottle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw},responseMode:preset,ch5:Number($('flightCh5')?.value||1000),ch6:Number($('flightCh6')?.value||1000),previewRequested:!!drag.left||!!drag.right}};
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
@@ -120,14 +120,21 @@ function render(){
   $('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';
   if(directKit()){
    $('flightLatency').textContent=diagnostic.seq?diagnostic.rtt+' ms':'—';
-   $('flightModeState').textContent=(kitModePending?'SAVING • ':'KIT '+kitInputState()+' • ')+mode.toUpperCase();
+   // Mode status is rendered below from signed firmware state.
+
   }
  }
  $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=mirroring()||!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
- $('flightMode').disabled=mirroring()||kitModePending;
+ $('flightMode').disabled=mirroring()&&!directKit();
+ if(directKit()){
+  const actual=window.ZebjusNetwork?.flightModeState?.();
+  $('flightModeState').textContent=kitModePending?'SAVING • '+mode.toUpperCase():actual?
+   'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):
+   'KIT MODE UNSUPPORTED • UPDATE FIRMWARE';
+ }
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
@@ -297,25 +304,27 @@ function bind(){
   e.preventDefault();doStop();
  });
  $('flightMode').onchange=async e=>{
-   const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
+   const desired=e.target.value==='acro'?'acro':'angle',previous=mode,request=++modeUiSeq;
    if(directKit()){
-    if(kitArmed()||kitArmPending){
-     e.target.value=mode;updateStatus('DISARM KIT INPUT BEFORE CHANGING MODE');return;
-    }
-    kitModePending=true;render();
+    mode=desired;kitModePending=true;render();
     try{
-     await window.ZebjusNetwork.setSavedFlightMode(desired);
-     mode=desired;updateStatus('KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF');
+     const actual=await window.ZebjusNetwork.setSavedFlightMode(desired);
+     if(request!==modeUiSeq)return;
+     mode=actual.saved;updateStatus(actual.pending?'SAVED • PENDING UNTIL KIT DISARM':'SAVED • ACTIVE '+actual.active.toUpperCase());
     }catch(error){
+     if(request!==modeUiSeq)return;
      mode=window.ZebjusNetwork?.savedFlightMode?.()||previous;
-     updateStatus('FLIGHT MODE NOT SAVED • '+error.message);
-    }finally{kitModePending=false;render()}
+     updateStatus('FLIGHT MODE NOT VERIFIED • '+error.message);
+    }finally{if(request===modeUiSeq){kitModePending=false;render()}}
     return;
    }
-   mode=desired;render();
-   if(isOwned()){sent.clear();send(true)}
+   mode=desired;render();if(isOwned()){sent.clear();send(true)}
   };
-  $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
+  for(const channel of ['flightCh5','flightCh6'])$(channel)?.addEventListener('input',()=>{
+  $(channel+'Value').textContent=$(channel).value+' µs';
+  if(directKit())window.ZebjusNetwork?.previewControls?.({...diagnosticInput(),previewRequested:true});
+ });
+ $('flightPreset').onchange=e=>{preset=F.PRESETS[e.target.value]?e.target.value:'Medium';clearTouches();try{localStorage.setItem(settingsKey,preset)}catch{}render()};
  document.addEventListener('contextmenu',event=>{if(event.target.closest('button,select,.flight-touch-zone'))event.preventDefault()});
  $('flightPair').onclick=openConnection;$('flightBack').onclick=closeConnection;$('flightSettings').onclick=openConnection;
  // Keep the dialog present until the touch ends. Closing on pointerdown lets
