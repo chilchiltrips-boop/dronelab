@@ -27,7 +27,13 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
   motors:network&&(kit.motorsDisabled===true||kit.motorsArmed===false)?'DISABLED':'NOT REPORTED'};
  if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
- const rc=sample.rc;
+ const accepted=sample.rc,preview=accepted?.preview;
+ const previewFresh=preview?.previewOnly===true&&preview?.source==='ANDROID'&&
+  Number.isSafeInteger(preview.seq)&&preview.seq>0&&
+  Number.isFinite(preview.ageMs)&&preview.ageMs>=0&&preview.ageMs<=400&&
+  now-sample.at<=SNAPSHOT_TTL_MS&&channels.every(field=>finitePulse(preview[field]));
+ const usePreview=accepted?.active!==true&&previewFresh;
+ const rc=usePreview?{...preview,active:true,inputValid:true,failsafe:false}:accepted;
  if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
  const valid=channels.every(field=>finitePulse(rc[field]));
  if(!valid)return {...m,state:'waiting'};
@@ -43,7 +49,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
  const armed=active&&rc.inputArmed===true;
  return {...m,
-  inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?(rc.previewOnly?'preview':'live'):recent?'idle':'stale',previewOnly:rc.previewOnly===true,aux5:finitePulse(rc.ch5)?rc.ch5:null,aux6:finitePulse(rc.ch6)?rc.ch6:null,
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
   ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
@@ -145,6 +151,7 @@ function initLiveInputs(){
   write('liRate',v.rateHz===null?'— Hz':v.rateHz.toFixed(1)+' Hz');
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
+   write('liAux5',v.aux5??'—');write('liAux6',v.aux6??'—');
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
   const modeSelect=$('liModeSelect'),save=$('liModeSave');
   if(modeSelect&&v.flightMode&&document.activeElement!==modeSelect&&!modeSaving)modeSelect.value=v.flightMode;
@@ -168,7 +175,8 @@ function initLiveInputs(){
   stick('liRightDot',(n.roll-1000)/10,100-(n.pitch-1000)/10);
   write('liLeftYaw',v.values?n.yaw:'—');write('liLeftThrottle',v.values?n.throttle:'—');
   write('liRightRoll',v.values?n.roll:'—');write('liRightPitch',v.values?n.pitch:'—');
-  const message=v.state==='live'?'Received by physical Kit • monitoring only; no control session was claimed.':
+  const message=v.state==='preview'?'AUTHORIZED DISARMED PREVIEW • diagnostic TRPY/AUX only; input is NOT armed and no RC ownership was claimed.':
+    v.state==='live'?'Received by physical Kit • monitoring only; no control session was claimed.':
    v.state==='idle'?'No current accepted RC input. Joysticks neutral; no Take Control needed to view.':
    v.state==='stale'?'Last confirmed packet is stale. Values are historical, not live control.':
    v.state==='waiting'?'Waiting for authenticated accepted-input telemetry from this Kit. PPM requires firmware support.':
