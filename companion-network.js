@@ -61,7 +61,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  // Signed HMAC counters and Android's single HTTP worker MUST preserve
  // request order. Do not enqueue unrelated reads/writes behind joystick ACKs.
  // /api/auth/ is allowed for the selected RC session's signed reauthentication.
- if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
+ if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!(route==='/api/flight/mode'&&method==='POST'&&!rcClaiming))
   return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
  trace('native_request',{route,transport:link,outcome:'pending'});
