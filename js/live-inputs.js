@@ -199,7 +199,12 @@ function initLiveInputs(){
    const hz=rate.observe(id,reply,at);
    // Period is measured start-to-start; network wait already consumes budget.
    // A single in-flight request still caps load when ESP32/WRTC is slow.
-   readFailures=0;nextPollAt=Math.max(at,startedAt+(current.rc?.active===true?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS));
+   // The visible PID cockpit needs a fresh virtual RC input every ~140ms;
+   // the ordinary hardware Live Inputs pane keeps its existing reduced 250ms
+   // cadence under active physical control. All requests remain bounded GETs.
+   const interval=pidVisible()?NETWORK_POLL_MS:
+    (current.rc?.active===true?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS);
+   readFailures=0;nextPollAt=Math.max(at,startedAt+interval);
    sample={kitId:id,rc:reply,at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
     motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
    display();
