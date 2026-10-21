@@ -410,6 +410,31 @@ static void zjRpcLoop(){
  const uint32_t loopUs=micros()-started;
  if(loopUs>zjRpcMaxLoopUs)zjRpcMaxLoopUs=loopUs;
 }
+// USB physical serial command for a verified classroom Kit. This only saves
+// Angle/Acro metadata; the FlightCore firmware never drives physical motors.
+// A signed AP/STA client uses /api/flight/mode instead.
+static bool zjSerialFlightMode(char* line){
+ if(!strcmp(line,"ZJFLIGHT,GET")){
+  Serial.print("ZJFLIGHT,MODE,");Serial.print(zjKitId);Serial.print(',');
+  Serial.print(zjFlightMode);Serial.println(",CURRENT");return true;
+ }
+ const char prefix[]="ZJFLIGHT,MODE,";
+ if(strncmp(line,prefix,sizeof(prefix)-1))return false;
+ const String requested=line+sizeof(prefix)-1;
+ if(requested!="angle"&&requested!="acro"){
+  Serial.println("ZJFLIGHT,ERROR,INVALID_MODE");return true;
+ }
+ if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+  Serial.println("ZJFLIGHT,ERROR,NETWORK_OR_OTA_BUSY");return true;
+ }
+ if(zjPrefs.putString("flightMode",requested)!=requested.length()){
+  Serial.println("ZJFLIGHT,ERROR,SAVE_FAILED");return true;
+ }
+ zjFlightMode=requested;
+ Serial.print("ZJFLIGHT,MODE,");Serial.print(zjKitId);Serial.print(',');
+ Serial.print(zjFlightMode);Serial.println(",SAVED");
+ return true;
+}
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){
   if(event==ARDUINO_EVENT_WIFI_AP_START)zjApStarted=true;
