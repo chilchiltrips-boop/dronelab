@@ -68,7 +68,9 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
   kitSample={mirrorVersion:1,sessionId:'verified-kit-'+key,seq:input.seq,
    channels:Object.fromEntries(['throttle','roll','pitch','yaw'].map(field=>[field,vals[field]])),
-   transport,kind:'android-command',kitId:id,inputAgeMs:input.ageMs,origin:'kit'};
+   transport,kind:'android-command',kitId:id,inputAgeMs:input.ageMs,origin:'kit',
+   flightMode:['angle','acro'].includes(input.flightMode)?input.flightMode:null,
+   inputArm:input.inputArm==='ARMED'?'ARMED':input.inputArm==='DISARMED'?'DISARMED':'STALE'};
   notify();return true;
  }
  function snapshot(){
@@ -119,13 +121,15 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   const v=store.snapshot(),source=effective(),remote=source==='android',
    frame=remote?androidFrame(v,lockedOrigin||'auto'):null,
    c=frame?frame.channels:neutral(),a=axesOf(c),p=getSnapshot(s);
-  const sticks=remote?{left:{x:-a.yaw,y:0},right:{x:a.roll,y:-a.pitch}}:webSticks;
+  const throttleY=1-2*(c.throttle-1000)/1000;
+   const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
+    {left:{...webSticks.left,y:Math.abs(webSticks.left.y)>.04?webSticks.left.y:1-2*(s.throttle-1000)/1000},right:webSticks.right};
   return {source:remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
    seq:remote?frame?.seq||0:0,appliedAt:0,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
    axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:remote&&!s.running?a:{roll:0,pitch:0,yaw:0},sticks,
    input:remote?{channels:{...c},fresh:!!frame,ageMs:frame?.ageMs??null,rateHz:frame?.rateHz??null,
     kind:frame?.kind||'',transport:frame?.transport||'',kitId:frame?.kitId||'',
-    origin:frame?.origin||lockedOrigin||'',supported:!!frame||v.peer.supported,paired:!!frame||v.peer.approved}:null,
+    origin:frame?.origin||lockedOrigin||'',flightMode:frame?.flightMode||null,inputArm:frame?.inputArm||'NOT REPORTED',supported:!!frame||v.peer.supported,paired:!!frame||v.peer.approved}:null,
    reason,angles:{roll:p.roll,pitch:p.pitch,yaw:p.yaw},rates:{roll:p.rollRate,pitch:p.pitchRate,yaw:p.yawRate},
    motors:{rpm:p.motorRPM,requestedRPM:p.motorRequestedRPM,thrust:p.motorThrust,output:p.motorCommands},vertical:p.vertical};
  }
