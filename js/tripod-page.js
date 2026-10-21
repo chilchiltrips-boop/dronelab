@@ -174,7 +174,7 @@ function makeScene(){
     camera.position.set(Math.sin(azimuth)*radius*Math.cos(elevation),2.65+Math.sin(elevation)*radius,Math.cos(azimuth)*radius*Math.cos(elevation));camera.lookAt(0,2.65,0);
     renderer.render(scene,camera);
    },
-   diagnostics:()=>({quality,pivotY:pivot.position.y,rpmSpin:propGroups.map(p=>p.rotation.y),wash:wash.map(w=>w.cone.material.opacity),props:propGroups.map(p=>p.getWorldPosition(new THREE.Vector3()).toArray())}),
+   diagnostics:()=>({quality,cameraMode:view,cameraAzimuth:azimuth,pivotY:pivot.position.y,rpmSpin:propGroups.map(p=>p.rotation.y),wash:wash.map(w=>w.cone.material.opacity),props:propGroups.map(p=>p.getWorldPosition(new THREE.Vector3()).toArray())}),
    dispose:()=>{disposed=true;observer.disconnect();disposeTree(scene);key.shadow.map?.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();}
   };
  }catch(err){
