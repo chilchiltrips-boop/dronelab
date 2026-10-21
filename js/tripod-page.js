@@ -126,8 +126,9 @@ function makeScene(){
   }).catch(err=>console.warn('Assembly Lab tripod model unavailable',err));
   let quality='high',slowFrames=0;const rotorWorld=new THREE.Vector3(),axisDown=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
   const applyQuality=value=>{quality=value;renderer.setPixelRatio(value==='low'?1:Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=value!=='low';resize()};
-  // Front red arms (+Z) face the viewer by default: positive pitch drops the drone nose.
-   let radius=9.9,azimuth=0,elevation=.20,wantedAzimuth=0,wantedElevation=.20,view='front';
+  // Start behind the drone: red front arms (+Z) point away from the viewer.
+  // View change only; yaw/pitch, motor numbering and flight physics stay unchanged.
+   let radius=9.9,azimuth=Math.PI,elevation=.20,wantedAzimuth=Math.PI,wantedElevation=.20,view='back';
   const resize=()=>{const {width,height}=stage.getBoundingClientRect();if(width<1||height<1)return;camera.aspect=width/height;camera.updateProjectionMatrix();renderer.setSize(width,height,false)};
   const observer=new ResizeObserver(resize);observer.observe(stage);resize();
   $('tpSceneStatus').textContent='3D ACTIVE';$('tpSceneTip').textContent='Drag to orbit • Scroll to zoom';
@@ -216,8 +217,8 @@ function syncActions(){
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
  $('tpControlSource').textContent=remote?'ANDROID '+(state.input.fresh?'LIVE':'STALE')+' • #'+state.seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
  const input=state.input;
- $('tpSourceState').textContent=remote?'Android AP · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
- $('tpInputStatus').textContent=remote?(input.fresh?(input.kind==='android-command'?'ANDROID COMMAND • ':'ANDROID PREVIEW • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • KIT RX UNCONFIRMED':input.paired&&!input.supported?'Android app update required':'Waiting for fresh Android input'):'WEBAPP • Keyboard / joysticks';
+ $('tpSourceState').textContent=remote?'Android '+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
+ $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.paired&&!input.supported?'Android app update required':'Waiting for verified AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs':'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning!==s.running){
