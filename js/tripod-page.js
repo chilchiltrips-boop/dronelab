@@ -7,7 +7,15 @@ import {simulateResponse} from './tripod-experiments.js';
 import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,MOTOR_GEOMETRY,PLANT,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
 let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false,embeddedVisible=true;
-const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
+const audioEngine=createTripodAudio(status=>{
+ const el=$('tpAudioStatus');if(el)el.textContent=status;
+ const alert=$('tpAudioAlert');
+ if(alert){
+  const failed=/AUDIO UNAVAILABLE|AUDIO INITIALIZATION FAILED|TAP SOUND ON TO UNLOCK AUDIO/.test(status);
+  alert.hidden=!failed;
+  alert.textContent=failed?status+' • Open Sound settings to retry or adjust audio.':'';
+ }
+});
 // Do not run DOM updates synchronously for every 25-Hz WebRTC control
 // frame. The receiver must validate/apply and return its ACK before layout
 // and stick presentation can consume another frame on the main thread.
@@ -208,6 +216,7 @@ function syncActions(){
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
  $('tpControlSource').textContent=remote?'ANDROID '+(state.input.fresh?'LIVE':'STALE')+' • #'+state.seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
  const input=state.input;
+ $('tpSourceState').textContent=remote?'Android AP · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
  $('tpInputStatus').textContent=remote?(input.fresh?(input.kind==='android-command'?'ANDROID COMMAND • ':'ANDROID PREVIEW • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • KIT RX UNCONFIRMED':input.paired&&!input.supported?'Android app update required':'Waiting for fresh Android input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs':'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
@@ -330,13 +339,18 @@ function updateControls(){
  $('tpReset').onclick=()=>stop('Web RESET');
  $('tpInputSource').onchange=e=>{receiver.setChoice(e.target.value);releaseAll();syncActions();drawUI()};
  $('tpCalibrate').onclick=()=>{calibrateLevel(s);setStatus('LEVEL TRIM SAVED (VIRTUAL)')};
- $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Manual Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
+ $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
  try{const pref=JSON.parse(localStorage.getItem('zebjus.tripod.audio.v1')||'null');if(pref){if(Number.isFinite(pref.volume))volume=clamp(pref.volume,0,1);if(['quiet','normal','detailed'].includes(pref.profile))$('tpSoundPreset').value=pref.profile;if(pref.muted){soundOn=audioEngine.toggle()}}}catch{}
  const saveAudio=()=>{try{localStorage.setItem('zebjus.tripod.audio.v1',JSON.stringify({volume,profile:audioEngine.profile,muted:!soundOn}))}catch{}};
- $('tpSound').setAttribute('aria-pressed',String(soundOn));$('tpSound').textContent=soundOn?'♫ Sound On':'♫ Sound Off';$('tpVolume').value=Math.round(volume*100);$('tpVolumeOut').textContent=Math.round(volume*100)+'%';
+ const syncSoundLabel=()=>{
+  $('tpSound').setAttribute('aria-pressed',String(soundOn));$('tpSound').textContent=soundOn?'Sound On':'Sound Off';
+  const summary=document.querySelector('.tp-sound-menu>summary');
+  summary.textContent=soundOn?'🔊':'🔇';summary.setAttribute('aria-label','Sound settings ('+(soundOn?'on':'off')+')');
+ };
+ syncSoundLabel();$('tpVolume').value=Math.round(volume*100);$('tpVolumeOut').textContent=Math.round(volume*100)+'%';
  $('topPairMobileBtn').addEventListener('click',()=>{audioUnlocked=true;if(soundOn)audioEngine.start()});
  $('tpSound').onclick=e=>{audioUnlocked=true;
-   soundOn=audioEngine.toggle();e.currentTarget.setAttribute('aria-pressed',String(soundOn));e.currentTarget.textContent=soundOn?'♫ Sound On':'♫ Sound Off';
+   soundOn=audioEngine.toggle();syncSoundLabel();
    if(soundOn&&s.running)audioStart();saveAudio();
  };
 
