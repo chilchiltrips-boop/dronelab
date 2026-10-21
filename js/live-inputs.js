@@ -19,9 +19,12 @@ const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
 export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
+ const statusFresh=Number.isFinite(kit?.rcAt)&&kit.rcAt>0&&now-kit.rcAt<=SNAPSHOT_TTL_MS;
+ const reportedArm=statusFresh&&typeof kit.rc?.inputArmed==='boolean'?
+  (kit.rc.inputArmed?'ARMED':'DISARMED'):'NOT REPORTED';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
   inputTransport:'—',seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
-  inputArm:'NOT REPORTED',flightMode:['angle','acro'].includes(kit?.flightMode)?kit.flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
+  inputArm:reportedArm,flightMode:['angle','acro'].includes(kit?.flightMode)?kit.flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
@@ -146,6 +149,8 @@ function initLiveInputs(){
   write('liRate',v.rateHz===null?'— Hz':v.rateHz.toFixed(1)+' Hz');
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
+   write('liArmBadge','INPUT '+v.inputArm);
+   if($('liArmBadge'))$('liArmBadge').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':v.inputArm==='STALE'?'stale':'unknown';
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
    if($('liSetFlightMode')&&v.flightMode&&!modeSaving&&document.activeElement!==$('liSetFlightMode'))
     $('liSetFlightMode').value=v.flightMode;
