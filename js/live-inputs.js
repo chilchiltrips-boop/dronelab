@@ -87,7 +87,7 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- let monitorChoice='auto',selectionReason='';
+ let monitorChoice='auto',selectionReason='',modeSaving=false;
  const getKit=()=>{
   const kit=window.ZebjusKits?.getState?.()||{connected:false};
   const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
@@ -146,6 +146,9 @@ function initLiveInputs(){
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
+  const modeSelect=$('liModeSelect'),save=$('liModeSave');
+  if(modeSelect&&v.flightMode&&document.activeElement!==modeSelect&&!modeSaving)modeSelect.value=v.flightMode;
+  if(save)save.disabled=modeSaving||!kit.connected||!['ap','sta','usb'].includes(kit.transport)||kit.otaInProgress||!kit.kitId;
   $('liInputArm').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':'unknown';
   write('liLed',v.led);
   write('liMotors',v.motors);
@@ -228,11 +231,11 @@ function initLiveInputs(){
    usbPpm={...ppm,at:Date.now()};
    if(ppm.owner&&sample?.rc?.source==='PPM'&&sample?.rc?.active===true){
     sample.rc={...sample.rc,channels:ppm.channels};
-    if(visible())display();
+    if(monitoring())display();
    }
    return;
   }
-  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(visible())display();return;}
+  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(monitoring())display();return;}
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
@@ -251,7 +254,7 @@ function initLiveInputs(){
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
     at,rateHz:null,motorsOff:motorReported};
   }
-  if(visible())display();
+  if(monitoring())display();
  });
  document.addEventListener('visibilitychange',()=>{
   // Preserve the historical IMU/RC snapshot; never resurrect a stale value as LIVE.
@@ -260,6 +263,25 @@ function initLiveInputs(){
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
  $('liMonitorSelect')?.addEventListener('change',e=>{monitorChoice=e.target.value;wipe();display();});
+ $('liModeSave')?.addEventListener('click',async()=>{
+  if(modeSaving)return;
+  const kit=getKit(),desired=$('liModeSelect')?.value;
+  const message=$('liModeMessage');
+  if(!['angle','acro'].includes(desired)||!kit.connected||!['usb','ap','sta'].includes(kit.transport)){
+   if(message)message.textContent='Select and verify a direct USB, AP or STA Kit first';return;
+  }
+  modeSaving=true;display();
+  if(message)message.textContent='Saving '+desired.toUpperCase()+' to verified '+kit.transport.toUpperCase()+' Kit…';
+  try{
+   const ack=await window.ZebjusKits.setFlightMode(desired,kit.kitId,kit.transport);
+   const now=getKit();
+   if(now.kitId!==kit.kitId||!now.connected||ack?.flightMode!==desired||ack?.saved!==true)
+    throw Error('Kit changed or save acknowledgement invalid');
+   if(message)message.textContent='KIT SAVED • '+desired.toUpperCase()+' • '+kit.transport.toUpperCase()+' • MOTORS OFF';
+   write('liFlightMode',desired.toUpperCase());
+  }catch(e){if(message)message.textContent='MODE NOT SAVED • '+(e.message||e)}
+  finally{modeSaving=false;display()}
+ });
  window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
  function tick(){display();if(monitoring()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
