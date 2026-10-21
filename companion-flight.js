@@ -108,6 +108,10 @@ function render(){
  $('flightArm').textContent=kitArmPending?'ARMING…':armed||kitArmed()?'DISARM':'ARM';
  $('flightArm').disabled=kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
  $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
+  const previewActive=directKit()&&window.ZebjusNetwork?.hasControl?.()&&!kitArmed();
+  $('flightPreview').disabled=kitArmPending||kitModePending||!directKit()||!previewActive&&!window.ZebjusNetwork?.canArm?.();
+  $('flightPreview').textContent=previewActive?'END PREVIEW':'PREVIEW';
+  $('flightPreview').setAttribute('aria-pressed',String(previewActive));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
  const diagnostic=window.ZebjusNetwork?.feedback?.();
@@ -271,6 +275,24 @@ function closeConnection(){
 }
 function bind(){
  setupStick('left');setupStick('right');
+ $('flightPreview').onclick=async()=>{
+  if(!directKit()){updateStatus('CONNECT VERIFIED KIT FOR DISARMED PREVIEW');return}
+  if(kitArmPending||kitModePending)return;
+  kitArmPending=true;render();
+  try{
+   if(window.ZebjusNetwork?.hasControl?.()&&!kitArmed()){
+    await window.ZebjusNetwork.releaseRc('PREVIEW_OFF');
+    diagnosticThrottle=1000;clearTouches();
+    updateStatus('DISARMED PREVIEW RELEASED • MOTORS OFF');
+   }else{
+    if(kitArmed())await doStop('PREVIEW_REQUEST');
+    diagnosticThrottle=1000;clearTouches();
+    await window.ZebjusNetwork.startDisarmedPreview();
+    updateStatus('DISARMED RC PREVIEW LIVE • MOTOR OUTPUTS OFF');
+   }
+  }catch(error){updateStatus('RC PREVIEW: '+error.message)}
+  finally{kitArmPending=false;render()}
+ };
  $('flightArm').onclick=async()=>{
   if(directKit()){
    if(kitArmed()){await doStop();updateStatus('KIT DISARMED • MOTORS OFF');return}
