@@ -8,6 +8,7 @@ const trace=(event,data)=>window.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
+let kitFlightMode='angle',kitFlightModeVerified=false,flightModeSaving=false;
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
 let udpActive=false,udpStarting=false,udpReadyWaiter=null,udpArmWaiter=null,udpStats=null,udpStreamId='';
 const apStreaming=()=>udpActive&&link==='ap'&&native?.apStreamingVersion===1;
@@ -32,9 +33,9 @@ const udpFeedback=data=>({
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
-const diagnosticRoutes=new Set(['POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
  const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
@@ -514,6 +515,12 @@ async function status(){
  if(epoch!==linkEpoch)throw Error('Kit link changed during status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
  verifiedKitId=data.kitId||'';mode=data.mode||mode;
+ // Wi-Fi mode and persisted Angle/Acro flight mode are independent.
+ kitFlightModeVerified=['angle','acro'].includes(data.flightMode);
+ if(kitFlightModeVerified){
+  kitFlightMode=data.flightMode;
+  window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',{detail:{kitId:verifiedKitId,flightMode:kitFlightMode,saved:true}}));
+ }
  // Reject the wrong interface BEFORE pinning Wi-Fi or advertising ONLINE.
  onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
  if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
@@ -566,6 +573,25 @@ async function testSave(){
   if(d.wifiTestState==='failed')throw Error('Not saved • router test failed (reason '+d.lastStaFailureReason+'). Previous credentials preserved.');
  }
  throw Error('Save not verified. Reconnect the kit and inspect status before retrying.');
+}
+async function setSavedFlightMode(desired){
+ if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
+ if(!online||!onKitLink||!verifiedKitId)throw Error('Verify FlightCore Kit before changing flight mode');
+ if(!kitFlightModeVerified)throw Error('FlightCore firmware update required for saved flight mode');
+ if(flightModeSaving||otaBusy||rcSession||rcClaiming||rcInputArmed||previewBusy)
+  throw Error('Disarm and release Kit control before changing flight mode');
+ const id=verifiedKitId,epoch=linkEpoch;
+ flightModeSaving=true;
+ try{
+  const data=await request('/api/flight/mode','POST',{flightMode:desired});
+  if(epoch!==linkEpoch||id!==verifiedKitId||data?.kitId!==id||
+     data?.flightMode!==desired||data?.saved!==true||data?.motorsArmed!==false)
+   throw Error('FlightCore did not confirm the saved mode and Kit identity');
+  kitFlightMode=desired;
+  window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',
+   {detail:{kitId:id,flightMode:desired,saved:true}}));
+  return desired;
+ }finally{flightModeSaving=false}
 }
 async function setMode(desired=el('kitMode')?.value){
  if(!['ap','sta','auto'].includes(desired))throw Error('Invalid Wi-Fi mode');
@@ -1120,7 +1146,8 @@ window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
- window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
+ window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
+  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
