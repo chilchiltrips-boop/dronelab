@@ -216,7 +216,7 @@ static void zjSetupHttp(){
    ",\"flightModePending\":"+(zjPendingFlightMode.isEmpty()?String("false"):String("true"))+
    ",\"flightModeRevision\":"+String(zjFlightModeRevision)+
    ",\"flightModeImplementation\":\"diagnostic-metadata\",\"saved\":true,\"motorsArmed\":false}");
- });;
+ });
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"udpManagement\":\"ZJM1\",\"udpManagementPort\":4211,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
  // AP-local Kit identity maintenance; full immutable Device ID is never changed.
  zjHttp.on("/api/kit/name",HTTP_POST,[](){
