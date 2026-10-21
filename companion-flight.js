@@ -2,7 +2,7 @@
 (function(){'use strict';
 const $=id=>document.getElementById(id),F=window.ZebjusFlightMath;
 let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',left=null,right=null,throttle=1000,mode='angle',armed=false,halted=true,ready=false,lastAckAt=0,lastAckSeq=0,criticalRequestSeq=0,armRequestSeq=0,sent=new Map(),drag={left:null,right:null},loopStarted=false,lastApplied=null,authority=false,sessionId='',splashTimer=null,clockAt=0,clockElapsed=0;
-let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0,kitModePending=false,pendingFlightMode=null;
+let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0,kitModePending=false,pendingFlightMode=null,pendingFlightModeKit='';
 let mirrorSeq=0,lastMirrorAt=-Infinity;
 const mirroring=()=>peer?.status()?.inputMirrorVersion===1;
 const directKit=()=>(!peer?.status()?.connected||mirroring())&&!!window.ZebjusNetwork?.isConnected?.();
@@ -99,8 +99,11 @@ function render(){
  $('flightThrottle').textContent=m.throttle+' µs';$('flightRoll').textContent=Math.round(m.roll*100)+'%';$('flightPitch').textContent=Math.round(m.pitch*100)+'%';$('flightYaw').textContent=Math.round(m.yaw*100)+'%';
  // A mode choice during an active diagnostic stream is queued. The signed
  // firmware save remains disarmed/idle-only; never hot-switch a running drone.
+ if(pendingFlightMode&&directKit()&&window.ZebjusNetwork?.identity?.()?.kitId!==pendingFlightModeKit){
+  pendingFlightMode=null;pendingFlightModeKit='';updateStatus('MODE SAVE CANCELLED • KIT IDENTITY CHANGED');
+ }
  if(pendingFlightMode&&directKit()&&!kitModePending&&window.ZebjusNetwork?.canSaveFlightMode?.()){
-  const desired=pendingFlightMode;pendingFlightMode=null;kitModePending=true;
+  const desired=pendingFlightMode;pendingFlightMode=null;pendingFlightModeKit='';kitModePending=true;
   Promise.resolve().then(()=>window.ZebjusNetwork.setSavedFlightMode(desired))
    .then(()=>{mode=desired;updateStatus('KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF')})
    .catch(error=>{mode=window.ZebjusNetwork?.savedFlightMode?.()||'angle';updateStatus('FLIGHT MODE NOT SAVED • '+error.message)})
@@ -129,7 +132,7 @@ function render(){
   $('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';
   if(directKit()){
    $('flightLatency').textContent=diagnostic.seq?diagnostic.rtt+' ms':'—';
-   $('flightModeState').textContent=(kitModePending?'SAVING • ':'KIT '+kitInputState()+' • ')+mode.toUpperCase();
+   $('flightModeState').textContent=(pendingFlightMode?'PENDING DISARM • ':kitModePending?'SAVING • ':'KIT '+kitInputState()+' • ')+mode.toUpperCase();
   }
  }
  $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
@@ -309,11 +312,11 @@ function bind(){
    const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
    if(directKit()){
     if(kitArmed()||kitArmPending||!window.ZebjusNetwork?.canSaveFlightMode?.()){
-     mode=desired;pendingFlightMode=desired;
+     mode=desired;pendingFlightMode=desired;pendingFlightModeKit=window.ZebjusNetwork?.identity?.()?.kitId||'';
      updateStatus('MODE '+desired.toUpperCase()+' • PENDING DISARM / RELEASE TO SAVE');
      render();return;
     }
-    pendingFlightMode=null;kitModePending=true;render();
+    pendingFlightMode=null;pendingFlightModeKit='';kitModePending=true;render();
     try{
      await window.ZebjusNetwork.setSavedFlightMode(desired);
      mode=desired;updateStatus('KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF');
