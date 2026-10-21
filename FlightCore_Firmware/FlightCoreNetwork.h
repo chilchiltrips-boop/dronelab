@@ -484,6 +484,39 @@ static void zjNetUsbStatus(){
  Serial.print("ZJNET,SAVED,");Serial.println(zjProfilesStatus());
 }
 static bool zjNetSerialCommand(char* line){
+ if(!strcmp(line,"ZJFLIGHT,GET")||!strncmp(line,"ZJFLIGHT,SET,",13)){
+  if(!strcmp(line,"ZJFLIGHT,GET")){
+   Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\\n",zjKitId.c_str(),
+    zjFlightMode.c_str(),zjRequestedFlightMode.c_str(),
+    zjPendingFlightMode.isEmpty()?"NONE":zjPendingFlightMode.c_str(),
+    (unsigned long)zjFlightModeRevision);
+   return true;
+  }
+  // Physical USB teacher access is scoped to the short-lived admin unlock.
+  // Do not infer network permissions or ownership from a USB cable.
+  if(!zjAdminAuthorized()){Serial.println("ZJFLIGHT,ERR,ADMIN_UNLOCK_REQUIRED");return true;}
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   Serial.println("ZJFLIGHT,ERR,BUSY");return true;
+  }
+  const String next=line+13;
+  if(next!="angle"&&next!="acro"){Serial.println("ZJFLIGHT,ERR,INVALID_MODE");return true;}
+  const bool changed=next!=zjRequestedFlightMode;
+  if(changed&&zjPrefs.putString("flightMode",next)!=next.length()){
+   Serial.println("ZJFLIGHT,ERR,SAVE_FAILED");return true;
+  }
+  if(changed)zjRequestedFlightMode=next;
+  const String oldPending=zjPendingFlightMode,oldActive=zjFlightMode;
+  if(next==zjFlightMode)zjPendingFlightMode="";
+  else if(zjRcInputArmed)zjPendingFlightMode=next;
+  else {zjFlightMode=next;zjPendingFlightMode="";}
+  if(changed||oldPending!=zjPendingFlightMode||oldActive!=zjFlightMode)++zjFlightModeRevision;
+  Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\\n",zjKitId.c_str(),
+   zjFlightMode.c_str(),zjRequestedFlightMode.c_str(),
+   zjPendingFlightMode.isEmpty()?"NONE":zjPendingFlightMode.c_str(),
+   (unsigned long)zjFlightModeRevision);
+  return true;
+ }
+
  if(!strncmp(line,"ZJNET,LABEL,",12)||!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM")){
   if(!zjAdminAuthorized()||zjRcOwned||zjNetTesting){Serial.println("ZJNET,ERR,ADMIN_LOCKED_OR_BUSY");return true;}
   const bool revoke=!strcmp(line,"ZJNET,REVOKE_LABEL,CONFIRM");const String label=revoke?String(""):String(line+12);
