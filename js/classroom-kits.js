@@ -967,7 +967,7 @@ function onSerial(e){
  if(e.detail?.transport&&e.detail.transport!=='usb')return;
  const line=String(e.detail?.line||'').trim();
  if(usbCandidate.serialGeneration===root.DroneLabSerial?.generation?.()&&usbCandidate.kitId===state.kitId&&
-   root.ZebjusSerialRcDecoder?.parseSerialRc?.(line)?.kind==='frame')usbMonitorPacketAt=Date.now();
+   ['frame','preview'].includes(root.ZebjusSerialRcDecoder?.parseSerialRc?.(line)?.kind))usbMonitorPacketAt=Date.now();
  if(line.startsWith('ZJKIT,ID,')){usbMonitorPacketAt=0;if(usbCandidate.kitId!==line.slice(9))for(const key of Object.keys(usbCandidate))delete usbCandidate[key];usbCandidate.kitId=line.slice(9);usbCandidate.identityAt=Date.now();usbCandidate.serialGeneration=root.DroneLabSerial?.generation?.();}
  if(line.startsWith('ZJNET,PAIR,')){
   const f=line.split(',');if(/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
