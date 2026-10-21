@@ -23,7 +23,10 @@ bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
 // Classroom-selected flight mode is saved metadata, NOT a hardware flight-control loop.
-static String zjFlightMode="angle";
+static String zjFlightMode="angle"; // active diagnostic metadata, never motor PID
+static String zjRequestedFlightMode="angle",zjPendingFlightMode="";
+static uint32_t zjFlightModeRevision=0;
+static String zjRcAuthSessionId=""; // signed owner session for network RC claim
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
 // UDP has independent 500 ms receive/apply deadlines; other transports use zjRcLoop.
@@ -69,6 +72,13 @@ static String zjRcNewSession(){
   (unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random(),(unsigned long)esp_random());
  return String(token);
 }
+static bool zjApplyPendingFlightMode(){
+ // Active metadata updates only after diagnostic input is disarmed.
+ // No physical flight controller / PWM / DShot output is implemented here.
+ if(zjRcInputArmed||zjPendingFlightMode.isEmpty())return false;
+ zjFlightMode=zjPendingFlightMode;zjPendingFlightMode="";++zjFlightModeRevision;
+ return true;
+}
 static void zjRcNeutral(){
  zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
 }
@@ -76,7 +86,8 @@ static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
  if(had){zjRcLastReleaseReason=reason;zjRcLastReleaseAt=millis();}
  zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcUdpOwned=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
- zjRcSession="";zjRcOwnerId="";zjRcSource="NONE";zjRcTransport="NONE";
+ zjRcSession="";zjRcOwnerId="";zjRcAuthSessionId="";zjRcSource="NONE";zjRcTransport="NONE";
+ zjApplyPendingFlightMode();
  if(had&&Serial.availableForWrite()>70){Serial.print("ZJRC,RELEASE,");Serial.println(reason);}
 }
 static bool zjRcClaim(const String& source,const String& code,bool network,const IPAddress& ip,const char* transport){
@@ -85,7 +96,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");
  zjRcOwned=true;zjRcNetwork=network;zjRcSource=source;zjRcOwnerIP=ip;
- zjRcTransport=transport;zjRcSession=zjRcNewSession();zjRcOwnerId=zjRcNewSession().substring(0,12);zjRcSeq=0;
+ zjRcTransport=transport;zjRcAuthSessionId="";zjRcSession=zjRcNewSession();zjRcOwnerId=zjRcNewSession().substring(0,12);zjRcSeq=0;
  zjRcLast=0;zjRcLeaseAt=now;zjRcNeutral();
  if(Serial.availableForWrite()>75){Serial.print("ZJRC,CLAIM,");Serial.print(transport);Serial.print(',');Serial.println(source);}
  return true;
@@ -104,6 +115,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  }
  zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
  zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
+ if(!inputArmed)zjApplyPendingFlightMode();
  // RAW mode logs separate RC packets for legacy tools; COMBINED includes RC in ZJTEL.
  // Maximum 10 RAW diagnostic frames/s; sensors and Wi-Fi service take priority.
  if(zjTelemetryRaw&&now-zjRcLastLog>=ZJ_RC_LOG_MS&&Serial.availableForWrite()>100){
@@ -114,6 +126,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
+ if(!zjRcInputArmed)zjApplyPendingFlightMode();
  if(zjRcUdpOwned)return; // UDP worker/main check separate receive/apply ages.
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
@@ -126,7 +139,10 @@ static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
  return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
-  ",\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
+  ",\"activeFlightMode\":\""+zjFlightMode+"\",\"requestedFlightMode\":\""+zjRequestedFlightMode+
+  "\",\"pendingFlightMode\":"+(zjPendingFlightMode.isEmpty()?String("null"):String("\"")+zjPendingFlightMode+"\"")+
+  ",\"flightModeRevision\":"+String(zjFlightModeRevision)+",\"flightModeImplementation\":\"diagnostic-metadata\","+ 
+  "\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+

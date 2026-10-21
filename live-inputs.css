@@ -63,3 +63,9 @@
 .li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
 #liSelectionReason{flex:1 1 230px;min-width:160px}
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
+
+/* Step 2: compact verified Kit mode command, independent of Wi-Fi mode. */
+.li-flight-mode-control{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:5px 10px;border:1px solid var(--line,#34435b);border-radius:8px;margin:6px 0;font-size:12px}
+.li-flight-mode-control label{font-weight:700;white-space:nowrap}
+.li-flight-mode-control select{min-height:30px;max-width:110px;padding:3px 6px}
+.li-flight-mode-control small{flex:1;min-width:185px;line-height:1.35}

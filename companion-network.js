@@ -9,6 +9,22 @@ const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
 let kitFlightMode='angle',kitFlightModeVerified=false,flightModeSaving=false;
+let kitRequestedFlightMode='angle',kitPendingFlightMode=null,kitFlightModeRevision=0,kitModeBootId='';
+function adoptFlightMode(data){
+ const active=['angle','acro'].includes(data?.activeFlightMode)?data.activeFlightMode:data?.flightMode;
+ if(!['angle','acro'].includes(active)){kitFlightModeVerified=false;return false}
+ const boot=String(data?.bootId||'');
+ const revision=Number(data?.flightModeRevision);
+ if(kitFlightModeVerified&&boot&&boot===kitModeBootId&&Number.isSafeInteger(revision)&&revision<kitFlightModeRevision)return false;
+ kitFlightModeVerified=true;kitModeBootId=boot;kitFlightModeRevision=Number.isSafeInteger(revision)?revision:0;
+ kitFlightMode=active;
+ kitRequestedFlightMode=['angle','acro'].includes(data.requestedFlightMode)?data.requestedFlightMode:active;
+ kitPendingFlightMode=['angle','acro'].includes(data.pendingFlightMode)?data.pendingFlightMode:null;
+ window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',{detail:{kitId:verifiedKitId,
+  flightMode:kitFlightMode,activeFlightMode:kitFlightMode,requestedFlightMode:kitRequestedFlightMode,
+  pendingFlightMode:kitPendingFlightMode,revision:kitFlightModeRevision,saved:true}}));
+ return true;
+}
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
 let udpActive=false,udpStarting=false,udpReadyWaiter=null,udpArmWaiter=null,udpStats=null,udpStreamId='';
 const apStreaming=()=>udpActive&&link==='ap'&&native?.apStreamingVersion===1;
@@ -32,6 +48,9 @@ const udpFeedback=data=>({
 });
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
+// Signed management and native UDP senders are independent. Do not
+// interleave mode POST with ACK-dependent legacy HTTP preview requests.
+const safeUdpModeWrite=(route,method)=>udpActive&&!rcClaiming&&method==='POST'&&route==='/api/flight/mode';
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
 const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
@@ -61,7 +80,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  // Signed HMAC counters and Android's single HTTP worker MUST preserve
  // request order. Do not enqueue unrelated reads/writes behind joystick ACKs.
  // /api/auth/ is allowed for the selected RC session's signed reauthentication.
- if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
+ if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!safeUdpModeWrite(route,method))
   return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
  trace('native_request',{route,transport:link,outcome:'pending'});
@@ -200,7 +219,7 @@ async function request(route,method='GET',args={}){
  if(!allowed.has(method+' '+route))throw Error('Unsupported FlightCore operation');
  // Central admission control also covers signed-session calls whose auth is
  // already open; blocking ONLY nativeTransport would leave a race here.
- if(!route.startsWith('/api/rc/')&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
+ if(!route.startsWith('/api/rc/')&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!safeUdpModeWrite(route,method))
   throw Error('RC ACK has priority • STOP diagnostic input before Kit requests');
  if(!auth||Date.now()>auth.expiresAt-5000){
   if(!authOpening){
@@ -516,11 +535,7 @@ async function status(){
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
  verifiedKitId=data.kitId||'';mode=data.mode||mode;
  // Wi-Fi mode and persisted Angle/Acro flight mode are independent.
- kitFlightModeVerified=['angle','acro'].includes(data.flightMode);
- if(kitFlightModeVerified){
-  kitFlightMode=data.flightMode;
-  window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',{detail:{kitId:verifiedKitId,flightMode:kitFlightMode,saved:true}}));
- }
+ adoptFlightMode(data);
  // Reject the wrong interface BEFORE pinning Wi-Fi or advertising ONLINE.
  onKitLink=data.requestTransport===link.toUpperCase()&&(link==='ap'?data.apActive===true:data.staConnected===true);
  if(!onKitLink){online=false;dropInput('Wrong Wi-Fi path • select '+(data.requestTransport||'the actual')+' connection and reconnect');throw Error('Kit responded over '+(data.requestTransport||'unknown')+' while '+link.toUpperCase()+' was selected')}
@@ -578,21 +593,21 @@ async function setSavedFlightMode(desired){
  if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
  if(!online||!onKitLink||!verifiedKitId)throw Error('Verify FlightCore Kit before changing flight mode');
  if(!kitFlightModeVerified)throw Error('FlightCore firmware update required for saved flight mode');
- if(flightModeSaving||otaBusy||rcSession||rcClaiming||rcInputArmed||previewBusy)
-  throw Error('Disarm and release Kit control before changing flight mode');
+ if(flightModeSaving||otaBusy||rcClaiming||(!udpActive&&(rcSession||rcInputArmed||previewBusy)))
+  throw Error('Flight mode needs secure UDP streaming or disarmed released HTTP input');
  const id=verifiedKitId,epoch=linkEpoch;
  flightModeSaving=true;
  try{
   const data=await request('/api/flight/mode','POST',{flightMode:desired});
   if(epoch!==linkEpoch||id!==verifiedKitId||data?.kitId!==id||
-     data?.flightMode!==desired||data?.saved!==true||data?.motorsArmed!==false)
-   throw Error('FlightCore did not confirm the saved mode and Kit identity');
-  kitFlightMode=desired;
-  window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',
-   {detail:{kitId:id,flightMode:desired,saved:true}}));
-  return desired;
+     data?.requestedFlightMode!==desired||data?.saved!==true||data?.motorsArmed!==false||
+     (kitModeBootId&&data?.bootId!==kitModeBootId))
+   throw Error('FlightCore did not confirm requested mode, boot identity and persistence');
+  adoptFlightMode(data); // ACTIVE stays unchanged while request is PENDING.
+  return {requested:kitRequestedFlightMode,active:kitFlightMode,pending:kitPendingFlightMode};
  }finally{flightModeSaving=false}
 }
+
 async function setMode(desired=el('kitMode')?.value){
  if(!['ap','sta','auto'].includes(desired))throw Error('Invalid Wi-Fi mode');
  if(otaBusy||connecting)throw Error('Kit operation is already in progress');
@@ -642,7 +657,7 @@ async function onWebRequest(req,peer){
  if(!online||!onKitLink)return peer.sendNetworkResponse({id,ok:false,error:'Selected Kit Wi-Fi is not verified'});
  // The independent 50 Hz UDP sender allows read-only IMU/status access while
  // armed. Wi-Fi changes and new ownership remain blocked. STOP is authorized.
- if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!(method==='POST'&&route==='/api/rc/stop'))
+ if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!safeUdpModeWrite(route,method)&&!(method==='POST'&&route==='/api/rc/stop'))
   return peer.sendNetworkResponse({id,ok:false,error:'Android RC active • release control before requesting Kit data'});
  try{
   if(method==='POST'&&route==='/api/rc/stop')dropInput('WebApp STOP • diagnostic input disarmed');
@@ -1147,7 +1162,9 @@ window.zebjusNativeAppResumed=()=>{
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
  window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
-  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
+  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,
+  modeSnapshot:()=>kitFlightModeVerified?{active:kitFlightMode,requested:kitRequestedFlightMode,pending:kitPendingFlightMode,
+   revision:kitFlightModeRevision,bootId:kitModeBootId}:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

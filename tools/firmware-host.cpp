@@ -55,6 +55,18 @@ int main(){
  zjSavedSsid="";zjSavedPass="";zjWifiCount=0;zjLoadProfiles();assert(zjWifiCount==4&&zjSavedSsid=="Router6");
  assert(zjRememberProfile("Open router",""));zjWifiCount=0;zjLoadProfiles();assert(zjSavedSsid=="Open router"&&zjSavedPass.isEmpty());
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";
+ // Firmware-actual header: a requested Acro selection must not activate while
+ // diagnostic input ARM is accepted; a subsequent disarm applies metadata only.
+ zjFlightMode="angle";zjRequestedFlightMode="acro";zjPendingFlightMode="acro";
+ zjFlightModeRevision=0;zjRcInputArmed=true;
+ assert(!zjApplyPendingFlightMode()&&zjFlightMode=="angle"&&zjPendingFlightMode=="acro");
+ zjRcInputArmed=false;
+ assert(zjApplyPendingFlightMode()&&zjFlightMode=="acro"&&zjPendingFlightMode.isEmpty()&&zjFlightModeRevision==1);
+ assert(!zjApplyPendingFlightMode()&&zjFlightModeRevision==1);
+ assert(zjPrefs.putString("flightMode","acro")==4);
+ assert(zjPrefs.getString("flightMode","angle")=="acro");
+ zjFlightMode="angle";zjRequestedFlightMode="angle";zjPendingFlightMode="";zjFlightModeRevision=0;
+
  clockMs=1000;assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));const String rcToken=zjRcSession;
  // A freshly claimed session accepts its FIRST frame, even though no RC timestamp exists.
  assert(zjRcFrame(1,1200,1510,1490,1520,"ANDROID",rcToken,true,IPAddress(192,168,4,2)));
