@@ -126,6 +126,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
+ if(!zjRcInputArmed)zjApplyPendingFlightMode();
  if(zjRcUdpOwned)return; // UDP worker/main check separate receive/apply ages.
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
@@ -140,7 +141,7 @@ static String zjRcState(){
  return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
   ",\"activeFlightMode\":\""+zjFlightMode+"\",\"requestedFlightMode\":\""+zjRequestedFlightMode+
   "\",\"pendingFlightMode\":"+(zjPendingFlightMode.isEmpty()?String("null"):String("\"")+zjPendingFlightMode+"\"")+
-  ",\"flightModeRevision\":"+String(zjFlightModeRevision)+",\"flightModeImplementation\":\"diagnostic-metadata\",
+  ",\"flightModeRevision\":"+String(zjFlightModeRevision)+",\"flightModeImplementation\":\"diagnostic-metadata\","+ 
   "\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
