@@ -177,7 +177,7 @@ test('native non-RC promises are drained before ARM claim and new ones are block
  assert.match(source,/nonRcNativeRequests\.add\(operation\)/);
  assert.match(source,/operation\.finally\(\(\)=>nonRcNativeRequests\.delete\(operation\)\)/);
  assert.match(source,/if\(nonRcNativeRequests\.size\)await Promise\.allSettled\(\[\.\.\.nonRcNativeRequests\]\)/);
- assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)\)/);
+ assert.match(source,/if\(!rcRoute&&!authentication&&\(rcClaiming\|\|rcSession\|\|previewBusy\)&&!safeUdpRead\(route,method\)&&!safeUdpModeWrite\(route,method\)\)/);
 });
 
 test('UDP input ARM keeps WebApp IMU reads available while Wi-Fi mutation remains blocked',async()=>{
