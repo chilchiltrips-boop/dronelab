@@ -178,8 +178,9 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         check("document.getElementById('mobileConnection').open && document.getElementById('kitLink').value==='ap' && document.getElementById('flightNetworkSwitch').getAttribute('aria-checked')==='false' && /Connect and verify the Kit/.test(document.getElementById('kitNetStatus').textContent)");
         float[] transportBack=point("flightBack",.5f,.5f);
         touch(MotionEvent.ACTION_DOWN,new int[]{7},transportBack);touch(MotionEvent.ACTION_UP,new int[]{7},transportBack);
+        check("!document.getElementById('mobileConnection').open");
         touch(MotionEvent.ACTION_DOWN,new int[]{7},transport);touch(MotionEvent.ACTION_UP,new int[]{7},transport);
-        check("document.getElementById('kitLink').value==='ap' && document.getElementById('flightNetworkSwitch').getAttribute('aria-checked')==='false'");
+        check("document.getElementById('mobileConnection').open && document.getElementById('kitLink').value==='ap' && document.getElementById('flightNetworkSwitch').getAttribute('aria-checked')==='false'");
         touch(MotionEvent.ACTION_DOWN,new int[]{7},transportBack);touch(MotionEvent.ACTION_UP,new int[]{7},transportBack);
         check("!document.getElementById('mobileConnection').open");
         screenshot("native-ready.png");

@@ -1,5 +1,17 @@
 name: Read-only Android AP mirror
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'companion*'
+      - 'flight-input.js'
+      - 'pairing-*'
+      - 'js/simulator-input.js'
+      - 'js/tripod-*'
+      - 'tripod*'
+      - 'tools/*'
+      - 'mobile-android/**'
+      - '.github/workflows/simulator-input-mirror.yml'
   push:
     branches: [feat/tripod-ap-input-mirror-20261021, main]
     paths:
