@@ -133,7 +133,7 @@ function render(){
   const actual=window.ZebjusNetwork?.flightModeState?.();
   $('flightModeState').textContent=kitModePending?'SAVING • '+mode.toUpperCase():actual?
    'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):
-   'KIT MODE UNSUPPORTED • UPDATE FIRMWARE';
+   (window.ZebjusNetwork?.savedFlightMode?.()?'ACTIVE '+window.ZebjusNetwork.savedFlightMode().toUpperCase()+' • UPDATE FIRMWARE FOR MODE CHANGES':'KIT MODE UNSUPPORTED • UPDATE FIRMWARE');
  }
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';

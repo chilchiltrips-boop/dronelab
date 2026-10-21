@@ -7,7 +7,7 @@ const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function bench(udp=false,feedbackVersion=1){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
- let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0,modeData=null,modeDelay=null,modeError=null,acceptedArm=false;
+ let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0,modeData=null,legacyMode=null,modeDelay=null,modeError=null,acceptedArm=false;
  const Clock=class extends Date{static now(){return Date.now()+clockOffset}};
  const element=id=>{
   if(id==='kitRcPreview')return null;
@@ -22,7 +22,7 @@ function bench(udp=false,feedbackVersion=1){
    if(failure)throw failure;
    return {kitId,kitCode:'123456',board:'ZFC-A2',mode:transport.toLowerCase(),requestTransport:transport,
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
-    inputArmSupported:true,controlAuthorized:authorized,ledOn:false,...(modeData?{flightMode:modeData.active,flightModeState:{...modeData}}:{})};
+    inputArmSupported:true,controlAuthorized:authorized,ledOn:false,...(modeData?{flightMode:modeData.active,flightModeState:{...modeData}}:legacyMode?{flightMode:legacyMode}:{})};
   }
   if(route==='/api/flight/mode'){
    if(modeDelay)await modeDelay;if(modeError)throw modeError;
@@ -59,7 +59,7 @@ function bench(udp=false,feedbackVersion=1){
   fail:e=>failure=e,failClaim:e=>claimFailure=e,holdStatus:p=>delayStatus=p,holdClaim:p=>delayClaim=p,holdPreview:p=>delayPreview=p,
   async connect(sta=false){if(sta){transport='STA';element('kitLink').value='sta';handlers.get('kitLink:change')();element('kitIp').value='192.168.1.22';handlers.get('kitIp:change')();element('kitKey').value='label'}
    handlers.get('kitConnect:click')();await settle();await settle();assert.equal(win.ZebjusNetwork.isConnected(),true);},
-  withMode:(active='angle')=>modeData={supported:true,stabilizationSupported:false,saved:active,active,pending:null},
+  withLegacyMode:mode=>legacyMode=mode,withMode:(active='angle')=>modeData={supported:true,stabilizationSupported:false,saved:active,active,pending:null},
   delayMode:p=>modeDelay=p,modeError:e=>modeError=e,
   observer:()=>authorized=false,advance:ms=>clockOffset+=ms};
 }
@@ -368,4 +368,11 @@ test('mode response from a previous Android connection cannot restore its status
  b.delayMode(new Promise(r=>finish=r));const rejected=assert.rejects(b.network.setSavedFlightMode('acro'),/Kit or mode request changed/);
  await settle();b.network.networkChanged();finish();await rejected;
  assert.equal(b.network.flightModeState(),null);
+});
+
+test('legacy firmware actual mode overrides local defaults while writes require the new status capability',async()=>{
+ const b=bench();b.withLegacyMode('acro');await b.connect();
+ assert.equal(b.network.savedFlightMode(),'acro');assert.equal(b.network.flightModeState(),null);
+ await assert.rejects(b.network.setSavedFlightMode('angle'),/firmware update/);
+ b.network.networkChanged();assert.equal(b.network.savedFlightMode(),null);
 });

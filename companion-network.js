@@ -8,7 +8,7 @@ const trace=(event,data)=>window.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
-let kitFlightMode='angle',kitFlightModeVerified=false,flightModeSaving=false,kitModeState=null,modeRequestSeq=0,modeTail=Promise.resolve(),lastPreviewClaimAt=-Infinity;
+let kitFlightMode='angle',kitFlightModeVerified=false,kitFlightModeObserved=false,flightModeSaving=false,kitModeState=null,modeRequestSeq=0,modeTail=Promise.resolve(),lastPreviewClaimAt=-Infinity;
 const validModeState=value=>value?.supported===true&&['angle','acro'].includes(value.saved)&&['angle','acro'].includes(value.active)&&(value.pending===null||value.pending===value.saved)&&((value.pending===null)===(value.saved===value.active));
 const modeStatus=d=>validModeState(d?.flightModeState)?{...d.flightModeState}:null;
 const modeTraffic=(route,method)=>route==='/api/flight/mode'&&method==='POST'||(flightModeSaving||ledBusy)&&route==='/api/status'&&method==='GET'||ledBusy&&route==='/api/command'&&method==='POST';
@@ -523,6 +523,8 @@ async function status(){
  // Saved/active/pending are firmware-owned metadata, never Wi-Fi mode.
  kitModeState=modeStatus(data);
  kitFlightModeVerified=kitModeState!==null;
+ kitFlightModeObserved=kitFlightModeVerified||['angle','acro'].includes(data.flightMode);
+ if(!kitFlightModeVerified&&kitFlightModeObserved)kitFlightMode=data.flightMode;
  if(kitFlightModeVerified){
   kitFlightMode=kitModeState.saved;
   window.dispatchEvent(new CustomEvent('zebjus:kit-flight-mode',{detail:{kitId:verifiedKitId,...kitModeState}}));
@@ -620,7 +622,7 @@ async function setMode(desired=el('kitMode')?.value){
   if(response.kitId!==id||response.mode!==desired||response.state!=='switching')
    throw Error('Kit did not verify mode switching acknowledgement');
   // Only switch Android's request target AFTER the authenticated command is accepted.
-  ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;++modeRequestSeq;authOpening=null;finishHandover();forgetGrants();forgetNativePin();dropInput('Switching link • inputs disarmed');
+  ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;kitFlightModeObserved=false;++modeRequestSeq;authOpening=null;finishHandover();forgetGrants();forgetNativePin();dropInput('Switching link • inputs disarmed');
   if(before==='sta'&&validHost(ip))staIp=ip;
   link=physical;mode=desired;ip=physical==='ap'?'192.168.4.1':staIp;
   if(el('kitLink'))el('kitLink').value=link;
@@ -1087,14 +1089,14 @@ function bind(){
   if(!['ap','sta'].includes(el('kitLink').value)){el('kitLink').value=link;return;}
   if(el('kitLink').value===link){syncHeaderTransport();return;}
   window.ZebjusFlightApp?.doStop();
-  ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;++modeRequestSeq;authOpening=null;finishHandover();void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
+  ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;kitFlightModeObserved=false;++modeRequestSeq;authOpening=null;finishHandover();void releaseRc();forgetGrants();forgetNativePin();if(link==='sta'&&validHost(ip))staIp=ip;
   discoveredId='';cachedFallbackIp='';link=el('kitLink').value;ip=link==='ap'?'192.168.4.1':staIp;
   el('kitIp').value=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false;
   syncHeaderTransport();
   show(link==='sta'?'STA selected • join the same router as this Kit, discover and verify again.':'AP selected • join the Kit hotspot; app will connect automatically.');
   if(link==='ap')scheduleAutoApConnect();
  });
- el('kitIp').addEventListener('change',()=>{if(otaBusy||connecting){el('kitIp').value=ip;return;}++linkEpoch;kitModeState=null;kitFlightModeVerified=false;++modeRequestSeq;authOpening=null;void releaseRc();forgetGrants();forgetNativePin();discoveredId='';cachedFallbackIp='';ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
+ el('kitIp').addEventListener('change',()=>{if(otaBusy||connecting){el('kitIp').value=ip;return;}++linkEpoch;kitModeState=null;kitFlightModeVerified=false;kitFlightModeObserved=false;++modeRequestSeq;authOpening=null;void releaseRc();forgetGrants();forgetNativePin();discoveredId='';cachedFallbackIp='';ip=el('kitIp').value.trim();if(link==='sta')staIp=ip;online=false;auth=null;diagnosticKey='';reconnectEnabled=false;kitCode='';verifiedKitId='';onKitLink=false});
  el('kitKey').addEventListener('input',()=>{reconnectEnabled=false});
  el('kitNetworks').addEventListener('change',()=>{el('kitSsid').value=el('kitNetworks').value});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)void releaseRc();else scheduleAutoApConnect(300)});
@@ -1145,7 +1147,7 @@ function scheduleAutoApConnect(delay=650){
  },delay);
 }
 function networkChanged(){
- ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;++modeRequestSeq;authOpening=null;inputArmSupported=controlAuthorized=false;
+ ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;kitFlightModeObserved=false;++modeRequestSeq;authOpening=null;inputArmSupported=controlAuthorized=false;
  forgetGrants();forgetNativePin();
  if(otaBusy)otaCancelRequested=true;
  cancelNativePending('Android Wi-Fi changed; request delivery unconfirmed');
@@ -1170,7 +1172,7 @@ window.zebjusNativeAppResumed=()=>{
 };
  window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
   flightModeState:()=>online&&onKitLink&&kitFlightModeVerified?{...kitModeState}:null,
-  savedFlightMode:()=>online&&onKitLink&&kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
+  savedFlightMode:()=>online&&onKitLink&&(kitFlightModeVerified||kitFlightModeObserved)?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
