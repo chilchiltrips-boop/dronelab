@@ -124,6 +124,7 @@ function initLiveInputs(){
      !rc||rc.kitId!==kit.kitId||!Number.isFinite(at)||at<=0||
      at<=Number(sample?.at||0)||now-at>SNAPSHOT_TTL_MS||
      !channels.every(field=>finitePulse(rc[field])))return;
+  if(sample?.rc?.active&&rc.active&&isOlderAcceptedInput(sample.rc,rc))return;
   const previous=sample;
   const sequenceAt=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source&&ownerKey(previous.rc)===ownerKey(rc)&&previous.rc.accepted===rc.accepted?
    previous.sequenceAt??previous.at:at;
