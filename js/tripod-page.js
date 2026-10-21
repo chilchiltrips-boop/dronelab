@@ -213,7 +213,7 @@ function start(){
 function toggleRun(){s.running?stop():start()}
 function syncActions(){
  const remote=!localInput(),state=receiver.snapshot();
- const modeSignal=state.input?.origin==='kit'&&state.input.fresh&&
+ const modeSignal=['kit','usb'].includes(state.input?.origin)&&state.input.fresh&&
   ['angle','acro'].includes(state.input.flightMode)?
   state.input.kitId+'|'+state.input.flightMode:'';
  // Follow a freshly verified Kit mode before Run only; never alter a running
@@ -224,15 +224,17 @@ function syncActions(){
  $('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
  $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
- const sourceText=remote?'ANDROID '+(state.input?.transport?.toUpperCase()||'AP')+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
+ const sourceText=remote?(state.activeSource==='usb'?'USB KIT':state.input?.source==='WEB'?'WEB KIT':'ANDROID '+(state.input?.transport?.toUpperCase()||'AP'))+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
  if($('tpControlSource').textContent!==sourceText)$('tpControlSource').textContent=sourceText;
  const kitMode=remote&&state.input?.flightMode?'KIT '+state.input.flightMode.toUpperCase():'KIT MODE —';
  if($('tpKitMode').textContent!==kitMode)$('tpKitMode').textContent=kitMode;
- const inputArm=remote&&state.input?.origin==='kit'?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT —';
+ const inputArm=remote&&['kit','usb'].includes(state.input?.origin)?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT —';
  if($('tpInputArm').textContent!==inputArm)$('tpInputArm').textContent=inputArm;
+  const motors=remote&&['kit','usb'].includes(state.input?.origin)?'MOTORS OFF':'MOTORS —';
+  if($('tpMotorArm')?.textContent!==motors)$('tpMotorArm').textContent=motors;
  const input=state.input;
- $('tpSourceState').textContent=remote?'Android '+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
- $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.paired&&!input.supported?'Android app update required':'Waiting for verified AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
+ $('tpSourceState').textContent=remote?(state.activeSource==='usb'?'USB':input?.transport?.toUpperCase()||'ANDROID')+' · '+(input?.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
+ $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='usb'?'VERIFIED USB SERIAL RC • ':input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.paired&&!input.supported?'Android app update required':'Waiting for verified AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs':'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning!==s.running){
