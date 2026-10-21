@@ -160,3 +160,46 @@ test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read
  assert.equal(state.activeSource,'web');
  assert.equal(state.input,null);
 });
+
+test('USB selector displays verified serial pulses, saved mode and input ARM without hardware commands',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const kit={connected:true,kitId:'ZFC-A2-USB001',transport:'usb',bootId:'usb-boot'};
+ const input=(seq,throttle=1000,source='WEB')=>({state:'live',source,seq,ageMs:20,rateHz:20,
+  flightMode:'acro',inputArm:'DISARMED',led:'ON',motors:'DISABLED',
+  values:{throttle,roll:1650,pitch:1400,yaw:1550}});
+ b.store.observeKitStatus(kit,input(1));
+ assert.equal(b.store.acceptKit({kit,input:input(1)}),true);
+ assert.equal(b.input.snapshot().activeSource,'usb');
+ assert.equal(b.input.snapshot().kitStatus.flightMode,'acro');
+ assert.equal(b.input.snapshot().kitStatus.inputArm,'DISARMED');
+ assert.equal(b.input.snapshot().sticks.left.y,1);
+ assert.equal(b.s.running,false);
+ assert.equal(b.input.setChoice('usb'),true);
+ assert.equal(b.input.start().accepted,true);
+ b.store.acceptKit({kit,input:input(2,1700)});
+ assert.equal(b.s.throttle,1700);
+ assert.ok(b.input.snapshot().sticks.left.y<-.3);
+ assert.equal(b.input.setChoice('web'),false);
+ b.input.stop();
+ assert.equal(b.s.running,false);
+ b.store.acceptKit({kit,input:input(3,1800,'PPM')});
+ assert.equal(b.input.snapshot().input.origin,'usb');
+ assert.equal(b.s.running,false);
+ b.store.clearKit();b.store.observeKitStatus(null,null);
+ assert.equal(b.input.snapshot().input.fresh,false);
+});
+test('USB input requires a verified Kit, monotonic sequence, valid pulses and a fresh transport',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const kit={connected:true,kitId:'ZFC-A1-SERIAL',transport:'usb',bootId:'boot'};
+ const packet=(seq)=>({kit,input:{source:'ANDROID',state:'live',seq,ageMs:22,rateHz:20,
+  values:{throttle:1000,roll:1500,pitch:1500,yaw:1500}}});
+ assert.equal(b.store.acceptKit(packet(1)),true);
+ assert.equal(b.store.acceptKit(packet(1)),false);
+ assert.equal(b.store.acceptKit({...packet(2),input:{...packet(2).input,source:'FAKE'}}),false);
+ assert.equal(b.store.snapshot().kit.fresh,false);
+ assert.equal(b.store.acceptKit(packet(3)),true);
+ b.input.setChoice('usb');b.input.start();
+ b.advance(1001);
+ assert.equal(b.s.running,false);
+ assert.equal(b.stops(),1);
+});
