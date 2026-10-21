@@ -310,7 +310,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: android-actions/setup-android@v4
@@ -335,6 +335,27 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # The Google API30 system-image ZIP can occasionally be truncated by the
+      # download mirror. Validate the installed emulator image and retry only
+      # the download. This must never skip the actual signed-APK API30 test.
+      - name: Install and verify Android 11 system image (retry corrupt downloads)
+        shell: bash
+        run: |
+          set -euo pipefail
+          package='system-images;android-30;google_apis;x86_64'
+          folder="${ANDROID_HOME}/system-images/android-30/google_apis/x86_64"
+          for attempt in 1 2 3; do
+            if sdkmanager --install "$package" --channel=0 &&
+              test -s "$folder/system.img" && test -s "$folder/package.xml"; then
+              echo "PASS API30 emulator image installed and verified (attempt $attempt)"
+              exit 0
+            fi
+            echo "::warning::API30 image download corrupt or incomplete (attempt $attempt/3); retrying"
+            rm -rf -- "$folder"
+            sleep $((10 * attempt))
+          done
+          echo "::error::Android 11 system image could not be verified; block APK publication"
+          exit 1
       - name: Exercise real API30 HTTP response reader and WebView startup
         uses: reactivecircus/android-emulator-runner@v2
         with:
