@@ -744,6 +744,23 @@ async function claimRc(){
  }
  finally{rcClaiming=false}
 }
+// Explicit authenticated telemetry preview; controller lease is user requested
+// but INPUT_ARMED remains false and firmware motor outputs remain disabled.
+async function startDisarmedPreview(){
+ if(!canArm())throw Error('Verify the Kit and diagnostic permission before preview');
+ if(rcSession){
+  if(rcInputArmed)throw Error('DISARM first to start input preview');
+  return firmwareAck;
+ }
+ await claimRc();
+ try{
+  rcInputArmed=false;
+  await previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'},true);
+  if(rcInputArmed)throw Error('Preview unexpectedly armed input');
+  show('DISARMED PREVIEW • authenticated T/R/P/Y telemetry • MOTORS OFF','good');
+  return firmwareAck;
+ }catch(error){await releaseRc('PREVIEW_FAILED');throw error}
+}
 async function armControls(){
  if(!canArm())throw Error(inputArmSupported?'Verify Kit control permission first':'Update FlightCore firmware for direct ARM');
  if(rcSession)await releaseRc();
@@ -1146,7 +1163,7 @@ window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
- window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
+ window.ZebjusNetwork={request,status,pollConnection,armControls,startDisarmedPreview,canArm,setSavedFlightMode,
   savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();

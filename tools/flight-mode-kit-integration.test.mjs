@@ -28,7 +28,7 @@ test('Android mode selection verifies kit ID and signed saved result; never trea
  assert.match(net,/kitFlightModeVerified=\['angle','acro'\]\.includes\(data\.flightMode\)/);
  assert.match(app,/mode='angle'/);
  assert.match(app,/await window\.ZebjusNetwork\.setSavedFlightMode\(desired\)/);
- assert.match(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
+ assert.match(app,/FLIGHT_MODE_CHANGE/);
 });
 test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1000-2000µs',()=>{
  const live=read('js/live-inputs.js'),mirror=read('js/simulator-input.js'),
@@ -44,4 +44,41 @@ test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1
  assert.match(html,/id="tpKitMode"/);
  assert.match(index,/id="liFlightMode"/);
  assert.doesNotMatch(page,/\/api\/flight\/mode|\/api\/rc\/preview/);
+});
+
+test('WebApp save is explicit, authenticated, identity-checked; dark monitor selector shows choices',()=>{
+ const html=read('index.html'),lab=read('lab.html'),live=read('js/live-inputs.js'),css=read('live-inputs.css');
+ assert.equal(html,lab);
+ for(const id of ['liMonitorSelect','liSetFlightMode','liSaveFlightMode','liModeSaveStatus'])assert.ok(html.includes('id="'+id+'"'),id);
+ assert.match(live,/ZebjusKits\.request\('\/api\/flight\/mode','POST',\{flightMode:desired\}\)/);
+ assert.match(live,/reply\?\.kitId!==id/);
+ assert.match(live,/reply\.motorsArmed!==false/);
+ assert.match(css,/li-monitor-toolbar select option/);
+ assert.match(css,/color-scheme:dark/);
+});
+test('USB Kit source uses verified passive serial input without sending simulator commands to hardware',()=>{
+ const mirror=read('js/simulator-input.js'),live=read('js/live-inputs.js'),
+  page=read('js/tripod-page.js'),html=read('tripod.html');
+ assert.match(html,/<option value="usb">USB Kit<\/option>/);
+ assert.match(mirror,/\['ap','sta','usb','android-relay'\]\.includes\(transport\)/);
+ assert.match(mirror,/observeKitStatus/);
+ assert.match(live,/simInputs\.acceptKit/);
+ assert.match(live,/simInputs\.observeKitStatus/);
+ assert.match(page,/state\.kitStatus\.flightMode/);
+ assert.doesNotMatch(page,/\/api\/rc\/preview|\/api\/flight\/mode/);
+});
+
+test('Android explicit disarmed diagnostic preview sends signed T/R/P/Y without motor arming',()=>{
+ const network=read('companion-network.js'),app=read('companion-flight.js'),
+  html=read('companion.html');
+ assert.match(html,/id="flightPreview"/);
+ assert.match(network,/async function startDisarmedPreview\(\)/);
+ assert.match(network,/await claimRc\(\)/);
+ assert.match(network,/rcInputArmed=false/);
+ assert.match(network,/await previewControls\(\{throttle:1000,axes:\{roll:0,pitch:0,yaw:0\}/);
+ assert.match(app,/startDisarmedPreview\(\)/);
+ assert.match(app,/releaseRc\('PREVIEW_OFF'\)/);
+ assert.match(app,/PREVIEW.*MOTOR OUTPUTS OFF/);
+ assert.match(network,/native\.offerUdp\(values\.join\(','\),rcInputArmed\)/);
+ assert.match(network,/inputArmed:String\(rcInputArmed\)/);
 });

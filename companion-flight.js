@@ -108,6 +108,10 @@ function render(){
  $('flightArm').textContent=kitArmPending?'ARMING…':armed||kitArmed()?'DISARM':'ARM';
  $('flightArm').disabled=kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
  $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
+  const previewActive=directKit()&&window.ZebjusNetwork?.hasControl?.()&&!kitArmed();
+  $('flightPreview').disabled=kitArmPending||kitModePending||!directKit()||!previewActive&&!window.ZebjusNetwork?.canArm?.();
+  $('flightPreview').textContent=previewActive?'END PREVIEW':'PREVIEW';
+  $('flightPreview').setAttribute('aria-pressed',String(previewActive));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
  const diagnostic=window.ZebjusNetwork?.feedback?.();
@@ -127,7 +131,7 @@ function render(){
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=mirroring()||!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
- $('flightMode').disabled=mirroring()||kitModePending;
+ $('flightMode').disabled=kitModePending; // Flight mode remains selectable while paired, disarmed or diagnostic-input armed.
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
@@ -271,6 +275,24 @@ function closeConnection(){
 }
 function bind(){
  setupStick('left');setupStick('right');
+ $('flightPreview').onclick=async()=>{
+  if(!directKit()){updateStatus('CONNECT VERIFIED KIT FOR DISARMED PREVIEW');return}
+  if(kitArmPending||kitModePending)return;
+  kitArmPending=true;render();
+  try{
+   if(window.ZebjusNetwork?.hasControl?.()&&!kitArmed()){
+    await window.ZebjusNetwork.releaseRc('PREVIEW_OFF');
+    diagnosticThrottle=1000;clearTouches();
+    updateStatus('DISARMED PREVIEW RELEASED • MOTORS OFF');
+   }else{
+    if(kitArmed())await doStop('PREVIEW_REQUEST');
+    diagnosticThrottle=1000;clearTouches();
+    await window.ZebjusNetwork.startDisarmedPreview();
+    updateStatus('DISARMED RC PREVIEW LIVE • MOTOR OUTPUTS OFF');
+   }
+  }catch(error){updateStatus('RC PREVIEW: '+error.message)}
+  finally{kitArmPending=false;render()}
+ };
  $('flightArm').onclick=async()=>{
   if(directKit()){
    if(kitArmed()){await doStop();updateStatus('KIT DISARMED • MOTORS OFF');return}
@@ -299,13 +321,15 @@ function bind(){
  $('flightMode').onchange=async e=>{
    const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
    if(directKit()){
-    if(kitArmed()||kitArmPending){
-     e.target.value=mode;updateStatus('DISARM KIT INPUT BEFORE CHANGING MODE');return;
-    }
-    kitModePending=true;render();
+    // The selector is always available. If diagnostic input is currently
+    // armed, release it FIRST; never change a physical control session or
+    // silently re-arm after changing persistent Kit settings.
+    kitModePending=true;mode=desired;render();
     try{
+     const active=kitArmed()||kitArmPending||window.ZebjusNetwork?.hasControl?.();
+     if(active)await doStop('FLIGHT_MODE_CHANGE');
      await window.ZebjusNetwork.setSavedFlightMode(desired);
-     mode=desired;updateStatus('KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF');
+     updateStatus('KIT SAVED '+desired.toUpperCase()+(active?' • INPUT DISARMED • PRESS ARM TO RESUME':' • MOTORS OFF'));
     }catch(error){
      mode=window.ZebjusNetwork?.savedFlightMode?.()||previous;
      updateStatus('FLIGHT MODE NOT SAVED • '+error.message);

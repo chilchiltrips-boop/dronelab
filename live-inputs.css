@@ -63,3 +63,18 @@
 .li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
 #liSelectionReason{flex:1 1 230px;min-width:160px}
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
+
+/* Monitor connection options must contrast in dark/OS-native popup menus. */
+.li-monitor-toolbar select{color-scheme:dark!important;background:#071722!important;color:#f1fafb!important;border:1px solid #5c8b9d!important;min-height:44px!important}
+.li-monitor-toolbar select option{background:#071722!important;color:#f1fafb!important}
+.li-monitor-toolbar select:focus-visible{outline:3px solid #71e5c8;outline-offset:2px}
+.li-flight-mode-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border:1px solid #36576a;border-radius:10px}
+.li-flight-mode-controls select{background:#071722!important;color:#f1fafb!important;color-scheme:dark;min-height:44px;min-width:100px}
+.li-flight-mode-controls select option{background:#071722;color:#f1fafb}
+.li-flight-mode-controls button{min-height:44px}
+.li-flight-mode-controls [role=status]{font-size:12px;overflow-wrap:anywhere;color:#b3dfd5}
+
+.li-arm-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid #517387;background:#102534;color:#cce4ef;font-size:11px;font-weight:800;padding:7px 10px;white-space:nowrap}
+.li-arm-pill[data-state=armed]{border-color:#b78c42;color:#ffdc96;background:#332813}
+.li-arm-pill[data-state=off]{border-color:#347c65;color:#b4f2d6;background:#102b24}
+.li-arm-pill[data-state=stale]{border-color:#986c4a;color:#ffcfb0}
