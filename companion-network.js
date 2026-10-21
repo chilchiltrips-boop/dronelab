@@ -761,7 +761,7 @@ function previewControls(m,critical=false){
   if(!rcSession||!online||!onKitLink||document.hidden||!m?.axes)return;
   const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
   const values=[Math.max(1000,Math.min(2000,Math.round(m.throttle))),
-   clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),1000,1000];
+   clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),ledOn?2000:1000,kitFlightMode==='acro'?2000:1000];
   native.offerUdp(values.join(','),rcInputArmed);
   if(apStreaming()){
    if(!firmwareAck)firmwareAck={seq:0,at:0,rtt:0,inputArmed:false,protocol:'ZJUDP1',
@@ -781,7 +781,7 @@ function previewControls(m,critical=false){
  lastPreview=Date.now();previewBusy=true;const at=performance.now(),session=rcSession,epoch=rcEpoch,frameSeq=++rcSeq;
  const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
  return request('/api/rc/preview','POST',{session,source:'ANDROID',seq:frameSeq,armed:'false',inputArmed:String(rcInputArmed),ledKeep:String(ledOn),responseMode:m.responseMode||'Medium',
-  throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw)})
+  throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw),ch5:ledOn?2000:1000,ch6:kitFlightMode==='acro'?2000:1000})
  .then(d=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
   if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||rcInputArmed&&d.inputArmed!==true)throw Error('Invalid firmware receive ACK');
