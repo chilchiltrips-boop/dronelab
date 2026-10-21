@@ -87,7 +87,7 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- let monitorChoice='auto',selectionReason='',pendingMode=null,modeSaving=false;
+ let monitorChoice='auto',selectionReason='',pendingMode=null,modeSaving=false,nextModeSaveAt=0;
  const getKit=()=>{
   const kit=window.ZebjusKits?.getState?.()||{connected:false};
   const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
@@ -266,7 +266,7 @@ function initLiveInputs(){
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
  async function savePendingMode(){
-  if(!pendingMode||modeSaving)return;
+  if(!pendingMode||modeSaving||Date.now()<nextModeSaveAt)return;
   const kit=window.ZebjusKits.getState();
   if(!kit.connected||kit.kitId!==pendingMode.kitId){
    pendingMode=null;write('liModeSaveStatus','Save cancelled • Kit disconnected/identity changed');return;
@@ -284,6 +284,7 @@ function initLiveInputs(){
   }catch(error){
    const reason=String(error?.message||error);
    if(/disarm|release|owned|busy|controller|423|409/i.test(reason)){
+    nextModeSaveAt=Date.now()+1600;
     write('liModeSaveStatus','PENDING DISARM / RELEASE • '+target.mode.toUpperCase());
    }else{
     pendingMode=null;write('liModeSaveStatus','NOT SAVED • '+reason);
@@ -295,7 +296,7 @@ function initLiveInputs(){
   if(!kit.connected||!kit.kitId||!['angle','acro'].includes(chosen)){
    write('liModeSaveStatus','Verify Kit and select Angle or Acro');return;
   }
-  pendingMode={kitId:kit.kitId,mode:chosen};
+  pendingMode={kitId:kit.kitId,mode:chosen};nextModeSaveAt=0;
   write('liModeSaveStatus',kit.owner||kit.rc?.inputArmed===true?
    'PENDING DISARM / RELEASE • '+chosen.toUpperCase():
    'SAVING • '+chosen.toUpperCase());
