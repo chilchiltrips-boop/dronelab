@@ -63,3 +63,20 @@
 .li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
 #liSelectionReason{flex:1 1 230px;min-width:160px}
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
+
+/* Verified monitor transport must remain legible in light native option menus
+   and dark DroneLab themes (including Android WebView). */
+.li-monitor-toolbar select,
+#liMonitorSelect {
+ color:#f2fbff!important;
+ background-color:#0b2535!important;
+ border:1px solid #52768d!important;
+ color-scheme:dark;
+ min-height:44px;
+}
+#liMonitorSelect option,
+#liMonitorSelect optgroup {
+ color:#101e2a!important;
+ background:#f4f8fb!important;
+}
+#liMonitorSelect:focus-visible{outline:3px solid #64eac5;outline-offset:2px}
