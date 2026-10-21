@@ -33,9 +33,9 @@ const udpFeedback=data=>({
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
-const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview','POST /api/rc/observe']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview','POST /api/rc/observe']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
  const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
@@ -805,6 +805,35 @@ function previewControls(m,critical=false){
  })
  .finally(()=>{previewBusy=false});
 }
+
+let lastDisarmedPreview=0,disarmedPreviewSeq=0,disarmedPreviewBusy=false;
+function previewDisarmed(m){
+ // Diagnostic preview is explicitly distinct from a claimed/ARMED RC stream.
+ // Never impersonate input ARM, feed motors, or send faster than ~5 Hz.
+ if(!online||!onKitLink||!verifiedKitId||otaBusy||rcSession||rcClaiming||
+    document.hidden||disarmedPreviewBusy||!m?.axes||Date.now()-lastDisarmedPreview<190)return false;
+ if(![m.throttle,m.axes.roll,m.axes.pitch,m.axes.yaw].every(Number.isFinite))return false;
+ const clamp=v=>Math.max(1000,Math.min(2000,Math.round(v)));
+ const pulse=v=>clamp(1500+500*v);
+ const id=verifiedKitId,epoch=linkEpoch,seq=++disarmedPreviewSeq;
+ lastDisarmedPreview=Date.now();disarmedPreviewBusy=true;
+ void request('/api/rc/observe','POST',{source:'ANDROID',armed:'false',inputArmed:'false',seq,
+  throttle:clamp(m.throttle),roll:pulse(m.axes.roll),pitch:pulse(m.axes.pitch),yaw:pulse(m.axes.yaw),
+  ch5:ledOn?2000:1000,ch6:kitFlightMode==='acro'?2000:1000})
+ .then(reply=>{
+  if(epoch!==linkEpoch||id!==verifiedKitId)return;
+  if(reply?.kitId!==id||reply?.received!==true||reply?.previewOnly!==true||
+     reply?.seq!==seq||reply?.inputArmed!==false||reply?.motorsArmed!==false)
+   throw Error('Disarmed preview acknowledgement invalid');
+ })
+ .catch(error=>{
+  // Old firmware returns 404. Preview errors must never fake a verified RC ACK,
+  // change the physical input owner or drop an otherwise healthy AP/STA link.
+  if(epoch===linkEpoch&&id===verifiedKitId&&seq%20===1)
+   trace('diagnostic_preview_unsupported',{transport:link,reason:classify(error)});
+ }).finally(()=>{disarmedPreviewBusy=false});
+ return true;
+}
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
  // Never queue expensive signed status/SSID verification ahead of ARM/RC.
@@ -1147,7 +1176,7 @@ window.zebjusNativeAppResumed=()=>{
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
  window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
-  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
+  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,previewDisarmed,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();
