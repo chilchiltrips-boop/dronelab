@@ -35,6 +35,23 @@ static uint32_t zjRcLastReleaseAt=0;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
 static const char* zjRcTransport="NONE";
+// Separately authorized DISARMED diagnostic joystick preview. Never touches
+// RC ownership, motor output, INPUT ARM or the RC watchdog. 500 ms hard TTL.
+static String zjPreviewSession="";
+static uint32_t zjPreviewSeq=0,zjPreviewAt=0;
+static int zjPreviewT=1000,zjPreviewR=1500,zjPreviewP=1500,zjPreviewY=1500;
+static int zjPreviewCh5=1000,zjPreviewCh6=1000;
+static bool zjPreviewLive(uint32_t at){return zjPreviewSeq>0&&uint32_t(at-zjPreviewAt)<=500;}
+static String zjPreviewState(){
+ const uint32_t at=millis();
+ if(!zjPreviewLive(at))return "null";
+ return String("{\"source\":\"ANDROID\",\"transport\":\"")+String(zjClientTransport())+
+  "\",\"previewOnly\":true,\"inputArmed\":false,\"seq\":"+String(zjPreviewSeq)+
+  ",\"ageMs\":"+String(uint32_t(at-zjPreviewAt))+
+  ",\"throttle\":"+String(zjPreviewT)+",\"roll\":"+String(zjPreviewR)+
+  ",\"pitch\":"+String(zjPreviewP)+",\"yaw\":"+String(zjPreviewY)+
+  ",\"ch5\":"+String(zjPreviewCh5)+",\"ch6\":"+String(zjPreviewCh6)+"}";
+}
 
 static void zjKitInfo(){
  Serial.print("ZJKIT,ID,");Serial.println(zjKitId);
