@@ -97,14 +97,13 @@ function render(){
  $('flightCockpit').dataset.response=preset;$('mobileConnection').dataset.response=preset;$('flightResponse').title=preset+' • Roll/Pitch/Yaw '+Math.round(F.PRESETS[preset].axisScale*100)+'% maximum • throttle '+F.PRESETS[preset].throttleRate+' µs/s';
  const m=a?{...a.axes,throttle:a.throttle}:preview;
  $('flightThrottle').textContent=m.throttle+' µs';$('flightRoll').textContent=Math.round(m.roll*100)+'%';$('flightPitch').textContent=Math.round(m.pitch*100)+'%';$('flightYaw').textContent=Math.round(m.yaw*100)+'%';
- if(directKit()&&!kitModePending){
-  const saved=window.ZebjusNetwork?.savedFlightMode?.();
-  if(['angle','acro'].includes(saved))mode=saved;
- }
+ const kitMode=directKit()?window.ZebjusNetwork?.modeSnapshot?.():null;
+ if(kitMode&&!kitModePending)mode=kitMode.requested;
  $('flightMode').value=mode;
- $('flightModeState').textContent=directKit()?
-   (kitModePending?'SAVING KIT • ':window.ZebjusNetwork?.savedFlightMode?.()?'KIT SAVED • ':'KIT MODE UNAVAILABLE • ')+mode.toUpperCase():
-   (a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+((a?.mode||mode)==='acro'?'ACRO / RATE':'ANGLE');
+ const modeText=kitMode?'REQUESTED '+kitMode.requested.toUpperCase()+' • ACTIVE '+kitMode.active.toUpperCase()+
+  (kitMode.pending?' • PENDING '+kitMode.pending.toUpperCase()+' UNTIL INPUT DISARMED':' • SAVED'):
+  directKit()?'KIT MODE UNAVAILABLE':(a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+mode.toUpperCase();
+ $('flightModeState').textContent=(kitModePending?'SAVING • ':'')+modeText;
  $('flightArm').textContent=kitArmPending?'ARMING…':armed||kitArmed()?'DISARM':'ARM';
  $('flightArm').disabled=kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
  $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
@@ -120,7 +119,7 @@ function render(){
   $('flightThrottle').textContent=Math.round(diagnosticThrottle)+' µs';
   if(directKit()){
    $('flightLatency').textContent=diagnostic.seq?diagnostic.rtt+' ms':'—';
-   $('flightModeState').textContent=(kitModePending?'SAVING • ':'KIT '+kitInputState()+' • ')+mode.toUpperCase();
+   $('flightModeState').textContent=(kitModePending?'SAVING • ':'')+modeText;
   }
  }
  $('flightFeedback').hidden=!lastAckSeq&&!diagnostic;
@@ -299,15 +298,12 @@ function bind(){
  $('flightMode').onchange=async e=>{
    const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
    if(directKit()){
-    if(kitArmed()||kitArmPending){
-     e.target.value=mode;updateStatus('DISARM KIT INPUT BEFORE CHANGING MODE');return;
-    }
     kitModePending=true;render();
     try{
-     await window.ZebjusNetwork.setSavedFlightMode(desired);
-     mode=desired;updateStatus('KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF');
+     const result=await window.ZebjusNetwork.setSavedFlightMode(desired);
+     mode=result.requested;updateStatus(result.pending?'KIT REQUESTED '+desired.toUpperCase()+' • ACTIVE '+result.active.toUpperCase()+' • PENDING UNTIL DISARM':'KIT SAVED '+desired.toUpperCase()+' • MOTORS OFF');
     }catch(error){
-     mode=window.ZebjusNetwork?.savedFlightMode?.()||previous;
+     mode=window.ZebjusNetwork?.modeSnapshot?.()?.requested||previous;
      updateStatus('FLIGHT MODE NOT SAVED • '+error.message);
     }finally{kitModePending=false;render()}
     return;
@@ -330,6 +326,7 @@ function bind(){
  $('mobileConnection').addEventListener('close',()=>{window.ZebjusPairingStopCamera?.();$('flightSettings').setAttribute('aria-expanded','false')});
  $('flightTakeControl').onclick=()=>{peer?.requestControl();updateStatus('REQUESTED • GRANT MOBILE CONTROL ON WEB')};
  $('flightReleaseControl').onclick=()=>{doStop();peer?.releaseControl();render()};
+ window.addEventListener('zebjus:kit-flight-mode',()=>render());
  window.addEventListener('zebjus:diagnostic-control',event=>{diagnosticThrottle=1000;clearTouches();if(event.detail?.active===false&&directKit())updateStatus('KIT INPUT DISARMED • MOTORS OFF');render()});
  window.addEventListener('blur',()=>{if(!document.hidden&&!armed)return;stopLocally('APP LOST FOCUS • SAFE DISARM');send(true)});document.addEventListener('visibilitychange',()=>{if(document.hidden){stopLocally('APP BACKGROUND • SAFE DISARM');send(true)}});
  window.addEventListener('pagehide',()=>{doStop();clearInterval(sender);cancelAnimationFrame(raf);loopStarted=false});
