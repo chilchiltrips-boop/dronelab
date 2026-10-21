@@ -56,7 +56,16 @@ try{
  await page.setViewportSize({width:1366,height:900});
  await page.locator('[data-tab="pid"]').first().click();
  await sim.locator('#tpInputSource').selectOption('usb');
- await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='usb'&&window.ZebjusTraining.snapshot().input.fresh);
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='usb'&&window.ZebjusTraining.snapshot().input?.fresh);
+ // A single fresh browser snapshot is not proof that the USB producer
+ // continues advancing. Wait for an actual newer accepted frame after the
+ // source selector settles, without retrying Run or softening any watchdog.
+ const initialSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
+ await page.waitForFunction(previous=>{
+  const state=window.ZebjusTraining.snapshot();
+  return state.activeSource==='usb'&&state.input?.fresh&&state.input.origin==='kit'&&
+   state.throttle===1000&&state.seq>previous&&state.kitMode?.active==='angle'&&!state.armed;
+ },initialSeq,{timeout:10000});
  check(await sim.locator('#tpMode').isDisabled(),'Connected Kit must own simulator mode');
  await sim.locator('#tpRun').click();
  try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000})}
@@ -76,7 +85,14 @@ try{
  check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
  await sim.locator('#tpStop').click();
  await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpMode').value==='acro');
+ const stoppedSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
+ await page.waitForFunction(previous=>{
+  const state=window.ZebjusTraining.snapshot();
+  return !state.armed&&state.activeSource==='usb'&&state.input?.fresh&&
+   state.throttle===1000&&state.seq>previous&&state.kitMode?.active==='acro';
+ },stoppedSeq,{timeout:10000});
  await sim.locator('#tpRun').click();
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000});
  await page.evaluate(()=>window.__statusFixture.kit.connected=false);
  await page.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed,null,{timeout:5000});
  await page.evaluate(()=>window.__statusFixture.kit.connected=true);
