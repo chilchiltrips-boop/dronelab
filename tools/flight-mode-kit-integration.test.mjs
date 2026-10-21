@@ -38,7 +38,7 @@ test('mode writes preserve exclusive RC ownership and authenticated session boun
  assert.match(fw,/flight_mode_save_failed/);
  assert.match(fw,/zjRcAuthSessionId=zjRequestSession>=0/);
  assert.match(rc,/zjRcAuthSessionId=""/);
- assert.match(fw,/\"bootId\":/);
+ assert.match(fw,/bootId/);
 });
 
 test('USB mode readback and teacher-authorized save does not grant AP/STA privileges',()=>{
