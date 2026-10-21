@@ -67,3 +67,18 @@ test('USB Kit source uses verified passive serial input without sending simulato
  assert.match(page,/state\.kitStatus\.flightMode/);
  assert.doesNotMatch(page,/\/api\/rc\/preview|\/api\/flight\/mode/);
 });
+
+test('Android explicit disarmed diagnostic preview sends signed T/R/P/Y without motor arming',()=>{
+ const network=read('companion-network.js'),app=read('companion-flight.js'),
+  html=read('companion.html');
+ assert.match(html,/id="flightPreview"/);
+ assert.match(network,/async function startDisarmedPreview\(\)/);
+ assert.match(network,/await claimRc\(\)/);
+ assert.match(network,/rcInputArmed=false/);
+ assert.match(network,/await previewControls\(\{throttle:1000,axes:\{roll:0,pitch:0,yaw:0\}/);
+ assert.match(app,/startDisarmedPreview\(\)/);
+ assert.match(app,/releaseRc\('PREVIEW_OFF'\)/);
+ assert.match(app,/PREVIEW.*MOTOR OUTPUTS OFF/);
+ assert.match(network,/native\.offerUdp\(values\.join\(','\),rcInputArmed\)/);
+ assert.match(network,/inputArmed:String\(rcInputArmed\)/);
+});
