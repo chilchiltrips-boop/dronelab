@@ -28,7 +28,7 @@ test('Android mode selection verifies kit ID and signed saved result; never trea
  assert.match(net,/kitFlightModeVerified=\['angle','acro'\]\.includes\(data\.flightMode\)/);
  assert.match(app,/mode='angle'/);
  assert.match(app,/await window\.ZebjusNetwork\.setSavedFlightMode\(desired\)/);
- assert.match(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
+ assert.match(app,/FLIGHT_MODE_CHANGE/);
 });
 test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1000-2000µs',()=>{
  const live=read('js/live-inputs.js'),mirror=read('js/simulator-input.js'),
