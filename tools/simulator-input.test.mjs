@@ -87,7 +87,7 @@ test('verified AP Kit accepted Android RC feeds Auto simulator only after explic
 test('Kit input rejects idle, stale, non-Android, unverified, malformed and repeated frames',()=>{
  const b=bench();b.store.setPeer({connected:false});
  for(const modify of [
-   p=>{p.kit.connected=false},p=>{p.kit.transport='usb'},
+   p=>{p.kit.connected=false},p=>{p.kit.transport='bluetooth'},
    p=>{p.input.source='WEB'},p=>{p.input.state='stale'},
    p=>{p.input.ageMs=401},p=>{p.input.values.roll=2001}
  ]){
@@ -159,4 +159,27 @@ test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read
  b.input.setChoice('web');state=b.input.snapshot();
  assert.equal(state.activeSource,'web');
  assert.equal(state.input,null);
+});
+
+test('Verified USB Kit supports explicit virtual input, DISARMED preview and saved mode without motor writes',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const p=verifiedKit(1,{throttle:1000,roll:1750});p.kit.transport='usb';
+ p.input.source='ANDROID';p.input.state='preview';p.input.previewOnly=true;
+ p.input.inputArm='DISARMED';p.input.flightMode='acro';
+ assert.equal(b.store.acceptKit(p),true);
+ assert.equal(b.input.setChoice('usb'),true);
+ let s=b.input.snapshot();
+ assert.equal(s.activeSource,'usb');
+ assert.equal(s.input.origin,'usb');
+ assert.equal(s.input.inputArm,'DISARMED');
+ assert.equal(s.input.flightMode,'acro');
+ assert.equal(s.armed,false);
+ assert.equal(b.input.start().accepted,true);
+ const next=verifiedKit(2,{throttle:1460,pitch:1250});next.kit.transport='usb';
+ next.input.state='preview';next.input.previewOnly=true;next.input.inputArm='DISARMED';next.input.flightMode='acro';
+ b.store.acceptKit(next);
+ assert.equal(b.s.throttle,1460);assert.equal(b.s.cmdPitch,-.5);
+ b.input.stop('STOP');assert.equal(b.s.running,false);
+ b.store.clearKit();assert.equal(b.input.snapshot().activeSource,'usb'); // explicit selection retained, data becomes stale
+ assert.equal(b.input.start().accepted,false);
 });

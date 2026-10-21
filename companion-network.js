@@ -33,9 +33,9 @@ const udpFeedback=data=>({
 const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
-const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview','POST /api/rc/observe']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview','POST /api/rc/observe']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
  const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
@@ -61,7 +61,7 @@ function nativeTransport(route,method='GET',args={},headers={},targetIp=ip){
  // Signed HMAC counters and Android's single HTTP worker MUST preserve
  // request order. Do not enqueue unrelated reads/writes behind joystick ACKs.
  // /api/auth/ is allowed for the selected RC session's signed reauthentication.
- if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method))
+ if(!rcRoute&&!authentication&&(rcClaiming||rcSession||previewBusy)&&!safeUdpRead(route,method)&&!(route==='/api/flight/mode'&&method==='POST'&&!rcClaiming))
   return Promise.reject(Error('RC ACK has priority • STOP diagnostic input before Kit requests'));
  const id='zj'+(++requestId),write=method==='POST'&&route.startsWith('/api/firmware/');
  trace('native_request',{route,transport:link,outcome:'pending'});
@@ -578,8 +578,8 @@ async function setSavedFlightMode(desired){
  if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
  if(!online||!onKitLink||!verifiedKitId)throw Error('Verify FlightCore Kit before changing flight mode');
  if(!kitFlightModeVerified)throw Error('FlightCore firmware update required for saved flight mode');
- if(flightModeSaving||otaBusy||rcSession||rcClaiming||rcInputArmed||previewBusy)
-  throw Error('Disarm and release Kit control before changing flight mode');
+ if(flightModeSaving||otaBusy||rcClaiming)
+  throw Error('Kit operation in progress; wait to change Flight Mode');
  const id=verifiedKitId,epoch=linkEpoch;
  flightModeSaving=true;
  try{
@@ -761,7 +761,7 @@ function previewControls(m,critical=false){
   if(!rcSession||!online||!onKitLink||document.hidden||!m?.axes)return;
   const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
   const values=[Math.max(1000,Math.min(2000,Math.round(m.throttle))),
-   clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),1000,1000];
+   clamp(m.axes.roll),clamp(m.axes.pitch),clamp(m.axes.yaw),ledOn?2000:1000,kitFlightMode==='acro'?2000:1000];
   native.offerUdp(values.join(','),rcInputArmed);
   if(apStreaming()){
    if(!firmwareAck)firmwareAck={seq:0,at:0,rtt:0,inputArmed:false,protocol:'ZJUDP1',
@@ -781,7 +781,7 @@ function previewControls(m,critical=false){
  lastPreview=Date.now();previewBusy=true;const at=performance.now(),session=rcSession,epoch=rcEpoch,frameSeq=++rcSeq;
  const clamp=v=>Math.max(1000,Math.min(2000,Math.round(1500+500*v)));
  return request('/api/rc/preview','POST',{session,source:'ANDROID',seq:frameSeq,armed:'false',inputArmed:String(rcInputArmed),ledKeep:String(ledOn),responseMode:m.responseMode||'Medium',
-  throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw)})
+  throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw),ch5:ledOn?2000:1000,ch6:kitFlightMode==='acro'?2000:1000})
  .then(d=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
   if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||rcInputArmed&&d.inputArmed!==true)throw Error('Invalid firmware receive ACK');
@@ -804,6 +804,35 @@ function previewControls(m,critical=false){
   if(critical)throw e;
  })
  .finally(()=>{previewBusy=false});
+}
+
+let lastDisarmedPreview=0,disarmedPreviewSeq=0,disarmedPreviewBusy=false;
+function previewDisarmed(m){
+ // Diagnostic preview is explicitly distinct from a claimed/ARMED RC stream.
+ // Never impersonate input ARM, feed motors, or send faster than ~5 Hz.
+ if(!online||!onKitLink||!verifiedKitId||otaBusy||rcSession||rcClaiming||
+    document.hidden||disarmedPreviewBusy||!m?.axes||Date.now()-lastDisarmedPreview<190)return false;
+ if(![m.throttle,m.axes.roll,m.axes.pitch,m.axes.yaw].every(Number.isFinite))return false;
+ const clamp=v=>Math.max(1000,Math.min(2000,Math.round(v)));
+ const pulse=v=>clamp(1500+500*v);
+ const id=verifiedKitId,epoch=linkEpoch,seq=++disarmedPreviewSeq;
+ lastDisarmedPreview=Date.now();disarmedPreviewBusy=true;
+ void request('/api/rc/observe','POST',{source:'ANDROID',armed:'false',inputArmed:'false',seq,
+  throttle:clamp(m.throttle),roll:pulse(m.axes.roll),pitch:pulse(m.axes.pitch),yaw:pulse(m.axes.yaw),
+  ch5:ledOn?2000:1000,ch6:kitFlightMode==='acro'?2000:1000})
+ .then(reply=>{
+  if(epoch!==linkEpoch||id!==verifiedKitId)return;
+  if(reply?.kitId!==id||reply?.received!==true||reply?.previewOnly!==true||
+     reply?.seq!==seq||reply?.inputArmed!==false||reply?.motorsArmed!==false)
+   throw Error('Disarmed preview acknowledgement invalid');
+ })
+ .catch(error=>{
+  // Old firmware returns 404. Preview errors must never fake a verified RC ACK,
+  // change the physical input owner or drop an otherwise healthy AP/STA link.
+  if(epoch===linkEpoch&&id===verifiedKitId&&seq%20===1)
+   trace('diagnostic_preview_unsupported',{transport:link,reason:classify(error)});
+ }).finally(()=>{disarmedPreviewBusy=false});
+ return true;
 }
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
@@ -1147,7 +1176,7 @@ window.zebjusNativeAppResumed=()=>{
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
  window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,
-  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
+  savedFlightMode:()=>kitFlightModeVerified?kitFlightMode:null,previewDisarmed,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })();

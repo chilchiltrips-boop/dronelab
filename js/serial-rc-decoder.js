@@ -20,6 +20,14 @@
   if(!s||s.length>512)return null;
   if(/^ZJRC,(?:FAILSAFE|RELEASE|STOP)(?:,|$)/.test(s))return {kind:'reset',...neutral,active:false,claimed:false,inputArmed:false};
   if(/^ZJRC,CLAIM,/.test(s))return {kind:'claim',...neutral,active:false,claimed:true,inputArmed:false};
+  if(s.startsWith('ZJRC,PREVIEW,')){
+   const m=/^ZJRC,PREVIEW,(USB|AP|STA),ANDROID,(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+),CH5=(\d+),CH6=(\d+),ARM=0$/.exec(s);
+   if(!m||!decimal(m[2])||Number(m[2])===0||!m.slice(3).every(pulse))return null;
+   return {kind:'preview',previewOnly:true,transport:m[1],source:'ANDROID',
+    seq:Number(m[2]),throttle:Number(m[3]),roll:Number(m[4]),
+    pitch:Number(m[5]),yaw:Number(m[6]),ch5:Number(m[7]),ch6:Number(m[8]),
+    active:true,inputArmed:false,claimed:false};
+  }
   if(s.startsWith('ZJRC,')){
    const m=/^ZJRC,(USB|AP|STA|PPM),(WEB|ANDROID|PPM),(\d+),T=(\d+),R=(\d+),P=(\d+),Y=(\d+)(?:,ARM=([01]))?$/.exec(s);
    if(!m||!decimal(m[3])||Number(m[3])===0||![m[4],m[5],m[6],m[7]].every(pulse))return null;

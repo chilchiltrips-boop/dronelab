@@ -35,7 +35,7 @@ export async function safeShot(page,path){const masks=page.locator('#pairOfferCa
 export async function installApFixture(context){
  await context.addInitScript(()=>{
   const kitId='ZFC-A2-012345ABCDEF';let api,active=false,streamId='',sent=0;
-  window.__apFrames=[];window.__apStops=0;window.__apManagement=[];
+  window.__apFrames=[];window.__apStops=0;window.__apManagement=[];window.__apObserves=[];
   window.ZebjusNative={
    managementProtocol:'ZJM1',udpFeedbackVersion:2,apStreamingVersion:1,
    requestWifiPermission:id=>queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true})),
@@ -55,7 +55,14 @@ export async function installApFixture(context){
   };
   Object.defineProperty(window,'ZebjusKitAuth',{get:()=>api,set(value){
    api=value;api.local=async()=>({local:true,expiresAt:Date.now()+1800000,udpKey:()=>'1'.repeat(64),
-    request:async(route)=>{window.__apManagement.push(route);
+    request:async(route,method,args)=>{
+      if(route==='/api/rc/observe'){
+       if(args?.armed!=='false'||args?.inputArmed!=='false'||args?.source!=='ANDROID')
+        throw Error('Disarmed RC observation tried to arm');
+       window.__apObserves.push({seq:args.seq,throttle:args.throttle,roll:args.roll,pitch:args.pitch,yaw:args.yaw,ch5:args.ch5,ch6:args.ch6});
+       return {kitId,received:true,previewOnly:true,seq:args.seq,inputArmed:false,motorsArmed:false};
+      }
+      window.__apManagement.push(route);
      if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',mode:'ap',requestTransport:'AP',
       apActive:true,apSsid:'zebjus_drone_1',inputArmSupported:true,controlAuthorized:true};
      if(route==='/api/rc/claim'){active=true;return {kitId,session:'a'.repeat(32),udpProtocol:'ZJUDP1',udpPort:4210,udpFeedbackVersion:2};}

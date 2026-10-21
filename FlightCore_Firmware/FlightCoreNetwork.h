@@ -178,15 +178,16 @@ static void zjSetupHttp(){
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  zjHttp.on("/api/flight/mode",HTTP_POST,[](){
   if(!zjAllow())return;
-  // Save classroom flight-mode selection, never arm motor outputs.
+  // Classroom-only mode metadata: diagnostic INPUT ARM never enables physical motors.
+  // Persist authorized changes even during a signed RC input session, not during OTA.
   // STA observer sessions have no write permission.
   if(zjRequestSession<0||(!zjAuthAdmin&&zjSessions[zjRequestSession].localSta)){
    zjReply(403,"{\"error\":\"flight_mode_requires_authorized_controller\"}");return;
   }
   const String next=zjArg("flightMode");
   if(next!="angle"&&next!="acro"){zjReply(400,"{\"error\":\"invalid_flight_mode\"}");return;}
-  if(zjRcOwned||zjRcInputArmed||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
-   zjReply(409,"{\"error\":\"disarm_and_release_input_before_mode_change\"}");return;
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   zjReply(409,"{\"error\":\"flight_mode_save_unavailable_during_network_or_ota\"}");return;
   }
   if(zjPrefs.putString("flightMode",next)!=next.length()){
    zjReply(500,"{\"error\":\"flight_mode_save_failed\"}");return;
@@ -317,19 +318,62 @@ static void zjSetupHttp(){
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
   const String inputArm=zjArg("inputArmed");
   if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
-  long seq=0,t=0,r=0,p=0,y=0;
+  long seq=0,t=0,r=0,p=0,y=0,ch5=1000,ch6=1000;
   const String response=zjArg("responseMode");
   if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
      !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
+     (zjArg("ch5").length()&&!parseNumber(zjArg("ch5").c_str(),1000,2000,ch5))||
+     (zjArg("ch6").length()&&!parseNumber(zjArg("ch6").c_str(),1000,2000,ch6))||
      (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
      !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.peerIP(),inputArm=="true")){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
+  zjRcCh5=int(ch5);zjRcCh6=int(ch6); // diagnostic auxiliaries, no GPIO mapping
   zjRcResponse=response.length()?response:String("Medium");
   if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
  });
  zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ // Strictly diagnostic: never touches motor outputs, RC claim or watchdog.
+ zjHttp.on("/api/rc/observe",HTTP_POST,[](){
+  if(!zjAllow())return;
+  if(zjRequestSession<0||(!zjAuthAdmin&&zjSessions[zjRequestSession].localSta)){
+   zjReply(403,"{\"error\":\"preview_requires_authorized_controller\"}");return;
+  }
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;
+  }
+  if(zjArg("source")!="ANDROID"||zjArg("armed")!="false"||zjArg("inputArmed")!="false"){
+   zjReply(403,"{\"error\":\"disarmed_preview_only\"}");return;
+  }
+  long seq=0,t=0,r=0,p=0,y=0,ch5=0,ch6=0;
+  if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||
+   !parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
+   !parseNumber(zjArg("roll").c_str(),1000,2000,r)||
+   !parseNumber(zjArg("pitch").c_str(),1000,2000,p)||
+   !parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
+   !parseNumber(zjArg("ch5").c_str(),1000,2000,ch5)||
+   !parseNumber(zjArg("ch6").c_str(),1000,2000,ch6)){
+   zjReply(400,"{\"error\":\"invalid_preview_values\"}");return;
+  }
+  const String session=zjSessions[zjRequestSession].id;
+  const uint32_t at=millis();
+  if(zjPreviewSession==session&&(uint32_t(seq)<=zjPreviewSeq||
+      uint32_t(at-zjPreviewAt)<100)){
+   zjReply(429,"{\"error\":\"preview_replay_or_rate_limit\"}");return;
+  }
+  zjPreviewSession=session;zjPreviewAt=at;zjPreviewSeq=uint32_t(seq);
+  zjPreviewTransport=zjClientTransport();
+  zjPreviewT=int(t);zjPreviewR=int(r);zjPreviewP=int(p);zjPreviewY=int(y);
+  zjPreviewCh5=int(ch5);zjPreviewCh6=int(ch6);
+  if(Serial.availableForWrite()>132){
+   Serial.printf("ZJRC,PREVIEW,%s,ANDROID,%lu,T=%d,R=%d,P=%d,Y=%d,CH5=%d,CH6=%d,ARM=0\n",
+    zjPreviewTransport.c_str(),(unsigned long)zjPreviewSeq,zjPreviewT,zjPreviewR,zjPreviewP,zjPreviewY,zjPreviewCh5,zjPreviewCh6);
+  }
+  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+
+    ",\"received\":true,\"previewOnly\":true,\"seq\":"+String(zjPreviewSeq)+
+    ",\"inputArmed\":false,\"motorsArmed\":false}");
+ });
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
  zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 
@@ -408,6 +452,31 @@ static void zjRpcLoop(){
  }
  const uint32_t loopUs=micros()-started;
  if(loopUs>zjRpcMaxLoopUs)zjRpcMaxLoopUs=loopUs;
+}
+// USB physical serial command for a verified classroom Kit. This only saves
+// Angle/Acro metadata; the FlightCore firmware never drives physical motors.
+// A signed AP/STA client uses /api/flight/mode instead.
+static bool zjSerialFlightMode(char* line){
+ if(!strcmp(line,"ZJFLIGHT,GET")){
+  Serial.print("ZJFLIGHT,MODE,");Serial.print(zjKitId);Serial.print(',');
+  Serial.print(zjFlightMode);Serial.println(",CURRENT");return true;
+ }
+ const char prefix[]="ZJFLIGHT,MODE,";
+ if(strncmp(line,prefix,sizeof(prefix)-1))return false;
+ const String requested=line+sizeof(prefix)-1;
+ if(requested!="angle"&&requested!="acro"){
+  Serial.println("ZJFLIGHT,ERROR,INVALID_MODE");return true;
+ }
+ if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+  Serial.println("ZJFLIGHT,ERROR,NETWORK_OR_OTA_BUSY");return true;
+ }
+ if(zjPrefs.putString("flightMode",requested)!=requested.length()){
+  Serial.println("ZJFLIGHT,ERROR,SAVE_FAILED");return true;
+ }
+ zjFlightMode=requested;
+ Serial.print("ZJFLIGHT,MODE,");Serial.print(zjKitId);Serial.print(',');
+ Serial.print(zjFlightMode);Serial.println(",SAVED");
+ return true;
 }
 static void zjNetworkSetup(){
  WiFi.onEvent([](WiFiEvent_t event,WiFiEventInfo_t info){

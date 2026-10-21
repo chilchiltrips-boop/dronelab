@@ -127,7 +127,7 @@ function render(){
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=mirroring()||!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
- $('flightMode').disabled=mirroring()||kitModePending;
+ $('flightMode').disabled=kitModePending;
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
@@ -162,7 +162,7 @@ function tick(now){
   if(kitArmed()&&kitFeedback&&kitFeedback.protocol!=='ZJUDP1'&&Date.now()-kitFeedback.at>500){
    void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')
   }
- if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
+ if(directKit()||window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  if(mirroring()&&!window.ZebjusNetwork?.hasControl?.()&&drag.left)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
@@ -201,7 +201,7 @@ function sendMirror(){
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else if(directKit())window.ZebjusNetwork?.previewControls?.(diagnosticInput());sendMirror()},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else if(directKit()){if(window.ZebjusNetwork?.hasControl?.())window.ZebjusNetwork?.previewControls?.(diagnosticInput());else window.ZebjusNetwork?.previewDisarmed?.(diagnosticInput())}sendMirror()},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
@@ -299,9 +299,7 @@ function bind(){
  $('flightMode').onchange=async e=>{
    const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
    if(directKit()){
-    if(kitArmed()||kitArmPending){
-     e.target.value=mode;updateStatus('DISARM KIT INPUT BEFORE CHANGING MODE');return;
-    }
+    // Input ARM is diagnostic-only; this selection persists classroom mode metadata.
     kitModePending=true;render();
     try{
      await window.ZebjusNetwork.setSavedFlightMode(desired);

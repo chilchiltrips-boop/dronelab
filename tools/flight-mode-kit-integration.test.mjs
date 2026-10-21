@@ -10,7 +10,8 @@ test('FlightCore saves authenticated Angle/Acro independently from Wi-Fi mode, d
  assert.match(firmware,/if\(!zjAllow\(\)\)return/);
  assert.match(firmware,/localSta/);
  assert.match(firmware,/next!="angle"&&next!="acro"/);
- assert.match(firmware,/zjRcOwned\|\|zjRcInputArmed/);
+ assert.doesNotMatch(firmware,/if\(zjRcOwned\|\|zjRcInputArmed\|\|zjNetTesting/);
+ assert.match(firmware,/if\(zjNetTesting\|\|zjOtaAuthorized\|\|zjSecureOtaActive/);
  assert.match(firmware,/zjPrefs\.putString\("flightMode",next\)/);
  assert.match(firmware,/zjPrefs\.getString\("flightMode","angle"\)/);
  assert.match(firmware,/zjJson\(zjFlightMode\)/);
@@ -24,13 +25,13 @@ test('Android mode selection verifies kit ID and signed saved result; never trea
  assert.match(net,/async function setSavedFlightMode\(desired\)/);
  assert.match(net,/request\('\/api\/flight\/mode','POST',\{flightMode:desired\}\)/);
  assert.match(net,/data\?\.flightMode!==desired\|\|data\?\.saved!==true/);
- assert.match(net,/rcSession\|\|rcClaiming\|\|rcInputArmed/);
+ assert.doesNotMatch(net,/rcSession\|\|rcClaiming\|\|rcInputArmed/);
  assert.match(net,/kitFlightModeVerified=\['angle','acro'\]\.includes\(data\.flightMode\)/);
  assert.match(app,/mode='angle'/);
  assert.match(app,/await window\.ZebjusNetwork\.setSavedFlightMode\(desired\)/);
- assert.match(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
+ assert.doesNotMatch(app,/DISARM KIT INPUT BEFORE CHANGING MODE/);
 });
-test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1000-2000µs',()=>{
+test('WebApp mode persistence is explicit and simulator remains read-only, throttle follows 1000-2000µs',()=>{
  const live=read('js/live-inputs.js'),mirror=read('js/simulator-input.js'),
   page=read('js/tripod-page.js'),html=read('tripod.html'),index=read('index.html');
  assert.match(live,/flightMode:\['angle','acro'\]\.includes\(rc\.flightMode\)/);
@@ -44,4 +45,32 @@ test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1
  assert.match(html,/id="tpKitMode"/);
  assert.match(index,/id="liFlightMode"/);
  assert.doesNotMatch(page,/\/api\/flight\/mode|\/api\/rc\/preview/);
+});
+
+test('Flight Mode USB/AP/STA persistence and DISARMED RC preview retain hardware guards',()=>{
+ const firmware=read('FlightCore_Firmware/FlightCoreNetwork.h');
+ const sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
+ const classroom=read('FlightCore_Firmware/FlightCoreClassroom.h');
+ const network=read('companion-network.js'),web=read('js/classroom-kits.js');
+ const live=read('js/live-inputs.js'),html=read('index.html');
+ assert.match(firmware,/zjHttp\.on\("\/api\/rc\/observe",HTTP_POST/);
+ assert.match(firmware,/zjArg\("inputArmed"\)!="false"/);
+ assert.match(firmware,/zjArg\("armed"\)!="false"/);
+ assert.match(firmware,/preview_requires_authorized_controller/);
+ assert.match(firmware,/zjPreviewSession==session/);
+ assert.match(classroom,/zjPreviewLive\(uint32_t at\)/);
+ assert.match(classroom,/zjRcPreviewState|zjPreviewState/);
+ assert.match(sketch,/zjSerialFlightMode\(line\)/);
+ assert.match(firmware,/ZJFLIGHT,MODE,/);
+ assert.match(web,/async function setFlightMode\(desired,expectedId,expectedTransport\)/);
+ assert.match(web,/waitSerial\(\/\^ZJFLIGHT,MODE,/);
+ assert.match(web,/deviceRequest\('\/api\/flight\/mode','POST'/);
+ assert.match(network,/function previewDisarmed\(m\)/);
+ assert.match(network,/request\('\/api\/rc\/observe','POST'/);
+ assert.match(live,/v\.state==='preview'/);
+ assert.match(html,/id="liModeSave"/);
+ assert.match(html,/id="liAux5"/);
+ assert.match(html,/id="liAux6"/);
+ assert.match(read('tripod.html'),/value="usb">USB Kit/);
+ assert.doesNotMatch(read('js/tripod-page.js'),/\/api\/rc\/observe/);
 });
