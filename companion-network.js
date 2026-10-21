@@ -578,8 +578,8 @@ async function setSavedFlightMode(desired){
  if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
  if(!online||!onKitLink||!verifiedKitId)throw Error('Verify FlightCore Kit before changing flight mode');
  if(!kitFlightModeVerified)throw Error('FlightCore firmware update required for saved flight mode');
- if(flightModeSaving||otaBusy||rcSession||rcClaiming||rcInputArmed||previewBusy)
-  throw Error('Disarm and release Kit control before changing flight mode');
+ if(flightModeSaving||otaBusy||rcClaiming)
+  throw Error('Kit operation in progress; wait to change Flight Mode');
  const id=verifiedKitId,epoch=linkEpoch;
  flightModeSaving=true;
  try{
