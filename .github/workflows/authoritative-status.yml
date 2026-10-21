@@ -37,6 +37,7 @@ jobs:
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/authoritative-status-http.log 2>&1 &
           node tools/authoritative-status-browser.mjs
+          node tools/live-inputs-layout-browser.mjs
           node tools/tripod-compact-browser.mjs
           node tools/tripod-ap-mirror-browser.mjs
       - uses: actions/upload-artifact@v4
