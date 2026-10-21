@@ -77,7 +77,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitStatus=n
  }
  function observeKitStatus(kit,input){
   const id=String(kit?.kitId||'');
-  const next=kit?.connected&&id&&['usb','ap','sta'].includes(String(kit.transport).toLowerCase())?
+  const next=kit?.connected&&id&&['usb','ap','sta','android-relay'].includes(String(kit.transport).toLowerCase())?
    {kitId:id,transport:String(kit.transport).toLowerCase(),
     flightMode:['angle','acro'].includes(input?.flightMode)?input.flightMode:null,
     inputArm:input?.inputArm||'NOT REPORTED',led:input?.led||'NOT REPORTED',
