@@ -59,7 +59,18 @@ try{
  await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='usb'&&window.ZebjusTraining.snapshot().input.fresh);
  check(await sim.locator('#tpMode').isDisabled(),'Connected Kit must own simulator mode');
  await sim.locator('#tpRun').click();
- await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed);
+ try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000})}
+ catch(error){
+  const diagnostic=await page.evaluate(()=>{
+   const frame=document.getElementById('pidFrame')?.contentDocument;
+   return {snapshot:window.ZebjusTraining?.snapshot?.(),status:frame?.getElementById('tpStatus')?.textContent,
+    runDisabled:frame?.getElementById('tpRun')?.disabled,tab:document.querySelector('.tab.active')?.id,
+    fixture:{...window.__statusFixture,kit:window.__statusFixture?.kit},
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+  });
+  console.error('USB VIRTUAL RUN DIAGNOSTIC '+JSON.stringify(diagnostic));
+  throw error;
+ }
  await page.evaluate(()=>{const f=window.__statusFixture;f.kit.flightMode='acro';Object.assign(f.kit.flightModeState,{saved:'acro',active:'acro',pending:null})});
  await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpKitMode').textContent.includes('SYNC PENDING'));
  check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
