@@ -127,7 +127,7 @@ function render(){
  if(!peer?.status().connected)$('flightAppliedTelemetry').textContent='';
  for(const side of ['left','right'])$(side==='left'?'flightLeftZone':'flightRightZone').dataset.preview=String(!(isOwned()&&armed||kitArmed()));
  $('flightTakeControl').disabled=mirroring()||!peer?.status().paired||isOwned();$('flightReleaseControl').disabled=!isOwned();
- $('flightMode').disabled=mirroring()||kitModePending;
+ $('flightMode').disabled=kitModePending;
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
@@ -299,9 +299,7 @@ function bind(){
  $('flightMode').onchange=async e=>{
    const desired=e.target.value==='acro'?'acro':'angle',previous=mode;
    if(directKit()){
-    if(kitArmed()||kitArmPending){
-     e.target.value=mode;updateStatus('DISARM KIT INPUT BEFORE CHANGING MODE');return;
-    }
+    // Input ARM is diagnostic-only; this selection persists classroom mode metadata.
     kitModePending=true;render();
     try{
      await window.ZebjusNetwork.setSavedFlightMode(desired);
