@@ -1,11 +1,11 @@
 /* Read-only physical Kit monitor. Natural-height content; workspace owns scrolling. */
 #fwLiveInputs{min-width:0;max-width:100%;height:auto;max-height:none;display:grid;grid-auto-rows:max-content;align-content:start;gap:8px;padding:10px!important;border:1px solid #2c4b60!important;background:linear-gradient(155deg,#0c2434,#0a1929)!important}
 .li-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.li-header>div{display:flex;align-items:center;flex-wrap:wrap;gap:3px 10px;min-width:0}
+.li-header>div{display:flex;flex:1 1 0;align-items:center;flex-wrap:wrap;gap:3px 10px;min-width:0}
 .li-header small{font-size:10px;letter-spacing:.08em;color:#73d2d5;font-weight:750}
 .li-header h2{font-size:19px;line-height:1.2;margin:0}
 .li-header p{flex-basis:100%;font-size:11px;color:#a7bfd0;line-height:1.35;margin:0}
-.li-link-state{display:inline-block;font-size:10px;letter-spacing:.06em;padding:5px 9px;border:1px solid #5a6f7c;border-radius:20px;background:#162737;color:#b7c7d1;white-space:nowrap}
+.li-link-state{display:inline-block;flex:0 0 auto;font-size:10px;letter-spacing:.06em;padding:5px 9px;border:1px solid #5a6f7c;border-radius:20px;background:#162737;color:#b7c7d1;white-space:nowrap}
 .li-link-state[data-state=live]{border-color:#3fd7a6;color:#77edc8;background:#113b35}
 .li-link-state[data-state=stale]{border-color:#dcb367;color:#f3d28e;background:#393022}
 .li-identity{display:grid;grid-template-columns:minmax(0,1.7fr) repeat(4,minmax(0,1fr));gap:5px}

@@ -50,6 +50,7 @@ try{
     const bounds=el=>{const r=el.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height,width:r.width}};
     return {viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,card:bounds(card),
      cardScrollHeight:card.scrollHeight,cardClientHeight:card.clientHeight,body:bounds(body),
+     badge:bounds(document.getElementById('liLiveState')),
      bodyScrollHeight:body.scrollHeight,bodyClientHeight:body.clientHeight,
      controls:bounds(card.querySelector('.li-controls')),identity:bounds(card.querySelector('.li-identity')),
      beforeSticks:card.querySelector('.li-middle').getBoundingClientRect().top-card.getBoundingClientRect().top,
@@ -61,6 +62,7 @@ try{
    assert.ok(metrics.documentWidth<=width+1,'Horizontal overflow: '+detail);
    assert.ok(metrics.cardScrollHeight<=metrics.cardClientHeight+1,'Card clipped its own content: '+detail);
    assert.equal(metrics.visibleHeadings,1,'Duplicate Live Inputs heading');
+   assert.ok(metrics.badge.left>=metrics.card.left&&metrics.badge.right<=metrics.card.right,'Connection badge clipped: '+detail);
    for(const select of metrics.selects){
     assert.ok(select.height>=44&&select.left>=0&&select.right<=width+1,'Select target clipped/small: '+detail);
    }
