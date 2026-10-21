@@ -16,7 +16,7 @@
   <span id="flightLeftTouch" class="flight-touch-readout">TOUCH TO CONTROL</span></div>
  <div class="flight-center">
  <div id="flightAttitude" class="flight-attitude" data-source="preview" aria-label="Simulator attitude indicator"><div id="flightAttitudeLadder" class="flight-attitude-ladder"><i></i><i></i><i></i><i></i><i></i></div><svg viewBox="0 0 80 32" aria-hidden="true"><path d="M5 16h23l5 6h14l5-6h23M28 16v-6h24v6M40 6v20"/><circle cx="40" cy="16" r="10"/></svg><span id="flightAttitudeLabel">INPUT PREVIEW</span></div>
- <div class="flight-center-actions"><select id="flightMode" aria-label="Flight simulator mode"><option value="angle">ANGLE</option><option value="acro">ACRO</option></select><button id="flightArm" class="flight-arm" disabled aria-pressed="false">ARM</button></div>
+ <div class="flight-center-actions"><select id="flightMode" aria-label="Flight simulator mode"><option value="angle">ANGLE</option><option value="acro">ACRO</option></select><button id="flightPreview" class="flight-arm" type="button" disabled aria-pressed="false" title="Send authenticated disarmed joystick telemetry; never arm motors">PREVIEW</button><button id="flightArm" class="flight-arm" disabled aria-pressed="false">ARM</button></div>
  <button id="flightConnect" class="flight-connect">CONNECT</button>
  <p id="flightWarning" class="flight-warning">PAIR WITH WEB APP TO ENABLE FLIGHT</p></div>
  <div id="flightRightZone" class="flight-touch-zone" aria-label="Right joystick roll and pitch" role="application">
