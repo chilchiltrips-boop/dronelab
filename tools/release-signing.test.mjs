@@ -55,3 +55,13 @@ test('API30 SDK mirror retry verifies a real image and retains mandatory signed 
  assert.match(yaml,/grep -F 'INSTRUMENTATION_CODE: -1'/);
  assert.match(yaml,/needs: \[android, native_touch, legacy_api30\]/);
 });
+
+test('staging API30 consumes the same review artifact as signing and never weakens publication prerequisites',()=>{
+ const yaml=read('.github/workflows/build-qr-android.yml');
+ const legacy=yaml.slice(yaml.indexOf('  legacy_api30:'),yaml.indexOf('  publish:'));
+ assert.ok(legacy.includes("name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}"));
+ const publish=yaml.slice(yaml.indexOf('  publish:'));
+ assert.match(publish,/needs: \[android, native_touch, legacy_api30\]/);
+ assert.match(publish,/if: github.ref == 'refs\/heads\/main'/);
+ assert.ok(yaml.includes("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}"));
+});

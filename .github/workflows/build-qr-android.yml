@@ -62,7 +62,8 @@ permissions:
   actions: read
 concurrency:
   group: zebjus-android-release-${{ github.ref_name }}
-  cancel-in-progress: false
+  # Superseded review candidates may stop; production releases always finish their gates.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   release_candidate:
@@ -318,7 +319,7 @@ jobs:
           packages: 'platform-tools'
       - uses: actions/download-artifact@v4
         with:
-          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_release
+          name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_${{ github.ref_name == 'main' && 'release' || 'review' }}
           path: mobile-apk/
       - uses: actions/download-artifact@v4
         with:
