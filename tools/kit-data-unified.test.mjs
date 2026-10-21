@@ -63,7 +63,7 @@ test('Android controller names actual Kit versus WebRTC simulator, never claims 
  assert.match(control,/TARGET • KIT \/ /);
  assert.match(control,/TARGET • PREVIEW ONLY/);
  assert.match(control,/FlightCore diagnostic input • MOTOR OUTPUTS DISABLED/);
- assert.match(control,/if\(directKit\(\)\)window\.ZebjusNetwork\?\.previewControls/);
+ assert.match(control,/window\.ZebjusNetwork\?\.previewDisarmed\?\.\(diagnosticInput\(\)\)/);
  assert.match(control,/s\?\.connected&&!mirroring\(\)&&window\.ZebjusNetwork\?\.hasControl\?\.\(\)/);
  assert.match(css,/\.flight-sim-badge\[data-target=kit\]/);
 });
