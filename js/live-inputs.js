@@ -247,7 +247,7 @@ function initLiveInputs(){
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
-  if(received.kind==='frame'){
+  if(received.kind==='frame'||received.kind==='preview'){
    if(sample?.rc?.active&&sample.rc.source===received.source&&Number(received.seq)<Number(sample.rc.seq))return;
    const hz=rate.observe(kit.kitId,received,at);
    const prev=sample;
@@ -256,7 +256,7 @@ function initLiveInputs(){
       at-usbPpm.at<=300?usbPpm.channels:null;
    sample={kitId:kit.kitId,rc:confirmed?{...received,channels:confirmed}:received,
     at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
-    rateHz:hz,motorsOff:motorReported};
+    rateHz:hz,motorsOff:motorReported||received.previewOnly===true};
   }else if(received.kind==='idle'||received.kind==='reset'){
    rate.reset();
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
