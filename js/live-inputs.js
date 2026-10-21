@@ -16,12 +16,21 @@ const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
 const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
 const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
 
+const ownerKey=rc=>String(rc?.ownerId||rc?.diagnosticId||'');
+export function isOlderAcceptedInput(previous,next){
+ const before=previous?.accepted,after=next?.accepted;
+ const counters=Number.isSafeInteger(before)&&Number.isSafeInteger(after);
+ if(counters&&after<before)return true;
+ if(ownerKey(previous)!==ownerKey(next))return false;
+ return Number(next?.seq)<Number(previous?.seq)&&!(counters&&after>before);
+}
+
 export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const connected=kit?.connected===true,transport=String(kit?.transport||'').toUpperCase();
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
   inputTransport:'—',seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
-  aux:{ch5:null,ch6:null},inputArm:'NOT REPORTED',flightMode:['angle','acro'].includes(kit?.flightMode)?kit.flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
+  aux:{ch5:null,ch6:null},inputArm:'NOT REPORTED',ownerId:'',flightMode:['angle','acro'].includes(kit?.flightMode)?kit.flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
@@ -43,7 +52,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
  const armed=active&&rc.inputArmed===true;
  return {...m,
-  inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  ownerId:ownerKey(rc),inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
   ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
@@ -65,7 +74,7 @@ export function createInputRateTracker(){
  function reset(){previous=null;rate=null}
  function observe(kitId,rc,at){
   const seq=Number(rc?.seq),counter=Number(rc?.accepted);
-  const key=kitId+'|'+String(rc?.source||'')+'|'+String(rc?.transport||'');
+  const key=kitId+'|'+String(rc?.source||'')+'|'+String(rc?.transport||'')+'|'+ownerKey(rc);
   const valid=rc?.active===true&&Number.isSafeInteger(seq)&&seq>0;
   if(!valid){reset();return null}
   const accepted=Number.isSafeInteger(counter)&&counter>=0?counter:null;
@@ -115,8 +124,9 @@ function initLiveInputs(){
      !rc||rc.kitId!==kit.kitId||!Number.isFinite(at)||at<=0||
      at<=Number(sample?.at||0)||now-at>SNAPSHOT_TTL_MS||
      !channels.every(field=>finitePulse(rc[field])))return;
+  if(sample?.rc?.active&&rc.active&&isOlderAcceptedInput(sample.rc,rc))return;
   const previous=sample;
-  const sequenceAt=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source?
+  const sequenceAt=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source&&ownerKey(previous.rc)===ownerKey(rc)&&previous.rc.accepted===rc.accepted?
    previous.sequenceAt??previous.at:at;
   sample={kitId:kit.kitId,rc:{...rc},at,sequenceAt,
    rateHz:rate.observe(kit.kitId,rc,at),ledOn:kit.ledOn,
@@ -208,8 +218,8 @@ function initLiveInputs(){
       current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id||current.bootId!==bootId)return;
    const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
-   if(prev?.rc?.active&&reply.active&&prev.rc.source===reply.source&&prev.rc.diagnosticId===reply.diagnosticId&&Number(reply.seq)<Number(prev.rc.seq))return;
-   const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source;
+   if(prev?.rc?.active&&reply.active&&isOlderAcceptedInput(prev.rc,reply))return;
+   const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source||ownerKey(prev.rc)!==ownerKey(reply)||Number(reply.accepted)>Number(prev.rc.accepted);
    const sequenceAt=seqChanged?at:prev.sequenceAt??prev.at;
    const hz=rate.observe(id,reply,at);
    // Period is measured start-to-start; network wait already consumes budget.
@@ -249,7 +259,7 @@ function initLiveInputs(){
   if(statusRecord){
    if(statusRecord.kitId!==kit.kitId)return;
    const at=Date.now(),rc=statusRecord.rc,previous=sample;
-   const same=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source;
+   const same=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source&&previous.rc.accepted===rc.accepted;
    sample={kitId:kit.kitId,rc,at,sequenceAt:same?previous.sequenceAt??previous.at:at,
     rateHz:rate.observe(kit.kitId,rc,at),ledOn:statusRecord.ledOn,motorsOff:true};
    if(visible())display();return;
@@ -264,11 +274,11 @@ function initLiveInputs(){
    const seqChanged=!prev||prev.rc?.seq!==received.seq||prev.rc?.source!==received.source;
    const confirmed=received.source==='PPM'&&usbPpm?.owner===true&&
       at-usbPpm.at<=300?usbPpm.channels:null;
-   sample={kitId:kit.kitId,rc:{...received,ch5:sample?.rc?.ch5,ch6:sample?.rc?.ch6,...(confirmed?{channels:confirmed}:{})},
+   sample={kitId:kit.kitId,rc:{...received,accepted:sample?.rc?.accepted,rejected:sample?.rc?.rejected,ch5:sample?.rc?.ch5,ch6:sample?.rc?.ch6,...(confirmed?{channels:confirmed}:{})},
     at,sequenceAt:seqChanged?at:prev.sequenceAt??prev.at,
     rateHz:hz,motorsOff:motorReported};
-  }else if(received.kind==='idle'||received.kind==='reset'){
-   rate.reset();
+  }else if(received.kind==='idle'||received.kind==='reset'||received.kind==='claim'){
+   rate.reset();simInputs.clearKit();
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
     at,rateHz:null,motorsOff:motorReported};
   }

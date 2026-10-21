@@ -23,7 +23,7 @@ export function createInputStore({now=()=>performance.now()}={}){
  let peer={connected:false,approved:false,supported:false,sessionId:'',deviceId:''},sample=null,receivedAt=0,lastSeq=0,arrivals=[],rateHz=null,rejected=0;
 // Independent read-only stream of firmware-accepted Android RC, never a control grant.
 // The monitor alone may feed this cache, after Kit identity and RC freshness validation.
-let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=null;
+let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=null,kitAccepted=null,kitEpoch=0;
  const listeners=new Set();
  const notify=()=>{for(const fn of listeners)fn()};
  function setPeer(value){
@@ -47,7 +47,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
  function clearKit(){
   kitMode=null;
   const hadSample=kitSample!==null;
-  kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;
+  kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
   if(hadSample)notify();
  }
  function acceptKit({kit,input}={}){
@@ -57,7 +57,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   const actual=kit?.flightModeState?.active||kit?.flightMode;
   kitMode=kit?.connected===true&&['usb','ap','sta'].includes(transport)&&id&&['angle','acro'].includes(actual)?
    {kitId:id,transport,active:actual,saved:kit.flightModeState?.saved||actual,pending:kit.flightModeState?.pending||null}:null;
-  const key=id+'|'+transport+'|'+String(kit?.bootId||'');
+  const key=id+'|'+transport+'|'+String(kit?.bootId||'')+'|'+String(input?.ownerId||'');
   // A transient delayed poll is not a new packet; let the Kit freshness clock
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
@@ -68,10 +68,17 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
    Number.isFinite(input?.ageMs)&&input.ageMs>=0&&input.ageMs<=400&&
    vals&&['throttle','roll','pitch','yaw'].every(field=>validPulse(vals[field]));
   if(!valid){const mode=kitMode;clearKit();kitMode=mode;return false;}
-  if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;}
-  if(input.seq<=kitSeq)return false; // Polling the same accepted packet cannot refresh freshness.
+  if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;kitAccepted=null;kitEpoch=0;}
+  const accepted=Number.isSafeInteger(input.accepted)?input.accepted:null;
+  if(input.seq<=kitSeq){
+   // Compact USB telemetry may omit ownerId. An advancing firmware accepted
+   // counter proves that a reset sequence belongs to a new accepted producer.
+   if(accepted!==null&&kitAccepted!==null&&accepted>kitAccepted){++kitEpoch;kitSeq=0;}
+   else return false;
+  }
+  kitAccepted=accepted; // Polling the same accepted packet cannot refresh freshness.
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
-  kitSample={mirrorVersion:1,sessionId:'verified-kit-'+key,seq:input.seq,
+  kitSample={mirrorVersion:1,sessionId:'verified-kit-'+key+'|'+kitEpoch,seq:input.seq,
    channels:Object.fromEntries(['throttle','roll','pitch','yaw'].map(field=>[field,vals[field]])),
    transport,kind:transport==='usb'?'usb-received':'android-command',aux:{...input.aux},kitId:id,inputAgeMs:input.ageMs,origin:'kit',
    flightMode:['angle','acro'].includes(input.flightMode)?input.flightMode:null,
