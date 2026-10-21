@@ -162,7 +162,7 @@ function tick(now){
   if(kitArmed()&&kitFeedback&&kitFeedback.protocol!=='ZJUDP1'&&Date.now()-kitFeedback.at>500){
    void doStop('ACK_TIMEOUT');updateStatus('KIT ACK TIMEOUT • INPUT DISARMED')
   }
- if(window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
+ if(directKit()||window.ZebjusNetwork?.hasControl?.()){if(drag.left)diagnosticThrottle=F.integrateThrottle(diagnosticThrottle,drag.left.data.y,dt,preset)}else diagnosticThrottle=1000;
  if(drag.left&&isOwned()&&armed&&!halted)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  if(mirroring()&&!window.ZebjusNetwork?.hasControl?.()&&drag.left)throttle=F.integrateThrottle(throttle,drag.left.data.y,dt,preset);
  for(const [key,val] of sent)if(now-val>2000)sent.delete(key);
@@ -201,7 +201,7 @@ function sendMirror(){
 }
 function connect(p){
  peer=p;authority=false;sessionId='';seq=lastAckSeq=criticalRequestSeq=0;lastAckAt=0;lastControlSentAt=lastControlAttemptAt=lastRejectedAt=0;acceptedFrames=rejectedFrames=0;clockAt=clockElapsed=0;sent.clear();
- clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else if(directKit())window.ZebjusNetwork?.previewControls?.(diagnosticInput());sendMirror()},40);
+ clearInterval(sender);sender=setInterval(()=>{if(isOwned())send();else if(directKit()){if(window.ZebjusNetwork?.hasControl?.())window.ZebjusNetwork?.previewControls?.(diagnosticInput());else window.ZebjusNetwork?.previewDisarmed?.(diagnosticInput())}sendMirror()},40);
  updateStatus('INPUT PREVIEW • PAIR IN CONNECTION SETTINGS');render();
  if(!loopStarted){loopStarted=true;last=performance.now();raf=requestAnimationFrame(tick)}
 }
