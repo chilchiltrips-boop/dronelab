@@ -334,6 +334,19 @@ function triggerTuningResponse(){
  return true;
 }
 function updateControls(){
+ const menus=[...document.querySelectorAll('.tp-menu')];
+ menus.forEach(menu=>menu.addEventListener('toggle',()=>{
+  if(menu.open)menus.forEach(other=>{if(other!==menu)other.open=false});
+ }));
+ document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+   const open=menus.find(menu=>menu.open);
+   if(open){open.open=false;open.querySelector('summary')?.focus()}
+  }
+ });
+ document.addEventListener('pointerdown',e=>{
+  if(!e.target.closest('.tp-menu'))menus.forEach(menu=>menu.open=false);
+ });
  $('tpMode').onchange=e=>{setFlightMode(s,e.target.value);history.length=0;updatePidEditor();coach()};
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
  $('tpReset').onclick=()=>stop('Web RESET');
