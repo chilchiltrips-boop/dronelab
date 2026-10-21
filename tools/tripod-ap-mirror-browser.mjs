@@ -37,7 +37,18 @@ try{
  check(!(await page.evaluate(()=>window.ZebjusSimulatorInputs.snapshot().peer.approved)),'Kit path must not claim WebRTC pairing');
  check((await iframe.locator('#tpCameraView').inputValue())==='back','Initial view should face opposite direction');
  await iframe.locator('#tpRun').click();
- await page.waitForFunction(()=>window.ZebjusTraining.snapshot()?.armed===true);
+ try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot()?.armed===true,null,{timeout:7000})}
+ catch(error){
+  const debug=await page.evaluate(()=>({
+   topTab:document.querySelector('#tab-pid')?.className,
+   status:document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpStatus')?.textContent,
+   sourceState:document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpSourceState')?.textContent,
+   inputStatus:document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpInputStatus')?.textContent,
+   simulator:window.ZebjusTraining?.snapshot(),kitMirror:window.ZebjusSimulatorInputs?.snapshot().kit,
+   kitRequests:window.__pidTest?.requests?.slice(-8)
+  }));
+  throw Error('AP Run did not stay active: '+JSON.stringify(debug)+' • '+error.message);
+ }
  check(await iframe.locator('#tpInputSource').isDisabled(),'Source must lock during Run');
  await page.evaluate(()=>Object.assign(window.__pidTest.channels,{throttle:1350,roll:1800,pitch:1250,yaw:1700}));
  await page.waitForFunction(()=>{
