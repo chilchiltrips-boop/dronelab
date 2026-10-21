@@ -52,6 +52,27 @@ test('idle verified Kit mode remains available with WebApp input independently o
  assert.equal(s.mode,'angle','a running loop must not be reconfigured by telemetry');
  assert.equal(input.snapshot().kitMode.active,'acro');assert.equal(s.running,true);
 });
+test('Kit Angle/Acro mode changes notify the virtual cockpit even without a new RC sequence',()=>{
+ let ticks=0;const store=createInputStore({now:()=>0}),s=createSimulator(),input=createSimulatorInput(s,store);
+ const unsubscribe=store.subscribe(()=>ticks++);
+ const p=packet(3);p.kit.flightModeState={supported:true,stabilizationSupported:false,saved:'angle',active:'angle',pending:null};
+ p.kit.flightMode='angle';assert.equal(store.acceptKit(p),true);
+ assert.equal(input.start().accepted,true);const received=ticks;
+ p.kit.flightModeState={supported:true,stabilizationSupported:false,saved:'acro',active:'acro',pending:null};
+ p.kit.flightMode='acro';
+ assert.equal(store.acceptKit(p),false,'same RC sequence cannot be accepted as new telemetry');
+ assert.ok(ticks>received,'authoritative mode needs a notification independent of input freshness');
+ assert.equal(input.snapshot().kitMode.active,'acro');
+ assert.equal(s.mode,'angle','virtual simulator cannot hot-switch during Run');
+ assert.equal(s.running,true,'mode metadata cannot stop the running virtual simulator');
+ const prev=ticks;p.input.state='stale';
+ p.kit.flightModeState={supported:true,stabilizationSupported:false,saved:'angle',active:'acro',pending:'angle'};
+ assert.equal(store.acceptKit(p),false);
+ assert.ok(ticks>prev,'stale input must not hide a verified pending Kit mode');
+ assert.equal(input.snapshot().kitMode.pending,'angle');
+ assert.equal(s.running,true,'metadata change alone must not alter Run');
+ unsubscribe();input.dispose();
+});
 test('native Android explicitly admits the authenticated flight-mode route',()=>{
  assert.match(read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java'),/route.equals\("\/api\/flight\/mode"\)/);
 });
