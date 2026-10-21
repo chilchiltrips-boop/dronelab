@@ -107,7 +107,12 @@ static String zjStatus(){
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
- out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"exclusiveWifi\":true";
+ out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjFlightMode)+
+  ",\"activeFlightMode\":"+zjJson(zjFlightMode)+",\"requestedFlightMode\":"+zjJson(zjRequestedFlightMode)+
+  ",\"pendingFlightMode\":"+(zjPendingFlightMode.isEmpty()?String("null"):zjJson(zjPendingFlightMode))+
+  ",\"flightModePending\":"+(zjPendingFlightMode.isEmpty()?String("false"):String("true"))+
+  ",\"flightModeRevision\":"+String(zjFlightModeRevision)+
+  ",\"flightModeImplementation\":\"diagnostic-metadata\",\"exclusiveWifi\":true";
  out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
   ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
   ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
@@ -178,22 +183,40 @@ static void zjSetupHttp(){
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  zjHttp.on("/api/flight/mode",HTTP_POST,[](){
   if(!zjAllow())return;
-  // Save classroom flight-mode selection, never arm motor outputs.
-  // STA observer sessions have no write permission.
+  // A local STA observer cannot write. An existing RC claim is exclusive:
+  // only the same authenticated claimant or a teacher/admin may request mode.
   if(zjRequestSession<0||(!zjAuthAdmin&&zjSessions[zjRequestSession].localSta)){
    zjReply(403,"{\"error\":\"flight_mode_requires_authorized_controller\"}");return;
   }
   const String next=zjArg("flightMode");
   if(next!="angle"&&next!="acro"){zjReply(400,"{\"error\":\"invalid_flight_mode\"}");return;}
-  if(zjRcOwned||zjRcInputArmed||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
-   zjReply(409,"{\"error\":\"disarm_and_release_input_before_mode_change\"}");return;
+  if(zjRcOwned&&!zjAuthAdmin&&(!zjRcNetwork||zjRcAuthSessionId!=zjSessions[zjRequestSession].id)){
+   zjReply(423,"{\"error\":\"flight_mode_owned_by_another_controller\"}");return;
   }
-  if(zjPrefs.putString("flightMode",next)!=next.length()){
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   zjReply(409,"{\"error\":\"flight_mode_busy\"}");return;
+  }
+  // NVS stores the desired mode only when it changes; never touch RC ownership,
+  // UDP, watchdog, sequence counter, motor outputs or network state.
+  const bool changed=next!=zjRequestedFlightMode;
+  if(changed&&zjPrefs.putString("flightMode",next)!=next.length()){
    zjReply(500,"{\"error\":\"flight_mode_save_failed\"}");return;
   }
-  zjFlightMode=next;
-  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"saved\":true,\"motorsArmed\":false}");
- });
+  if(changed)zjRequestedFlightMode=next;
+  const String beforePending=zjPendingFlightMode,beforeActive=zjFlightMode;
+  if(next==zjFlightMode)zjPendingFlightMode="";
+  else if(zjRcInputArmed)zjPendingFlightMode=next; // no armed live-mode switch
+  else {zjFlightMode=next;zjPendingFlightMode="";}
+  if(changed||beforePending!=zjPendingFlightMode||beforeActive!=zjFlightMode)++zjFlightModeRevision;
+  // flightMode is legacy ACTIVE value, not the saved requested value.
+  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
+   ",\"flightMode\":"+zjJson(zjFlightMode)+",\"activeFlightMode\":"+zjJson(zjFlightMode)+
+   ",\"requestedFlightMode\":"+zjJson(zjRequestedFlightMode)+
+   ",\"pendingFlightMode\":"+(zjPendingFlightMode.isEmpty()?String("null"):zjJson(zjPendingFlightMode))+
+   ",\"flightModePending\":"+(zjPendingFlightMode.isEmpty()?String("false"):String("true"))+
+   ",\"flightModeRevision\":"+String(zjFlightModeRevision)+
+   ",\"flightModeImplementation\":\"diagnostic-metadata\",\"saved\":true,\"motorsArmed\":false}");
+ });;
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"udpManagement\":\"ZJM1\",\"udpManagementPort\":4211,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
  // AP-local Kit identity maintenance; full immutable Device ID is never changed.
  zjHttp.on("/api/kit/name",HTTP_POST,[](){
@@ -295,6 +318,7 @@ static void zjSetupHttp(){
   if(!zjRcClaim(source,code,true,zjHttp.peerIP(),zjClientTransport())){
    zjReply(423,"{\"error\":\"controller_locked_or_invalid_source\"}");return;
   }
+  zjRcAuthSessionId=zjRequestSession>=0?zjSessions[zjRequestSession].id:String("");
   zjUdpInvalidate();
   bool udpReady=false;
   const uint8_t feedbackVersion=zjArg("udpFeedbackVersion")=="2"?2:1;
@@ -423,8 +447,9 @@ static void zjNetworkSetup(){
  });
  zjPrefs.begin("zj-network",false);
  WiFi.persistent(false);WiFi.setSleep(false);WiFi.setAutoReconnect(false);zjEnrollmentInit();
- zjFlightMode=zjPrefs.getString("flightMode","angle");
- if(zjFlightMode!="angle"&&zjFlightMode!="acro")zjFlightMode="angle";
+ zjRequestedFlightMode=zjPrefs.getString("flightMode","angle");
+ if(zjRequestedFlightMode!="angle"&&zjRequestedFlightMode!="acro")zjRequestedFlightMode="angle";
+ zjFlightMode=zjRequestedFlightMode;zjPendingFlightMode="";zjFlightModeRevision=0;
  zjSavedSsid=zjPrefs.getString("ssid","");zjSavedPass=zjPrefs.getString("pass","");
  const String saved=zjPrefs.getString("staConfig","");if(saved.length()>2){const int n=saved.substring(0,2).toInt();if(n>0&&n<=32&&saved.length()>=size_t(n+2)){zjSavedSsid=saved.substring(2,n+2);zjSavedPass=saved.substring(n+2);}}zjMode=zjPrefs.getString("mode","auto");
  zjLoadProfiles();
