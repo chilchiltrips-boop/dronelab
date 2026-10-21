@@ -91,7 +91,7 @@ test('firmware scopes OTA to idle USB-paired AP/STA; setup labels never grant OT
 test('WebRTC simulator STOP does not mutate separately owned physical Kit at all',()=>{
  const source=read('pairing-web.js'),fn=source.slice(source.indexOf('function stopSimulatorRemote('),source.indexOf('function forwardSimulatorControl('));
  let owner=false,stops=0,virtual=0;
- const context={window:{ZebjusKits:{getState:()=>({owner}),stop:()=>stops++}},training:()=>({stop:()=>virtual++}),$:()=>({})};
+ const context={window:{ZebjusKits:{getState:()=>({owner}),stop:()=>stops++}},training:()=>({snapshot:()=>({source:'mobile'}),stop:()=>virtual++}),$:()=>({})};
  vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,1);
  owner=true;vm.runInNewContext(fn+';stopSimulatorRemote()',context);assert.equal(stops,0);assert.equal(virtual,2);
 });

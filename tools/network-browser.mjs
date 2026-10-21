@@ -92,6 +92,9 @@ try{
  await web.locator('[data-tab="firmware"]').click();
  await web.locator('[data-dw-view="connection"]').click();
  await web.locator('#dwLegacyConnection > summary').click();
+ // Native details toggle is queued after the click. Wait for the production
+ // toggle handler, just as accordion-browser does, before asserting its state.
+ await web.waitForFunction(()=>document.getElementById('kitAdvancedHardware')?.open,null,{timeout:5000});
  assert.equal(await web.locator('#kitAdvancedHardware').evaluate(el=>el.open),true,'The inner legacy disclosure must not hide Kit Setup after opening Advanced once');
  assert.equal(await web.locator('#kitNewSetup').isVisible(),true,'New Kit Setup must be reachable inside one Advanced disclosure');
  await web.locator('#kitNewSetup').click();await wait(web,()=>window.ZebjusKits.getState().connected);

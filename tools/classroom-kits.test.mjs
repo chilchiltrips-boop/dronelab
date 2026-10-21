@@ -4,6 +4,14 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url),read=p=>readFileSync(new URL(p,root),'utf8');
 const kit=read('js/classroom-kits.js'),html=read('index.html'),fw=read('FlightCore_Firmware/FlightCoreNetwork.h'),cl=read('FlightCore_Firmware/FlightCoreClassroom.h');
+test('PID input mirror sends no Kit keepalive even with an old enabled physical target',()=>{
+ const fn=kit.slice(kit.indexOf('function webControls(){'),kit.indexOf('async function identify(){'));
+ let writes=0,pid=true;
+ const elements={'tab-pid':{classList:{contains:()=>pid}},'tab-python':{classList:{contains:()=>!pid}},kitHardwareTarget:{checked:true},pidFrame:{contentWindow:{ZebjusTraining:{hardwareInput:()=>null}}}};
+ const context={$:id=>elements[id],root:{ZebjusPythonHardwareActive:true},state:{connected:true,owner:true,rcSource:'WEB'},document:{hidden:false},sendFrame:()=>writes++};
+ vm.runInNewContext(fn+';webControls()',context);assert.equal(writes,0);
+ pid=false;vm.runInNewContext(fn+';webControls()',context);assert.equal(writes,1,'Explicit Python hardware session remains independent');
+});
 test('MY KITS script is parseable and exposes a single verified device session API',()=>{
  const win={},doc={readyState:'loading',addEventListener:()=>{}};
  vm.runInNewContext(kit,{window:win,document:doc,URLSearchParams,Promise,Error});
@@ -31,7 +39,8 @@ test('Remote WebRTC simulator inputs never claim physical Kit ownership; local c
  assert.ok(pairing.includes('Remote Phase 1 is simulator-only'));
  assert.ok(host.includes('hardwareInput(){'));
  assert.ok(pid.includes('hardwareInput:()=>'));
- assert.ok(pid.includes('window.parent?.ZebjusKits?.stop?.()'));
+ assert.doesNotMatch(pid,/ZebjusKits/,'Simulator must never call physical Kit APIs');
+ assert.ok(pid.includes('hardwareInput:()=>null'));
 });
 test('Network/session changes cannot silently reassign firmware control',()=>{
  for(const t of ['kitId!==state.kitId','kitCode!==state.kitCode','state.owner=false','releaseRc()','RC frame rejected:','state.rcSession','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,RELEASE','ZJRC,STOP'])assert.ok(kit.includes(t),t);

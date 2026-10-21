@@ -3,7 +3,7 @@
 import {pairBench,grant,wait,safeShot} from './flight-test-harness.mjs';import {mkdirSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});const {browser,web,phone,errors}=await pairBench();
 async function assertQr(p,id,value){const decoded=await p.locator('#'+id).evaluate(c=>{const x=c.getContext('2d',{willReadFrequently:true}),data=x.getImageData(0,0,c.width,c.height);return jsQR(data.data,c.width,c.height,{inversionAttempts:'attemptBoth'})?.data});if(decoded!==value)throw Error('QR pixel roundtrip failed '+id)}
-async function finishPair(){await wait(web,()=>!document.getElementById('pairConfirmBtn').disabled);if(!await web.locator('#pairConfirmPanel').evaluate(e=>e.classList.contains('ready')))throw Error('Confirmation readiness missing');await web.locator('#pairConfirmBtn').click();await wait(phone,()=>!document.getElementById('requestControlBtn').disabled)}
+async function finishPair(){await wait(web,()=>!document.getElementById('pairConfirmBtn').disabled);if(!await web.locator('#pairConfirmPanel').evaluate(e=>e.classList.contains('ready')))throw Error('Confirmation readiness missing');await web.locator('#pairConfirmBtn').click();await wait(phone,()=>window.__testPeer?.status().paired)}
 async function onePair(){
  await phone.evaluate(()=>window.ZebjusMobileMenu?.select('pair'));
  await web.evaluate(()=>window.__qrScanOptions=null);await web.locator('#pairCreateBtn').click();await wait(web,()=>document.getElementById('pairOfferText').value.startsWith('zj1:'));
@@ -16,10 +16,13 @@ async function onePair(){
  await web.evaluate(value=>window.__qrScanOptions.onData(value),answer);await finishPair();
 }
 async function exerciseControl(){
- await grant(web,phone);await phone.locator('#flightBack').click();await phone.locator('#flightArm').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
- await phone.locator('#flightStop').click();await wait(web,()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(x=>x===0));
- await phone.locator('#flightSettings').click();await web.locator('#topGrantMobileSwitch').evaluate(e=>e.closest('label').click());await wait(phone,()=>document.getElementById('flightArm').disabled);
+ await grant(web,phone);await phone.locator('#flightBack').click();await web.locator('#connectionClose').click();
+ if(!await phone.locator('#flightArm').isDisabled())throw Error('Read-only mirror must not require Android ARM');
+ await web.locator('#tpRun').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
+ await web.locator('#tpStop').click();await wait(web,()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.snapshot().motors.rpm.every(x=>x===0));
+ await phone.locator('#flightSettings').click();await web.locator('#topPairMobileBtn').click();
 }
+
 try{
  if(!await web.locator('#pairCameraSection').isHidden()||await web.locator('#pairCodeMode').getAttribute('aria-pressed')!=='true')throw Error('Code default lost');
  if(!await phone.locator('#flightArm').isDisabled())throw Error('Unpaired ARM enabled');
@@ -37,5 +40,5 @@ try{
  await safeShot(web,'test-output/connection-confirmed.png');await safeShot(phone,'test-output/android-connection-sheet.png');
  await web.reload();await wait(phone,()=>document.getElementById('flightArm').disabled);await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
  if(await web.locator('#pairCode').textContent()!=='------')throw Error('Refresh retained pairing');if(errors.length)throw Error(errors.join(' | '));
- console.log('PASS real encrypted QR pairing/ACK/STOP: camera pixels, code UI, PIN approval, exclusive owner, Wi-Fi reset/fresh QR, refresh invalidation; no legacy LED');
+ console.log('PASS real encrypted QR pairing/input mirror/local STOP: camera pixels, code UI, PIN approval, Web-owned Run/Stop, Wi-Fi reset/fresh QR, refresh invalidation; no legacy LED');
 }catch(e){console.error(e.stack||e);console.error(errors);await safeShot(web,'test-output/qr-error-web.png').catch(()=>{});await safeShot(phone,'test-output/qr-error-phone.png').catch(()=>{});process.exitCode=1}finally{await browser.close()}

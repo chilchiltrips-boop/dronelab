@@ -1,6 +1,7 @@
 /* ZEBJUS v1.4.5 Smart Mobile Pairing • direct QR / optional online code signaling.
    Refresh clears all QR sessions, answer data, and control privileges. */
-const $=id=>document.getElementById(id);
+import {sharedInputStore} from './js/simulator-input.js';
+const $=id=>document.getElementById(id),inputs=sharedInputStore();
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
 let flightTimer=null,statsTimer=null;
 let previousMobileTab=null,previousHardwareView='overview';
@@ -21,7 +22,7 @@ const training=()=>window.ZebjusTraining;
 const inlineSettings=()=>document.getElementById('connectionDialog')?.dataset.inline==='true';
 function stopSimulatorRemote(reason='Control lost'){
  // Simulator STOP must not issue any physical Kit command.
- training()?.stop(reason);
+ if(training()?.snapshot()?.source==='mobile')training()?.stop(reason);
  const el=$('simControlInfo');if(el)el.textContent='STOP • '+reason;
 }
 function forwardSimulatorControl(m){
@@ -88,8 +89,8 @@ function status(text){
 }
 function sync(){
  const s=host.status();
- training()?.setOwner(s.connected&&s.approved&&s.controller==='mobile'?'mobile':'web');
- $('pairReleaseBtn').disabled=!s.controller;
+ inputs.setPeer({connected:s.connected,approved:s.approved,supported:s.remoteMirrorVersion===1,sessionId:s.sessionId,deviceId:s.remoteDeviceId});
+ $('pairReleaseBtn').disabled=true;
  const confirm=$('pairConfirmBtn'),panel=$('pairConfirmPanel'),hint=$('pairConfirmHint');
  confirm.disabled=!s.connected||s.approved;
  panel.classList.toggle('ready',s.connected&&!s.approved);
@@ -97,7 +98,7 @@ function sync(){
  panel.classList.toggle('waiting',!s.connected);
  confirm.classList.toggle('ready',s.connected&&!s.approved);
  confirm.textContent=s.approved?'✓ Pairing Confirmed':s.connected?'✓ Confirm Pairing Now':'Waiting for Connection';
- hint.textContent=s.approved?'Paired successfully • Android can request control':s.connected?'✓ ANDROID CONNECTED • Compare the Safety Verification PIN on both screens, then press the glowing Confirm Pairing button.':'Step 1: Android scans Web QR → Step 2: enter CONNECT code → Confirm Pairing unlocks automatically.';
+ hint.textContent=s.approved?'Paired • select Auto, WebApp or Android AP in PID Tuning. Run/Stop stays on WebApp.':s.connected?'✓ ANDROID CONNECTED • Compare the Safety Verification PIN on both screens, then press the glowing Confirm Pairing button.':'Step 1: Android scans Web QR → Step 2: enter CONNECT code → Confirm Pairing unlocks automatically.';
  $('pairConnectCodeBtn').classList.toggle('is-ready',pairMode==='code'&&offer&&!codeBusy&&ZebjusCodePair.validCode($('pairPhoneCode').value));
  $('pairCreateBtn').disabled=creatingOffer;
 
@@ -117,9 +118,11 @@ function sync(){
  $('pairCopyOfferBtn').disabled=!offer;
  $('pairStep2').querySelector('summary').setAttribute('aria-disabled',String(!offer));
  $('pairStep3').querySelector('summary').setAttribute('aria-disabled',String(!s.connected));
- $('pairTakeWebBtn').disabled=s.controller==='mobile';
- const toggle=$('topGrantMobileSwitch');toggle.checked=s.controller==='mobile';toggle.disabled=!s.connected||!s.approved;
- $('pairControlStatus').textContent='Controller: '+(s.controller||'none')+' • '+(s.approved?'Paired':'Not approved');
+ $('pairTakeWebBtn').disabled=true;
+ const toggle=$('topGrantMobileSwitch');toggle.checked=s.connected&&s.approved&&s.remoteMirrorVersion===1;toggle.disabled=true;toggle.title='Choose joystick source in PID Tuning before Run';
+ toggle.setAttribute('aria-label','Android input mirror availability');
+ const mirrorLabel=toggle.closest('label')?.querySelector('.grant-control-text,span:first-child');if(mirrorLabel)mirrorLabel.textContent='Input mirror';
+ $('pairControlStatus').textContent=s.approved?(s.remoteMirrorVersion===1?'Read-only Android input • choose source in PID Tuning':'Android app update required for input mirror'):'Pair Android to mirror inputs • Run/Stop stays on WebApp';
  $('pairDeviceList').replaceChildren();
  if(s.connected){
   const el=document.createElement('div');el.className='qr-device-item';
@@ -134,7 +137,9 @@ function callbacks(){
  return {
   status:s=>{status(s);sync()},
   connected:()=>{host.setSimulatorReady(!!training()?.isReady?.()||!!(!inlineSettings()&&training()));clearTimeout(connectionTimer);openStep(3);status('Connected • VERIFY PIN');$('pairAnswerState').textContent='✓ PHONE CONNECTED • Compare the Safety PIN and click the highlighted Confirm Pairing button!';scanFeedback('✓ Android response received • Confirm Pairing is now ready','success');stamp('WebRTC connected • confirmation required');sync()},
-  paired:()=>{status('Connected • paired');scanFeedback('✓ Pairing confirmed • Turn ON Grant Mobile Control after Android Take Control','success');stamp('Pairing approved, mobile needs control permission');sync()},
+  paired:()=>{status('Connected • paired');scanFeedback('✓ Pairing confirmed • choose joystick source in PID Tuning','success');stamp('Read-only input pairing approved');sync()},
+  mirrorStatus:sync,
+  inputMirror:m=>inputs.accept(m),
   control:()=>{sync();stamp('Control: '+(host.status().controller||'none'))},
   simControl:forwardSimulatorControl,
   simStop:d=>stopSimulatorRemote(d?.reason||'Pairing stopped'),
@@ -146,7 +151,7 @@ function callbacks(){
   error:reason=>{$('pairAnswerState').textContent=reason;stamp('Pairing error: '+reason);sync()}
  };
 }
-function startHost(){host=ZebjusP2P.session('host',callbacks());host.setSimulatorReady(!!training());sync()}
+function startHost(){host=ZebjusP2P.session('host',callbacks(),{inputMirrorOnly:true});host.setSimulatorReady(!!training());sync()}
 function selectMode(mode){
  cancelCode();
  pairMode=mode==='code'?'code':'camera';
@@ -275,11 +280,11 @@ function disconnect(reason='Disconnected by Web App'){
 async function showVersion(){try{const r=await fetch('./app-version.json',{cache:'no-store'});if(r.ok){const meta=await r.json();$('webappVersion').textContent='v'+meta.version+' • '+meta.channel.toUpperCase()}}catch{}}
 function bind(){
  window.addEventListener('zebjus:training-ready',()=>{host.setSimulatorReady(true);sync()});
- window.addEventListener('zebjus:training-stop',e=>host.emergencyStop(e.detail?.reason||'Web STOP'));
- $('simRemoteStop').onclick=()=>host.emergencyStop('Web emergency STOP');
- $('connectionStop').onclick=()=>host.emergencyStop('Connection settings STOP');
- for(const id of ['connectionStop','simRemoteStop'])$(id).addEventListener('pointerdown',e=>{e.preventDefault();host.emergencyStop('Web emergency STOP')});
- flightTimer=setInterval(()=>{training()?.tick();host.sendTelemetry(training()?.snapshot())},100);
+ const localStop=reason=>training()?.stop(reason);
+ $('simRemoteStop').onclick=()=>localStop('Web simulator STOP');
+ $('connectionStop').onclick=()=>localStop('Connection settings simulator STOP');
+ for(const id of ['connectionStop','simRemoteStop'])$(id).addEventListener('pointerdown',e=>{e.preventDefault();localStop('Web simulator STOP')});
+ flightTimer=setInterval(()=>training()?.tick(),100);
  statsTimer=setInterval(async()=>{
   const pc=host.peer,dc=host.channel;if(!pc){$('pairLinkStats').textContent='DataChannel closed • RTT —';return}
   try{const stats=await pc.getStats();if(pc!==host.peer)return;
@@ -309,7 +314,7 @@ function bind(){
  $('pairAnswerText').oninput=sync;
  $('pairUseAnswerBtn').onclick=()=>{const txt=$('pairAnswerText').value.trim();if(txt)void receiveResponse(txt);else $('pairAnswerState').textContent='Paste Android QR answer text first.'};
  $('pairCopyOfferBtn').onclick=async()=>{try{await ZebjusQR.copy(offer);$('pairAnswerState').textContent='Web QR offer copied to clipboard.'}catch(err){$('pairAnswerState').textContent='Copy failed: '+err.message}};
- $('pairConfirmBtn').onclick=()=>{try{host.approvePairing();status('Connected • paired');scanFeedback('✓ Pairing confirmed! Grant Mobile Control when ready','success');stopCamera()}catch(err){$('pairAnswerState').textContent=err.message}sync()};
+ $('pairConfirmBtn').onclick=()=>{try{host.approvePairing();status('Connected • paired');scanFeedback('✓ Pairing confirmed! Choose input source in PID Tuning','success');stopCamera()}catch(err){$('pairAnswerState').textContent=err.message}sync()};
  $('topGrantMobileSwitch').onchange=e=>{
   if(e.target.checked){if(host.grantMobileControl())stamp('Android control ON');else stamp('Pair first')}
   else{host.releaseControl();stamp('Android control OFF')}

@@ -2,22 +2,23 @@ import * as THREE from '../three.module.min.js';
 import {loadGLB} from '../glb-loader.js';
 import {createTripodAudio} from './tripod-audio.js';
 import {loadAssemblyTripod} from './tripod-assembly-model.js';
-import {createTrainingReceiver} from './training-receiver.js';
+import {createSimulatorInput,sharedInputStore} from './simulator-input.js';
 import {simulateResponse} from './tripod-experiments.js';
 import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,MOTOR_GEOMETRY,PLANT,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false;
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false,embeddedVisible=true;
 const audioEngine=createTripodAudio(status=>{const el=$('tpAudioStatus');if(el)el.textContent=status;});
 // Do not run DOM updates synchronously for every 25-Hz WebRTC control
 // frame. The receiver must validate/apply and return its ACK before layout
 // and stick presentation can consume another frame on the main thread.
 let receiverUiScheduled=false;
 function scheduleReceiverUi(){
+ if(document.hidden||!embeddedVisible)return;
  if(receiverUiScheduled)return;
  receiverUiScheduled=true;
  requestAnimationFrame(()=>{receiverUiScheduled=false;syncActions();renderStickKnobs()});
 }
-const receiver=createTrainingReceiver(s,{onChange:scheduleReceiverUi,onTimeout:()=>{audioStop();setStatus('CONTROL TIMEOUT • MOTORS OFF');window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason:'Control timeout'}}))}});
+const receiver=createSimulatorInput(s,sharedInputStore(),{onChange:scheduleReceiverUi,onTimeout:()=>{audioStop();setStatus('ANDROID INPUT LOST • PRESS RUN TO RESUME')}});
 const localInput=()=>receiver.owner==='web';
 let lastMode=s.mode,lastRunning=false,audioUnlocked=false;
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
@@ -192,24 +193,26 @@ function audioTick(){if(soundOn)audioEngine.update(s.motors,s.motorRPM)}
 function audioStop(){audioEngine.stop()}
 function setStatus(message){$('tpStatus').textContent=message}
 function stop(reason='Web STOP'){
+ if(typeof reason!=='string')reason='Web STOP';
  receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();syncActions();setStatus('STOP • MOTORS OFF • HOME RESET');renderStickKnobs();drawUI();
- window.dispatchEvent(new CustomEvent('zebjus:training-stop',{detail:{reason}}));
- try{if(window.parent?.ZebjusKits?.getState?.()?.owner)window.parent?.ZebjusKits?.stop?.()}catch{}
 }
 function start(){
- if(!localInput())return;audioUnlocked=true;
- if(!startSimulator(s)){setStatus('LOWER THROTTLE TO 1000 µs');return}
+ audioUnlocked=true;
+ const result=receiver.start();if(!result.accepted){setStatus(result.reason);return}
  setStatus('VIRTUAL MOTORS ACTIVE');syncActions();audioStart();
 }
 function toggleRun(){s.running?stop():start()}
 function syncActions(){
- const remote=!localInput();$('tpRun').disabled=remote||s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=remote;
- $('tpReset').disabled=remote;
+ const remote=!localInput(),state=receiver.snapshot();$('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
+ $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
- $('tpControlSource').textContent=remote?(s.running?'ANDROID APPLIED • #':'ANDROID PREVIEW • #')+receiver.snapshot().seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
+ $('tpControlSource').textContent=remote?'ANDROID '+(state.input.fresh?'LIVE':'STALE')+' • #'+state.seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
+ const input=state.input;
+ $('tpInputStatus').textContent=remote?(input.fresh?(input.kind==='android-command'?'ANDROID COMMAND • ':'ANDROID PREVIEW • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • KIT RX UNCONFIRMED':input.paired&&!input.supported?'Android app update required':'Waiting for fresh Android input'):'WEBAPP • Keyboard / joysticks';
+ const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs':'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning!==s.running){
-  setStatus(s.running?(remote?'ANDROID • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • DISARMED');
+  setStatus(s.running?(remote?'ANDROID INPUT • WEB RUN • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • '+state.reason);
   if(s.running&&audioUnlocked)audioStart();else if(!s.running)audioStop();
  }
  lastRunning=s.running;
@@ -273,10 +276,11 @@ function bindCamera(){
 }
 function keyHandler(e,down){
  const target=e.target;if(target?.closest?.('input,textarea,select,[contenteditable]'))return;
- if(!localInput()||$('connectionDialog').open)return;
+ if($('connectionDialog').open)return;
  const key=e.key.length===1?e.key.toLowerCase():e.key;
  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','w','s','a','d','r'].includes(key))e.preventDefault();else return;
  if(key==='r'){if(down&&!e.repeat)toggleRun();return}
+ if(!localInput())return;
  if(key==='w'||key==='s'){if(down)s.throttle=clamp(s.throttle+(key==='w'?25:-25),1000,2000);return}
  if(down)pressed.add(key);else pressed.delete(key);
  inputAxes();
@@ -288,7 +292,7 @@ function pidBank(){
 }
 function syncPIDMatrix(bank=null,values=null){
  for(const row of $('tpPidMatrix').querySelectorAll('[data-pid-bank]')){
-  const key=row.dataset.pidBank,p=bank===key&&values?values:s.pid[key];
+  const key=row.dataset.pidBank,p=bank===key&&values?values:s.pendingPID[key]||s.pid[key];
   for(const gain of ['p','i','d'])row.querySelector('[data-gain="'+gain+'"]').value=p[gain];
  }
  $('tpAnglePidSection').hidden=s.mode==='acro';
@@ -298,7 +302,7 @@ function syncPIDMatrix(bank=null,values=null){
 }
 function updatePidEditor(){
  $('tpPidLoop').querySelector('option[value=angle]').disabled=s.mode==='acro'||$('tpPidAxis').value==='yaw';
- const bank=pidBank(),p=s.pid[bank];if(!p)return;
+ const bank=pidBank(),p=s.pendingPID[bank]||s.pid[bank];if(!p)return;
  for(const k of ['p','i','d'])$('tpPid'+k.toUpperCase()).value=p[k];
  $('tpReadoutMode').textContent=s.mode==='acro'?'ACRO • RATE':'ANGLE • LEVEL';
  $('tpMode').value=s.mode;syncPIDMatrix();
@@ -323,7 +327,8 @@ function triggerTuningResponse(){
 function updateControls(){
  $('tpMode').onchange=e=>{setFlightMode(s,e.target.value);history.length=0;updatePidEditor();coach()};
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
- $('tpReset').onclick=()=>{resetSimulator(s);releaseAll();history.length=0;audioStop();syncActions();setStatus('RESET • MOTORS OFF');drawUI()};
+ $('tpReset').onclick=()=>stop('Web RESET');
+ $('tpInputSource').onchange=e=>{receiver.setChoice(e.target.value);releaseAll();syncActions();drawUI()};
  $('tpCalibrate').onclick=()=>{calibrateLevel(s);setStatus('LEVEL TRIM SAVED (VIRTUAL)')};
  $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Manual Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
  try{const pref=JSON.parse(localStorage.getItem('zebjus.tripod.audio.v1')||'null');if(pref){if(Number.isFinite(pref.volume))volume=clamp(pref.volume,0,1);if(['quiet','normal','detailed'].includes(pref.profile))$('tpSoundPreset').value=pref.profile;if(pref.muted){soundOn=audioEngine.toggle()}}}catch{}
@@ -450,11 +455,12 @@ function drawComparison(comparison){
  drawMultiLine($('tpCompareChart'),plots);
 }
 function drawUI(){
+ syncActions();renderStickKnobs();
  const v=getSnapshot(s),angular=s.mode==='acro',axis=$('tpChartAxis').value,axisC=axis[0].toUpperCase()+axis.slice(1);
  for(const a of ['roll','pitch','yaw']){$('tp'+a[0].toUpperCase()+a.slice(1)).textContent=readable(v[a])+'°';$('tp'+a[0].toUpperCase()+a.slice(1)+'Rate').textContent=readable(v[a+'Rate'])+'°/s'}
  $('tpThrottleReadout').textContent=Math.round(s.throttle)+' µs';$('tpThrottlePct').textContent=readable((s.throttle-1000)/10,0)+'%';
  const preview=!localInput()&&!s.running?receiver.snapshot().previewAxes:null;
-  $('tpThrottleInput').textContent=Math.round(s.throttle)+' µs';
+  $('tpThrottleInput').textContent=Math.round(receiver.snapshot().input?.channels.throttle??s.throttle)+' µs';
   $('tpLeftReadout').textContent=(preview?'PREVIEW ':'')+'YAW '+readable(preview?.yaw??s.cmdYaw,2);
   $('tpRightReadout').textContent=(preview?'PREVIEW ':'')+'R '+readable(preview?.roll??s.cmdRoll,2)+' / P '+readable(preview?.pitch??s.cmdPitch,2);
  $('tpLiftDisplay').textContent='THRUST / WEIGHT '+readable(v.lift,2)+' • z '+readable(v.vertical.z*100,1)+' cm';
@@ -488,8 +494,9 @@ function drawUI(){
  drawChart();
 }
 function frame(time){
+ if(document.hidden||!embeddedVisible){lastFrame=0;raf=requestAnimationFrame(frame);return;}
  const dt=lastFrame?clamp((time-lastFrame)/1000,0,.064):.016;lastFrame=time;
- receiver.tick();const left=pointers.get('left');if(localInput()&&left&&(s.running||window.parent?.ZebjusKits?.targetHardware?.()))s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
+ receiver.tick();const left=pointers.get('left');if(localInput()&&left&&s.running)s.throttle=clamp(s.throttle-deadband(left.y)*400*dt,1000,2000);
  if(localInput())inputAxes();
  advanceSimulator(s,dt);const snapshot=getSnapshot(s);
  visual?.draw(snapshot,dt);
@@ -503,9 +510,10 @@ function frame(time){
 window.ZebjusTraining={
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
  setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
- stop:reason=>{try{if(window.parent?.ZebjusKits?.getState?.()?.owner)window.parent?.ZebjusKits?.stop?.()}catch{}receiver.stop(reason);pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();history.length=0;audioStop();setStatus('STOP • HOME RESET • '+reason);drawUI()},
+ stop:reason=>stop(reason),
  snapshot:receiver.snapshot,tick:receiver.tick,
- hardwareInput:()=>({armed:false,throttle:Math.round(s.throttle),axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw}}),
+ hardwareInput:()=>null,
+ setVisible:value=>{embeddedVisible=!!value;if(!embeddedVisible)stop('Simulator hidden');lastFrame=0;},
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
 function boot(){

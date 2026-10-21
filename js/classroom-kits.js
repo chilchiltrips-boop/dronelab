@@ -712,15 +712,15 @@ function ingestAndroid(frame){
 }
 function webControls(){
  const pidActive=$('tab-pid')?.classList.contains('active');
+ // PID Tuning is a read-only input consumer. Even a previously selected
+ // physical diagnostic target must not cause neutral/keepalive Kit writes.
+ if(pidActive)return;
  const pythonActive=$('tab-python')?.classList.contains('active')&&root.ZebjusPythonHardwareActive===true;
  if((!pidActive&&!pythonActive)||!$('kitHardwareTarget')?.checked||
    !state.connected||!state.owner||state.rcSource!=='WEB'||document.hidden)return;
  // Keep the 1.8 s diagnostic lease alive on Python Lab with neutral frames only.
  // No motors/arming; pausing/backgrounding or STOP still releases the lease.
  if(pythonActive){void sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},'WEB');return}
- const f=$('pidFrame')?.contentWindow?.ZebjusTraining?.hardwareInput?.();
- if(f)void sendFrame(f,'WEB');
- else void sendFrame({throttle:1000,axes:{roll:0,pitch:0,yaw:0},armed:false},'WEB');
 }
 async function identify(){
  if(!state.connected)throw Error('Connect a kit first');

@@ -24,6 +24,8 @@ on:
       - 'pairing-core.js'
       - 'pairing-web.js'
       - 'js/tripod-page.js'
+      - 'js/simulator-input.js'
+      - 'tools/simulator-input.test.mjs'
       - 'js/ui-controls.js'
       - 'tripod.html'
       - 'tools/flight-controller-browser.mjs'

@@ -12,10 +12,10 @@ function status(s){
 }
 function sync(){
  if(!peer)return;
- const s=peer.status(),ready=s.connected&&s.paired,canControl=ready&&s.controller==='mobile';
+ const s=peer.status(),ready=s.connected&&s.paired,mirror=s.inputMirrorVersion===1,canControl=ready&&!mirror&&s.controller==='mobile';
  $('controllerDetail').textContent=ready?(s.controller||'None'):'None';
  $('controlState').textContent=canControl?'CONTROL GRANTED':ready?'PAIRED • VIEW ONLY':'NO CONTROL';
- $('requestControlBtn').disabled=!ready||canControl;
+ $('requestControlBtn').disabled=mirror||!ready||canControl;
  $('releaseControlBtn').disabled=!canControl;
  $('scanOfferBtn').disabled=processing||scannerStarting;
  $('stopCameraBtn').disabled=!scannerStarting&&!scannerStop;
@@ -24,12 +24,13 @@ function sync(){
  $('showAnswerBtn').disabled=!response;
  $('copyAnswerBtn').disabled=!response;
  if(!ready)$('commandStatus').textContent='Not paired • scan a fresh Web App QR';
+ if(ready&&mirror){$('controlState').textContent='READ-ONLY INPUT MIRROR';$('commandStatus').textContent='Joystick input only • Run / Stop / PID on WebApp';}
 }
 function initPeer(){
  peer=ZebjusP2P.session('mobile',{
   status:s=>{status(s);window.ZebjusFlightApp?.onStatus(peer?.status())},
   connected:()=>{status('Connected • awaiting Web approval');message('WebRTC connected. Confirm code on laptop.')},
-  paired:()=>{stopPhoneCode();$('phoneShortCodeStatus').textContent='Paired successfully; code expired.';status('Connected • Paired');message('Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
+  paired:()=>{stopPhoneCode();$('phoneShortCodeStatus').textContent='Paired successfully; code expired.';status('Connected • Paired');message(peer.status().inputMirrorVersion===1?'Read-only input mirror paired • Run / Stop on WebApp':'Pairing approved; tap Take Control, then Web App header Grant Mobile Control ON.')},
   control:d=>{sync();window.ZebjusFlightApp?.onStatus(peer?.status());if(d.owner==='mobile')message('Web App granted exclusive mobile control')},
   denied:r=>{message('Control rejected: '+r);$('commandStatus').textContent=r},
   simAck:ack=>window.ZebjusFlightApp?.onAck(ack),

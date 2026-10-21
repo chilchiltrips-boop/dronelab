@@ -35,7 +35,11 @@
    Object.keys(m.axes).length===3;
  }
  function safeControl(){const n=neutral();return {...n,axes:{roll:0,pitch:0,yaw:0}}}
- const api={PRESETS,clamp,shape,vector,neutral,mapState,integrateThrottle,validControl,safeControl};
+ function pulseChannels(input){
+  const pulse=v=>Math.round(clamp(1500+500*v,1000,2000));
+  return {throttle:Math.round(clamp(input.throttle,1000,2000)),roll:pulse(input.axes.roll),pitch:pulse(input.axes.pitch),yaw:pulse(input.axes.yaw)};
+ }
+ const api={PRESETS,clamp,shape,vector,neutral,mapState,integrateThrottle,validControl,safeControl,pulseChannels};
  root.ZebjusFlightMath=api;
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

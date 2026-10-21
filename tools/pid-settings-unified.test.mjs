@@ -16,7 +16,7 @@ test('Mobile grant switch and WebRTC status remain in the shared workspace contr
  assert.equal((html.match(/id="topGrantMobileSwitch"/g)||[]).length,1);
  assert.equal((html.match(/id="mobileHeaderStatus"/g)||[]).length,1);
  assert.match(html,/class="qr-header-switch top-grant-control"/);
- assert.match(pair,/toggle\.disabled=!s\.connected\|\|!s\.approved/);
+ assert.match(pair,/toggle\.disabled=true/);
  assert.match(get('styles.css'),/\.topbar-main \.top-grant-control\{display:flex!important/);
 });
 test('Settings embeds QR/code/PIN controls, no external redirect and stage layout is compact',()=>{

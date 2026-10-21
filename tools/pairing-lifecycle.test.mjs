@@ -23,6 +23,26 @@ function runtime(){
  vm.runInNewContext(source,ctx);return {api:ctx.ZebjusP2P,pcs,intervals,timeouts,advance:ms=>now+=ms};
 }
 async function connectedHost(r){const host=r.api.session('host');await host.makeOffer();const pc=host.peer;pc.dc.readyState='open';pc.dc.onopen();host.approvePairing();assert.equal(host.grantMobileControl(),true);return {host,pc}}
+test('read-only mirror pairs without ownership, has no frame ACK and ignores Android ARM; Web STOP stays local',async()=>{
+ const r=runtime(),seen=[];let stops=0;
+ const host=r.api.session('host',{inputMirror:m=>seen.push(m),simStop:()=>stops++},{inputMirrorOnly:true});
+ const offer=await host.makeOffer(),mobile=r.api.session('mobile'),answer=await mobile.makeAnswer(offer.qr);
+ assert.equal(mobile.status().inputMirrorVersion,1,'Mirror role is known before connecting and must not release AP control');
+ await host.receiveAnswer(answer.qr);const pc=host.peer;pc.dc.readyState=pc.input.readyState='open';pc.dc.onopen();host.approvePairing();
+ const deliver=m=>pc.dc.onmessage({data:JSON.stringify({v:1,sessionId:host.status().sessionId,...m})});
+ deliver({type:'SYNC_REQUEST',inputMirrorVersion:1,deviceId:'phone-1'});
+ assert.equal(host.status().remoteMirrorVersion,1);assert.equal(host.grantMobileControl(),false);assert.equal(host.status().controller,null);
+ const m={type:'INPUT_MIRROR',mirrorVersion:1,seq:1,transport:'ap',kind:'android-command',kitId:'KIT-A2',inputAgeMs:0,channels:{throttle:1000,roll:1600,pitch:1500,yaw:1400}};
+ const count=pc.input.sent.length;deliver(m);deliver(m);deliver({...m,seq:2,sessionId:'old-session'});
+ assert.equal(seen.length,1);assert.equal(pc.input.sent.length,count,'Mirror frames must not create feedback traffic');
+ deliver({type:'SIM_CONTROL',seq:100,mode:'angle',armed:true,throttle:1800,axes:{roll:1,pitch:0,yaw:0}});assert.equal(seen.length,1);
+ const before=pc.dc.sent.length;host.emergencyStop();assert.equal(pc.dc.sent.length,before);assert.ok(stops>0);
+});
+test('mirror host rejects an old APK before applying its SDP answer',async()=>{
+ const r=runtime(),host=r.api.session('host',{}, {inputMirrorOnly:true}),offer=await host.makeOffer(),mobile=r.api.session('mobile'),answer=await mobile.makeAnswer(offer.qr);
+ const data=await r.api.unpack(answer.qr);delete data.inputMirrorVersion;
+ await assert.rejects(host.receiveAnswer(await r.api.pack(data)),/Android app update required/);assert.equal(host.peer.remoteDescription,undefined);
+});
 test('cancel during asynchronous offer cannot recreate a discarded session',async()=>{
  const r=runtime(),host=r.api.session('host');let resolve;
  r.pcs.length=0;
