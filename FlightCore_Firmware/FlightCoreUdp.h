@@ -279,6 +279,7 @@ static void zjUdpLoop(uint32_t now){
  if(!zjRcFrame(seq,ch[0],ch[1],ch[2],ch[3],"ANDROID",zjRcSession,true,zjRcOwnerIP,arm)){
   zjUdpStop(ZJ_UDP_INVALID_FRAME);zjRcRelease("UDP_FRAME_REJECTED");return;
  }
+ zjRcCh5=int(ch[4]);zjRcCh6=int(ch[5]); // accepted signed UDP auxiliaries; no GPIO writes
  portENTER_CRITICAL(&zjUdpMux);const bool current=generation==zjUdpGeneration&&zjUdpActive;
  if(current){zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis();zjUdpAppliedArm=zjRcInputArmed;++zjUdpAppliedCount;}
  const uint8_t stopped=zjUdpEndReason;portEXIT_CRITICAL(&zjUdpMux);
