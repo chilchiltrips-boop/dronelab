@@ -58,7 +58,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitStatus=n
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
      input?.state==='stale'&&input?.source==='ANDROID')return false;
-  const valid=kit?.connected===true&&['ap','sta','usb'].includes(transport)&&
+  const valid=kit?.connected===true&&['ap','sta','usb','android-relay'].includes(transport)&&
    id.length>0&&id.length<=80&&input?.state==='live'&&
    (usb?['WEB','ANDROID','PPM'].includes(input?.source):input?.source==='ANDROID')&&
    Number.isSafeInteger(input?.seq)&&input.seq>0&&
