@@ -56,9 +56,9 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   // A transient delayed poll is not a new packet; let the Kit freshness clock
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
-     input?.state==='stale'&&input?.source==='ANDROID')return false;
-  const valid=kit?.connected===true&&['ap','sta'].includes(transport)&&
-   id.length>0&&id.length<=80&&input?.state==='live'&&input?.source==='ANDROID'&&
+     input?.state==='stale'&&['ANDROID','WEB','PPM'].includes(input?.source))return false;
+  const valid=kit?.connected===true&&['ap','sta','usb','android-relay'].includes(transport)&&
+   id.length>0&&id.length<=80&&input?.state==='live'&&(transport==='usb'?['WEB','ANDROID','PPM'].includes(input?.source):input?.source==='ANDROID')&&
    Number.isSafeInteger(input?.seq)&&input.seq>0&&
    Number.isFinite(input?.ageMs)&&input.ageMs>=0&&input.ageMs<=400&&
    vals&&['throttle','roll','pitch','yaw'].every(field=>validPulse(vals[field]));
@@ -68,7 +68,8 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
   kitSample={mirrorVersion:1,sessionId:'verified-kit-'+key,seq:input.seq,
    channels:Object.fromEntries(['throttle','roll','pitch','yaw'].map(field=>[field,vals[field]])),
-   transport,kind:'android-command',kitId:id,inputAgeMs:input.ageMs,origin:'kit',
+   transport,kind:'kit-accepted-rc',kitId:id,inputAgeMs:input.ageMs,origin:'kit',
+    inputSource:input.source,
    flightMode:['angle','acro'].includes(input.flightMode)?input.flightMode:null,
    inputArm:input.inputArm==='ARMED'?'ARMED':input.inputArm==='DISARMED'?'DISARMED':'STALE'};
   notify();return true;
@@ -92,39 +93,45 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  let choice='auto',locked=null,lockedOrigin='',identity='',reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
-  if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
+  if((origin==='auto'||origin==='android'||origin==='webrtc')&&v.fresh&&v.sample)
    return {...v.sample,origin:'webrtc',ageMs:v.ageMs,rateHz:v.rateHz};
-  if((origin==='auto'||origin==='kit')&&v.kit?.fresh&&v.kit.sample)
-   return {...v.kit.sample,origin:'kit',ageMs:v.kit.ageMs,rateHz:v.kit.rateHz};
+  if(v.kit?.fresh&&v.kit.sample){
+   const k=v.kit.sample,isUsb=k.transport==='usb';
+   if((origin==='usb'&&isUsb)||(origin==='kit'&&!isUsb)||
+      (origin==='auto')||(origin==='android'&&!isUsb&&k.inputSource==='ANDROID'))
+    return {...k,origin:'kit',ageMs:v.kit.ageMs,rateHz:v.kit.rateHz};
+  }
   return null;
  };
- const effective=()=>locked||(choice==='auto'?(androidFrame(store.snapshot())?'android':'web'):choice);
+ const effective=()=>locked||(choice==='auto'?(androidFrame(store.snapshot())?
+  (androidFrame(store.snapshot()).transport==='usb'?'usb':'android'):'web'):choice);
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
  function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
- function setChoice(value){if(s.running||!['auto','web','android'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
+ function setChoice(value){if(s.running||!['auto','web','android','usb'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
-  if(!s.running||locked!=='android')return;
-  const v=store.snapshot(),frame=androidFrame(v,lockedOrigin);
+  if(!s.running||!['android','usb'].includes(locked))return;
+  const v=store.snapshot(),frame=androidFrame(v,locked==='usb'?'usb':lockedOrigin);
   if(!frame||key(frame)!==identity){stop('Android input lost • press Run to resume');onTimeout();return;}
   const c=frame.channels,a=axesOf(c);s.throttle=c.throttle;s.cmdRoll=a.roll;s.cmdPitch=a.pitch;s.cmdYaw=a.yaw;
  }
  function start(){
   if(s.running)return {accepted:true};
   const selected=effective(),v=store.snapshot(),frame=androidFrame(v);
-  if(selected==='android'&&!frame){reason=v.peer.approved&&!v.peer.supported?'Android app update required or connect a verified AP Kit':'Waiting for fresh Android AP / paired input';return {accepted:false,reason};}
-  const throttle=selected==='android'?frame.channels.throttle:s.throttle;
+  if((selected==='android'||selected==='usb')&&!(selected==='usb'?androidFrame(v,'usb'):androidFrame(v,'android'))){reason=v.peer.approved&&!v.peer.supported?'Android app update required or connect a verified AP Kit':'Waiting for fresh Android AP / paired input';return {accepted:false,reason};}
+  const selectedFrame=selected==='usb'?androidFrame(v,'usb'):selected==='android'?androidFrame(v,'android'):frame;
+  const throttle=selected!=='web'?selectedFrame.channels.throttle:s.throttle;
   if(throttle>1025){reason='LOWER THROTTLE TO 1000 µs';return {accepted:false,reason};}
   s.throttle=throttle;if(!startSimulator(s))return {accepted:false,reason:'LOWER THROTTLE TO 1000 µs'};
-  locked=selected;lockedOrigin=selected==='android'?frame.origin:'';identity=selected==='android'?key(frame):'';reason='Running';applyLatest();onChange();return {accepted:true};
+  locked=selected;lockedOrigin=selected==='usb'?'usb':selected==='android'?selectedFrame.origin:'';identity=selected!=='web'?key(selectedFrame):'';reason='Running';applyLatest();onChange();return {accepted:true};
  }
  function snapshot(){
-  const v=store.snapshot(),source=effective(),remote=source==='android',
-   frame=remote?androidFrame(v,lockedOrigin||'auto'):null,
+  const v=store.snapshot(),source=effective(),remote=source==='android'||source==='usb',
+   frame=remote?androidFrame(v,source==='usb'?'usb':lockedOrigin||'android'):null,
    c=frame?frame.channels:neutral(),a=axesOf(c),p=getSnapshot(s);
   const throttleY=1-2*(c.throttle-1000)/1000;
    const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
     {left:{...webSticks.left,y:Math.abs(webSticks.left.y)>.04?webSticks.left.y:1-2*(s.throttle-1000)/1000},right:webSticks.right};
-  return {source:remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
+  return {source:source==='usb'?'usb':remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
    seq:remote?frame?.seq||0:0,appliedAt:0,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
    axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:remote&&!s.running?a:{roll:0,pitch:0,yaw:0},sticks,
    input:remote?{channels:{...c},fresh:!!frame,ageMs:frame?.ageMs??null,rateHz:frame?.rateHz??null,
@@ -137,5 +144,5 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const unsubscribe=store.subscribe(()=>{applyLatest();onChange()});
  return {start,stop,snapshot,setChoice,tick:applyLatest,dispose:unsubscribe,
   setOwner:()=>false,apply:()=>({accepted:false,reason:'Use read-only input mirror; Run/Stop belongs to WebApp'}),
-  webSticks(left,right){webSticks={left:{...left},right:{...right}}},get owner(){return effective()==='android'?'mobile':'web'}};
+  webSticks(left,right){webSticks={left:{...left},right:{...right}}},get owner(){return ['android','usb'].includes(effective())?'mobile':'web'}};
 }

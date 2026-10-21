@@ -63,3 +63,30 @@
 .li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
 #liSelectionReason{flex:1 1 230px;min-width:160px}
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
+
+/* Verified monitor transport must remain legible in light native option menus
+   and dark DroneLab themes (including Android WebView). */
+.li-monitor-toolbar select,
+#liMonitorSelect {
+ color:#f2fbff!important;
+ background-color:#0b2535!important;
+ border:1px solid #52768d!important;
+ color-scheme:dark;
+ min-height:44px;
+}
+#liMonitorSelect option,
+#liMonitorSelect optgroup {
+ color:#101e2a!important;
+ background:#f4f8fb!important;
+}
+#liMonitorSelect:focus-visible{outline:3px solid #64eac5;outline-offset:2px}
+
+/* Physical mode is separate from PID simulation mode. Make transport/state
+   and queued save readable on desktop and touch devices. */
+.li-flight-mode-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 10px;background:#0a2232;border:1px solid #36596e;border-radius:10px}
+.li-flight-mode-toolbar label{font-size:12px;font-weight:750;color:#c5ece5}
+.li-flight-mode-toolbar select,.li-flight-mode-toolbar button{min-height:44px;padding:8px 12px;border-radius:8px}
+.li-flight-mode-toolbar select{background:#102c3d;color:#f5fdff;color-scheme:dark;border:1px solid #4a8294}
+.li-flight-mode-toolbar select option{background:#f4f8fc;color:#182c3b}
+.li-flight-mode-toolbar small{flex:1 1 260px;min-width:0;color:#b4d5df;font-size:11px;overflow-wrap:anywhere}
+.li-flight-mode-toolbar :is(select,button):focus-visible{outline:3px solid #79f2cc;outline-offset:2px}

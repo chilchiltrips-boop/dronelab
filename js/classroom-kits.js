@@ -1796,6 +1796,24 @@ async function renameConnectedKit(name='',reset=false){
  root.dispatchEvent(new CustomEvent('dronelab:kit-name',{detail:{kitId:state.kitId,name:response.kitName}}));
  return response.kitName;
 }
+// Physical FlightCore mode save is a separate authenticated write.
+// This action never arms motors or changes the virtual PID controller.
+async function saveFlightMode(desired){
+ if(!['angle','acro'].includes(desired))throw Error('Choose Angle or Acro');
+ if(!linkFresh()||!state.kitId)throw Error('Verify a physical Kit first');
+ if(state.transport==='usb')throw Error('USB flight-mode save requires newer serial firmware; use AP/STA for now');
+ if(!['ap','sta','android-relay'].includes(state.transport))throw Error('Use verified AP, STA or Android Relay');
+ if(state.owner||state.rc?.inputArmed===true)throw Error('Disarm and release Kit input before saving');
+ const before=state.kitId+'|'+state.transport+'|'+state.bootId;
+ const reply=await deviceRequest('/api/flight/mode','POST',{flightMode:desired});
+ if(!linkFresh()||before!==state.kitId+'|'+state.transport+'|'+state.bootId||
+    reply?.kitId!==state.kitId||reply?.flightMode!==desired||
+    reply?.saved!==true||reply?.motorsArmed!==false)
+  throw Error('FlightCore did not verify saved mode/identity');
+ state.flightMode=desired;render();
+ root.dispatchEvent(new CustomEvent('dronelab:kit-flight-mode',{detail:{kitId:state.kitId,flightMode:desired,saved:true}}));
+ return desired;
+}
 // Read-only transport choice. A second physical USB port is never opened.
 function getMonitorPaths(){
  const id=state.kitId,link=linkFresh(),serialLink=serial();
@@ -1815,7 +1833,7 @@ function getMonitorPaths(){
 root.ZebjusKits={
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
- getMonitorPaths,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ saveFlightMode,getMonitorPaths,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({connected:linkFresh(),usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.ssid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
