@@ -58,7 +58,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
   if(kit?.connected===true&&kitSample&&kitKey===key&&
      input?.state==='stale'&&input?.source==='ANDROID')return false;
   const valid=kit?.connected===true&&['ap','sta','usb','android-relay'].includes(transport)&&
-   id.length>0&&id.length<=80&&input?.state==='live'&&(input?.source==='ANDROID'||transport==='usb'&&['WEB','ANDROID','PPM'].includes(input?.source))&&
+   id.length>0&&id.length<=80&&['live','preview'].includes(input?.state)&&(input?.source==='ANDROID'||transport==='usb'&&['WEB','ANDROID','PPM'].includes(input?.source))&&
    Number.isSafeInteger(input?.seq)&&input.seq>0&&
    Number.isFinite(input?.ageMs)&&input.ageMs>=0&&input.ageMs<=400&&
    vals&&['throttle','roll','pitch','yaw'].every(field=>validPulse(vals[field]));
@@ -70,7 +70,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null;
    channels:Object.fromEntries(['throttle','roll','pitch','yaw'].map(field=>[field,vals[field]])),
    transport,kind:transport==='usb'?'verified-usb-serial':'android-command',kitId:id,inputAgeMs:input.ageMs,origin:transport==='usb'?'usb':'kit',source:input.source,
    flightMode:['angle','acro'].includes(input.flightMode)?input.flightMode:null,
-   inputArm:input.inputArm==='ARMED'?'ARMED':input.inputArm==='DISARMED'?'DISARMED':'STALE'};
+   previewOnly:input.previewOnly===true,inputArm:input.inputArm==='ARMED'?'ARMED':input.inputArm==='DISARMED'?'DISARMED':'STALE'};
   notify();return true;
  }
  function snapshot(){
