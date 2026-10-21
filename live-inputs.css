@@ -1,74 +1,78 @@
-/* Read-only accepted RC input monitor, Devices & Firmware → Kit Connection. */
-.fw-live-inputs-card{min-width:0;max-width:100%;display:grid;gap:14px;border:1px solid #2c4b60!important;background:linear-gradient(155deg,#0c2434,#0a1929)!important}
-.li-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
-.li-header small{font-size:10px;letter-spacing:.13em;color:#73d2d5;font-weight:750}
-.li-header h2{font-size:21px;line-height:1.15;margin:5px 0}
-.li-header p{font-size:12px;color:#a7bfd0;line-height:1.5;max-width:690px;margin:0}
-.li-link-state{display:inline-block;font-size:11px;letter-spacing:.08em;padding:7px 11px;border:1px solid #5a6f7c;border-radius:20px;background:#162737;color:#b7c7d1;white-space:nowrap}
+/* Read-only physical Kit monitor. Natural-height content; workspace owns scrolling. */
+#fwLiveInputs{min-width:0;max-width:100%;height:auto;max-height:none;display:grid;grid-auto-rows:max-content;align-content:start;gap:8px;padding:10px!important;border:1px solid #2c4b60!important;background:linear-gradient(155deg,#0c2434,#0a1929)!important}
+.li-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.li-header>div{display:flex;align-items:center;flex-wrap:wrap;gap:3px 10px;min-width:0}
+.li-header small{font-size:10px;letter-spacing:.08em;color:#73d2d5;font-weight:750}
+.li-header h2{font-size:19px;line-height:1.2;margin:0}
+.li-header p{flex-basis:100%;font-size:11px;color:#a7bfd0;line-height:1.35;margin:0}
+.li-link-state{display:inline-block;font-size:10px;letter-spacing:.06em;padding:5px 9px;border:1px solid #5a6f7c;border-radius:20px;background:#162737;color:#b7c7d1;white-space:nowrap}
 .li-link-state[data-state=live]{border-color:#3fd7a6;color:#77edc8;background:#113b35}
 .li-link-state[data-state=stale]{border-color:#dcb367;color:#f3d28e;background:#393022}
-.li-identity{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:8px}
-.li-identity>div,.li-metrics>div,.li-safety>div{border:1px solid #294559;border-radius:10px;background:#0a1b2a;padding:9px 11px;min-width:0}
-.li-identity small,.li-metrics small,.li-safety small{display:block;font-size:10px;font-weight:700;letter-spacing:.07em;color:#9bb6c7}
-.li-identity b,.li-metrics b,.li-safety b{display:block;font-size:14px;font-weight:760;margin-top:6px;overflow-wrap:anywhere}
-.li-middle{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
-.li-sticks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.li-stick-card{border:1px solid #2e5065;background:#10283b;border-radius:12px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
-.li-stick-title{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;font-size:11px}
-.li-stick-title span{color:#9bb9ca;font-size:10px}
-.li-stick-area{position:relative;width:min(100%,150px);aspect-ratio:1;border:1px solid #4f7588;border-radius:15px;background:radial-gradient(circle at center,#193c50,#092232);overflow:hidden}
+.li-identity{display:grid;grid-template-columns:minmax(0,1.7fr) repeat(4,minmax(0,1fr));gap:5px}
+.li-identity>div,.li-metrics>div,.li-safety>div{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:3px 8px;border:1px solid #294559;border-radius:7px;background:#0a1b2a;padding:6px 8px;min-width:0}
+.li-identity small,.li-metrics small,.li-safety small{font-size:9px;font-weight:700;letter-spacing:.04em;color:#9bb6c7}
+.li-identity b,.li-metrics b,.li-safety b{font-size:12px;font-weight:760;overflow-wrap:anywhere;min-width:0}
+.li-middle{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:stretch}
+.li-sticks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.li-stick-card{border:1px solid #2e5065;background:#10283b;border-radius:9px;padding:7px;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.li-stick-title{width:100%;display:flex;justify-content:space-between;flex-wrap:wrap;gap:3px;font-size:10px}
+.li-stick-title span{color:#9bb9ca;font-size:9px}
+.li-stick-area{position:relative;width:min(100%,120px);aspect-ratio:1;flex:none;border:1px solid #4f7588;border-radius:11px;background:radial-gradient(circle at center,#193c50,#092232);overflow:hidden}
 .li-stick-axis{position:absolute;background:#416579;opacity:.75;pointer-events:none}
 .li-stick-axis-x{top:50%;height:1px;width:100%;left:0}
 .li-stick-axis-y{left:50%;width:1px;height:100%;top:0}
-.li-stick-dot{position:absolute;z-index:2;width:18px;height:18px;transform:translate(-50%,-50%);border-radius:50%;border:2px solid #c3fff1;background:#43d8ae;box-shadow:0 0 0 4px #3fd8ae24,0 2px 8px #000a;transition:left 120ms linear,top 120ms linear}
-.li-stick-label{display:flex;justify-content:space-between;width:100%;flex-wrap:wrap;gap:4px;color:#b5cedb;font-size:10px;font-variant-numeric:tabular-nums}
+.li-stick-dot{position:absolute;z-index:2;width:16px;height:16px;transform:translate(-50%,-50%);border-radius:50%;border:2px solid #c3fff1;background:#43d8ae;box-shadow:0 0 0 3px #3fd8ae24,0 2px 8px #000a;transition:left 120ms linear,top 120ms linear}
+.li-stick-label{display:flex;justify-content:space-between;width:100%;flex-wrap:wrap;gap:3px;color:#b5cedb;font-size:10px;font-variant-numeric:tabular-nums}
 .li-stick-label b{color:#f0f8fc}
-.li-channels{display:grid;align-content:center;gap:12px;min-width:0}
-.li-channel{display:grid;gap:6px}
-.li-channel>div:first-child{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.04em}
-.li-channel output{font-weight:800;font-size:15px;color:#edfaff;font-variant-numeric:tabular-nums}
-.li-bar{background:#10293c;border:1px solid #35576c;border-radius:8px;height:12px;overflow:hidden}
+.li-channels{display:grid;align-content:center;gap:8px;min-width:0}
+.li-channel{display:grid;gap:4px}
+.li-channel>div:first-child{display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:.04em}
+.li-channel output{font-weight:800;font-size:13px;color:#edfaff;font-variant-numeric:tabular-nums}
+.li-bar{background:#10293c;border:1px solid #35576c;border-radius:6px;height:8px;overflow:hidden}
 .li-bar i{display:block;width:0;height:100%;background:linear-gradient(90deg,#3299cb,#49dec0);transition:width 120ms linear;border-radius:inherit}
-.li-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.li-safety{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.li-metrics,.li-safety{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
 .li-safety b[data-state=off]{color:#78edc7}
 .li-safety b[data-state=armed]{color:#f5cf83}
-.li-footnote{margin:0;color:#a8bed1;font-size:11px;line-height:1.55}
-.fw-live-inputs-card[data-live-state=stale] .li-stick-dot,.fw-live-inputs-card[data-live-state=offline] .li-stick-dot,.fw-live-inputs-card[data-live-state=idle] .li-stick-dot{opacity:.55;box-shadow:none}
-.fw-live-inputs-card .li-identity,.fw-live-inputs-card .li-channels{min-width:0}
-@media(max-width:980px){.li-middle{grid-template-columns:1fr}.li-identity{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:580px){.li-header{align-items:flex-start}.li-header h2{font-size:18px}.li-header p{font-size:11px}.li-sticks{gap:7px}.li-stick-card{padding:8px}.li-stick-area{width:min(100%,135px)}.li-identity,.li-metrics,.li-safety{grid-template-columns:repeat(2,minmax(0,1fr))}.li-identity b,.li-metrics b,.li-safety b{font-size:12px}}
-@media(max-width:390px){.li-identity,.li-metrics,.li-safety{grid-template-columns:1fr}}
-@media(prefers-reduced-motion:reduce){.li-stick-dot,.li-bar i{transition:none}}
+.li-footnote{margin:0;color:#a8bed1;font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+#fwLiveInputs[data-live-state=stale] .li-stick-dot,#fwLiveInputs[data-live-state=offline] .li-stick-dot,#fwLiveInputs[data-live-state=idle] .li-stick-dot{opacity:.55;box-shadow:none}
 
-/* PPM CH1–CH8 from physical Kit, not from simulated Web/Android joystick. */
-.li-ppm-panel{border:1px solid #28556a;border-radius:12px;padding:12px;background:#0b2535;min-width:0}
-.li-ppm-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap}
-.li-ppm-head strong{font-size:11px;letter-spacing:.08em;color:#b6f5df}
-.li-ppm-head small{font-size:11px;color:#abc3cf}
-.li-ppm-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.li-ppm-channel{min-width:0;background:#102f43;border:1px solid #315a70;border-radius:8px;padding:7px 9px;display:grid;gap:5px}
-.li-ppm-channel small{color:#a9c5d1;font-weight:700;letter-spacing:.04em}
-.li-ppm-channel output{color:#ecfbff;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
-.li-ppm-track{height:7px;background:#082030;border-radius:6px;overflow:hidden}
+/* PPM CH1–CH8 remain visible, including when the receiver is not reporting. */
+.li-ppm-panel{border:1px solid #28556a;border-radius:9px;padding:8px;background:#0b2535;min-width:0}
+.li-ppm-head{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-bottom:6px;flex-wrap:wrap}
+.li-ppm-head strong{font-size:10px;letter-spacing:.05em;color:#b6f5df}
+.li-ppm-head small{font-size:10px;color:#abc3cf}
+.li-ppm-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:5px}
+.li-ppm-channel{min-width:0;background:#102f43;border:1px solid #315a70;border-radius:6px;padding:5px 6px;display:grid;grid-template-columns:auto 1fr;gap:4px;align-items:center}
+.li-ppm-channel small{color:#a9c5d1;font-size:9px;font-weight:700}
+.li-ppm-channel output{color:#ecfbff;font-size:12px;font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.li-ppm-track{grid-column:1/-1;height:5px;background:#082030;border-radius:6px;overflow:hidden}
 .li-ppm-track i{display:block;width:0;height:100%;background:#48cfa6;transition:width .12s linear}
-.li-ppm-note{font-size:11px;color:#92b4c5;margin:8px 0 0;line-height:1.5}
-@media(max-width:580px){.li-ppm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(prefers-reduced-motion:reduce){.li-ppm-track i{transition:none}}
+.li-ppm-note{font-size:10px;color:#92b4c5;margin:6px 0 0;line-height:1.4}
 
-/* Verified monitoring is read-only: mode selection never changes Kit ownership. */
-.li-monitor-toolbar{display:flex;flex-wrap:wrap;gap:9px 14px;align-items:center;margin:10px 0 16px;padding:10px 12px;border:1px solid var(--border,rgba(127,127,127,.25));border-radius:12px}
-.li-monitor-toolbar label{font-size:.85rem;font-weight:650}
-.li-monitor-toolbar select{min-height:36px;min-width:106px;border-radius:8px;padding:5px 10px;background:var(--surface,#fff);color:inherit;max-width:100%}
-.li-monitor-toolbar small{font-size:.78rem;line-height:1.4;overflow-wrap:anywhere}
-#liSelectionReason{flex:1 1 230px;min-width:160px}
-@media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
-
-/* Explicit colors keep native option popups readable in both browser themes. */
-.li-monitor-toolbar select,.li-mode-toolbar select{background:#f6f8fc;color:#172331;color-scheme:light;min-height:44px;border:1px solid #8295aa}
-.li-monitor-toolbar select option,.li-mode-toolbar select option{background:#f6f8fc;color:#172331}
-.li-monitor-toolbar select:focus-visible,.li-mode-toolbar select:focus-visible{outline:3px solid #2277db;outline-offset:2px}
-.li-mode-toolbar,.li-status-detail{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 0;min-width:0}
-.li-mode-toolbar select{border-radius:8px;padding:6px 10px}.li-mode-toolbar span{flex:1 1 240px;overflow-wrap:anywhere;font-size:.8rem}
-.li-status-detail{font-size:.8rem;font-variant-numeric:tabular-nums}.li-status-detail span{min-width:0;overflow-wrap:anywhere}
-@media(prefers-color-scheme:dark){.li-monitor-toolbar select,.li-mode-toolbar select,.li-monitor-toolbar select option,.li-mode-toolbar select option{background:#162333;color:#edf4ff;color-scheme:dark}}
+/* Two compact control groups, with readable native menus and 44px targets. */
+.li-controls{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:7px}
+.li-monitor-toolbar,.li-mode-toolbar{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;align-content:center;margin:0;padding:6px 8px;border:1px solid #294559;border-radius:8px;min-width:0}
+.li-monitor-toolbar label,.li-mode-toolbar label{font-size:11px;font-weight:650;line-height:1.3}
+#fwLiveInputs select{min-height:44px;max-width:100%;min-width:86px;border-radius:7px;padding:5px 8px;background:#f6f8fc;color:#172331;color-scheme:light;border:1px solid #8295aa;font-size:12px}
+#fwLiveInputs select option{background:#f6f8fc;color:#172331}
+#fwLiveInputs select:focus-visible{outline:3px solid #2277db;outline-offset:2px}
+.li-monitor-toolbar small,.li-mode-toolbar span{font-size:10px;line-height:1.35;overflow-wrap:anywhere;min-width:0}
+#liSelectionReason{flex:1 1 120px}
+.li-mode-toolbar span{flex:1 1 150px}
+.li-status-detail{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;padding:0;font-size:10px;line-height:1.4;font-variant-numeric:tabular-nums}
+.li-status-detail span{min-width:0;overflow-wrap:anywhere}
+@media(max-width:1100px){.li-controls{grid-template-columns:1fr}.li-monitor-toolbar,.li-mode-toolbar{padding:4px 7px}#liBoardVersion{flex-basis:auto}.li-ppm-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:580px){
+ #fwLiveInputs{gap:7px;padding:8px!important}
+ .li-header h2{font-size:17px}.li-header small{font-size:9px}.li-header p{font-size:10px}
+ .li-identity{grid-template-columns:repeat(2,minmax(0,1fr))}.li-identity>div:first-child{grid-column:1/-1}
+ .li-middle{grid-template-columns:1fr;gap:7px}.li-stick-area{width:min(100%,100px)}.li-stick-card{padding:6px}
+ .li-channels{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 10px}
+ .li-metrics,.li-safety{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .li-metrics>div:last-child,.li-safety>div:last-child{grid-column:1/-1}
+ .li-ppm-channel{grid-template-columns:1fr;text-align:center}.li-ppm-channel output{text-align:center}
+ .li-mode-toolbar span{flex-basis:100%}.li-monitor-toolbar label{flex:1 1 100px}
+ .li-status-detail{gap:4px 10px}
+}
+@media(prefers-color-scheme:dark){#fwLiveInputs select,#fwLiveInputs select option{background:#162333;color:#edf4ff;color-scheme:dark}}
+@media(prefers-reduced-motion:reduce){.li-stick-dot,.li-bar i,.li-ppm-track i{transition:none}}

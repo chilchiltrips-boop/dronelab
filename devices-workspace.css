@@ -373,7 +373,8 @@
    In a bounded grid overflow:hidden form cards otherwise shrink and CLIP text. */
 @media(min-width:781px){
  #tab-firmware #dw-panel-connection>.dw-view-content,
- #tab-firmware #dw-panel-firmware>.dw-view-content{
+ #tab-firmware #dw-panel-firmware>.dw-view-content,
+ #tab-firmware #dw-panel-inputs>.dw-view-content{
   display:grid;
   grid-template-columns:minmax(0,1fr);
   grid-auto-rows:max-content;
@@ -388,12 +389,15 @@
  #tab-firmware #dw-body-connection>.fw-available-card,
  #tab-firmware #dw-body-connection>.fw-rename-card,
  #tab-firmware #dw-body-connection>.dw-legacy-kit,
- #tab-firmware #dw-body-firmware>.firmware-grid{
+ #tab-firmware #dw-body-firmware>.firmware-grid,
+ #tab-firmware #dw-body-inputs>.fw-live-inputs-card{
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
  }
 }
+/* The monitor supplies its own heading; keep a single title in this view. */
+#tab-firmware #dw-panel-inputs>.dw-view-header{display:none}
 #tab-firmware #dw-body-connection .fw-simple-steps{
  grid-template-columns:repeat(3,minmax(0,1fr));
  align-items:stretch;
