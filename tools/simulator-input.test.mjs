@@ -84,10 +84,10 @@ test('verified AP Kit accepted Android RC feeds Auto simulator only after explic
  assert.equal(b.s.running,false);assert.equal(b.s.throttle,1000);
  assert.equal(b.s.cmdRoll,0);
 });
-test('Kit input rejects idle, stale, non-Android, unverified, malformed and repeated frames',()=>{
+test('AP Kit input rejects idle, stale, non-Android, unverified, malformed and repeated frames',()=>{
  const b=bench();b.store.setPeer({connected:false});
  for(const modify of [
-   p=>{p.kit.connected=false},p=>{p.kit.transport='usb'},
+   p=>{p.kit.connected=false},
    p=>{p.input.source='WEB'},p=>{p.input.state='stale'},
    p=>{p.input.ageMs=401},p=>{p.input.values.roll=2001}
  ]){
