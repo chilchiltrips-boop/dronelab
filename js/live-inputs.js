@@ -228,11 +228,11 @@ function initLiveInputs(){
    usbPpm={...ppm,at:Date.now()};
    if(ppm.owner&&sample?.rc?.source==='PPM'&&sample?.rc?.active===true){
     sample.rc={...sample.rc,channels:ppm.channels};
-    if(visible())display();
+    if(monitoring())display();
    }
    return;
   }
-  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(visible())display();return;}
+  if(line.startsWith('ZJPPM,1,LOST,')){usbPpm=null;if(sample){sample.rc={...sample.rc,ppmSignal:'LOST',channels:null};if(sample.rc.source==='PPM')sample.rc={...sample.rc,...neutral,active:false,inputArmed:false,source:'NONE'};}if(monitoring())display();return;}
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
   const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
@@ -251,7 +251,7 @@ function initLiveInputs(){
    sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
     at,rateHz:null,motorsOff:motorReported};
   }
-  if(visible())display();
+  if(monitoring())display();
  });
  document.addEventListener('visibilitychange',()=>{
   // Preserve the historical IMU/RC snapshot; never resurrect a stale value as LIVE.
