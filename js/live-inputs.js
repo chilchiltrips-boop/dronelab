@@ -40,7 +40,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
  const receiveAge=Math.max(0,now-sample.at);
  const ageMs=(Number.isFinite(ageBase)&&ageBase>=0?ageBase:0)+receiveAge;
- const sequenceAge=sample.sequenceAt==null?receiveAge:Math.max(0,now-sample.sequenceAt);
+ const sequenceAge=usePreview?receiveAge:sample.sequenceAt==null?receiveAge:Math.max(0,now-sample.sequenceAt);
  const recent=receiveAge<=SNAPSHOT_TTL_MS&&ageMs<=INPUT_MAX_AGE_MS&&sequenceAge<=SEQUENCE_TTL_MS;
  const source=String(rc.source||'NONE').toUpperCase();
  const validSource=['WEB','ANDROID','PPM'].includes(source)?source:'NONE';
