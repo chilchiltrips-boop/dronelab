@@ -91,7 +91,7 @@ button{min-height:44px}
 .flight-attitude-ladder i{display:block;width:31px;height:1px;background:linear-gradient(90deg,#9993aa 43%,transparent 43%,transparent 57%,#9993aa 57%)}.flight-attitude-ladder i:nth-child(3){width:48px;background:#a59bae80}
 .flight-attitude svg{position:relative;width:68px;height:30px;fill:none;stroke:var(--cyan);stroke-width:1.4;z-index:1;background:radial-gradient(ellipse,#151422 40%,#15142200 72%)}
 #flightAttitudeLabel{position:absolute;bottom:0;left:0;right:0;font-size:6px;text-align:center;letter-spacing:.09em;color:#9c93ac;white-space:nowrap}
-.flight-center-actions{display:flex;align-items:center;gap:7px;pointer-events:auto}
+.flight-center-actions{display:flex;align-items:center;gap:7px;pointer-events:auto}.flight-center-actions #flightPreview{min-height:44px;padding:8px 10px;font-size:12px;border:1px solid #52a9a2;background:#10333b;color:#d1f9e9;border-radius:9px}.flight-center-actions #flightPreview:focus-visible{outline:3px solid #80f3d8;outline-offset:2px}.flight-center-actions #flightPreview[aria-pressed=true]{background:#1c6457;color:#fff}.flight-center-actions #flightPreview:disabled{opacity:.5}
 .flight-cockpit #flightMode{font-size:9px;width:76px;padding:7px 4px;background:#23212f;color:#ccc7d7;border-color:#514b60;border-radius:20px;text-align:center}
 .flight-cockpit button.flight-arm{position:relative;min-width:93px;border-radius:24px;padding:8px 9px 8px 33px;background:#2e2b3b;color:#d5cddd;border-color:#655968;font-size:10px;text-align:center}
 .flight-arm::before{content:'';position:absolute;left:5px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:linear-gradient(#cdc7d3,#8d8799);border:1px solid #e4d8e3;box-shadow:0 2px 4px #0005}
