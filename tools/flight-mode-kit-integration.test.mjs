@@ -57,6 +57,8 @@ test('USB mode readback and teacher-authorized save does not grant AP/STA privil
 
 test('Android reads authoritative Kit status and permits pending requests over independent secure UDP',()=>{
  const net=read('companion-network.js'),app=read('companion-flight.js');
+ const native=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
+ assert.match(native,/route\.equals\("\/api\/flight\/mode"\)/);
  assert.match(net,/async function setSavedFlightMode\(desired\)/);
  assert.match(net,/request\('\/api\/flight\/mode','POST',\{flightMode:desired\}\)/);
  assert.match(net,/data\?\.requestedFlightMode!==desired/);
