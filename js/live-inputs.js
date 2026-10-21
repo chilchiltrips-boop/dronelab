@@ -21,7 +21,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
   inputTransport:'—',seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
-  inputArm:'NOT REPORTED',flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
+  inputArm:'NOT REPORTED',flightMode:['angle','acro'].includes(kit?.flightMode)?kit.flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
