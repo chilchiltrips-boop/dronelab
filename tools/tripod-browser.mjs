@@ -14,6 +14,9 @@ try{
  if(/CONNECT USB SERIAL|STA MODE|AP MODE/.test(docText))throw Error('Hardware controls must not exist in Tripod page');
  if(await page.locator('.tp-orientation-hint,.tp-nose').count())throw Error('Remove floating direction text from scene');
  if((await page.locator('#tpCameraView option').count())<7)throw Error('Seven camera views including Follow Drone expected');
+ if(await page.locator('#tpCameraView').inputValue()!=='back')throw Error('Drone front should point away by default (back camera)');
+ await until(()=>window.ZebjusTraining.diagnostics().scene?.cameraMode==='back');
+ await until(()=>Math.abs(window.ZebjusTraining.diagnostics().scene?.cameraAzimuth-Math.PI)<.1);
  await page.locator('#tpCameraView').selectOption('front');
  if(await page.locator('#tpCameraView').inputValue()!=='front')throw Error('Front view selection failed');
  await page.locator('#tpCameraView').selectOption('isometric');
