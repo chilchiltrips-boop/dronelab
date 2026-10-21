@@ -25,6 +25,8 @@ on:
       - 'tripod.css'
       - 'js/tripod-physics.js'
       - 'js/tripod-page.js'
+      - 'js/simulator-input.js'
+      - 'tools/simulator-input.test.mjs'
       - 'js/tripod-audio.js'
       - 'js/tripod-realism.js'
       - 'js/tripod-assembly-model.js'

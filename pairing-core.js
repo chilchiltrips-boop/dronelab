@@ -43,9 +43,11 @@ function waitIce(pc,timeout=12000){
   pc.addEventListener('icegatheringstatechange',update);
  });
 }
-function session(role,events={}){
+function session(role,events={},options={}){
  const emit=(event,detail)=>{try{return events[event]?.(detail)}catch(e){console.error(e);return false}};
  let peer=null,channel=null,inputChannel=null,sessionId=null,code=null,expires=0,paired=false,approved=false,lastHeartbeat=0,heartbeat=null,dropTimer=null,connected=false,controller=null,deviceId=randomId(8),generation=0,lastSimSeq=0,simulatorReady=false;
+ const inputMirrorOnly=role==='host'&&options.inputMirrorOnly===true;
+ let inputMirrorVersion=0,remoteMirrorVersion=0,remoteDeviceId='',lastMirrorSeq=0;
  const error=(err)=>emit('error',String(err?.message||err));
  const state=(s)=>emit('status',s);
  function close(reason='Disconnected'){
@@ -55,18 +57,19 @@ function session(role,events={}){
   const oldChannel=channel,oldInput=inputChannel,oldPeer=peer;channel=null;inputChannel=null;peer=null;
   try{oldChannel?.close()}catch{}try{oldInput?.close()}catch{}try{oldPeer?.close()}catch{}
   connected=false;paired=false;approved=false;
+  inputMirrorVersion=remoteMirrorVersion=lastMirrorSeq=0;remoteDeviceId='';
   controller=null;simulatorReady=false;sessionId=null;code=null;expires=0;lastHeartbeat=0;
   state('Disconnected');emit('control',{owner:null});emit('disconnected',reason);
  }
- const realtimeTypes=new Set(['SIM_CONTROL','SIM_ACK','SIM_TELEMETRY']);
+ const realtimeTypes=new Set(['SIM_CONTROL','SIM_ACK','SIM_TELEMETRY','INPUT_MIRROR']);
  const liveChannel=()=>inputChannel?.readyState==='open'?inputChannel:channel;
  function send(m){const realtime=realtimeTypes.has(m.type),target=realtime?liveChannel():channel;if(target?.readyState!=='open'||realtime&&target.bufferedAmount>32768)return false;try{target.send(JSON.stringify({...m,v:VERSION}));return true}catch{return false}}
- function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,at:Date.now(),deviceId})}
+ function broadcast(){if(role!=='host')return;send({type:'STATE',sessionId,controller,paired:approved,simulatorReady,inputMirrorVersion:inputMirrorOnly?1:0,at:Date.now(),deviceId})}
  function sendTelemetry(applied){return role==='host'&&approved&&connected&&liveChannel()?.bufferedAmount<32768?send({type:'SIM_TELEMETRY',sessionId,applied}):false}
  function sendNetworkRequest(m){return role==='host'&&approved&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_REQUEST',sessionId,id:m.id,method:m.method,route:m.route,args:m.args||{}}):false}
   function sendNetworkResponse(m){return role==='mobile'&&paired&&connected&&channel?.bufferedAmount<16384&&Number.isInteger(m.id)?send({type:'NET_RESPONSE',sessionId,id:m.id,ok:m.ok===true,data:m.data||{},error:String(m.error||'').slice(0,150)}):false}
   function emergencyStop(reason='Web emergency STOP'){
-  if(role!=='host')return false;emit('simStop',{reason});return send({type:'SIM_STOP',sessionId,reason});
+  if(role!=='host')return false;emit('simStop',{reason});return inputMirrorOnly?true:send({type:'SIM_STOP',sessionId,reason});
  }
  function setSimulatorReady(value){if(role!=='host')return false;simulatorReady=!!value;broadcast();return true}
  function dropControl(reason){if(controller&&role==='host'){emit('simStop',{reason});lastSimSeq=0;controller=null;emit('control',{owner:null,reason});broadcast()}}
@@ -94,6 +97,20 @@ function session(role,events={}){
   return send({type:'SIM_CONTROL',seq:m.seq,sessionId:m.sessionId,mode:m.mode,armed:m.armed,
    throttle:m.throttle,axes:m.axes,...(m.sticks?{sticks:m.sticks}:{})});
  }
+ function sendInputMirror(m){
+  // No fallback onto the reliable management channel: discard congestion,
+  // never queue/retry old stick positions or wait for per-frame feedback.
+  if(role!=='mobile'||inputMirrorVersion!==1||!connected||!paired||inputChannel?.readyState!=='open'||inputChannel.bufferedAmount>4096)return false;
+  if(!validInputMirror(m))return false;
+  return send({type:'INPUT_MIRROR',mirrorVersion:1,sessionId,seq:m.seq,channels:m.channels,
+   kitId:m.kitId,transport:m.transport,kind:m.kind,inputAgeMs:m.inputAgeMs});
+ }
+ function validInputMirror(m){
+  return m&&m.mirrorVersion===1&&m.sessionId===sessionId&&Number.isSafeInteger(m.seq)&&m.seq>0&&
+   ['ap','sta','preview'].includes(m.transport)&&['android-command','android-preview'].includes(m.kind)&&
+   typeof m.kitId==='string'&&m.kitId.length<=80&&Number.isFinite(m.inputAgeMs)&&m.inputAgeMs>=0&&m.inputAgeMs<=250&&
+   m.channels&&Object.keys(m.channels).length===4&&['throttle','roll','pitch','yaw'].every(k=>Number.isInteger(m.channels[k])&&m.channels[k]>=1000&&m.channels[k]<=2000);
+ }
  function onData(raw){
   if(typeof raw!=='string'||raw.length>5000)return;
   let m;try{m=JSON.parse(raw)}catch{return}
@@ -101,11 +118,16 @@ function session(role,events={}){
   lastHeartbeat=Date.now();emit('heartbeat',lastHeartbeat);
   if(m.type==='PING'){send({type:'PONG',at:m.at});return}
   if(m.type==='PONG')return;
-  if(m.type==='PAIR_APPROVED'&&role==='mobile'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST'});return}
+  if(m.type==='PAIR_APPROVED'&&role==='mobile'){paired=true;state('Connected');emit('paired');send({type:'SYNC_REQUEST',inputMirrorVersion:1,deviceId});return}
   if(m.type==='PAIR_REJECTED'){close('Pairing rejected');return}
   if(role==='host'){
+   if(m.type==='INPUT_MIRROR'){
+    if(!inputMirrorOnly||!approved||!connected||remoteMirrorVersion!==1||!validInputMirror(m)||m.seq<=lastMirrorSeq)return;
+    lastMirrorSeq=m.seq;emit('inputMirror',m);return;
+   }
    if(m.type==='NET_RESPONSE'&&approved&&m.sessionId===sessionId&&Number.isInteger(m.id)){emit('networkResponse',m);return;}
     if(m.type==='SIM_CONTROL'){
+    if(inputMirrorOnly)return; // Android ARM must never run this Web-owned simulator.
     const fail=reason=>send({type:'SIM_ACK',sessionId,ackSeq:Number.isSafeInteger(m.seq)?m.seq:0,accepted:false,reason});
     if(!approved||!connected||controller!=='mobile')return fail('Mobile control not granted');
     if(!validSimFrame(m))return fail('Invalid session or simulator control fields');
@@ -121,7 +143,7 @@ function session(role,events={}){
     }).catch(()=>{if(ticket===generation)fail('Simulator feedback timeout')});
     return;
    }
-   if(m.type==='SYNC_REQUEST'){if(approved)broadcast();return}
+   if(m.type==='SYNC_REQUEST'){if(approved){remoteMirrorVersion=m.inputMirrorVersion===1?1:0;remoteDeviceId=typeof m.deviceId==='string'?m.deviceId.slice(0,80):'';broadcast();emit('mirrorStatus');}return}
    if(m.type==='REQUEST_CONTROL'){
     if(!approved)return send({type:'CONTROL_DENIED',reason:'Pairing not approved'});
     if(controller==='mobile')return send({type:'CONTROL_GRANTED',owner:'mobile'});
@@ -129,14 +151,14 @@ function session(role,events={}){
    }
    if(m.type==='RELEASE_CONTROL'){if(controller==='mobile')dropControl('Released by Android');return}
   }else{
-   if(m.type==='STATE'){if(!paired||m.sessionId!==sessionId||![null,'web','mobile'].includes(m.controller))return;controller=m.controller;simulatorReady=m.simulatorReady===true;emit('control',{owner:controller});emit('simReady',{ready:simulatorReady});return}
+   if(m.type==='STATE'){if(!paired||m.sessionId!==sessionId||![null,'web','mobile'].includes(m.controller))return;controller=m.controller;inputMirrorVersion=m.inputMirrorVersion===1?1:0;simulatorReady=m.simulatorReady===true;emit('control',{owner:controller});emit('simReady',{ready:simulatorReady});return}
    if(m.type==='CONTROL_GRANTED'){if(!paired)return;controller='mobile';emit('control',{owner:'mobile'});send({type:'SYNC_REQUEST'});return}
    if(m.type==='CONTROL_DENIED'){emit('denied',m.reason||'Control denied');return}
    if(!paired||m.sessionId!==sessionId)return;
    if(m.type==='NET_REQUEST'&&Number.isInteger(m.id)&&m.id>0&&m.id<=1000000000){emit('networkRequest',{id:m.id,method:m.method,route:m.route,args:m.args||{}});return;}
     if(m.type==='SIM_ACK'&&Number.isSafeInteger(m.ackSeq)&&typeof m.accepted==='boolean'){emit('simAck',m);return}
    if(m.type==='SIM_TELEMETRY'){emit('simTelemetry',m);return}
-   if(m.type==='SIM_STOP'){emit('simStop',{reason:typeof m.reason==='string'?m.reason.slice(0,150):'Web STOP'});return}
+   if(m.type==='SIM_STOP'){if(inputMirrorVersion!==1)emit('simStop',{reason:typeof m.reason==='string'?m.reason.slice(0,150):'Web STOP'});return}
   }
  }
  function setup(pc,dc){
@@ -151,7 +173,7 @@ function session(role,events={}){
   pc.onconnectionstatechange=()=>{
    if(peer!==pc)return;
    const s=pc.connectionState;
-   if(s==='connected'){clearTimeout(dropTimer);connected=channel?.readyState==='open';state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST'});if(role==='host'&&approved)broadcast()}
+   if(s==='connected'){clearTimeout(dropTimer);connected=channel?.readyState==='open';state(paired?'Connected':'Connected • awaiting approval');if(role==='mobile'&&paired)send({type:'SYNC_REQUEST',inputMirrorVersion:1,deviceId});if(role==='host'&&approved)broadcast()}
    if(s==='disconnected'){connected=false;dropControl('Wi-Fi changed');controller=null;emit('control',{owner:null});state('Reconnecting');emit('reconnecting');clearTimeout(dropTimer);dropTimer=setTimeout(()=>{if(peer===pc&&pc.connectionState!=='connected')close('Connection lost • scan fresh QR')},RETRY_GRACE_MS)}
    if(s==='failed'||s==='closed')close('Connection ended • check STUN/TURN, firewall and scan fresh QR');
   };
@@ -175,13 +197,14 @@ function session(role,events={}){
   const check=()=>{if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled')};
   const description=await pc.createOffer();check();await pc.setLocalDescription(description);check();state('Gathering local Wi-Fi connection candidates');
   await waitIce(pc);check();state('Waiting for Android QR response • ICE candidates gathered');
-  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});check();
+  const qr=await pack({v:VERSION,kind:'offer',sid:sessionId,pin:code,expires,inputMirrorVersion:inputMirrorOnly?1:0,sdp:pc.localDescription.sdp});check();
   return {qr,pin:code,expires,sessionId};
  }
  async function makeAnswer(offerText){
   close('New pairing session');
   const ticket=generation,offer=await unpack(offerText);if(ticket!==generation)throw Error('Pairing cancelled');if(offer.kind!=='offer')throw Error('Expected a Web App offer QR');
   sessionId=offer.sid;code=offer.pin;expires=offer.expires;
+  inputMirrorVersion=offer.inputMirrorVersion===1?1:0;
   if(root.ZebjusRemoteRTC?.load)await root.ZebjusRemoteRTC.load();
   if(ticket!==generation)throw Error('Pairing cancelled');
   const pc=makePC();setup(pc);
@@ -190,7 +213,7 @@ function session(role,events={}){
   const description=await pc.createAnswer();check();await pc.setLocalDescription(description);check();
   state('Generating response QR');
   await waitIce(pc);check();
-  const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,sdp:pc.localDescription.sdp});check();
+  const qr=await pack({v:VERSION,kind:'answer',sid:sessionId,pin:code,expires,inputMirrorVersion:1,sdp:pc.localDescription.sdp});check();
   state('Show response QR to Web App');
   return {qr,pin:code,expires,sid:sessionId};
  }
@@ -200,6 +223,7 @@ function session(role,events={}){
   const answer=await unpack(answerText);
   if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled');
   if(answer.kind!=='answer'||answer.sid!==sessionId||answer.pin!==code||answer.expires!==expires)throw Error('Answer does not match this pairing session');
+  if(inputMirrorOnly&&answer.inputMirrorVersion!==1)throw Error('Android app update required: install 1.8.12 or later for read-only input mirror');
   if(peer.signalingState!=='have-local-offer')throw Error('Pairing offer already answered');
   await pc.setRemoteDescription({type:'answer',sdp:answer.sdp});
   if(ticket!==generation||peer!==pc)throw Error('Pairing cancelled');
@@ -212,11 +236,12 @@ function session(role,events={}){
  }
  function decline(){if(role==='host')send({type:'PAIR_REJECTED'});close('Pairing cancelled')}
  function takeWebControl(){
-  if(role!=='host')return false;
+  if(role!=='host'||inputMirrorOnly)return false;
   if(controller==='mobile')return false;
   controller='web';emit('control',{owner:'web'});broadcast();return true;
  }
  function grantMobileControl(){
+  if(inputMirrorOnly)return false;
   if(role!=='host'||!approved||!connected||channel?.readyState!=='open'||Date.now()-lastHeartbeat>TIMEOUT_MS)return false;
   if(controller==='web')dropControl('Transferred to Android');
   controller='mobile';send({type:'CONTROL_GRANTED',owner:'mobile'});emit('control',{owner:'mobile'});broadcast();return true;
@@ -226,9 +251,9 @@ function session(role,events={}){
   send({type:'RELEASE_CONTROL'});controller=null;emit('control',{owner:null});
  }
  return {
-  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,sendNetworkRequest,sendNetworkResponse,setSimulatorReady,sendTelemetry,emergencyStop,
+  makeOffer,makeAnswer,receiveAnswer,approvePairing,decline,close,takeWebControl,grantMobileControl,releaseControl,sendSimulatorControl,sendInputMirror,sendNetworkRequest,sendNetworkResponse,setSimulatorReady,sendTelemetry,emergencyStop,
   requestControl:()=>paired&&connected?send({type:'REQUEST_CONTROL',deviceId}):false,
-  status:()=>({role,connected,paired,approved,controller,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId}),
+  status:()=>({role,connected,paired,approved,controller,simulatorReady,lastHeartbeat,sessionId,expires,pin:code,deviceId,inputMirrorOnly,inputMirrorVersion,remoteMirrorVersion,remoteDeviceId}),
   get channel(){return channel},get realtimeChannel(){return liveChannel()},get peer(){return peer}
  };
 }

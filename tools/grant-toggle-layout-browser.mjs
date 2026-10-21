@@ -52,7 +52,7 @@ try{
  for(const tab of ['pid','firmware','python','assembly']){
   await page.locator('[data-tab="'+tab+'"]').click();
   const t=await page.locator('.top-grant-control .grant-control-text').textContent();
-  if(t.trim()!=='Mobile Ctrl'||await page.locator('#topGrantMobileSwitch').getAttribute('aria-label')!=='Grant Mobile Control')throw Error('Grant switch disappeared on '+tab);
+  if(t.trim()!=='Input mirror'||await page.locator('#topGrantMobileSwitch').getAttribute('aria-label')!=='Android input mirror availability')throw Error('Grant switch disappeared on '+tab);
   const r=await page.locator('.top-grant-control').boundingBox();
   if(!r||r.width<120)throw Error('Header control collapsed on '+tab);
  }

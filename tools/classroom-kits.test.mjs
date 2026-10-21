@@ -31,7 +31,8 @@ test('Remote WebRTC simulator inputs never claim physical Kit ownership; local c
  assert.ok(pairing.includes('Remote Phase 1 is simulator-only'));
  assert.ok(host.includes('hardwareInput(){'));
  assert.ok(pid.includes('hardwareInput:()=>'));
- assert.ok(pid.includes('window.parent?.ZebjusKits?.stop?.()'));
+ assert.doesNotMatch(pid,/ZebjusKits/,'Simulator must never call physical Kit APIs');
+ assert.ok(pid.includes('hardwareInput:()=>null'));
 });
 test('Network/session changes cannot silently reassign firmware control',()=>{
  for(const t of ['kitId!==state.kitId','kitCode!==state.kitCode','state.owner=false','releaseRc()','RC frame rejected:','state.rcSession','ZJRC,CLAIM,','ZJRC,SET,','ZJRC,RELEASE','ZJRC,STOP'])assert.ok(kit.includes(t),t);

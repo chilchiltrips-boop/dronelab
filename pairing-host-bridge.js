@@ -16,6 +16,7 @@
  function notify(){
   const sim=target();if(!sim)return;
   sim.setOwner(owner);
+  sim.setVisible?.(document.querySelector('#tab-pid')?.classList.contains('active')===true);
   if(contentResize)contentResize.disconnect();
   const content=frame.contentWindow?.document?.querySelector('main.tp-shell');
   if(content&&typeof ResizeObserver==='function'){
@@ -34,6 +35,7 @@
   }
  });
  root.addEventListener('dronelab:tab',event=>{
+  target()?.setVisible?.(event.detail?.name==='pid');
   if(event.detail?.name==='pid'||event.detail?.name==='firmware'&&root.ZebjusDevicesWorkspace?.active?.()==='mobile')ensureSimulator();
   if(event.detail?.name==='pid'){
    root.requestAnimationFrame(()=>{try{frame.contentWindow?.dispatchEvent(new Event('resize'))}catch{}});

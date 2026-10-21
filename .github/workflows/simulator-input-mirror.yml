@@ -1,0 +1,45 @@
+name: Read-only Android AP mirror
+on:
+  push:
+    branches: [feat/tripod-ap-input-mirror-20261021, main]
+    paths:
+      - 'companion*'
+      - 'flight-input.js'
+      - 'pairing-*'
+      - 'js/simulator-input.js'
+      - 'js/tripod-*'
+      - 'tripod*'
+      - 'tools/*'
+      - '.github/workflows/simulator-input-mirror.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  input-mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test && npm run check
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Paired AP mirror, offline QR and embedded simulator
+        run: |
+          mkdir -p test-output
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/input-mirror-http.log 2>&1 &
+          sleep 2
+          node tools/flight-controller-browser.mjs
+          node tools/qr-pairing-browser.mjs
+          node tools/pid-shell-browser.mjs
+          node tools/ap-streaming-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: readonly-ap-mirror-evidence
+          path: test-output/
+          if-no-files-found: ignore
