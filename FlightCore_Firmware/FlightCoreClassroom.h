@@ -33,7 +33,7 @@ static bool zjRcUdpOwned=false;
 static String zjRcLastReleaseReason="NONE";
 static uint32_t zjRcLastReleaseAt=0;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
-static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
+static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500,zjRcCh5=1000,zjRcCh6=1000;
 static const char* zjRcTransport="NONE";
 // Separately authorized DISARMED diagnostic joystick preview. Never touches
 // RC ownership, motor output, INPUT ARM or the RC watchdog. 500 ms hard TTL.
@@ -87,7 +87,7 @@ static String zjRcNewSession(){
  return String(token);
 }
 static void zjRcNeutral(){
- zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
+ zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcCh5=zjRcCh6=1000;zjRcHasFrame=false;zjRcInputArmed=false;
 }
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
@@ -147,7 +147,7 @@ static String zjRcState(){
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
-  ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
+  ",\"yaw\":"+String(zjRcYaw)+",\"ch5\":"+String(zjRcCh5)+",\"ch6\":"+String(zjRcCh6)+",\"accepted\":"+String(zjRcAccepted)+
   ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+",\"preview\":"+zjPreviewState()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
