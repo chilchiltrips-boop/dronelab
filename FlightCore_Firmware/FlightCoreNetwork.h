@@ -318,14 +318,17 @@ static void zjSetupHttp(){
   if(zjArg("armed")!="false"){zjReply(403,"{\"error\":\"hardware_arming_disabled\"}");return;}
   const String inputArm=zjArg("inputArmed");
   if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
-  long seq=0,t=0,r=0,p=0,y=0;
+  long seq=0,t=0,r=0,p=0,y=0,ch5=1000,ch6=1000;
   const String response=zjArg("responseMode");
   if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
      !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
+     (zjArg("ch5").length()&&!parseNumber(zjArg("ch5").c_str(),1000,2000,ch5))||
+     (zjArg("ch6").length()&&!parseNumber(zjArg("ch6").c_str(),1000,2000,ch6))||
      (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
      !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.peerIP(),inputArm=="true")){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
+  zjRcCh5=int(ch5);zjRcCh6=int(ch6); // diagnostic auxiliaries, no GPIO mapping
   zjRcResponse=response.length()?response:String("Medium");
   if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
