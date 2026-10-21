@@ -119,8 +119,10 @@ void ledCommand(char* line){
 }
 void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch
+static bool zjSerialFlightMode(char* line); // implemented by network module
 void serialCommand(char* line){
- if(zjRcSerialCommand(line))return;
+ if(zjSerialFlightMode(line))return;
+  if(zjRcSerialCommand(line))return;
  if(zjPpmSerialCommand(line))return;
  if(zjNetSerialCommand(line))return;
  if(!strcmp(line,"ZJINFO,GET")){printFirmwareInfo();return;}
