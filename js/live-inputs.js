@@ -87,7 +87,7 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- let monitorChoice='auto',selectionReason='';
+ let monitorChoice='auto',selectionReason='',modeBusy=false,modeMessage='';
  const getKit=()=>{
   const kit=window.ZebjusKits?.getState?.()||{connected:false};
   const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
@@ -146,6 +146,19 @@ function initLiveInputs(){
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
+  const modeSelect=$('liFlightModeSelect');
+  if(modeSelect){
+   const actual=['angle','acro'].includes(kit.activeFlightMode)?kit.activeFlightMode:kit.flightMode;
+   const requested=['angle','acro'].includes(kit.requestedFlightMode)?kit.requestedFlightMode:actual;
+   const pending=['angle','acro'].includes(kit.pendingFlightMode)?kit.pendingFlightMode:null;
+   const canSelect=kit.connected&&['angle','acro'].includes(actual)&&!kit.otaInProgress&&!kit.working;
+   modeSelect.disabled=!canSelect||modeBusy;
+   if(!modeBusy&&requested)modeSelect.value=requested;
+   write('liModeWriteStatus',modeBusy?'Saving signed Kit request…':
+    modeMessage||(!canSelect?'Kit mode unavailable • connect and verify firmware':
+     'REQUESTED '+requested.toUpperCase()+' • ACTIVE '+actual.toUpperCase()+
+     (pending?' • PENDING '+pending.toUpperCase()+' UNTIL INPUT DISARMED':' • SAVED')));
+  }
   $('liInputArm').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':'unknown';
   write('liLed',v.led);
   write('liMotors',v.motors);
@@ -260,6 +273,20 @@ function initLiveInputs(){
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
  $('liMonitorSelect')?.addEventListener('change',e=>{monitorChoice=e.target.value;wipe();display();});
+ $('liFlightModeSelect')?.addEventListener('change',async e=>{
+  if(modeBusy)return;
+  const desired=e.target.value,kitBefore=getKit(),id=kitBefore.kitId;
+  if(!kitBefore.connected||!['angle','acro'].includes(desired))return;
+  modeBusy=true;modeMessage='';display();
+  try{
+   const result=await window.ZebjusKits.setFlightMode(desired);
+   if(getKit().kitId!==id)throw Error('Kit changed during Flight Mode write');
+   modeMessage='REQUESTED '+result.requested.toUpperCase()+' • ACTIVE '+result.active.toUpperCase()+
+    (result.pending?' • PENDING '+result.pending.toUpperCase()+' UNTIL INPUT DISARMED':' • SAVED');
+  }catch(error){modeMessage='NOT SAVED • '+String(error?.message||error).slice(0,140)}
+  finally{modeBusy=false;display()}
+ });
+ window.addEventListener('dronelab:kit-flight-mode',()=>{if(!modeBusy)modeMessage='';display()});
  window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
  function tick(){display();if(monitoring()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
