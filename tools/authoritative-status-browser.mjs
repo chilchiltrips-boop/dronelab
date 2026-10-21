@@ -81,7 +81,20 @@ try{
   throw error;
  }
  await page.evaluate(()=>{const f=window.__statusFixture;f.kit.flightMode='acro';Object.assign(f.kit.flightModeState,{saved:'acro',active:'acro',pending:null})});
- await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpKitMode').textContent.includes('SYNC PENDING'));
+ try{
+  await page.waitForFunction(()=>document.getElementById('pidFrame')?.contentDocument?.getElementById('tpKitMode')?.textContent.includes('SYNC PENDING'),null,{timeout:5000});
+ }catch(error){
+  const diagnostic=await page.evaluate(()=>{
+   const frame=document.getElementById('pidFrame')?.contentDocument;
+   return {snapshot:window.ZebjusTraining?.snapshot?.(),modeText:frame?.getElementById('tpKitMode')?.textContent,
+    selectedMode:frame?.getElementById('tpMode')?.value,runStatus:frame?.getElementById('tpStatus')?.textContent,
+    fixtureMode:{...window.__statusFixture.kit.flightModeState},
+    connection:document.getElementById('liConnectionState')?.textContent,
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+  });
+  console.error('USB KIT MODE SYNC DIAGNOSTIC '+JSON.stringify(diagnostic));
+  throw error;
+ }
  check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
  await sim.locator('#tpStop').click();
  await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpMode').value==='acro');
