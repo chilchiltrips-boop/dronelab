@@ -150,5 +150,5 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const unsubscribe=store.subscribe(()=>{applyLatest();onChange()});
  return {start,stop,snapshot,setChoice,tick:applyLatest,dispose:unsubscribe,
   setOwner:()=>false,apply:()=>({accepted:false,reason:'Use read-only input mirror; Run/Stop belongs to WebApp'}),
-  webSticks(left,right){webSticks={left:{...left},right:{...right}}},get owner(){return effective()==='android'?'mobile':'web'}};
+  webSticks(left,right){webSticks={left:{...left},right:{...right}}},get owner(){return ['android','usb'].includes(effective())?'mobile':'web'}};
 }
