@@ -65,9 +65,9 @@
 @media(max-width:540px){.li-monitor-toolbar{align-items:stretch}.li-monitor-toolbar select{flex:1 1 100%}#liSelectionReason{flex:1 1 100%}}
 
 /* Monitor connection options must contrast in dark/OS-native popup menus. */
-.firmware-page .li-monitor-toolbar select{color-scheme:dark!important;background:#071722!important;color:#f1fafb!important;border:1px solid #5c8b9d!important;min-height:44px!important}
-.firmware-page .li-monitor-toolbar select option{background:#071722!important;color:#f1fafb!important}
-.firmware-page .li-monitor-toolbar select:focus-visible{outline:3px solid #71e5c8;outline-offset:2px}
+.li-monitor-toolbar select{color-scheme:dark!important;background:#071722!important;color:#f1fafb!important;border:1px solid #5c8b9d!important;min-height:44px!important}
+.li-monitor-toolbar select option{background:#071722!important;color:#f1fafb!important}
+.li-monitor-toolbar select:focus-visible{outline:3px solid #71e5c8;outline-offset:2px}
 .li-flight-mode-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border:1px solid #36576a;border-radius:10px}
 .li-flight-mode-controls select{background:#071722!important;color:#f1fafb!important;color-scheme:dark;min-height:44px;min-width:100px}
 .li-flight-mode-controls select option{background:#071722;color:#f1fafb}
