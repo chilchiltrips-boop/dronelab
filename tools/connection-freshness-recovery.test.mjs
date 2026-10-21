@@ -8,8 +8,10 @@ test('Live Inputs runs bounded 5–10Hz when visible, not the 2.2-second Kit hea
  assert.match(kit,/\},2200\)/);
  assert.match(live,/const NETWORK_POLL_MS=140, UI_TICK_MS=70/);
  assert.match(live,/!inFlight&&Date\.now\(\)>=nextPollAt/);
- assert.ok(live.includes("nextPollAt=Math.max(at,startedAt+(current.rc?.active===true?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS))"));
- assert.match(live,/if\(!visible\(\)\|\|!kit\.connected/);
+ assert.match(live,/const interval=pidVisible\(\)\?NETWORK_POLL_MS/);
+ assert.match(live,/current\.rc\?\.active===true\?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS/);
+ assert.match(live,/nextPollAt=Math\.max\(at,startedAt\+interval\)/);
+ assert.match(live,/if\(!monitoring\(\)\|\|!kit\.connected/);assert.match(live,/const monitoring=\(\)=>visible\(\)\|\|pidVisible\(\)/);
  assert.match(live,/readFailures=Math\.min\(5,readFailures\+1\)/);
  assert.match(live,/MAX_RETRY_BACKOFF_MS=2400/);
  assert.doesNotMatch(live,/\/api\/rc\/claim|\/api\/rc\/preview/);

@@ -62,3 +62,85 @@ test('receive rate measures a window instead of inflating WebRTC arrival bursts'
  assert.ok(store.snapshot().rateHz>=20&&store.snapshot().rateHz<40);
  store.setPeer({connected:false});assert.equal(store.snapshot().rateHz,null);
 });
+
+const verifiedKit=(seq=1,values={})=>({kit:{connected:true,kitId:'KIT-A2',transport:'ap',bootId:'boot-1'},
+ input:{state:'live',source:'ANDROID',seq,ageMs:12,rateHz:5,
+ values:{throttle:1000,roll:1500,pitch:1500,yaw:1500,...values}}});
+test('verified AP Kit accepted Android RC feeds Auto simulator only after explicit Web Run',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ assert.equal(b.store.acceptKit(verifiedKit(1,{roll:1750})),true);
+ assert.equal(b.input.snapshot().activeSource,'android');
+ assert.equal(b.input.snapshot().input.origin,'kit');
+ assert.equal(b.input.snapshot().previewAxes.roll,.5);
+ assert.equal(b.s.running,false);
+ assert.equal(b.s.cmdRoll,0);
+ assert.equal(b.input.start().accepted,true);
+ b.store.acceptKit(verifiedKit(2,{throttle:1325,roll:1750,pitch:1250,yaw:1650}));
+ assert.equal(b.s.throttle,1325);assert.equal(b.s.cmdRoll,.5);
+ assert.equal(b.s.cmdPitch,-.5);assert.equal(b.s.cmdYaw,.3);
+ advanceSimulator(b.s,.04);assert.ok(b.s.motorRPM.some(n=>n>0));
+ b.input.stop('Web STOP');
+ b.store.acceptKit(verifiedKit(3,{throttle:1700,roll:2000}));
+ assert.equal(b.s.running,false);assert.equal(b.s.throttle,1000);
+ assert.equal(b.s.cmdRoll,0);
+});
+test('Kit input rejects idle, stale, non-Android, unverified, malformed and repeated frames',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ for(const modify of [
+   p=>{p.kit.connected=false},p=>{p.kit.transport='usb'},
+   p=>{p.input.source='WEB'},p=>{p.input.state='stale'},
+   p=>{p.input.ageMs=401},p=>{p.input.values.roll=2001}
+ ]){
+  const packet=verifiedKit();modify(packet);
+  assert.equal(b.store.acceptKit(packet),false);
+  assert.equal(b.store.snapshot().kit.fresh,false);
+ }
+ assert.equal(b.store.acceptKit(verifiedKit(5,{yaw:1300})),true);
+ b.advance(180);assert.equal(b.store.acceptKit(verifiedKit(5,{yaw:1800})),false);
+ b.advance(821);assert.equal(b.store.snapshot().kit.fresh,false);
+ assert.equal(b.input.snapshot().activeSource,'web');
+ assert.equal(b.store.acceptKit(verifiedKit(4)),false);
+ assert.equal(b.store.acceptKit(verifiedKit(6)),true);
+ assert.equal(b.input.snapshot().input.channels.yaw,1500);
+});
+test('Kit source locked during Run; loss and identity handover stop only virtual simulator',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ b.store.acceptKit(verifiedKit());b.input.start();
+ assert.equal(b.input.setChoice('web'),false);
+ b.store.acceptKit(verifiedKit(2,{throttle:1375}));
+ assert.equal(b.s.throttle,1375);
+ const other=verifiedKit(3);other.kit.kitId='OTHER';
+ b.store.acceptKit(other);assert.equal(b.s.running,false);
+ assert.equal(b.s.throttle,1000);assert.equal(b.stops(),1);
+ b.store.acceptKit(verifiedKit(4));assert.equal(b.s.running,false); // never auto resume
+ b.input.start();b.advance(1001);
+ assert.equal(b.s.running,false);assert.equal(b.stops(),2);
+});
+test('WebRTC and Kit mirrors do not silently replace a locked stream',()=>{
+ const b=bench();
+ b.store.acceptKit(verifiedKit());
+ b.input.start();assert.equal(b.input.snapshot().input.origin,'kit');
+ b.store.accept(frame(1,{roll:1999}));
+ assert.equal(b.s.running,true);assert.equal(b.input.snapshot().input.origin,'kit');
+ b.store.acceptKit(verifiedKit(2,{roll:1700}));
+ assert.equal(b.s.cmdRoll,.4);
+ b.input.stop(); // Auto now prefers an approved fresh WebRTC source
+ assert.equal(b.input.snapshot().input.origin,'webrtc');
+ assert.equal(b.input.start().accepted,true);
+ b.store.acceptKit(verifiedKit(3,{throttle:1900}));
+ assert.equal(b.s.running,true);assert.equal(b.s.throttle,1000);
+});
+
+test('Temporary stale Kit monitor UI preserves read-only simulator input for bounded jitter, then stops',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ assert.equal(b.store.acceptKit(verifiedKit(1,{roll:1650})),true);
+ assert.equal(b.input.start().accepted,true);
+ b.advance(460);
+ const delayed=verifiedKit(1);delayed.input.state='stale';
+ assert.equal(b.store.acceptKit(delayed),false);
+ assert.equal(b.s.running,true);assert.equal(b.store.snapshot().kit.fresh,true);
+ b.advance(410);
+ assert.equal(b.s.running,true);
+ b.advance(131);
+ assert.equal(b.s.running,false);assert.equal(b.stops(),1);
+});
