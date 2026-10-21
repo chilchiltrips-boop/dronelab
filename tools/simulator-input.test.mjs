@@ -97,7 +97,7 @@ test('Kit input rejects idle, stale, non-Android, unverified, malformed and repe
  }
  assert.equal(b.store.acceptKit(verifiedKit(5,{yaw:1300})),true);
  b.advance(180);assert.equal(b.store.acceptKit(verifiedKit(5,{yaw:1800})),false);
- b.advance(260);assert.equal(b.store.snapshot().kit.fresh,false);
+ b.advance(821);assert.equal(b.store.snapshot().kit.fresh,false);
  assert.equal(b.input.snapshot().activeSource,'web');
  assert.equal(b.store.acceptKit(verifiedKit(4)),false);
  assert.equal(b.store.acceptKit(verifiedKit(6)),true);
@@ -113,7 +113,7 @@ test('Kit source locked during Run; loss and identity handover stop only virtual
  b.store.acceptKit(other);assert.equal(b.s.running,false);
  assert.equal(b.s.throttle,1000);assert.equal(b.stops(),1);
  b.store.acceptKit(verifiedKit(4));assert.equal(b.s.running,false); // never auto resume
- b.input.start();b.advance(451);
+ b.input.start();b.advance(1001);
  assert.equal(b.s.running,false);assert.equal(b.stops(),2);
 });
 test('WebRTC and Kit mirrors do not silently replace a locked stream',()=>{
@@ -129,4 +129,18 @@ test('WebRTC and Kit mirrors do not silently replace a locked stream',()=>{
  assert.equal(b.input.start().accepted,true);
  b.store.acceptKit(verifiedKit(3,{throttle:1900}));
  assert.equal(b.s.running,true);assert.equal(b.s.throttle,1000);
+});
+
+test('Temporary stale Kit monitor UI preserves read-only simulator input for bounded jitter, then stops',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ assert.equal(b.store.acceptKit(verifiedKit(1,{roll:1650})),true);
+ assert.equal(b.input.start().accepted,true);
+ b.advance(460);
+ const delayed=verifiedKit(1);delayed.input.state='stale';
+ assert.equal(b.store.acceptKit(delayed),false);
+ assert.equal(b.s.running,true);assert.equal(b.store.snapshot().kit.fresh,true);
+ b.advance(410);
+ assert.equal(b.s.running,true);
+ b.advance(131);
+ assert.equal(b.s.running,false);assert.equal(b.stops(),1);
 });
