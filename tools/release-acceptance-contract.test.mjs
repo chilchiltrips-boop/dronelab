@@ -35,7 +35,7 @@ test('manual evidence starts NOT_RUN and strict mode cannot pass without operato
  const commands=JSON.parse(read('package.json')).scripts;
  assert.equal(commands['verify:acceptance:strict'],'node tools/release-acceptance.mjs --strict');
  const productionGate=read('.github/workflows/school-production-physical-gate.yml');
- assert.match(productionGate,/school-production-\\\*/);
+ assert.match(productionGate,/school-production-\*/);
  assert.match(productionGate,/npm run verify:acceptance:strict/);
  const f=structuredClone(e);f.cases[0].status='PASS';
  assert.equal(validateEvidence(f).passed,false,'unsubstantiated PASS rejected');
