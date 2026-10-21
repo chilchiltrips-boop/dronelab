@@ -37,7 +37,7 @@ static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
 static const char* zjRcTransport="NONE";
 // Separately authorized DISARMED diagnostic joystick preview. Never touches
 // RC ownership, motor output, INPUT ARM or the RC watchdog. 500 ms hard TTL.
-static String zjPreviewSession="";
+static String zjPreviewSession="",zjPreviewTransport="NONE";
 static uint32_t zjPreviewSeq=0,zjPreviewAt=0;
 static int zjPreviewT=1000,zjPreviewR=1500,zjPreviewP=1500,zjPreviewY=1500;
 static int zjPreviewCh5=1000,zjPreviewCh6=1000;
@@ -45,7 +45,7 @@ static bool zjPreviewLive(uint32_t at){return zjPreviewSeq>0&&uint32_t(at-zjPrev
 static String zjPreviewState(){
  const uint32_t at=millis();
  if(!zjPreviewLive(at))return "null";
- return String("{\"source\":\"ANDROID\",\"transport\":\"")+String(zjClientTransport())+
+ return String("{\"source\":\"ANDROID\",\"transport\":\"")+zjPreviewTransport+
   "\",\"previewOnly\":true,\"inputArmed\":false,\"seq\":"+String(zjPreviewSeq)+
   ",\"ageMs\":"+String(uint32_t(at-zjPreviewAt))+
   ",\"throttle\":"+String(zjPreviewT)+",\"roll\":"+String(zjPreviewR)+
@@ -148,7 +148,7 @@ static String zjRcState(){
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+",\"preview\":"+zjPreviewState()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.
