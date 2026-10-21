@@ -201,3 +201,70 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
  .tp-compact-heading .tp-title-line{gap:5px 8px}
  .tp-source-state{font-size:10px}
 }
+
+/* PID single-line desktop cockpit: title, live source, simulation actions and Help.
+   Keep the existing controls, IDs and menus; only the header composition changes. */
+.tp-cockpit-row{
+ display:flex;align-items:center;flex-wrap:nowrap;gap:10px;
+ position:relative;z-index:3;min-width:0;
+ padding:7px 10px;margin:0 0 10px;
+ border:1px solid #2e5568;border-radius:16px;
+ background:linear-gradient(165deg,#081a29,#061724);
+}
+.tp-cockpit-row .tp-compact-heading{
+ flex:0 0 auto;align-items:center;min-height:44px;margin:0;padding:0;gap:0;
+}
+.tp-cockpit-row .tp-title-line{flex-wrap:nowrap;gap:6px;white-space:nowrap}
+.tp-cockpit-row .tp-compact-heading h1{
+ flex-wrap:nowrap;gap:7px;font-size:18px;white-space:nowrap;
+}
+.tp-cockpit-row .tp-compact-heading h1 span{font-size:12px}
+.tp-cockpit-row .tp-compact-heading .badge{font-size:9px;padding:5px 7px}
+.tp-cockpit-row .tp-source-state{font-size:10px;padding:6px 8px}
+.tp-cockpit-row .tp-compact-controls{
+ flex:1 1 auto;display:flex;flex-wrap:nowrap;gap:8px;justify-content:flex-end;
+ width:auto;min-width:0;min-height:44px;
+ margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;
+}
+.tp-cockpit-row .tp-compact-controls .tp-command-group{flex-wrap:nowrap;gap:5px}
+.tp-cockpit-row .tp-compact-controls .tp-command-buttons{
+ flex:0 0 auto;order:initial;width:auto;gap:5px;flex-wrap:nowrap;
+}
+.tp-cockpit-row .tp-compact-controls .tp-command-buttons>.action{padding:8px 9px}
+.tp-cockpit-row .tp-compact-controls select{min-height:44px;padding:8px 24px 8px 8px}
+.tp-cockpit-row #tpInputSource{width:112px}
+.tp-cockpit-row #tpMode{width:88px}
+.tp-cockpit-row .tp-help-menu{flex:0 0 auto;margin:0}
+.tp-cockpit-row .tp-menu>summary{min-height:44px}
+.tp-cockpit-row .tp-audio-alert:not([hidden]){
+ position:absolute;top:calc(100% + 4px);right:5px;z-index:50;background:#17212c;
+ max-width:min(370px,calc(100vw - 25px));
+}
+@media(max-width:1320px){
+ .tp-cockpit-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  grid-template-areas:"heading help" "controls controls";
+  gap:5px 8px;
+ }
+ .tp-cockpit-row .tp-compact-heading{grid-area:heading;min-width:0}
+ .tp-cockpit-row .tp-title-line{flex-wrap:wrap;white-space:normal}
+ .tp-cockpit-row .tp-compact-controls{
+  grid-area:controls;flex-wrap:wrap;justify-content:flex-start;
+  min-width:0;gap:6px 10px;
+ }
+ .tp-cockpit-row .tp-compact-controls .tp-command-buttons{flex-wrap:wrap}
+ .tp-cockpit-row .tp-help-menu{grid-area:help;justify-self:end}
+}
+@media(max-width:540px){
+ .tp-cockpit-row{padding:6px 7px;margin-bottom:9px}
+ .tp-cockpit-row .tp-compact-heading h1{font-size:17px}
+ .tp-cockpit-row .tp-compact-controls{gap:6px}
+ .tp-cockpit-row .tp-compact-controls .tp-command-buttons{flex:1 1 100%;width:100%;gap:5px}
+ .tp-cockpit-row .tp-compact-controls .tp-command-buttons>.action{padding:8px 9px}
+}
+@media(max-width:360px){
+ .tp-cockpit-row .tp-title-line{gap:5px}
+ .tp-cockpit-row .tp-compact-heading h1{gap:5px;font-size:16px}
+ .tp-cockpit-row .tp-source-state{font-size:10px}
+ .tp-cockpit-row .tp-compact-controls .tp-command-buttons button{white-space:nowrap;min-width:0}
+}
