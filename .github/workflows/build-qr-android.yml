@@ -98,6 +98,15 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      # The Android bundle embeds firmware-catalog.json. Do not waste signing,
+      # native emulator and publication jobs on a catalog whose APP/FACTORY
+      # binaries or source version are not yet in sync. Exact-SHA release gates
+      # remain mandatory; this check is additional, never a gate bypass.
+      - name: Verify FlightCore catalog and APP/FACTORY before APK packaging
+        run: |
+          set -euo pipefail
+          python3 tools/verify_release.py
+
       - name: Package Flight Training, WebRTC and camera assets
         run: |
           set -euo pipefail
