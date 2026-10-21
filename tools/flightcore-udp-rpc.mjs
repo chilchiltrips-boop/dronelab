@@ -13,7 +13,7 @@ export function privateIPv4(ip){
 }
 const READ=new Set(['health','identify','status','telemetry','rc/snapshot','wifi/scan','wifi/saved','ppm/status']);
 const WRITE=new Set(['auth/challenge','auth/enroll','auth/local','auth/close','rc/claim','rc/release','rc/preview','rc/stop','command',
- 'wifi/test','wifi/mode','wifi/use','wifi/forget','kit/name','kit/name/reset','firmware/begin','firmware/chunk','firmware/end','firmware/abort','reboot']);
+ 'flight/mode','wifi/test','wifi/mode','wifi/use','wifi/forget','kit/name','kit/name/reset','firmware/begin','firmware/chunk','firmware/end','firmware/abort','reboot']);
 export function allowedOperation(method,route){return typeof route==='string'&&route.startsWith('/api/')&&(method==='GET'?READ:method==='POST'?WRITE:new Set()).has(route.slice(5));}
 export function encodeRequest(method,route,form='',headers={}){
  if(!allowedOperation(method,route)||typeof form!=='string'||!headers||Array.isArray(headers)||

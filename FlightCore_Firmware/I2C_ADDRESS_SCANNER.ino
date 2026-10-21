@@ -28,6 +28,7 @@ constexpr unsigned long LED_LEASE_MS=4000;
 struct LedStep {uint8_t brightness;uint16_t duration;};
 enum LedMode:uint8_t {LED_OFF,LED_MANUAL,LED_BLINK,LED_FADE,LED_SAFE,LED_WARNING,LED_SOS,LED_PATTERN};
 LedMode ledMode=LED_OFF;
+bool ledCommandOk=false;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,telLast=0;
 uint16_t telRateHz=20;
@@ -64,7 +65,7 @@ void printFirmwareInfo(){
  Serial.println(",DEDICATED_4_5");
 #endif
 }
-void ledAck(const char* id,const char* status){Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
+void ledAck(const char* id,const char* status){ledCommandOk=!strcmp(status,"OK");Serial.print("ZJLED,ACK,");Serial.print(id);Serial.print(',');Serial.println(status);}
 bool parseNumber(const char* text,long minimum,long maximum,long& result){
  if(!text||!*text)return false;
  char* end=nullptr;const long n=strtol(text,&end,10);
@@ -77,6 +78,7 @@ bool readLong(char*& state,long low,long high,long& result){
 #include "FlightCoreClassroom.h"
 #include "FlightCorePpm.h"
 void ledCommand(char* line){
+ ledCommandOk=false;
  if(strncmp(line,"ZJLED,",6)!=0)return;
  char* state=nullptr;
  char* id=strtok_r(line+6,",",&state);
@@ -398,5 +400,15 @@ void loop(){
  emitTelemetry(now);
  zjNetworkLoop(now);
  zjRcLoop(now);
+ // Versioned extension leaves the legacy ZJTEL record unchanged.
+ static uint32_t lastState=0;
+ if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>128){
+  lastState=millis();
+  Serial.print("ZJSTATE,1,{\"kitId\":\"");Serial.print(zjKitId);
+  Serial.print("\",\"flightModeState\":");Serial.print(zjFlightModeState());
+  Serial.print(",\"ledOn\":");Serial.print(ledMode!=LED_OFF?"true":"false");
+  Serial.print(",\"ledEffect\":");Serial.print(int(ledMode));
+  Serial.print(",\"rc\":");Serial.print(zjRcState());Serial.println('}');
+ }
  // Legacy ZJGYRO duplicates are disabled.
 }

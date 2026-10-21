@@ -34,7 +34,31 @@ static String zjRcLastReleaseReason="NONE";
 static uint32_t zjRcLastReleaseAt=0;
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
+static int zjRcCh5=1000,zjRcCh6=1000;
 static const char* zjRcTransport="NONE";
+static String zjSavedFlightMode="angle";
+static bool zjFlightModePending=false;
+static void zjApplyPendingFlightMode(){
+ if(!zjRcInputArmed){zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;}
+}
+static void zjLoadFlightMode(Preferences& prefs){
+ zjSavedFlightMode=prefs.getString("flightMode","angle");
+ if(zjSavedFlightMode!="angle"&&zjSavedFlightMode!="acro")zjSavedFlightMode="angle";
+ zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;
+}
+static bool zjSaveFlightMode(Preferences& prefs,const String& next){
+ if(next!="angle"&&next!="acro")return false;
+ if(next!=zjSavedFlightMode){
+  if(prefs.putString("flightMode",next)!=next.length()||prefs.getString("flightMode","")!=next)return false;
+  zjSavedFlightMode=next;
+ }
+ zjFlightModePending=zjSavedFlightMode!=zjFlightMode;
+ zjApplyPendingFlightMode();return true;
+}
+static String zjFlightModeState(){
+ return String("{\"supported\":true,\"stabilizationSupported\":false,\"saved\":\"")+zjSavedFlightMode+
+  "\",\"active\":\""+zjFlightMode+"\",\"pending\":"+(zjFlightModePending?String("\"")+zjSavedFlightMode+"\"":String("null"))+"}";
+}
 
 static void zjKitInfo(){
  Serial.print("ZJKIT,ID,");Serial.println(zjKitId);
@@ -71,6 +95,7 @@ static String zjRcNewSession(){
 }
 static void zjRcNeutral(){
  zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
+ zjRcCh5=zjRcCh6=1000;zjApplyPendingFlightMode();
 }
 static void zjRcRelease(const char* reason){
  const bool had=zjRcOwned;
@@ -90,7 +115,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if(Serial.availableForWrite()>75){Serial.print("ZJRC,CLAIM,");Serial.print(transport);Serial.print(',');Serial.println(source);}
  return true;
 }
-static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false){
+static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false,int ch5=1000,int ch6=1000){
  const uint32_t now=millis();
  // A late packet must never re-arm a timed-out input session. The user must
  // press ARM again, which obtains a fresh ownership token at low throttle.
@@ -99,10 +124,11 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
     (network&&(session!=zjRcSession||ip!=zjRcOwnerIP))||
     seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
     t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000||
-    (inputArmed&&!zjRcInputArmed&&t>1050)){
+    ch5<1000||ch5>2000||ch6<1000||ch6>2000||(inputArmed&&!zjRcInputArmed&&t>1050)){
   ++zjRcRejected;return false;
  }
  zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
+ zjRcCh5=ch5;zjRcCh6=ch6;zjApplyPendingFlightMode();
  zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
  // RAW mode logs separate RC packets for legacy tools; COMBINED includes RC in ZJTEL.
  // Maximum 10 RAW diagnostic frames/s; sensors and Wi-Fi service take priority.
@@ -126,7 +152,7 @@ static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
  return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
-  ",\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
+  ",\"flightModeState\":"+zjFlightModeState()+",\"ch5\":"+String(zjRcCh5)+",\"ch6\":"+String(zjRcCh6)+",\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
@@ -272,12 +298,14 @@ static bool zjRcSerialCommand(char* line){
   char* tText=strtok_r(nullptr,",",&s),*rText=strtok_r(nullptr,",",&s);
   char* pText=strtok_r(nullptr,",",&s),*yText=strtok_r(nullptr,",",&s);
   char* source=strtok_r(nullptr,",",&s);
-  long seq=0,t=0,r=0,p=0,y=0;
+  char* ch5Text=strtok_r(nullptr,",",&s),*ch6Text=strtok_r(nullptr,",",&s);
+  long seq=0,t=0,r=0,p=0,y=0,ch5=1000,ch6=1000;
   if(!seqText||!source||strtok_r(nullptr,",",&s)||
      !parseNumber(seqText,1,2147483647L,seq)||!parseNumber(tText,1000,2000,t)||
      !parseNumber(rText,1000,2000,r)||!parseNumber(pText,1000,2000,p)||
-     !parseNumber(yText,1000,2000,y)||
-     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),source,"",false,IPAddress()))
+     !parseNumber(yText,1000,2000,y)||(ch5Text&&!parseNumber(ch5Text,1000,2000,ch5))||
+     (ch6Text&&!parseNumber(ch6Text,1000,2000,ch6))||bool(ch5Text)!=bool(ch6Text)||
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),source,"",false,IPAddress(),false,int(ch5),int(ch6)))
    Serial.println("ZJRC,ERR,FRAME_REJECTED");
   return true;
  }
