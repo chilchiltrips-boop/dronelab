@@ -85,11 +85,13 @@ try{
  await page.locator('#tpResetIntegrators').click();
  if(!(await text('tpStatus')).includes('INTEGRATORS RESET'))throw Error('PID reset failed');
  await page.locator('#tpCameraView').selectOption('follow');
+ await page.locator('.tp-sound-menu > summary').click();
  await page.locator('#tpSoundPreset').selectOption('quiet');
  await page.locator('#tpSound').click();
  if(await page.locator('#tpSound').getAttribute('aria-pressed')!=='false')throw Error('Mute failed');
  await page.locator('#tpSound').click();
  if(await page.locator('#tpSound').getAttribute('aria-pressed')!=='true')throw Error('Unmute failed');
+ await page.locator('.tp-sound-menu > summary').click();
  await page.locator('#tpMode').selectOption('acro');
  if(!(await page.locator('#tpAnglePidSection').isHidden()))throw Error('ACRO must hide outer Angle PID');
  await page.locator('[data-pid-bank="ratePitch"] [data-gain="p"]').fill('1.3');
@@ -97,7 +99,8 @@ try{
  await page.locator('#tpMode').selectOption('angle');
  if(await page.locator('#tpAnglePidSection').isHidden())throw Error('ANGLE outer PID missing');
  if(Number(await page.locator('[data-pid-bank="ratePitch"] [data-gain="p"]').inputValue())!==1.3)throw Error('Rate PID must be shared across modes');
- await page.locator('#tpPidLoop').selectOption('angle');await page.locator('#tpCalibrate').click();
+ await page.locator('#tpPidLoop').selectOption('angle');await page.locator('.tp-tools-menu > summary').click();await page.locator('#tpCalibrate').click();
+ await page.locator('.tp-tools-menu > summary').click();
  await page.locator('#tpWind').fill('20');await page.locator('#tpWind').dispatchEvent('input');
  if(await text('tpWindOut')!=='20%')throw Error('Environment slider failed');
  await page.locator('#tpStop').click();

@@ -27,6 +27,7 @@ try{
  await page.locator('#topPairMobileBtn').click();await page.locator('#connectionStop').click();await page.locator('#connectionClose').click();
  await wait(()=>!window.ZebjusTraining.snapshot().armed&&window.ZebjusTraining.diagnostics().audio.voices===0&&window.ZebjusTraining.diagnostics().scene.wash.every(v=>v===0));
  await page.waitForTimeout(220);const stopped=await diagnostics();
+ await page.locator('.tp-sound-menu > summary').click();
  await page.locator('#tpVolume').fill('30');await page.locator('#tpVolume').dispatchEvent('input');await page.locator('#tpSound').click();
  await page.reload();await wait(()=>window.ZebjusTraining);const persisted=await diagnostics();
  if(persisted.audio.enabled||persisted.audio.volume!==.3||persisted.audio.voices!==0)throw Error('Mute/volume persistence failed');
