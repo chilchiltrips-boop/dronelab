@@ -31,6 +31,12 @@ test('manual evidence starts NOT_RUN and strict mode cannot pass without operato
  assert.ok(e.cases.every(x=>x.status==='NOT_RUN'));
  assert.deepEqual(validateEvidence(e).totals,{PASS:0,FAIL:0,NOT_RUN:requiredIds.length});
  assert.equal(validateEvidence(e,{strict:true}).passed,false);
+ // Production tagging must fail closed on this still-unwitnessed evidence set.
+ const commands=JSON.parse(read('package.json')).scripts;
+ assert.equal(commands['verify:acceptance:strict'],'node tools/release-acceptance.mjs --strict');
+ const productionGate=read('.github/workflows/school-production-physical-gate.yml');
+ assert.match(productionGate,/school-production-\\\*/);
+ assert.match(productionGate,/npm run verify:acceptance:strict/);
  const f=structuredClone(e);f.cases[0].status='PASS';
  assert.equal(validateEvidence(f).passed,false,'unsubstantiated PASS rejected');
 });
