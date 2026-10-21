@@ -21,7 +21,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const name=connected?String(kit.kitName||'Kit').slice(0,48):'No kit connected';
  const base={kitName:name,transport:connected?transport:'—',source:'NONE',state:'offline',
   inputTransport:'—',seq:null,values:null,ppmChannels:null,ageMs:null,rateHz:null,accepted:null,rejected:null,
-  inputArm:'NOT REPORTED',led:'NOT REPORTED',motors:'NOT REPORTED'};
+  inputArm:'NOT REPORTED',flightMode:null,led:'NOT REPORTED',motors:'NOT REPORTED'};
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:network&&typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
@@ -51,7 +51,9 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   ageMs:Math.round(ageMs),rateHz:recent&&Number.isFinite(sample.rateHz)?sample.rateHz:null,
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
-  inputArm:stale?'STALE':armed?'ARMED':'DISARMED',
+  inputArm:stale?'STALE':typeof rc.inputArmed!=='boolean'?'NOT REPORTED':armed?'ARMED':'DISARMED',
+   flightMode:['angle','acro'].includes(rc.flightMode)?rc.flightMode:
+    ['angle','acro'].includes(kit.flightMode)?kit.flightMode:null,
   led:network&&typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
   motors:sample.motorsOff===true?'DISABLED':m.motors
  };
@@ -143,6 +145,7 @@ function initLiveInputs(){
   write('liRate',v.rateHz===null?'— Hz':v.rateHz.toFixed(1)+' Hz');
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
+  write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
   $('liInputArm').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':'unknown';
   write('liLed',v.led);
   write('liMotors',v.motors);
