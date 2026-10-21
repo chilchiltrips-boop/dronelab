@@ -42,3 +42,16 @@ test('production web version stamping derives release version from package metad
  const workflow=read('.github/workflows/version-stamp.yml');
  assert.match(workflow,/Path\('package.json'\)/);assert.doesNotMatch(workflow,/meta\['version'\]='1\.4\.4/);
 });
+
+test('API30 SDK mirror retry verifies a real image and retains mandatory signed native instrumentation',()=>{
+ const yaml=read('.github/workflows/build-qr-android.yml');
+ assert.match(yaml,/Install and verify Android 11 system image \(retry corrupt downloads\)/);
+ assert.match(yaml,/for attempt in 1 2 3/);
+ assert.match(yaml,/test -s "\$folder\/system\.img"/);
+ assert.match(yaml,/test -s "\$folder\/package\.xml"/);
+ assert.match(yaml,/Android 11 system image could not be verified; block APK publication/);
+ assert.match(yaml,/adb shell am instrument -w -r -e legacyReaderOnly true/);
+ assert.match(yaml,/grep -F 'PASS API30 network response compatibility'/);
+ assert.match(yaml,/grep -F 'INSTRUMENTATION_CODE: -1'/);
+ assert.match(yaml,/needs: \[android, native_touch, legacy_api30\]/);
+});
