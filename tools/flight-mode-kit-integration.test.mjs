@@ -60,7 +60,7 @@ test('USB Kit source uses verified passive serial input without sending simulato
  const mirror=read('js/simulator-input.js'),live=read('js/live-inputs.js'),
   page=read('js/tripod-page.js'),html=read('tripod.html');
  assert.match(html,/<option value="usb">USB Kit<\/option>/);
- assert.match(mirror,/\['ap','sta','usb'\]\.includes\(transport\)/);
+ assert.match(mirror,/\['ap','sta','usb','android-relay'\]\.includes\(transport\)/);
  assert.match(mirror,/observeKitStatus/);
  assert.match(live,/simInputs\.acceptKit/);
  assert.match(live,/simInputs\.observeKitStatus/);
