@@ -73,3 +73,8 @@
 .li-flight-mode-controls select option{background:#071722;color:#f1fafb}
 .li-flight-mode-controls button{min-height:44px}
 .li-flight-mode-controls [role=status]{font-size:12px;overflow-wrap:anywhere;color:#b3dfd5}
+
+.li-arm-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid #517387;background:#102534;color:#cce4ef;font-size:11px;font-weight:800;padding:7px 10px;white-space:nowrap}
+.li-arm-pill[data-state=armed]{border-color:#b78c42;color:#ffdc96;background:#332813}
+.li-arm-pill[data-state=off]{border-color:#347c65;color:#b4f2d6;background:#102b24}
+.li-arm-pill[data-state=stale]{border-color:#986c4a;color:#ffcfb0}
