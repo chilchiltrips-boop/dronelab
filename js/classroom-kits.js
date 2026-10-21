@@ -581,7 +581,7 @@ async function readStatus(){
  if(state.transport==='usb'){
   const expected=state.kitId,ticket=reconnectTicket;
   const response=waitSerial(/^ZJKIT,ID,/,3200);response.catch(()=>{});
-  await usbWrite('ZJKIT,GET');await usbWrite('ZJINFO,GET');
+  await usbWrite('ZJKIT,GET');await usbWrite('ZJINFO,GET');await usbWrite('ZJFLIGHT,GET');
   const identity=await response;
   if(ticket!==reconnectTicket||identity.slice(9).trim()!==expected)throw Error('USB identity changed during refresh');
   state.heartbeatAt=Date.now();state.linkState='connected';render();return state.usbInfo;
