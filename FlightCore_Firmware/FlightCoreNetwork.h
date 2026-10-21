@@ -331,6 +331,46 @@ static void zjSetupHttp(){
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
  });
  zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ // Strictly diagnostic: never touches motor outputs, RC claim or watchdog.
+ zjHttp.on("/api/rc/observe",HTTP_POST,[](){
+  if(!zjAllow())return;
+  if(zjRequestSession<0||(!zjAuthAdmin&&zjSessions[zjRequestSession].localSta)){
+   zjReply(403,"{\"error\":\"preview_requires_authorized_controller\"}");return;
+  }
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){
+   zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;
+  }
+  if(zjArg("source")!="ANDROID"||zjArg("armed")!="false"||zjArg("inputArmed")!="false"){
+   zjReply(403,"{\"error\":\"disarmed_preview_only\"}");return;
+  }
+  long seq=0,t=0,r=0,p=0,y=0,ch5=0,ch6=0;
+  if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||
+   !parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
+   !parseNumber(zjArg("roll").c_str(),1000,2000,r)||
+   !parseNumber(zjArg("pitch").c_str(),1000,2000,p)||
+   !parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
+   !parseNumber(zjArg("ch5").c_str(),1000,2000,ch5)||
+   !parseNumber(zjArg("ch6").c_str(),1000,2000,ch6)){
+   zjReply(400,"{\"error\":\"invalid_preview_values\"}");return;
+  }
+  const String session=zjSessions[zjRequestSession].id;
+  const uint32_t at=millis();
+  if(zjPreviewSession==session&&(uint32_t(seq)<=zjPreviewSeq||
+      uint32_t(at-zjPreviewAt)<100)){
+   zjReply(429,"{\"error\":\"preview_replay_or_rate_limit\"}");return;
+  }
+  zjPreviewSession=session;zjPreviewAt=at;zjPreviewSeq=uint32_t(seq);
+  zjPreviewTransport=zjClientTransport();
+  zjPreviewT=int(t);zjPreviewR=int(r);zjPreviewP=int(p);zjPreviewY=int(y);
+  zjPreviewCh5=int(ch5);zjPreviewCh6=int(ch6);
+  if(Serial.availableForWrite()>132){
+   Serial.printf("ZJRC,PREVIEW,%s,ANDROID,%lu,T=%d,R=%d,P=%d,Y=%d,CH5=%d,CH6=%d,ARM=0\n",
+    zjPreviewTransport.c_str(),(unsigned long)zjPreviewSeq,zjPreviewT,zjPreviewR,zjPreviewP,zjPreviewY,zjPreviewCh5,zjPreviewCh6);
+  }
+  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+
+    ",\"received\":true,\"previewOnly\":true,\"seq\":"+String(zjPreviewSeq)+
+    ",\"inputArmed\":false,\"motorsArmed\":false}");
+ });
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
  zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 
