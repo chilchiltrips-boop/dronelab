@@ -123,7 +123,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  }
  function start(){
   if(s.running)return {accepted:true};
-  const selected=effective(),v=store.snapshot(),frame=androidFrame(v);
+  const selected=effective(),v=store.snapshot(),frame=androidFrame(v,selected==='usb'?'usb':selected==='android'?(v.fresh?'webrtc':'kit'):'auto');
   if(['android','usb'].includes(selected)&&(!frame||selected==='usb'&&frame.transport!=='usb'||selected==='android'&&frame.transport==='usb')){reason=v.peer.approved&&!v.peer.supported?'Android app update required or connect a verified AP Kit':'Waiting for fresh Android AP / paired input';return {accepted:false,reason};}
   const throttle=['android','usb'].includes(selected)?frame.channels.throttle:s.throttle;
   if(throttle>1025){reason='LOWER THROTTLE TO 1000 µs';return {accepted:false,reason};}
@@ -132,7 +132,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  }
  function snapshot(){
   const v=store.snapshot(),source=effective(),remote=source==='android'||source==='usb',
-   frame=remote?androidFrame(v,lockedOrigin||'auto'):null,
+   frame=remote?androidFrame(v,lockedOrigin||(source==='usb'?'usb':source==='android'?(v.fresh?'webrtc':'kit'):'auto')):null,
    c=frame?frame.channels:neutral(),a=axesOf(c),p=getSnapshot(s);
   const throttleY=1-2*(c.throttle-1000)/1000;
    const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
