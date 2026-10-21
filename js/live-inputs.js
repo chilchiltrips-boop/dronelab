@@ -87,7 +87,7 @@ function initLiveInputs(){
  const card=document.getElementById('fwLiveInputs');
  if(!card||!window.ZebjusKits)return;
  const $=id=>document.getElementById(id);
- let monitorChoice='auto',selectionReason='';
+ let monitorChoice='auto',selectionReason='',pendingMode=null,modeSaving=false;
  const getKit=()=>{
   const kit=window.ZebjusKits?.getState?.()||{connected:false};
   const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
@@ -146,6 +146,12 @@ function initLiveInputs(){
   write('liCounts',String(v.accepted??'—')+' / '+String(v.rejected??'—'));
   write('liInputArm',v.inputArm);
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
+  const modeChoice=$('liModeChoice'),saveMode=$('liSaveMode');
+  if(modeChoice&&!pendingMode&&!modeSaving&&v.flightMode)modeChoice.value=v.flightMode;
+  if(saveMode)saveMode.disabled=!kit.connected||kit.transport==='usb'||modeSaving;
+  if(!kit.connected&&$('liModeSaveStatus')&&!pendingMode)$('liModeSaveStatus').textContent='Connect verified AP/STA Kit to save mode';
+  if(kit.transport==='usb'&&!pendingMode&&$('liModeSaveStatus'))$('liModeSaveStatus').textContent='USB mode save not available in firmware 1.5.9 • use verified AP/STA';
+
   $('liInputArm').dataset.state=v.inputArm==='ARMED'?'armed':v.inputArm==='DISARMED'?'off':'unknown';
   write('liLed',v.led);
   write('liMotors',v.motors);
@@ -259,9 +265,45 @@ function initLiveInputs(){
   ++requestGeneration;nextPollAt=0;readFailures=0;rate.reset();display();
  });
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
+ async function savePendingMode(){
+  if(!pendingMode||modeSaving)return;
+  const kit=window.ZebjusKits.getState();
+  if(!kit.connected||kit.kitId!==pendingMode.kitId){
+   pendingMode=null;write('liModeSaveStatus','Save cancelled • Kit disconnected/identity changed');return;
+  }
+  if(kit.transport==='usb'){
+   pendingMode=null;write('liModeSaveStatus','USB write not supported on installed firmware • select verified AP/STA');return;
+  }
+  if(kit.owner||kit.rc?.inputArmed===true)return;
+  modeSaving=true;const target=pendingMode;
+  write('liModeSaveStatus','Saving '+target.mode.toUpperCase()+' on verified Kit…');
+  try{
+   await window.ZebjusKits.saveFlightMode(target.mode);
+   if(pendingMode===target)pendingMode=null;
+   write('liModeSaveStatus','KIT SAVED • '+target.mode.toUpperCase()+' • MOTORS OFF');
+  }catch(error){
+   const reason=String(error?.message||error);
+   if(/disarm|release|owned|busy|controller|423|409/i.test(reason)){
+    write('liModeSaveStatus','PENDING DISARM / RELEASE • '+target.mode.toUpperCase());
+   }else{
+    pendingMode=null;write('liModeSaveStatus','NOT SAVED • '+reason);
+   }
+  }finally{modeSaving=false;display()}
+ }
+ $('liSaveMode')?.addEventListener('click',()=>{
+  const kit=window.ZebjusKits.getState(),chosen=$('liModeChoice')?.value;
+  if(!kit.connected||!kit.kitId||!['angle','acro'].includes(chosen)){
+   write('liModeSaveStatus','Verify Kit and select Angle or Acro');return;
+  }
+  pendingMode={kitId:kit.kitId,mode:chosen};
+  write('liModeSaveStatus',kit.owner||kit.rc?.inputArmed===true?
+   'PENDING DISARM / RELEASE • '+chosen.toUpperCase():
+   'SAVING • '+chosen.toUpperCase());
+  void savePendingMode();
+ });
  $('liMonitorSelect')?.addEventListener('change',e=>{monitorChoice=e.target.value;wipe();display();});
  window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
- function tick(){display();if(monitoring()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
+ function tick(){display();if(pendingMode&&!modeSaving)void savePendingMode();if(monitoring()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
  setInterval(tick,UI_TICK_MS);
 }
