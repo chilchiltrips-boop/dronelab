@@ -93,7 +93,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  let choice='auto',locked=null,lockedOrigin='',identity='',reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
-  if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
+  if((origin==='auto'||origin==='android'||origin==='webrtc')&&v.fresh&&v.sample)
    return {...v.sample,origin:'webrtc',ageMs:v.ageMs,rateHz:v.rateHz};
   if(v.kit?.fresh&&v.kit.sample){
    const k=v.kit.sample,isUsb=k.transport==='usb';
