@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.8.13-flight-mode
-VersionCode: 51
+Version: 1.8.14-authoritative-status
+VersionCode: 52
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: 57e41bddffa5b4d70de6988cf0c9fb183d6da6aa
+Source commit: 3deb99ad128b9b2340764fdf75b578690a04c8fe
