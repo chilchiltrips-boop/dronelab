@@ -203,3 +203,20 @@ test('USB input requires a verified Kit, monotonic sequence, valid pulses and a 
  assert.equal(b.s.running,false);
  assert.equal(b.stops(),1);
 });
+
+test('Verified Android Relay Kit telemetry remains read-only, unverified relay rejected',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const kit={kitId:'ZFC-A2-RELAY',connected:true,transport:'android-relay',bootId:'relay-boot'};
+ const input={state:'live',source:'ANDROID',seq:71,ageMs:15,rateHz:15,inputArm:'DISARMED',flightMode:'angle',
+  values:{throttle:1000,roll:1600,pitch:1550,yaw:1450}};
+ b.store.observeKitStatus(kit,input);
+ assert.equal(b.store.acceptKit({kit,input}),true);
+ assert.equal(b.input.snapshot().activeSource,'android');
+ assert.equal(b.input.snapshot().input.transport,'android-relay');
+ assert.equal(b.s.running,false);
+ b.input.start();
+ assert.equal(b.s.running,true);
+ b.store.clearKit();assert.equal(b.s.running,false);
+ assert.equal(b.store.acceptKit({kit:{...kit,connected:false},input}),false);
+ assert.equal(b.store.snapshot().kit.fresh,false);
+});
