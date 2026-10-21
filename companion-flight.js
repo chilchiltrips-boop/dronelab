@@ -203,7 +203,7 @@ function sendMirror(){
  const input=physical?diagnosticInput():{throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}};
  const kit=window.ZebjusNetwork?.identity?.();
  peer.sendInputMirror?.({mirrorVersion:1,sessionId:status.sessionId,seq:++mirrorSeq,
-  channels:F.pulseChannels(input),inputAgeMs:0,kitId:kit?.connected?kit.kitId:'',
+  channels:F.pulseChannels(input),aux:{ch5:Number($('flightCh5')?.value||1000),ch6:Number($('flightCh6')?.value||1000)},inputAgeMs:0,kitId:kit?.connected?kit.kitId:'',
   transport:kit?.connected?kit.transport:'preview',kind:physical?'android-command':'android-preview'});
 }
 function connect(p){

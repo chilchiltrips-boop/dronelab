@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
-import {createInputStore,createSimulatorInput} from '../js/simulator-input.js';
+import {createInputStore,createSimulatorInput,validMirrorFrame} from '../js/simulator-input.js';
 import {createSimulator} from '../js/tripod-physics.js';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const context={};vm.runInNewContext(read('js/serial-rc-decoder.js'),context);
@@ -53,4 +53,12 @@ test('idle verified Kit mode remains available with WebApp input independently o
 });
 test('native Android explicitly admits the authenticated flight-mode route',()=>{
  assert.match(read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java'),/route.equals\("\/api\/flight\/mode"\)/);
+});
+
+test('paired Android auxiliary channels stay optional and are strictly validated',()=>{
+ const m={mirrorVersion:1,sessionId:'paired-session-0123',seq:1,transport:'preview',kind:'android-preview',kitId:'',inputAgeMs:0,
+  channels:{throttle:1000,roll:1500,pitch:1500,yaw:1500},aux:{ch5:1725,ch6:1280}};
+ assert.equal(validMirrorFrame(m),true);assert.equal(validMirrorFrame({...m,aux:{ch5:2001,ch6:1280}}),false);
+ const store=createInputStore();store.setPeer({connected:true,approved:true,supported:true,sessionId:m.sessionId});store.accept(m);
+ m.aux.ch5=2000;assert.equal(store.snapshot().sample.aux.ch5,1725);
 });

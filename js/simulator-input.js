@@ -15,6 +15,7 @@ export function validMirrorFrame(m){
   Number.isSafeInteger(m.seq)&&m.seq>0&&['ap','sta','preview'].includes(m.transport)&&
   ['android-command','android-preview'].includes(m.kind)&&typeof m.kitId==='string'&&m.kitId.length<=80&&
   Number.isFinite(m.inputAgeMs)&&m.inputAgeMs>=0&&m.inputAgeMs<=250&&
+  (!m.aux||Object.keys(m.aux).length===2&&['ch5','ch6'].every(k=>validPulse(m.aux[k])))&&
   !!m.channels&&Object.keys(m.channels).length===4&&Object.values(m.channels).every(validPulse)&&
   ['throttle','roll','pitch','yaw'].every(k=>validPulse(m.channels[k]));
 }
@@ -41,7 +42,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   if(arrivals.length>128)arrivals.splice(0,arrivals.length-128);
   const span=at-arrivals[0];rateHz=span>=250?1000*(arrivals.length-1)/span:null;
   lastSeq=m.seq;receivedAt=at;
-  sample={...m,channels:{...m.channels}};notify();return true;
+  sample={...m,aux:m.aux?{...m.aux}:undefined,channels:{...m.channels}};notify();return true;
  }
  function clearKit(){
   kitMode=null;
@@ -80,7 +81,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
  function snapshot(){
   const ageMs=sample?Math.max(0,now()-receivedAt)+sample.inputAgeMs:null;
   const kitAgeMs=kitSample?Math.max(0,now()-kitReceivedAt)+kitSample.inputAgeMs:null;
-  return {mode:kitMode?{...kitMode}:null,peer:{...peer},sample:sample?{...sample,channels:{...sample.channels}}:null,ageMs,rateHz,rejected,
+  return {mode:kitMode?{...kitMode}:null,peer:{...peer},sample:sample?{...sample,aux:sample.aux?{...sample.aux}:undefined,channels:{...sample.channels}}:null,ageMs,rateHz,rejected,
    fresh:!!sample&&peer.connected&&peer.approved&&peer.supported&&ageMs<=INPUT_MAX_AGE_MS,
    kit:{sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
     ageMs:kitAgeMs,rateHz:kitRateHz,fresh:!!kitSample&&kitAgeMs<=KIT_MIRROR_MAX_AGE_MS}};
