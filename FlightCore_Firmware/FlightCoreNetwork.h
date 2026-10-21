@@ -38,7 +38,7 @@ static uint32_t zjRpcMaxLoopUs=0,zjRpcMaxDispatchUs=0;
 static String zjJson(const String& src){
  String out="\"";for(size_t i=0;i<src.length()&&i<128;i++){const char c=src[i];
  if(c=='\"'||c=='\\'){out+='\\';out+=c;}
- else if(c=='\n')out+="\\n";else if(c=='\r')out+="\\r";
+ else if(c=='\n')out+="\n";else if(c=='\r')out+="\\r";
  else if(uint8_t(c)>=32)out+=c;
  }return out+"\"";
 }
@@ -486,7 +486,7 @@ static void zjNetUsbStatus(){
 static bool zjNetSerialCommand(char* line){
  if(!strcmp(line,"ZJFLIGHT,GET")||!strncmp(line,"ZJFLIGHT,SET,",13)){
   if(!strcmp(line,"ZJFLIGHT,GET")){
-   Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\\n",zjKitId.c_str(),
+   Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\n",zjKitId.c_str(),
     zjFlightMode.c_str(),zjRequestedFlightMode.c_str(),
     zjPendingFlightMode.isEmpty()?"NONE":zjPendingFlightMode.c_str(),
     (unsigned long)zjFlightModeRevision);
@@ -510,7 +510,7 @@ static bool zjNetSerialCommand(char* line){
   else if(zjRcInputArmed)zjPendingFlightMode=next;
   else {zjFlightMode=next;zjPendingFlightMode="";}
   if(changed||oldPending!=zjPendingFlightMode||oldActive!=zjFlightMode)++zjFlightModeRevision;
-  Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\\n",zjKitId.c_str(),
+  Serial.printf("ZJFLIGHT,STATE,%s,%s,%s,%s,%lu\n",zjKitId.c_str(),
    zjFlightMode.c_str(),zjRequestedFlightMode.c_str(),
    zjPendingFlightMode.isEmpty()?"NONE":zjPendingFlightMode.c_str(),
    (unsigned long)zjFlightModeRevision);
