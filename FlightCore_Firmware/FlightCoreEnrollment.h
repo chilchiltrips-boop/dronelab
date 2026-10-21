@@ -44,7 +44,7 @@ static bool zjLocalDiagnosticRoute(){
    (ap&&(path=="/api/wifi/scan"||path=="/api/wifi/saved"));
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/command"||path=="/api/rc/claim"||path=="/api/rc/preview"||
-   path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/auth/close")||
+   path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/flight/mode"||path=="/api/auth/close")||
    (path=="/api/wifi/test"||path=="/api/wifi/mode"||path=="/api/wifi/use"||path=="/api/wifi/forget"||path=="/api/kit/name"||path=="/api/kit/name/reset");
 }
 static bool zjSessionAuthenticated(){
