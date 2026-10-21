@@ -45,3 +45,25 @@ test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1
  assert.match(index,/id="liFlightMode"/);
  assert.doesNotMatch(page,/\/api\/flight\/mode|\/api\/rc\/preview/);
 });
+
+test('WebApp save is explicit, authenticated, identity-checked; dark monitor selector shows choices',()=>{
+ const html=read('index.html'),lab=read('lab.html'),live=read('js/live-inputs.js'),css=read('live-inputs.css');
+ assert.equal(html,lab);
+ for(const id of ['liMonitorSelect','liSetFlightMode','liSaveFlightMode','liModeSaveStatus'])assert.ok(html.includes('id="'+id+'"'),id);
+ assert.match(live,/ZebjusKits\.request\('\/api\/flight\/mode','POST',\{flightMode:desired\}\)/);
+ assert.match(live,/reply\?\.kitId!==id/);
+ assert.match(live,/reply\.motorsArmed!==false/);
+ assert.match(css,/li-monitor-toolbar select option/);
+ assert.match(css,/color-scheme:dark/);
+});
+test('USB Kit source uses verified passive serial input without sending simulator commands to hardware',()=>{
+ const mirror=read('js/simulator-input.js'),live=read('js/live-inputs.js'),
+  page=read('js/tripod-page.js'),html=read('tripod.html');
+ assert.match(html,/<option value="usb">USB Kit<\/option>/);
+ assert.match(mirror,/\['ap','sta','usb'\]\.includes\(transport\)/);
+ assert.match(mirror,/observeKitStatus/);
+ assert.match(live,/simInputs\.acceptKit/);
+ assert.match(live,/simInputs\.observeKitStatus/);
+ assert.match(page,/state\.kitStatus\.flightMode/);
+ assert.doesNotMatch(page,/\/api\/rc\/preview|\/api\/flight\/mode/);
+});
