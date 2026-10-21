@@ -28,7 +28,7 @@ function scheduleReceiverUi(){
 }
 const receiver=createSimulatorInput(s,sharedInputStore(),{onChange:scheduleReceiverUi,onTimeout:()=>{audioStop();setStatus('ANDROID INPUT LOST • PRESS RUN TO RESUME')}});
 const localInput=()=>receiver.owner==='web';
-let lastMode=s.mode,lastRunning=false,audioUnlocked=false;
+let lastMode=s.mode,lastRunning=false,audioUnlocked=false,lastKitModeSeen='';
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
 const makeMat=(color,metalness=.2,roughness=.5)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
 const COLORS={dark:makeMat('#111f2c',.65,.34),silver:makeMat('#7897a5',.76,.35),red:makeMat('#ee514f',.28,.5),white:makeMat('#e4edf1',.23,.48),green:makeMat('#23d9b1',.2,.42),black:makeMat('#101921',.2,.7),copper:makeMat('#be8f51',.65,.32)};
@@ -212,10 +212,24 @@ function start(){
 }
 function toggleRun(){s.running?stop():start()}
 function syncActions(){
- const remote=!localInput(),state=receiver.snapshot();$('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
+ const remote=!localInput(),state=receiver.snapshot();
+ const modeSignal=state.input?.origin==='kit'&&state.input.fresh&&
+  ['angle','acro'].includes(state.input.flightMode)?
+  state.input.kitId+'|'+state.input.flightMode:'';
+ // Follow a freshly verified Kit mode before Run only; never alter a running
+ // simulator PID loop, and never send mode changes back to FlightCore.
+ if(modeSignal&&modeSignal!==lastKitModeSeen&&!s.running){
+  setFlightMode(s,state.input.flightMode);lastKitModeSeen=modeSignal;
+ }else if(!modeSignal)lastKitModeSeen='';
+ $('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
  $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
- $('tpControlSource').textContent=remote?'ANDROID '+(state.input.fresh?'LIVE':'STALE')+' • #'+state.seq:s.running?'WEB INPUT • VIRTUAL ARMED':'WEB INPUT PREVIEW';
+ const sourceText=remote?'ANDROID '+(state.input?.transport?.toUpperCase()||'AP')+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
+ if($('tpControlSource').textContent!==sourceText)$('tpControlSource').textContent=sourceText;
+ const kitMode=remote&&state.input?.flightMode?'KIT '+state.input.flightMode.toUpperCase():'KIT MODE —';
+ if($('tpKitMode').textContent!==kitMode)$('tpKitMode').textContent=kitMode;
+ const inputArm=remote&&state.input?.origin==='kit'?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT —';
+ if($('tpInputArm').textContent!==inputArm)$('tpInputArm').textContent=inputArm;
  const input=state.input;
  $('tpSourceState').textContent=remote?'Android '+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
  $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.paired&&!input.supported?'Android app update required':'Waiting for verified AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';

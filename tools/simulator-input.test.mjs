@@ -144,3 +144,19 @@ test('Temporary stale Kit monitor UI preserves read-only simulator input for bou
  b.advance(131);
  assert.equal(b.s.running,false);assert.equal(b.stops(),1);
 });
+
+test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read-only metadata',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ const low=verifiedKit(1);low.input.flightMode='acro';low.input.inputArm='DISARMED';
+ b.store.acceptKit(low);let state=b.input.snapshot();
+ assert.equal(state.sticks.left.y,1);assert.equal(state.input.flightMode,'acro');
+ assert.equal(state.input.inputArm,'DISARMED');assert.equal(b.s.running,false);
+ const high=verifiedKit(2,{throttle:1919,yaw:1300});
+ high.input.flightMode='acro';high.input.inputArm='ARMED';b.store.acceptKit(high);
+ state=b.input.snapshot();
+ assert.ok(state.sticks.left.y<-.8);assert.equal(state.sticks.left.x,.4);
+ assert.equal(state.input.inputArm,'ARMED');assert.equal(b.s.running,false);
+ b.input.setChoice('web');state=b.input.snapshot();
+ assert.equal(state.activeSource,'web');
+ assert.equal(state.input,null);
+});
