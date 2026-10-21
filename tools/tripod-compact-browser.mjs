@@ -20,20 +20,25 @@ try{
  check(!(await page.locator('body').textContent()).includes('FLIGHT CONTROL • INTERACTIVE TRAINING'),'Old eyebrow remains');
  check(await page.locator('#tpInputValues').evaluate(e=>!!e.closest('.tp-sticks .panel-title')),'TRPY not in joystick header');
  check(/T \d+ • R \d+ • P \d+ • Y \d+ µs/.test(await page.locator('#tpInputValues').textContent()),'Raw TRPY values or units missing');
- for(const [width,height] of [[1366,900],[1024,800],[768,900],[390,844],[320,740]]){
+ for(const [width,height] of [[1920,1080],[1440,900],[1366,900],[1024,800],[768,900],[390,844],[320,740]]){
   await page.setViewportSize({width,height});
   const data=await page.evaluate(()=>{
    const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right,width:r.width,height:r.height}};
-   return {scrollWidth:document.documentElement.scrollWidth,heading:rect('.tp-compact-heading'),toolbar:rect('.tp-compact-controls'),
-    targets:['#tpInputSource','#tpMode','#tpRun','#tpStop','#tpTestResponse','.tp-tools-menu>summary','.tp-sound-menu>summary'].map(rect)};
+   return {scrollWidth:document.documentElement.scrollWidth,strip:rect('.tp-cockpit-row'),main:rect('.tp-main-grid'),heading:rect('.tp-compact-heading'),toolbar:rect('.tp-compact-controls'),help:rect('.tp-help-menu>summary'),
+    targets:['#tpInputSource','#tpMode','#tpRun','#tpStop','#tpTestResponse','.tp-tools-menu>summary','.tp-sound-menu>summary','.tp-help-menu>summary'].map(rect)};
   });
   check(data.scrollWidth<=width+2,'Horizontal overflow at '+width+': '+JSON.stringify(data));
-  if(width>=1024)check(data.toolbar.bottom-data.heading.top<=130,'Desktop top exceeds 130px at '+width+': '+JSON.stringify(data));
+  if(width>=1366){
+    check(Math.abs(data.heading.top-data.toolbar.top)<4&&Math.abs(data.heading.top-data.help.top)<4,'Desktop heading, controls and Help must share one horizontal row at '+width+': '+JSON.stringify(data));
+    check(data.strip.height<=80,'Single-row desktop cockpit too tall at '+width+': '+JSON.stringify(data));
+   }
+   if(width>=1024)check(data.strip.height<=130,'Desktop cockpit exceeds 130px at '+width+': '+JSON.stringify(data));
+   check(data.main.top-data.strip.bottom<=20,'Unexpected gap below controls at '+width+': '+JSON.stringify(data));
   for(const r of data.targets)check(r.width>=44&&r.height>=44&&r.left>=-1&&r.right<=width+1,'Touch target clipped/small at '+width+': '+JSON.stringify(r));
-  measurements.push({width,topHeight:Math.round(data.toolbar.bottom-data.heading.top),overflow:data.scrollWidth-width,minTouchHeight:Math.min(...data.targets.map(t=>t.height))});
-  if(width===1366)await page.screenshot({path:'test-output/pid-compact-desktop-1366.png',fullPage:true});
-  if(width===390)await page.screenshot({path:'test-output/pid-compact-mobile-390.png',fullPage:true});
-  if(width===320)await page.screenshot({path:'test-output/pid-compact-mobile-320.png',fullPage:true});
+  measurements.push({width,topHeight:Math.round(data.strip.height),gapToScene:Math.round(data.main.top-data.strip.bottom),oneRow:Math.abs(data.heading.top-data.toolbar.top)<4,overflow:data.scrollWidth-width,minTouchHeight:Math.min(...data.targets.map(t=>t.height))});
+  if(width===1366)await page.screenshot({path:'test-output/pid-single-row-desktop-1366.png',fullPage:true});
+  if(width===390)await page.screenshot({path:'test-output/pid-single-row-mobile-390.png',fullPage:true});
+  if(width===320)await page.screenshot({path:'test-output/pid-single-row-mobile-320.png',fullPage:true});
  }
  await page.setViewportSize({width:1366,height:900});
  await page.locator('.tp-help-menu>summary').focus();
