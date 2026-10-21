@@ -56,7 +56,9 @@
 @media(max-width:580px){.li-ppm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){.li-ppm-track i{transition:none}}
 
-/* Verified monitoring is read-only: mode selection never changes Kit ownership. */
+.li-aux-readouts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:#aee5dd;font-size:11px;padding:7px 10px;background:#0b2734;border:1px solid #295d67;border-radius:9px}.li-aux-readouts span{font-weight:700}.li-aux-readouts b{color:#fff;font-variant-numeric:tabular-nums}.li-aux-readouts small{color:#a4bec8}
+.li-link-state[data-state=preview]{background:#123c48;color:#85ecd7;border-color:#2ca78f}
+/* Verified monitoring is read-only except explicit authorized mode-save. */
 .li-monitor-toolbar{display:flex;flex-wrap:wrap;gap:9px 14px;align-items:center;margin:10px 0 16px;padding:10px 12px;border:1px solid var(--border,rgba(127,127,127,.25));border-radius:12px}
 .li-monitor-toolbar label{font-size:.85rem;font-weight:650}
 .li-monitor-toolbar select{min-height:44px;min-width:106px;border-radius:8px;padding:7px 10px;background:#0b2434!important;color:#edfafe!important;border:1px solid #588199;color-scheme:dark;max-width:100%;font-weight:750}.li-monitor-toolbar select option{background:#0b2434;color:#edfafe}.li-monitor-toolbar select:focus-visible{outline:3px solid #65d4ba;outline-offset:2px}.li-monitor-toolbar button{min-height:44px}.li-mode-save{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.li-mode-save label{white-space:nowrap}.li-mode-save #liModeMessage{flex:1 1 100%;color:#aad3d8;font-size:11px}
