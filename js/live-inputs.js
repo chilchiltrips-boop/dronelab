@@ -4,7 +4,9 @@
  * Serial Monitor's shared frame decoder. PPM is display-only until firmware
  * actually advertises it in an authenticated RC snapshot.
  */
-// At most ~6 read requests/s while this pane is visible; never stack slow Wi-Fi/WebRTC requests.
+import {sharedInputStore} from './simulator-input.js';
+// Reuse the existing authenticated read-only RC monitor while PID is visible;
+// no independent poller and no simulator-triggered hardware writes.
 const SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800;
 // Monitor-only HTTP/RPC reads are rate-limited; native UDP command streaming stays at 50 Hz.
 const NETWORK_POLL_MS=140, UI_TICK_MS=70, MAX_RETRY_BACKOFF_MS=2400;
@@ -91,12 +93,15 @@ function initLiveInputs(){
   return selected?.path?{...kit,connected:true,transport:selected.path.transport,
    physicalLink:selected.path.transport==='usb'?'usb':kit.physicalLink}:{...kit,connected:false};
  };
- const rate=createInputRateTracker();
+ const rate=createInputRateTracker(),simInputs=sharedInputStore();
  let sample=null,usbPpm=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
   nextPollAt=0,readFailures=0,requestGeneration=0,lastBoot='';
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
   window.ZebjusDevicesWorkspace?.active?.()==='inputs'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
+ const pidVisible=()=>document.getElementById('tab-pid')?.classList.contains('active')&&
+  !document.hidden&&!$('fwKitDemoMode')?.checked;
+ const monitoring=()=>visible()||pidVisible();
  function wipe(){sample=null;usbPpm=null;rate.reset();nextPollAt=0;readFailures=0;++requestGeneration}
  // Use firmware-accepted RC from a newer authenticated /api/status response
  // when the dedicated faster /api/rc/snapshot read is temporarily unavailable.
@@ -121,6 +126,8 @@ function initLiveInputs(){
   }
   reuseVerifiedStatus(kit);
   const v=normalizeAcceptedInput(kit,sample);
+  if(pidVisible())simInputs.acceptKit({kit,input:v});
+  else simInputs.clearKit();
   card.dataset.liveState=v.state;
   write('liLiveState',v.state.toUpperCase());
   $('liLiveState').dataset.state=v.state;
@@ -173,14 +180,16 @@ function initLiveInputs(){
  }
  async function poll(){
   const kit=getKit();
-  if(!visible()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||kit.working||kit.otaInProgress||inFlight)return;
+  if(!monitoring()||!kit.connected||!window.ZebjusKitData?.isNetwork(kit.transport)||
+    pidVisible()&&!['ap','sta'].includes(String(kit.transport).toLowerCase())||
+    kit.working||kit.otaInProgress||inFlight)return;
   inFlight=true;
   const id=kit.kitId,transport=kit.transport,physicalLink=kit.physicalLink,bootId=kit.bootId,token=requestGeneration,
    startedAt=Date.now();
   try{
    const reply=await window.ZebjusKits.request('/api/rc/snapshot');
    const current=getKit();
-   if(token!==requestGeneration||!visible()||!current.connected||current.kitId!==id||
+   if(token!==requestGeneration||!monitoring()||!current.connected||current.kitId!==id||
       current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id||current.bootId!==bootId)return;
    const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
@@ -244,7 +253,7 @@ function initLiveInputs(){
  window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
  $('liMonitorSelect')?.addEventListener('change',e=>{monitorChoice=e.target.value;wipe();display();});
  window.addEventListener('dronelab:devices-view',()=>{++requestGeneration;nextPollAt=0;display();});
- function tick(){display();if(visible()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
+ function tick(){display();if(monitoring()&&!inFlight&&Date.now()>=nextPollAt)void poll()}
  tick();
  setInterval(tick,UI_TICK_MS);
 }
