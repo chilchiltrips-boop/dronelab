@@ -16,11 +16,14 @@ test('Android mirror previews while stopped; only Web Run starts physics and Web
  advanceSimulator(s,.04);assert.ok(s.motorRPM.some(v=>v>0));
  input.stop();store.accept(frame(3,{throttle:1600}));assert.equal(s.running,false);assert.equal(s.throttle,1000);assert.equal(s.cmdRoll,0);
 });
-test('Auto picks fresh Android before Run, locks during Run, and never changes to Web on data loss',()=>{
+test('Auto locks Android during Run; missing mirror ACK/telemetry never disarms the virtual model',()=>{
  const b=bench();assert.equal(b.input.snapshot().activeSource,'web');b.store.accept(frame());assert.equal(b.input.snapshot().activeSource,'android');
- b.input.start();assert.equal(b.input.setChoice('web'),false);b.advance(451);
- assert.equal(b.s.running,false);assert.equal(b.s.throttle,1000);assert.equal(b.stops(),1);
- b.store.accept(frame(2));assert.equal(b.s.running,false);assert.equal(b.input.start().accepted,true);
+ b.input.start();assert.equal(b.input.setChoice('web'),false);
+ b.store.accept(frame(2,{throttle:1460,roll:1750}));b.advance(451);
+ assert.equal(b.s.running,true);assert.equal(b.s.throttle,1460);assert.equal(b.input.snapshot().activeSource,'android');
+ assert.equal(b.input.snapshot().input.fresh,false);assert.equal(b.input.snapshot().input.held,true);assert.equal(b.stops(),0);
+ b.store.accept(frame(3,{throttle:1600,roll:1800}));assert.equal(b.s.running,true);
+ assert.equal(b.s.throttle,1600);assert.equal(b.input.snapshot().input.fresh,true);
 });
 test('Auto locked to Web ignores Android arrival, ARM metadata and pairing loss',()=>{
  const {store,s,input}=bench();input.start();s.throttle=1400;
@@ -114,7 +117,8 @@ test('Kit source locked during Run; loss and identity handover stop only virtual
  assert.equal(b.s.throttle,1000);assert.equal(b.stops(),1);
  b.store.acceptKit(verifiedKit(4));assert.equal(b.s.running,false); // never auto resume
  b.input.start();b.advance(1001);
- assert.equal(b.s.running,false);assert.equal(b.stops(),2);
+ assert.equal(b.s.running,true);assert.equal(b.input.snapshot().input.held,true);
+ assert.equal(b.stops(),1);
 });
 test('WebRTC and Kit mirrors do not silently replace a locked stream',()=>{
  const b=bench();
@@ -131,20 +135,48 @@ test('WebRTC and Kit mirrors do not silently replace a locked stream',()=>{
  assert.equal(b.s.running,true);assert.equal(b.s.throttle,1000);
 });
 
-test('Temporary stale Kit monitor UI preserves read-only simulator input for bounded jitter, then stops',()=>{
+test('Stale or delayed read-only Kit telemetry never closes virtual Run or switches to Web control',()=>{
  const b=bench();b.store.setPeer({connected:false});
  assert.equal(b.store.acceptKit(verifiedKit(1,{roll:1650})),true);
  assert.equal(b.input.start().accepted,true);
+ b.store.acceptKit(verifiedKit(2,{throttle:1575}));
  b.advance(460);
- const delayed=verifiedKit(1);delayed.input.state='stale';
+ const delayed=verifiedKit(2);delayed.input.state='stale';
  assert.equal(b.store.acceptKit(delayed),false);
  assert.equal(b.s.running,true);assert.equal(b.store.snapshot().kit.fresh,true);
- b.advance(410);
- assert.equal(b.s.running,true);
- b.advance(131);
- assert.equal(b.s.running,false);assert.equal(b.stops(),1);
+ b.advance(2000);
+ assert.equal(b.s.running,true);assert.equal(b.s.throttle,1575);assert.equal(b.stops(),0);
+ assert.equal(b.input.snapshot().activeSource,'android');
+ assert.equal(b.input.snapshot().input.held,true);assert.equal(b.input.snapshot().input.fresh,false);
+ assert.equal(b.store.acceptKit(verifiedKit(3,{throttle:1740})),true);
+ assert.equal(b.s.throttle,1740);assert.equal(b.input.snapshot().input.fresh,true);
+});
+test('A temporary empty Kit snapshot does not disarm a running virtual simulator',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ b.store.acceptKit(verifiedKit(1));b.input.start();
+ b.store.acceptKit(verifiedKit(2,{throttle:1450}));
+ const missing=verifiedKit(3);missing.input.state='waiting';
+ assert.equal(b.store.acceptKit(missing),false);b.advance(2100);
+ assert.equal(b.s.running,true);assert.equal(b.s.throttle,1450);
+ assert.equal(b.input.snapshot().input.held,true);assert.equal(b.stops(),0);
+ b.store.acceptKit(verifiedKit(4,{throttle:1700}));
+ assert.equal(b.s.running,true);assert.equal(b.s.throttle,1700);
+ b.input.stop();assert.equal(b.s.running,false);
 });
 
+test('Confirmed AP Kit disconnect or reboot stops virtual Run; polling delays do not',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ b.store.acceptKit(verifiedKit());b.input.start();
+ const delayed=verifiedKit(2);delayed.input.state='waiting';
+ b.store.acceptKit(delayed);b.advance(1750);assert.equal(b.s.running,true);
+ const missing=verifiedKit(3);missing.kit.connected=false;
+ b.store.acceptKit(missing);
+ assert.equal(b.s.running,false);assert.equal(b.stops(),1);
+ b.store.acceptKit(verifiedKit(4));assert.equal(b.s.running,false);
+ b.input.start();
+ const reboot=verifiedKit(5);reboot.kit.bootId='boot-2';reboot.input.state='waiting';
+ b.store.acceptKit(reboot);assert.equal(b.s.running,false);assert.equal(b.stops(),2);
+});
 test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read-only metadata',()=>{
  const b=bench();b.store.setPeer({connected:false});
  const low=verifiedKit(1);low.input.flightMode='acro';low.input.inputArm='DISARMED';

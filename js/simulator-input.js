@@ -24,6 +24,7 @@ export function createInputStore({now=()=>performance.now()}={}){
 // Independent read-only stream of firmware-accepted Android RC, never a control grant.
 // The monitor alone may feed this cache, after Kit identity and RC freshness validation.
 let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=null,kitAccepted=null,kitEpoch=0;
+let kitConnected=false,kitLinkIdentity='';
  const listeners=new Set();
  const notify=()=>{for(const fn of listeners)fn()};
  function setPeer(value){
@@ -45,14 +46,19 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   sample={...m,aux:m.aux?{...m.aux}:undefined,channels:{...m.channels}};notify();return true;
  }
  function clearKit(){
-  kitMode=null;
+  const hadLink=kitConnected||!!kitLinkIdentity;
+  kitMode=null;kitConnected=false;kitLinkIdentity='';
   const hadSample=kitSample!==null;
   kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
-  if(hadSample)notify();
+  if(hadSample||hadLink)notify();
  }
  function acceptKit({kit,input}={}){
   const transport=String(kit?.transport||'').toLowerCase();
   const id=String(kit?.kitId||'');
+  const priorLink=kitConnected,priorLinkIdentity=kitLinkIdentity;
+  kitConnected=kit?.connected===true;
+  kitLinkIdentity=kitConnected?id+'|'+transport+'|'+String(kit?.bootId||''):'';
+  const linkChanged=priorLink!==kitConnected||priorLinkIdentity!==kitLinkIdentity;
   const vals=input?.values;
   const actual=kit?.flightModeState?.active||kit?.flightMode;
   const priorMode=kitMode;
@@ -64,7 +70,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
      input?.state==='stale'&&(input?.source==='ANDROID'||transport==='usb')){
-   if(modeChanged)notify();
+   if(modeChanged||linkChanged)notify();
    return false;
   }
   const valid=kit?.connected===true&&['usb','ap','sta'].includes(transport)&&
@@ -77,7 +83,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
    // Do not briefly announce mode=null to subscribers during a source loss.
    const hadSample=kitSample!==null;
    kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
-   if(hadSample||modeChanged)notify();
+   if(hadSample||modeChanged||linkChanged)notify();
    return false;
   }
   if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;kitAccepted=null;kitEpoch=0;}
@@ -86,7 +92,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
    // Compact USB telemetry may omit ownerId. An advancing firmware accepted
    // counter proves that a reset sequence belongs to a new accepted producer.
    if(accepted!==null&&kitAccepted!==null&&accepted>kitAccepted){++kitEpoch;kitSeq=0;}
-   else{if(modeChanged)notify();return false;}
+   else{if(modeChanged||linkChanged)notify();return false;}
   }
   kitAccepted=accepted; // Polling the same accepted packet cannot refresh freshness.
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
@@ -102,7 +108,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   const kitAgeMs=kitSample?Math.max(0,now()-kitReceivedAt)+kitSample.inputAgeMs:null;
   return {mode:kitMode?{...kitMode}:null,peer:{...peer},sample:sample?{...sample,aux:sample.aux?{...sample.aux}:undefined,channels:{...sample.channels}}:null,ageMs,rateHz,rejected,
    fresh:!!sample&&peer.connected&&peer.approved&&peer.supported&&ageMs<=INPUT_MAX_AGE_MS,
-   kit:{sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
+   kit:{connected:kitConnected,identity:kitLinkIdentity,sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
     ageMs:kitAgeMs,rateHz:kitRateHz,fresh:!!kitSample&&kitAgeMs<=KIT_MIRROR_MAX_AGE_MS}};
  }
  return {setPeer,accept,acceptKit,clearKit,snapshot,subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn)}};
@@ -113,7 +119,7 @@ export function sharedInputStore(){
  return root.ZebjusSimulatorInputs||(root.ZebjusSimulatorInputs=createInputStore());
 }
 export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}={}){
- let choice='auto',locked=null,lockedOrigin='',identity='',reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
+ let choice='auto',locked=null,lockedOrigin='',identity='',lockedKitIdentity='',heldFrame=null,reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
   if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
@@ -126,12 +132,34 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const frameFor=(v,source,origin='auto')=>source==='usb'?usbFrame(v):androidFrame(v,origin);
  const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(usbFrame(v)?'usb':androidFrame(v)?'android':'web'):choice)};
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
- function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
+ function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';lockedKitIdentity='';heldFrame=null;reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
  function setChoice(value){if(s.running||!['auto','web','android','usb'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
   if(!s.running||!['android','usb'].includes(locked))return;
   const v=store.snapshot(),frame=frameFor(v,locked,lockedOrigin);
-  if(!frame||key(frame)!==identity){stop((locked==='usb'?'USB':'Android')+' input lost • press Run to resume');onTimeout();return;}
+  // A verified Kit disconnect/reboot/transport change is not a transient
+  // read-only snapshot gap; stop the virtual source lock immediately.
+  if(lockedOrigin==='kit'&&(!v.kit.connected||v.kit.identity!==lockedKitIdentity)){
+   stop('Kit link or identity changed • press Run to resume');onTimeout();return;
+  }
+  if(!frame){
+   // Preserve the existing verified USB loss policy. Only Android AP/STA mirror
+   // stalls (WebRTC or read-only Kit monitor) may hold a virtual Run.
+   if(locked==='usb'){stop('USB input lost • press Run to resume');onTimeout();return;}
+   // No simulator-side RC ACK or telemetry-age disarm. The read-only WebRTC/Kit
+   // observer can stall while Android and FlightCore RC remain live.
+   // Hold the last verified command ONLY in this virtual plant. Firmware,
+   // Android and the browser's authenticated read-only monitor are unchanged.
+   const pairingLost=lockedOrigin==='webrtc'&&
+    (!v.peer.connected||!v.peer.approved||!v.peer.supported||v.peer.sessionId!==heldFrame?.sessionId);
+   if(pairingLost){stop('Android pairing lost • press Run to resume');onTimeout();return;}
+   if(reason!=='Running • mirror stale (holding last virtual input)'){
+    reason='Running • mirror stale (holding last virtual input)';onChange();
+   }
+   return;
+  }
+  if(key(frame)!==identity){stop((locked==='usb'?'USB':'Android')+' source changed • press Run to resume');onTimeout();return;}
+  heldFrame=frame;reason='Running';
   const c=frame.channels,a=axesOf(c);s.throttle=c.throttle;s.cmdRoll=a.roll;s.cmdPitch=a.pitch;s.cmdYaw=a.yaw;
  }
  function start(){
@@ -141,11 +169,14 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   const throttle=selected!=='web'?frame.channels.throttle:s.throttle;
   if(throttle>1025){reason='LOWER THROTTLE TO 1000 µs';return {accepted:false,reason};}
   s.throttle=throttle;if(!startSimulator(s))return {accepted:false,reason:'LOWER THROTTLE TO 1000 µs'};
-  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';reason='Running';applyLatest();onChange();return {accepted:true};
+  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';lockedKitIdentity=lockedOrigin==='kit'?v.kit.identity:'';heldFrame=selected!=='web'?frame:null;reason='Running';applyLatest();onChange();return {accepted:true};
  }
  function snapshot(){
   const v=store.snapshot(),source=effective(),remote=source!=='web',
-   frame=remote?frameFor(v,source,lockedOrigin||'auto'):null,
+   liveFrame=remote?frameFor(v,source,lockedOrigin||'auto'):null,
+   held=remote&&s.running&&locked===source&&!liveFrame?heldFrame:null,
+   frame=liveFrame||held,
+   ageMs=liveFrame?.ageMs??(held?(lockedOrigin==='kit'?v.kit?.ageMs:v.ageMs):null),
    c=frame?frame.channels:neutral(),a=axesOf(c),p=getSnapshot(s);
   const throttleY=1-2*(c.throttle-1000)/1000;
    const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
@@ -153,7 +184,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   return {kitMode:v.mode,source:source==='usb'?'usb':remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
    seq:remote?frame?.seq||0:0,appliedAt:0,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
    axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:remote&&!s.running?a:{roll:0,pitch:0,yaw:0},sticks,
-   input:remote?{aux:{...frame?.aux},channels:{...c},fresh:!!frame,ageMs:frame?.ageMs??null,rateHz:frame?.rateHz??null,
+   input:remote?{aux:{...frame?.aux},channels:{...c},fresh:!!liveFrame,held:!!held,ageMs:ageMs??null,rateHz:frame?.rateHz??null,
     kind:frame?.kind||'',transport:frame?.transport||'',kitId:frame?.kitId||'',
     origin:frame?.origin||lockedOrigin||'',flightMode:frame?.flightMode||null,inputArm:frame?.inputArm||'NOT REPORTED',supported:!!frame||v.peer.supported,paired:!!frame||v.peer.approved}:null,
    reason,angles:{roll:p.roll,pitch:p.pitch,yaw:p.yaw},rates:{roll:p.rollRate,pitch:p.pitchRate,yaw:p.yawRate},

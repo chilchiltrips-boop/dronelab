@@ -57,11 +57,23 @@ shown before and during Run. `ANDROID COMMAND` means a sender-side command
 snapshot, **not** firmware RX/APPLIED confirmation. `ANDROID PREVIEW` means no
 physical control session supplies the snapshot.
 
-Android input older than 450 ms, pairing loss or a Kit/transport/producer change
-stops only an Android-driven simulator run. It never changes to Web control
-mid-run and never auto-resumes. A Web-driven run ignores Android arrival/loss.
-Hidden browser/embedded simulator views stop the virtual run and suspend 3D,
-chart and audio updates; pairing can remain connected for fresh input preview.
+Simulator freshness and physical input safety are separate. Paired Android
+WebRTC input older than 450 ms and authenticated Kit RC snapshots older than
+1000 ms are marked STALE. After a user-initiated WebApp Run, a read-only
+mirror/snapshot gap does **not** stop the virtual model or change its locked
+source to Web control. The virtual model visibly holds the last validated
+channels until a fresh frame from the same producer arrives. This virtual
+hold is not proof that Kit RC is active or armed. The display must not label
+held/old input as LIVE or use it to issue hardware commands.
+
+Explicit WebApp Stop/Reset, confirmed WebRTC pairing authorization loss,
+confirmed Kit disconnect/reboot/transport/producer identity changes, and hidden browser/embedded simulator
+views still stop the virtual run. Verified USB source-loss continues to
+stop the simulator (unchanged). A Web-driven Run ignores Android arrival/loss.
+No incoming mirror packet restarts a stopped simulator automatically.
+The FlightCore/Android hardware input freshness checks, release rules,
+ownership and emergency stops are completely unchanged; no WebApp mirror
+data or ACK state can arm or disarm a physical Kit.
 
 ## Validation
 

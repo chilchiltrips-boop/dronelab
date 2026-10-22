@@ -53,12 +53,15 @@ try{
  await web.locator('#tpRun').click();await wait(web,()=>window.ZebjusTraining.snapshot().armed);
  await phone.evaluate(()=>Object.defineProperty(window.__testPeer.realtimeChannel,'bufferedAmount',{configurable:true,get:()=>140000}));
  const frames=await phone.evaluate(()=>window.__apFrames.length);
- await wait(web,()=>!window.ZebjusTraining.snapshot().armed,2500);
+ await wait(web,()=>{const s=window.ZebjusTraining.snapshot();return s.armed&&s.input?.held&&!s.input.fresh},2500);
  assert.equal(await phone.evaluate(()=>window.ZebjusNetwork.inputArmed()),true);
+ assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().activeSource),'android','Virtual source switched to Web on mirror gap');
  await phone.waitForFunction(n=>window.__apFrames.length>n+8,frames,{timeout:2500});
  await phone.evaluate(()=>delete window.__testPeer.realtimeChannel.bufferedAmount);
- await wait(web,()=>window.ZebjusSimulatorInputs.snapshot().fresh);assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed),false);
- evidence.staleStopsOnlySimulator=true;
+ await wait(web,()=>window.ZebjusSimulatorInputs.snapshot().fresh);
+ assert.equal(await web.evaluate(()=>window.ZebjusTraining.snapshot().armed),true,'Fresh mirror interrupted virtual Run');
+ evidence.staleKeepsVirtualRun=true;
+ await web.locator('#tpStop').click();await wait(web,()=>!window.ZebjusTraining.snapshot().armed);
  await phone.locator('#flightStop').click();await wait(phone,()=>!window.ZebjusNetwork.hasControl());
  // Releasing a long AP session can expire its old status snapshot. Wait for
  // the independent observer refresh and the matching preview before Run;
@@ -79,6 +82,6 @@ try{
  await safeShot(web,'test-output/web-android-input-mirror.png');await safeShot(phone,'test-output/android-ap-input-mirror.png');
  assert.deepEqual(errors,[]);
  writeFileSync('test-output/webrtc-applied-evidence.json',JSON.stringify({transport:'Real Chromium DTLS/SCTP WebRTC, native AP boundary double',...evidence,errors},null,2));
- console.log('PASS read-only AP mirror: concurrent AP stream, exact throttle, Web-only Run/Stop/mode/PID, source lock, no ARM requirement, bounded backpressure, stale local stop, independent Web source');
+ console.log('PASS read-only AP mirror: concurrent AP stream, exact throttle, Web-only Run/Stop/mode/PID, source lock, no ARM requirement, bounded backpressure, stale virtual hold, independent Web source');
 }catch(e){console.error(e.stack||e);console.error(errors);console.error('Simulator state',await web.evaluate(()=>window.ZebjusTraining?.snapshot()).catch(()=>null));await safeShot(web,'test-output/flight-error-web.png').catch(()=>{});await safeShot(phone,'test-output/flight-error-phone.png').catch(()=>{});process.exitCode=1}
 finally{await browser.close()}
