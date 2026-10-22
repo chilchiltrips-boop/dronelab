@@ -2,7 +2,9 @@
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync,writeFileSync} from 'node:fs';
-mkdirSync('test-output',{recursive:true});
+const runLabel=String(process.env.DRONELAB_STATUS_RUN||'single').replace(/[^a-zA-Z0-9_-]/g,'');
+const outputDir='test-output/authoritative-status-'+runLabel;
+mkdirSync(outputDir,{recursive:true});
 const browser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:'block'});
 await configureContext(context);
 const page=await context.newPage(),errors=[],evidence=[];
@@ -17,6 +19,24 @@ try{
   const kit={kitId,kitName:'Verified fixture',connected:true,transport:'ap',version:'1.5.10',board:'ZFC-A2',bootId:'boot-test',
    flightMode:'angle',flightModeState:mode,ledOn:true,motorsArmed:false,motorsDisabled:true,usbAvailable:true,working:false};
   const f=window.__statusFixture={kit,seq:0,t:1000,r:1500,armed:false,requests:[]};
+  const history=window.__inputTrace=[];
+  const log=(kind,data)=>{history.push({at:performance.now(),kind,...data});if(history.length>200)history.shift()};
+  const store=window.ZebjusSimulatorInputs;
+  const state=()=>{
+   const s=window.ZebjusTraining.snapshot(),k=store.snapshot().kit;
+   return {running:s.armed,reason:s.reason,source:s.activeSource,seq:s.seq,input:s.input,
+    kit:{fresh:k.fresh,ageMs:k.ageMs,seq:k.sample?.seq,sessionId:k.sample?.sessionId}};
+  };
+  for(const method of ['acceptKit','clearKit']){
+   const original=store[method];
+   store[method]=function(...args){
+    const before=state(),result=original.apply(this,args),after=state();
+    log(method,{before,after,packet:args[0]?.input});return result;
+   };
+  }
+  let lastTick=performance.now();
+  setInterval(()=>{const at=performance.now();if(at-lastTick>300)log('timer-gap',{gap:at-lastTick,state:state()});lastTick=at},40);
+  window.addEventListener('dronelab:kit-link',e=>log('kit-link',{detail:e.detail,state:state()}));
   const rc=()=>({kitId,seq:++f.seq,source:'ANDROID',transport:'AP',active:true,inputValid:true,failsafe:false,ageMs:0,
    throttle:f.t,roll:f.r,pitch:1500,yaw:1500,ch5:1725,ch6:1280,inputArmed:f.armed,
    flightMode:kit.flightMode,flightModeState:{...mode},motorsDisabled:true,motorsArmed:false});
@@ -75,11 +95,18 @@ try{
    return {snapshot:window.ZebjusTraining?.snapshot?.(),status:frame?.getElementById('tpStatus')?.textContent,
     runDisabled:frame?.getElementById('tpRun')?.disabled,tab:document.querySelector('.tab.active')?.id,
     fixture:{...window.__statusFixture,kit:window.__statusFixture?.kit},
-    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState},trace:window.__inputTrace};
   });
   console.error('USB VIRTUAL RUN DIAGNOSTIC '+JSON.stringify(diagnostic));
   throw error;
  }
+ // Refreshing the same verified connection, or a different network path,
+ // must not turn a continuously advancing USB stream into input loss.
+ await page.evaluate(()=>{
+  window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true,kitId:window.__statusFixture.kit.kitId,transport:'usb'}}));
+  window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,kitId:'ZFC-A1-FFFFFFFFFFFF',transport:'sta'}}));
+ });
+ check(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Unchanged/unrelated link event stopped verified USB Run');
  await page.evaluate(()=>{const f=window.__statusFixture;f.kit.flightMode='acro';Object.assign(f.kit.flightModeState,{saved:'acro',active:'acro',pending:null})});
  try{
   await page.waitForFunction(()=>document.getElementById('pidFrame')?.contentDocument?.getElementById('tpKitMode')?.textContent.includes('SYNC PENDING'),null,{timeout:5000});
@@ -112,8 +139,14 @@ try{
  check(!(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed)),'Telemetry restarted virtual motors');
  check((await page.evaluate(()=>window.__statusFixture.requests)).every(r=>r.method==='GET'),'Simulator wrote to hardware');
  check(errors.length===0,'Browser errors: '+errors.join(' | '));
- await page.screenshot({path:'test-output/authoritative-status-usb.png',fullPage:true});
- writeFileSync('test-output/authoritative-status-evidence.json',JSON.stringify({evidence,errors,physicalHardware:'NOT TESTED'},null,2));
- console.log('PASS authoritative status: AP/STA/relay/USB, auxiliaries, disarmed monitoring, USB simulator, pending mode, contrast and five viewports');
-}catch(error){await page.screenshot({path:'test-output/authoritative-status-error.png',fullPage:true}).catch(()=>{});throw error}
+ await page.screenshot({path:outputDir+'/usb.png',fullPage:true});
+ const trace=await page.evaluate(()=>window.__inputTrace||[]);
+ writeFileSync(outputDir+'/evidence.json',JSON.stringify({runLabel,evidence,errors,
+  timerGaps:trace.filter(e=>e.kind==='timer-gap'),linkEvents:trace.filter(e=>e.kind==='kit-link'),physicalHardware:'NOT TESTED'},null,2));
+ console.log('PASS authoritative status run '+runLabel+': AP/STA/relay/USB, auxiliaries, disarmed monitoring, USB Run across link notifications, pending mode, contrast and five viewports');
+}catch(error){
+ const trace=await page.evaluate(()=>window.__inputTrace||[]).catch(()=>[]);
+ writeFileSync(outputDir+'/failure.json',JSON.stringify({error:error.stack||error.message,trace,errors},null,2));
+ await page.screenshot({path:outputDir+'/error.png',fullPage:true}).catch(()=>{});throw error;
+}
 finally{await browser.close()}

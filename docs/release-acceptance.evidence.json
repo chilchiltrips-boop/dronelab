@@ -175,7 +175,7 @@
     {
       "id": "ANDROID_ACK_FRESHNESS",
       "platform": "ANDROID",
-      "expected": "RC ACK sequence and sample ages progress; stale >350ms input disarms; header not false connected",
+      "expected": "RC ACK sequence and sample ages progress; firmware input deadman is 500ms (ZJ_RC_DEADMAN_MS); record actual measured release timing; header not false connected",
       "status": "NOT_RUN",
       "observedAt": null,
       "operator": null,

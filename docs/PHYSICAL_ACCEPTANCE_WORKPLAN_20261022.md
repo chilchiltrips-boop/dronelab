@@ -24,12 +24,14 @@ All observations must reference the **same exact tested source release**, and A1
 | `A1_BUILD_STAMPS`, `A2_BUILD_STAMPS` | Record loaded catalog timestamp separately from **running** `ZJ_BUILD_UTC` reported by real Kit; require matching board and flashed image before calling upgrade successful |
 | `ANDROID_WIFI_WITHOUT_APP_LINK` | Phone Wi-Fi association alone must not show verified Kit app control when API is unreachable |
 | `ANDROID_DIAGNOSTIC_ARM` | Verify authenticated low-throttle diagnostic ARM, confirmed accepted input and MOTOR OFF; never infer motor arming |
-| `ANDROID_ACK_FRESHNESS` | Observe real native UDP feedback and advancing applied/received sequence; interrupt radio/input and measure 350 ms firmware deadman, no stale-live or auto-rearm |
+| `ANDROID_ACK_FRESHNESS` | Observe real native UDP feedback and advancing applied/received sequence; interrupt radio/input and measure the current **500 ms** firmware deadman (`ZJ_RC_DEADMAN_MS`), no stale-live or auto-rearm. Record handset feedback timing separately from the firmware timeout. |
 | `ANDROID_BACKGROUND_RECOVERY` | Background phone, lose network and return; confirm input releases safely and deliberate reconnect/authorization required |
 | `ANDROID_UPGRADE_TOUCH` | On handset confirm same package identity and signing certificate, upgrade without uninstall/data loss, portrait/landscape policy and actual joystick/touch responsiveness |
 | `ADMIN_HTTPS_DEPLOYED` | Only if operator provisions optional backend: verify TLS, persistent private store, login/logout/revocation across two real sessions and no public account database; unrelated to hardware controller authorization |
 
 For every physical case use the canonical evidence file fields `id`, `status`, `observedAt`, `operator`, `deviceId`, `firmwareVersion`, `evidenceRef`, `notes`. Do not set `PASS` without real observations and safe trace references. Record `FAIL` with sanitized failure logs where a real test fails, and leave `NOT_RUN` where it was not performed. Do not invent screenshots or device readings. Write the exact 40-character tested source SHA into `sourceCommit` only after a real acceptance session.
+
+Source contract tests allow genuine results to be recorded incrementally; they do not require the ledger to stay `NOT_RUN`. Partial results still fail the strict production gate. Keep raw serial captures, timing measurements and handset recordings referenced by each result available for independent review.
 
 ## Software checks and strict release barrier
 
