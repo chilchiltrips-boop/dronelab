@@ -294,3 +294,6 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 
 /* Telemetry labels keep their own rows instead of moving stick geometry. */
 .tp-stick-header-values{min-width:0;max-width:100%;font-variant-numeric:tabular-nums;align-content:start}.tp-stick-header-values output{display:block;min-height:2.8em;line-height:1.4;overflow-wrap:anywhere}.tp-stick-header-values .smallstate{min-height:1.5em;min-width:9ch}#tpKitMode{min-width:14ch}#tpControlSource{min-width:20ch}.tp-command select{min-height:44px}
+.tp-stick-header-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.tp-stick-header-values .smallstate{min-width:0!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;height:28px}
+.tp-stick-header-values #tpInputValues{grid-column:1/-1}

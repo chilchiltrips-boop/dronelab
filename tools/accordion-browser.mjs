@@ -47,23 +47,25 @@ try{
    // First visit to Security opens existing USB maintenance accordion.
    await page.locator('[data-dw-view="security"]').click();
    assert.equal(await page.locator('#dw-panel-security').isVisible(),true);
-   assert.equal(await page.locator('#kitAdmin').evaluate(e=>e.open),true);
+   assert.equal(await page.locator('#cloudAdminCenter').isVisible(),true,'cloud sign-in must render');
+   await page.waitForFunction(()=>!/Checking central admin server/.test(document.querySelector('#cloudAdminStatus')?.textContent||''),null,{timeout:9000});
+   await page.locator('[data-open-admin]').click();
+   assert.equal(await page.locator('#dw-panel-wifi').isVisible(),true);
+   assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),true);
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),true,'USB passphrase input must be visible');
    assert.equal(await page.locator('#kitAdminResetAp').isVisible(),true,'AP reset action must render');
-   assert.equal(await page.locator('#cloudAdminCenter').isVisible(),true,'cloud sign-in must render');
-   // Wait for async cloud session resolution before checking USB accordion.
-   await page.waitForFunction(()=>!/Checking central admin server/.test(document.querySelector('#cloudAdminStatus')?.textContent||''),null,{timeout:9000});
+   // Cloud session resolution must not hide the independent physical USB tools.
    assert.equal(await page.locator('#kitAdmin').isVisible(),true,'cloud session must not hide physical USB accordion');
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),true);
    // A teacher can intentionally collapse maintenance; switching tabs must
    // NOT force it open again (save manual accordion state).
-   await page.locator('#kitAdmin > summary').click();
-   assert.equal(await page.locator('#kitAdmin').evaluate(e=>e.open),false);
+   await page.locator('#smartAdvanced > summary').click();
+   assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),false);
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),false);
+   await page.locator('[data-dw-view="overview"]').click();
    await page.locator('[data-dw-view="wifi"]').click();
-   await page.locator('[data-dw-view="security"]').click();
-   assert.equal(await page.locator('#kitAdmin').evaluate(e=>e.open),false,'manual close must persist');
-   await page.locator('#kitAdmin > summary').click();
+   assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),false,'manual close must persist');
+   await page.locator('#smartAdvanced > summary').click();
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),true);
    await page.screenshot({path:`test-output/accordion/security-${width}.png`,fullPage:true});
    if(errors.length)throw Error('Browser script error: '+errors.join(' | '));

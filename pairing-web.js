@@ -128,6 +128,9 @@ function sync(){
  toggle.setAttribute('aria-label','Android input mirror availability');
  const mirrorLabel=toggle.closest('label')?.querySelector('.grant-control-text,span:first-child');if(mirrorLabel)mirrorLabel.textContent='Input mirror';
  $('pairControlStatus').textContent=s.approved?(s.remoteMirrorVersion===1?'Read-only Android input • choose source in PID Tuning':'Android app update required for input mirror'):'Pair Android to mirror inputs • Run/Stop stays on WebApp';
+ const deviceSignature=JSON.stringify([s.connected,s.approved,s.controller,s.sessionId]);
+ if($('pairDeviceList').dataset.renderedPeer!==deviceSignature){
+ $('pairDeviceList').dataset.renderedPeer=deviceSignature;
  $('pairDeviceList').replaceChildren();
  if(s.connected){
   const el=document.createElement('div');el.className='qr-device-item';
@@ -135,6 +138,7 @@ function sync(){
   const detail=document.createElement('small');detail.textContent='WebRTC encrypted P2P • controller: '+(s.controller||'none')+' • session '+s.sessionId;
   el.append(name,detail);$('pairDeviceList').append(el);
  }else $('pairDeviceList').textContent='No mobile device connected.';
+ }
  status($('pairStatus').textContent);
 }
 function go(){openSettings()}

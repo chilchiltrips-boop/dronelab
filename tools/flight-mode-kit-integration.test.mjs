@@ -40,7 +40,8 @@ test('WebApp mode and input ARM are read-only, simulator throttle knob follows 1
  assert.match(mirror,/1-2\*\(c\.throttle-1000\)\/1000/);
  assert.match(mirror,/flightMode:frame\?\.flightMode/);
  assert.match(mirror,/inputArm:frame\?\.inputArm/);
- assert.match(page,/lastKitModeSeen/);
+ assert.match(page,/tpMode'\)\.disabled=false/);
+ assert.doesNotMatch(page,/setFlightMode\(s,kitActive\)/);
  assert.match(page,/!s\.running/);
  assert.match(html,/id="tpInputArm"/);
  assert.match(html,/id="tpKitMode"/);

@@ -1,11 +1,17 @@
 import {createI2CBridge,createGyroBridge,parseNetworkGyroTelemetry} from './usb-i2c-bridge.js?v=gyro-sta-20261014';
 import {createPythonIDEShell} from './python-ide-workspace.js?v=compact-run-20261011';
+import {createPythonLedSession} from './python-led-session.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
-const EXAMPLES={"joystick":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\n# Values below come from the ESP32 receiver, not WebRTC or frontend sticks.\n# Android owns input; this browser only reads it over STA.\nwhile True:\n    rc = await drone.read_joystick()\n    print(rc[\"source\"], \"T\", rc[\"throttle\"], \"R\", rc[\"roll\"], \"P\", rc[\"pitch\"], \"Y\", rc[\"yaw\"], \"frame\", rc[\"seq\"], \"age\", rc[\"age_ms\"], \"valid\", rc[\"input_valid\"])\n    await asyncio.sleep(0.1)\n","wifi_scan":"from zebjus_simple import Drone\n\ndrone = Drone()\nnetworks = await drone.wifi_scan()\nfor router in networks:\n    print(router[\"ssid\"], router[\"rssi\"], \"dBm\", \"Secure\" if router[\"secure\"] else \"Open\")\nprint(\"Found\", len(networks), \"2.4 GHz networks\")\n","wifi_save":"from zebjus_simple import Drone\n\ndrone = Drone()\n# Keep credentials private: this file is autosaved in your browser.\nssid = \"REPLACE_WITH_2_4GHZ_WIFI\"\npassword = \"REPLACE_WITH_WIFI_PASSWORD\"\nresult = await drone.wifi_test_save(ssid, password)\nprint(result)\nif result[\"saved\"]:\n    print(\"Wi-Fi saved in FlightCore NVS; reconnect and Take Control.\")\nelse:\n    print(\"Not saved/verified. Check status via USB before retry.\")\n","scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
-const bridge=createI2CBridge(),gyroBridge=createGyroBridge();
+const EXAMPLES={"joystick":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\n# Values below come from the ESP32 receiver, not WebRTC or frontend sticks.\n# Android owns input; this browser reads the verified Kit connection.\nwhile True:\n    rc = await drone.read_joystick()\n    print(rc[\"source\"], \"T\", rc[\"throttle\"], \"R\", rc[\"roll\"], \"P\", rc[\"pitch\"], \"Y\", rc[\"yaw\"], \"frame\", rc[\"seq\"], \"age\", rc[\"age_ms\"], \"valid\", rc[\"input_valid\"])\n    await asyncio.sleep(0.1)\n","wifi_scan":"from zebjus_simple import Drone\n\ndrone = Drone()\nnetworks = await drone.wifi_scan()\nfor router in networks:\n    print(router[\"ssid\"], router[\"rssi\"], \"dBm\", \"Secure\" if router[\"secure\"] else \"Open\")\nprint(\"Found\", len(networks), \"2.4 GHz networks\")\n","wifi_save":"from zebjus_simple import Drone\n\ndrone = Drone()\n# Keep credentials private: this file is autosaved in your browser.\nssid = \"REPLACE_WITH_2_4GHZ_WIFI\"\npassword = \"REPLACE_WITH_WIFI_PASSWORD\"\nresult = await drone.wifi_test_save(ssid, password)\nprint(result)\nif result[\"saved\"]:\n    print(\"Wi-Fi saved in FlightCore NVS; reconnect and Take Control.\")\nelse:\n    print(\"Not saved/verified. Check status via USB before retry.\")\n","scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
+const bridge=createI2CBridge({acceptEvent:e=>{
+ const transport=e?.detail?.transport||'usb';
+ return pythonBinding?pythonBinding.transport==='usb'?transport==='usb':transport===pythonBinding.transport:false;
+}}),gyroBridge=createGyroBridge({acceptEvent:e=>!e?.detail?.transport||e.detail.transport==='usb'});
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
-let ledSession=false,ledHeartbeat=null,ledLastError=0;
+let ledSession=false,ledHeartbeat=null,ledReportedPhase='',ledErrorEpisode=false;
+const ledController=createPythonLedSession({write:writeBoundLed,verify:verifyLedBinding,onHealth:renderLedHealth,
+ onObsoleteFailure:({binding,command,error})=>terminal('[LED earlier session • '+binding.kitId+'] '+command+' failed: '+String(error.message||error)+'\n','error')});
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null;
 const fallbacks=new Map();
 let workspace=null;
@@ -116,18 +122,66 @@ async function importProject(file){
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
 const kitData=()=>window.ZebjusKitData;
-function wifiPythonSelected(){return kitData()?.isNetwork($('pythonTarget')?.value)===true}
+let pythonBinding=null,pythonRunIdentity=null,pythonStarting=false,pythonRunEpoch=0;
+function pythonSelection(operation='read'){
+ const requested=$('pythonTarget')?.value||'python',kits=window.ZebjusKits,kit=kits?.getState?.();
+ if(requested==='usb'&&!kit?.kitId)return {transport:'usb',kitId:'',generation:window.DroneLabSerial?.generation?.(),legacy:true,reason:'Manual physical USB',capability:'read/write diagnostics'};
+ const paths=kits?.getMonitorPaths?.()|| (kit?.connected?[{kitId:kit.kitId,transport:kit.transport,verified:true,available:true,fresh:true,permitted:true}]:[]);
+ return kitData()?.resolvePythonTarget?.(kit,paths,requested,operation)||{transport:null,reason:'NO VERIFIED KIT • connect a verified Kit first.'};
+}
+function validatePythonSession(){
+ const kit=window.ZebjusKits?.getState?.(),paths=window.ZebjusKits?.getMonitorPaths?.()||
+  (kit?.connected?[{kitId:kit.kitId,transport:kit.transport,verified:true,available:true,fresh:true,permitted:true}]:[]);
+ if(pythonRunIdentity&&pythonRunIdentity.kitId&&(kit?.kitId!==pythonRunIdentity.kitId||kit?.bootId!==pythonRunIdentity.bootId))
+  throw Object.assign(Error('KitDataDisconnectedError: Kit identity or boot changed during Python Run. Verify and Run again.'),{code:'KIT_SESSION_CHANGED'});
+ if(!pythonBinding){if(pythonRunIdentity&&!pythonSelection().transport)throw Error('KitDataDisconnectedError: verified Python target was lost. Reconnect and Run again.');return;}
+ if(pythonBinding.legacy){
+  if(!window.DroneLabSerial?.isOpen?.()||window.DroneLabSerial?.generation?.()!==pythonBinding.generation)throw Error('USBDisconnectedError: Python USB session changed. Reconnect and Run again.');
+ }else kitData().validatePythonBinding(pythonBinding,kit,paths);
+}
+function bindPythonOperation(operation='read'){
+ if(($('pythonTarget')?.value||'python')==='python')throw Error('PythonSimulatorIsolationError: select Auto or an explicit hardware target to access a Kit.');
+ validatePythonSession();
+ if(!pythonBinding){
+  const selected=pythonSelection(operation);
+  if(!selected.transport)throw Error(selected.reason);
+  pythonBinding=selected;
+  if(kitData()?.isNetwork(selected.transport))window.DroneLabNetwork?.stream?.(true);
+ }
+ if($('pythonTarget')?.value==='auto'&&pythonBinding.transport==='android-relay'&&['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation))
+  throw Error('Auto Android Relay is read-only. Select a directly authorized USB/AP/STA path for this hardware operation.');
+ const operationTarget=pythonBinding.legacy?pythonBinding:kitData().resolvePythonTarget(window.ZebjusKits.getState(),window.ZebjusKits.getMonitorPaths?.()||
+  [{kitId:pythonBinding.kitId,transport:pythonBinding.transport,verified:true,available:true,fresh:true,permitted:true}],pythonBinding.transport,operation);
+ if(!operationTarget.transport)throw Error(operationTarget.reason+' The active Python session stays on '+pythonBinding.transport.toUpperCase()+'.');
+ usbStatus();return pythonBinding;
+}
+function pythonTransport(){return pythonBinding?.transport||pythonSelection().transport}
+function wifiPythonSelected(){return kitData()?.isNetwork(pythonTransport())===true}
 function selectedPythonKit(){
- const kit=window.ZebjusKits?.getState?.(),target=$('pythonTarget')?.value;
+ validatePythonSession();
+ const target=pythonTransport(),kit=target==='usb'?window.ZebjusKits?.getUsbMonitorState?.()||window.ZebjusKits?.getState?.():window.ZebjusKits?.getState?.();
  if(!kitData()?.matchesTarget(kit,target))throw Error('KitDataDisconnectedError: Select and verify the '+String(target||'Kit').toUpperCase()+' target in Kit Connection.');
  return kit;
 }
 function wifiPythonReady(){
  const selected=window.ZebjusKits?.getState?.();
- return !!kitData()?.matchesTarget(selected,$('pythonTarget')?.value)&&
+ return !!kitData()?.matchesTarget(selected,pythonTransport())&&
   !!window.DroneLabNetwork?.isConnected?.();
 }
 function usbStatus(){
+ const requested=$('pythonTarget')?.value,selection=pythonBinding||pythonSelection();
+ const resolution=$('pyTargetResolution'),kit=window.ZebjusKits?.getState?.();
+ const description=requested==='python'?'Python Simulator • isolated from Kit':
+  'Requested '+String(requested).toUpperCase()+' • '+(selection.transport?'Resolved '+selection.transport.toUpperCase()+' • '+(selection.kitId||'physical USB')+' • '+selection.capability:'NO VERIFIED KIT')+' • '+selection.reason+
+  (kit?.rc?' • Input '+String(kit.rc.source||'NONE')+' • '+(kit.rc.ageMs==null?'age unavailable':kit.rc.ageMs+' ms at last status'):'');
+ if(resolution&&resolution.textContent!==description)resolution.textContent=description;
+ const short=$('pyTargetShort'),shortText=requested==='python'?'Python • ISOLATED':String(requested).toUpperCase()+' → '+(selection.transport?.toUpperCase()||'NO VERIFIED KIT');
+ if(short&&short.textContent!==shortText)short.textContent=shortText;
+ if($('pythonTarget')&&$('pythonTarget').title!==description)$('pythonTarget').title=description;
+ if(running&&(pythonBinding||pythonRunIdentity)){try{validatePythonSession()}catch(e){
+  if(kitData()?.isNetwork(pythonBinding?.transport))ledController.suspend(e);
+  else{abortPythonWithHardwareError('KitDataDisconnectedError',e.message);return;}
+ }}
  if(wifiPythonSelected()){
   const ready=wifiPythonReady(),selected=window.ZebjusKits?.getState?.();
   const transport=selected?.connected?selected.transport:'none';
@@ -150,6 +204,7 @@ function usbStatus(){
  }
 }
 async function connectUsb(){
+ if($('pythonTarget')?.value==='auto'){window.ZebjusDevicesWorkspace?.open('connection',{scroll:true});return}
  if(wifiPythonSelected()){
   try{await window.DroneLabNetwork?.read?.();usbStatus();status('FlightCore Wi-Fi relay connected','good')}
   catch(e){status('Wi-Fi: '+(e.message||e),'warn')}return;
@@ -160,33 +215,56 @@ async function connectUsb(){
  try{await api.connect();usbStatus();status('USB listening • 115200 baud','good')}
  catch(e){usbStatus();status('USB: '+e.message,'warn')}
 }
-function sendLedPacket(packet){
- if(wifiPythonSelected()){
-  window.DroneLabNetwork?.writeLine?.(packet).catch(e=>{
-   if(Date.now()-ledLastError>1000){terminal('[Network LED] '+e.message+'\\n','error');ledLastError=Date.now()}
-  });
-  return;
+function renderLedHealth(health){
+ if(health.phase==='verifying'&&health.failures===0)ledErrorEpisode=false;
+ const label=$('pyLedHealth');if(label){label.textContent='LED: '+health.phase.toUpperCase()+(health.failures?' • '+health.failures+' failed':'');label.dataset.state=health.phase;
+  label.title=(health.binding?.kitId||'No bound Kit')+' • '+(health.binding?.transport||'unresolved')+' • '+health.failures+' failed operation(s)'+(health.lastError?' • '+health.lastError:'');}
+ if(health.phase===ledReportedPhase)return;
+ const previous=ledReportedPhase;ledReportedPhase=health.phase;
+ if(['paused','blocked','stop-failed'].includes(health.phase)&&(!ledErrorEpisode||health.phase==='stop-failed'||health.phase==='blocked'&&previous!=='blocked')){
+  ledErrorEpisode=true;
+  terminal('[LED '+health.phase.toUpperCase()+'] '+health.lastCommand+' failed: '+health.lastError+'\n'+(running?'Python execution continues; LED state is unconfirmed.\n':'LED state is unconfirmed; verify the Kit before the next Run.\n'),'error');
+ }else if(health.phase==='healthy'&&ledErrorEpisode){
+  ledErrorEpisode=false;
+  terminal('[LED RECOVERED] Original Kit re-verified; latest LED command acknowledged.\n','out');
+ }else if(health.phase==='stopped')ledErrorEpisode=false;
+}
+async function verifyLedBinding(bound,{freshOnly=false}={}){
+ if(kitData()?.isNetwork(bound.transport)){
+  const kit=window.ZebjusKits?.getState?.();kitData().assertBoundSession(bound,kit,{allowDelayed:true});
+  if(freshOnly&&kit.connected&&kit.controlAuthorized===true)return;
+  return window.DroneLabNetwork.verifyBinding(bound);
  }
- const api=window.DroneLabSerial;
- if(!api?.isOpen?.()||!api.writeLine){
-  if(Date.now()-ledLastError>1000){terminal('[LED] USB disconnected. Connect at 115200 baud.\n','error');ledLastError=Date.now()}
-  return;
+ if(bound.legacy){
+  if(window.DroneLabSerial?.isOpen?.()&&window.DroneLabSerial?.generation?.()===bound.generation)return;
+  throw Object.assign(Error('Original USB LED session disconnected.'),{code:'KIT_DISCONNECTED'});
  }
- void api.writeLine(packet).catch(error=>{
-  if(Date.now()-ledLastError>1000){terminal('[LED] '+error.message+'\n','error');ledLastError=Date.now()}
- });
+ kitData().validatePythonBinding(bound,window.ZebjusKits.getState(),window.ZebjusKits.getMonitorPaths());
+}
+async function writeBoundLed(packet,bound){
+ if(kitData()?.isNetwork(bound.transport)){
+  if(/,STOP\s*$/.test(packet)&&!window.ZebjusKits.getState().connected)await verifyLedBinding(bound);
+  return window.DroneLabNetwork.writeLine(packet,bound);
+ }
+ await verifyLedBinding(bound,{freshOnly:true});
+ if(!window.DroneLabSerial?.writeLine)throw Error('USB LED writer unavailable.');
+ await window.DroneLabSerial.writeLine(packet);
+ await verifyLedBinding(bound,{freshOnly:true});
 }
 function stopLedSession(){
  if(ledHeartbeat){clearInterval(ledHeartbeat);ledHeartbeat=null}
- if(ledSession)sendLedPacket('ZJLED,0,STOP\n');
- ledSession=false;
+ ledSession=false;ledController.stop();
 }
 function startLedSession(packet){
+ let bound;
+ try{bound=bindPythonOperation('led')}
+ catch(error){if(error.code==='KIT_DELAYED'&&kitData()?.isNetwork(pythonBinding?.transport))bound=pythonBinding;
+  else{ledController.fail(error);return;}}
  if(!ledSession){
   ledSession=true;
-  ledHeartbeat=setInterval(()=>{if(ledSession)sendLedPacket('ZJLED,0,KEEP\n')},1000);
+  ledHeartbeat=setInterval(()=>{if(ledSession)ledController.keep()},1000);
  }
- sendLedPacket(packet);
+ ledController.set(packet,bound);
 }
 const ERROR_DESCRIPTIONS={
  SyntaxError:'Check quotes, colons, brackets and punctuation.',
@@ -233,17 +311,21 @@ function closePythonHardwareControl(){
  if(owned&&wifiPythonSelected())void window.ZebjusKits?.releaseRc?.().catch(()=>{});
 }
 function stopPython(notify=true){
+ ++pythonRunEpoch;pythonStarting=false;
  closePythonHardwareControl();
  stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);
  const w=worker;worker=null;if(w)w.terminate();running=false;$('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=true;
- updateButtons();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
+ pythonBinding=null;pythonRunIdentity=null;
+ updateButtons();usbStatus();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
 }
 async function onRpc(w,m){
  try{
+  if(worker!==w)return;
+  bindPythonOperation(m.method);
   let result;
   if(m.method==='read_joystick'){
    selectedPythonKit(); // Same verified AP / STA / USB / Android Relay reader.
-   result=await window.DroneLabNetwork.readJoystick();
+   result=pythonTransport()==='usb'?kitData().usbJoystick(selectedPythonKit()):await window.DroneLabNetwork.readJoystick();
   }else if(m.method==='i2c_scan'){
    if(wifiPythonSelected()&&!wifiPythonReady())throw Error('FlightCore Wi-Fi disconnected. Pair Android, connect Kit and enable WebApp access.');
    if(!wifiPythonSelected()&&!window.DroneLabSerial?.isOpen?.())throw Error('USB disconnected. Click Connect USB Serial, select the board, and use 115200 baud.');
@@ -267,7 +349,7 @@ async function onRpc(w,m){
      // AP, STA and Android Relay use the same verified Kit telemetry endpoint.
      if(!wifiPythonReady())throw Error('NetworkDisconnectedError: selected AP / STA / Android Relay Kit is not verified.');
      const before=window.ZebjusKits?.getState?.();
-     if(!kitData()?.matchesTarget(before,$('pythonTarget')?.value))
+     if(!kitData()?.matchesTarget(before,pythonTransport()))
       throw Error('NetworkDisconnectedError: select a verified network Kit before reading gyro.');
      const timeout=Math.max(200,Math.min(10000,Number(m.args?.timeout)||3000));
      let timer;
@@ -279,7 +361,7 @@ async function onRpc(w,m){
       ]);
      }finally{clearTimeout(timer)}
      const after=window.ZebjusKits?.getState?.();
-     if(!after?.connected||after.kitId!==before.kitId||after.transport!==before.transport||!kitData()?.matchesTarget(after,$('pythonTarget')?.value))
+     if(!after?.connected||after.kitId!==before.kitId||after.transport!==before.transport||!kitData()?.matchesTarget(after,pythonTransport()))
       throw Error('NetworkDisconnectedError: Connected kit or AP/STA transport changed during gyro read.');
      result=parseNetworkGyroTelemetry(telemetry,before.kitId);
     }else{
@@ -288,6 +370,7 @@ async function onRpc(w,m){
     }
    }else if(m.method==='latest_scan')result=bridge.getLatest();
   else throw Error('Unsupported Python hardware command: '+m.method);
+  validatePythonSession();
   if(worker===w)w.postMessage({type:'rpc-result',id:m.id,ok:true,value:JSON.stringify(result)});
  }catch(e){if(worker===w)w.postMessage({type:'rpc-result',id:m.id,ok:false,error:String(e.message||e)})}
 }
@@ -310,7 +393,8 @@ function makeWorker(){
     stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);markPythonError(m,'runtime');
     w.terminate();worker=null;running=false;
    }else{if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);status('Python finished','good');$('pyLastRun').textContent='COMPLETE';running=false;}
-   $('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();
+   if(!ledSession){pythonBinding=null;pythonRunIdentity=null;}
+   $('runPythonBtn').disabled=false;$('stopPythonBtn').disabled=!ledSession;updateButtons();usbStatus();
   }
  };
  w.onerror=e=>{if(w===syntaxWorker){syntaxWorker.terminate();syntaxWorker=null;status('Syntax checker unavailable','warn');return}if(worker!==w)return;terminal('\n[Python Worker Error] '+(e.message||'unknown')+'\n');stopPython(false);status('Python runtime unavailable','warn')};
@@ -325,14 +409,22 @@ function checkPythonSyntax(){
  w.postMessage({type:'check-syntax',filename:active,code:currentCode()});
 }
 async function runPython(){
- if(running)return;
+ if(running||pythonStarting)return;
+ const epoch=++pythonRunEpoch;pythonStarting=true;updateButtons();
+ try{
  workspace?.openBottom('run');
  if(syntaxWorker){syntaxWorker.terminate();syntaxWorker=null}
  stopLedSession();
+ pythonBinding=null;pythonRunIdentity=null;
  const fileToRun=active,code=currentCode();if(!code.trim())return status('Nothing to run','warn');
+ if($('pythonTarget').value!=='python'){
+  const selection=pythonSelection(),kit=window.ZebjusKits?.getState?.();
+  if(!selection.transport){terminal('[Hardware] '+selection.reason+'\n','error');status(selection.reason,'warn');return}
+  pythonRunIdentity=kit?.kitId?{kitId:kit.kitId,bootId:kit.bootId,transport:kit.transport}:null;
+ }
  if(wifiPythonSelected()){
    try{
-    const kit=window.ZebjusKits?.getState?.(),target=$('pythonTarget').value;
+    const kit=window.ZebjusKits?.getState?.(),target=pythonTransport();
     if(!kitData()?.matchesTarget(kit,target))
      throw Error('Connect and verify the '+target.toUpperCase()+' Kit in Kit Connection before Python Run.');
     // Monitoring and sensor/LED diagnostics do not acquire the exclusive RC lease.
@@ -340,24 +432,26 @@ async function runPython(){
     await window.DroneLabNetwork.read();
     if(!wifiPythonReady())throw Error('Selected '+target.toUpperCase()+' connection is not responding; reconnect MY KITS.');
     window.ZebjusPythonHardwareActive=false;
-    window.DroneLabNetwork.stream(true);
+    validatePythonSession();
    }catch(e){
     clearTerminal();terminal('[FlightCore '+$('pythonTarget').value.toUpperCase()+'] '+(e.message||e)+'\n','error');
     status('Wi-Fi Python blocked: '+(e.message||e),'warn');return;
    }
   }
-  if(!wifiPythonSelected()&&/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){clearTerminal();terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
+  if($('pythonTarget').value!=='python'&&!wifiPythonSelected()&&/\bi2c_scan\s*\(|\bzebjus_simple\b/.test(code)&&!window.DroneLabSerial?.isOpen?.()){terminal('[USB] Connect USB Serial at 115200 baud before running this hardware script.\n','error');status('USB connection required','warn');return}
+ if(epoch!==pythonRunEpoch)return;
  files[fileToRun]=code;save();if(worker){worker.terminate();worker=null}
  worker=makeWorker();running=true;hasRun=true;$('runPythonBtn').disabled=true;$('stopPythonBtn').disabled=false;
  clearTerminal();terminal('>>> Running '+fileToRun+'\n');status('Starting '+fileToRun+'…');updateButtons();
  clearPythonMarkers();
- worker.postMessage({type:'hardware-info',info:wifiPythonSelected()?window.ZebjusKits?.getState?.():window.DroneLabSerial?.firmwareInfo?.()||null});
- worker.postMessage({type:'i2c-data',scan:bridge.getLatest()});
+ worker.postMessage({type:'hardware-info',info:$('pythonTarget').value==='python'?null:wifiPythonSelected()?window.ZebjusKits?.getState?.():window.DroneLabSerial?.firmwareInfo?.()||null});
+ worker.postMessage({type:'i2c-data',scan:$('pythonTarget').value==='python'?null:pythonBinding?bridge.getLatest():null});
  const runWorker=worker;
  try{const assets=workspace?await workspace.assetPayload():[];
   if(worker===runWorker)runWorker.postMessage({type:'run',filename:fileToRun,code,files:{...files,[fileToRun]:code},assets});
  }catch(e){if(worker===runWorker){status('Assets: '+e.message,'warn');runWorker.postMessage({type:'run',filename:fileToRun,code,files:{...files,[fileToRun]:code},assets:[]})}}
 
+ }finally{if(epoch===pythonRunEpoch){pythonStarting=false;if(!running&&!ledSession){if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);pythonBinding=null;pythonRunIdentity=null;}updateButtons();usbStatus();}}
 }
 
 function updateButtons(){
@@ -365,10 +459,10 @@ function updateButtons(){
  const u=$('pythonUndoFileBtn'),r=$('pythonRedoFileBtn');
  if(u){u.disabled=!!running||(!editor&&!h?.undo?.length);u.title='Undo (Ctrl/⌘+Z)'}
  if(r){r.disabled=!!running||(!editor&&!h?.redo?.length);r.title='Redo (Ctrl/⌘+Shift+Z)'}
- $('rerunPythonBtn').disabled=running||!hasRun;
- $('runPythonBtn').disabled=running;
- $('pythonTarget').disabled=running; // prevent transport switch halfway through an authorized Python session
- $('stopPythonBtn').disabled=!running&&!ledSession;
+ $('rerunPythonBtn').disabled=running||pythonStarting||!hasRun;
+ $('runPythonBtn').disabled=running||pythonStarting;
+ $('pythonTarget').disabled=running||pythonStarting; // prevent transport switch halfway through an authorized Python session
+ $('stopPythonBtn').disabled=!running&&!pythonStarting&&!ledSession;
 }
 function editorPosition(){
  const pos=editor?.getPosition?.(),box=$('pythonEditor'),line=box?box.value.slice(0,box.selectionStart).split('\n'):[''];
@@ -642,7 +736,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=e.target.value==='joystick'?'sta':['wifi_scan','wifi_save'].includes(e.target.value)?'ap':['scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?(['sta','ap','android-relay'].includes(window.ZebjusKits?.getState?.().transport)?window.ZebjusKits.getState().transport:'usb'):'python';e.target.value=''};
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'auto':'python';usbStatus();e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',usbStatus);$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
@@ -667,15 +761,16 @@ function bind(){
   }
  });
  window.addEventListener('dronelab:usb-state',e=>{
-  if(e.detail?.connected===false&&running&&$('pythonTarget')?.value==='usb')abortPythonWithHardwareError('USBDisconnectedError','USB Serial disconnected while the Python hardware program was running.');
+  if(e.detail?.connected===false&&running&&pythonTransport()==='usb')abortPythonWithHardwareError('USBDisconnectedError','USB Serial disconnected while the Python hardware program was running.');
  });
  window.addEventListener('pagehide',()=>{stopLedSession();worker?.terminate();stopCamera();bridge.close();gyroBridge.close()});
  bridge.subscribe(data=>{
-  if(worker)worker.postMessage({type:'i2c-data',scan:data});
+  if(worker&&pythonBinding){try{validatePythonSession();worker.postMessage({type:'i2c-data',scan:data})}catch(e){abortPythonWithHardwareError('KitDataDisconnectedError',e.message)}}
   $('pyDeviceAddresses').textContent=data.addresses.join('  ')||'No devices';
   $('pyScanStatus').textContent='Last scan: '+data.total+' device(s) • '+new Date(data.timestamp).toLocaleTimeString();
   usbStatus();
  });
+ window.addEventListener('dronelab:kit-link',usbStatus);
  setInterval(usbStatus,1200);$('stopPythonBtn').disabled=true;$('pythonCameraStop').disabled=true;updateButtons();
 }
 function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bind();

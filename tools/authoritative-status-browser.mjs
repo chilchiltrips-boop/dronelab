@@ -86,7 +86,7 @@ try{
   return state.activeSource==='usb'&&state.input?.fresh&&state.input.origin==='kit'&&
    state.throttle===1000&&state.seq>previous&&state.kitMode?.active==='angle'&&!state.armed;
  },initialSeq,{timeout:10000});
- check(await sim.locator('#tpMode').isDisabled(),'Connected Kit must own simulator mode');
+ check(!(await sim.locator('#tpMode').isDisabled()),'Simulator mode must remain independent of connected Kit');
  await sim.locator('#tpRun').click();
  try{await page.waitForFunction(()=>window.ZebjusTraining.snapshot().armed,null,{timeout:5000})}
  catch(error){
@@ -109,7 +109,7 @@ try{
  check(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Unchanged/unrelated link event stopped verified USB Run');
  await page.evaluate(()=>{const f=window.__statusFixture;f.kit.flightMode='acro';Object.assign(f.kit.flightModeState,{saved:'acro',active:'acro',pending:null})});
  try{
-  await page.waitForFunction(()=>document.getElementById('pidFrame')?.contentDocument?.getElementById('tpKitMode')?.textContent.includes('SYNC PENDING'),null,{timeout:5000});
+  await page.waitForFunction(()=>document.getElementById('pidFrame')?.contentDocument?.getElementById('tpKitMode')?.textContent.includes('KIT ACTIVE ACRO'),null,{timeout:5000});
  }catch(error){
   const diagnostic=await page.evaluate(()=>{
    const frame=document.getElementById('pidFrame')?.contentDocument;
@@ -124,7 +124,8 @@ try{
  }
  check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
  await sim.locator('#tpStop').click();
- await page.waitForFunction(()=>document.getElementById('pidFrame').contentDocument.getElementById('tpMode').value==='acro');
+ check((await sim.locator('#tpMode').inputValue())==='angle','Stop must preserve the independently selected simulator mode');
+ await sim.locator('#tpMode').selectOption('acro');
  const stoppedSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
  await page.waitForFunction(previous=>{
   const state=window.ZebjusTraining.snapshot();
@@ -143,7 +144,7 @@ try{
  const trace=await page.evaluate(()=>window.__inputTrace||[]);
  writeFileSync(outputDir+'/evidence.json',JSON.stringify({runLabel,evidence,errors,
   timerGaps:trace.filter(e=>e.kind==='timer-gap'),linkEvents:trace.filter(e=>e.kind==='kit-link'),physicalHardware:'NOT TESTED'},null,2));
- console.log('PASS authoritative status run '+runLabel+': AP/STA/relay/USB, auxiliaries, disarmed monitoring, USB Run across link notifications, pending mode, contrast and five viewports');
+ console.log('PASS authoritative status run '+runLabel+': AP/STA/relay/USB, auxiliaries, disarmed monitoring, USB Run across link notifications, independent simulator / Kit modes, contrast and five viewports');
 }catch(error){
  const trace=await page.evaluate(()=>window.__inputTrace||[]).catch(()=>[]);
  writeFileSync(outputDir+'/failure.json',JSON.stringify({error:error.stack||error.message,trace,errors},null,2));

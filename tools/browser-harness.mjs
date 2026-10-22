@@ -3,10 +3,10 @@
 import {readFile} from 'node:fs/promises';
 import {extname,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-export const browserOptions={headless:true,args:['--no-sandbox'],...(process.env.DRONELAB_BROWSER_EXECUTABLE?{executablePath:process.env.DRONELAB_BROWSER_EXECUTABLE}:{})};
+export const browserOptions={headless:true,args:['--no-sandbox',...(process.env.DRONELAB_BROWSER_SINGLE_PROCESS==='1'?['--single-process','--no-zygote']:[])],...(process.env.DRONELAB_BROWSER_EXECUTABLE?{executablePath:process.env.DRONELAB_BROWSER_EXECUTABLE}:{})};
 export async function configureContext(context){
  if(process.env.DRONELAB_TEST_FILE_ROUTES!=='1')return;
- const root=fileURLToPath(new URL('../',import.meta.url)),mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.ttf':'font/ttf','.png':'image/png'};
+ const root=process.env.DRONELAB_TEST_SOURCE_ROOT?resolve(process.env.DRONELAB_TEST_SOURCE_ROOT)+sep:fileURLToPath(new URL('../',import.meta.url)),mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.wasm':'application/wasm','.ttf':'font/ttf','.png':'image/png'};
  await context.route('http://127.0.0.1:8765/**',async route=>{
   const url=new URL(route.request().url()),file=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
   if(!file.startsWith(root))return route.fulfill({status:403,body:'Invalid path'});

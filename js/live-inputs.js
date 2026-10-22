@@ -132,7 +132,7 @@ function initLiveInputs(){
    rateHz:rate.observe(kit.kitId,rc,at),ledOn:kit.ledOn,
    motorsOff:rc.motorsDisabled===true||rc.motorsArmed===false};
  }
- const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
+ const write=(id,value)=>{const e=$(id),text=String(value);if(e&&e.textContent!==text)e.textContent=text};
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
   const connected=kit.connected===true;
@@ -161,7 +161,8 @@ function initLiveInputs(){
   write('liFlightMode',v.flightMode?v.flightMode.toUpperCase():'NOT REPORTED');
   const actual=kit.connected?kit.flightModeState:null;
   const modeSelect=$('liModeSelect');
-  if(modeSelect){modeSelect.disabled=!kit.connected||kit.transport==='android-relay';if(actual&&!modeSaving)modeSelect.value=actual.saved;}
+  if(modeSelect){modeSelect.disabled=!kit.connected||!actual||kit.transport==='android-relay';if(actual&&!modeSaving)modeSelect.value=actual.saved;
+   modeSelect.title=!actual?'UNSUPPORTED • update FlightCore for authoritative Kit mode settings':kit.transport==='android-relay'?'Relay monitoring is read-only':'Kit classroom metadata • physical stabilization is not supported';}
   if(!modeSaving&&!$('liModeStatus')?.textContent?.startsWith('NOT VERIFIED'))write('liModeStatus',actual?'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):'UNSUPPORTED • update FlightCore for authoritative mode settings');
   for(const [key,id] of [['ch5','liAux5'],['ch6','liAux6']])write(id,v.aux?.[key]===null||v.aux?.[key]===undefined?'NOT REPORTED':v.aux[key]+' µs');
   const connectionState=kit.connected?(v.state==='stale'?'STALE':'CONNECTED'):

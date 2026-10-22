@@ -50,7 +50,15 @@ export function startSimulator(s){
 export function resetSimulator(s){for(const [bank,values] of Object.entries(s.pendingPID))applyPID(s,bank,values);stopSimulator(s);s.vertical.z=s.vertical.velocity=s.vertical.acceleration=0;s.vertical.stop='BOTTOM';s.roll=s.pitch=s.yaw=s.trimRoll=s.trimPitch=s.time=0;s.targetRoll=s.targetPitch=0;resetMetrics(s)}
 export function setFlightMode(s,mode){
  if(!['angle','acro'].includes(mode))return false;
- if(s.mode!==mode){s.mode=mode;s.pulse=null;clearPID(s);resetMetrics(s)}
+ if(s.mode!==mode){
+  // The inner rate loop is shared. Keep its integral and derivative history,
+  // physical state and motor inertia; prime only the newly engaged outer loop.
+  s.modeTransition=s.running?{at:s.time,from:{...s.ratePID}}:null;
+  s.mode=mode;s.pulse=null;
+  for(const bank of ['angleRoll','anglePitch'])s.memory[bank]=newPID();
+  if(!s.running)clearPID(s);
+  resetMetrics(s);
+ }
  return true;
 }
 export function setPID(s,bank,params){
@@ -126,9 +134,17 @@ export function stepSimulator(s){
  s.gyroPitch+=(s.pitchRate-s.gyroPitch)*gyroAlpha;
  s.gyroYaw+=(s.yawRate-s.gyroYaw)*gyroAlpha;
  const noise=clamp(e.gyroNoise??.07,0,2)+e.wind*.001,clock=s.time*89.17+(e.noiseSeed??7919)*.001;
- const uR=computePID(s,bankR,s.targetRollRate,s.gyroRoll+noise*Math.sin(clock));
- const uP=computePID(s,bankP,s.targetPitchRate,s.gyroPitch+noise*Math.cos(clock*.87));
- const uY=computePID(s,bankY,s.targetYawRate,s.gyroYaw+noise*.45*Math.sin(clock*1.13));
+ const rateOutput=(bank,axis,target,actual)=>{
+  const output=computePID(s,bank,target,actual),transition=s.modeTransition;
+  // Engage the new controller immediately and blend its torque for 120 ms.
+  // Repeated switches start from the last applied torque, never zero RPM.
+  const blend=transition?clamp((s.time-transition.at)/.12,0,1):1;
+  return transition?transition.from[axis]+blend*(output-transition.from[axis]):output;
+ };
+ const uR=rateOutput(bankR,'roll',s.targetRollRate,s.gyroRoll+noise*Math.sin(clock));
+ const uP=rateOutput(bankP,'pitch',s.targetPitchRate,s.gyroPitch+noise*Math.cos(clock*.87));
+ const uY=rateOutput(bankY,'yaw',s.targetYawRate,s.gyroYaw+noise*.45*Math.sin(clock*1.13));
+ if(s.modeTransition&&s.time-s.modeTransition.at>=.12)s.modeTransition=null;
  s.anglePID.roll=s.memory.angleRoll.output;s.anglePID.pitch=s.memory.anglePitch.output;
  s.ratePID.roll=uR;s.ratePID.pitch=uP;s.ratePID.yaw=uY;
  const base=enabled?100*(PLANT.idle+(1-PLANT.idle)*clamp((s.throttle-1000)/1000,0,1)):0;
