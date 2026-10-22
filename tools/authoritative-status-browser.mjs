@@ -17,6 +17,19 @@ try{
   const kit={kitId,kitName:'Verified fixture',connected:true,transport:'ap',version:'1.5.10',board:'ZFC-A2',bootId:'boot-test',
    flightMode:'angle',flightModeState:mode,ledOn:true,motorsArmed:false,motorsDisabled:true,usbAvailable:true,working:false};
   const f=window.__statusFixture={kit,seq:0,t:1000,r:1500,armed:false,requests:[]};
+  const history=window.__inputTrace=[];
+  const log=(kind,data)=>{history.push({at:performance.now(),kind,...data});if(history.length>200)history.shift()};
+  const store=window.ZebjusSimulatorInputs;
+  const state=()=>({receiver:window.ZebjusTraining.snapshot(),kit:store.snapshot().kit});
+  for(const method of ['acceptKit','clearKit']){
+   const original=store[method];
+   store[method]=function(...args){
+    const before=state(),result=original.apply(this,args),after=state();
+    log(method,{before,after,packet:args[0]});return result;
+   };
+  }
+  let lastTick=performance.now();
+  setInterval(()=>{const at=performance.now();if(at-lastTick>300)log('timer-gap',{gap:at-lastTick,state:state()});lastTick=at},40);
   const rc=()=>({kitId,seq:++f.seq,source:'ANDROID',transport:'AP',active:true,inputValid:true,failsafe:false,ageMs:0,
    throttle:f.t,roll:f.r,pitch:1500,yaw:1500,ch5:1725,ch6:1280,inputArmed:f.armed,
    flightMode:kit.flightMode,flightModeState:{...mode},motorsDisabled:true,motorsArmed:false});
@@ -75,7 +88,7 @@ try{
    return {snapshot:window.ZebjusTraining?.snapshot?.(),status:frame?.getElementById('tpStatus')?.textContent,
     runDisabled:frame?.getElementById('tpRun')?.disabled,tab:document.querySelector('.tab.active')?.id,
     fixture:{...window.__statusFixture,kit:window.__statusFixture?.kit},
-    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState}};
+    visibility:{parent:document.visibilityState,iframe:frame?.visibilityState},trace:window.__inputTrace};
   });
   console.error('USB VIRTUAL RUN DIAGNOSTIC '+JSON.stringify(diagnostic));
   throw error;
@@ -115,5 +128,9 @@ try{
  await page.screenshot({path:'test-output/authoritative-status-usb.png',fullPage:true});
  writeFileSync('test-output/authoritative-status-evidence.json',JSON.stringify({evidence,errors,physicalHardware:'NOT TESTED'},null,2));
  console.log('PASS authoritative status: AP/STA/relay/USB, auxiliaries, disarmed monitoring, USB simulator, pending mode, contrast and five viewports');
-}catch(error){await page.screenshot({path:'test-output/authoritative-status-error.png',fullPage:true}).catch(()=>{});throw error}
+}catch(error){
+ const trace=await page.evaluate(()=>window.__inputTrace||[]).catch(()=>[]);
+ writeFileSync('test-output/authoritative-status-failure.json',JSON.stringify({error:error.stack||error.message,trace,errors},null,2));
+ await page.screenshot({path:'test-output/authoritative-status-error.png',fullPage:true}).catch(()=>{});throw error;
+}
 finally{await browser.close()}
