@@ -67,7 +67,7 @@ hold is not proof that Kit RC is active or armed. The display must not label
 held/old input as LIVE or use it to issue hardware commands.
 
 Explicit WebApp Stop/Reset, confirmed WebRTC pairing authorization loss,
-Kit/transport/producer identity changes, and hidden browser/embedded simulator
+confirmed Kit disconnect/reboot/transport/producer identity changes, and hidden browser/embedded simulator
 views still stop the virtual run. Verified USB source-loss continues to
 stop the simulator (unchanged). A Web-driven Run ignores Android arrival/loss.
 No incoming mirror packet restarts a stopped simulator automatically.
