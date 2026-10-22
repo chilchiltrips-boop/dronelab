@@ -252,8 +252,9 @@
   if(tools)resize.observe(tools);
  }
  shell.addEventListener('click',event=>{
+  if(event.target.closest('button[data-open-admin]')){open('wifi');if($('smartAdvanced'))$('smartAdvanced').open=true;return;}
   const button=event.target.closest('button[data-dw-view]');
-  if(button){open(button.dataset.dwView);if(button.hasAttribute('data-open-admin')&&$('smartAdvanced'))$('smartAdvanced').open=true;}
+  if(button)open(button.dataset.dwView);
  });
  shell.addEventListener('keydown',event=>{
   const button=event.target.closest('button[data-dw-view]');
