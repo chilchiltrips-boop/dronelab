@@ -24,6 +24,7 @@ export function createInputStore({now=()=>performance.now()}={}){
 // Independent read-only stream of firmware-accepted Android RC, never a control grant.
 // The monitor alone may feed this cache, after Kit identity and RC freshness validation.
 let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=null,kitAccepted=null,kitEpoch=0;
+let kitConnected=false,kitLinkIdentity='';
  const listeners=new Set();
  const notify=()=>{for(const fn of listeners)fn()};
  function setPeer(value){
@@ -45,7 +46,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   sample={...m,aux:m.aux?{...m.aux}:undefined,channels:{...m.channels}};notify();return true;
  }
  function clearKit(){
-  kitMode=null;
+  kitMode=null;kitConnected=false;kitLinkIdentity='';
   const hadSample=kitSample!==null;
   kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
   if(hadSample)notify();
@@ -53,6 +54,8 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
  function acceptKit({kit,input}={}){
   const transport=String(kit?.transport||'').toLowerCase();
   const id=String(kit?.kitId||'');
+  kitConnected=kit?.connected===true;
+  kitLinkIdentity=kitConnected?id+'|'+transport+'|'+String(kit?.bootId||''):'';
   const vals=input?.values;
   const actual=kit?.flightModeState?.active||kit?.flightMode;
   const priorMode=kitMode;
@@ -102,7 +105,7 @@ let kitSample=null,kitReceivedAt=0,kitKey='',kitSeq=0,kitRateHz=null,kitMode=nul
   const kitAgeMs=kitSample?Math.max(0,now()-kitReceivedAt)+kitSample.inputAgeMs:null;
   return {mode:kitMode?{...kitMode}:null,peer:{...peer},sample:sample?{...sample,aux:sample.aux?{...sample.aux}:undefined,channels:{...sample.channels}}:null,ageMs,rateHz,rejected,
    fresh:!!sample&&peer.connected&&peer.approved&&peer.supported&&ageMs<=INPUT_MAX_AGE_MS,
-   kit:{sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
+   kit:{connected:kitConnected,identity:kitLinkIdentity,sample:kitSample?{...kitSample,channels:{...kitSample.channels}}:null,
     ageMs:kitAgeMs,rateHz:kitRateHz,fresh:!!kitSample&&kitAgeMs<=KIT_MIRROR_MAX_AGE_MS}};
  }
  return {setPeer,accept,acceptKit,clearKit,snapshot,subscribe(fn){listeners.add(fn);return ()=>listeners.delete(fn)}};
@@ -113,7 +116,7 @@ export function sharedInputStore(){
  return root.ZebjusSimulatorInputs||(root.ZebjusSimulatorInputs=createInputStore());
 }
 export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}={}){
- let choice='auto',locked=null,lockedOrigin='',identity='',heldFrame=null,reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
+ let choice='auto',locked=null,lockedOrigin='',identity='',lockedKitIdentity='',heldFrame=null,reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
   if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
@@ -126,11 +129,16 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const frameFor=(v,source,origin='auto')=>source==='usb'?usbFrame(v):androidFrame(v,origin);
  const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(usbFrame(v)?'usb':androidFrame(v)?'android':'web'):choice)};
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
- function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';heldFrame=null;reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
+ function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';lockedKitIdentity='';heldFrame=null;reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
  function setChoice(value){if(s.running||!['auto','web','android','usb'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
   if(!s.running||!['android','usb'].includes(locked))return;
   const v=store.snapshot(),frame=frameFor(v,locked,lockedOrigin);
+  // A verified Kit disconnect/reboot/transport change is not a transient
+  // read-only snapshot gap; stop the virtual source lock immediately.
+  if(lockedOrigin==='kit'&&(!v.kit.connected||v.kit.identity!==lockedKitIdentity)){
+   stop('Kit link or identity changed • press Run to resume');onTimeout();return;
+  }
   if(!frame){
    // Preserve the existing verified USB loss policy. Only Android AP/STA mirror
    // stalls (WebRTC or read-only Kit monitor) may hold a virtual Run.
@@ -158,7 +166,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   const throttle=selected!=='web'?frame.channels.throttle:s.throttle;
   if(throttle>1025){reason='LOWER THROTTLE TO 1000 µs';return {accepted:false,reason};}
   s.throttle=throttle;if(!startSimulator(s))return {accepted:false,reason:'LOWER THROTTLE TO 1000 µs'};
-  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';heldFrame=selected!=='web'?frame:null;reason='Running';applyLatest();onChange();return {accepted:true};
+  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';lockedKitIdentity=lockedOrigin==='kit'?v.kit.identity:'';heldFrame=selected!=='web'?frame:null;reason='Running';applyLatest();onChange();return {accepted:true};
  }
  function snapshot(){
   const v=store.snapshot(),source=effective(),remote=source!=='web',
