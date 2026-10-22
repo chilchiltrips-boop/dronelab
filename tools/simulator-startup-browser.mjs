@@ -23,7 +23,7 @@ try{
  // Release the deliberately pending document before screenshot capture:
  // Chromium waits for its font-loading lifecycle even though our error UI
  // has already been asserted above. This does not change the boot deadline.
- await context.unroute(match);await held.abort();held=null;
+ await held.abort();held=null;await context.unroute(match);
  await page.screenshot({path:'test-output/startup/timed-out.png'});
  await page.locator('.pid-load-status button').click();
  await page.waitForFunction(()=>window.ZebjusTraining.isReady(),null,{timeout:30000});
