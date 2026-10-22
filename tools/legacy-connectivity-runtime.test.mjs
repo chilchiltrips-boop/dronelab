@@ -17,7 +17,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  const ip=mode==='ap'?'192.168.4.1':'192.168.1.20';
  for(const [name,value] of Object.entries({kitCodeInput:'123456',kitTransport:mode,kitIpInput:ip,kitKeyInput:''}))elements.get(name).value=value;
  let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
-  requestTransport:mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
+  requestTransport:mode==='android-relay'?'AP':mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
  let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
@@ -415,6 +415,7 @@ test('Android relay loss immediately revokes connected state and rejects late re
  const f=fixture({mode:'android-relay',initialize:true});let finish;
  try{
   await f.api.connect();assert.equal(f.api.getState().connected,true);
+  await f.api.read();assert.equal(f.api.getState().physicalLink,'ap');
   f.blockRelay(new Promise(resolve=>finish=resolve));
   const pending=f.api.request('/api/telemetry');
   f.relay({connected:false,approved:false});

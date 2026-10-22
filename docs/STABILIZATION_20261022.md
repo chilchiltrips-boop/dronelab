@@ -15,7 +15,7 @@ Software checks and physical acceptance are separate. A successful build or brow
 
 1. Relay connectivity previously depended on the last Kit heartbeat and the existence of a request function. It could remain apparently connected after its paired phone disconnected. Bind the verified Kit to the approved phone session, clear stale accepted input on session loss, and reject replies from a replaced session. Direct USB/AP/STA links retain their own verification.
 2. A failed or stalled simulator iframe had no visible bounded recovery path. Expose a load failure after 15 seconds, require explicit Retry, and announce readiness only after the child has installed controls and started its rendering loop. Loading/retry never starts virtual motors.
-3. Auto graphics previously waited for 90 slow render frames before reducing load. On software/low-power renderers this can monopolize the main thread and delay telemetry callbacks. Reduce that delay to four consecutive slow frames, retaining the existing lower-quality renderer and every input freshness watchdog. Explicit graphics selections remain available.
+3. Auto graphics previously waited for 90 slow render frames before reducing load. On software/low-power renderers this can monopolize the main thread and delay telemetry callbacks. Reduce that delay to four repeated slow frames, retaining the existing lower-quality renderer and every input freshness watchdog. Explicit graphics selections remain available.
 
 ## Repeatable verification
 

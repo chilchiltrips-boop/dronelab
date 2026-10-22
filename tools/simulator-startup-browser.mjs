@@ -20,8 +20,11 @@ try{
  assert.equal((await page.evaluate(()=>window.ZebjusTraining.apply({}).accepted)),false);
  assert.ok(await page.locator('.pid-load-status button').isVisible());
  assert.ok((await page.locator('.pid-load-status button').boundingBox()).height>=44);
- await page.screenshot({path:'test-output/startup/timed-out.png'});
+ // Release the deliberately pending document before screenshot capture:
+ // Chromium waits for its font-loading lifecycle even though our error UI
+ // has already been asserted above. This does not change the boot deadline.
  await context.unroute(match);await held.abort();held=null;
+ await page.screenshot({path:'test-output/startup/timed-out.png'});
  await page.locator('.pid-load-status button').click();
  await page.waitForFunction(()=>window.ZebjusTraining.isReady(),null,{timeout:30000});
  assert.equal(await page.locator('.pid-load-status').isHidden(),true);
@@ -35,5 +38,8 @@ try{
  writeFileSync('test-output/startup/evidence.json',JSON.stringify({deadlineMs:15000,
   timeoutErrorVisible:true,explicitRetryRecovered:true,runStop:true,physicalHardware:'NOT TESTED'},null,2));
  console.log('PASS simulator startup: bounded timeout, visible reason, explicit Retry and functional Run/Stop');
-}catch(error){await page.screenshot({path:'test-output/startup/error.png'}).catch(()=>{});throw error}
+}catch(error){
+ if(held){await held.abort().catch(()=>{});held=null}
+ await page.screenshot({path:'test-output/startup/error.png',timeout:5000}).catch(()=>{});throw error;
+}
 finally{if(held)await held.abort().catch(()=>{});await browser.close()}
