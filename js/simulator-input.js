@@ -46,16 +46,19 @@ let kitConnected=false,kitLinkIdentity='';
   sample={...m,aux:m.aux?{...m.aux}:undefined,channels:{...m.channels}};notify();return true;
  }
  function clearKit(){
+  const hadLink=kitConnected||!!kitLinkIdentity;
   kitMode=null;kitConnected=false;kitLinkIdentity='';
   const hadSample=kitSample!==null;
   kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
-  if(hadSample)notify();
+  if(hadSample||hadLink)notify();
  }
  function acceptKit({kit,input}={}){
   const transport=String(kit?.transport||'').toLowerCase();
   const id=String(kit?.kitId||'');
+  const priorLink=kitConnected,priorLinkIdentity=kitLinkIdentity;
   kitConnected=kit?.connected===true;
   kitLinkIdentity=kitConnected?id+'|'+transport+'|'+String(kit?.bootId||''):'';
+  const linkChanged=priorLink!==kitConnected||priorLinkIdentity!==kitLinkIdentity;
   const vals=input?.values;
   const actual=kit?.flightModeState?.active||kit?.flightMode;
   const priorMode=kitMode;
@@ -67,7 +70,7 @@ let kitConnected=false,kitLinkIdentity='';
   // expire naturally instead of clearing the source at Live Inputs' 400ms UI limit.
   if(kit?.connected===true&&kitSample&&kitKey===key&&
      input?.state==='stale'&&(input?.source==='ANDROID'||transport==='usb')){
-   if(modeChanged)notify();
+   if(modeChanged||linkChanged)notify();
    return false;
   }
   const valid=kit?.connected===true&&['usb','ap','sta'].includes(transport)&&
@@ -80,7 +83,7 @@ let kitConnected=false,kitLinkIdentity='';
    // Do not briefly announce mode=null to subscribers during a source loss.
    const hadSample=kitSample!==null;
    kitSample=null;kitReceivedAt=0;kitKey='';kitSeq=0;kitRateHz=null;kitAccepted=null;kitEpoch=0;
-   if(hadSample||modeChanged)notify();
+   if(hadSample||modeChanged||linkChanged)notify();
    return false;
   }
   if(kitKey!==key){kitSample=null;kitSeq=0;kitKey=key;kitAccepted=null;kitEpoch=0;}
@@ -89,7 +92,7 @@ let kitConnected=false,kitLinkIdentity='';
    // Compact USB telemetry may omit ownerId. An advancing firmware accepted
    // counter proves that a reset sequence belongs to a new accepted producer.
    if(accepted!==null&&kitAccepted!==null&&accepted>kitAccepted){++kitEpoch;kitSeq=0;}
-   else{if(modeChanged)notify();return false;}
+   else{if(modeChanged||linkChanged)notify();return false;}
   }
   kitAccepted=accepted; // Polling the same accepted packet cannot refresh freshness.
   kitSeq=input.seq;kitReceivedAt=now();kitRateHz=Number.isFinite(input.rateHz)?input.rateHz:null;
