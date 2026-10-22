@@ -216,8 +216,8 @@ function toggleRun(){s.running?stop():start()}
 function syncActions(){
  const remote=!localInput(),state=receiver.snapshot();
  const authoritative=state.kitMode,kitActive=authoritative?.active;
- // Simulator mode is owned by this virtual model. Kit mode is separate,
- // authenticated classroom metadata, with no physical stabilization support.
+ // Follow changed Android/Kit SAVED choices in the virtual model; ACTIVE and
+ // PENDING still describe the physical firmware and never imply motor output.
  $('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
  $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
@@ -236,7 +236,9 @@ function syncActions(){
  $('tpSourceState').textContent=remote?(state.activeSource==='usb'?'USB ':'Android ')+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
  $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs'+(Number.isInteger(input.aux?.ch5)?' • CH5 '+input.aux.ch5:'')+(Number.isInteger(input.aux?.ch6)?' • CH6 '+input.aux.ch6:''):'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
- if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
+ if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach();
+  $('tpLastMode').textContent='SIM '+s.mode.toUpperCase()+(state.followedMode?' • ANDROID':'');
+  $('tpLastMode').title=state.followedMode?'Following '+state.followedMode.source+' • virtual mode applied immediately':'WebApp virtual mode';}
  if(lastRunning!==s.running){
   setStatus(s.running?(remote?'ANDROID INPUT • WEB RUN • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • '+state.reason);
   if(s.running&&audioUnlocked)audioStart();else if(!s.running)audioStop();

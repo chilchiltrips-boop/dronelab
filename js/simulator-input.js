@@ -1,7 +1,7 @@
 /* Read-only Android command cache shared by the host and embedded simulator.
  * No transport polling, Kit ownership, ARM, or physical output APIs belong here.
  */
-import {startSimulator,stopSimulator,resetSimulator,getSnapshot} from './tripod-physics.js';
+import {startSimulator,stopSimulator,resetSimulator,getSnapshot,setFlightMode} from './tripod-physics.js';
 export const INPUT_MAX_AGE_MS=450;
 // Read-only verified Kit HTTP RC snapshots arrive slower than paired WebRTC.
 // Simulator-only 1s grace absorbs Wi-Fi/browser rendering jitter; it never
@@ -119,7 +119,7 @@ export function sharedInputStore(){
  return root.ZebjusSimulatorInputs||(root.ZebjusSimulatorInputs=createInputStore());
 }
 export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}={}){
- let choice='auto',locked=null,lockedOrigin='',identity='',lockedKitIdentity='',heldFrame=null,heldObservedAt=0,lastStopReason='Not started',reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
+ let choice='auto',locked=null,lockedOrigin='',identity='',lockedKitIdentity='',heldFrame=null,heldObservedAt=0,lastStopReason='Not started',reason='Ready',lastModeKey='',followedMode=null,webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
   if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
@@ -132,11 +132,25 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const frameFor=(v,source,origin='auto')=>source==='usb'?usbFrame(v):androidFrame(v,origin);
  const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(usbFrame(v)?'usb':androidFrame(v)?'android':'web'):choice)};
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
+ function followRemoteMode(v,frame=null){
+  const source=effective();
+  if(source==='web'&&(s.running||choice!=='auto'))return;
+  const candidate=frame||frameFor(v,source,lockedOrigin||'auto')||heldFrame;
+  const meta=v.mode&&(!candidate||v.mode.kitId===candidate.kitId)?v.mode:null;
+  // Android's verified SAVED choice may be PENDING on the physical Kit until
+  // disarm. The virtual plant can apply it immediately without a hardware write.
+  const mode=meta?.saved||candidate?.mode||candidate?.flightMode;
+  if(!['angle','acro'].includes(mode))return;
+  const producer=meta?meta.kitId+'|'+meta.transport:key(candidate),modeKey=producer+'|'+mode;
+  if(modeKey===lastModeKey)return; // preserve manual virtual edits until Android changes mode
+  lastModeKey=modeKey;setFlightMode(s,mode);followedMode={mode,source:meta?'Kit saved mode':'Android mode',kitId:meta?.kitId||candidate?.kitId||''};
+ }
  function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';lockedKitIdentity='';heldFrame=null;reason=lastStopReason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
  function setChoice(value){if(s.running||!['auto','web','android','usb'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
-  if(!s.running||!['android','usb'].includes(locked))return;
-  const v=store.snapshot(),frame=frameFor(v,locked,lockedOrigin);
+  const v=store.snapshot();
+  if(!s.running||!['android','usb'].includes(locked)){followRemoteMode(v);return;}
+  const frame=frameFor(v,locked,lockedOrigin);
   // A verified Kit disconnect/reboot/transport change is not a transient
   // read-only snapshot gap; stop the virtual source lock immediately.
   if(lockedOrigin==='kit'&&(!v.kit.connected||v.kit.identity!==lockedKitIdentity)){
@@ -153,12 +167,14 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
    const pairingLost=lockedOrigin==='webrtc'&&
     (!v.peer.connected||!v.peer.approved||!v.peer.supported||v.peer.sessionId!==heldFrame?.sessionId);
    if(pairingLost){stop('Android pairing lost • press Run to resume');onTimeout();return;}
+   followRemoteMode(v,heldFrame);
    if(reason!=='Running • mirror stale (holding last virtual input)'){
     reason='Running • mirror stale (holding last virtual input)';onChange();
    }
    return;
   }
   if(key(frame)!==identity){stop((locked==='usb'?'USB':'Android')+' source changed • press Run to resume');onTimeout();return;}
+  followRemoteMode(v,frame);
   if(!heldFrame||heldFrame.seq!==frame.seq)heldObservedAt=Date.now();
   heldFrame=frame;reason='Running';
   const c=frame.channels,a=axesOf(c);s.throttle=c.throttle;s.cmdRoll=a.roll;s.cmdPitch=a.pitch;s.cmdYaw=a.yaw;
@@ -182,7 +198,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   const throttleY=1-2*(c.throttle-1000)/1000;
    const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
     {left:{...webSticks.left,y:Math.abs(webSticks.left.y)>.04?webSticks.left.y:1-2*(s.throttle-1000)/1000},right:webSticks.right};
-  return {kitMode:v.mode,source:source==='usb'?'usb':remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
+  return {kitMode:v.mode,followedMode:followedMode?.mode===s.mode?{...followedMode}:null,source:source==='usb'?'usb':remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
    seq:remote?frame?.seq||0:0,appliedAt:0,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
    axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:remote&&!s.running?a:{roll:0,pitch:0,yaw:0},sticks,
    input:remote?{aux:{...frame?.aux},channels:{...c},fresh:!!liveFrame,held:!!held,ageMs:ageMs??null,rateHz:frame?.rateHz??null,

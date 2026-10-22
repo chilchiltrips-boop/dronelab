@@ -36,7 +36,7 @@ try{
  check((await iframe.locator('#tpInputStatus').textContent()).includes('VERIFIED KIT RC'),'Source should say Kit RC not WebRTC');
  check(!(await page.evaluate(()=>window.ZebjusSimulatorInputs.snapshot().peer.approved)),'Kit path must not claim WebRTC pairing');
  check((await iframe.locator('#tpCameraView').inputValue())==='back','Initial view should face opposite direction');
- check((await iframe.locator('#tpMode').inputValue())==='angle','Simulator mode must be independent from Kit metadata');
+ check((await iframe.locator('#tpMode').inputValue())==='acro','Simulator mode must follow the selected Android Kit saved mode');
  check((await iframe.locator('#tpKitMode').textContent()).includes('KIT ACTIVE ACRO'),'Saved FlightCore mode missing in tripod');
  check((await iframe.locator('#tpInputArm').textContent())==='INPUT ARMED','Kit input ARM status not shown');
  check((await page.locator('#liFlightMode').textContent())==='ACRO','Live Inputs must show FlightCore ACRO');
@@ -61,6 +61,11 @@ try{
    const s=window.ZebjusTraining.snapshot();return s?.armed&&s.throttle===1919&&s.axes.roll>.5&&s.axes.pitch<-.4&&s.axes.yaw>.3;
  },null,{timeout:12000});
 
+ // Android changes its SAVED mode while firmware ACTIVE waits for disarm.
+ for(const mode of ['angle','acro','angle']){
+  await page.evaluate(mode=>{const k=window.__pidTest.kit;k.flightModeState={supported:true,stabilizationSupported:false,saved:mode,active:'acro',pending:mode==='acro'?null:mode}},mode);
+  await page.waitForFunction(mode=>{const s=window.ZebjusTraining.snapshot();return s.mode===mode&&s.armed&&s.throttle===1919},mode);
+ }
  // Switch the real mode selector repeatedly at high throttle. No Run, Stop,
  // input-source selection or physical mode request accompanies these changes.
  for(const mode of ['acro','angle','acro','angle','acro','angle']){

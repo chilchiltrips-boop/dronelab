@@ -413,7 +413,7 @@ async function connectUSB(code,ticket=reconnectTicket){
 }
 const form=args=>new URLSearchParams(args||{});
 function wifiDirect(ip,key,route,method='GET',args={},guard=null){
- const expected=state.kitId||localKitHosts.get(ip)||discoveredKits.find(k=>k.ip===ip)?.kitId||[...pairedKeys].find(([id,k])=>k===key)?.[0];
+ const expected=state.kitId||localKitHosts.get(ip)||adminKitHosts.get(ip)||discoveredKits.find(k=>k.ip===ip)?.kitId||[...pairedKeys].find(([id,k])=>k===key)?.[0];
  const ticket=reconnectTicket,slot=expected||ip;
  // Serialize session creation AND requests for a physical kit. Status and
  // telemetry used to open competing sessions before either had been cached.
