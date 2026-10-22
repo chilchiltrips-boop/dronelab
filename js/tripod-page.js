@@ -146,7 +146,9 @@ function makeScene(){
     sleeve.position.y=3.44+snapshot.vertical.z*3.5*2;
     pivot.updateMatrixWorld(true);
     const requested=$('tpQuality').value;
-    if(requested==='auto'){slowFrames=dt>.033?slowFrames+1:Math.max(0,slowFrames-1);if(slowFrames>90&&quality!=='low')applyQuality('low')}else if(requested!==quality)applyQuality(requested);
+    // Back off promptly on slow software/low-power renderers. Waiting for 90
+    // slow frames can starve read-only input callbacks for many seconds.
+    if(requested==='auto'){slowFrames=dt>.033?slowFrames+1:Math.max(0,slowFrames-1);if(slowFrames>=4&&quality!=='low')applyQuality('low')}else if(requested!==quality)applyQuality(requested);
     const intensity={off:0,soft:.4,normal:1}[$('tpEffects').value]??1;
     pivot.position.x=0; // no scripted vibration: attitude follows motor torque only
     for(let i=0;i<4;i++){
