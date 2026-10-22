@@ -31,6 +31,8 @@ All observations must reference the **same exact tested source release**, and A1
 
 For every physical case use the canonical evidence file fields `id`, `status`, `observedAt`, `operator`, `deviceId`, `firmwareVersion`, `evidenceRef`, `notes`. Do not set `PASS` without real observations and safe trace references. Record `FAIL` with sanitized failure logs where a real test fails, and leave `NOT_RUN` where it was not performed. Do not invent screenshots or device readings. Write the exact 40-character tested source SHA into `sourceCommit` only after a real acceptance session.
 
+Source contract tests allow genuine results to be recorded incrementally; they do not require the ledger to stay `NOT_RUN`. Partial results still fail the strict production gate. Keep raw serial captures, timing measurements and handset recordings referenced by each result available for independent review.
+
 ## Software checks and strict release barrier
 
 Run the static checks before physical testing:
