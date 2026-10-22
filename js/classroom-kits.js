@@ -12,7 +12,7 @@ const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.n
 const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',flightMode:null,flightModeState:null,rc:null,rcObservedAt:0,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
- ip:'',key:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
+ ip:'',key:'',relaySessionId:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let usbMonitorPacketAt=0;let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
 const readScheduler=root.ZebjusKitData?.createReadScheduler?.();
@@ -80,7 +80,19 @@ function supportedOtaChunkSize(status){
  const limit=Number(status?.otaChunkMaxBytes);
  return Number.isSafeInteger(limit)&&limit>=2048?2048:Number.isSafeInteger(limit)&&limit>=1024?1024:384;
 }
-function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())}
+function relaySession(){
+ const s=root.ZebjusDeviceRelay?.status?.();
+ return s?.connected===true&&s.paired===true&&s.approved===true&&typeof s.sessionId==='string'&&s.sessionId.length>0?s.sessionId:'';
+}
+function relayStateChanged(){
+ if(state.transport!=='android-relay'||state.relaySessionId&&state.relaySessionId===relaySession())return;
+ ++reconnectTicket;++controlTicket;
+ state.heartbeatAt=0;state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';state.rc=null;state.rcObservedAt=0;
+ render();
+ root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'android-relay',kitId:state.kitId}}));
+}
+function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())&&
+ (state.transport!=='android-relay'||!!state.relaySessionId&&state.relaySessionId===relaySession())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
 function staConnectionHint(){
  const router=state.ssid?'router Wi-Fi "'+state.ssid+'"':'the saved router Wi-Fi';
@@ -349,7 +361,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const slot of authSessions.keys())if(slot.startsWith(priorId+'@'))authSessions.delete(slot);
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
- state.connected=false;state.rc=null;state.key='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
+ state.connected=false;state.rc=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
  Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:false});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
@@ -473,9 +485,10 @@ async function deviceRequestCore(route,method='GET',args={}){
  if(!state.connected&&route!=='/api/status')throw Error('Kit not connected');
  if(state.transport==='usb')throw Error('USB uses native Serial commands, not HTTP');
  if(state.transport==='android-relay'){
-  const expected=state.kitId,ticket=reconnectTicket;
-  const reply=await relay().request(route,method,args);
-  if(ticket!==reconnectTicket||!linkFresh()||state.kitId!==expected)throw Error('Selected relay Kit changed during request');
+  const expected=state.kitId,ticket=reconnectTicket,session=state.relaySessionId,adapter=relay();
+  if(!session||session!==relaySession()||route!=='/api/status'&&!linkFresh())throw Error('Android relay session is disconnected or unverified');
+  const reply=await adapter.request(route,method,args);
+  if(ticket!==reconnectTicket||adapter!==relay()||session!==relaySession()||state.kitId!==expected||route!=='/api/status'&&!linkFresh())throw Error('Selected relay Kit changed during request');
   if(reply?.kitId&&reply.kitId!==expected)throw Error('Android Relay Device ID mismatch');
   return reply;
  }
@@ -486,12 +499,14 @@ async function deviceRequestCore(route,method='GET',args={}){
 async function connectNetwork(code,mode,ticket=reconnectTicket,expectedId=''){
  const ip=($('kitIpInput')?.value||'').trim();
  const transport=mode==='android-relay'?'android-relay':mode;
- if(mode==='android-relay'&&!relay()?.request)throw Error('Pair Android over WebRTC first and enable its kit access');
+ const session=mode==='android-relay'?relaySession():'';
+ if(mode==='android-relay'&&(!relay()?.request||!session))throw Error('Pair Android over WebRTC first and enable its kit access');
  let access=mode==='android-relay'?null:await resolveKitAccess(code,ip,expectedId);
  const result=access?await networkStatusWithFallback(access,ip):null;
  if(result)access=result.access;
  const key=access?.key||'';
  const d=mode==='android-relay'?await relay().request('/api/status'):result.data;
+ if(mode==='android-relay'&&session!==relaySession())throw Error('Android relay session changed before Kit verification');
  const verified=checkIdentity(d,transport,code,expectedId||access?.kitId||state.kitId||'');
  if(access&&access.kitId!==verified.kitId)throw Error('Public discovery Device ID differs from authenticated hardware. Blocked.');
  if(mode!=='android-relay'&&verifiedTransport(d)!==mode)
@@ -500,6 +515,7 @@ async function connectNetwork(code,mode,ticket=reconnectTicket,expectedId=''){
   if($('kitRememberBrowser')?.checked)try{await pairing()?.remember?.(access.kitId,key)}catch(e){audit('Trusted browser storage not available: '+e.message,'warn')}
  }
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before network verification');
+ state.relaySessionId=session;
  Object.assign(state,verified,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:!!d.otaAuthorized,ip:mode==='android-relay'?'':ip,key:mode==='android-relay'?'':key,rc:d.rc||null,mode:d.mode||'',staIp:d.ip||'',staConnected:!!d.staConnected,apActive:!!d.apActive,staDisconnectReason:Number(d.staDisconnectReason)||0,rssi:Number(d.rssi)||null,physicalLink:d.staConnected?'sta':'ap',since:Date.now()});
  if($('kitKeyInput'))$('kitKeyInput').value=''; // do not leave access credentials in the visible input
  if(mode!=='android-relay')state.transport=verifiedTransport(d);
@@ -1528,6 +1544,7 @@ function init(){
  $('kitReconnectDialog')?.addEventListener('cancel',declineReconnectOffer);
  guardAction('kitNewSetup',startSetup);guardAction('kitFindAp',findKitAp);guardAction('kitHandover',handoverSta);
  showKnown();render();root.addEventListener('dronelab:serial-line',onSerial);
+ root.addEventListener('dronelab:relay-state',relayStateChanged);
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
  guardAction('kitFindSaved',findSaved);guardAction('kitPairUsb',pairUsb);
  guardAction('kitForgetBrowserPairing',forgetBrowserPairing);

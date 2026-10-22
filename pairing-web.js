@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id),inputs=sharedInputStore();
 let host,offer='',expiryTimer=null,scanStop=null,answerProcessing=false,offerEpoch=0,pairMode='code',codeBusy=false,codeAbort=null,scanEpoch=0,cameraStarting=false,creatingOffer=false,answerAccepted=false,connectionTimer=null;
 let flightTimer=null,statsTimer=null;
 let previousMobileTab=null,previousHardwareView='overview';
-const networkPending=new Map();let networkId=0;
+const networkPending=new Map();let networkId=0,lastRelaySignal='';
 function networkRequest(route,method='GET',args={}){
  if(!host?.status()?.paired||!host?.status()?.connected)return Promise.reject(Error('Pair Android first, then enable WebApp kit access in Android Wi-Fi settings'));
  if(!/^(GET|POST)$/.test(method)||typeof route!=='string'||route.length>60)return Promise.reject(Error('Invalid network operation'));
@@ -89,6 +89,11 @@ function status(text){
 }
 function sync(){
  const s=host.status();
+ const relaySignal=JSON.stringify([s.connected,s.paired,s.approved,s.sessionId]);
+ if(relaySignal!==lastRelaySignal){
+  lastRelaySignal=relaySignal;clearNetworkRequests('Android relay session changed');
+  window.dispatchEvent(new CustomEvent('dronelab:relay-state'));
+ }
  inputs.setPeer({connected:s.connected,approved:s.approved,supported:s.remoteMirrorVersion===1,sessionId:s.sessionId,deviceId:s.remoteDeviceId});
  $('pairReleaseBtn').disabled=true;
  const confirm=$('pairConfirmBtn'),panel=$('pairConfirmPanel'),hint=$('pairConfirmHint');

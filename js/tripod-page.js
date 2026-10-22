@@ -6,7 +6,7 @@ import {createSimulatorInput,sharedInputStore} from './simulator-input.js';
 import {simulateResponse} from './tripod-experiments.js';
 import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,MOTOR_GEOMETRY,PLANT,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false,embeddedVisible=true;
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false,embeddedVisible=true,booted=false;
 const audioEngine=createTripodAudio(status=>{
  const el=$('tpAudioStatus');if(el)el.textContent=status;
  const alert=$('tpAudioAlert');
@@ -146,7 +146,9 @@ function makeScene(){
     sleeve.position.y=3.44+snapshot.vertical.z*3.5*2;
     pivot.updateMatrixWorld(true);
     const requested=$('tpQuality').value;
-    if(requested==='auto'){slowFrames=dt>.033?slowFrames+1:Math.max(0,slowFrames-1);if(slowFrames>90&&quality!=='low')applyQuality('low')}else if(requested!==quality)applyQuality(requested);
+    // Back off promptly on slow software/low-power renderers. Waiting for 90
+    // slow frames can starve read-only input callbacks for many seconds.
+    if(requested==='auto'){slowFrames=dt>.033?slowFrames+1:Math.max(0,slowFrames-1);if(slowFrames>=4&&quality!=='low')applyQuality('low')}else if(requested!==quality)applyQuality(requested);
     const intensity={off:0,soft:.4,normal:1}[$('tpEffects').value]??1;
     pivot.position.x=0; // no scripted vibration: attitude follows motor torque only
     for(let i=0;i<4;i++){
@@ -550,6 +552,7 @@ function frame(time){
 
 /* The authenticated host and renderer share this receiver and one plant. */
 window.ZebjusTraining={
+ isReady:()=>booted,
  apply:m=>{const result=receiver.apply(m);syncActions();return result},
  setOwner:value=>{if(value!==receiver.owner){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear()}receiver.setOwner(value)},
  stop:reason=>stop(reason),
@@ -559,7 +562,7 @@ window.ZebjusTraining={
  diagnostics:()=>({physics:getSnapshot(s),audio:audioEngine.diagnostics(),frameTime:lastFrame,renderer:visual?.renderer?.info?.memory||null,scene:visual?.diagnostics?.()||null})
 };
 function boot(){
- visual=makeScene();updateControls();drawUI();raf=requestAnimationFrame(frame);
+ visual=makeScene();updateControls();drawUI();raf=requestAnimationFrame(frame);booted=true;
  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
  window.dispatchEvent(new Event('zebjus:training-ready'));
 }

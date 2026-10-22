@@ -2,7 +2,7 @@ name: Authoritative status integration
 on:
   push:
     branches: [feature/authoritative-status-integration-20261021, main]
-    paths: ['FlightCore_Firmware/**', 'companion*', 'js/**', 'tools/**', 'tripod*', 'index.html', 'lab.html', 'live-inputs.css', 'mobile-android/**', '.github/workflows/authoritative-status.yml']
+    paths: ['FlightCore_Firmware/**', 'companion*', 'js/**', 'tools/**', 'tripod*', 'pairing-web.js', 'pairing-host-bridge.js', 'styles.css', 'index.html', 'lab.html', 'live-inputs.css', 'mobile-android/**', '.github/workflows/authoritative-status.yml']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -36,6 +36,7 @@ jobs:
         run: |
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/authoritative-status-http.log 2>&1 &
+          node tools/simulator-startup-browser.mjs
           for status_iteration in 1 2 3; do
             DRONELAB_STATUS_RUN="$status_iteration" node tools/authoritative-status-browser.mjs
           done

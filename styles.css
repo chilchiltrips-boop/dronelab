@@ -1152,6 +1152,8 @@ button:disabled,.btn:disabled{transform:none!important;box-shadow:none!important
 
 /* Unified, persistent DroneLab shell for all pages (including PID Tuning). */
 .pid-workspace{padding:0!important;border:0!important;background:#06121e!important;overflow:hidden}
+.pid-load-status{margin:10px;padding:12px;border:1px solid #36576d;border-radius:10px;background:#0c2434;color:#e7f3fa;font-size:12px}
+.pid-load-status[hidden]{display:none}.pid-load-status p{margin:0 0 8px}.pid-load-status .btn{min-height:44px}
 #pidFrame{display:block;width:100%;height:max(780px,calc(100dvh - 203px));min-height:780px;border:0;background:#06121e}
 .settings-workspace{padding:14px!important;background:transparent!important;border:0!important;max-width:1500px;margin-inline:auto}
 .settings-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 12px;padding:12px 16px;background:#0b1d30;border:1px solid #25445a;border-radius:14px}

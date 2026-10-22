@@ -17,10 +17,11 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  const ip=mode==='ap'?'192.168.4.1':'192.168.1.20';
  for(const [name,value] of Object.entries({kitCodeInput:'123456',kitTransport:mode,kitIpInput:ip,kitKeyInput:''}))elements.get(name).value=value;
  let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
-  requestTransport:mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
+  requestTransport:mode==='android-relay'?'AP':mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
  let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
+ let relayState={connected:true,paired:true,approved:true,sessionId:'relay-session-1'},relayGate=null;
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
@@ -60,6 +61,9 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    assert.equal(kind,'admin');status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
    const session={expiresAt:now+600000,request:(route,_method,args)=>handler(route,args)};sessions.push(session);return session;
   }}};
+ window.ZebjusDeviceRelay={status:()=>({...relayState}),request:async(route,_method,args)=>{
+  const result=await handler(route,args);if(relayGate)await relayGate;return result;
+ }};
  const shared={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
@@ -84,6 +88,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   setTimeout:timeout,clearTimeout,setInterval:()=>1,clearInterval(){},Date:Clock,confirm:()=>true,console,CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail}}});
  if(initialize)ready();
  return {api:window.ZebjusKits,elements,requests,events,diagnostics,storage,blockClaim:p=>claimGate=p,identity:value=>identityOverride=value,
+  relay:patch=>{relayState={...relayState,...patch};listeners.get('dronelab:relay-state')?.({})},blockRelay:p=>relayGate=p,
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
@@ -404,4 +409,33 @@ test('WebApp old firmware fails with an actionable unsupported status and never 
  const f=fixture({mode:'ap'});try{await f.api.connect();await assert.rejects(f.api.setFlightMode('acro'),/UNSUPPORTED/);
   assert.equal(f.requests.some(x=>x.route==='/api/flight/mode'),false);
  }finally{f.dispose()}
+});
+
+test('Android relay loss immediately revokes connected state and rejects late replies across sessions',async()=>{
+ const f=fixture({mode:'android-relay',initialize:true});let finish;
+ try{
+  await f.api.connect();assert.equal(f.api.getState().connected,true);
+  await f.api.read();assert.equal(f.api.getState().physicalLink,'ap');
+  f.blockRelay(new Promise(resolve=>finish=resolve));
+  const pending=f.api.request('/api/telemetry');
+  f.relay({connected:false,approved:false});
+  assert.equal(f.api.getState().connected,false,'cached heartbeat cannot outlive its relay');
+  assert.equal(f.api.getState().rc,null);assert.equal(f.api.getMonitorPaths().length,0);
+  assert.equal(f.elements.get('kitGlobalState').textContent,'LINK STALE');
+  f.relay({connected:true,approved:true,sessionId:'relay-session-2'});
+  assert.equal(f.api.getState().connected,false,'new phone session must reverify the Kit');
+  finish();await assert.rejects(pending,/relay Kit changed|relay session/);
+  f.blockRelay(null);await f.api.connect();assert.equal(f.api.getState().connected,true);
+  assert.equal(f.api.getState().owner,false);
+ }finally{finish?.();f.dispose()}
+});
+test('relay verification rejects a phone session replaced while status was in flight',async()=>{
+ const f=fixture({mode:'android-relay'});let finish;
+ try{
+  f.blockRelay(new Promise(resolve=>finish=resolve));const connecting=f.api.connect();
+  await new Promise(resolve=>setImmediate(resolve));
+  f.relay({sessionId:'relay-session-2'});finish();await connecting;
+  assert.equal(f.api.getState().connected,false);
+  assert.match(f.elements.get('kitMessage').textContent,/relay session changed/);
+ }finally{finish?.();f.dispose()}
 });
