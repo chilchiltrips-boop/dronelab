@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {createPythonLedSession} from '../js/python-led-session.js';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
-const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve}};
+const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function fixture(board='A1'){
  const scope={};vm.runInNewContext(read('js/kit-data-interface.js'),scope);const contract=scope.ZebjusKitData;
@@ -79,4 +79,14 @@ test('an authenticated reply arriving during a heartbeat delay is not an identit
  assert.throws(()=>contract.assertBoundSession(bound,delayed),e=>e.code==='KIT_DELAYED');
  assert.doesNotThrow(()=>contract.assertBoundSession(bound,delayed,{allowDelayed:true}));
  assert.throws(()=>contract.validateReply(before,{...delayed,linkVerified:false},{kitId:bound.kitId}),e=>e.code==='KIT_DISCONNECTED');
+});
+test('a late failed STOP is reported without overwriting a newer session health',async()=>{
+ const gate=deferred(),failures=[],writes=[];let holdStop=true;
+ const led=createPythonLedSession({verify:async()=>{},write:async packet=>{writes.push(packet);if(holdStop&&packet.includes(',STOP'))await gate.promise},onObsoleteFailure:e=>failures.push(e)});
+ const bound={kitId:'ZFC-A1-012345ABCDEF',transport:'sta'};
+ led.set('ZJLED,1,SET,100\n',bound);await settle();led.stop();await settle();
+ led.set('ZJLED,2,SET,50\n',bound);holdStop=false;gate.reject(Error('STOP response lost'));await settle();
+ assert.equal(failures.length,1);assert.equal(failures[0].command,'STOP');assert.match(failures[0].error.message,/response lost/);
+ assert.equal(led.snapshot().phase,'healthy');assert.equal(led.snapshot().failures,0);
+ assert.equal(writes.at(-1),'ZJLED,2,SET,50\n');
 });

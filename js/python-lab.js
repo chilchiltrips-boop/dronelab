@@ -10,7 +10,8 @@ const bridge=createI2CBridge({acceptEvent:e=>{
 const clamp=(n,min,max)=>Math.min(max,Math.max(min,n));
 let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutReady=false;
 let ledSession=false,ledHeartbeat=null,ledReportedPhase='',ledErrorEpisode=false;
-const ledController=createPythonLedSession({write:writeBoundLed,verify:verifyLedBinding,onHealth:renderLedHealth});
+const ledController=createPythonLedSession({write:writeBoundLed,verify:verifyLedBinding,onHealth:renderLedHealth,
+ onObsoleteFailure:({binding,command,error})=>terminal('[LED earlier session • '+binding.kitId+'] '+command+' failed: '+String(error.message||error)+'\n','error')});
 let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null;
 const fallbacks=new Map();
 let workspace=null;

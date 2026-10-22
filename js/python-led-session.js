@@ -1,7 +1,7 @@
 /* Independent LED diagnostics. One ordered queue, one immutable Kit binding.
  * A failed LED request never terminates the Python Worker or renews an RC lease.
  */
-export function createPythonLedSession({write,verify,onHealth=()=>{},now=()=>Date.now(),retryMs=1000,maxQueue=8}){
+export function createPythonLedSession({write,verify,onHealth=()=>{},onObsoleteFailure=()=>{},now=()=>Date.now(),retryMs=1000,maxQueue=8}){
  let epoch=0,active=false,binding=null,desired='',phase='idle',queue=[],draining=false,keepPending=false,inFlightKeep=false;
  let retryAt=0,failures=0,lastError='',lastCommand='',lastVerifiedAt=0;
  const permanent=e=>['KIT_SESSION_CHANGED','KIT_DISCONNECTED','KIT_AUTH_REJECTED'].includes(e?.code)||
@@ -45,6 +45,7 @@ export function createPythonLedSession({write,verify,onHealth=()=>{},now=()=>Dat
     if(job.stop)publish('stopped',null,'STOP');
     else{lastError='';publish('healthy',null,job.packet.trim().split(',')[2]);}
    }catch(error){
+    if(job.token!==epoch){onObsoleteFailure({binding:job.bound,command:job.packet.trim().split(',')[2],error});continue;}
     if(job.stop){if(job.token===epoch){++failures;publish('stop-failed',error,'STOP')}}
     else failed(error,job.packet.trim().split(',')[2],job.token);
    }finally{inFlightKeep=false;}
