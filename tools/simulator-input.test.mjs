@@ -164,6 +164,19 @@ test('A temporary empty Kit snapshot does not disarm a running virtual simulator
  b.input.stop();assert.equal(b.s.running,false);
 });
 
+test('Confirmed AP Kit disconnect or reboot stops virtual Run; polling delays do not',()=>{
+ const b=bench();b.store.setPeer({connected:false});
+ b.store.acceptKit(verifiedKit());b.input.start();
+ const delayed=verifiedKit(2);delayed.input.state='waiting';
+ b.store.acceptKit(delayed);b.advance(1750);assert.equal(b.s.running,true);
+ const missing=verifiedKit(3);missing.kit.connected=false;
+ b.store.acceptKit(missing);
+ assert.equal(b.s.running,false);assert.equal(b.stops(),1);
+ b.store.acceptKit(verifiedKit(4));assert.equal(b.s.running,false);
+ b.input.start();
+ const reboot=verifiedKit(5);reboot.kit.bootId='boot-2';reboot.input.state='waiting';
+ b.store.acceptKit(reboot);assert.equal(b.s.running,false);assert.equal(b.stops(),2);
+});
 test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read-only metadata',()=>{
  const b=bench();b.store.setPeer({connected:false});
  const low=verifiedKit(1);low.input.flightMode='acro';low.input.inputArm='DISARMED';
