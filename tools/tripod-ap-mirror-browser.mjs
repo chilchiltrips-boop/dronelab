@@ -15,7 +15,7 @@ try{
  await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusKitData&&window.ZebjusTraining?.isReady?.(),null,{timeout:30000});
  await page.evaluate(()=>{
   const kit={connected:true,transport:'ap',kitId:'TEST-VERIFIED-A2',kitName:'Test verified AP',bootId:'boot-1',flightMode:'acro',
-    working:false,otaInProgress:false,apActive:true,motorsArmed:false};
+    flightModeState:{supported:true,stabilizationSupported:false,saved:'acro',active:'acro',pending:null},working:false,otaInProgress:false,apActive:true,motorsArmed:false};
   window.__pidTest={kit,inputArmed:true,channels:{throttle:1000,roll:1500,pitch:1500,yaw:1500},seq:0,requests:[]};
   window.ZebjusKits.getState=()=>({...kit});
   window.ZebjusKits.getMonitorPaths=()=>kit.connected?[{kitId:kit.kitId,transport:'ap',
@@ -24,7 +24,7 @@ try{
    window.__pidTest.requests.push({path,method});
    if(path!=='/api/rc/snapshot'||method!=='GET')throw Error('Unexpected hardware request '+method+' '+path);
    if(!kit.connected)throw Error('Kit link lost');
-   const s=window.__pidTest;return {kitId:kit.kitId,source:'ANDROID',transport:'ap',
+   const s=window.__pidTest;if(s.delay)throw Error('Read-only telemetry delayed');return {kitId:kit.kitId,source:'ANDROID',transport:'ap',
     seq:++s.seq,active:true,inputValid:true,failsafe:false,inputArmed:s.inputArmed!==false,flightMode:s.kit.flightMode,ageMs:15,
     ...s.channels,__observedAt:Date.now()};
   };
@@ -36,8 +36,8 @@ try{
  check((await iframe.locator('#tpInputStatus').textContent()).includes('VERIFIED KIT RC'),'Source should say Kit RC not WebRTC');
  check(!(await page.evaluate(()=>window.ZebjusSimulatorInputs.snapshot().peer.approved)),'Kit path must not claim WebRTC pairing');
  check((await iframe.locator('#tpCameraView').inputValue())==='back','Initial view should face opposite direction');
- await page.waitForFunction(()=>document.querySelector('#pidFrame')?.contentWindow?.document.querySelector('#tpMode')?.value==='acro');
- check((await iframe.locator('#tpKitMode').textContent())==='KIT ACRO','Saved FlightCore mode missing in tripod');
+ check((await iframe.locator('#tpMode').inputValue())==='angle','Simulator mode must be independent from Kit metadata');
+ check((await iframe.locator('#tpKitMode').textContent()).includes('KIT ACTIVE ACRO'),'Saved FlightCore mode missing in tripod');
  check((await iframe.locator('#tpInputArm').textContent())==='INPUT ARMED','Kit input ARM status not shown');
  check((await page.locator('#liFlightMode').textContent())==='ACRO','Live Inputs must show FlightCore ACRO');
  const before=await iframe.locator('#tpLeftKnob').boundingBox();
@@ -61,6 +61,22 @@ try{
    const s=window.ZebjusTraining.snapshot();return s?.armed&&s.throttle===1919&&s.axes.roll>.5&&s.axes.pitch<-.4&&s.axes.yaw>.3;
  },null,{timeout:12000});
 
+ // Switch the real mode selector repeatedly at high throttle. No Run, Stop,
+ // input-source selection or physical mode request accompanies these changes.
+ for(const mode of ['acro','angle','acro','angle','acro','angle']){
+  await iframe.locator('#tpMode').selectOption(mode);
+  const state=await page.evaluate(()=>window.ZebjusTraining.snapshot());
+  check(state.armed&&state.mode===mode&&state.throttle===1919&&state.activeSource==='android','Live mode switch interrupted Run or throttle');
+  check(state.motors.rpm.every(Number.isFinite)&&state.motors.rpm.some(n=>n>0),'Mode switch lost motor response');
+ }
+ await page.evaluate(()=>window.__pidTest.delay=true);
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().input?.held===true,null,{timeout:8000});
+ let delayed=await page.evaluate(()=>window.ZebjusTraining.snapshot());
+ check(delayed.armed&&delayed.throttle===1919&&delayed.activeSource==='android','Read-only ACK / snapshot delay stopped virtual Run');
+ await iframe.locator('#tpMode').selectOption('acro');
+ check(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed),'Mode change while mirror delayed stopped Run');
+ await page.evaluate(()=>{window.__pidTest.delay=false;window.__pidTest.channels.throttle=1950});
+ await page.waitForFunction(()=>{const s=window.ZebjusTraining.snapshot();return s.armed&&s.input?.fresh&&s.throttle===1950&&s.activeSource==='android'},null,{timeout:12000});
  const after=await iframe.locator('#tpLeftKnob').boundingBox();
  const headerAfter=await iframe.locator('.tp-sticks>.panel-title').boundingBox();
  check(after.y<before.y-25,'Android throttle 1919µs must move left knob upward');
@@ -76,6 +92,7 @@ try{
  await page.waitForTimeout(450);
  check(!(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed)),'Incoming data must not auto-run after Stop');
  await page.evaluate(()=>Object.assign(window.__pidTest.channels,{throttle:1000,roll:1500,pitch:1500,yaw:1500}));
+ await page.waitForFunction(()=>window.ZebjusTraining.snapshot().input?.channels.throttle===1000);
  await iframe.locator('#tpRun').click();
  await page.waitForFunction(()=>window.ZebjusTraining.snapshot()?.armed===true);
  await page.evaluate(()=>{window.__pidTest.kit.connected=false});

@@ -28,7 +28,7 @@ function scheduleReceiverUi(){
 }
 const receiver=createSimulatorInput(s,sharedInputStore(),{onChange:scheduleReceiverUi,onTimeout:()=>{audioStop();setStatus('ANDROID INPUT LOST • PRESS RUN TO RESUME')}});
 const localInput=()=>receiver.owner==='web';
-let lastMode=s.mode,lastRunning=false,audioUnlocked=false,lastKitModeSeen='';
+let lastMode=s.mode,lastRunning=false,audioUnlocked=false;
 const readable=(x,n=1)=>Number(x).toFixed(n),rad=THREE.MathUtils.degToRad;
 const makeMat=(color,metalness=.2,roughness=.5)=>new THREE.MeshStandardMaterial({color,metalness,roughness});
 const COLORS={dark:makeMat('#111f2c',.65,.34),silver:makeMat('#7897a5',.76,.35),red:makeMat('#ee514f',.28,.5),white:makeMat('#e4edf1',.23,.48),green:makeMat('#23d9b1',.2,.42),black:makeMat('#101921',.2,.7),copper:makeMat('#be8f51',.65,.32)};
@@ -216,23 +216,23 @@ function toggleRun(){s.running?stop():start()}
 function syncActions(){
  const remote=!localInput(),state=receiver.snapshot();
  const authoritative=state.kitMode,kitActive=authoritative?.active;
- const modeSignal=authoritative?authoritative.kitId+'|'+kitActive:'';
- // Follow the connected Kit even with WebApp joystick input. A running loop
- // keeps its active configuration and advertises the next synchronization.
- if(modeSignal&&!s.running){
-  if(s.mode!==kitActive)setFlightMode(s,kitActive);
-  lastKitModeSeen=modeSignal;
- }else if(!modeSignal)lastKitModeSeen='';
- $('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=!!authoritative;
+ // Simulator mode is owned by this virtual model. Kit mode is separate,
+ // authenticated classroom metadata, with no physical stabilization support.
+ $('tpRun').disabled=s.running;$('tpStop').disabled=false;$('tpMode').value=s.mode;$('tpMode').disabled=false;
  $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
  const sourceText=remote?(state.activeSource==='usb'?'USB ':'ANDROID ')+(state.input?.transport?.toUpperCase()||'AP')+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
  if($('tpControlSource').textContent!==sourceText)$('tpControlSource').textContent=sourceText;
- const kitMode=authoritative?'KIT '+kitActive.toUpperCase()+(s.running&&kitActive!==s.mode?' • SYNC PENDING':authoritative.pending?' • KIT PENDING '+authoritative.pending.toUpperCase():''):'KIT MODE —';
+ const kitMode=authoritative?'KIT ACTIVE '+kitActive.toUpperCase()+' • SAVED '+authoritative.saved.toUpperCase()+(authoritative.pending?' • PENDING '+authoritative.pending.toUpperCase():'')+' • METADATA ONLY':'KIT MODE UNSUPPORTED / NOT REPORTED';
  if($('tpKitMode').textContent!==kitMode)$('tpKitMode').textContent=kitMode;
+ $('tpKitMode').title=kitMode;
  const inputArm=remote&&state.input?.origin==='kit'?(state.input.fresh?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT STALE • NOT LIVE ARM'):'INPUT —';
  if($('tpInputArm').textContent!==inputArm)$('tpInputArm').textContent=inputArm;
  const input=state.input;
+ const diagnostic=$('tpInputDiagnostic');
+ const health=remote?(state.input?.fresh?'LIVE':state.input?.held?'MIRROR DELAYED • STALE':'DISCONNECTED'):'LIVE';
+ const diagnosticText='SIM '+s.mode.toUpperCase()+' • '+health+(state.input?.ageMs!=null?' • genuine input '+Math.round(state.input.ageMs)+' ms':'')+' • last stop: '+state.lastStopReason;
+ if(diagnostic&&diagnostic.textContent!==diagnosticText)diagnostic.textContent=diagnosticText;
  $('tpSourceState').textContent=remote?(state.activeSource==='usb'?'USB ':'Android ')+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
  $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs'+(Number.isInteger(input.aux?.ch5)?' • CH5 '+input.aux.ch5:'')+(Number.isInteger(input.aux?.ch6)?' • CH6 '+input.aux.ch6:''):'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
@@ -246,6 +246,13 @@ function syncActions(){
  lastRunning=s.running;
 }
 function releaseAll(stopMotor=false){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();if(localInput())releaseInputs(s);renderStickKnobs();if(stopMotor)stop('Page lost focus')}
+function onWindowBlur(){
+ // Moving from this iframe to the host toolbar releases held keys, while the
+ // visible simulator keeps running. A genuine app/window focus loss still stops.
+ let hostFocused=false;
+ try{hostFocused=window.parent!==window&&window.parent.document.hasFocus()}catch{}
+ releaseAll(!hostFocused);
+}
 function deadband(x){if(Math.abs(x)<.04)return 0;const linear=(Math.abs(x)-.04)/.96,exposed=.8*linear+.2*linear**3;return Math.sign(x)*exposed}
 function renderStickKnobs(){
  const remote=!localInput(),applied=receiver.snapshot().sticks;
@@ -366,7 +373,12 @@ function updateControls(){
  document.addEventListener('pointerdown',e=>{
   if(!e.target.closest('.tp-menu'))menus.forEach(menu=>menu.open=false);
  });
- $('tpMode').onchange=e=>{if(receiver.snapshot().kitMode){syncActions();return;}setFlightMode(s,e.target.value);history.length=0;updatePidEditor();coach()};
+ $('tpMode').onchange=e=>{
+  if(setFlightMode(s,e.target.value)){
+   const el=$('tpLastMode');if(el){el.textContent='SIM '+s.mode.toUpperCase()+' APPLIED';el.title=s.running?'Mode applied • Run continues':'Mode applied while stopped';}
+   updatePidEditor();coach();syncActions();drawUI();
+  }
+ };
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
  $('tpReset').onclick=()=>stop('Web RESET');
  $('tpInputSource').onchange=e=>{receiver.setChoice(e.target.value);releaseAll();syncActions();drawUI()};
@@ -452,7 +464,9 @@ function updateControls(){
  $('tpCameraView').onchange=e=>visual?.setView?.(e.target.value);
  bindStick('tpLeftPad','left');bindStick('tpRightPad','right');bindCamera();
  window.addEventListener('keydown',e=>keyHandler(e,true));window.addEventListener('keyup',e=>keyHandler(e,false));
- window.addEventListener('blur',()=>releaseAll(true));document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
+ window.addEventListener('blur',onWindowBlur);
+ try{if(window.parent!==window)window.parent.addEventListener('blur',onWindowBlur)}catch{}
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
  window.addEventListener('pagehide',()=>{stop();cancelAnimationFrame(raf);audioStop();visual?.dispose?.()});
  $('tpStop').addEventListener('pointerdown',e=>{e.preventDefault();stop()});
  updatePidEditor();coach();syncActions();

@@ -166,7 +166,8 @@
    relocate('.kit-legacy-network','wifi');
    relocate('.kit-browser-access','security');
    relocate('#kitTrustHelp','security');
-   relocate('#kitAdmin','security');
+   const admin=relocate('#kitAdmin','wifi');
+   const advanced=$('smartAdvancedBody');if(advanced){advanced.append(admin);admin.open=true;admin.querySelector('summary').hidden=true;}
    relocate('.settings-heading','mobile');
    relocate('#kitMobilePairDetails','mobile');
    // Move the exact existing nodes (not clones): preserve recorder storage and listeners.
@@ -252,7 +253,7 @@
  }
  shell.addEventListener('click',event=>{
   const button=event.target.closest('button[data-dw-view]');
-  if(button)open(button.dataset.dwView);
+  if(button){open(button.dataset.dwView);if(button.hasAttribute('data-open-admin')&&$('smartAdvanced'))$('smartAdvanced').open=true;}
  });
  shell.addEventListener('keydown',event=>{
   const button=event.target.closest('button[data-dw-view]');

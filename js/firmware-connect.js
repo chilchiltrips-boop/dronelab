@@ -6,7 +6,7 @@
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
 let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0,lastAutoFilledName='';
-const set=(id,value)=>{const el=$(id);if(el)el.textContent=String(value??'--')};
+const set=(id,value)=>{const el=$(id),text=String(value??'--');if(el&&el.textContent!==text)el.textContent=text};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
  el.textContent=new Date().toLocaleTimeString()+'  '+String(message).slice(0,160)+'\n'+el.textContent.slice(0,3500);

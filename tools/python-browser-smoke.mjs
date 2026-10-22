@@ -177,11 +177,12 @@ try{
  await page.evaluate(()=>{
   window.__previousDroneSerial=window.DroneLabSerial;
   window.__ledTestWrites=[];
-  window.DroneLabSerial={...window.DroneLabSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>window.__ledTestWrites.push(line)};
+  window.DroneLabSerial={...window.DroneLabSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>{window.__ledTestWrites.push(line);if(String(line).startsWith('ZJI2C,SCAN'))window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line:'ZJSCAN,A2,1000,1,0x68'}}));}};
   for(const line of ['Scanning I2C bus...','✔ Found device at 0x68','✅ Total I2C devices found: 1']){
    window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line}}));
   }
  });
+ await page.locator('#pythonTarget').selectOption('usb');
  const ledTest="from zebjus_simple import Drone\nimport time\ndrone=Drone()\nprint('SCAN_READY', drone.i2c_scan()['addresses'])\ndrone.led_blink(200, 300)\ntime.sleep(0.3)\nprint('LED_SENT')\n";
  await page.evaluate(code=>window.monaco.editor.getModels().find(x=>x.uri.toString().includes('main.py')).setValue(code),ledTest);
  await page.locator('#runPythonBtn').click();
@@ -217,7 +218,8 @@ try{
  page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('gyro');
  await page.waitForFunction(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'))?.getValue().includes('await drone.read_gyro('));
- if((await page.locator('#pythonTarget').inputValue())!=='usb')throw Error('Gyro Python example must select USB Hardware mode');
+ if((await page.locator('#pythonTarget').inputValue())!=='auto')throw Error('Hardware example must select Auto verified Kit mode');
+ await page.locator('#pythonTarget').selectOption('usb'); // This legacy test uses an explicitly selected raw Serial boundary; verified Auto is covered separately.
  await page.evaluate(()=>{
   window.DroneLabSerial={...window.__previousDroneSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async()=>true};
   window.dispatchEvent(new CustomEvent('dronelab:usb-state',{detail:{connected:true}}));

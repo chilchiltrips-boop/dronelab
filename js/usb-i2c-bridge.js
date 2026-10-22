@@ -32,14 +32,14 @@ export function createI2CParser(onScan=()=>{}){
  }
  return {acceptLine,getLatest:()=>last,reset:()=>{collecting=false;addresses=[];last=null}};
 }
-export function createI2CBridge({host=window,parser=createI2CParser()}={}){
+export function createI2CBridge({host=window,parser=createI2CParser(),acceptEvent=()=>true}={}){
  const subs=new Set(),pending=new Set();
  const report=scan=>{
   for(const handler of subs)try{handler(scan)}catch{}
   for(const p of [...pending]){clearTimeout(p.timer);pending.delete(p);p.resolve(scan)}
  };
  const p=createI2CParser(report);
- function handler(e){p.acceptLine(e?.detail?.line)}
+ function handler(e){if(acceptEvent(e))p.acceptLine(e?.detail?.line)}
  host.addEventListener('dronelab:serial-line',handler);
  function waitForScan(timeoutMs=12000){
   const ms=Math.max(1000,Math.min(60000,Number(timeoutMs)||12000));
@@ -134,7 +134,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
  }
  return {acceptLine,getLatest:()=>last,getError:()=>latestError,reset:()=>{last=null;unifiedSeen=false;latestError=''}};
 }
-export function createGyroBridge({host=window}={}){
+export function createGyroBridge({host=window,acceptEvent=()=>true}={}){
  const waiting=new Set();
  let latestError='',disconnected=false;
  const parser=createGyroParser(
@@ -146,7 +146,7 @@ export function createGyroBridge({host=window}={}){
    for(const p of [...waiting]){clearTimeout(p.timer);waiting.delete(p);p.reject(new Error(message))}
   }
  );
- const serial=e=>parser.acceptLine(e?.detail?.line);
+ const serial=e=>{if(acceptEvent(e))parser.acceptLine(e?.detail?.line)};
  const usbState=e=>{
   if(e?.detail?.connected===true){disconnected=false;latestError='';parser.reset();return}
   if(e?.detail?.connected===false){

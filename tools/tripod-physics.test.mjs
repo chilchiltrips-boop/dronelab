@@ -35,12 +35,31 @@ test('PID bank validation, mode changes, safe input release',()=>{
  assert.equal(setPID(s,'unknown',{p:1,i:1,d:0}),false);
  startSimulator(s);s.throttle=1550;s.cmdYaw=1;s.cmdPitch=.5;stepSimulator(s);releaseInputs(s);
  assert.equal(s.cmdYaw,0);assert.equal(s.cmdPitch,0);
- setFlightMode(s,'acro');assert.equal(s.memory.rateRoll.sum,0);
+ const integral=s.memory.rateRoll.sum;setFlightMode(s,'acro');assert.equal(s.memory.rateRoll.sum,integral,'shared rate integral survives live mode change');
 });
 test('module has no browser, hardware or network dependency',async()=>{
  const {readFileSync}=await import('node:fs');
  const source=readFileSync(new URL('../js/tripod-physics.js',import.meta.url),'utf8');
  assert.doesNotMatch(source,/\bfetch\s*\(|\bWebSocket\b|\bSerial\b|\bnavigator\b|\bdocument\b|\bwindow\b|RTCPeerConnection/);
+});
+test('repeated live ANGLE/ACRO transitions preserve plant, throttle and motor inertia with bounded torque engagement',()=>{
+ const s=createSimulator();startSimulator(s);s.throttle=1850;s.cmdRoll=.55;s.cmdPitch=-.4;s.cmdYaw=.2;
+ for(let i=0;i<100;i++)stepSimulator(s);
+ for(let transition=0;transition<40;transition++){
+  const mode=transition%2?'angle':'acro',before={pose:[s.roll,s.pitch,s.yaw,s.rollRate,s.pitchRate,s.yawRate,s.vertical.z],rpm:[...s.motorRPM],commands:[...s.motorCommands],throttle:s.throttle,integral:s.memory.rateRoll.sum};
+  setFlightMode(s,mode);
+  assert.equal(s.running,true);assert.equal(s.throttle,before.throttle);
+  assert.deepEqual([s.roll,s.pitch,s.yaw,s.rollRate,s.pitchRate,s.yawRate,s.vertical.z],before.pose);
+  assert.deepEqual(s.motorRPM,before.rpm);assert.deepEqual(s.motorCommands,before.commands);
+  assert.equal(s.memory.rateRoll.sum,before.integral);
+  stepSimulator(s);
+  assert.ok(s.motorCommands.every((n,i)=>Math.abs(n-before.commands[i])<5),'mode engagement produced a step larger than 5% motor command');
+  for(let tick=0;tick<40;tick++){
+   stepSimulator(s);
+   assert.ok([s.roll,s.pitch,s.yaw,s.rollRate,s.pitchRate,s.yawRate,...s.motorRPM,...s.motorCommands,...Object.values(s.memory).flatMap(m=>[m.sum,m.output,m.derivative])].every(Number.isFinite));
+   assert.ok(s.motorRPM.every(n=>n>0));assert.equal(s.running,true);assert.equal(s.throttle,1850);
+  }
+ }
 });
 
 

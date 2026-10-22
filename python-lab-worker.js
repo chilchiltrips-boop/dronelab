@@ -96,7 +96,13 @@ async function run(msg){
   // Compile-check before importing packages or starting hardware commands.
   runtime.globals.set('_zj_source',source);
   runtime.globals.set('_zj_filename',msg.filename||'main.py');
-  await runtime.runPythonAsync("import ast\nast.parse(_zj_source,filename=_zj_filename)",{filename:'syntax_check.py'});
+  await runtime.runPythonAsync("import ast\n_zj_checked_tree=ast.parse(_zj_source,filename=_zj_filename)\n_zj_needs_i2c=any(isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in (\"i2c_scan\",\"latest_i2c_scan\") for node in ast.walk(_zj_checked_tree))",{filename:'syntax_check.py'});
+  // Prepare the synchronous beginner scanner from an actual Python call, not
+  // a substring in a comment or printed help. The parent still resolves and
+  // authorizes this operation; isolated Python can never access a Kit.
+  if(runtime.globals.get('_zj_needs_i2c')===true){
+   lastScanSnapshot=JSON.parse(await rpc('i2c_scan',{timeout:4000}));
+  }
   send('status',{text:'Checking Python libraries…'});
   await runtime.loadPackagesFromImports(source);
   if(/\b(?:import\s+cv2|from\s+cv2\s+import)\b/.test(source)){send('status',{text:'Loading browser-compatible OpenCV Python…'});await runtime.loadPackage('opencv-python')}

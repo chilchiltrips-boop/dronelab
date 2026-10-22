@@ -1,0 +1,61 @@
+name: Smart Kit Setup, Python Auto and UI stability
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths: ['js/**', 'tools/**', 'index.html', 'lab.html', 'tripod*', 'pairing-web.js', '*workspace.css', 'python-lab.css', '.github/workflows/smart-setup-auto.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: smart-kit-auto-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: npm test
+      - run: npm run check
+      - run: npm run verify:firmware
+  browser:
+    needs: regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Capture the previous main rendering behavior
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add --detach /tmp/dronelab-ui-before "$BASE_SHA"
+          DRONELAB_TEST_FILE_ROUTES=1 DRONELAB_TEST_SOURCE_ROOT=/tmp/dronelab-ui-before DRONELAB_AUDIT_BEFORE=1 node tools/ui-stability-browser.mjs
+      - name: Verify actual UI, USB setup and Python execution
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/smart-kit-auto-http.log 2>&1 &
+          node tools/ui-stability-browser.mjs
+          node tools/smart-kit-setup-browser.mjs
+          node tools/python-auto-browser.mjs
+          node tools/python-browser-smoke.mjs
+          node tools/accordion-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smart-setup-python-auto-browser-evidence
+          path: test-output/
