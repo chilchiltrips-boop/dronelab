@@ -132,6 +132,9 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   if(!s.running||!['android','usb'].includes(locked))return;
   const v=store.snapshot(),frame=frameFor(v,locked,lockedOrigin);
   if(!frame){
+   // Preserve the existing verified USB loss policy. Only Android AP/STA mirror
+   // stalls (WebRTC or read-only Kit monitor) may hold a virtual Run.
+   if(locked==='usb'){stop('USB input lost • press Run to resume');onTimeout();return;}
    // No simulator-side RC ACK or telemetry-age disarm. The read-only WebRTC/Kit
    // observer can stall while Android and FlightCore RC remain live.
    // Hold the last verified command ONLY in this virtual plant. Firmware,
