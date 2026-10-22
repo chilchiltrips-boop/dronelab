@@ -60,13 +60,13 @@ try{
  assert.equal(await page.evaluate(()=>window.__pyFixture.requests.length+window.__pyFixture.usbWrites.length),syntaxRequests);
  for(const transport of ['usb','ap','sta','android-relay']){
   await page.evaluate(t=>{window.__pyFixture.transport=t;window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true}}))},transport);
-  await page.locator('#pythonTarget').selectOption('auto');await edit(source);await page.locator('#runPythonBtn').click();
+  await page.waitForFunction(t=>document.getElementById('pythonTarget').value===t,transport);await edit(source);await page.locator('#runPythonBtn').click();
   await page.waitForFunction(t=>document.getElementById('pythonTerminal').textContent.includes('AUTO_RC '+t+' ')&&
    (document.getElementById('pyLastRun').textContent==='COMPLETE'||document.getElementById('pyLastRun').textContent==='ERROR'),transport,{timeout:90000});
   const terminal=await page.locator('#pythonTerminal').textContent();
   assert.equal(await page.locator('#pyLastRun').textContent(),'COMPLETE',terminal);
   assert.match(terminal,new RegExp('AUTO_RC '+transport+' 1345'));assert.match(terminal,/AUTO_GYRO MPU6050 1.25/);
-  assert.equal(await page.locator('#pythonTarget').inputValue(),'auto');results.push({transport,joystick:true,gyro:true});
+  assert.equal(await page.locator('#pythonTarget').inputValue(),transport);results.push({transport,joystick:true,gyro:true});
  }
  // A synchronous beginner scan/LED program also uses Auto's verified USB path.
  await page.evaluate(()=>{window.__pyFixture.transport='usb';window.dispatchEvent(new CustomEvent('dronelab:kit-link'))});
@@ -107,7 +107,7 @@ try{
  // Losing the active source stops this Python program; another live transport
  // for the same Kit is not a silent replacement.
  await page.evaluate(()=>{window.__pyFixture.transport='usb';window.dispatchEvent(new CustomEvent('dronelab:kit-link'))});
- await page.locator('#pythonTarget').selectOption('auto');
+ await page.locator('#pythonQuickHardware').selectOption('joystick');
  await edit("from zebjus_simple import Drone\nimport asyncio\ndrone=Drone()\nwhile True:\n    rc=await drone.read_joystick()\n    print('BOUND_USB', rc['throttle'])\n    await asyncio.sleep(0.1)\n");
  await page.locator('#runPythonBtn').click();await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('BOUND_USB'),null,{timeout:90000});
  const editorBefore=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());

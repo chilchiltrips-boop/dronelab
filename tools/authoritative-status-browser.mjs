@@ -122,9 +122,9 @@ try{
   console.error('USB KIT MODE SYNC DIAGNOSTIC '+JSON.stringify(diagnostic));
   throw error;
  }
- check((await sim.locator('#tpMode').inputValue())==='angle','Running virtual mode changed silently');
+ check((await sim.locator('#tpMode').inputValue())==='acro','Running virtual mode did not follow the changed Kit mode');
  await sim.locator('#tpStop').click();
- check((await sim.locator('#tpMode').inputValue())==='angle','Stop must preserve the independently selected simulator mode');
+ check((await sim.locator('#tpMode').inputValue())==='acro','Stop must preserve the followed simulator mode');
  await sim.locator('#tpMode').selectOption('acro');
  const stoppedSeq=await page.evaluate(()=>window.ZebjusTraining.snapshot().seq);
  await page.waitForFunction(previous=>{

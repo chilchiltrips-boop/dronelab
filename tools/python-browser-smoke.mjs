@@ -218,7 +218,7 @@ try{
  page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('gyro');
  await page.waitForFunction(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'))?.getValue().includes('await drone.read_gyro('));
- if((await page.locator('#pythonTarget').inputValue())!=='auto')throw Error('Hardware example must select Auto verified Kit mode');
+ if(await page.locator('#pythonTarget option[value=auto]').count())throw Error('Connected Kit must be detected without a manual Auto option');
  await page.locator('#pythonTarget').selectOption('usb'); // This legacy test uses an explicitly selected raw Serial boundary; verified Auto is covered separately.
  await page.evaluate(()=>{
   window.DroneLabSerial={...window.__previousDroneSerial,isOpen:()=>true,isFlashing:()=>false,writeLine:async()=>true};

@@ -75,6 +75,11 @@
    relaySessionId:kit.relaySessionId||'',capability:path.transport==='usb'||kit.controlAuthorized&&(path.transport!=='android-relay'||requested!=='auto')?'read/write diagnostics':'read-only',
    reason:(requested==='auto'?'AUTO • ':'Manual • ')+'verified '+path.transport.toUpperCase()+' • '+operation+' supported; firmware authorization applies'};
  }
+ function detectPythonTarget(kit,paths){
+  if(!kit?.connected||!['usb','ap','sta','android-relay'].includes(kit.transport))return null;
+  const selected=resolvePythonTarget(kit,paths,kit.transport,'read');
+  return selected.transport?selected:null;
+ }
  function validatePythonBinding(binding,kit,paths){
   if(isNetwork(binding.transport))assertBoundSession(binding,kit);
   const current=resolvePythonTarget(kit,paths,binding.transport,'read');
@@ -123,5 +128,5 @@
    accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:true,motors_disabled:true,
    motorsArmed:false,readSource:'verified-usb-serial'};
  }
- root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
+ root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,detectPythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
 })(globalThis);

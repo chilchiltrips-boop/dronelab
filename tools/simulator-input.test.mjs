@@ -48,9 +48,21 @@ test('new Kit, transport, session or producer kind stops an Android run without 
  store.setPeer({connected:true,approved:true,supported:true,sessionId:'new-session-0000',deviceId:'phone-2'});
  assert.equal(store.accept(frame(20)),false);assert.equal(s.running,false);
 });
-test('Android input never overwrites Web mode or PID and requires no hardware ARM',()=>{
+test('Android mode follows the selected Android source during Run without requiring hardware ARM',()=>{
  const {store,s,input}=bench();s.mode='acro';store.accept(frame(1,{}, {armed:false,mode:'angle'}));input.start();
- assert.equal(s.running,true);assert.equal(s.mode,'acro');store.accept(frame(2,{throttle:1350},{armed:false,mode:'angle'}));assert.equal(s.mode,'acro');assert.equal(s.running,true);
+ assert.equal(s.running,true);assert.equal(s.mode,'angle');store.accept(frame(2,{throttle:1350},{armed:false,mode:'acro'}));assert.equal(s.mode,'acro');assert.equal(s.running,true);assert.equal(s.throttle,1350);
+});
+test('verified Android SAVED mode applies virtually while physical ACTIVE mode is still pending',()=>{
+ const {store,s,input}=bench();store.setPeer({connected:false});
+ const packet=verifiedKit(1);packet.kit.flightModeState={saved:'angle',active:'angle',pending:null};
+ store.acceptKit(packet);input.start();packet.input.seq=2;packet.input.values.throttle=1800;
+ packet.kit.flightModeState={saved:'acro',active:'angle',pending:'acro'};store.acceptKit(packet);
+ assert.equal(s.mode,'acro');assert.equal(s.running,true);assert.equal(s.throttle,1800);
+ assert.equal(input.snapshot().kitMode.active,'angle');assert.equal(input.snapshot().kitMode.pending,'acro');
+ s.mode='angle';packet.input.seq++;store.acceptKit(packet);assert.equal(s.mode,'angle','Unchanged remote mode must preserve a manual virtual edit');
+ packet.kit.flightModeState={saved:'angle',active:'angle',pending:null};packet.input.seq++;store.acceptKit(packet);
+ packet.kit.flightModeState={saved:'acro',active:'acro',pending:null};packet.input.seq++;store.acceptKit(packet);
+ assert.equal(s.mode,'acro');assert.equal(s.running,true);
 });
 test('old APK has a clear update-required state and cannot become an Auto Android source',()=>{
  const {store,input}=bench();store.setPeer({connected:true,approved:true,supported:false,sessionId:frame().sessionId});

@@ -30,7 +30,7 @@ function clearTerminal(){const e=$('pythonTerminal');if(e)e.replaceChildren();te
 function currentCode(){return editor?editor.getValue():$('pythonEditor')?.value||''}
 function save(){
  if(!loading)files[active]=currentCode();
- try{localStorage.setItem(KEY,JSON.stringify({active,files,updated:Date.now()}));$('pyLastRun').textContent='SAVED'}catch{status('Browser storage unavailable','warn')}
+ try{localStorage.setItem(KEY,JSON.stringify({active,files,updated:Date.now()}));if(!running&&!pythonStarting&&!ledSession)$('pyLastRun').textContent='SAVED'}catch{status('Browser storage unavailable','warn')}
 }
 function autosave(){clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
 function load(){
@@ -122,12 +122,20 @@ async function importProject(file){
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
 const kitData=()=>window.ZebjusKitData;
-let pythonBinding=null,pythonRunIdentity=null,pythonStarting=false,pythonRunEpoch=0;
+let pythonBinding=null,pythonRunIdentity=null,pythonStarting=false,pythonRunEpoch=0,pythonTargetIntent='connected';
+function syncConnectedPythonTarget(){
+ if(running||pythonStarting||ledSession||pythonTargetIntent!=='connected')return;
+ const kit=window.ZebjusKits?.getState?.(),target=$('pythonTarget');if(!target)return;
+ const resolved=kitData()?.detectPythonTarget?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[]);
+ target.value=resolved?.transport||'python';
+}
 function pythonSelection(operation='read'){
  const requested=$('pythonTarget')?.value||'python',kits=window.ZebjusKits,kit=kits?.getState?.();
  if(requested==='usb'&&!kit?.kitId)return {transport:'usb',kitId:'',generation:window.DroneLabSerial?.generation?.(),legacy:true,reason:'Manual physical USB',capability:'read/write diagnostics'};
  const paths=kits?.getMonitorPaths?.()|| (kit?.connected?[{kitId:kit.kitId,transport:kit.transport,verified:true,available:true,fresh:true,permitted:true}]:[]);
- return kitData()?.resolvePythonTarget?.(kit,paths,requested,operation)||{transport:null,reason:'NO VERIFIED KIT • connect a verified Kit first.'};
+ const selected=kitData()?.resolvePythonTarget?.(kit,paths,requested,operation)||{transport:null,reason:'NO VERIFIED KIT • connect a verified Kit first.'};
+ if(pythonTargetIntent==='connected'&&selected.transport==='android-relay')selected.capability='read-only';
+ return selected;
 }
 function validatePythonSession(){
  const kit=window.ZebjusKits?.getState?.(),paths=window.ZebjusKits?.getMonitorPaths?.()||
@@ -148,8 +156,8 @@ function bindPythonOperation(operation='read'){
   pythonBinding=selected;
   if(kitData()?.isNetwork(selected.transport))window.DroneLabNetwork?.stream?.(true);
  }
- if($('pythonTarget')?.value==='auto'&&pythonBinding.transport==='android-relay'&&['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation))
-  throw Error('Auto Android Relay is read-only. Select a directly authorized USB/AP/STA path for this hardware operation.');
+ if((pythonTargetIntent==='connected'||$('pythonTarget')?.value==='auto')&&pythonBinding.transport==='android-relay'&&['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation))
+  throw Error('Detected Android Relay is read-only. Select a directly authorized USB/AP/STA path for this hardware operation.');
  const operationTarget=pythonBinding.legacy?pythonBinding:kitData().resolvePythonTarget(window.ZebjusKits.getState(),window.ZebjusKits.getMonitorPaths?.()||
   [{kitId:pythonBinding.kitId,transport:pythonBinding.transport,verified:true,available:true,fresh:true,permitted:true}],pythonBinding.transport,operation);
  if(!operationTarget.transport)throw Error(operationTarget.reason+' The active Python session stays on '+pythonBinding.transport.toUpperCase()+'.');
@@ -169,13 +177,14 @@ function wifiPythonReady(){
   !!window.DroneLabNetwork?.isConnected?.();
 }
 function usbStatus(){
+ syncConnectedPythonTarget();
  const requested=$('pythonTarget')?.value,selection=pythonBinding||pythonSelection();
  const resolution=$('pyTargetResolution'),kit=window.ZebjusKits?.getState?.();
  const description=requested==='python'?'Python Simulator • isolated from Kit':
   'Requested '+String(requested).toUpperCase()+' • '+(selection.transport?'Resolved '+selection.transport.toUpperCase()+' • '+(selection.kitId||'physical USB')+' • '+selection.capability:'NO VERIFIED KIT')+' • '+selection.reason+
   (kit?.rc?' • Input '+String(kit.rc.source||'NONE')+' • '+(kit.rc.ageMs==null?'age unavailable':kit.rc.ageMs+' ms at last status'):'');
  if(resolution&&resolution.textContent!==description)resolution.textContent=description;
- const short=$('pyTargetShort'),shortText=requested==='python'?'Python • ISOLATED':String(requested).toUpperCase()+' → '+(selection.transport?.toUpperCase()||'NO VERIFIED KIT');
+ const short=$('pyTargetShort'),shortText=requested==='python'?'Python • ISOLATED':(pythonTargetIntent==='connected'?'Connected Kit':String(requested).toUpperCase())+' → '+(selection.transport?.toUpperCase()||'NO VERIFIED KIT');
  if(short&&short.textContent!==shortText)short.textContent=shortText;
  if($('pythonTarget')&&$('pythonTarget').title!==description)$('pythonTarget').title=description;
  if(running&&(pythonBinding||pythonRunIdentity)){try{validatePythonSession()}catch(e){
@@ -410,6 +419,7 @@ function checkPythonSyntax(){
 }
 async function runPython(){
  if(running||pythonStarting)return;
+ syncConnectedPythonTarget();
  const epoch=++pythonRunEpoch;pythonStarting=true;updateButtons();
  try{
  workspace?.openBottom('run');
@@ -461,7 +471,7 @@ function updateButtons(){
  if(r){r.disabled=!!running||(!editor&&!h?.redo?.length);r.title='Redo (Ctrl/⌘+Shift+Z)'}
  $('rerunPythonBtn').disabled=running||pythonStarting||!hasRun;
  $('runPythonBtn').disabled=running||pythonStarting;
- $('pythonTarget').disabled=running||pythonStarting; // prevent transport switch halfway through an authorized Python session
+ $('pythonTarget').disabled=running||pythonStarting||ledSession; // retain an active LED binding even after the Worker finishes
  $('stopPythonBtn').disabled=!running&&!pythonStarting&&!ledSession;
 }
 function editorPosition(){
@@ -736,8 +746,8 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);$('pythonTarget').value=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'auto':'python';usbStatus();e.target.value=''};
- $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',usbStatus);$('runPythonBtn').onclick=runPython;
+ $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);pythonTargetIntent=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
+ $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',()=>{pythonTargetIntent=$('pythonTarget').value==='python'?'isolated':'manual';usbStatus()});$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
  $('clearTerminalBtn').onclick=clearTerminal;$('copyTerminalBtn').onclick=copyTerminal;bindPlotWindow();initPythonStickyToolbar();

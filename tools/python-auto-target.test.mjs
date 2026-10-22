@@ -7,6 +7,14 @@ const context={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interfa
 const data=context.ZebjusKitData,kitId='ZFC-A2-012345ABCDEF';
 const kit={connected:true,kitId,transport:'sta',bootId:'boot-one',controlAuthorized:true,setupAuthorized:true};
 const path=transport=>({transport,kitId,verified:true,available:true,fresh:true,permitted:true,generation:4});
+test('Python detects the selected verified connection instead of requiring an Auto selection or preferring another open port',()=>{
+ for(const transport of ['usb','ap','sta','android-relay']){
+  const selected={...kit,transport};
+  assert.equal(data.detectPythonTarget(selected,['usb','ap','sta','android-relay'].map(path)).transport,transport);
+ }
+ assert.equal(data.detectPythonTarget({...kit,connected:false},[path('sta')]),null);
+ assert.equal(data.detectPythonTarget(kit,[{...path('sta'),verified:false}]),null);
+});
 test('Python AUTO resolves fresh verified USB, AP, STA and authorized relay in explicit priority order',()=>{
  const paths=['android-relay','sta','ap','usb'].map(path);
  for(const expected of ['usb','ap','sta','android-relay']){

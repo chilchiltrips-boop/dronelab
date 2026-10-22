@@ -63,7 +63,7 @@ test('Kit Angle/Acro mode changes notify the virtual cockpit even without a new 
  assert.equal(store.acceptKit(p),false,'same RC sequence cannot be accepted as new telemetry');
  assert.ok(ticks>received,'authoritative mode needs a notification independent of input freshness');
  assert.equal(input.snapshot().kitMode.active,'acro');
- assert.equal(s.mode,'angle','virtual simulator cannot hot-switch during Run');
+ assert.equal(s.mode,'acro','virtual simulator must follow the changed Android Kit mode during Run');
  assert.equal(s.running,true,'mode metadata cannot stop the running virtual simulator');
  const prev=ticks;p.input.state='stale';
  p.kit.flightModeState={supported:true,stabilizationSupported:false,saved:'angle',active:'acro',pending:'angle'};
