@@ -20,7 +20,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/simulator-input.test.mjs
+      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
   browser:
     needs: protocol
     runs-on: ubuntu-latest
@@ -36,7 +36,9 @@ jobs:
         run: |
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/authoritative-status-http.log 2>&1 &
-          node tools/authoritative-status-browser.mjs
+          for status_iteration in 1 2 3; do
+            DRONELAB_STATUS_RUN="$status_iteration" node tools/authoritative-status-browser.mjs
+          done
           node tools/live-inputs-layout-browser.mjs
           node tools/tripod-compact-browser.mjs
           node tools/tripod-ap-mirror-browser.mjs

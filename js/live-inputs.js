@@ -108,7 +108,7 @@ function initLiveInputs(){
  const rate=createInputRateTracker(),simInputs=sharedInputStore();
  let modeSaving=false,modeUiRequest=0;
  let sample=null,usbPpm=null,inFlight=false,lastKit='',lastTransport='',lastPhysicalLink='',
-  nextPollAt=0,readFailures=0,requestGeneration=0,lastBoot='';
+  nextPollAt=0,readFailures=0,requestGeneration=0,lastBoot='',lastConnected=false;
  const visible=()=>document.getElementById('tab-firmware')?.classList.contains('active')&&
   window.ZebjusDevicesWorkspace?.active?.()==='inputs'&&!document.hidden&&
   !$('fwKitDemoMode')?.checked;
@@ -135,8 +135,9 @@ function initLiveInputs(){
  const write=(id,value)=>{const e=$(id);if(e)e.textContent=String(value)};
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
-  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot){
-   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;
+  const connected=kit.connected===true;
+  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot||connected!==lastConnected){
+   wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;lastConnected=connected;
   }
   reuseVerifiedStatus(kit);
   const v=normalizeAcceptedInput(kit,sample);
@@ -289,7 +290,11 @@ function initLiveInputs(){
   // Invalidate old in-flight requests and poll immediately after re-verification.
   ++requestGeneration;nextPollAt=0;readFailures=0;rate.reset();display();
  });
- window.addEventListener('dronelab:kit-link',()=>{wipe();display();});
+ // A link notification can describe a different path or refresh the same Kit.
+ // The selected verified path decides whether identity/connection actually
+ // changed. Clearing every notification creates an artificial missing packet
+ // and stops a running USB simulator even while serial input stays fresh.
+ window.addEventListener('dronelab:kit-link',()=>{++requestGeneration;nextPollAt=0;readFailures=0;display();});
  $('liModeSelect')?.addEventListener('change',async e=>{
   const request=++modeUiRequest;modeSaving=true;write('liModeStatus','SAVING • '+e.target.value.toUpperCase());
   try{
