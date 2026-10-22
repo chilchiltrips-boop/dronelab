@@ -113,7 +113,7 @@ export function sharedInputStore(){
  return root.ZebjusSimulatorInputs||(root.ZebjusSimulatorInputs=createInputStore());
 }
 export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}={}){
- let choice='auto',locked=null,lockedOrigin='',identity='',reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
+ let choice='auto',locked=null,lockedOrigin='',identity='',heldFrame=null,reason='Ready',webSticks={left:{x:0,y:0},right:{x:0,y:0}};
  const androidFrame=(v,origin='auto')=>{
   // Preserve an already-running producer; never hand over silently mid-flight.
   if((origin==='auto'||origin==='webrtc')&&v.fresh&&v.sample)
@@ -126,12 +126,26 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  const frameFor=(v,source,origin='auto')=>source==='usb'?usbFrame(v):androidFrame(v,origin);
  const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(usbFrame(v)?'usb':androidFrame(v)?'android':'web'):choice)};
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
- function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
+ function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';heldFrame=null;reason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
  function setChoice(value){if(s.running||!['auto','web','android','usb'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
   if(!s.running||!['android','usb'].includes(locked))return;
   const v=store.snapshot(),frame=frameFor(v,locked,lockedOrigin);
-  if(!frame||key(frame)!==identity){stop((locked==='usb'?'USB':'Android')+' input lost • press Run to resume');onTimeout();return;}
+  if(!frame){
+   // No simulator-side RC ACK or telemetry-age disarm. The read-only WebRTC/Kit
+   // observer can stall while Android and FlightCore RC remain live.
+   // Hold the last verified command ONLY in this virtual plant. Firmware,
+   // Android and the browser's authenticated read-only monitor are unchanged.
+   const pairingLost=lockedOrigin==='webrtc'&&
+    (!v.peer.connected||!v.peer.approved||!v.peer.supported||v.peer.sessionId!==heldFrame?.sessionId);
+   if(pairingLost){stop('Android pairing lost • press Run to resume');onTimeout();return;}
+   if(reason!=='Running • mirror stale (holding last virtual input)'){
+    reason='Running • mirror stale (holding last virtual input)';onChange();
+   }
+   return;
+  }
+  if(key(frame)!==identity){stop((locked==='usb'?'USB':'Android')+' source changed • press Run to resume');onTimeout();return;}
+  heldFrame=frame;reason='Running';
   const c=frame.channels,a=axesOf(c);s.throttle=c.throttle;s.cmdRoll=a.roll;s.cmdPitch=a.pitch;s.cmdYaw=a.yaw;
  }
  function start(){
@@ -141,11 +155,14 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   const throttle=selected!=='web'?frame.channels.throttle:s.throttle;
   if(throttle>1025){reason='LOWER THROTTLE TO 1000 µs';return {accepted:false,reason};}
   s.throttle=throttle;if(!startSimulator(s))return {accepted:false,reason:'LOWER THROTTLE TO 1000 µs'};
-  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';reason='Running';applyLatest();onChange();return {accepted:true};
+  locked=selected;lockedOrigin=selected!=='web'?frame.origin:'';identity=selected!=='web'?key(frame):'';heldFrame=selected!=='web'?frame:null;reason='Running';applyLatest();onChange();return {accepted:true};
  }
  function snapshot(){
   const v=store.snapshot(),source=effective(),remote=source!=='web',
-   frame=remote?frameFor(v,source,lockedOrigin||'auto'):null,
+   liveFrame=remote?frameFor(v,source,lockedOrigin||'auto'):null,
+   held=remote&&s.running&&locked===source&&!liveFrame?heldFrame:null,
+   frame=liveFrame||held,
+   ageMs=liveFrame?.ageMs??(held?(lockedOrigin==='kit'?v.kit?.ageMs:v.ageMs):null),
    c=frame?frame.channels:neutral(),a=axesOf(c),p=getSnapshot(s);
   const throttleY=1-2*(c.throttle-1000)/1000;
    const sticks=remote?{left:{x:-a.yaw,y:throttleY},right:{x:a.roll,y:-a.pitch}}:
@@ -153,7 +170,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   return {kitMode:v.mode,source:source==='usb'?'usb':remote?'mobile':'web',selectedSource:choice,activeSource:source,locked:!!locked,
    seq:remote?frame?.seq||0:0,appliedAt:0,mode:s.mode,armed:s.running,throttle:Math.round(s.throttle),
    axes:{roll:s.cmdRoll,pitch:s.cmdPitch,yaw:s.cmdYaw},previewAxes:remote&&!s.running?a:{roll:0,pitch:0,yaw:0},sticks,
-   input:remote?{aux:{...frame?.aux},channels:{...c},fresh:!!frame,ageMs:frame?.ageMs??null,rateHz:frame?.rateHz??null,
+   input:remote?{aux:{...frame?.aux},channels:{...c},fresh:!!liveFrame,held:!!held,ageMs:ageMs??null,rateHz:frame?.rateHz??null,
     kind:frame?.kind||'',transport:frame?.transport||'',kitId:frame?.kitId||'',
     origin:frame?.origin||lockedOrigin||'',flightMode:frame?.flightMode||null,inputArm:frame?.inputArm||'NOT REPORTED',supported:!!frame||v.peer.supported,paired:!!frame||v.peer.approved}:null,
    reason,angles:{roll:p.roll,pitch:p.pitch,yaw:p.yaw},rates:{roll:p.rollRate,pitch:p.pitchRate,yaw:p.yawRate},
