@@ -3,18 +3,27 @@
  * physical simulation state in the embedded tripod.html document. */
 (function(root){'use strict';
  const frame=document.getElementById('pidFrame');if(!frame)return;
- let owner='web',ready=false,loading=false,contentResize=null;
+ let owner='web',ready=false,loading=false,contentResize=null,bootTimer=null;
+ const notice=document.createElement('div'),message=document.createElement('p'),retry=document.createElement('button');
+ notice.className='pid-load-status';notice.hidden=true;notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+ retry.type='button';retry.className='btn ghost';retry.textContent='Retry simulator';retry.hidden=true;
+ notice.append(message,retry);frame.before(notice);
+ function bootState(text,failed=false){notice.hidden=!text;message.textContent=text;retry.hidden=!failed;frame.inert=!ready;}
+ function failed(){clearTimeout(bootTimer);bootTimer=null;ready=false;loading=false;bootState('Simulator could not start. Check the connection and retry.',true);}
  function target(){
   try{return frame.contentWindow?.ZebjusTraining||null}catch{return null}
  }
  function isReady(){return !!target()&&ready}
- function ensureSimulator(){
-  if(!frame.getAttribute('src')&&!loading){
-   loading=true;frame.setAttribute('src',frame.dataset.src||'./tripod.html?embedded=1');
+ function ensureSimulator(reload=false){
+  if((reload||!frame.getAttribute('src'))&&!loading){
+   ready=false;loading=true;clearTimeout(bootTimer);bootState('Loading simulator…');
+   bootTimer=setTimeout(failed,15000);
+   frame.setAttribute('src',frame.dataset.src||'./tripod.html?embedded=1');
   }
  }
+ retry.addEventListener('click',()=>ensureSimulator(true));
  function notify(){
-  const sim=target();if(!sim)return;
+  const sim=target();if(!sim||sim.isReady&&!sim.isReady())return failed();
   sim.setOwner(owner);
   sim.setVisible?.(document.querySelector('#tab-pid')?.classList.contains('active')===true);
   if(contentResize)contentResize.disconnect();
@@ -23,17 +32,18 @@
    const resize=()=>{const h=Math.ceil(content.getBoundingClientRect().height+22);if(h>550&&h<8000)frame.style.height=h+'px'};
    contentResize=new ResizeObserver(resize);contentResize.observe(content);resize();
   }
-  ready=true;loading=false;
+  clearTimeout(bootTimer);bootTimer=null;ready=true;loading=false;bootState('');
   root.dispatchEvent(new Event('zebjus:training-ready'));
  }
  frame.addEventListener('load',()=>{
   const sim=target();
   if(sim)notify();
   else{
-   ready=false;loading=false;
+   failed();
    console.warn('PID simulator receiver did not boot');
   }
  });
+ frame.addEventListener('error',failed);
  root.addEventListener('dronelab:tab',event=>{
   target()?.setVisible?.(event.detail?.name==='pid');
   if(event.detail?.name==='pid'||event.detail?.name==='firmware'&&root.ZebjusDevicesWorkspace?.active?.()==='mobile')ensureSimulator();
