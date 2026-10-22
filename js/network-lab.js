@@ -6,11 +6,16 @@ const $=id=>document.getElementById(id),bridge=()=>window.ZebjusDeviceRelay,data
 let netReady=false,netMode='',lastSeen=0,pollTimer=null,scanSequence=-1,frameSeq=0,pollBusy=false;
 let joystickReadAt=0,joystickPending=null;
 const output=(text,kind='')=>{const e=$('netResult');if(e){e.textContent=text;e.dataset.state=kind;}};
-async function request(route,method='GET',args={}){
+async function request(route,method='GET',args={},binding=null){
  const kits=window.ZebjusKits,selected=kits?.getState?.();
+ if(binding)dataInterface().assertBoundSession(binding,selected,{allowDelayed:/,STOP\s*$/.test(args.line||'')});
  if(!selected?.connected||!selected.kitId||!dataInterface()?.isNetwork(selected.transport))
   throw Error('Connect and verify an AP / STA / Android Relay Kit before reading network data.');
- const result=await kits.request(route,method,args),after=kits.getState();
+ let result;
+ try{result=await (binding&&kits.requestBound?kits.requestBound(binding,route,method,args):kits.request(route,method,args))}
+ catch(error){if(binding)dataInterface().assertBoundSession(binding,kits.getState(),{allowDelayed:true});throw error;}
+ const after=kits.getState();
+ if(binding)dataInterface().assertBoundSession(binding,after,{allowDelayed:true});
  const requireKitId=['/api/status','/api/telemetry','/api/rc/snapshot'].includes(route);
  dataInterface().validateReply(selected,after,result,{requireKitId});
  if(result?.board&&route==='/api/status'){
@@ -56,9 +61,22 @@ async function getTelemetry(){
  const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+(d.managementProtocol==='ZJM1'?' • UDP':'')+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
  return d;
 }
-async function writeLine(text){
+async function writeLine(text,binding=null){
  const line=String(text||'').trim();if(!/^(ZJINFO,GET|ZJI2C,SCAN|ZJLED,[0-9]+,(?:STOP|SET|KEEP|BLINK|FADE|PATTERN|SAFE|WARNING|SOS)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Only FlightCore bench commands can use network transport');
- return request('/api/command','POST',{line});
+ const result=await request('/api/command','POST',{line},binding);
+ if(result?.accepted===false||result?.ok===false||result?.error)throw Error('LED command rejected: '+(result.error||result.reason||'not accepted'));
+ return result;
+}
+async function verifyBinding(binding){
+ const kits=window.ZebjusKits,contract=dataInterface();
+ contract.assertBoundSession(binding,kits?.getState?.(),{allowDelayed:true});
+ // read() adopts a fresh authenticated status without changing the selected
+ // Kit, acquiring RC ownership, or discovering a different router peer.
+ const result=await kits.read();
+ contract.assertBoundSession(binding,kits.getState());
+ if(result?.kitId!==binding.kitId)throw Object.assign(Error('Device ID mismatch during LED re-verification'),{code:'KIT_SESSION_CHANGED'});
+ if(kits.getState().controlAuthorized!==true)throw Object.assign(Error('LED diagnostic permission is no longer authorized.'),{code:'KIT_AUTH_REJECTED'});
+ return result;
 }
 // Python runs in Pyodide on the browser; firmware exposes only these allowlisted
 // authenticated Wi-Fi operations. The program itself is never uploaded to ESP32.
@@ -130,7 +148,7 @@ function init(){
  bindAction('netScanI2c',async()=>{await writeLine('ZJI2C,SCAN');output('I²C scan triggered; fetch telemetry after scan completes','good')});
  $('netNetworks').addEventListener('change',()=>{$('netSsid').value=$('netNetworks').value});
 }
-window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,pythonWifiScan,pythonWifiTestSave,stream,
+window.DroneLabNetwork={request,read,scan,getTelemetry,readJoystick,writeLine,verifyBinding,pythonWifiScan,pythonWifiTestSave,stream,
  isConnected:()=>{const kit=window.ZebjusKits?.getState?.();return !!(kit?.connected&&dataInterface()?.isNetwork(kit.transport)&&kit.kitId);},mode:()=>window.ZebjusKits?.getState?.().transport||netMode};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();

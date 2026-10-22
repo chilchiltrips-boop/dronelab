@@ -71,11 +71,12 @@
   const path=candidates.filter(p=>(requested==='auto'||p.transport===requested||p.transport==='android-relay'&&kit?.physicalLink===requested)&&compatible(p))
    .sort((a,b)=>order.indexOf(a.transport)-order.indexOf(b.transport))[0];
   if(!path)return {transport:null,kitId:kit?.kitId||'',capability:'none',reason:'NO VERIFIED KIT • '+operation+' needs a fresh, authorized '+(requested==='auto'?'compatible USB/AP/STA/Relay connection':requested.toUpperCase()+' connection')+'. Connect Kit in Devices & Firmware.'};
-  return {transport:path.transport,kitId:path.kitId,bootId:kit.bootId||'',physicalLink:kit.physicalLink||'',generation:path.generation,
+  return {transport:path.transport,kitId:path.kitId,bootId:kit.bootId||'',physicalLink:kit.physicalLink||'',generation:path.generation,connectionGeneration:kit.connectionGeneration,
    relaySessionId:kit.relaySessionId||'',capability:path.transport==='usb'||kit.controlAuthorized&&(path.transport!=='android-relay'||requested!=='auto')?'read/write diagnostics':'read-only',
    reason:(requested==='auto'?'AUTO • ':'Manual • ')+'verified '+path.transport.toUpperCase()+' • '+operation+' supported; firmware authorization applies'};
  }
  function validatePythonBinding(binding,kit,paths){
+  if(isNetwork(binding.transport))assertBoundSession(binding,kit);
   const current=resolvePythonTarget(kit,paths,binding.transport,'read');
   if(!current.transport||current.transport!==binding.transport||current.kitId!==binding.kitId||
    binding.transport==='usb'&&current.generation!==binding.generation||
@@ -83,9 +84,25 @@
    throw Error('KitDataDisconnectedError: Python hardware connection, Device ID or session changed. Stop, verify the intended Kit and Run again.');
   return current;
  }
+ function sessionError(message,code){const error=Error(message);error.code=code;return error;}
+ function assertBoundSession(binding,kit,{allowDelayed=false}={}){
+  if(!binding?.kitId||!kit?.kitId||kit.kitId!==binding.kitId||kit.transport!==binding.transport||
+   binding.bootId!==undefined&&(kit.bootId||'')!==binding.bootId||
+   binding.physicalLink!==undefined&&(kit.physicalLink||'')!==binding.physicalLink||
+   binding.relaySessionId!==undefined&&(kit.relaySessionId||'')!==binding.relaySessionId||
+   binding.connectionGeneration!==undefined&&kit.connectionGeneration!==binding.connectionGeneration)
+   throw sessionError('KitDataDisconnectedError: Python hardware session changed (Device ID, transport, boot or connection). Verify the original Kit and Run again.','KIT_SESSION_CHANGED');
+  if(!kit.connected){
+   if(kit.linkVerified!==true)throw sessionError('KitDataDisconnectedError: original Kit disconnected. Verify it and Run again.','KIT_DISCONNECTED');
+   if(!allowDelayed)throw sessionError('NetworkDelayError: original Kit heartbeat is delayed; authenticated re-verification is required.','KIT_DELAYED');
+  }
+  return kit;
+ }
  function validateReply(before,after,reply,{requireKitId=true}={}){
-  if(!before?.connected||!before.kitId||!after?.connected||after.kitId!==before.kitId||
-    after.transport!==before.transport)throw Error('NetworkDisconnectedError: verified Kit identity or transport changed during read.');
+  if(!before?.connected||!before.kitId||!after?.kitId||after.kitId!==before.kitId||after.transport!==before.transport||
+   (before.bootId||'')!==(after.bootId||'')||before.connectionGeneration!==after.connectionGeneration)
+   throw sessionError('NetworkDisconnectedError: verified Kit identity or transport changed during read.','KIT_SESSION_CHANGED');
+  if(!after.connected&&after.linkVerified!==true)throw sessionError('NetworkDisconnectedError: Kit disconnected during read; verify its identity and transport before retrying.','KIT_DISCONNECTED');
   if(requireKitId&&reply?.kitId!==before.kitId)throw Error('Device ID mismatch or absent: Kit data rejected.');
   if(reply?.kitId&&reply.kitId!==before.kitId)throw Error('Device ID mismatch: Kit data rejected.');
   return reply;
@@ -106,5 +123,5 @@
    accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:true,motors_disabled:true,
    motorsArmed:false,readSource:'verified-usb-serial'};
  }
- root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,validatePythonBinding,validateReply,usbJoystick});
+ root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
 })(globalThis);

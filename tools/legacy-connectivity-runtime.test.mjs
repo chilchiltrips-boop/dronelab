@@ -98,6 +98,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
   if(route==='/api/telemetry')return {kitId:id,gyroReady:true};
+  if(route==='/api/command')return {kitId:id,accepted:true};
   if(route==='/api/wifi/test'){
    status={...status,staConnected:true,ip:'192.168.1.41',ssid:args.ssid,wifiTestState:'saved',networkState:'AP_STA_COEXISTENCE'};
    return {state:'testing',saved:false};
@@ -315,6 +316,35 @@ test('status and telemetry share one session renewal instead of parallel enrollm
   await new Promise(resolve=>setImmediate(resolve));assert.equal(f.authAttempts(),2,'Only one renewal should start');
   finish();await pending;assert.equal(f.authAttempts(),2);
  }finally{f.dispose()}
+});
+test('LED POST does not invalidate an authenticated status read already waiting on session renewal',async()=>{
+ const f=fixture({paired:true,encrypted:true});let finish;
+ try{
+  await f.api.connect();f.expireSessions();f.blockEnrollment(new Promise(resolve=>finish=resolve));
+  const status=f.api.read();await new Promise(resolve=>setImmediate(resolve));
+  const led=f.api.request('/api/command','POST',{line:'ZJLED,1,SET,100'});
+  finish();await Promise.all([status,led]);assert.equal(f.api.getState().connected,true);
+  assert.equal(f.api.getState().linkVerified,true);
+ }finally{finish?.();f.dispose()}
+});
+test('late heartbeat remains visibly stale while original Kit re-verification retains session identity',async()=>{
+ const f=fixture({mode:'ap'});try{
+  await f.api.connect();const first=f.api.getState();f.advance(7000);
+  assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().linkVerified,true);
+  await f.api.read();assert.equal(f.api.getState().connected,true);
+  assert.equal(f.api.getState().kitId,first.kitId);assert.equal(f.api.getState().connectionGeneration,first.connectionGeneration);
+ }finally{f.dispose()}
+});
+test('a queued bound LED command is rejected before dispatch after the selected Kit disconnects',async()=>{
+ const f=fixture({paired:true,encrypted:true});let finish;
+ try{
+  await f.api.connect();const binding=f.api.getState();f.expireSessions();f.blockEnrollment(new Promise(resolve=>finish=resolve));
+  const read=f.api.request('/api/telemetry');await new Promise(resolve=>setImmediate(resolve));
+  const led=f.api.requestBound(binding,'/api/command','POST',{line:'ZJLED,1,SET,100'});
+  const outcomes=Promise.allSettled([read,led]);await f.api.disconnect();finish();
+  const results=await outcomes;assert.ok(results.every(x=>x.status==='rejected'));
+  assert.equal(f.requests.filter(x=>x.route==='/api/command').length,0,'Old session must never dispatch a queued LED command');
+ }finally{finish?.();f.dispose()}
 });
 test('enrollment cooldown retains STA monitoring and blocks repeated authorization until it expires',async()=>{
  const f=fixture({paired:true,encrypted:true});try{
