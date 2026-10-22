@@ -230,17 +230,19 @@ function syncActions(){
  if($('tpControlSource').textContent!==sourceText)$('tpControlSource').textContent=sourceText;
  const kitMode=authoritative?'KIT '+kitActive.toUpperCase()+(s.running&&kitActive!==s.mode?' • SYNC PENDING':authoritative.pending?' • KIT PENDING '+authoritative.pending.toUpperCase():''):'KIT MODE —';
  if($('tpKitMode').textContent!==kitMode)$('tpKitMode').textContent=kitMode;
- const inputArm=remote&&state.input?.origin==='kit'?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT —';
+ const inputArm=remote&&state.input?.origin==='kit'?(state.input.fresh?'INPUT '+(state.input.inputArm||'NOT REPORTED'):'INPUT STALE • NOT LIVE ARM'):'INPUT —';
  if($('tpInputArm').textContent!==inputArm)$('tpInputArm').textContent=inputArm;
  const input=state.input;
- $('tpSourceState').textContent=remote?(state.activeSource==='usb'?'USB ':'Android ')+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
- $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
+ $('tpSourceState').textContent=remote?(state.activeSource==='usb'?'USB ':'Android ')+(input.transport?.toUpperCase()||'AP')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
+ $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs'+(Number.isInteger(input.aux?.ch5)?' • CH5 '+input.aux.ch5:'')+(Number.isInteger(input.aux?.ch6)?' • CH6 '+input.aux.ch6:''):'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach()}
  if(lastRunning!==s.running){
   setStatus(s.running?(remote?'ANDROID INPUT • WEB RUN • VIRTUAL ARMED':'WEB • VIRTUAL ARMED'):'MOTORS OFF • '+state.reason);
   if(s.running&&audioUnlocked)audioStart();else if(!s.running)audioStop();
  }
+ if(s.running&&remote&&input?.held)setStatus('VIRTUAL RUN • MIRROR STALE • LAST COMMAND HELD');
+ else if(s.running&&remote&&lastRunning&&$('tpStatus').textContent.includes('MIRROR STALE'))setStatus('ANDROID INPUT • WEB RUN • VIRTUAL ARMED');
  lastRunning=s.running;
 }
 function releaseAll(stopMotor=false){pressed.clear();inputCancels.forEach(cancel=>cancel());pointers.clear();if(localInput())releaseInputs(s);renderStickKnobs();if(stopMotor)stop('Page lost focus')}
