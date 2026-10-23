@@ -90,10 +90,11 @@ try{
   await page.setViewportSize({width,height:900});await page.evaluate(()=>scrollTo(0,0));
   const m=await page.evaluate(()=>{
    const r=s=>{const b=document.querySelector(s).getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom}};
-   return {width:innerWidth,overflow:document.documentElement.scrollWidth-innerWidth,network:r('.kit-top-network'),access:r('.kit-access-badges'),details:r('.v2-connection-details')};
+   return {width:innerWidth,overflow:document.documentElement.scrollWidth-innerWidth,network:r('.kit-top-network'),access:r('.kit-access-badges'),details:r('.v2-connection-details'),header:r('.topbar'),status:r('.kit-top-status'),tools:r('.v2-workspace-tools')};
   });
   const overlaps=(a,b)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
   assert.ok(m.overflow<=2,'Horizontal overflow '+JSON.stringify(m));assert.ok(!overlaps(m.network,m.access)&&!overlaps(m.access,m.details),'Header controls overlap '+JSON.stringify(m));
+  assert.ok(m.status.bottom<=m.header.bottom&&m.tools.top>=m.header.bottom-1,'Header overflows into workspace '+JSON.stringify(m));
   layouts.push(m);await page.screenshot({path:'test-output/kit-access/ppm-'+width+'.png',fullPage:true});
  }
  await page.evaluate(async()=>{window.__accessFixture.diag=false;await window.ZebjusKits.read()});

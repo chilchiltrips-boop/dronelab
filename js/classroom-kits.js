@@ -219,7 +219,7 @@ function render(){
  const hint=$('kitPidMonitor');if(hint)hint.textContent=ready?'RC '+(rc.active?'LIVE':'IDLE')+' • '+(rc.source||'NONE')+' • T '+(rc.throttle??1000)+' R '+(rc.roll??1500)+' P '+(rc.pitch??1500)+' Y '+(rc.yaw??1500):'No hardware connected • simulator available';
  const targetHardware=$('kitHardwareTarget');if(targetHardware)targetHardware.disabled=!ready;
  if($('kitWifiStatus')&&!ready&&!pendingNetworkTarget)$('kitWifiStatus').textContent='Join Kit AP → Connect Kit → Scan Wi-Fi → Test & Save → join the router → approve Connect.';
- root.dispatchEvent(new CustomEvent('dronelab:kit-access'));
+ if(typeof root.CustomEvent==='function')root.dispatchEvent(new root.CustomEvent('dronelab:kit-access'));
 }
 const serial=()=>root.DroneLabSerial;
 const relay=()=>root.ZebjusDeviceRelay;
