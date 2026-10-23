@@ -109,7 +109,7 @@ try{
   const id='ZFC-A1-ABCDEF012345',f=window.__usbAccess={unlocked:false,paused:false,selection:'PPM',actions:[]};
   const emit=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
   const access=()=>({version:1,selection:f.selection,paused:f.paused,stationary:true,maintenance:{active:f.paused,owned:f.paused,leaseRemainingMs:f.paused?30000:0}});
-  f.publish=()=>{emit('ZJRC,PPM,PPM,1,T=1000,R=1500,P=1500,Y=1500,ARM=0');emit('ZJACCESS,STATE,'+id+',PPM,0,1,0,0,0')};
+  f.publish=()=>{emit('ZJSTATE,1,'+id+',angle,angle,none,1000,1500,1500,1500,1000,1500,0,1,0,1,0,0,PPM,PPM,1');emit('ZJACCESS,STATE,'+id+',PPM,0,1,0,0,0')};
   window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>71,writeLine:async line=>{
    line=String(line).trim();const p=line.split(',');
    if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB maintenance')}

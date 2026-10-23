@@ -1176,7 +1176,11 @@ function onSerial(e){
   if(statusRecord.kitId!==state.kitId||usbCandidate.kitId!==state.kitId||usbCandidate.serialGeneration!==serial()?.generation?.())return;
   state.flightModeState={...statusRecord.flightModeState};state.flightMode=statusRecord.flightModeState.active;
   state.ledOn=statusRecord.ledOn;state.motorsArmed=false;state.motorsDisabled=true;
-  if(!state.rc||statusRecord.rc.seq>=state.rc.seq||statusRecord.rc.active===false){state.rc={...statusRecord.rc};state.ackAt=Date.now();}
+  if(!state.rc||statusRecord.rc.seq>=state.rc.seq||statusRecord.rc.active===false){
+   // Compact ZJSTATE carries the authoritative source, including a reserved
+   // producer before its first frame; it has no separate claimed field.
+   state.rc={...statusRecord.rc,claimed:['WEB','ANDROID','PPM'].includes(statusRecord.rc.source)};state.ackAt=Date.now();
+  }
   render();return;
  }
  if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
