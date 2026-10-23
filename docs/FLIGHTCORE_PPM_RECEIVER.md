@@ -85,7 +85,7 @@ read-only PID simulator. Keep Take Control off.
    router as the Kit. Release active Web/Android control, set throttle low and
    CH5 OFF, and check that Live Inputs reports accepted PPM channels.
 2. Open PID Tuning. **Auto** detects the selected Kit's PPM, or explicitly
-   choose **PPM Receiver**. The source label shows `PPM STA`, `PPM AP` or
+   choose **PPM RX**. The source label shows `PPM STA`, `PPM AP` or
    `PPM USB`. Receiver sticks preview without starting the virtual plant.
 3. Lower throttle to 1000 µs (virtual Run accepts at most 1025 µs) and click
    **Run** in the WebApp. Move the transmitter sticks to drive the virtual

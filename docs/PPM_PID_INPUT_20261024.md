@@ -16,7 +16,7 @@ accepted input into the virtual plant requires no hardware control grant.
 
 - Accepted PPM over a verified selected USB/AP/STA Kit feeds a distinct PPM
   simulator source. Auto detects it before Android preview; an explicit
-  **PPM Receiver** option is also available.
+  **PPM RX** option is also available.
 - Labels identify PPM and the monitoring transport separately. Stick preview,
   low-throttle WebApp Run, local mode/PID edits and explicit Stop work while
   the physical Kit remains view-only.
@@ -44,8 +44,9 @@ accepted input into the virtual plant requires no hardware control grant.
   verified A2 STA, A1 STA, A2 AP and A2 USB replies. It checks Auto/explicit
   PPM, preview, low-throttle Run rejection, TRPY/virtual motor response, live
   PID edit, Stop, receiver/polling loss, recovery without auto-run and zero
-  hardware writes. Evidence is uploaded by that workflow. The local browser
-  download was unavailable, so browser verification runs in GitHub CI.
+  hardware writes. All four cases passed locally in Chromium headless with
+  file routes and separate single-process browser runs, required by local
+  socket restrictions. Full browser verification also runs in GitHub CI.
 
 ## Physical validation remaining
 

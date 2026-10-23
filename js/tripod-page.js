@@ -222,7 +222,8 @@ function syncActions(){
  $('tpReset').disabled=false;$('tpInputSource').disabled=s.running;$('tpInputSource').value=state.selectedSource;
  for(const id of ['tpLeftPad','tpRightPad'])$(id).dataset.remote=String(remote);
  const sourceLabel=state.activeSource==='ppm'||state.input?.source==='PPM'?'PPM':state.activeSource==='usb'?'USB':'Android';
- const sourceText=remote?sourceLabel.toUpperCase()+' '+(state.input?.transport?.toUpperCase()||'—')+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
+ const transportLabel=state.input?.transport?.toUpperCase()||(sourceLabel==='Android'?'AP':'—');
+ const sourceText=remote?sourceLabel.toUpperCase()+' '+transportLabel+' • '+(state.input?.fresh?'LIVE':'STALE'):'WEB INPUT';
  if($('tpControlSource').textContent!==sourceText)$('tpControlSource').textContent=sourceText;
  const kitMode=authoritative?'KIT ACTIVE '+kitActive.toUpperCase()+' • SAVED '+authoritative.saved.toUpperCase()+(authoritative.pending?' • PENDING '+authoritative.pending.toUpperCase():'')+' • METADATA ONLY':'KIT MODE UNSUPPORTED / NOT REPORTED';
  if($('tpKitMode').textContent!==kitMode)$('tpKitMode').textContent=kitMode;
@@ -234,8 +235,8 @@ function syncActions(){
  const health=remote?(state.input?.fresh?'LIVE':state.input?.held?'MIRROR DELAYED • STALE':'DISCONNECTED'):'LIVE';
  const diagnosticText='SIM '+s.mode.toUpperCase()+' • '+health+(state.input?.ageMs!=null?' • genuine input '+Math.round(state.input.ageMs)+' ms':'')+' • last stop: '+state.lastStopReason;
  if(diagnostic&&diagnostic.textContent!==diagnosticText)diagnostic.textContent=diagnosticText;
- $('tpSourceState').textContent=remote?sourceLabel+' '+(input.transport?.toUpperCase()||'—')+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
- $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
+ $('tpSourceState').textContent=remote?sourceLabel+' '+transportLabel+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
+ $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':state.activeSource==='ppm'?'Waiting for accepted PPM over verified USB / AP / STA':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs'+(Number.isInteger(input.aux?.ch5)?' • CH5 '+input.aux.ch5:'')+(Number.isInteger(input.aux?.ch6)?' • CH6 '+input.aux.ch6:''):'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
  if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach();
   $('tpLastMode').textContent='SIM '+s.mode.toUpperCase()+(state.followedMode?(input?.origin==='kit'?' • KIT':' • ANDROID'):'');
