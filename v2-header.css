@@ -132,7 +132,7 @@
 #app .topbar-main{grid-template-columns:minmax(120px,155px) minmax(270px,1fr) minmax(560px,1.45fr)!important;gap:10px!important}
 #app .topbar-main>.kit-top-status{
  display:grid!important;grid-template-columns:minmax(170px,1fr) auto auto auto auto auto auto;
- align-items:center;justify-content:stretch!important;width:100%!important;
+ align-items:center;justify-content:stretch!important;width:100%!important;height:auto!important;
  min-width:0!important;max-width:none!important;gap:7px!important
 }
 #app .topbar .kit-top-detail{
