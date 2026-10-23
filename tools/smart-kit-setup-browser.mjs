@@ -62,7 +62,11 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
   }
   await page.locator('#smartTeacher').fill('FixtureTeacher#12345');
   await page.locator('#smartSave').scrollIntoViewIfNeeded();
-  const saveRect=await page.locator('#smartSave').boundingBox();assert.ok(saveRect.y>=0&&saveRect.y+saveRect.height<=height+1,'Save is not reachable by scrolling');
+  const saveRect=await page.locator('#smartSave').boundingBox();
+  // Chromium can align an edge a fractional CSS pixel beyond zero (-0.3125px
+  // at 360px). Keep a symmetric one-pixel tolerance and verify real hit testing.
+  const saveHit=await page.locator('#smartSave').evaluate(button=>{const r=button.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('#smartSave')===button});
+  assert.ok(saveRect.y>=-1&&saveRect.y+saveRect.height<=height+1&&saveHit,'Save is not reachable by scrolling: '+JSON.stringify({viewport:{width,height},rect:saveRect,saveHit}));
   await page.screenshot({path:`${output}/${width}-before-save.png`});
   await page.locator('#smartSave').click();await page.locator('#smartResult').waitFor({state:'visible'});
   assert.match(await page.locator('#smartResult').textContent(),/Restart acknowledged/);

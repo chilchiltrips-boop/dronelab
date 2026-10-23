@@ -87,15 +87,15 @@ try{
     Math.abs(after.asideY-before.asideY)>2||after.navY!==before.navY)
   hardFailures.push('Desktop mousewheel should scroll only the right hardware settings pane');
  await page.screenshot({path:'test-output/form-fit/hardware-scroll-desktop.png'});
- // Overview must allow a long status/details card to scroll under an always
- // visible, physically identical Take Control button (no duplicate handler).
+ // RC controls now live in their contextual card. Long details must scroll in
+ // the right pane; the one original RC button must remain reachable by scroll.
  await page.setViewportSize({width:1480,height:590});
  await page.locator('[data-dw-view="overview"]').click();
  await page.waitForTimeout(240);
  const ovBefore=await page.evaluate(()=>{
   const content=document.querySelector('#dw-body-overview');
   const ctl=document.querySelector('#fwKitTakeControl');
-  const bar=document.querySelector('#dw-panel-overview>.dw-overview-actions');
+  const bar=document.querySelector('#kitRcActions>.dw-overview-actions');
   const card=document.querySelector('#dw-body-overview>.fw-kit-detail-card');
   const rect=ctl.getBoundingClientRect();
   return {bodyY:scrollY,contentY:content.scrollTop,hasOverflow:content.scrollHeight>content.clientHeight+20,
@@ -107,23 +107,25 @@ try{
  });
  console.log('SCROLL_DIAG overview-before',JSON.stringify(ovBefore));
  if(!ovBefore.hasOverflow||!ovBefore.controlVisible||!ovBefore.controlBarParent||ovBefore.buttonCount!==1||!ovBefore.cardNatural)
-  hardFailures.push('Overview Take Control needs one visible button and an independently scrollable, unclipped details card');
+  hardFailures.push('RC Input panel needs one visible WebApp RC button and independently scrollable, unclipped details');
  await page.locator('#dw-body-overview').hover();
  await page.mouse.wheel(0,440);
  await page.waitForTimeout(200);
  const ovAfter=await page.evaluate(()=>{
   const content=document.querySelector('#dw-body-overview');
-  const bar=document.querySelector('#dw-panel-overview>.dw-overview-actions');
-  return {bodyY:scrollY,contentY:content.scrollTop,barY:bar.getBoundingClientRect().top,
-   hitTest:document.elementFromPoint(...(()=>{
-    const r=document.querySelector('#fwKitTakeControl').getBoundingClientRect();
-    return [r.left+r.width/2,r.top+r.height/2]
-   })())?.closest('#fwKitTakeControl')!==null};
+  const bar=document.querySelector('#kitRcActions>.dw-overview-actions');
+  return {bodyY:scrollY,contentY:content.scrollTop,barY:bar.getBoundingClientRect().top};
  });
  console.log('SCROLL_DIAG overview-after',JSON.stringify(ovAfter));
  if(ovAfter.contentY<=ovBefore.contentY+15||Math.abs(ovAfter.bodyY-ovBefore.bodyY)>2||
-    Math.abs(ovAfter.barY-ovBefore.barY)>2||!ovAfter.hitTest)
-  hardFailures.push('Overview wheel must scroll details without moving/click-blocking Take Control');
+    Math.abs((ovBefore.barY-ovAfter.barY)-(ovAfter.contentY-ovBefore.contentY))>2)
+  hardFailures.push('Overview wheel must scroll the contextual RC card and details in the right pane only');
+ await page.locator('#fwKitTakeControl').scrollIntoViewIfNeeded();
+ const rcReachable=await page.locator('#fwKitTakeControl').evaluate(button=>{
+  const r=button.getBoundingClientRect();
+  return r.top>=0&&r.bottom<=innerHeight&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('#fwKitTakeControl')===button;
+ });
+ if(!rcReachable)hardFailures.push('Contextual WebApp RC button cannot be reached after scrolling long details');
  await page.screenshot({path:'test-output/form-fit/hardware-overview-controls-desktop.png'});
  // The three onboarding cards must stay full height above the real Connect
  // controls; scrolling must reveal the form rather than clip the first card.
