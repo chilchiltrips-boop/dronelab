@@ -433,7 +433,7 @@ async function connectUSB(code,ticket=reconnectTicket){
   for(let i=0;i<18&&(!identity.kitId||!identity.kitCode);i++)await sleep(140);
  }finally{root.removeEventListener('dronelab:serial-line',listener);}
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before USB identity verification');
- Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode),{rcAccess:null});
+ Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode),{rc:null,rcAccess:null,rcObservedAt:0});
  state.usbInfo=identity;state.key='';state.ip='';
 }
 const form=args=>new URLSearchParams(args||{});

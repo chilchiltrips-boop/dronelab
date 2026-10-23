@@ -61,7 +61,9 @@ STOP behavior are unchanged. Never infer physical acceptance from compilation.
   without acquiring RC. Existing replay, tamper, watchdog and OTA tests remain.
 - Browser integration uses real WebApp connection/render/action handlers with
   explicit device doubles: PPM + IMU/LED, pause/resume, expired holder, source
-  selection, observer denial and 1366/768/390/320px header layouts.
+  selection, observer denial and 1366/768/390/320px header layouts. The USB
+  frontend test verifies teacher unlock with PPM active, settings still locked,
+  correlated Device ID/token ACKs and isolation from the previous network Kit.
 - Actual Pyodide LED blink also runs with A2 STA PPM ownership. Existing A1/A2
   AP/STA Python, PPM simulator and layout regressions still apply.
 

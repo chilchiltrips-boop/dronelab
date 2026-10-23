@@ -102,8 +102,54 @@ try{
  assert.equal(await page.locator('#fwDetailAccess').textContent(),'Diagnostics read-only');
  assert.equal(await page.locator('#kitRcHandover').isDisabled(),true);
  const denied=await page.evaluate(async()=>{const before=window.__accessFixture.actions.length;try{await window.ZebjusKits.changeRcAccess('BEGIN');return false}catch{return window.__accessFixture.actions.length===before}});
- assert.equal(denied,true);assert.deepEqual(errors,[]);
- writeFileSync('test-output/kit-access/evidence.json',JSON.stringify({layouts,errors,diagnosticsWithPpm:true,maintenanceKeepsDiagnostics:true,explicitResume:true,observerDenied:true,physicalHardware:'NOT TESTED'},null,2));
- console.log('PASS independent RC/diagnostics: PPM, IMU+LED, maintenance, lease expiry, explicit Web/PPM handover, observer denial and responsive header');
+ assert.equal(denied,true);
+ // Real USB frontend path, including teacher unlock while PPM owns input and
+ // correlated ACKs. Device double only; native tests enforce the firmware side.
+ await page.evaluate(async()=>{
+  const id='ZFC-A1-ABCDEF012345',f=window.__usbAccess={unlocked:false,paused:false,selection:'PPM',actions:[]};
+  const emit=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
+  const access=()=>({version:1,selection:f.selection,paused:f.paused,stationary:true,maintenance:{active:f.paused,owned:f.paused,leaseRemainingMs:f.paused?30000:0}});
+  f.publish=()=>{emit('ZJRC,PPM,PPM,1,T=1000,R=1500,P=1500,Y=1500,ARM=0');emit('ZJACCESS,STATE,'+id+',PPM,0,1,0,0,0')};
+  window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>71,writeLine:async line=>{
+   line=String(line).trim();const p=line.split(',');
+   if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB maintenance')}
+   else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A1,1.5.11');
+   else if(line==='ZJNET,PAIR')emit('ZJNET,PAIR,'+id+','+'b2'.repeat(16));
+   else if(line==='ZJADMIN,GET')emit('ZJADMIN,AUTH,'+(f.unlocked?'UNLOCKED':'LOCKED'));
+   else if(p[0]==='ZJADMIN'&&p[1]==='UNLOCK'){f.unlocked=true;emit('ZJADMIN,ACK,UNLOCKED_60S')}
+   else if(p[0]==='ZJACCESS'){
+    f.actions.push(p[1]);if(!f.unlocked)throw Error('Fixture USB access lacked teacher unlock');
+    if(p[1]==='BEGIN')f.paused=true;
+    if(p[1]==='RESUME'){f.paused=false;f.selection=p[4]}
+    // Neither another Device ID nor another request token can satisfy this write.
+    emit('ZJACCESS,ACK,ZFC-A2-012345ABCDEF,'+p[3]+','+JSON.stringify(access()));
+    emit('ZJACCESS,ACK,'+id+',wrong-token,'+JSON.stringify(access()));
+    emit('ZJACCESS,ACK,'+id+','+p[3]+','+JSON.stringify(access()));
+   }
+  }};
+  document.getElementById('kitTransport').value='usb';await window.ZebjusKits.connect();
+ });
+ let usb=await page.evaluate(()=>window.ZebjusKits.getState());
+ assert.equal(usb.kitId,'ZFC-A1-ABCDEF012345');assert.equal(usb.rc,null,'USB identity must not inherit previous network RC');
+ assert.equal(usb.rcAccess,null,'USB identity must not inherit previous network maintenance');
+ await page.evaluate(()=>window.__usbAccess.publish());
+ assert.equal(await page.locator('#kitRcAccess').textContent(),'RC PPM');
+ const locked=await page.evaluate(async()=>{try{await window.ZebjusKits.changeRcAccess('BEGIN');return false}catch(e){return /Unlock teacher admin/.test(e.message)&&window.__usbAccess.actions.length===0}});
+ assert.equal(locked,true,'Locked physical USB must not send a maintenance write');
+ await page.evaluate(()=>{window.ZebjusDevicesWorkspace.open('wifi');document.getElementById('smartAdvanced').open=true});
+ assert.equal(await page.locator('#kitAdminUnlock').isDisabled(),false,'Credential unlock is independent of PPM ownership');
+ assert.equal(await page.locator('#kitAdminApply').isDisabled(),true,'Settings writes still require idle RC');
+ await page.locator('#kitAdminSecret').fill('FixtureTeacher#12345');await page.locator('#kitAdminUnlock').click();
+ await page.waitForFunction(()=>window.__usbAccess.unlocked&&document.getElementById('kitAdminSecret').value==='');
+ await page.evaluate(()=>window.ZebjusDevicesWorkspace.open('overview'));
+ await page.locator('#kitMaintenanceEnter').click();await page.waitForFunction(()=>window.ZebjusKits.getState().rcAccess?.paused);
+ assert.equal(await page.locator('#kitRcAccess').textContent(),'RC PAUSED');
+ await page.locator('#kitRcSourceTarget').selectOption('WEB');await page.locator('#kitMaintenanceExit').click();
+ await page.waitForFunction(()=>window.ZebjusKits.getState().rcAccess?.selection==='WEB');
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
+ assert.equal(await page.evaluate(()=>document.getElementById('kitEvents').textContent.includes('FixtureTeacher#12345')),false);
+ assert.deepEqual(errors,[]);
+ writeFileSync('test-output/kit-access/evidence.json',JSON.stringify({layouts,errors,diagnosticsWithPpm:true,maintenanceKeepsDiagnostics:true,explicitResume:true,observerDenied:true,usbTeacherUnlockWithPpm:true,usbIdentityIsolation:true,physicalHardware:'NOT TESTED'},null,2));
+ console.log('PASS independent RC/diagnostics: PPM, IMU+LED, maintenance, lease expiry, explicit Web/PPM handover, observer denial, USB teacher unlock and responsive header');
 }catch(error){await page.screenshot({path:'test-output/kit-access/error.png',fullPage:true}).catch(()=>{});console.error(error.stack||error);process.exitCode=1}
 finally{await browser.close()}
