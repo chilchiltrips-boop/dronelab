@@ -145,7 +145,9 @@ static void zjPpmLoop(uint32_t now){
     p=zjPpmValues[zjPpmMap[1]],y=zjPpmValues[zjPpmMap[3]];
    const bool armHigh=zjPpmValues[zjPpmMap[4]]>=1700;
    const bool armLow=zjPpmValues[zjPpmMap[4]]<=1300;
-   if(zjRcOwned&&zjRcSource=="PPM"){
+   if(!zjRcSourceAllowed("PPM")){
+    zjPpmSafeFrames=0;zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+   }else if(zjRcOwned&&zjRcSource=="PPM"){
     if(armLow){zjPpmArmingLowSeen=true;zjPpmInputSwitchArmed=false;}
     if(armHigh&&zjPpmArmingLowSeen&&!zjPpmInputSwitchArmed&&t<=1050)zjPpmInputSwitchArmed=true;
     if(!armHigh)zjPpmInputSwitchArmed=false;

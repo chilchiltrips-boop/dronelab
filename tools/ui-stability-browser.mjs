@@ -76,8 +76,14 @@ try{
     });
     await page.screenshot({path:`${output}/${width}-${tab}-before.png`});
     for(let i=0;i<3;i++){
-     await page.locator('#kitTopControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
-     await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
+     if(before){await page.locator('#kitTopControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
+      await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);}
+     else{
+      // RC action now belongs to its Devices panel. Exercise the same handler
+      // without navigating away from the workspace under this rendering audit.
+      await page.evaluate(()=>window.ZebjusKits.toggleControl());await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
+      await page.evaluate(()=>window.ZebjusKits.toggleControl());await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
+     }
     }
     const audit=await page.evaluate(()=>{
      const a=window.__renderAudit;a.active=false;a.observer.disconnect();a.shiftObserver.disconnect();

@@ -15,6 +15,7 @@ export async function startFirmwareHost(){
    section(source,'static void zjRpcLoop(){','static void zjNetworkSetup(){')+'\nstatic void setupHostTelemetry(){\n'+
    section(source,' zjHttp.on("/api/health"',' // AP-local Kit identity maintenance')+'\n'+
    section(source,' zjHttp.on("/api/telemetry"',' zjHttp.on("/api/command"')+'\n'+
+   section(source,' zjHttp.on("/api/rc/access"',' // RC diagnostics only:')+'\n'+
    section(source,' zjHttp.on("/api/rc/snapshot"',' zjHttp.on("/api/ppm/status"')+'\n}\n';
   writeFileSync(join(directory,'udp-network-extract.h'),extract);
   writeFileSync(join(directory,'udp-version.h'),'static const char* FW_VERSION="'+read('VERSION.txt').trim()+'";\n');

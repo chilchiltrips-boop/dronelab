@@ -5,7 +5,7 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const html=read('index.html'),css=read('classroom-kits.css'),kit=read('js/classroom-kits.js'),updater=read('firmware-updater.js'),network=read('FlightCore_Firmware/FlightCoreNetwork.h');
 
 test('header is one horizontal row with real STA/AP network toggle and controller action',()=>{
- for(const id of ['kitTopNetworkSwitch','kitTopControl','kitTopWifiConnect','kitTopConnect','kitTopStop','fwConnectStaBtn','fwConnectApBtn'])
+ for(const id of ['kitTopNetworkSwitch','kitRcAccess','kitDiagnosticAccess','kitTopWifiConnect','kitTopConnect','kitTopStop','fwConnectStaBtn','fwConnectApBtn'])
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const handler of ['toggleHeaderNetwork','toggleHeaderControl','connectHeaderNetwork','applyMode','claim(\'WEB\')'])
   assert.ok(kit.includes(handler),handler);
@@ -44,8 +44,10 @@ test('network OTA UI excludes USB/relay and does not claim success without runti
 test('header network switch changes physical Wi-Fi mode and never claims physical motor arming',()=>{
  assert.match(kit,/headerNetworkChoice==='ap'/);
  assert.match(kit,/return switchKitNetworkMode\(mode\)/);
- assert.match(html,/id="kitTopControl"[^>]*role="switch"/);
- assert.match(html,/id="kitTopControlLabel"/);
+ assert.doesNotMatch(html,/id="kitTopControl"/);
+ assert.match(html,/id="kitRcAccess"/);
+ assert.match(html,/id="kitDiagnosticAccess"/);
+ assert.match(html,/id="fwKitTakeControl"[^>]*>Use WebApp RC/);
  assert.ok(html.indexOf('id="kitTopStop"')>html.indexOf('id="tab-settings"'),'Emergency stop is not occupying the header');
  assert.ok(html.includes('id="webappVersion"')&&html.indexOf('id="webappVersion"')<html.indexOf('id="kitTopStatus"'));
  assert.match(kit,/await claim\('WEB'\)/);

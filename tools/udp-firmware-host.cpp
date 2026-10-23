@@ -8,6 +8,13 @@
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 static String zjPpmRcChannelsJson(){return "null";}
 static void zjPpmLoop(uint32_t){}
+static bool zjPpmSignalFresh(uint32_t){return false;}
+static uint16_t zjPpmValues[8]={1000,1500,1000,1500,1000,1500,1500,1500};
+static uint8_t zjPpmMap[5]={0,1,2,3,4},zjPpmSafeFrames=0;
+static bool zjPpmArmingLowSeen=false,zjPpmInputSwitchArmed=false;
+#include "../FlightCore_Firmware/FlightCoreAccess.h"
+static bool zjAccessStationary(){return true;}
+static void zjUdpInvalidate(){} // no native RC UDP worker in the management host
 #include "../FlightCore_Firmware/FlightCoreRpc.h"
 static ZjNetworkServer zjHttp(80);
 static Preferences zjPrefs;
