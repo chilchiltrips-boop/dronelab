@@ -20,7 +20,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
+      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/ppm-simulator-input.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
   browser:
     needs: protocol
     runs-on: ubuntu-latest
@@ -43,6 +43,7 @@ jobs:
           node tools/live-inputs-layout-browser.mjs
           node tools/tripod-compact-browser.mjs
           node tools/tripod-ap-mirror-browser.mjs
+          node tools/ppm-pid-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

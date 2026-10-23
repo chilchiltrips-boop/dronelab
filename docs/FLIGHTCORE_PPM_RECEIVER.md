@@ -1,4 +1,4 @@
-# FlightCore PPM-SUM receiver — firmware 1.4.12 (hardware verification required)
+# FlightCore PPM-SUM receiver — firmware 1.5.10 (hardware verification required)
 
 ## Wiring — do not confuse D10 with GPIO10
 | Board | Board marking | Real MCU input | FlightCore profile |
@@ -74,6 +74,31 @@ and switch thresholds with the receiver on a bench.
   Existing combined 20-field `ZJTEL` remains backward compatible.
   The Live Inputs panel shows CH1–CH8 only for *accepted PPM ownership*;
   a merely connected receiver does not overwrite active Android/Web values.
+
+## PID Tuning with a PPM receiver
+
+The WebApp becomes hardware **view-only** while the physical receiver owns the
+Kit. This prevents competing Web/Android RC commands; it does not block the
+read-only PID simulator. Keep Take Control off.
+
+1. Select the correct verified Kit over STA, AP or USB. For STA, use the same
+   router as the Kit. Release active Web/Android control, set throttle low and
+   CH5 OFF, and check that Live Inputs reports accepted PPM channels.
+2. Open PID Tuning. **Auto** detects the selected Kit's PPM, or explicitly
+   choose **PPM Receiver**. The source label shows `PPM STA`, `PPM AP` or
+   `PPM USB`. Receiver sticks preview without starting the virtual plant.
+3. Lower throttle to 1000 µs (virtual Run accepts at most 1025 µs) and click
+   **Run** in the WebApp. Move the transmitter sticks to drive the virtual
+   throttle/roll/pitch/yaw. CH5 does not start the simulator. Adjust simulator
+   mode and PID locally; no PID, ARM or RC writes are sent to the physical Kit.
+4. **Stop** stays stopped despite further receiver frames. Reported receiver
+   loss, a changed producer/Kit/transport/reboot, or expired PPM mirror data
+   stops and neutralizes the virtual plant. Reacquire low throttle + CH5 OFF,
+   then press Run again. Duplicate polls cannot refresh the input age.
+
+The browser mirror permits at most 1000 ms of telemetry age for polling jitter;
+this is separate from the firmware's unchanged 150 ms physical PPM loss limit.
+This feature requires a WebApp update, not a firmware or Android APK rebuild.
 
 ## On-device hardware acceptance checklist
 1. Disconnect ESCs/motors/propellers; identify 3.3V versus 5V PPM levels
