@@ -12,7 +12,7 @@
   const s=api()?.usbSetupState?.();if(!s)return;
   if(s.verified&&s.kitId!==boundId){
    if(boundId)message='Different USB Kit verified. Review its settings before saving.';
-   boundId=s.kitId;dirty=false;result=null;clearSecrets();
+   boundId=s.kitId;dirty=false;result=null;clearSecrets();if($('smartTeacherVerify'))$('smartTeacherVerify').open=false;
    $('smartKitName').value=s.kitName||'';
    $('smartApPrefix').value=s.apSsid===s.prefix+'-'+s.kitCode?s.prefix:'';
    $('smartEnrollConsent').checked=false;
@@ -40,6 +40,7 @@
   }catch(e){reason=e.message;set('smartSsidPreview','Check AP prefix');$('smartSave').disabled=true;}
   for(const id of ['smartKitName','smartApPrefix','smartApPassword','smartTeacher','smartTeacherConfirm','smartEnrollConsent','smartGeneratePassword','smartShowPassword'])$(id).disabled=busy||!s.available;
   $('smartConnectUsb').disabled=busy||s.busy;
+  if($('smartReview'))$('smartReview').disabled=busy||!s.available||!changed;
   set('smartSaveReason',reason);set('smartProgress',busy?'Working on verified USB Kit…':message||reason);
   $('smartProgress').dataset.tone=messageTone;
   const names=api()?.getDiscovered?.()||[];
@@ -63,6 +64,7 @@
  $('smartConnectUsb').addEventListener('click',()=>void perform(async()=>{
   await api().connectSetupUsb();message='USB identity and current settings verified. Edit the fields below.';
  }));
+ $('smartReview')?.addEventListener('click',()=>{if($('smartTeacherVerify'))$('smartTeacherVerify').open=true;$('smartTeacher').focus();});
  $('smartSave').addEventListener('click',()=>void perform(async()=>{
   const input=fields();
   try{result=await api().saveUsbSetup(input);dirty=false;message='Settings saved. '+(result.rebooting?'Kit restarting.':'Fresh USB read-back confirmed.');messageTone='good';}

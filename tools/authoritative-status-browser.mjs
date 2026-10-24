@@ -5,7 +5,10 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 const runLabel=String(process.env.DRONELAB_STATUS_RUN||'single').replace(/[^a-zA-Z0-9_-]/g,'');
 const outputDir='test-output/authoritative-status-'+runLabel;
 mkdirSync(outputDir,{recursive:true});
-const browser=await chromium.launch(browserOptions),context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:'block'});
+// This suite exercises input/state transitions, including real freshness loss.
+// CI software WebGL can block the shared JS thread past the 1s input watchdog.
+// Use the supported 2D renderer here; tripod graphics suites retain full WebGL.
+const browser=await chromium.launch({...browserOptions,args:[...browserOptions.args,'--disable-webgl']}),context=await browser.newContext({viewport:{width:1366,height:900},serviceWorkers:'block'});
 await configureContext(context);
 const page=await context.newPage(),errors=[],evidence=[];
 page.on('pageerror',e=>errors.push(e.stack||e.message));
@@ -47,6 +50,7 @@ try{
    detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId,flightModeState:{...mode},ledOn:true,ledEffect:1,rc:rc()})}}))},80);
  });
  const sim=page.frameLocator('#pidFrame');
+ await sim.locator('#tpFallback').waitFor({state:'visible'});
  await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='android');
  for(const transport of ['ap','sta','android-relay']){
   await page.evaluate(t=>{window.__statusFixture.kit.transport=t;window.ZebjusDevicesWorkspace.open('inputs')},transport);

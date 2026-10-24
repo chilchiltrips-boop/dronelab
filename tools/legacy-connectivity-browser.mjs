@@ -66,7 +66,8 @@ try{
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
   assert.equal(await page.locator('#kitRcAccess').textContent(),'RC WEB');
   await page.locator('#fwKitTakeControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);
-  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();
+  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="diagnostics"]').click();
+  await page.locator('#wifiLegacyNetwork > summary').click();
   await page.locator('#fwWifiConnectSta').click();
   await page.waitForFunction(()=>document.querySelector('#fwConnectLog').textContent.includes('STA is not reachable'));
   assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap','Unreachable STA leaves the AP setup link intact');
