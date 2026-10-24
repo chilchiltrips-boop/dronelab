@@ -45,6 +45,12 @@ teacher unlock window. Network transitions use encrypted, signed and replay-
 protected `/api/rc/access` POSTs; STA observer writes and relay handover are denied.
 The localhost ZJM1 helper allowlists the same route without granting permission.
 
+Android 1.8.15 (versionCode 53) refreshes its bundled firmware catalog to 1.5.11;
+it adds no native controller or relay behavior. Android 1.8.14 remains compatible
+for existing control, but its bundled offline OTA catalog is still 1.5.10. Use
+the current WebApp for the firmware update or install the verified new APK.
+Existing release signing, native/emulator and publication gates still apply.
+
 Selection and maintenance are volatile boot state. A reboot starts the existing
 AUTO arbitration with mandatory low PPM throttle/switch acquisition. No source
 restores an armed state, and physical motor outputs remain disabled. The 150 ms
