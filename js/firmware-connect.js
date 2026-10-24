@@ -198,7 +198,9 @@ function init(){
  bind('fwKitDisconnect',()=>kit().disconnect('Firmware page disconnected'));
  bind('fwKitPing',ping);
  bind('fwKitTakeControl',()=>kit().toggleControl());
- bind('fwAuthorizeUpdates',()=>kit().authorizeNetwork());
+ bind('fwAuthorizeUpdates',async()=>{try{return await kit().authorizeNetwork()}catch(error){
+  const status=$('kitWifiStatus');if(status){status.textContent=error.message;status.dataset.tone='error'}throw error;
+ }});
  bind('fwWifiConnectAp',()=>kit().connectTransport('ap'));
  bind('fwWifiConnectSta',()=>kit().connectTransport('sta'));
  $('fwWifiSettingsBtn')?.addEventListener('click',()=>root.ZebjusDevicesWorkspace?.open('wifi',{scroll:true}));

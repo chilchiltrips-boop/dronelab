@@ -50,7 +50,7 @@ try{
    assert.equal(await page.locator('#cloudAdminCenter').isVisible(),true,'cloud sign-in must render');
    await page.waitForFunction(()=>!/Checking central admin server/.test(document.querySelector('#cloudAdminStatus')?.textContent||''),null,{timeout:9000});
    await page.locator('[data-open-admin]').click();
-   assert.equal(await page.locator('#dw-panel-wifi').isVisible(),true);
+   assert.equal(await page.locator('#dw-panel-security').isVisible(),true);
    assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),true);
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),true,'USB passphrase input must be visible');
    assert.equal(await page.locator('#kitAdminResetAp').isVisible(),true,'AP reset action must render');
@@ -63,7 +63,7 @@ try{
    assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),false);
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),false);
    await page.locator('[data-dw-view="overview"]').click();
-   await page.locator('[data-dw-view="wifi"]').click();
+   await page.locator('[data-dw-view="security"]').click();
    assert.equal(await page.locator('#smartAdvanced').evaluate(e=>e.open),false,'manual close must persist');
    await page.locator('#smartAdvanced > summary').click();
    assert.equal(await page.locator('#kitAdminSecret').isVisible(),true);

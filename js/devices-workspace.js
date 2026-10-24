@@ -57,7 +57,9 @@
   const topbar=document.querySelector('#app .topbar');
   // Header is sticky, but its height changes at tablet/phone breakpoints.
   const headerBottom=Math.max(0,Math.round(topbar?.getBoundingClientRect().bottom||0));
-  shell.style.setProperty('--dw-mobile-top',(headerBottom+4)+'px');
+  // The header scrolls with the document. Keep the mobile menu at the viewport
+  // edge instead of retaining the offscreen header's old height over a form.
+  shell.style.setProperty('--dw-mobile-top','0px');
   const page=$('tab-firmware');
   if(compact||!page?.classList.contains('active')){
    shell.style.removeProperty('--dw-height');
@@ -163,13 +165,22 @@
    relocate('.fw-live-inputs-card','inputs');
    relocate('.fw-available-card','connection');
    relocate('.fw-rename-card','connection');
-   relocate('.fw-network-card','wifi');
-   relocate('#kitNetworkSettings','wifi');
-   relocate('.kit-legacy-network','wifi');
+   const network=relocate('#kitNetworkSettings','wifi');
+   body('wifi').prepend(network);
+   const oldNetwork=relocate('.fw-network-card','diagnostics');
+   const legacyNetwork=document.createElement('details');legacyNetwork.id='wifiLegacyNetwork';legacyNetwork.className='wifi-disclosure';
+   const legacyTitle=document.createElement('summary');legacyTitle.textContent='Legacy AP/STA connection tools';
+   legacyNetwork.append(legacyTitle);oldNetwork.before(legacyNetwork);legacyNetwork.append(oldNetwork);
+   $('wifiNetworkSummary')?.append(oldNetwork.querySelector('.fw-detail-grid'));
+   $('wifiStatusSlot')?.append($('fwWifiState'));
+   $('wifiAuthorizeSlot')?.append($('fwAuthorizeUpdates'));
+   if($('fwAuthorizeUpdates'))$('fwAuthorizeUpdates').textContent='Authorize protected access';
+   relocate('.kit-legacy-network','diagnostics');
    relocate('.kit-browser-access','security');
    relocate('#kitTrustHelp','security');
-   const admin=relocate('#kitAdmin','wifi');
+   const admin=relocate('#kitAdmin','security');
    const advanced=$('smartAdvancedBody');if(advanced){advanced.append(admin);admin.open=true;admin.querySelector('summary').hidden=true;}
+   if($('smartAdvanced'))body('security').append($('smartAdvanced'));
    relocate('.settings-heading','mobile');
    relocate('#kitMobilePairDetails','mobile');
    // Move the exact existing nodes (not clones): preserve recorder storage and listeners.
@@ -254,7 +265,7 @@
   if(tools)resize.observe(tools);
  }
  shell.addEventListener('click',event=>{
-  if(event.target.closest('button[data-open-admin]')){open('wifi');if($('smartAdvanced'))$('smartAdvanced').open=true;return;}
+  if(event.target.closest('button[data-open-admin]')){open('security');if($('smartAdvanced'))$('smartAdvanced').open=true;return;}
   const button=event.target.closest('button[data-dw-view]');
   if(button)open(button.dataset.dwView);
  });

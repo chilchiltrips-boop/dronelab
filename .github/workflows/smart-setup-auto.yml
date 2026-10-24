@@ -50,6 +50,7 @@ jobs:
         run: |
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/smart-kit-auto-http.log 2>&1 &
           node tools/ui-stability-browser.mjs
+          node tools/wifi-workspace-browser.mjs
           node tools/smart-kit-setup-browser.mjs
           node tools/python-auto-browser.mjs
           node tools/python-connected-led-browser.mjs

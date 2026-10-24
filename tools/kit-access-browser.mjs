@@ -136,7 +136,7 @@ try{
  assert.equal(await page.locator('#kitRcAccess').textContent(),'RC PPM');
  const locked=await page.evaluate(async()=>{try{await window.ZebjusKits.changeRcAccess('BEGIN');return false}catch(e){return /Unlock teacher admin/.test(e.message)&&window.__usbAccess.actions.length===0}});
  assert.equal(locked,true,'Locked physical USB must not send a maintenance write');
- await page.evaluate(()=>{window.ZebjusDevicesWorkspace.open('wifi');document.getElementById('smartAdvanced').open=true});
+ await page.evaluate(()=>{window.ZebjusDevicesWorkspace.open('security');document.getElementById('smartAdvanced').open=true});
  assert.equal(await page.locator('#kitAdminUnlock').isDisabled(),false,'Credential unlock is independent of PPM ownership');
  assert.equal(await page.locator('#kitAdminApply').isDisabled(),true,'Settings writes still require idle RC');
  await page.locator('#kitAdminSecret').fill('FixtureTeacher#12345');await page.locator('#kitAdminUnlock').click();

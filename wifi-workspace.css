@@ -1,0 +1,79 @@
+/* Daily network tasks first; privileged provisioning stays disclosed. */
+#dw-body-wifi{--wifi-page:#0b1220;--wifi-card:#111c2e;--wifi-input:#0b1525;--wifi-border:#2b3b52;--wifi-text:#f1f5f9;--wifi-muted:#b4c2d4;color:var(--wifi-text);color-scheme:dark;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;max-width:1180px;align-content:start}
+#dw-body-wifi :is(button,input,select,summary,label){font-family:inherit}
+#dw-body-wifi .wifi-dashboard{display:grid;gap:12px;padding:0!important;border:0;background:none;box-shadow:none}
+#dw-body-wifi :is(.wifi-mode-card,.wifi-panel,.wifi-disclosure){min-width:0;border:1px solid var(--wifi-border);border-radius:10px;background:var(--wifi-card);box-shadow:none}
+#dw-body-wifi :is(.wifi-mode-card,.wifi-panel){padding:16px}
+#dw-body-wifi .wifi-mode-card{padding:12px}
+#dw-body-wifi .wifi-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;min-width:0}
+#dw-body-wifi .wifi-heading>:first-child{min-width:0}
+#dw-body-wifi #wifiStatusSlot{flex:none}
+#dw-body-wifi h3{font-size:16px;line-height:1.35;font-weight:650;color:var(--wifi-text);margin:0;overflow-wrap:anywhere}
+#dw-body-wifi .wifi-eyebrow{display:none}
+#dw-body-wifi :is(.wifi-note,.kit-hint){font-size:12px;line-height:1.5;color:var(--wifi-muted);margin:8px 0 0}
+#dw-body-wifi :is(input:not([type=checkbox]),select){width:100%;min-width:0;max-width:100%;height:40px;min-height:40px;border:1px solid #40516a;border-radius:7px;background:var(--wifi-input);color:var(--wifi-text);padding:7px 10px;font-size:14px;line-height:1.35;box-sizing:border-box}
+#dw-body-wifi input::placeholder{font-size:13px;color:#98a9bf;opacity:1}
+#dw-body-wifi option{background:var(--wifi-input);color:var(--wifi-text)}
+#dw-body-wifi label{font-size:13px;font-weight:500;color:var(--wifi-text);margin:10px 0 5px;gap:5px}
+#dw-body-wifi .btn{width:auto;max-width:100%;min-height:40px;margin:0;padding:8px 13px;border-radius:7px;font-size:13px!important;font-weight:600;line-height:1.35!important;white-space:normal}
+#dw-body-wifi #fwWifiState{white-space:nowrap;min-width:76px;text-align:center;flex:none;font-size:11px}
+#dw-body-wifi .btn.primary{background:#2563eb;border:1px solid #4b83f5;color:#fff}
+#dw-body-wifi .btn.ghost{background:#16243a;border:1px solid #40516a;color:var(--wifi-text)}
+#dw-body-wifi .btn.danger{color:#ffb4bc;border-color:#a75463}
+#dw-body-wifi :is(button,input,select,summary):focus-visible{outline:2px solid #93c5fd;outline-offset:3px}
+#dw-body-wifi button:disabled{opacity:1!important;background:#182235!important;border-color:#344157!important;color:#91a1b8!important;cursor:not-allowed}
+#dw-body-wifi .wifi-mode-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+#dw-body-wifi .wifi-mode-options{display:flex;gap:6px;flex:0 1 280px;min-width:0}
+#dw-body-wifi .wifi-mode-options button{display:flex;align-items:center;gap:7px;flex:1;min-width:0;min-height:44px;padding:8px 12px;border:1px solid #40516a;border-radius:8px;background:var(--wifi-input);color:var(--wifi-muted);font-size:12px;text-align:left}
+#dw-body-wifi .wifi-mode-options b{font-size:14px;color:var(--wifi-text)}
+#dw-body-wifi .wifi-mode-options button[aria-pressed=true]{background:#173965;border-color:#70a6ff;color:#e3edff}
+#dw-body-wifi .wifi-mode-current{display:flex;flex-wrap:wrap;gap:5px 16px;flex:1 1 170px;font-size:12px;color:var(--wifi-muted)}
+#dw-body-wifi .wifi-mode-current b{color:var(--wifi-text);margin-left:5px;font-weight:600}
+#dw-body-wifi .wifi-summary>.fw-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0 0}
+#dw-body-wifi .wifi-summary .fw-detail-grid>div{padding:8px 10px;min-width:0;background:var(--wifi-input);border:1px solid var(--wifi-border);border-radius:7px}
+#dw-body-wifi .wifi-summary small{font-size:11px;color:var(--wifi-muted)}
+#dw-body-wifi .wifi-summary b{font-size:13px;font-weight:550;color:var(--wifi-text);overflow-wrap:anywhere}
+#dw-body-wifi .wifi-permission{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-top:10px;color:var(--wifi-muted);font-size:12px;line-height:1.45}
+#dw-body-wifi .wifi-startup{margin-top:10px;color:var(--wifi-muted);font-size:12px}
+#dw-body-wifi .wifi-startup summary{cursor:pointer;width:fit-content;padding:4px 0}
+#dw-body-wifi .wifi-startup label{max-width:360px}
+#dw-body-wifi .wifi-columns{display:grid;grid-template-columns:minmax(250px,.85fr) minmax(0,1.15fr);gap:12px;align-items:start}
+#dw-body-wifi .wifi-scan-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+#dw-body-wifi .wifi-password-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+#dw-body-wifi .wifi-manual-toggle{display:flex;align-items:center;flex-direction:row;gap:7px;font-size:12px;margin:8px 0}
+#dw-body-wifi input[type=checkbox]{width:17px;height:17px;min-height:17px;accent-color:#6095ff;margin:0;flex:none}
+#dw-body-wifi .wifi-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px}
+#dw-body-wifi .wifi-saved-list{display:grid;gap:6px;margin-top:10px}
+#dw-body-wifi .wifi-saved-choice{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;padding:9px 10px;border:1px solid var(--wifi-border);border-radius:8px;background:var(--wifi-input);color:var(--wifi-text);font-size:13px;text-align:left;overflow-wrap:anywhere}
+#dw-body-wifi .wifi-saved-choice span{min-width:0;overflow-wrap:anywhere}
+#dw-body-wifi .wifi-saved-choice[aria-pressed=true]{border-color:#70a6ff;background:#173965}
+#dw-body-wifi .wifi-saved-choice small{font-size:11px;color:#b4c2d4;flex:none}
+#dw-body-wifi .wifi-saved-choice small[data-connected=true]{color:#7ee7c5}
+#dw-body-wifi .wifi-empty{font-size:13px;color:var(--wifi-muted);line-height:1.5;margin:6px 0}
+#dw-body-wifi .wifi-more{position:relative;font-size:12px;color:var(--wifi-muted)}
+#dw-body-wifi .wifi-more summary{cursor:pointer;padding:9px 3px;min-height:40px;box-sizing:border-box}
+#dw-body-wifi .wifi-more[open]{flex:1 1 160px}
+#dw-body-wifi .wifi-more .btn{margin-top:5px}
+#dw-body-wifi .wifi-operation-status{padding:10px 12px;border:1px solid var(--wifi-border);border-radius:8px;background:var(--wifi-input);color:var(--wifi-muted);font-size:12px;line-height:1.5;margin:0;overflow-wrap:anywhere}
+#dw-body-wifi #kitWifiStatus[data-tone=error]{color:#ffb4bc;border-color:#a75463}
+#dw-body-wifi #kitWifiStatus[data-tone=good]{color:#7ee7c5;border-color:#327a68}
+#dw-body-wifi .wifi-disclosure>summary{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;cursor:pointer;padding:14px 16px;font-size:14px;font-weight:600;min-height:44px;list-style:none}
+#dw-body-wifi .wifi-disclosure>summary:before{content:'▸';color:#b4c2d4}
+#dw-body-wifi .wifi-disclosure[open]>summary:before{content:'▾'}
+#dw-body-wifi .wifi-disclosure>summary>span{flex:1}
+#dw-body-wifi .wifi-disclosure>summary small{font-size:12px;color:var(--wifi-muted);font-weight:400}
+#dw-body-wifi #smartKitSetup{border:0!important;background:none;box-shadow:none;padding:0 16px 16px!important;gap:8px}
+#dw-body-wifi #smartKitSetup .kit-card-title{margin:0!important}
+#dw-body-wifi #smartKitSetup .kit-card-title strong{font-size:16px}
+#dw-body-wifi #smartKitSetup .kit-actions{margin:0;gap:8px}
+#dw-body-wifi #smartKitConnection{font-size:12px;color:var(--wifi-muted)}
+#dw-body-wifi .smart-info{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+#dw-body-wifi .smart-info>div{background:var(--wifi-input);border-color:var(--wifi-border);padding:8px}
+#dw-body-wifi #smartTeacherVerify{padding:0 12px 12px}
+#dw-body-wifi #smartTeacherVerify>summary{padding:12px 0}
+#dw-body-wifi #smartReview{justify-self:start}
+#dw-body-wifi .smart-preview{background:#153a35;color:#d1fae5;border-color:#327a68;padding:8px 10px;font-size:12px}
+#dw-body-wifi [hidden]{display:none!important}
+@media(max-width:780px){#dw-body-wifi :is(input,button,select,summary){scroll-margin-top:76px}}
+@media(max-width:980px){#dw-body-wifi .wifi-columns{grid-template-columns:minmax(0,1fr)}#dw-body-wifi .wifi-mode-current{flex-basis:180px}}
+@media(max-width:780px){#tab-firmware .dw-sidebar{top:0!important}#dw-body-wifi .btn{min-height:44px}#dw-body-wifi .wifi-mode-options{flex:1 1 100%}#dw-body-wifi .wifi-mode-current{flex-basis:100%}#dw-body-wifi :is(.wifi-mode-card,.wifi-panel){padding:13px}#dw-body-wifi .wifi-summary>.fw-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#dw-body-wifi .wifi-summary .fw-detail-grid>div:last-child{grid-column:1/-1}#dw-body-wifi .smart-info{grid-template-columns:1fr}#dw-body-wifi :is(input:not([type=checkbox]),select){height:44px;min-height:44px}#dw-body-wifi .wifi-disclosure>summary small{flex-basis:100%;margin-left:18px}}

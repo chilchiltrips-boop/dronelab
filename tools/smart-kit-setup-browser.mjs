@@ -41,6 +41,7 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
     }};
   },{index});
   await page.evaluate(()=>window.ZebjusDevicesWorkspace.open('wifi'));
+  await page.locator('#wifiHotspotSettings > summary').click();
   assert.equal(await page.locator('#smartSave').isDisabled(),true);
   await page.locator('#smartConnectUsb').click();
   await page.waitForFunction(()=>document.getElementById('smartKitConnection').textContent.includes('USB VERIFIED')&&document.getElementById('smartApPrefix').value.startsWith('Original-'));
@@ -51,6 +52,7 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
   assert.equal(await page.locator('#smartApPassword').evaluate(el=>el.value.length),24);
   await page.locator('#smartApPassword').fill('NewFixtureAp#98765');
   assert.equal(await page.locator('#smartSsidPreview').textContent(),expectedPrefix+'-123456');
+  await page.locator('#smartReview').click();
   if(index%2){
    await page.locator('#smartTeacher').fill('IncorrectFixture#12345');await page.locator('#smartSave').click();
    await page.waitForFunction(()=>document.getElementById('smartProgress').textContent.includes('INVALID_ADMIN_PASSPHRASE'));
@@ -76,7 +78,7 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
   const proof=await page.evaluate(()=>({id:window.__setupDevice.kitId,code:window.__setupDevice.code,commands:window.__setupDevice.commands,connectCalls:window.__setupDevice.connectCalls,
    ssid:window.__setupDevice.ap,overflow:document.documentElement.scrollWidth-innerWidth,
    secretLeaked:JSON.stringify({...localStorage}) .includes('NewFixtureAp#98765')||document.getElementById('kitEvents').textContent.includes('FixtureTeacher#12345'),
-   advanced:document.getElementById('smartAdvancedBody').contains(document.getElementById('kitAdmin'))}));
+   advanced:document.getElementById('dw-body-security').contains(document.getElementById('kitAdmin'))}));
   assert.equal(proof.code,'123456');assert.equal(proof.secretLeaked,false);assert.equal(proof.advanced,true);assert.ok(proof.overflow<=1);
   assert.ok(!proof.commands.includes('ZJNET,TEST')&&!proof.commands.includes('ZJKIT,CODE')&&!proof.commands.includes('ZJADMIN,FACTORY_RESET'));
   assert.deepEqual(errors,[]);results.push({width,height,...proof,errors});

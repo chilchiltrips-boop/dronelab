@@ -60,6 +60,7 @@ try{
  await page.setViewportSize({width:1480,height:640});
  await page.locator('[data-tab="firmware"]').click();
  await page.locator('[data-dw-view="wifi"]').click();
+ await page.locator('#wifiHotspotSettings > summary').click();
  await page.waitForTimeout(220);
  const before=await page.evaluate(()=>{
   const nav=document.querySelector('.dw-nav-list');
