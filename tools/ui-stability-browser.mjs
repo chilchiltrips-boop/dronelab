@@ -75,8 +75,11 @@ try{
      };requestAnimationFrame(sample);
     });
     await page.screenshot({path:`${output}/${width}-${tab}-before.png`});
+    // A later PR's base can already contain the contextual RC panel. Only
+    // pre-migration bases have the legacy global header switch.
+    const legacyHeader=before&&await page.locator('#kitTopControl').count()>0;
     for(let i=0;i<3;i++){
-     if(before){await page.locator('#kitTopControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
+     if(legacyHeader){await page.locator('#kitTopControl').click();await page.waitForFunction(()=>window.ZebjusKits.getState().owner);
       await page.locator('#kitTopControl').click();await page.waitForFunction(()=>!window.ZebjusKits.getState().owner);}
      else{
       // RC action now belongs to its Devices panel. Exercise the same handler
