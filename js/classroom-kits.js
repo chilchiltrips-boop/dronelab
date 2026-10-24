@@ -422,7 +422,7 @@ async function connectUSB(code,ticket=reconnectTicket){
  if(!serial()?.isOpen?.())throw Error('Select a USB port and open Serial Monitor in the Firmware page');
  const messages=[];let identity={};
  const networkInfo={mode:'',ssid:'',apSsid:'',apActive:false,staConnected:false,staIp:'',apIp:''};
- const listener=e=>{const line=String(e.detail?.line||'');if(line.startsWith('ZJKIT,ID,'))identity.kitId=line.slice(9).trim();
+ const listener=e=>{if(e.detail?.transport&&e.detail.transport!=='usb')return;const line=String(e.detail?.line||'');if(line.startsWith('ZJKIT,ID,'))identity.kitId=line.slice(9).trim();
   if(line.startsWith('ZJKIT,CODE,'))identity.kitCode=line.slice(11).trim();
   if(line.startsWith('ZJKIT,NAME,'))identity.kitName=line.slice(11).trim();
   if(line.startsWith('ZJINFO,FW,')){const p=line.split(',');identity.board=p[2]||'';identity.version=p[3]||'';}

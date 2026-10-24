@@ -9,7 +9,7 @@
   const s=root.ZebjusKits?.getState?.();if(!s||!$('wifiModeTitle'))return;
   const key=(s.kitId||'')+'|'+(s.connectionGeneration||0);
   if(key!==binding){
-   binding=key;selectionDirty=false;selected=['ap','sta'].includes(s.mode)?s.mode:'sta';
+   binding=key;selectionDirty=false;selected=['auto','ap','sta'].includes(s.mode)?s.mode:'sta';
    $('kitRouterPass').value='';$('kitRouterPass').type='password';
    $('wifiShowRouterPassword').setAttribute('aria-pressed','false');set('wifiShowRouterPassword','Show');
    $('kitRouterSsid').value='';$('wifiManualSsid').checked=false;$('wifiManualField').hidden=true;
@@ -17,7 +17,7 @@
    $('kitWifiNetworks').replaceChildren(new Option('Select a network',''));
   }
   const connected=s.connected===true,direct=['usb','ap','sta'].includes(s.transport);
-  if(!selectionDirty&&['ap','sta'].includes(s.mode))selected=s.mode;
+  if(!selectionDirty&&['auto','ap','sta'].includes(s.mode))selected=s.mode;
   const passwordShown=$('kitRouterPass').type==='text';
   $('wifiShowRouterPassword').setAttribute('aria-label',passwordShown?'Hide router password':'Show router password');
   $('wifiShowRouterPassword').setAttribute('aria-pressed',String(passwordShown));set('wifiShowRouterPassword',passwordShown?'Hide':'Show');
@@ -36,12 +36,12 @@
   for(const id of ['kitSavedUse','kitSavedForget'])$(id).disabled=!allowed||!$('kitSavedNetworks').value;
   for(const id of ['wifiManualSsid','kitRouterSsid','kitRouterPass','wifiShowRouterPassword'])$(id).disabled=!allowed;
   $('kitWifiNetworks').disabled=!allowed||$('wifiManualSsid').checked;
-  set('kitModeApply',same?selected.toUpperCase()+' selected':selected==='auto'?'Apply automatic mode':'Switch to '+selected.toUpperCase());
+  set('kitModeApply',same?(selected==='auto'?'Automatic selected':selected.toUpperCase()+' selected'):selected==='auto'?'Apply automatic mode':'Switch to '+selected.toUpperCase());
   $('wifiConnectKit').hidden=connected;
   const reason=!connected?'Connect and verify a Kit before changing its radio mode.':busy?'A Kit operation is in progress. Wait for its result.':
    owned?'RC input is active. Disarm and pause/release RC before changing Wi-Fi.':!direct?'Use a direct USB/AP/STA connection for network settings.':
    !allowed?'Read-only connection. Verify physical USB pairing to authorize settings.':
-   selected==='ap'?'AP keeps only the Kit hotspot active. Join its Wi-Fi on this computer after switching.':
+   selected==='ap'?'AP keeps only the Kit hotspot active. Join its Wi-Fi on this computer after switching.':selected==='auto'?'Automatic startup uses a saved router, otherwise AP. The active radio is shown above.':
    'STA uses a saved router and turns the Kit hotspot off. AP returns if every saved router fails.';
   set('wifiModeHint',reason);
   set('wifiPermissionHint',!connected?'Settings require an authorized Kit connection.':s.transport==='usb'?'Physical USB verified. Protected provisioning still requires teacher verification.':

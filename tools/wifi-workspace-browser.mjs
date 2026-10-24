@@ -18,9 +18,9 @@ try{
  assert.equal(await page.locator('#dw-body-diagnostics #wifiLegacyNetwork').count(),1);
  await page.evaluate(async()=>{
   const id='ZFC-A2-012345ABCDEF',native=fetch;
-  const f=window.__wifiFixture={id,authorized:true,ppm:false,requests:[],saved:['Classroom','Workshop','<img src=x>']};
+  const f=window.__wifiFixture={id,mode:'sta',authorized:true,ppm:false,requests:[],saved:['Classroom','Workshop','<img src=x>']};
   const rc=()=>({kitId:f.id,source:f.ppm?'PPM':'NONE',claimed:f.ppm,active:f.ppm,inputValid:f.ppm,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500,seq:f.ppm?1:0});
-  const status=()=>({kitId:f.id,kitCode:'123456',kitName:'A2 network classroom',board:'ZFC-A2',version:'1.5.11',bootId:'wifi-boot',requestTransport:'STA',mode:'sta',
+  const status=()=>({kitId:f.id,kitCode:'123456',kitName:'A2 network classroom',board:'ZFC-A2',version:'1.5.11',bootId:'wifi-boot',requestTransport:'STA',mode:f.mode,
    setupAuthorized:f.authorized,controlAuthorized:f.authorized,otaAuthorized:f.authorized,staConnected:true,apActive:false,ip:'192.168.1.20',ssid:'Classroom',exclusiveWifi:true,rc:rc(),motorsDisabled:true,motorsArmed:false});
   window.fetch=(u,o)=>String(u)==='http://192.168.1.20/api/identify'?Promise.resolve(new Response(JSON.stringify({kitId:id,kitCode:'123456',board:'ZFC-A2',simpleConnection:true,adminSessions:true}))):native(u,o);
   const request=async(route,method='GET',args={})=>{
@@ -70,6 +70,10 @@ try{
  assert.equal(await page.locator('#wifiActualMode').textContent(),'STA');
  await page.locator('[data-wifi-mode="sta"]').click();
  assert.equal(await page.locator('#kitModeApply').isDisabled(),true);
+ await page.evaluate(async()=>{window.__wifiFixture.mode='auto';await window.ZebjusKits.read()});
+ assert.equal(await page.locator('#kitWifiMode').inputValue(),'auto');assert.equal(await page.locator('#wifiActualMode').textContent(),'STA');
+ assert.equal(await page.locator('#kitModeApply').textContent(),'Automatic selected');
+ await page.evaluate(async()=>{window.__wifiFixture.mode='sta';await window.ZebjusKits.read()});
  for(const width of [1366,1024,768,390,320]){
   await page.setViewportSize({width,height:width<781?844:768});await page.evaluate(()=>{scrollTo(0,0);document.getElementById('dw-body-wifi').scrollTop=0});
   const m=await page.evaluate(()=>{
@@ -112,10 +116,10 @@ try{
    if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB network')}
    else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A1,1.5.11');
    else if(line==='ZJNET,PAIR')emit('ZJNET,PAIR,'+id+','+'b2'.repeat(16));
-   else if(line==='ZJNET,GET')f.report();
+   else if(line==='ZJNET,GET'){f.report();dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'sta',line:'ZJNET,STA,CONNECTED,10.1.2.3,Wrong Kit Network'}}))}
    else if(line.startsWith('ZJNET,MODE,')){f.writes.push(line);f.mode=line.split(',')[2];emit('ZJNET,ACK,MODE,'+f.mode)}
   }};
-  document.getElementById('kitTransport').value='usb';await window.ZebjusKits.connect();f.report();
+  document.getElementById('kitTransport').value='usb';await window.ZebjusKits.connect();
  });
  await page.waitForFunction(()=>document.getElementById('wifiActualMode').textContent==='AP');
  await page.evaluate(()=>window.__wifiFixture.releaseSaved());
