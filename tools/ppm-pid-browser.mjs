@@ -4,7 +4,9 @@ import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import {mkdirSync,writeFileSync} from 'node:fs';
 mkdirSync('test-output',{recursive:true});
-const browser=await chromium.launch(browserOptions),evidence=[];
+// Keep the real input watchdog and physics, while isolating transport/state
+// assertions from slow CI software WebGL. Graphics suites cover the 3D renderer.
+const browser=await chromium.launch({...browserOptions,args:[...browserOptions.args,'--disable-webgl']}),evidence=[];
 const check=(ok,message)=>{if(!ok)throw Error(message)};
 try{
  for(const [board,transport] of [['A2','sta'],['A1','sta'],['A2','ap'],['A2','usb']]){
@@ -41,6 +43,7 @@ try{
     },80);
    },{board,transport});
    const sim=page.frameLocator('#pidFrame');
+   await sim.locator('#tpFallback').waitFor({state:'visible'});
    await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='ppm'&&window.ZebjusTraining.snapshot().input?.fresh);
    check((await sim.locator('#tpSourceState').textContent()).includes('PPM '+transport.toUpperCase()),'PPM must show its monitor transport');
    check(await page.evaluate(()=>window.ZebjusKits.getState().owner===false),'No WebApp hardware ownership is required');
