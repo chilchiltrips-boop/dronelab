@@ -128,7 +128,7 @@ function render(){
  set('fwSelectedOnline',live?'Online':demo?'Simulation':'Offline');
  set('fwLocalLink',live?'LOCAL CONNECTED':'LOCAL READY');
  set('fwKitStateSimple',live?s.kitCode:'NOT SELECTED');
- set('fwControlSimple',live?s.owner?'YOURS':s.rc?.claimed?'BUSY':'AVAILABLE':'--');
+ set('fwControlSimple',live?s.rcAccess?.paused?'RC PAUSED':s.rc?.claimed?'RC '+s.rc.source:'RC AVAILABLE':'--');
  set('fwNetworkSimple',live?s.transport.toUpperCase()+(s.managementProtocol==='ZJM1'?' • UDP':''):'--');
  const age=live&&s.heartbeatAt?Date.now()-s.heartbeatAt:Infinity;
  const current=live&&age<=6500;
@@ -141,22 +141,26 @@ function render(){
  for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthCommand'&&current||id==='fwHealthImu'&&t?.gyroReady||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)?'live':'lost'}
  set('fwDetailName',live?s.kitName:'--');
  set('fwDetailId',live?s.kitId:'--');
- set('fwDetailAccess',live?(s.otaAuthorized?'USB-paired control / updates':s.setupAuthorized?'AP Setup':'STA observer'):'--');
+ set('fwDetailAccess',live?(s.transport==='usb'||s.controlAuthorized?'Diagnostics authorized':'Diagnostics read-only'):'--');
  set('fwDetailMode',live?s.mode||s.transport:'--');
  set('fwDetailWifi',live?s.staConnected?'STA connected':s.apActive?'AP available':'Offline':'--');
  set('fwDetailRssi',live&&s.staConnected&&Number.isFinite(s.rssi)?s.rssi+' dBm':'--');
  set('fwDetailFirmware',live?s.version||'Not reported':'--');
  set('fwDetailBuild',live?(s.firmwareBuiltAt?(root.ZebjusFirmwareTime?.formatBuildTime?.(s.firmwareBuiltAt)||s.firmwareBuiltAt):'Not reported by Kit'):'--');
  set('fwDetailIp',live?s.transport==='ap'?'192.168.4.1':s.staIp||'Unknown':'--');
- set('fwDetailControl',live?s.owner?'Owned here':s.rc?.claimed?'Owned elsewhere':'Released':'--');
+ set('fwDetailControl',live?s.rcAccess?.paused?'RC paused':s.owner?'WebApp RC':s.rc?.claimed?'RC: '+s.rc.source:'RC available':'--');
  set('fwDetailLastSeen',live&&s.heartbeatAt?new Date(s.heartbeatAt).toLocaleTimeString():'--');
- set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized?'Take Control reserves this Kit; Release Control neutralizes input. Motors remain disabled.':s.usbAvailable?'STA observer • physical USB detected. Click Verify USB & Authorize, then Take Control. USB Device ID and board must match.':'STA observer • Open physical USB Serial, verify this Kit and authorize protected controls; monitoring remains read-only.':'Select a live Kit. No commands are sent while offline.');
+ set('fwControlNote',demo?'Simulation preview only; no hardware commands.':live?s.controlAuthorized||s.transport==='usb'?'WebApp RC reserves only joystick input. IMU reads and authorized LED/Python commands remain independent. Motors stay disabled.':s.usbAvailable?'STA observer • verify this physical USB Kit to authorize diagnostic writes; RC control is a separate action.':'STA observer • sensor/RC reads are available. Physical USB pairing authorizes diagnostic writes.':'Select a live Kit. No commands are sent while offline.');
  set('fwApIndicator',live?s.apActive?'ACTIVE':'OFF':'--');
  set('fwStaIndicator',live?s.staConnected?'CONNECTED':'OFF':'--');
  if($('fwKitConnectSelected'))$('fwKitConnectSelected').disabled=requesting||scanning||s.working;
  if($('fwKitDisconnect'))$('fwKitDisconnect').disabled=requesting||!s.connected;
  if($('fwKitPing'))$('fwKitPing').disabled=requesting||!live;
- if($('fwKitTakeControl')){$('fwKitTakeControl').disabled=requesting||s.working||!live||!s.controlAuthorized&&s.transport!=='usb'||!!s.rc?.claimed&&!s.owner;$('fwKitTakeControl').textContent=s.owner?'Release Control':'Take Control'}
+ if($('fwKitTakeControl')){
+  const access=root.ZebjusKitAccessPolicy?.describe?.({...s,connected:live});
+  $('fwKitTakeControl').disabled=requesting||s.working||!live||(access?!access.mayUseWeb:!s.controlAuthorized&&s.transport!=='usb'||!!s.rc?.claimed&&!s.owner);
+  $('fwKitTakeControl').textContent=s.owner?'Release WebApp RC':'Use WebApp RC';
+ }
  for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||s.working||!live||!['ap','sta'].includes(s.transport)||!s.setupAuthorized||s.owner||!!s.rc?.claimed;
  for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed;
  set('fwWifiName',live?s.ssid||'Router not connected':'--');
@@ -211,6 +215,7 @@ function init(){
  $('fwKitDemoMode')?.addEventListener('change',()=>{line($('fwKitDemoMode').checked?'Demo preview enabled; physical commands unchanged':'Live connected-kit mode enabled');render()});
  $('fwRenameInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void guarded(()=>changeName(false))}});
  root.addEventListener('dronelab:kit-link',render);
+ root.addEventListener('dronelab:kit-access',render);
  root.addEventListener('dronelab:kit-name',render);
  document.querySelector('[data-tab="firmware"]')?.addEventListener('click',()=>{if(Date.now()-lastScanAt>20000)void scan()});
  renderAvailable(kit().getDiscovered?.()||[],false);render();

@@ -154,8 +154,10 @@
    if(!controlActions||!overview||!overviewContent)throw Error('Overview control actions missing');
    controlActions.classList.add('dw-overview-actions');
    controlActions.setAttribute('role','group');
-   controlActions.setAttribute('aria-label','Kit diagnostic control and connection test');
-   overview.insertBefore(controlActions,overviewContent);
+   controlActions.setAttribute('aria-label','WebApp RC input and connection test');
+   const rcActions=$('kitRcActions');
+   if(rcActions)rcActions.append(controlActions);
+   else overview.insertBefore(controlActions,overviewContent);
 
    relocate('.fw-connect-card','connection');
    relocate('.fw-live-inputs-card','inputs');

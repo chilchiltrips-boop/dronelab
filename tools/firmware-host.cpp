@@ -117,6 +117,8 @@ int main(){
  zjHttp.headers["X-ZJ-Device"]=zjKitId;zjHttp.headers["X-ZJ-Session"]=diag.id;zjHttp.headers["X-ZJ-Seq"]="1";
  zjHttp.headers["X-ZJ-Proof"]=zjHmac(diag.key,"GET|/api/status|"+zjKitId+"|"+zjBootId+"|"+diag.id+"|1|");assert(!zjAllow());
  clockMs+=400;transport="STA";prepare("/api/auth/challenge");zjHttp.args["kind"]="setup";zjHttp.args["client"]=String(std::string(32,'a'));zjHttp.handlers[zjHttp.path]();assert(replyStatus==403);
+ prepare("/api/rc/access",HTTP_POST);assert(!zjLocalDiagnosticRoute());
+ transport="AP";assert(zjLocalDiagnosticRoute());transport="STA";
  const String previousBoot=zjBootId;zjEnrollmentInit();assert(previousBoot!=zjBootId&&zjSessions[0].id.isEmpty());
  // Physical USB pairing can establish an encrypted admin session on STA even
  // without a manufacturer label. Public/local credentials cannot do so.

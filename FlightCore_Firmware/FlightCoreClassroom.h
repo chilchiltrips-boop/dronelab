@@ -26,6 +26,13 @@ static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medi
 static String zjFlightMode="angle";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
+// RC selection never grants sensor/LED/admin permissions. Maintenance pauses
+// only accepted RC; a lost maintenance lease never resumes an input source.
+static bool zjRcPaused=false;
+static String zjRcSelection="AUTO";
+static bool zjRcSourceAllowed(const String& source){
+ return !zjRcPaused&&(zjRcSelection=="AUTO"||zjRcSelection==source);
+}
 // UDP has independent 500 ms receive/apply deadlines; other transports use zjRcLoop.
 // ACK receipt is never used to refresh firmware input freshness.
 static bool zjRcUdpOwned=false;
@@ -105,7 +112,7 @@ static void zjRcRelease(const char* reason){
  if(had&&Serial.availableForWrite()>70){Serial.print("ZJRC,RELEASE,");Serial.println(reason);}
 }
 static bool zjRcClaim(const String& source,const String& code,bool network,const IPAddress& ip,const char* transport){
- if(code!=zjKitCode||(source!="WEB"&&source!="ANDROID")){++zjRcRejected;return false;}
+ if(code!=zjKitCode||(source!="WEB"&&source!="ANDROID")||!zjRcSourceAllowed(source)){++zjRcRejected;return false;}
  const uint32_t now=millis();
  if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");
@@ -120,7 +127,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  // A late packet must never re-arm a timed-out input session. The user must
  // press ARM again, which obtains a fresh ownership token at low throttle.
  if(!zjRcUdpOwned&&zjRcInputArmed&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS)zjRcRelease("ARMED_INPUT_TIMEOUT");
- if(!zjRcOwned||zjRcNetwork!=network||zjRcSource!=source||now-zjRcLeaseAt>ZJ_RC_LEASE_MS||
+ if(!zjRcSourceAllowed(source)||!zjRcOwned||zjRcNetwork!=network||zjRcSource!=source||now-zjRcLeaseAt>ZJ_RC_LEASE_MS||
     (network&&(session!=zjRcSession||ip!=zjRcOwnerIP))||
     seq==0||(zjRcSeq!=0&&int32_t(seq-zjRcSeq)<=0)||
     t<1000||t>2000||r<1000||r>2000||p<1000||p>2000||y<1000||y>2000||

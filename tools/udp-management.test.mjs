@@ -49,6 +49,24 @@ test('a lost UDP response retries the same write and returns its cached proof ex
  const result=await admin.request('/api/command','POST',{line:'ZJLED,1,SET,1'});
  assert.equal(result.count,1,'production replay cache must return ACK without invoking handler twice');
 });
+test('authenticated production RC access separates maintenance from reads/LED and rejects unsigned or foreign-session handover',async()=>{
+ const unsigned=await transport('/api/rc/access','POST',{action:'BEGIN'});assert.equal(unsigned.status,401);
+ const begin=await admin.request('/api/rc/access','POST',{action:'BEGIN'});
+ assert.equal(begin.rcAccess.paused,true);assert.equal(begin.rcAccess.maintenance.owned,true);assert.equal(begin.rc.claimed,false);
+ const other=await auth.open(transport,id,'ff112233445566778899aabbccddeeff0','admin');
+ await assert.rejects(other.request('/api/rc/access','POST',{action:'RESUME',source:'WEB'}),/maintenance_owned_by_other_session/);
+ await assert.rejects(other.request('/api/rc/access','POST',{action:'KEEP'}),/not_maintenance_owner/);
+ assert.equal((await other.request('/api/status')).rcAccess.maintenance.owned,false);
+ assert.equal((await admin.request('/api/telemetry')).sampleValid,true);
+ await admin.request('/api/command','POST',{line:'ZJLED,99,KEEP'});
+ const kept=await admin.request('/api/rc/access','POST',{action:'KEEP'});assert.equal(kept.rc.claimed,false);
+ assert.equal(kept.rcAccess.paused,true);assert.equal(kept.rcAccess.hardwarePidSupported,false);
+ await assert.rejects(admin.request('/api/rc/access','POST',{action:'SELECT',source:'WEB'}),/end_maintenance_explicitly/);
+ const resumed=await admin.request('/api/rc/access','POST',{action:'RESUME',source:'WEB'});
+ assert.equal(resumed.rcAccess.paused,false);assert.equal(resumed.rcAccess.selection,'WEB');assert.equal(resumed.rc.claimed,false);
+ await other.request('/api/auth/close','POST');
+});
+
 test('actual Android Java sender interoperates with firmware enrollment and signed UDP IMU response',async t=>{
  if(!javaAvailable){t.skip('JDK unavailable locally; mandatory CI job installs JDK 17');return}
  const javaTransport=async(route,method='GET',args={},headers={})=>{

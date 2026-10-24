@@ -29,6 +29,13 @@
 .kit-hint{display:block;font-size:11px;line-height:1.5;font-weight:450;color:#aabfd0;overflow-wrap:anywhere;margin:7px 0}
 #kitMessage{border-radius:10px;padding:10px 12px;margin:14px 0 4px;background:#142839;color:#b4cbde;border:1px solid #395069;font-size:12px;line-height:1.5}
 #kitMessage[data-tone=good],#kitRcState[data-tone=good]{color:#83eec8;border-color:#27835d}
+.kit-rc-access{min-width:0;padding:12px;border:1px solid #315568;border-radius:12px;background:#0b202d}
+.kit-access-actions{display:flex;flex-wrap:wrap;align-items:end;gap:8px}
+.kit-access-actions label{display:grid;gap:4px;font-size:12px;min-width:140px}
+.kit-access-actions button,.kit-access-actions select{min-height:44px;max-width:100%;white-space:normal}
+.kit-rc-access .dw-overview-actions{margin:8px 0;padding:0}
+.kit-rc-access .kit-hint{font-size:12px;line-height:1.45;margin:8px 0}
+@media(max-width:580px){.kit-access-actions>*{flex:1 1 145px;min-width:0}}
 #kitMessage[data-tone=info],#kitRcState[data-tone=info]{color:#8fcaff;border-color:#337abb}
 #kitMessage[data-tone=warn],#kitRcState[data-tone=warn]{color:#ffc980;border-color:#8d692b}
 #kitMessage[data-tone=error]{color:#ff9ca9;border-color:#ad4251;background:#381923}

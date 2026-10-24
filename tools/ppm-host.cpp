@@ -21,10 +21,10 @@ static void attachInterrupt(int,void(*)(),int){}
 
 static void edge(uint32_t us){clockUs+=us;clockMs=clockUs/1000;zjPpmInterrupt();}
 static void waitMs(uint32_t ms){clockUs+=ms*1000;clockMs=clockUs/1000;}
-static void frame(int arm,bool process=true,int roll=1500){
+static void frame(int arm,bool process=true,int roll=1500,int throttle=1000){
  static bool started=false;
  if(!started){zjPpmLastEdge=clockUs;edge(4000);started=true;}
- const int channels[8]={roll,1500,1000,1500,arm,1500,1500,1500};
+ const int channels[8]={roll,1500,throttle,1500,arm,1500,1500,1500};
  for(int value:channels)edge(value);
  edge(4000);
  if(process)zjPpmLoop(clockMs);
@@ -60,4 +60,5 @@ int main(){
  frame(1000);frame(1000);frame(1000);frame(2000);
  assert(zjRcOwned&&zjRcSource=="ANDROID"&&!zjRcInputArmed);
  std::cout<<"PASS production PPM receiver: arrival timestamps, latest mailbox, loss/re-arm, clock race, ownership"<<std::endl;
+ return 0;
 }

@@ -126,6 +126,7 @@ static String zjStatus(){
   out+=",\"sha256\":"+zjJson(zjSecureOtaHash);
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
+ out+=",\"rcAccess\":"+zjAccessState(zjRequestSession>=0?zjSessions[zjRequestSession].id:String(""),zjAccessStationary());
  out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true";
  out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+
   ",\"rpcMaxLoopUs\":"+String(zjRpcMaxLoopUs)+",\"rpcMaxDispatchUs\":"+String(zjRpcMaxDispatchUs)+",\"udpManagementPort\":4211}";
@@ -285,6 +286,19 @@ static void zjSetupHttp(){
   char line[sizeof(serialLine)];cmd.toCharArray(line,sizeof(line));serialCommand(line);
   if(cmd.startsWith("ZJLED,")&&!ledCommandOk){zjReply(400,"{\"error\":\"led_command_rejected\"}");return;}
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"accepted\":true,\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorControl\":false}");
+ });
+ // The session is authenticated, device/boot bound and replay protected before
+ // changing RC selection. Sensor/LED diagnostics never acquire this resource.
+ zjHttp.on("/api/rc/access",HTTP_POST,[](){
+  if(!zjAllow())return;
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning){zjReply(409,"{\"error\":\"network_or_ota_busy\"}");return;}
+  zjPpmLoop(millis());zjRcLoop(millis());
+  const bool owns=zjRcOwned&&zjRcNetwork&&zjArg("rcSession")==zjRcSession&&zjHttp.peerIP()==zjRcOwnerIP;
+  const String caller=zjRequestSession>=0?zjSessions[zjRequestSession].id:String("");
+  const char* error=zjAccessChange(zjArg("action"),zjArg("source"),caller,owns,zjAccessStationary());
+  if(error){zjReply(409,"{\"error\":"+zjJson(error)+"}");return;}
+  if(zjArg("action")!="KEEP")zjUdpInvalidate();
+  zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"rcAccess\":"+zjAccessState(caller,zjAccessStationary())+",\"rc\":"+zjRcState()+"}");
  });
  // RC diagnostics only: motors always disarmed. Kit code selects; access key authorizes.
  zjHttp.on("/api/rc/claim",HTTP_POST,[](){

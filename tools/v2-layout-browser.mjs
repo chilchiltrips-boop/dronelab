@@ -31,7 +31,8 @@ try{
   await page.locator('.v2-connection-details>summary').click();
   const pop=await page.locator('.v2-connection-popover').boundingBox();assert.ok(pop.x>=0&&pop.x+pop.width<=width+1);
   await page.locator('#kitTopNetworkSwitch').click();assert.equal(await page.locator('#kitTopNetworkSwitch').getAttribute('aria-checked'),'true');
-  assert.equal(await page.locator('#kitTopControl').isDisabled(),true);
+  assert.equal(await page.locator('#kitTopControl').count(),0);
+  assert.equal(await page.locator('#kitRcAccess').textContent(),'RC OFFLINE');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'Offline transport selection cannot enable OTA');
   await context.close();console.log('PASS V2 header',width,metrics.height);
  }

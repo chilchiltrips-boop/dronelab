@@ -1,7 +1,7 @@
 name: Build and verify FlightCore A1/A2 AP/STA Firmware
 on:
   push:
-    branches: [fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
+    branches: [feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/*.h'

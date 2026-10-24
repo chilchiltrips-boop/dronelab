@@ -17,7 +17,7 @@ try{
   const status=()=>({kitId:f.kitId,kitCode:'123456',kitName:'Connected '+f.board,board:'ZFC-'+f.board,version:'1.5.10',bootId:'boot-'+f.board+'-'+f.transport,
    requestTransport:f.transport.toUpperCase(),mode:f.transport,setupAuthorized:true,controlAuthorized:true,otaAuthorized:false,motorsDisabled:true,motorsArmed:false,
    apActive:f.transport==='ap',staConnected:f.transport==='sta',apSsid:'Fixture-123456',ip:f.transport==='sta'?'192.168.1.20':'',apIp:'192.168.4.1',ledOn:f.value>0,
-   rc:{claimed:false,active:false,source:'NONE',throttle:1000,roll:1500,pitch:1500,yaw:1500}});
+   rc:{claimed:!!f.ppm,active:!!f.ppm,source:f.ppm?'PPM':'NONE',inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500}});
   window.fetch=(url,opts)=>/^http:\/\/192\.168\./.test(String(url))&&String(url).endsWith('/api/identify')?
    Promise.resolve(new Response(JSON.stringify({kitId:f.kitId,kitCode:'123456',board:'ZFC-'+f.board,name:'Connected '+f.board,simpleConnection:true,adminSessions:true}))):native(url,opts);
   const request=async(route,method='GET',args={})=>{
@@ -41,7 +41,7 @@ try{
  assert.equal(await page.locator('#pythonTarget option[value=auto]').count(),0);
  for(const board of ['A1','A2'])for(const transport of ['ap','sta']){
   await page.evaluate(async({board,transport})=>{
-   await window.ZebjusKits.disconnect();const f=window.__connectedLed;Object.assign(f,{board,transport,kitId:'ZFC-'+board+'-012345ABCDEF',commands:[],value:0});
+   await window.ZebjusKits.disconnect();const f=window.__connectedLed;Object.assign(f,{board,transport,kitId:'ZFC-'+board+'-012345ABCDEF',commands:[],value:0,ppm:board==='A2'&&transport==='sta'});
    document.getElementById('kitTransport').value=transport;document.getElementById('kitCodeInput').value='123456';document.getElementById('kitIpInput').value=transport==='ap'?'192.168.4.1':'192.168.1.20';
    await window.ZebjusKits.connect(f.kitId);
    if(!window.ZebjusKits.getState().connected)throw Error('Connection fixture failed: '+document.getElementById('kitMessage').textContent+' '+JSON.stringify(window.ZebjusKits.getState()));
@@ -53,11 +53,16 @@ try{
   assert.equal(await page.locator('#pyLedHealth').getAttribute('data-state'),'healthy');
   assert.equal(await page.locator('#pythonTarget').inputValue(),transport);
   assert.equal((await page.evaluate(()=>window.ZebjusKits.getState())).owner,false);
+  if(board==='A2'&&transport==='sta'){
+   assert.equal((await page.evaluate(()=>window.ZebjusKits.getState())).rc.source,'PPM');
+   assert.equal(await page.locator('#kitRcAccess').textContent(),'RC PPM');
+   assert.equal(await page.locator('#kitDiagnosticAccess').textContent(),'DIAG AUTHORIZED');
+  }
   await page.locator('#stopPythonBtn').click();
   await page.waitForFunction(()=>window.__connectedLed.commands.at(-1)?.line.endsWith(',STOP'));
   const commands=await page.evaluate(()=>window.__connectedLed.commands);
   assert.ok(commands.every(c=>c.transport===transport&&c.kitId==='ZFC-'+board+'-012345ABCDEF'));
-  results.push({board,transport,detected:true,blink:true,stop:true});
+  results.push({board,transport,detected:true,blink:true,stop:true,ppmOwned:board==='A2'&&transport==='sta'});
   console.log('PASS detected Python LED',board,transport);
   await page.screenshot({path:out+'/'+board+'-'+transport+'.png'});
  }

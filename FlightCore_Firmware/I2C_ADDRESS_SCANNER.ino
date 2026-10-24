@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.10";
+constexpr const char* FW_VERSION="1.5.11";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -77,6 +77,9 @@ bool readLong(char*& state,long low,long high,long& result){
 }
 #include "FlightCoreClassroom.h"
 #include "FlightCorePpm.h"
+#include "FlightCoreAccess.h"
+static bool zjAccessStationary();
+static bool zjAccessBusy();
 void ledCommand(char* line){
  ledCommandOk=false;
  if(strncmp(line,"ZJLED,",6)!=0)return;
@@ -122,6 +125,7 @@ void ledCommand(char* line){
 void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch
 void serialCommand(char* line){
+ if(zjAccessSerialCommand(line,zjAccessStationary(),zjAccessBusy()))return;
  if(zjRcSerialCommand(line))return;
  if(zjPpmSerialCommand(line))return;
  if(zjNetSerialCommand(line))return;
@@ -332,7 +336,17 @@ void selectI2cBus(){
  Wire.begin(BUS_SDA,BUS_SCL);Wire.setClock(400000);
  activeSda=BUS_SDA;activeScl=BUS_SCL;ledAvailable=true;
 }
+static uint32_t zjStationarySince=0;
+static bool zjAccessStationary(){
+ const uint32_t now=millis();
+ const bool quiet=gyroReady&&gyroSampleSeq&&uint32_t(now-lastGyroSample)<=200&&
+  RateRoll>-3&&RateRoll<3&&RatePitch>-3&&RatePitch<3&&RateYaw>-3&&RateYaw<3;
+ if(!quiet){zjStationarySince=0;return false;}
+ if(!zjStationarySince)zjStationarySince=now;
+ return uint32_t(now-zjStationarySince)>=500;
+}
 #include "FlightCoreNetwork.h"
+static bool zjAccessBusy(){return zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
  // A rate-change command can update telLast after loop() captured "now".
@@ -395,6 +409,7 @@ void loop(){
  readLedCommands();
  updateLedEffect(now);
  updateGyro(now);
+ (void)zjAccessStationary();zjAccessLoop();
  scanI2C(now);
  zjPpmLoop(millis());
  emitTelemetry(now);
@@ -412,4 +427,13 @@ void loop(){
    zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U);
  }
  // Legacy ZJGYRO duplicates are disabled.
+ static uint32_t lastAccess=0;
+ if(uint32_t(millis()-lastAccess)>=750&&Serial.availableForWrite()>=100){
+  lastAccess=millis();zjAccessLoop();
+  const bool held=zjMaintenanceActive&&zjMaintenanceOwner.length();
+  const uint32_t remaining=held?ZJ_MAINTENANCE_LEASE_MS-uint32_t(millis()-zjMaintenanceRenewedAt):0;
+  Serial.printf("ZJACCESS,STATE,%s,%s,%u,%u,%u,%u,%lu\n",zjKitId.c_str(),zjRcSelection.c_str(),
+   zjRcPaused?1U:0U,zjAccessStationary()?1U:0U,zjMaintenanceActive?1U:0U,
+   held&&zjMaintenanceOwner=="USB"?1U:0U,(unsigned long)remaining);
+ }
 }

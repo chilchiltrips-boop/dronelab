@@ -1,5 +1,8 @@
 /* V2 shell: primary navigation, independent link observations, explicit controls. */
-#app .topbar{height:auto!important;min-height:0!important;padding:10px 16px!important;background:#0b1521!important;border-bottom:1px solid #263a4a;overflow:visible!important}
+.kit-access-badges{display:grid;gap:3px;justify-self:end;min-width:0;align-content:center}
+.kit-access-badges b{font-size:9px;line-height:1.25;padding:3px 5px;border:1px solid #416374;border-radius:5px;color:#bcecdc;white-space:nowrap}
+@media(max-width:660px){#app .topbar .kit-access-badges{grid-area:control}}
+#app .topbar{height:auto!important;min-height:0!important;max-height:none!important;padding:10px 16px!important;background:#0b1521!important;border-bottom:1px solid #263a4a;overflow:visible!important}
 #app .topbar-main{display:grid!important;grid-template-columns:150px minmax(350px,1fr) minmax(440px,560px)!important;gap:12px!important;align-items:center!important;min-height:46px!important;height:auto!important;overflow:visible!important;padding:0!important}
 #app .topbar-main>.brand{grid-area:auto!important;min-width:0!important;max-width:none!important;width:auto!important;gap:8px!important}
 #app .topbar-main>.brand .logo{width:30px!important;height:30px!important;flex:0 0 30px!important}
@@ -129,7 +132,7 @@
 #app .topbar-main{grid-template-columns:minmax(120px,155px) minmax(270px,1fr) minmax(560px,1.45fr)!important;gap:10px!important}
 #app .topbar-main>.kit-top-status{
  display:grid!important;grid-template-columns:minmax(170px,1fr) auto auto auto auto auto auto;
- align-items:center;justify-content:stretch!important;width:100%!important;
+ align-items:center;justify-content:stretch!important;width:100%!important;height:auto!important;
  min-width:0!important;max-width:none!important;gap:7px!important
 }
 #app .topbar .kit-top-detail{
