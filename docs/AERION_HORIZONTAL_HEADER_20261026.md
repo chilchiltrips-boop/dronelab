@@ -1,10 +1,14 @@
 # ZEBJUS Aerion horizontal header — 2026-10-26
 
 The shared WebApp header returns to horizontal navigation. On desktop widths
-from 736px, it occupies two 32px rows (64px total). Brand, navigation, independent
-Web/RC/diagnostic status, File and Shop occupy the first row. Kit connection,
+from 736px, it occupies two 32px rows (64px total). Brand, Kit name and connection status,
 STA/AP, input selection/confirmation, actual RC state, Input mirror and mobile
-pairing stay in the second row. There is no navigation rail or third controls
+pairing occupy the first row in that order. Kit name and status share one line.
+Larger left-aligned page tabs, independent Web/RC/diagnostic status, File and
+Shop occupy the second row. Desktop edge padding is 24px on both sides, 16px
+from 1000–1279px and 12px in compact 736–999px windows. Controls have fixed
+space for changing status text and no expanding gap between groups. Tabs have
+hover, pressed, persistent selected and keyboard focus states. There is no navigation rail or third controls
 row. Narrow windows retain a natural flow; touch targets retain their fallback.
 
 File opens Save, Undo, Redo and Reset vertically over the workspace without
@@ -14,7 +18,7 @@ Escape and outside-click dismissal work. Undo/Redo can disable their own buttons
 during execution; the admitted click still closes the menu correctly.
 
 The shared brand and document title become ZEBJUS Aerion. The header displays
-only v1.9. Subsequent main updates advance the minor integer to v1.10, v1.11,
+only v1.10. Subsequent main updates advance the minor integer to v1.11, v1.12,
 and so on. Build number, source commit and publication time remain separate
 metadata. An explicit release change is preserved and retrying the same source
 does not increment twice. APK publication paths and version-stamp commits do
@@ -26,7 +30,9 @@ Android flight shell is separate from this desktop WebApp header. The published
 APK retention verifier reports that no package rebuild is needed.
 
 Local Chromium checks cover two rows at 736, 768, 850, 1024, 1280, 1294, 1366 and
-1920px, mobile controls remaining in row two, real File Save/Undo/Redo actions,
+1920px, all connection/input/mobile controls remaining in row one, aligned edge insets,
+left-to-right control order, inline Kit status, page selection/focus effects,
+real File Save/Undo/Redo actions,
 all five tabs, popover bounds, status-width stability, Input mirror geometry,
 form fit, independent RC/diagnostic access, source selection/confirmation,
 Android PPM touch locks, Live Inputs scrolling and the full Python IDE/runtime
