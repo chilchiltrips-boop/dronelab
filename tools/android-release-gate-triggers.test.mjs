@@ -3,9 +3,13 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function pushPaths(text){
- const start=text.indexOf('    paths:\n'),end=text.indexOf('  workflow_dispatch:',start);
- assert.ok(start>=0&&end>start,'Missing GitHub push paths or workflow_dispatch');
- return text.slice(start,end).split('\n').map(line=>/^      - (.*)$/.exec(line)?.[1]?.replace(/^['"]|['"]$/g,'')).filter(Boolean);
+ const lines=text.split('\n'),start=lines.findIndex(line=>line==='  push:');
+ assert.ok(start>=0,'Missing GitHub push trigger');
+ const next=lines.findIndex((line,i)=>i>start&&/^  [A-Za-z_]+:/.test(line));
+ const push=lines.slice(start+1,next<0?lines.length:next),paths=push.findIndex(line=>line==='    paths:');
+ assert.ok(paths>=0,'Missing GitHub push paths');
+ const end=push.findIndex((line,i)=>i>paths&&/^    [A-Za-z_]+:/.test(line));
+ return push.slice(paths+1,end<0?push.length:end).map(line=>/^      - (.*)$/.exec(line)?.[1]?.replace(/^['"]|['"]$/g,'')).filter(Boolean);
 }
 const gates=[
  ['Authoritative status integration','.github/workflows/authoritative-status.yml'],
