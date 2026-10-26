@@ -1,7 +1,7 @@
 name: Aerion horizontal header and version
 on:
   push:
-    branches: [main, feat/aerion-horizontal-header-20261026]
+    branches: [main, feat/aerion-horizontal-header-20261026, feat/aerion-header-alignment-20261026]
     paths:
       - 'index.html'
       - 'lab.html'
