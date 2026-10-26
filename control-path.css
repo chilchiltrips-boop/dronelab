@@ -9,6 +9,7 @@
 .control-path-popover span{color:#c9d6e6;font-size:12px}.control-path-summary{display:block;flex:1 1 100%;min-height:18px;line-height:1.5;color:#b4c2d4;font-size:12px;font-variant-numeric:tabular-nums}
 .dw-view-header:has(>.control-path-summary){flex-wrap:wrap}.control-path-selector [data-control-reason]{overflow-wrap:anywhere}
 #tab-firmware .dw-view-header>.control-path-summary{display:block;min-width:0;font-size:11px;letter-spacing:normal;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#fwLiveInputs .li-header .control-path-summary{display:block;max-width:100%;min-width:0;font-size:11px;font-weight:500;letter-spacing:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(min-width:781px){#tab-firmware .dw-view-header:has(>.control-path-summary){flex-wrap:nowrap}#tab-firmware .dw-view-header>.control-path-summary{flex:1 1 0;text-align:right}}
 .flight-topbar .control-path-selector{grid-column:auto;font-size:11px;min-width:125px}.flight-topbar .control-path-popover{position:fixed;right:10px;top:58px;max-height:calc(100dvh - 76px);overflow:auto}
 @media(max-width:600px){.kit-top-status .control-path-selector{flex:1 1 auto}.control-path-selector>summary{min-height:44px}.control-path-popover{right:0}.control-path-summary{font-size:11px}}

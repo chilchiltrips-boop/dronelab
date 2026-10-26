@@ -57,7 +57,7 @@ try{
  for(const view of ['overview','connection','wifi','inputs','diagnostics','security','mobile','firmware']){
   await page.evaluate(view=>{window.ZebjusDevicesWorkspace.open(view);window.ZebjusControlUI.refresh()},view);
   assert.match(await page.locator('#dw-panel-'+view+' [data-control-summary]').textContent(),/PPM RX\/TX/);
-  assert.equal(await page.locator('#dw-panel-'+view+' [data-control-summary]').isVisible(),true);
+  assert.equal(await page.locator('#dw-panel-'+view+' [data-control-summary]').isVisible(),true,'Shared summary must be visible in '+view);
  }
  await page.evaluate(()=>{window.__controlFixture.snapshotIdle=true;window.__controlFixture.source='NONE';window.ZebjusDevicesWorkspace.open('inputs')});
  await page.waitForFunction(()=>document.getElementById('liLiveState').textContent==='IDLE');
