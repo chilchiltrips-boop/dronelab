@@ -204,3 +204,16 @@ test('verified AP throttle moves left joystick bottom-to-top; mode/arm stay read
  assert.equal(state.activeSource,'web');
  assert.equal(state.input,null);
 });
+
+
+test('explicit Android AP and WebRTC choices cannot substitute another transport or target',()=>{
+ const b=bench();b.input.setChoice('android-ap');b.store.accept(frame());
+ assert.equal(b.input.start().accepted,false,'WebRTC alone cannot satisfy Android AP');
+ b.store.acceptKit(verifiedKit(1));assert.equal(b.input.start().accepted,true);
+ assert.equal(b.input.snapshot().input.origin,'kit');b.input.stop();
+ const sta=verifiedKit(2);sta.kit.transport='sta';b.store.acceptKit(sta);
+ assert.equal(b.input.start().accepted,false,'STA accepted input cannot be labelled Android AP');
+ b.input.setChoice('android-webrtc');assert.equal(b.input.start().accepted,true);
+ assert.equal(b.input.snapshot().input.origin,'webrtc');
+ b.store.setPeer({connected:false});assert.equal(b.s.running,false,'Pairing loss cannot switch to Kit input');
+});

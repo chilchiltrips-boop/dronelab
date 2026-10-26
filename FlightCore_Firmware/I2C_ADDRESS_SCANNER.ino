@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.11";
+constexpr const char* FW_VERSION="1.5.12";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -80,6 +80,7 @@ bool readLong(char*& state,long low,long high,long& result){
 #include "FlightCoreAccess.h"
 static bool zjAccessStationary();
 static bool zjAccessBusy();
+static String zjControlRadio();
 void ledCommand(char* line){
  ledCommandOk=false;
  if(strncmp(line,"ZJLED,",6)!=0)return;
@@ -125,7 +126,7 @@ void ledCommand(char* line){
 void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch
 void serialCommand(char* line){
- if(zjAccessSerialCommand(line,zjAccessStationary(),zjAccessBusy()))return;
+ if(zjAccessSerialCommand(line,zjAccessStationary(),zjAccessBusy(),zjControlRadio()))return;
  if(zjRcSerialCommand(line))return;
  if(zjPpmSerialCommand(line))return;
  if(zjNetSerialCommand(line))return;
@@ -346,6 +347,7 @@ static bool zjAccessStationary(){
  return uint32_t(now-zjStationarySince)>=500;
 }
 #include "FlightCoreNetwork.h"
+static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
 static bool zjAccessBusy(){return zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
@@ -432,8 +434,8 @@ void loop(){
   lastAccess=millis();zjAccessLoop();
   const bool held=zjMaintenanceActive&&zjMaintenanceOwner.length();
   const uint32_t remaining=held?ZJ_MAINTENANCE_LEASE_MS-uint32_t(millis()-zjMaintenanceRenewedAt):0;
-  Serial.printf("ZJACCESS,STATE,%s,%s,%u,%u,%u,%u,%lu\n",zjKitId.c_str(),zjRcSelection.c_str(),
+  Serial.printf("ZJACCESS,STATE,%s,%s,%u,%u,%u,%u,%lu,%s\n",zjKitId.c_str(),zjRcSelection.c_str(),
    zjRcPaused?1U:0U,zjAccessStationary()?1U:0U,zjMaintenanceActive?1U:0U,
-   held&&zjMaintenanceOwner=="USB"?1U:0U,(unsigned long)remaining);
+   held&&zjMaintenanceOwner=="USB"?1U:0U,(unsigned long)remaining,zjRcControlPath.c_str());
  }
 }

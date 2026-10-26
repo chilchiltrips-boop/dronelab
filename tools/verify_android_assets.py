@@ -5,6 +5,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 ASSETS = (
+    "control-path.css", "js/control-path-policy.js", "js/control-path-ui.js", "js/kit-access-policy.js",
     "companion.html", "companion.css", "companion.js", "companion-network.js",
     "android-native-bridge.js", "companion-flight.js", "companion-menu.js", "flight-input.js",
     "pairing-core.js", "pairing-code.js", "pairing-qr-ui.js", "firmware-catalog.json",

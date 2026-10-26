@@ -57,12 +57,12 @@ function backgroundLinkPolicy(hidden,now,lastHiddenStatusAt,visibleResumedAt){
   penalize:!hidden&&(!visibleResumedAt||now-visibleResumedAt>=FOREGROUND_SETTLE_MS)};
 }
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
-state.controlAuthorized=false;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
+state.controlAuthorized=false;state.ppm=null;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
 let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
 let savedNetworks=[];
 function adoptNetworkStatus(d){
  Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
-  rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,
+  rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,ppm:d.ppm&&typeof d.ppm.present==='boolean'?{...d.ppm}:null,
   controlAuthorized:d.controlAuthorized===true||(d.controlAuthorized===undefined&&(state.transport==='ap'||!!state.key)),
   flightModeState:root.ZebjusKitData?.flightModeState?.(d)||null,mode:d.mode||state.mode,flightMode:['angle','acro'].includes(d.flightMode)?d.flightMode:null,version:d.version||state.version,kitName:d.kitName||d.name||state.kitName,
   apActive:!!d.apActive,apIp:d.apIp||'',apSsid:d.apSsid||'',staConnected:!!d.staConnected,staIp:d.ip||'',ssid:d.ssid||'',
@@ -102,7 +102,7 @@ function relayStateChanged(){
  render();
  root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'android-relay',kitId:state.kitId}}));
 }
-function linkFresh(){return state.connected&&state.linkState==='connected'&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())&&
+function linkFresh(){return state.connected&&['connected','delayed'].includes(state.linkState)&&Date.now()-state.heartbeatAt<=HEARTBEAT_MAX_AGE&&(state.transport!=='usb'||!!serial()?.isOpen?.())&&
  (state.transport!=='android-relay'||!!state.relaySessionId&&state.relaySessionId===relaySession())}
 function verifiedTransport(d){const t=String(d.requestTransport||'').toLowerCase();if(!['ap','sta'].includes(t))throw Error('Missing authenticated request transport');return t}
 function staConnectionHint(){
@@ -151,7 +151,7 @@ function render(){
  byId('kitDiagnosticOwner',!ready?'Unverified':state.owner?'This browser':state.rc?.claimed?state.rc.source||'Other controller':'Available');
  byId('kitInternetStatus','Web '+state.internet);
  byId('kitHeartbeat',state.heartbeatAt?Math.max(0,Math.round((Date.now()-state.heartbeatAt)/1000))+' s ago':'Unverified');
- byId('kitGlobalState',otaActive?(state.connected?'OTA UPLOADING':'OTA RECONNECTING'):state.linkState==='stale'?'LINK STALE':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':ready?'KIT CONNECTED':'KIT OFFLINE');
+ byId('kitGlobalState',otaActive?(state.connected?'OTA UPLOADING':'OTA RECONNECTING'):state.linkState==='stale'?'LINK STALE':state.linkState==='delayed'?'RESPONSE DELAYED':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':ready?'KIT CONNECTED':'KIT OFFLINE');
  const pill=$('kitGlobalState');if(pill){pill.dataset.tone=globalTone;pill.dataset.connected=String(ready);pill.title=(ready?'Verified kit online • ':'Kit not verified online • ')+(state.kitName||'No kit')+' • '+(state.transport||'offline').toUpperCase();}
  const bar=$('kitTopStatus');if(bar)bar.dataset.tone=globalTone;
  byId('kitSelectedId',ready?state.kitId:'—');byId('kitSelectedName',ready?state.kitName:'—');
@@ -388,7 +388,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const slot of authSessions.keys())if(slot.startsWith(priorId+'@'))authSessions.delete(slot);
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
- state.connected=false;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
+ state.connected=false;state.ppm=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
  Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:false});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
@@ -437,7 +437,7 @@ async function connectUSB(code,ticket=reconnectTicket){
   for(let i=0;i<18&&(!identity.kitId||!identity.kitCode);i++)await sleep(140);
  }finally{root.removeEventListener('dronelab:serial-line',listener);}
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before USB identity verification');
- Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode),networkInfo,{rc:null,rcAccess:null,rcObservedAt:0});
+ Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode),networkInfo,{rc:null,rcAccess:null,ppm:null,rcObservedAt:0});
  state.usbInfo=identity;state.key='';state.ip='';
 }
 const form=args=>new URLSearchParams(args||{});
@@ -614,6 +614,15 @@ function read(){
  if(statusPending)return statusPending;
  statusPending=readStatus().finally(()=>{statusPending=null});return statusPending;
 }
+function statusReadFailed(error){
+ if(error?.code==='STATUS_SUPERSEDED')return {fatal:false,state:state.linkState};
+ const health=root.ZebjusControlPaths?.failureState({error,heartbeatAt:state.heartbeatAt})||{fatal:true,state:'stale'};
+ state.linkState=health.state;
+ // Telemetry delay is not proof that the selected controller stopped. RC
+ // send/ACK and firmware watchdogs remain independent and unchanged.
+ if(health.fatal||health.state==='stale'){++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';}
+ render();return health;
+}
 async function readStatus(){
  if(!state.connected)return;
  if(state.transport==='usb'){
@@ -624,7 +633,12 @@ async function readStatus(){
   if(ticket!==reconnectTicket||identity.slice(9).trim()!==expected)throw Error('USB identity changed during refresh');
   state.heartbeatAt=Date.now();state.linkState='connected';render();return state.usbInfo;
  }
- const d=await deviceRequest('/api/status');
+ const binding={kitId:state.kitId,bootId:state.bootId,transport:state.transport,ticket:reconnectTicket};
+ const superseded=()=>binding.ticket!==reconnectTicket||binding.kitId!==state.kitId||binding.transport!==state.transport||binding.bootId!==state.bootId;
+ const cancelled=()=>Object.assign(Error('Selected kit changed; status request superseded by a new connection'),{code:'STATUS_SUPERSEDED'});
+ let d;
+ try{d=await deviceRequest('/api/status')}catch(error){if(superseded())throw cancelled();throw error}
+ if(superseded())throw cancelled();
  trace('web_status',{transport:state.transport,board:d.board,version:d.version,mode:d.mode,
   apActive:d.apActive,staConnected:d.staConnected,staReason:Number(d.staDisconnectReason)||0,
   rssi:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
@@ -1104,11 +1118,16 @@ function onSerial(e){
  const line=String(e.detail?.line||'').trim();
  if(line.startsWith('ZJACCESS,STATE,')&&state.transport==='usb'&&usbCandidate.kitId===state.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()){
   const p=line.split(',');
-  if(p.length===9&&p[2]===state.kitId&&p.slice(4,8).every(v=>/^[01]$/.test(v))&&/^\d+$/.test(p[8])){
-   const value=root.ZebjusKitAccessPolicy?.normalize?.({version:1,selection:p[3],paused:p[4]==='1',stationary:p[5]==='1',maintenance:{active:p[6]==='1',owned:p[7]==='1',leaseRemainingMs:Number(p[8])}});
+  if([9,10].includes(p.length)&&p[2]===state.kitId&&p.slice(4,8).every(v=>/^[01]$/.test(v))&&/^\d+$/.test(p[8])){
+   const value=root.ZebjusKitAccessPolicy?.normalize?.({version:1,pathVersion:p.length===10?1:0,controlPath:p[9],selection:p[3],paused:p[4]==='1',stationary:p[5]==='1',maintenance:{active:p[6]==='1',owned:p[7]==='1',leaseRemainingMs:Number(p[8])}});
    if(value){state.rcAccess=value;render();}
   }
   return;
+ }
+ if(state.transport==='usb'&&usbCandidate.kitId===state.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()){
+  const ppm=root.ZebjusSerialRcDecoder?.parsePpmChannels?.(line);
+  if(ppm)state.ppm={present:true,ageMs:0,observedAt:Date.now()};
+  else if(line.startsWith('ZJPPM,1,LOST,'))state.ppm={present:false,ageMs:null,observedAt:Date.now()};
  }
  const extension=root.ZebjusSerialRcDecoder?.parseSerialStatus?.(line);
  if(extension&&extension.kitId===usbCandidate.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()){
@@ -1460,7 +1479,8 @@ function watchHandoverDiscovery(ticket,until){
 }
 async function switchKitNetworkMode(mode){
  if(!['ap','sta','auto'].includes(mode))throw Error('Invalid Wi-Fi mode');
- if(!linkFresh()||state.working||state.owner||state.rc?.claimed||wifiTesting)throw Error('Connect the idle kit in its current mode before changing AP/STA');
+ const ppmSafe=state.rcAccess?.pathVersion===1&&state.rc?.source==='PPM'&&state.rc.inputArmed!==true&&state.rc.throttle<=1050;
+ if(!linkFresh()||state.working||state.owner||state.rc?.claimed&&!ppmSafe||wifiTesting)throw Error('Disarm and lower PPM throttle, or release the current controller, before changing AP/STA');
  const target=connectionTarget(),ticket=reconnectTicket;
  headerModePending=true;render();
  try{
@@ -1619,9 +1639,9 @@ async function toggleHeaderControl(){
  await claim('WEB');render();
 }
 
-async function changeRcAccess(action,source=''){
+async function changeRcAccess(action,source='',controlPath=''){
  if(accessBusy)throw Error('Wait for the current RC access request.');
- if(!linkFresh()||!['usb','ap','sta'].includes(state.transport))throw Error('Verify a direct USB/AP/STA Kit first.');
+ if(!linkFresh()||!['usb','ap','sta','android-relay'].includes(state.transport))throw Error('Verify a USB/AP/STA/approved Android relay Kit first.');
  if(!state.rcAccess)throw Error('Update FlightCore to 1.5.11 for RC handover and maintenance.');
  if(state.transport!=='usb'&&!state.controlAuthorized)throw Error('Diagnostic authorization is required; observer access cannot change RC ownership.');
  if(state.working||otaActive||wifiTesting)throw Error('Finish the current Kit operation first.');
@@ -1634,20 +1654,22 @@ async function changeRcAccess(action,source=''){
    if(action!=='GET'&&Date.now()>=adminUnlockedUntil)throw Error('Unlock teacher admin over this USB Kit before changing RC access.');
    const token='a'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
    const pending=waitSerial(new RegExp('^ZJACCESS,(?:ACK|NACK),'+id+','+token+','));
-   await usbWrite('ZJACCESS,'+action+','+id+','+token+(source?','+source:''));
+   await usbWrite('ZJACCESS,'+action+','+id+','+token+(source?','+source:'')+(controlPath?','+controlPath:''));
    const line=await pending,payload=line.split(',').slice(4).join(',');
    if(line.startsWith('ZJACCESS,NACK,'))throw Error(payload);
    reply={kitId:id,rcAccess:JSON.parse(payload)};
   }else{
-   reply=await deviceRequest('/api/rc/access','POST',{action,source,rcSession:state.owner?state.rcSession:''},()=>{if(!current())throw Error('Original Kit session changed before RC access write.');});
+   reply=await deviceRequest('/api/rc/access','POST',{action,source,controlPath,rcSession:state.owner?state.rcSession:''},()=>{if(!current())throw Error('Original Kit session changed before RC access write.');});
   }
   if(!current()||reply?.kitId!==id)throw Error('Kit identity, boot or transport changed during RC access request.');
   const actual=root.ZebjusKitAccessPolicy?.normalize?.(reply.rcAccess);
   if(!actual||action==='BEGIN'&&!actual.paused||['SELECT','RESUME'].includes(action)&&(actual.paused||actual.selection!==source))
    throw Error('RC access result was not verified. Refresh the original Kit before continuing.');
+  if(controlPath&&(actual.pathVersion!==1||actual.controlPath!==controlPath))throw Error('Control path was not confirmed by firmware.');
   state.rcAccess=actual;
   if(action!=='KEEP'){
    ++controlTicket;ownOwnerId='';state.owner=false;state.rcSession='';state.rcSource='';
+   state.rcObservedAt=Date.now();
    state.rc=reply.rc||{source:'NONE',claimed:false,active:false,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};
    audit(action==='BEGIN'?'Maintenance confirmed: RC paused; sensors and authorized LED/Python remain available.':
     'RC source selected: '+source+'; input remains disarmed until that controller starts safely.','success');
@@ -1668,6 +1690,16 @@ async function changeRcAccess(action,source=''){
   if(messages[error.message])throw Error(messages[error.message]);
   throw error;
  }finally{accessBusy=false;render();}
+}
+async function selectControlPath(path){
+ const item=root.ZebjusControlPaths?.find(path);if(!item)throw Error('Choose a supported control input');
+ const view=root.ZebjusControlPaths.describe({kit:root.ZebjusKits.getState(),peer:relay()?.status?.()||{},client:'web'});
+ const option=view.paths.find(p=>p.id===path);if(!option?.selectable)throw Error(option?.reason||'Input unavailable');
+ await changeRcAccess('SELECT',item.source,path);
+ // Source selection never arms input. The selected browser may reserve its
+ // own diagnostic joystick session; other controllers must claim their own.
+ if(path==='WEB_STA'&&$('kitHardwareTarget')?.checked)await claim('WEB');
+ return state.rcAccess;
 }
 async function maintainRcPause(){
  if(maintenanceKeepPending||accessBusy||document.hidden||!linkFresh()||!state.rcAccess?.maintenance?.owned)return;
@@ -1758,7 +1790,7 @@ function checkWebReachability(){
 async function refreshConnection(){
  void checkWebReachability();
  if(state.connected){
-  try{return await read()}catch(e){state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();throw e}
+  try{return await read()}catch(e){statusReadFailed(e);throw e}
  }
  await discoverKits();await offerRememberedConnection();
 }
@@ -1833,7 +1865,7 @@ function init(){
     try{await read();pollErrors=0;render()}
     catch(e){
      // Require a fresh authenticated status, but retain the selected Kit.
-     state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
+     statusReadFailed(e);
      audit('Tab restored • rechecking same Kit: '+e.message,'warn');
     }
    }else if(recoveryTarget&&['sta','ap'].includes(recoveryTarget.transport)){
@@ -1870,7 +1902,7 @@ function init(){
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
    if(ticket!==reconnectTicket||state.working)return;
-   state.linkState='stale';state.owner=false;state.rcSession='';state.rcSource='';render();
+   const health=statusReadFailed(e);if(health.fatal)pollErrors=2;
    // Hidden/just-resumed timer stalls are not three verified Wi-Fi failures.
    if(!backgroundLinkPolicy(document.hidden,Date.now(),lastBackgroundStatusAt,foregroundResumedAt).penalize){
     pollErrors=0;return;
@@ -2124,11 +2156,11 @@ function getUsbMonitorState(){
   flightModeState:record?.flightModeState||null,flightMode:record?.flightModeState?.active||null};
 }
 root.ZebjusKits={
- changeRcAccess,
+ changeRcAccess,selectControlPath,
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  setFlightMode,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
- getState:()=>({rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
+ getState:()=>({adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   networkBusy:!!(wifiTesting||headerModePending),authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,requestBound:(binding,route,method='GET',args={})=>deviceRequest(route,method,args,()=>root.ZebjusKitData.assertBoundSession(binding,root.ZebjusKits.getState(),{allowDelayed:route==='/api/status'||/,(?:STOP)\s*$/.test(args.line||'')})),pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,

@@ -8,6 +8,7 @@ function pushPaths(text){
  return text.slice(start,end).split('\n').map(line=>/^      - (.*)$/.exec(line)?.[1]?.replace(/^['"]|['"]$/g,'')).filter(Boolean);
 }
 const gates=[
+ ['Authoritative status integration','.github/workflows/authoritative-status.yml'],
  ['Android Landscape Flight WebRTC Tests','.github/workflows/android-flight-controller.yml'],
  ['QR WebRTC Browser Pairing Test','.github/workflows/qr-browser-test.yml'],
  ['Tripod PID Simulator Tests','.github/workflows/tripod-simulator.yml'],

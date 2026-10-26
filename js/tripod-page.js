@@ -215,6 +215,11 @@ function start(){
 function toggleRun(){s.running?stop():start()}
 function syncActions(){
  const remote=!localInput(),state=receiver.snapshot();
+ const controlRoot=(()=>{try{return parent!==window&&parent.location.origin===location.origin?parent:window}catch{return window}})();
+ const virtual={running:s.running,origin:state.input?.origin||'web',fresh:state.input?.fresh===true,source:state.activeSource};
+ const changed=JSON.stringify(controlRoot.ZebjusVirtualControl)!==JSON.stringify(virtual);
+ controlRoot.ZebjusVirtualControl=virtual;
+ if(changed)controlRoot.dispatchEvent(new CustomEvent('dronelab:virtual-state'));
  const authoritative=state.kitMode,kitActive=authoritative?.active;
  // Follow changed Android/Kit SAVED choices in the virtual model; ACTIVE and
  // PENDING still describe the physical firmware and never imply motor output.
@@ -386,6 +391,15 @@ function updateControls(){
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
  $('tpReset').onclick=()=>stop('Web RESET');
  $('tpInputSource').onchange=e=>{receiver.setChoice(e.target.value);releaseAll();syncActions();drawUI()};
+ const controlRoot=(()=>{try{return parent!==window&&parent.location.origin===location.origin?parent:window}catch{return window}})();
+ const applyControlPath=path=>{
+  const choice={ANDROID_AP:'android-ap',ANDROID_WEBRTC:'android-webrtc',PPM:'ppm',WEB_STA:'web'}[path];
+  if(!choice)return;
+  if(s.running)stop('Selected input changed • press Run to resume');
+  receiver.setChoice(choice);releaseAll();syncActions();drawUI();
+ };
+ controlRoot.addEventListener('dronelab:control-path',e=>applyControlPath(e.detail?.path));
+ applyControlPath(controlRoot.ZebjusControlUI?.snapshot?.()?.selected);
  $('tpCalibrate').onclick=()=>{calibrateLevel(s);setStatus('LEVEL TRIM SAVED (VIRTUAL)')};
  $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
  try{const pref=JSON.parse(localStorage.getItem('zebjus.tripod.audio.v1')||'null');if(pref){if(Number.isFinite(pref.volume))volume=clamp(pref.volume,0,1);if(['quiet','normal','detailed'].includes(pref.profile))$('tpSoundPreset').value=pref.profile;if(pref.muted){soundOn=audioEngine.toggle()}}}catch{}

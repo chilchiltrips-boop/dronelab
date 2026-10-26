@@ -1,10 +1,73 @@
 name: Authoritative status integration
 on:
   push:
-    branches: [feature/authoritative-status-integration-20261021, main]
-    paths: ['FlightCore_Firmware/**', 'companion*', 'js/**', 'tools/**', 'tripod*', 'pairing-web.js', 'pairing-host-bridge.js', 'styles.css', 'index.html', 'lab.html', 'live-inputs.css', 'mobile-android/**', '.github/workflows/authoritative-status.yml']
+    branches: [feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
+    paths:
+      - 'control-path.css'
+      - 'js/control-path-policy.js'
+      - 'js/control-path-ui.js'
+      - 'js/kit-access-policy.js'
+      - 'tools/android-direct-kit*'
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/android-peerjs-menu-regression.test.mjs'
+      - 'tools/flight-ack-priority.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/release-metadata.test.mjs'
+      - 'mobile-android/**'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/controls-browser.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
+      - 'tools/android-simple-ap-connect.test.mjs'
+      - 'tools/verify_signed_android_release.py'
+      - 'tools/write_android_release_metadata.py'
+      - 'tools/verify_android_assets.py'
+      - 'tools/wait-release-checks.mjs'
+      - '.github/workflows/build-qr-android.yml'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-network.js'
+      - 'android-native-bridge.js'
+      - 'companion-flight.js'
+      - 'companion-menu.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'remote-rtc.js'
+      - 'remote-rtc-config.json'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'js/kit-auth.js'
+      - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
+      - 'firmware-catalog.json'
+      - 'vendor/crypto/**'
+      - 'FlightCore_Firmware/**'
+      - 'js/**'
+      - 'tools/**'
+      - 'tripod*'
+      - 'pairing-web.js'
+      - 'pairing-host-bridge.js'
+      - 'styles.css'
+      - 'index.html'
+      - 'lab.html'
+      - 'live-inputs.css'
+      - '.github/workflows/authoritative-status.yml'
   pull_request:
-    branches: [main]
+    branches: [feat/unified-input-status-20261026, main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,7 +83,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: node --test tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/kit-access.test.mjs tools/ppm-simulator-input.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
+      - run: node --test tools/control-path-policy.test.mjs tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/kit-access.test.mjs tools/ppm-simulator-input.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
   browser:
     needs: protocol
     runs-on: ubuntu-latest
@@ -36,6 +99,7 @@ jobs:
         run: |
           mkdir -p test-output
           python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/authoritative-status-http.log 2>&1 &
+          node tools/control-path-browser.mjs
           node tools/simulator-startup-browser.mjs
           for status_iteration in 1 2 3; do
             DRONELAB_STATUS_RUN="$status_iteration" node tools/authoritative-status-browser.mjs

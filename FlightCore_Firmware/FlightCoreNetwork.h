@@ -261,10 +261,10 @@ static void zjSetupHttp(){
  zjHttp.on("/api/wifi/mode",HTTP_POST,[](){
   if(!zjAllowModeChange())return;const String mode=zjArg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
-  if(zjNetTesting||zjRcOwned||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
+  if(zjNetTesting||!zjAccessCanSwitchRadio()||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
   if(mode=="sta"&&!zjSavedSsid.length()){zjReply(409,"{\"error\":\"save_sta_credentials_first\"}");return;}
   if(zjPrefs.putString("mode",mode)!=mode.length()){zjReply(500,"{\"error\":\"mode_save_failed\"}");return;}
-  zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;
+  if(zjRcSource!="PPM")zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;
   zjReply(202,"{\"kitId\":"+zjJson(zjKitId)+",\"mode\":"+zjJson(mode)+",\"state\":\"switching\"}");
   zjScheduleMode(mode);
  });
@@ -295,7 +295,7 @@ static void zjSetupHttp(){
   zjPpmLoop(millis());zjRcLoop(millis());
   const bool owns=zjRcOwned&&zjRcNetwork&&zjArg("rcSession")==zjRcSession&&zjHttp.peerIP()==zjRcOwnerIP;
   const String caller=zjRequestSession>=0?zjSessions[zjRequestSession].id:String("");
-  const char* error=zjAccessChange(zjArg("action"),zjArg("source"),caller,owns,zjAccessStationary());
+  const char* error=zjAccessChange(zjArg("action"),zjArg("source"),caller,owns,zjAccessStationary(),zjArg("controlPath"),WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String(""));
   if(error){zjReply(409,"{\"error\":"+zjJson(error)+"}");return;}
   if(zjArg("action")!="KEEP")zjUdpInvalidate();
   zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"rcAccess\":"+zjAccessState(caller,zjAccessStationary())+",\"rc\":"+zjRcState()+"}");
@@ -538,11 +538,11 @@ static bool zjNetSerialCommand(char* line){
   Serial.println("ZJNET,TEST,STARTED");return true;
  }
  if(!strncmp(line,"ZJNET,MODE,",11)){
-  if(zjRcOwned||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
+  if(!zjAccessCanSwitchRadio()||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
   const String mode=line+11;
   if(mode!="auto"&&mode!="ap"&&mode!="sta"){Serial.println("ZJNET,ERR,INVALID_MODE");return true;}
   if(mode=="sta"&&!zjSavedSsid.length()){Serial.println("ZJNET,ERR,SAVE_STA_FIRST");return true;}
-  zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);zjScheduleMode(mode);
+  if(zjRcSource!="PPM")zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);zjScheduleMode(mode);
   Serial.print("ZJNET,ACK,MODE,");Serial.println(mode);return true;
  }
  return false;

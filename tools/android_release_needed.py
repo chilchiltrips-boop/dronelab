@@ -12,6 +12,7 @@ CERT = 'F1B86575B3590734654F638E4E0D68056D37B2E8884AC7D6C24636FE9B516894'
 # Inputs copied into the APK plus native sources/build configuration. WebApp-only
 # files and regression tests do not alter the installed Android package.
 APK_INPUTS = [
+    'control-path.css', 'js/control-path-policy.js', 'js/control-path-ui.js', 'js/kit-access-policy.js',
     'mobile-android', 'companion.html', 'companion.css', 'companion.js',
     'companion-network.js', 'android-native-bridge.js', 'companion-flight.js',
     'companion-menu.js', 'flight-input.js', 'pairing-core.js', 'pairing-code.js',

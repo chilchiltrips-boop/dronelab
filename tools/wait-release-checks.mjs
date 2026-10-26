@@ -1,7 +1,7 @@
 // A published main APK is gated by mandatory checks for exactly its source SHA.
 const {GITHUB_TOKEN,GITHUB_REPOSITORY,GITHUB_SHA}=process.env;
 if(!GITHUB_TOKEN||!GITHUB_REPOSITORY||!GITHUB_SHA)throw Error('Missing release check context');
-const required=['Android Landscape Flight WebRTC Tests','QR WebRTC Browser Pairing Test','Tripod PID Simulator Tests','Browser Test Python Lab',
+const required=['Authoritative status integration','Android Landscape Flight WebRTC Tests','QR WebRTC Browser Pairing Test','Tripod PID Simulator Tests','Browser Test Python Lab',
  'Verify UDP management, IMU and Python bridge','Verify DroneLab FlightCore Firmware Center','Unified PID Tuning Shell & Persistent WebRTC'];
 const deadline=Date.now()+25*60*1000;
 while(Date.now()<deadline){

@@ -41,6 +41,7 @@ static void zjScheduleWifiTest(){
 static void zjWifiPolicyLoop(uint32_t now){
  // Send the signed HTTP / USB acknowledgement before removing its interface.
  if(zjPendingMode.length()&&int32_t(now-zjNetSwitchAt)>=0){
+  if(!zjAccessCanSwitchRadio())return; // PPM may have armed since the signed ACK.
   const String mode=zjPendingMode;zjPendingMode="";
   if(mode=="ap"){zjEnsureAP();zjPhase="ap_manual";}
   else zjConnectSaved();
