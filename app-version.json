@@ -10,7 +10,7 @@
     "FlightCore 1.5.12 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope"
   ],
-  "buildCommit": "d902eb9a05ab",
-  "publishedAt": "2026-10-26T17:47:57.697875+00:00",
-  "buildNumber": 441
+  "buildCommit": "4c5ecc5ac11b",
+  "publishedAt": "2026-10-26T19:20:12.281386+00:00",
+  "buildNumber": 442
 }
