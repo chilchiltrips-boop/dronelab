@@ -1,40 +1,35 @@
-# ZEBJUS Aerion horizontal header — 2026-10-26
+# ZEBJUS Aerion header — 2026-10-27
 
-The shared WebApp header returns to horizontal navigation. On desktop widths
-from 736px, it occupies two 32px rows (64px total). Brand, Kit name and connection status,
-STA/AP, input selection/confirmation, actual RC state, Input mirror and mobile
-pairing occupy the first row in that order. Kit name and status share one line.
-Larger left-aligned page tabs, independent Web/RC/diagnostic status, File and
-Shop occupy the second row. Desktop edge padding is 24px on both sides, 16px
-from 1000–1279px and 12px in compact 736–999px windows. Controls have fixed
-space for changing status text and no expanding gap between groups. Tabs have
-hover, pressed, persistent selected and keyboard focus states. There is no navigation rail or third controls
-row. Narrow windows retain a natural flow; touch targets retain their fallback.
+The shared WebApp header has a 56px control row and a 48px centered navigation
+row (104px total on desktop). Brand, inline Kit name/status, STA/AP, input
+selection/confirmation, actual RC state, Input mirror, mobile pairing,
+Web/RC/diagnostic status and File stay in the top row. Only Assembly, Wiring,
+Python Lab, PID Tuning, Devices & Firmware and Shop occupy the lower row.
+Shop is an ordinary labeled navigation link to the configured store, opening
+in a new tab; the previous top-row Shop arrow link is removed.
 
-File opens Save, Undo, Redo and Reset vertically over the workspace without
-increasing header height. These are the existing controls and project handlers,
-including the existing Undo history and project storage key. Keyboard arrows,
-Escape and outside-click dismissal work. Undo/Redo can disable their own buttons
-during execution; the admitted click still closes the menu correctly.
+The two navy surfaces, fading divider and subtle lower shadow distinguish the
+header from the workspace. Controls have 12px vertical breathing room; larger
+navigation buttons have hover, pressed, persistent selection and keyboard focus
+states. Motion respects the reduced-motion preference. Equal side insets are
+24px from 1360px and 20px in smaller desktop windows.
 
-The shared brand and document title become ZEBJUS Aerion. The header displays
-only v1.10. Subsequent main updates advance the minor integer to v1.11, v1.12,
-and so on. Build number, source commit and publication time remain separate
-metadata. An explicit release change is preserved and retrying the same source
-does not increment twice. APK publication paths and version-stamp commits do
-not create additional WebApp release increments.
+At 1280px and above all controls fit without horizontal scrolling. From
+736–1279px the control row scrolls horizontally at readable sizes; the centered
+navigation row and page do not scroll sideways. Keyboard focus reveals controls,
+and File/connection/input popovers escape the scrolling row using viewport
+positioning. Narrower windows retain the existing natural-flow fallback.
 
-Kit IDs, pairing sessions, authorization, source confirmation, motor control,
-firmware versions and installed Android package inputs are unchanged. The native
-Android flight shell is separate from this desktop WebApp header. The published
-APK retention verifier reports that no package rebuild is needed.
+File still opens Save, Undo, Redo and Reset vertically over the workspace.
+Existing action handlers, undo history and storage identity are retained.
+Keyboard arrows, Escape and outside-click dismissal work, including after
+scrolling the control row. The shell and pairing/input nodes persist across
+all five application pages. This release displays v1.11; subsequent releases
+advance the minor integer (v1.12, v1.13). Build metadata remains separate.
 
-Local Chromium checks cover two rows at 736, 768, 850, 1024, 1280, 1294, 1366 and
-1920px, all connection/input/mobile controls remaining in row one, aligned edge insets,
-left-to-right control order, inline Kit status, page selection/focus effects,
-real File Save/Undo/Redo actions,
-all five tabs, popover bounds, status-width stability, Input mirror geometry,
-form fit, independent RC/diagnostic access, source selection/confirmation,
-Android PPM touch locks, Live Inputs scrolling and the full Python IDE/runtime
-smoke. Native WebRTC ICE and service-worker coverage run in GitHub CI. Physical
-A1/A2, handset, PPM loss and OTA acceptance is not claimed by this layout update.
+Browser verification covers desktop breakpoints, edge/vertical spacing,
+centered navigation, six navigation items including Shop, control reachability,
+popover clipping, status stability, File actions, mirror geometry, form fit,
+Live Inputs scrolling, Python, source confirmation, WebRTC and offline use.
+Installed Android package inputs are unchanged. Physical A1/A2, handset,
+PPM loss and OTA acceptance are not claimed by this visual update.
