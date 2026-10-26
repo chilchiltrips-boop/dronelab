@@ -44,7 +44,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  const receiveAge=Math.max(0,now-sample.at);
  const sequenceAge=sample.sequenceAt==null?receiveAge:Math.max(0,now-sample.sequenceAt);
  const ageMs=Math.max(sequenceAge,(Number.isFinite(ageBase)&&ageBase>=0?ageBase:0)+receiveAge);
- const recent=receiveAge<=SNAPSHOT_TTL_MS&&ageMs<=INPUT_MAX_AGE_MS&&sequenceAge<=SEQUENCE_TTL_MS;
+ const recent=!sample.historicalOnly&&receiveAge<=SNAPSHOT_TTL_MS&&ageMs<=INPUT_MAX_AGE_MS&&sequenceAge<=SEQUENCE_TTL_MS;
  const source=String(rc.source||'NONE').toUpperCase();
  const validSource=['WEB','ANDROID','PPM'].includes(source)?source:'NONE';
  const active=rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&validSource!=='NONE';
@@ -52,7 +52,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  // Do not equate diagnostic INPUT_ARMED with physical ESC/motor arming.
  const armed=active&&rc.inputArmed===true;
  return {...m,
-  ownerId:ownerKey(rc),inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':recent?'idle':'stale',
+  ownerId:ownerKey(rc),inputTransport:String(rc.transport||'—').toUpperCase(),source:active?validSource:'NONE',state:stale?'stale':active?'live':!sample.historicalOnly&&receiveAge<=SNAPSHOT_TTL_MS?'idle':'stale',
   seq:Number.isSafeInteger(seq)&&seq>0?seq:null,
   values:Object.fromEntries(channels.map(field=>[field,rc[field]])),
   ppmChannels:validSource==='PPM'&&active&&Array.isArray(rc.channels)&&rc.channels.length===8&&
@@ -136,12 +136,23 @@ function initLiveInputs(){
  function display(){
   const kit=getKit(),identity=kit.kitId&&(kit.connected||['stale','reconnecting'].includes(kit.linkState))?kit.kitId:'';
   const connected=kit.connected===true;
-  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot||connected!==lastConnected){
+  if(identity!==lastKit||kit.transport!==lastTransport||kit.physicalLink!==lastPhysicalLink||kit.bootId!==lastBoot){
    wipe();lastKit=identity;lastTransport=kit.transport;lastPhysicalLink=kit.physicalLink;lastBoot=kit.bootId;lastConnected=connected;
   }
+  if(connected!==lastConnected){
+   if(sample)sample={...sample,historicalOnly:true};
+   ++requestGeneration;nextPollAt=0;lastConnected=connected;
+  }
   reuseVerifiedStatus(kit);
-  const v=normalizeAcceptedInput(kit,sample);
-  if(pidVisible())simInputs.acceptKit({kit,input:v});
+  const accepted=normalizeAcceptedInput(kit,sample);
+  // Retained values are presentation only. The simulator still receives the
+  // real disconnected state and cannot consume this historical display.
+  const history=!connected&&sample?.kitId===kit.kitId&&Date.now()-sample.at<15000?
+   normalizeAcceptedInput({...kit,connected:true},{...sample,historicalOnly:true}):null;
+  const v=history?.values?{...accepted,kitName:history.kitName,values:history.values,
+   seq:history.seq,ageMs:history.ageMs,accepted:history.accepted,rejected:history.rejected,
+   inputTransport:history.inputTransport,inputArm:'STALE',historical:true}:accepted;
+  if(pidVisible())simInputs.acceptKit({kit,input:accepted});
   else simInputs.clearKit();
   card.dataset.liveState=v.state;
   write('liLiveState',v.state.toUpperCase());
@@ -165,7 +176,7 @@ function initLiveInputs(){
    modeSelect.title=!actual?'UNSUPPORTED • update FlightCore for authoritative Kit mode settings':kit.transport==='android-relay'?'Relay monitoring is read-only':'Kit classroom metadata • physical stabilization is not supported';}
   if(!modeSaving&&!$('liModeStatus')?.textContent?.startsWith('NOT VERIFIED'))write('liModeStatus',actual?'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):'UNSUPPORTED • update FlightCore for authoritative mode settings');
   for(const [key,id] of [['ch5','liAux5'],['ch6','liAux6']])write(id,v.aux?.[key]===null||v.aux?.[key]===undefined?'NOT REPORTED':v.aux[key]+' µs');
-  const connectionState=kit.connected?(v.state==='stale'?'STALE':'CONNECTED'):
+  const connectionState=kit.connected?(kit.linkState==='delayed'?'RESPONSE DELAYED':'CONNECTED'):
    monitorChoice==='usb'&&!globalThis.navigator?.serial?'UNSUPPORTED':
    monitorChoice==='usb'&&!kit.usbAvailable?'PERMISSION REQUIRED':'DISCONNECTED';
   write('liConnectionState',connectionState);
@@ -193,6 +204,7 @@ function initLiveInputs(){
    v.state==='idle'?'No current accepted RC input. Joysticks neutral; no Take Control needed to view.':
    v.state==='stale'?'Last confirmed packet is stale. Values are historical, not live control.':
    v.state==='waiting'?'Waiting for authenticated accepted-input telemetry from this Kit. PPM requires firmware support.':
+   v.historical?'Kit connection unavailable. Dimmed values are the last confirmed input; verify this Kit to resume.':
    'Select and connect a verified Kit to view its accepted RC inputs.';
   write('liHelp',message+' INPUT ARM is diagnostic only; motors are never armed by this monitor.');
   const ppmActive=v.source==='PPM'&&v.ppmChannels!==null;

@@ -5,7 +5,7 @@
 (function(root){
 'use strict';
 const $=id=>document.getElementById(id),kit=()=>root.ZebjusKits;
-let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0,lastAutoFilledName='';
+let discovered=[],selectedId='',scanning=false,requesting=false,healthAt=0,lastScanAt=0,lastConnectedId='',lastConnectedName='',lastConnectedTransport='',lastWasOnline=false,telemetry=null,telemetryTime=0,telemetryBinding=null,lastAutoFilledName='';
 const set=(id,value)=>{const el=$(id),text=String(value??'--');if(el&&el.textContent!==text)el.textContent=text};
 function line(message){
  const el=$('fwConnectLog');if(!el)return;
@@ -120,11 +120,11 @@ async function changeName(reset){
 }
 function render(){
  const s=state(),demo=!!$('fwKitDemoMode')?.checked,live=!!s.connected&&!demo;
- const changed=s.kitId!==lastConnectedId||s.kitName!==lastConnectedName||s.transport!==lastConnectedTransport||live!==lastWasOnline;
- if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastConnectedTransport=s.transport||'';lastWasOnline=live;telemetry=null;telemetryTime=0;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
+ const changed=s.kitId!==lastConnectedId||s.transport!==lastConnectedTransport;
+ if(changed){lastConnectedId=s.kitId||'';lastConnectedName=s.kitName||'';lastConnectedTransport=s.transport||'';lastWasOnline=live;telemetry=null;telemetryTime=0;telemetryBinding=null;if(live)line('Kit online • '+s.kitName+' • '+s.transport.toUpperCase())}
  set('fwConnectBadge',demo?'DEMO PREVIEW':live?'CONNECTED':'Not connected');
  $('fwConnectBadge')?.classList.toggle('offline',!live);
- set('fwSelectedKitName',live?s.kitName:demo?'Offline Simulation':'No kit selected');
+ set('fwSelectedKitName',s.kitId?s.kitName:demo?'Offline Simulation':'No kit selected');
  set('fwSelectedOnline',live?'Online':demo?'Simulation':'Offline');
  set('fwLocalLink',live?'LOCAL CONNECTED':'LOCAL READY');
  set('fwKitStateSimple',live?s.kitCode:'NOT SELECTED');
@@ -134,11 +134,14 @@ function render(){
  const current=live&&age<=6500;
  set('fwHealthCommand',current?s.rc?.active?'RC LIVE':'LINK OK':demo?'SIMULATED':'LOST');
  set('fwHealthCommandNote',current?'Status '+Math.round(age/1000)+'s ago':demo?'No physical commands':'Kit offline');
- const t=current&&Date.now()-telemetryTime<13000?telemetry:null;
- set('fwHealthImu',t?(t.gyroReady?'READY':'NOT FOUND'):'NOT REPORTED');
+ const telemetryAge=Date.now()-telemetryTime;
+ const t=telemetryBinding&&root.ZebjusControlPaths?.sameBinding(telemetryBinding,s)&&telemetry?.kitId===s.kitId&&telemetryAge<15000?telemetry:null;
+ const historical=!!t&&(!current||s.linkState==='delayed'||telemetryAge>=6500);
+ const historicalNote=historical?' · LAST '+Math.floor(telemetryAge/1000)+'s ago':'';
+ set('fwHealthImu',t?(t.gyroReady?'READY':'NOT FOUND')+historicalNote:'NOT REPORTED');
  set('fwHealthBaro','NOT REPORTED');set('fwHealthLidar','NOT REPORTED');
- set('fwHealthReceiver',t?(t.rcAlive||t.rc?.inputValid?'RC LIVE':'NO LIVE RC'):'NOT REPORTED');
- for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthCommand'&&current||id==='fwHealthImu'&&t?.gyroReady||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)?'live':'lost'}
+ set('fwHealthReceiver',t?(t.rcAlive||t.rc?.inputValid?(historical?'RC CONFIRMED':'RC LIVE'):'NO LIVE RC')+historicalNote:'NOT REPORTED');
+ for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthCommand'&&current||id==='fwHealthImu'&&t?.gyroReady&&!historical||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)&&!historical?'live':historical&&['fwHealthImu','fwHealthReceiver'].includes(id)?'stale':'lost'}
  set('fwDetailName',live?s.kitName:'--');
  set('fwDetailId',live?s.kitId:'--');
  set('fwDetailAccess',live?(s.transport==='usb'||s.controlAuthorized?'Diagnostics authorized':'Diagnostics read-only'):'--');
@@ -162,7 +165,8 @@ function render(){
   $('fwKitTakeControl').textContent=s.owner?'Release WebApp RC':'Use WebApp RC';
  }
  for(const id of ['fwRenameSave','fwRenameReset'])if($(id))$(id).disabled=requesting||s.working||!live||!['ap','sta'].includes(s.transport)||!s.setupAuthorized||s.owner||!!s.rc?.claimed;
- for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed;
+ const safePpm=s.rcAccess?.pathVersion===1&&s.rc?.source==='PPM'&&s.rc.inputArmed!==true&&s.rc.throttle<=1050;
+ for(const id of ['fwWifiConnectAp','fwWifiConnectSta'])if($(id))$(id).disabled=requesting||s.working||s.owner||!!s.rc?.claimed&&!safePpm;
  set('fwWifiName',live?s.ssid||'Router not connected':'--');
  set('fwWifiApName',live?s.apSsid||'Not reported':'--');
  set('fwWifiState',live?s.staConnected?(s.apActive?'STA + AP':'STA CONNECTED'):s.apActive?'AP • STA OFF':'Router offline':'Kit offline');
@@ -188,7 +192,8 @@ async function sampleHealth(){
     root.ZebjusDevicesWorkspace?.active?.()!=='overview')return;
  try{
   const t=await kit().request('/api/telemetry');
-  if(t.kitId===s.kitId){telemetry=t;telemetryTime=Date.now();healthAt=telemetryTime}
+  const current=state();
+  if(current.connected&&root.ZebjusControlPaths?.sameBinding(s,current)&&t.kitId===current.kitId){telemetry=t;telemetryBinding={...current};telemetryTime=Date.now();healthAt=telemetryTime}
  }catch(e){line('Telemetry unavailable • '+e.message)}
 }
 function init(){

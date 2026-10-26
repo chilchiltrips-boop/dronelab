@@ -22,6 +22,9 @@ static bool zjApStarted=false,zjNetTesting=false,zjRcOwned=false,zjOtaAuthorized
 static uint32_t zjNetAttempt=0,zjOtaRebootAt=0,zjNetNextRetry=0,zjTestConnectedAt=0,zjTestAssociationEpoch=0,zjAssociationEpoch=0;
 static uint8_t zjStaDisconnectReason=0,zjLastStaFailureReason=0;
 static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
+// Radio safety is supplied by FlightCoreAccess in production; access-host.cpp
+// executes that real PPM/disarm policy. This fixture isolates radio behavior.
+static bool zjAccessCanSwitchRadio(){return !zjRcOwned;}
 #include "../FlightCore_Firmware/FlightCoreWifiPolicy.h"
 static void tick(uint32_t ms){clockMs+=ms;zjWifiPolicyLoop(clockMs);}
 int main(){

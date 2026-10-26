@@ -23,6 +23,8 @@
   $('wifiShowRouterPassword').setAttribute('aria-pressed',String(passwordShown));set('wifiShowRouterPassword',passwordShown?'Hide':'Show');
   const busy=!!(s.working||s.networkBusy||s.otaInProgress),owned=!!(s.owner||s.rc?.claimed);
   const allowed=connected&&direct&&!busy&&!owned&&(s.transport==='usb'||s.setupAuthorized===true);
+  const safePpm=s.rcAccess?.pathVersion===1&&s.rc?.source==='PPM'&&s.rc.inputArmed!==true&&s.rc.throttle<=1050;
+  const modeAllowed=connected&&direct&&!busy&&(!owned||safePpm)&&(s.transport==='usb'||s.setupAuthorized===true||s.controlAuthorized===true);
   $('kitWifiMode').value=selected;
   for(const button of document.querySelectorAll('[data-wifi-mode]')){
    button.setAttribute('aria-pressed',String(button.dataset.wifiMode===selected));button.disabled=!connected||!direct||busy;
@@ -31,7 +33,7 @@
   set('wifiActualMode',actual);set('wifiBrowserLink',connected?String(s.transport).toUpperCase():'Offline');
   const same=connected&&selected===s.mode,apply=$('kitModeApply');
   if(same)selectionDirty=false;
-  apply.disabled=!allowed||same;
+  apply.disabled=!modeAllowed||same;
   for(const id of ['kitWifiScan','kitWifiSave'])$(id).disabled=!allowed;
   for(const id of ['kitSavedUse','kitSavedForget'])$(id).disabled=!allowed||!$('kitSavedNetworks').value;
   for(const id of ['wifiManualSsid','kitRouterSsid','kitRouterPass','wifiShowRouterPassword'])$(id).disabled=!allowed;
@@ -39,8 +41,8 @@
   set('kitModeApply',same?(selected==='auto'?'Automatic selected':selected.toUpperCase()+' selected'):selected==='auto'?'Apply automatic mode':'Switch to '+selected.toUpperCase());
   $('wifiConnectKit').hidden=connected;
   const reason=!connected?'Connect and verify a Kit before changing its radio mode.':busy?'A Kit operation is in progress. Wait for its result.':
-   owned?'RC input is active. Disarm and pause/release RC before changing Wi-Fi.':!direct?'Use a direct USB/AP/STA connection for network settings.':
-   !allowed?'Read-only connection. Verify physical USB pairing to authorize settings.':
+   owned&&!safePpm?'RC input is active. Lower throttle and disarm PPM, or release the current controller.':!direct?'Use a direct USB/AP/STA connection for network settings.':
+   !modeAllowed?'Read-only connection. Verify physical USB pairing to authorize settings.':
    selected==='ap'?'AP keeps only the Kit hotspot active. Join its Wi-Fi on this computer after switching.':selected==='auto'?'Automatic startup uses a saved router, otherwise AP. The active radio is shown above.':
    'STA uses a saved router and turns the Kit hotspot off. AP returns if every saved router fails.';
   set('wifiModeHint',reason);

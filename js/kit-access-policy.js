@@ -10,7 +10,8 @@
    typeof m.active!=='boolean'||typeof m.owned!=='boolean'||
    !Number.isSafeInteger(m.leaseRemainingMs)||m.leaseRemainingMs<0||m.leaseRemainingMs>30000||
    m.active!==value.paused||m.owned&&(!m.active||m.leaseRemainingMs===0)||!m.active&&m.leaseRemainingMs!==0)return null;
-  return {version:1,selection:value.selection,paused:value.paused,stationary:value.stationary,
+  const pathVersion=value.pathVersion===1&&['AUTO','PPM','ANDROID_AP','ANDROID_WEBRTC','WEB_STA'].includes(value.controlPath)?1:0;
+  return {version:1,pathVersion,controlPath:pathVersion?value.controlPath:'AUTO',selection:value.selection,paused:value.paused,stationary:value.stationary,
    reason:String(value.reason||'').slice(0,80),hardwarePidSupported:false,imuCalibrationSupported:false,
    maintenance:{active:m.active,owned:m.owned,leaseRemainingMs:m.leaseRemainingMs}};
  }

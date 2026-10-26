@@ -60,5 +60,28 @@ int main(){
  zjAccessSerialCommand(wrong,true,false);assert(!zjMaintenanceActive);
  char begin[]="ZJACCESS,BEGIN,ZFC-A1-012345ABCDEF,test-4";
  zjAccessSerialCommand(begin,true,false);assert(zjMaintenanceActive&&zjRcPaused);
+ // Four control paths are target-specific and enforced below the UI.
+ assert(!zjAccessChange("RESUME","PPM","USB",false,true,"PPM","AP"));
+ frame(1000);frame(1000);frame(1000);
+ assert(zjRcOwned&&zjRcSource=="PPM"&&zjAccessCanSwitchRadio());
+ const auto ppmSeq=zjRcSeq;
+ assert(zjAccessCanSwitchRadio()&&zjRcSeq==ppmSeq&&zjRcOwned);
+ frame(2000);assert(!zjAccessCanSwitchRadio());frame(1000);
+ errorIs(zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","STA"),"control_path_requires_matching_wifi");
+ assert(zjRcSource=="PPM"&&zjRcControlPath=="PPM");
+ assert(!zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","AP"));
+ assert(!zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"STA"));
+ assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"AP"));zjRcRelease("TEST_STOP");
+ assert(!zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_WEBRTC","STA"));
+ assert(!zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"STA"));
+ assert(!zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"AP"));
+ assert(!zjRcClaim("WEB",zjKitCode,true,IPAddress(2),"STA"));
+ assert(!zjAccessChange("SELECT","WEB","USB",false,true,"WEB_STA","STA"));
+ assert(!zjRcClaim("WEB",zjKitCode,true,IPAddress(2),"AP"));
+ assert(zjRcClaim("WEB",zjKitCode,true,IPAddress(2),"STA"));zjRcRelease("TEST_STOP");
+ assert(!zjAccessChange("SELECT","PPM","USB",false,true,"PPM","STA"));
+ frame(1000);frame(1000);frame(1000);assert(zjRcOwned&&zjRcSource=="PPM");
+ waitMs(151);zjPpmLoop(clockMs);assert(!zjRcOwned&&!zjRcHasFrame);
+ assert(!zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"STA"));
  std::cout<<"PASS production RC access: safe handover, maintenance, authorization, lease expiry and explicit resume"<<std::endl;
 }

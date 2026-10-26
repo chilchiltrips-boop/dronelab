@@ -30,8 +30,11 @@ static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=
 // only accepted RC; a lost maintenance lease never resumes an input source.
 static bool zjRcPaused=false;
 static String zjRcSelection="AUTO";
+// The user-facing control path also identifies the target. WebRTC commands
+// belong to the virtual simulator and must never claim the physical Kit.
+static String zjRcControlPath="AUTO";
 static bool zjRcSourceAllowed(const String& source){
- return !zjRcPaused&&(zjRcSelection=="AUTO"||zjRcSelection==source);
+ return !zjRcPaused&&zjRcControlPath!="ANDROID_WEBRTC"&&(zjRcSelection=="AUTO"||zjRcSelection==source);
 }
 // UDP has independent 500 ms receive/apply deadlines; other transports use zjRcLoop.
 // ACK receipt is never used to refresh firmware input freshness.
@@ -113,6 +116,8 @@ static void zjRcRelease(const char* reason){
 }
 static bool zjRcClaim(const String& source,const String& code,bool network,const IPAddress& ip,const char* transport){
  if(code!=zjKitCode||(source!="WEB"&&source!="ANDROID")||!zjRcSourceAllowed(source)){++zjRcRejected;return false;}
+ if((zjRcControlPath=="ANDROID_AP"&&(!network||String(transport)!="AP"||source!="ANDROID"))||
+    (zjRcControlPath=="WEB_STA"&&(!network||String(transport)!="STA"||source!="WEB"))){++zjRcRejected;return false;}
  const uint32_t now=millis();
  if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");

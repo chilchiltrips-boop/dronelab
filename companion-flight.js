@@ -5,7 +5,9 @@ let peer=null,sender=null,raf=0,last=0,seq=0,directPreviewSeq=0,preset='Medium',
 let diagnosticThrottle=1000,kitArmPending=false,kitArmGeneration=0,kitModePending=false;
 let mirrorSeq=0,lastMirrorAt=-Infinity,modeUiSeq=0;
 const mirroring=()=>peer?.status()?.inputMirrorVersion===1;
-const directKit=()=>(!peer?.status()?.connected||mirroring())&&!!window.ZebjusNetwork?.isConnected?.();
+const selectedPath=()=>window.ZebjusNetwork?.getState?.()?.rcAccess?.controlPath||'AUTO';
+const inputLocked=()=>{const a=window.ZebjusNetwork?.getState?.()?.rcAccess;return !!a?.paused||a?.selection==='PPM'||a?.selection==='WEB'||['PPM','WEB_STA'].includes(selectedPath())};
+const directKit=()=>selectedPath()!=='ANDROID_WEBRTC'&&(!peer?.status()?.connected||mirroring())&&!!window.ZebjusNetwork?.isConnected?.();
 const kitArmed=()=>directKit()&&!!window.ZebjusNetwork?.inputArmed?.();
 const kitInputState=()=>{
  const f=window.ZebjusNetwork?.feedback?.();
@@ -37,7 +39,7 @@ const diagnosticInput=()=>{const m=current();return {throttle:diagnosticThrottle
 const settingsKey='zebjus.flight.preset.v1';
 try{const v=localStorage.getItem(settingsKey);if(F.PRESETS[v])preset=v}catch{}
 const current=()=>F.mapState({left:left||{x:0,y:0},right:right||{x:0,y:0},throttle,mode,armed,preset});
-function isOwned(){const s=peer?.status();return !mirroring()&&!!s?.connected&&!!s?.paired&&s.controller==='mobile'&&s.simulatorReady===true}
+function isOwned(){const s=peer?.status();return !inputLocked()&&!mirroring()&&!!s?.connected&&!!s?.paired&&s.controller==='mobile'&&s.simulatorReady===true}
 function clearTouches(){
  for(const side of ['left','right']){
   const pad=$(side==='left'?'flightLeftZone':'flightRightZone'),id=drag[side]?.id;drag[side]=null;
@@ -55,9 +57,9 @@ function stopLocally(message='STOP • DISARMED'){
 function renderControlTarget(){
  const label=$('flightTarget');if(!label)return;
  const web=peer?.status()?.connected===true&&!mirroring();
- const kit=!web&&window.ZebjusNetwork?.isConnected?.()===true;
+ const kit=directKit();
  label.dataset.target=web?'simulator':kit?'kit':'preview';
- label.textContent=mirroring()?(kit?'TARGET • KIT + READ-ONLY SIM MIRROR':'READ-ONLY SIM INPUT • RUN ON WEB'):web?'TARGET • SIMULATOR / WEBRTC':kit?
+ label.textContent=selectedPath()==='ANDROID_WEBRTC'?'TARGET • SIMULATOR / WEBRTC':mirroring()?(kit?'TARGET • KIT + READ-ONLY SIM MIRROR':'READ-ONLY SIM INPUT • RUN ON WEB'):web?'TARGET • SIMULATOR / WEBRTC':kit?
   'TARGET • KIT / '+String(window.ZebjusNetwork.selectedTransport?.()||'Wi-Fi').toUpperCase():
   'TARGET • PREVIEW ONLY';
  label.title=web?'Virtual simulator controlled only after WebRTC authorization':
@@ -106,7 +108,7 @@ function render(){
    (kitModePending?'SAVING KIT • ':window.ZebjusNetwork?.savedFlightMode?.()?'KIT SAVED • ':'KIT MODE UNAVAILABLE • ')+mode.toUpperCase():
    (a?'APPLIED • ':armed?'REQUESTED • ':'PREVIEW • ')+((a?.mode||mode)==='acro'?'ACRO / RATE':'ANGLE');
  $('flightArm').textContent=kitArmPending?'ARMING…':armed||kitArmed()?'DISARM':'ARM';
- $('flightArm').disabled=kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
+ $('flightArm').disabled=inputLocked()||kitArmPending||(directKit()?(!kitArmed()&&!window.ZebjusNetwork?.canArm?.()):!isOwned()||(!armed&&(!ready||throttle>1050)));
  $('flightArm').setAttribute('aria-pressed',String(armed||kitArmed()));
  $('flightStop').disabled=false;$('flightPreset').value=preset;
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
@@ -139,6 +141,11 @@ function render(){
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
  for(const side of ['left','right'])stickRender(side,drag[side]);
+ for(const side of ['flightLeftZone','flightRightZone'])$(side).setAttribute('aria-disabled',String(inputLocked()));
+ if(inputLocked()){
+  $('flightOwner').textContent=selectedPath()==='PPM'?'PPM CONTROLS RC':'JOYSTICK LOCKED';
+  $('flightWarning').textContent='Selected input owns RC • telemetry monitoring available';
+ }
 }
 function setupStick(side){
  const pad=$(side==='left'?'flightLeftZone':'flightRightZone');
@@ -149,6 +156,7 @@ function setupStick(side){
   if(!armed&&!kitArmed())updateStatus(directKit()?'KIT CONNECTED • PRESS ARM':'INPUT PREVIEW • NO FLIGHT COMMAND');render();
  };
  pad.addEventListener('pointerdown',e=>{
+  if(inputLocked()){updateStatus('JOYSTICK LOCKED • use the selected input; telemetry available');return;}
   if(drag[side]||e.pointerType==='mouse'&&e.button!==0)return;
   e.preventDefault();skipIntro();const zone=pad.getBoundingClientRect();
   drag[side]={id:e.pointerId,cx:e.clientX,cy:e.clientY,radius:Math.max(22,Math.min($(side==='left'?'flightLeftRing':'flightRightRing').getBoundingClientRect().width*.32,Math.min(zone.width,zone.height)*.28)),data:{x:0,y:0}};
@@ -197,7 +205,7 @@ function send(critical=false){
 }
 function sendMirror(){
  const status=peer?.status(),now=performance.now();
- if(!mirroring()||!status?.paired||!status?.connected||document.hidden||now-lastMirrorAt<50)return;
+ if(inputLocked()||!mirroring()||!status?.paired||!status?.connected||document.hidden||now-lastMirrorAt<50)return;
  lastMirrorAt=Number.isFinite(lastMirrorAt)?now-(now-lastMirrorAt)%50:now;
  const physical=window.ZebjusNetwork?.hasControl?.()===true,m=current();
  const input=physical?diagnosticInput():{throttle:m.throttle,axes:{roll:m.roll,pitch:m.pitch,yaw:m.yaw}};
@@ -279,6 +287,7 @@ function closeConnection(){
 function bind(){
  setupStick('left');setupStick('right');
  $('flightArm').onclick=async()=>{
+  if(inputLocked()){updateStatus('Joystick locked by the selected input');return;}
   if(directKit()){
    if(kitArmed()){await doStop();updateStatus('KIT DISARMED • MOTORS OFF');return}
    if(kitArmPending)return;
@@ -351,6 +360,9 @@ function intro(){
  splash.hidden=false;splashTimer=setTimeout(()=>{splash.classList.add('closing');splashTimer=setTimeout(()=>splash.hidden=true,350)},4650);
 }
 function init(){bind();intro();render()}
-window.ZebjusFlightApp={connect,onStatus,onAck,onTelemetry,remoteStop,doStop,show,controlLinkDiagnostic};
+window.addEventListener('dronelab:control-path',()=>{diagnosticThrottle=1000;clearTouches();stopLocally('Input source changed • disarmed');if(window.ZebjusNetwork?.hasControl?.())void window.ZebjusNetwork.releaseRc('SOURCE_CHANGED');render()});
+window.ZebjusFlightApp={connect,onStatus,onAck,onTelemetry,remoteStop,doStop,show,controlLinkDiagnostic,
+ peerState:()=>peer?.status()||{},
+ virtualState:()=>({running:armed&&isOwned(),origin:'webrtc',fresh:!!lastAckAt&&performance.now()-lastAckAt<=650})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();

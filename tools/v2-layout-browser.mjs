@@ -8,7 +8,7 @@ try{
  for(const width of [320,360,390,768,1024,1366,1920]){
   const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});await configureContext(context);
   const page=await context.newPage();await page.goto('http://127.0.0.1:8765/#settings');
-  await page.waitForFunction(()=>window.ZebjusKits);
+  await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusControlUI?.snapshot());
   const metrics=await page.evaluate(()=>{
    const header=document.querySelector('.topbar'),nav=header.querySelector('.tabs');
    const boxes=[...nav.children].map(e=>e.getBoundingClientRect());
@@ -16,6 +16,13 @@ try{
   });results.push(metrics);
   await page.screenshot({path:`test-output/v2/header-${width}.png`});
   assert.ok(metrics.height<=(width<=600?205:width<=950?170:140),JSON.stringify(metrics));assert.ok(metrics.scroll<=width,JSON.stringify(metrics));assert.equal(metrics.navOverflow,false,JSON.stringify(metrics));assert.equal(metrics.overlap,false);
+  const input=await page.locator('[data-control-selector]>summary').boundingBox();
+  assert.ok(input&&input.x>=0&&input.x+input.width<=width&&input.height>=36,JSON.stringify({width,input}));
+  if(width<=950){
+   const brand=await page.locator('.topbar-main>.brand .brand-copy').boundingBox();
+   assert.ok(brand.x+brand.width<=input.x,JSON.stringify({width,brand,input}));
+   assert.ok(input.height>=44,'Compact header retains a 44px input touch target');
+  }
   const headerState=await page.evaluate(()=>{
    const name=document.getElementById('kitGlobalName'),badge=document.getElementById('kitGlobalState');
    const kitRect=name.getBoundingClientRect(),badgeRect=badge.getBoundingClientRect();

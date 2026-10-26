@@ -53,7 +53,7 @@ final class FlightCoreNativeBridge {
     private static boolean allowed(String method,String route) {
         if(method.equals("GET"))return route.equals("/api/health")||route.equals("/api/identify")||route.equals("/api/status")||route.equals("/api/wifi/scan")||route.equals("/api/wifi/saved")||route.equals("/api/telemetry")||route.equals("/api/rc/snapshot");
         if(!method.equals("POST"))return false;
-        return route.equals("/api/flight/mode")||route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local")||route.equals("/api/auth/close")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
+        return route.equals("/api/flight/mode")||route.equals("/api/firmware/begin")||route.equals("/api/firmware/chunk")||route.equals("/api/firmware/end")||route.equals("/api/firmware/abort")||route.equals("/api/auth/challenge")||route.equals("/api/auth/enroll")||route.equals("/api/auth/local")||route.equals("/api/auth/close")||route.equals("/api/rc/access")||route.equals("/api/rc/stop")||route.equals("/api/wifi/test")||route.equals("/api/wifi/mode")||route.equals("/api/command")||route.equals("/api/rc/claim")||route.equals("/api/rc/release")||route.equals("/api/rc/preview");
     }
     private void reply(String id,boolean ok,int status,String body,String error,String proof) {
         reply(id,ok,status,body,error,proof,null);

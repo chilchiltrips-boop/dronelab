@@ -130,8 +130,11 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
  };
  const usbFrame=v=>v.kit?.fresh&&v.kit.sample?.transport==='usb'?{...v.kit.sample,origin:'kit',ageMs:v.kit.ageMs,rateHz:v.kit.rateHz}:null;
  const ppmFrame=v=>v.kit?.fresh&&v.kit.sample?.source==='PPM'?{...v.kit.sample,origin:'kit',ageMs:v.kit.ageMs,rateHz:v.kit.rateHz}:null;
- const frameFor=(v,source,origin='auto')=>source==='ppm'?ppmFrame(v):source==='usb'?usbFrame(v):source==='android'?androidFrame(v,origin):null;
- const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(ppmFrame(v)?'ppm':usbFrame(v)?'usb':androidFrame(v)?'android':'web'):choice)};
+ const frameFor=(v,source,origin='auto')=>{
+  const frame=source==='ppm'?ppmFrame(v):source==='usb'?usbFrame(v):source==='android'?androidFrame(v,origin==='auto'?(choice==='android-ap'?'kit':choice==='android-webrtc'?'webrtc':'auto'):origin):null;
+  return choice==='android-ap'&&frame?.transport!=='ap'?null:frame;
+ };
+ const effective=()=>{const v=store.snapshot();return locked||(choice==='auto'?(ppmFrame(v)?'ppm':usbFrame(v)?'usb':androidFrame(v)?'android':'web'):['android-ap','android-webrtc'].includes(choice)?'android':choice)};
  const key=m=>[m?.origin,m?.sessionId,m?.kitId,m?.transport,m?.kind].join('|');
  function followRemoteMode(v,frame=null){
   const source=effective();
@@ -147,7 +150,7 @@ export function createSimulatorInput(s,store,{onChange=()=>{},onTimeout=()=>{}}=
   lastModeKey=modeKey;setFlightMode(s,mode);followedMode={mode,source:meta?'Kit saved mode':'Android mode',kitId:meta?.kitId||candidate?.kitId||''};
  }
  function stop(why='Web STOP'){resetSimulator(s);locked=null;lockedOrigin='';identity='';lockedKitIdentity='';heldFrame=null;reason=lastStopReason=why;webSticks={left:{x:0,y:0},right:{x:0,y:0}};onChange();}
- function setChoice(value){if(s.running||!['auto','web','android','usb','ppm'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
+ function setChoice(value){if(s.running||!['auto','web','android','android-ap','android-webrtc','usb','ppm'].includes(value))return false;stop('Input source selected');choice=value;onChange();return true;}
  function applyLatest(){
   const v=store.snapshot();
   if(!s.running||!['android','usb','ppm'].includes(locked)){followRemoteMode(v);return;}
