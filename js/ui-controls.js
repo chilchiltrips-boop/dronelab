@@ -55,9 +55,9 @@ export function initControls(ctx){
     // native click has already been admitted, so close even after that update.
     fileMenu.addEventListener('click',e=>{if(e.target.closest('button'))close()});
     fileMenu.addEventListener('keydown',e=>{
-      if(e.key==='Escape'){e.preventDefault();close();return;}
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();return;}
       if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;
-      e.preventDefault();fileMenu.open=true;
+      e.preventDefault();e.stopPropagation();fileMenu.open=true;
       const buttons=[...fileMenu.querySelectorAll('button:not(:disabled)')];
       const index=buttons.indexOf(document.activeElement);
       const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:e.key==='ArrowUp'?(index<=0?buttons.length-1:index-1):(index+1)%buttons.length;

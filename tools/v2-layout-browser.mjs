@@ -3,7 +3,8 @@
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import assert from 'node:assert/strict';
-import {mkdirSync,writeFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+const expectedVersion='v'+JSON.parse(readFileSync(new URL('../app-version.json',import.meta.url),'utf8')).version;
 mkdirSync('test-output/v2',{recursive:true});
 const browser=await chromium.launch(browserOptions),results=[];
 try{
@@ -63,10 +64,12 @@ try{
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'Offline transport selection cannot enable OTA');
   if(width===1366){
    assert.equal(await page.locator('[data-brand-name]').textContent(),'ZEBJUS Aerion');
-   assert.equal(await page.locator('#webappVersion').textContent(),'v1.9');
+   await page.waitForFunction(version=>document.getElementById('webappVersion').textContent===version,expectedVersion);
    const menu=page.locator('#workspaceFileMenu'),summary=menu.locator('summary');
+   await page.evaluate(()=>{window.__fileEscapeBubbled=0;window.addEventListener('keydown',e=>{if(e.key==='Escape')window.__fileEscapeBubbled++})});
    await summary.press('ArrowDown');assert.equal(await page.evaluate(()=>document.activeElement.id),'saveBtn');
    await page.keyboard.press('Escape');assert.equal(await menu.evaluate(e=>e.open),false);
+   assert.equal(await page.evaluate(()=>window.__fileEscapeBubbled),0,'File Escape must not trigger underlying project shortcuts');
    await summary.click();
    const popup=await page.locator('.workspace-file-actions').boundingBox();assert.ok(popup.x>=0&&popup.x+popup.width<=width);
    assert.equal((await page.locator('.topbar').boundingBox()).height,64,'File menu overlays without growing header');
