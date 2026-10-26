@@ -94,6 +94,6 @@ test('header names and verified connection status remain readable at every break
  assert.ok(kit.includes("$('kitGlobalName').title=label"),'Full Kit name remains available when truncated');
  assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="true"\]\{background:#167a4a!important/);
  assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="false"\]\{background:#b32636!important/);
- assert.match(css,/@media\(max-width:660px\)/);
+ assert.match(css,/@media\(max-width:735px\)/);
  assert.ok(kit.includes('pill.dataset.connected=String(ready)'), 'Status reflects verified live Kit, not chosen AP/STA');
 });

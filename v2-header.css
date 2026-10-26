@@ -1,91 +1,90 @@
-/* Shared desktop WebApp shell. One owner for navigation and global controls.
-   The native Android cockpit has its own stylesheet and geometry. */
-#app{display:grid;grid-template-columns:96px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);align-items:start;min-width:0}
-#app>.app-navigation{grid-column:1;grid-row:1/3;position:sticky;top:0;min-width:0;height:100dvh;display:flex;flex-direction:column;background:#0b1521;border-right:1px solid #263a4a;z-index:60}
-#app>.app-navigation .brand{height:auto;min-height:74px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:6px 4px;min-width:0}
-#app>.app-navigation .logo{height:24px;width:24px;flex:0 0 24px;font-size:16px;border-radius:6px}
-#app>.app-navigation .brand-copy{min-width:0;max-width:100%;text-align:center}
-#app>.app-navigation .brand-copy b{display:block;white-space:normal;font-size:11px!important;line-height:1.2}
-#app>.app-navigation #webappVersion{display:block;max-width:88px;margin-top:4px;padding:0;border:0;background:none;white-space:normal;overflow-wrap:anywhere;font-size:11px;line-height:1.2;color:#a3b9ca}
-#app>.app-navigation .tabs{display:flex;flex-direction:column;position:static;top:auto!important;flex:none;gap:3px;height:auto!important;min-height:0;margin:0;padding:6px;border:0;background:transparent;overflow:visible}
-#app>.app-navigation .tab{display:flex;flex-direction:column;justify-content:center;align-items:center;flex:none;gap:4px;width:100%;min-width:0;min-height:49px;padding:5px 2px;font-size:11px;line-height:1.25;letter-spacing:0;white-space:normal;border-radius:6px}
-#app>.app-navigation .tab.active{color:#8de7dc;background:#153438;border-color:#285754}
-#app .app-nav-icon{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
-#app>.app-navigation .compact-tab-label{display:none}
-#app>.app-navigation .wide-tab-label{display:inline}
-#app .app-navigation-foot{margin-top:auto;padding:8px 4px}
-#app .app-navigation-foot .zebjus-top-shop{display:flex!important;justify-content:center;min-width:0;min-height:30px;margin:0;padding:6px 2px;font-size:11px;letter-spacing:0;border:0;background:none}
-#app .app-navigation-foot .zebjus-top-shop span{font-size:11px;letter-spacing:0}
-#app>main{grid-column:2;grid-row:2;min-width:0;width:100%}
-#app .topbar{position:relative!important;top:auto!important;inset-block-start:auto!important;grid-column:2;grid-row:1;display:block!important;height:auto!important;min-height:44px!important;max-height:none!important;margin:0;padding:1px 8px!important;background:#0b1521!important;border-bottom:1px solid #263a4a;overflow:visible!important;z-index:80}
-#app .topbar-main{display:flex!important;flex-wrap:nowrap!important;grid-template-areas:none!important;gap:7px!important;align-items:center!important;width:100%;height:41px;min-height:0!important;min-width:0;overflow:visible!important;padding:0!important;white-space:normal}
+/* ZEBJUS Aerion: two horizontal rows, with workspace actions in File.
+   Native Android flight controls have their own shell and stylesheet. */
+#app{display:block!important;min-width:0}
+#app>main{min-width:0;width:100%}
+#app .topbar{position:relative!important;top:auto!important;inset-block-start:auto!important;display:block!important;height:auto!important;min-height:64px!important;max-height:none!important;margin:0;padding:0!important;background:#0b1521!important;border:0;overflow:visible!important;z-index:80}
+#app .topbar-primary,#app .topbar-main{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;grid-template-areas:none!important;gap:6px!important;width:100%;height:32px;min-height:0!important;min-width:0;margin:0;padding:0 8px!important;border-bottom:1px solid #263a4a;overflow:visible!important;box-sizing:border-box}
 #app .topbar .topbar-status{display:none!important}
-#app .topbar-main>.kit-top-status{grid-area:auto!important;display:flex!important;flex-wrap:nowrap;align-items:center;flex:1 1 auto!important;min-width:0!important;min-height:0!important;height:auto!important;width:auto!important;max-width:none!important;gap:5px!important;margin:0;padding:0!important;border:0;background:none;overflow:visible}
-#app .topbar .kit-top-detail{display:block!important;flex:1 1 110px!important;min-width:68px!important;max-width:200px!important;width:auto!important;overflow:hidden}
-#app .topbar .kit-top-detail b{display:block!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px!important;line-height:14px;color:#f5fcff}
-#app .topbar #kitGlobalState{display:block!important;width:max-content;max-width:100%;min-width:0;min-height:0;padding:1px 4px;border:1px solid transparent;border-radius:3px;color:#fff;font-size:11px;line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#app .topbar-primary>.brand{grid-area:auto;display:flex;align-items:center;flex:none;min-width:0!important;width:auto;gap:6px!important;margin:0!important;padding:0}
+#app .topbar-primary>.brand .logo{width:24px!important;height:24px!important;flex:0 0 24px!important;font-size:16px!important;border-radius:6px}
+#app .topbar-primary>.brand .brand-copy{display:flex;flex-direction:row;align-items:center;gap:6px;min-width:0;line-height:1.2}
+#app .topbar-primary>.brand .brand-copy b{display:block;max-width:none!important;white-space:nowrap;font-size:12px!important;font-weight:600}
+#app .topbar-primary #webappVersion{display:block!important;max-width:none;margin:0;padding:0!important;border:0!important;background:none!important;font-size:11px!important;font-weight:500;line-height:14px!important;color:#a3b9ca;white-space:nowrap}
+#app .topbar-primary>.tabs{grid-area:auto;display:flex!important;flex:1 1 auto;align-items:center;justify-content:center;position:static!important;top:auto!important;gap:2px;margin:0!important;padding:0!important;width:auto;min-width:0;min-height:0;height:auto!important;border:0;background:none;overflow:visible}
+#app .topbar-primary .tabs .tab{display:flex;align-items:center;justify-content:center;flex:none;min-width:0;min-height:28px!important;height:28px!important;padding:3px 7px!important;border-radius:5px;font-size:12px!important;font-weight:500;line-height:18px;letter-spacing:0;white-space:nowrap}
+#app .topbar-primary .tabs .tab.active{color:#8de7dc;background:#153438;border-color:#285754}
+#app .topbar-primary .compact-tab-label{display:none}
+#app .topbar-primary .wide-tab-label{display:inline}
+#app .header-health{display:flex;align-items:center;gap:5px;flex:none;min-width:0}
+#app .topbar .kit-access-badges{display:grid;align-content:center;flex:none;width:108px;min-width:108px;gap:0}
+#app .topbar .kit-access-badges b{display:block;margin:0;padding:0;border:0;background:none;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#bcecdc;font-size:11px;line-height:12px;font-weight:500}
+#app .topbar #kitInternetStatus{display:block;width:61px;max-width:61px;margin:0;padding:0;color:#a7bacb;white-space:nowrap;font-size:11px;line-height:13px}
+#app .topbar .zebjus-top-shop{display:flex!important;grid-area:auto;flex:none;align-items:center;justify-content:center;min-width:0;min-height:28px;height:28px;margin:0;padding:3px 4px;border:0;background:none;font-size:11px;letter-spacing:0}
+#app .topbar .zebjus-top-shop span{font-size:11px;letter-spacing:0;white-space:nowrap}
+#app .workspace-file-menu{position:relative;flex:none}
+#app .workspace-file-menu>summary{display:flex;align-items:center;justify-content:center;gap:4px;height:28px;padding:3px 7px;list-style:none;border:1px solid #365364;border-radius:5px;background:#102330;color:#d3e5ee;font-size:12px;line-height:20px;white-space:nowrap;cursor:pointer}
+#app .workspace-file-menu>summary::-webkit-details-marker{display:none}
+#app .workspace-file-menu[open]>summary{background:#153438;border-color:#65bfb5;color:#8de7dc}
+#app .workspace-file-actions{position:absolute;right:0;top:calc(100% + 4px);z-index:1000;width:182px;padding:5px;border:1px solid #365364;border-radius:7px;background:#102330;box-shadow:0 10px 30px #0008}
+#app .workspace-file-menu:not([open])>.workspace-file-actions{display:none}
+#app .workspace-file-menu .topbar-edit{display:grid!important;grid-template-columns:minmax(0,1fr);gap:2px;width:100%;margin:0;padding:0;border:0}
+#app .workspace-file-menu .topbar-edit .btn{display:block;width:100%;min-height:32px;height:32px;padding:5px 9px!important;border-color:transparent;border-radius:4px;background:none;font-size:12px!important;text-align:left}
+#app .workspace-file-menu .topbar-edit .btn:not(:disabled):hover{background:#173b3c}
+#app .workspace-file-menu #resetBtn{margin-top:4px;border-top:1px solid #365364;border-radius:0;color:#f2a8b3}
+#app .topbar-main>.kit-top-status{grid-area:auto!important;display:flex!important;flex-wrap:nowrap!important;align-items:center;flex:1 1 auto!important;min-width:0!important;min-height:0!important;height:auto!important;width:auto!important;max-width:none!important;gap:4px!important;margin:0;padding:0!important;border:0;background:none;overflow:visible}
+#app .topbar .kit-top-detail{display:block!important;flex:1 1 140px!important;min-width:60px!important;max-width:none!important;width:auto!important;overflow:hidden}
+#app .topbar .kit-top-detail b{display:block!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px!important;line-height:13px;color:#f5fcff}
+#app .topbar #kitGlobalState{display:block!important;width:max-content;max-width:100%;min-width:0;min-height:0;padding:0 3px;border:1px solid transparent;border-radius:3px;color:#fff;font-size:11px;line-height:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #app .topbar #kitGlobalState[data-connected="true"]{background:#167a4a!important;border-color:#38ad79;color:#fff}
 #app .topbar #kitGlobalState[data-connected="false"]{background:#b32636!important;border-color:#e25867;color:#fff}
 #app .topbar .kit-top-network{display:inline-flex;align-items:center;gap:3px;flex:none;white-space:nowrap;font-size:11px}
 #app .topbar .kit-top-switch{position:relative;width:30px;min-width:30px;height:18px;min-height:18px;flex:none;padding:0;border:1px solid #73badd;border-radius:12px;background:#264657}
 #app .topbar .kit-top-switch i{display:block;width:12px;height:12px;border-radius:50%;background:#d6f0ff;position:absolute;left:2px;top:2px;transition:transform .15s}
 #app .topbar .kit-top-switch[aria-checked="true"] i{transform:translateX(12px)}
-#app .topbar .kit-access-badges{display:grid;flex:none;gap:0;min-width:120px;width:120px;align-content:center}
-#app .topbar .kit-access-badges b,#app .topbar #kitInternetStatus{display:block;margin:0;padding:0;border:0;background:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:12px;color:#bcecdc}
-#app .topbar #kitInternetStatus{color:#a7bacb}
-#app .topbar button.btn,#app .topbar .v2-connection-details>summary{min-width:26px;min-height:30px;height:30px;padding:4px 6px!important;font-size:11px!important;line-height:20px;border-radius:5px;white-space:nowrap}
+#app .topbar-main button.btn,#app .topbar .v2-connection-details>summary{min-width:26px;min-height:28px!important;height:28px;padding:3px 5px!important;font-size:11px!important;line-height:20px;border-radius:5px;white-space:nowrap}
 #app .topbar #kitTopRefresh{display:inline-flex;flex:none;align-items:center;justify-content:center;width:26px;padding:2px!important;font-size:16px!important}
 #app .topbar .v2-connection-details{position:relative;flex:none}
-#app .topbar .v2-connection-details>summary{display:flex;align-items:center;justify-content:center;width:28px;list-style:none;border:1px solid #365364;color:#d3e5ee;font-size:16px!important;cursor:pointer}
+#app .topbar .v2-connection-details>summary{display:flex;align-items:center;justify-content:center;width:26px;list-style:none;border:1px solid #365364;color:#d3e5ee;font-size:16px!important;cursor:pointer}
 #app .topbar .v2-connection-details>summary::-webkit-details-marker{display:none}
-.v2-connection-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #3a596a;border-radius:10px;background:#102230;box-shadow:0 16px 50px #0009}
+.v2-connection-popover{position:absolute;left:0;top:calc(100% + 8px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #3a596a;border-radius:10px;background:#102230;box-shadow:0 16px 50px #0009}
 .v2-connection-details:not([open])>.v2-connection-popover{display:none}
 .v2-diagnostic{display:grid;grid-template-columns:120px minmax(0,1fr);width:100%;gap:9px;font-size:11px;line-height:1.4;color:#9fb5c8}
 .v2-diagnostic b,.v2-diagnostic small{color:#e2eff6;overflow-wrap:anywhere}
 #app #headerInputSlot{flex:none;min-width:0}
+#app #headerInputSlot .control-path-inline>select,#app #headerInputSlot .control-path-inline>button,#app #headerInputSlot .control-path-info>summary{height:28px;min-height:28px}
+#app #headerInputSlot .control-path-info>.control-path-popover{right:0;left:auto}
 #app .v2-workspace-tools{flex:none;min-width:0;margin:0;padding:0;border:0;font-size:11px;color:#a3b9ca}
-#app .v2-tools-content{display:flex;align-items:center;flex-wrap:nowrap;gap:7px;margin:0;padding:0}
+#app .v2-tools-content{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;margin:0;padding:0}
 #app .v2-tools-content .qr-header-controls{display:flex!important;align-items:center;flex-wrap:nowrap!important;gap:6px!important;min-width:0;margin:0}
-#app .topbar #topPairMobileBtn{display:inline-flex;align-items:center;gap:4px;max-width:none;padding:3px 5px!important}
-#app .topbar #mobileHeaderStatus{display:block!important;width:142px;max-width:142px!important;margin:0;padding:0;border:0;background:none;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:14px;white-space:nowrap;font-weight:500}
+#app .topbar #topPairMobileBtn{display:inline-flex;align-items:center;gap:3px;width:105px;min-width:105px;max-width:105px;padding:3px 4px!important}
+#app .topbar #mobileHeaderStatus{display:block!important;flex:1;min-width:0;max-width:none!important;margin:0;padding:0!important;border:0!important;background:none!important;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:14px;white-space:nowrap;font-weight:500!important}
 #app .pair-mobile-label{border-left:1px solid #365364;padding-left:4px;color:#d3e5ee}
-#app .topbar-main .qr-header-controls .top-grant-control{position:relative;display:inline-grid!important;grid-template-columns:minmax(0,1fr) 40px;align-items:center;column-gap:9px!important;width:136px!important;min-width:136px!important;max-width:136px!important;min-height:30px;padding:3px 5px!important;flex:none;margin:0;border-radius:5px;white-space:nowrap;font-size:11px;line-height:1.25}
+#app #topPairMobileBtn:has(.good) .pair-mobile-label,#app #topPairMobileBtn:has(.warn) .pair-mobile-label{display:none}
+#app .topbar-main .qr-header-controls .top-grant-control{position:relative;display:inline-grid!important;grid-template-columns:minmax(0,1fr) 40px;align-items:center;column-gap:9px!important;width:136px!important;min-width:136px!important;max-width:136px!important;min-height:28px;height:28px;padding:2px 5px!important;flex:none;margin:0;border-radius:5px;white-space:nowrap;font-size:11px;line-height:1.25}
 #app .topbar-main .qr-header-controls .top-grant-control>.grant-control-text{display:block;grid-column:1;grid-row:1;width:100%;max-width:none!important;min-width:0;white-space:nowrap;overflow:visible;line-height:1.25}
 #app .topbar-main .qr-header-controls .top-grant-control>.qr-switch-track{display:block;grid-column:2;grid-row:1;width:40px;min-width:40px;max-width:40px;height:22px;margin:0;align-self:center;justify-self:end;box-sizing:border-box}
 #app .topbar-main .qr-header-controls .top-grant-control>input[type="checkbox"]{position:absolute;width:100%;height:100%;inset:0;margin:0;opacity:0;cursor:pointer}
 #app .topbar-main .top-grant-control:focus-within{outline:2px solid #6ce8d0;outline-offset:2px}
-#app .topbar .topbar-edit{display:flex;align-items:center;flex-wrap:nowrap!important;gap:3px!important;width:auto;grid-area:auto;min-width:0;margin:0;padding-left:6px;border-left:1px solid #263a4a}
-#app .topbar #undoBtn,#app .topbar #redoBtn{width:26px;font-size:16px!important;padding:2px!important}
-/* A desktop toolbar stays 44px at laptop widths. At zoomed/narrow widths it
-   naturally wraps instead of hiding controls or imposing a phone workspace. */
-@media(min-width:1280px){#app .topbar{height:44px!important;min-height:44px!important;max-height:44px!important}}
-@media(max-width:1279px){
- #app .topbar-main{height:auto;min-height:41px!important;flex-wrap:wrap!important;gap:7px!important}
- #app .topbar-main>.kit-top-status{flex:1 1 100%!important}
- #app .topbar{padding:5px 8px!important}
- #app .v2-tools-content{flex-wrap:wrap}
+@media(min-width:736px){#app .topbar{height:64px!important;min-height:64px!important;max-height:64px!important}}
+@media(min-width:736px) and (max-width:1100px){
+ #app .topbar-primary,#app .topbar-main{gap:4px!important;padding-inline:6px!important}
+ #app .topbar-primary .tabs .tab{padding-inline:2px!important;font-size:11px!important}
+ #app .topbar-primary .wide-tab-label{display:none}
+ #app .topbar-primary .compact-tab-label{display:inline}
+ #app .topbar-primary>.brand .brand-copy{gap:4px}
+ #app .topbar-primary>.brand{gap:4px!important}
+ #app .topbar-primary .workspace-file-menu>summary{padding-inline:5px;font-size:11px}
+ #app #headerInputSlot .control-path-inline>select{width:110px}
+ #app #headerInputSlot .control-path-inline>[data-control-active]{width:50px;min-width:50px;max-width:50px}
 }
-@media(max-width:1100px){
- #app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr)}
- #app>.app-navigation{position:relative;top:auto;grid-column:1;grid-row:1;height:auto;flex-direction:row;align-items:center;flex-wrap:wrap;border-right:0;border-bottom:1px solid #263a4a}
- #app>.app-navigation .brand{height:auto;min-height:44px;flex:0 1 160px;flex-direction:row;padding:5px;gap:7px}
- #app>.app-navigation .brand-copy{text-align:left}
- #app>.app-navigation #webappVersion{max-width:none;font-size:11px}
- #app>.app-navigation .tabs{flex:1 1 420px;flex-direction:row;justify-content:space-between;gap:2px;padding:4px}
- #app>.app-navigation .tab{flex:1 1 0;width:auto;min-height:44px;padding:4px 2px}
- #app .app-navigation-foot{margin:0;padding:4px}
- #app .topbar{grid-column:1;grid-row:2}
- #app>main{grid-column:1;grid-row:3}
+@media(max-width:735px){
+ #app .topbar-primary,#app .topbar-main{height:auto;min-height:32px!important;flex-wrap:wrap!important;gap:6px!important;padding:4px 8px!important}
+ #app .topbar-primary>.tabs{flex:1 1 100%;order:10;flex-wrap:wrap!important;justify-content:space-between}
+ #app .topbar-primary .tabs .tab{padding-inline:3px!important;font-size:11px!important}
+ #app .topbar-main>.kit-top-status{flex:1 1 100%!important;flex-wrap:wrap!important}
+ #app .topbar .kit-top-detail{min-width:100px!important}
+ #app .topbar .v2-connection-popover,#app #headerInputSlot .control-path-info>.control-path-popover{position:fixed;left:12px;right:12px;top:12px;max-height:calc(100dvh - 24px);overflow:auto;width:auto}
+ #app .workspace-file-menu{position:static}
+ #app .workspace-file-actions{right:8px;top:32px}
 }
-@media(max-width:660px){
- #app .topbar-main>.kit-top-status{flex-wrap:wrap!important;gap:6px!important}
- #app .topbar .kit-top-detail{min-width:100px!important;max-width:none!important}
- #app>.app-navigation .tabs{flex-basis:100%;order:3}
- #app .app-navigation-foot{margin-left:auto}
- #app .v2-workspace-tools{flex:1 1 100%}
- #app .v2-tools-content{gap:7px;flex-wrap:wrap}
- #app .v2-tools-content .qr-header-controls{flex-wrap:wrap!important}
- #app .topbar .v2-connection-popover{position:fixed;left:12px;right:12px;top:12px;max-height:calc(100dvh - 24px);overflow:auto;width:auto}
-}
-@media(pointer:coarse){#app .topbar-main button.btn,#app .topbar .v2-connection-details>summary{min-height:44px;height:44px}#app .topbar-main .top-grant-control{min-height:44px}}
-@media print{#app>.app-navigation{display:none}#app{display:block}}
+@media(pointer:coarse){#app .topbar{height:auto!important;max-height:none!important}#app .topbar-primary,#app .topbar-main{height:auto;min-height:44px!important}#app .topbar-main button.btn,#app .topbar .v2-connection-details>summary,#app .workspace-file-menu>summary{min-height:44px!important;height:44px}#app .topbar-main .top-grant-control{min-height:44px;height:44px}}

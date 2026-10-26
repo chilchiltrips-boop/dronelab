@@ -1,5 +1,5 @@
 const el=document.getElementById('webappVersion');
-if(el)fetch('./app-version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{if(v)el.textContent='v'+v.version+' • '+v.channel.toUpperCase()}).catch(()=>{});
+if(el)fetch('./app-version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(v=>{if(v){el.textContent='v'+v.version;el.title='WebApp v'+v.version+' · '+(v.buildCommit||'source unavailable')}}).catch(()=>{});
 
 /* Old Wix iframes may receive a stale HTML snapshot while this unversioned
  * metadata helper has updated. Repair only the retired embed warning UI;

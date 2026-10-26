@@ -150,7 +150,8 @@ function render(){
  byId('kitDiagnosticMode',(state.mode||'—')+' / '+(ready?state.transport:'offline'));
  byId('kitDiagnosticInterfaces','AP '+(state.apActive?state.apIp||'active':'offline')+' / STA '+(state.staConnected?state.staIp||'active':'offline'));
  byId('kitDiagnosticOwner',!ready?'Unverified':state.owner?'This browser':state.rc?.claimed?state.rc.source||'Other controller':'Available');
- byId('kitInternetStatus','Web '+state.internet);
+ byId('kitInternetStatus',state.internet==='reachable'?'Web online':state.internet==='unreachable'?'Web offline':'Web ?');
+ if($('kitInternetStatus'))$('kitInternetStatus').title='Web '+state.internet+'; independent of the Kit';
  byId('kitHeartbeat',state.heartbeatAt?Math.max(0,Math.round((Date.now()-state.heartbeatAt)/1000))+' s ago':'Unverified');
  byId('kitGlobalState',otaActive?(state.connected?'OTA UPLOADING':'OTA RECONNECTING'):state.linkState==='stale'?'LINK STALE':state.linkState==='delayed'?'RESPONSE DELAYED':state.linkState==='reconnecting'?'RECONNECTING':state.working?'CONNECTING':ready?'KIT CONNECTED':'KIT OFFLINE');
  const pill=$('kitGlobalState');if(pill){pill.dataset.tone=globalTone;pill.dataset.connected=String(ready);pill.title=(ready?'Verified kit online • ':'Kit not verified online • ')+(state.kitName||'No kit')+' • '+(state.transport||'offline').toUpperCase();}

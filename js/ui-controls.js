@@ -47,6 +47,24 @@ export function initControls(ctx){
   bind('undoBtn',ctx.undoAction);bind('redoBtn',ctx.redoAction);
   bind('wireUndoBtn',ctx.wireUndo);bind('saveBtn',()=>{ctx.saveProject();ctx.notify('Project saved in this browser.');});
   bind('resetBtn',ctx.resetProject); // reversible through the shared Undo history
+  const fileMenu=$('#workspaceFileMenu');
+  if(fileMenu){
+    const summary=fileMenu.querySelector('summary');
+    const close=()=>{fileMenu.open=false;summary.focus()};
+    // Undo/Redo can disable their own button while the handler runs. The
+    // native click has already been admitted, so close even after that update.
+    fileMenu.addEventListener('click',e=>{if(e.target.closest('button'))close()});
+    fileMenu.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();return;}
+      if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;
+      e.preventDefault();e.stopPropagation();fileMenu.open=true;
+      const buttons=[...fileMenu.querySelectorAll('button:not(:disabled)')];
+      const index=buttons.indexOf(document.activeElement);
+      const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:e.key==='ArrowUp'?(index<=0?buttons.length-1:index-1):(index+1)%buttons.length;
+      buttons[next]?.focus();
+    });
+    document.addEventListener('pointerdown',e=>{if(fileMenu.open&&!fileMenu.contains(e.target))fileMenu.open=false});
+  }
   bind('guidedModeBtn',()=>{ctx.historyPush();s.guided=true;ctx.renderAssemblyUI();ctx.showGuides();});
   bind('freeModeBtn',()=>{ctx.historyPush();s.guided=false;ctx.guidesRoot?.clear();ctx.renderAssemblyUI();});
   bind('prevStepBtn',()=>{ctx.historyPush();s.step=Math.max(0,s.step-1);ctx.renderAssemblyUI();ctx.showGuides();});
