@@ -30,7 +30,7 @@
 #app .topbar .kit-top-switch{position:relative;width:30px;min-width:30px;height:18px;min-height:18px;flex:none;padding:0;border:1px solid #73badd;border-radius:12px;background:#264657}
 #app .topbar .kit-top-switch i{display:block;width:12px;height:12px;border-radius:50%;background:#d6f0ff;position:absolute;left:2px;top:2px;transition:transform .15s}
 #app .topbar .kit-top-switch[aria-checked="true"] i{transform:translateX(12px)}
-#app .topbar .kit-access-badges{display:grid;flex:none;gap:0;min-width:0;align-content:center}
+#app .topbar .kit-access-badges{display:grid;flex:none;gap:0;min-width:120px;width:120px;align-content:center}
 #app .topbar .kit-access-badges b,#app .topbar #kitInternetStatus{display:block;margin:0;padding:0;border:0;background:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:12px;color:#bcecdc}
 #app .topbar #kitInternetStatus{color:#a7bacb}
 #app .topbar button.btn,#app .topbar .v2-connection-details>summary{min-width:26px;min-height:30px;height:30px;padding:4px 6px!important;font-size:11px!important;line-height:20px;border-radius:5px;white-space:nowrap}
@@ -38,7 +38,7 @@
 #app .topbar .v2-connection-details{position:relative;flex:none}
 #app .topbar .v2-connection-details>summary{display:flex;align-items:center;justify-content:center;width:28px;list-style:none;border:1px solid #365364;color:#d3e5ee;font-size:16px!important;cursor:pointer}
 #app .topbar .v2-connection-details>summary::-webkit-details-marker{display:none}
-.v2-connection-popover{position:absolute;left:0;top:calc(100% + 8px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #3a596a;border-radius:10px;background:#102230;box-shadow:0 16px 50px #0009}
+.v2-connection-popover{position:absolute;right:0;top:calc(100% + 8px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #3a596a;border-radius:10px;background:#102230;box-shadow:0 16px 50px #0009}
 .v2-connection-details:not([open])>.v2-connection-popover{display:none}
 .v2-diagnostic{display:grid;grid-template-columns:120px minmax(0,1fr);width:100%;gap:9px;font-size:11px;line-height:1.4;color:#9fb5c8}
 .v2-diagnostic b,.v2-diagnostic small{color:#e2eff6;overflow-wrap:anywhere}
@@ -47,7 +47,7 @@
 #app .v2-tools-content{display:flex;align-items:center;flex-wrap:nowrap;gap:7px;margin:0;padding:0}
 #app .v2-tools-content .qr-header-controls{display:flex!important;align-items:center;flex-wrap:nowrap!important;gap:6px!important;min-width:0;margin:0}
 #app .topbar #topPairMobileBtn{display:inline-flex;align-items:center;gap:4px;max-width:none;padding:3px 5px!important}
-#app .topbar #mobileHeaderStatus{display:inline!important;max-width:none!important;margin:0;padding:0;border:0;background:none;overflow:visible;font-size:11px;line-height:14px;white-space:nowrap;font-weight:500}
+#app .topbar #mobileHeaderStatus{display:block!important;width:142px;max-width:142px!important;margin:0;padding:0;border:0;background:none;overflow:hidden;text-overflow:ellipsis;font-size:11px;line-height:14px;white-space:nowrap;font-weight:500}
 #app .pair-mobile-label{border-left:1px solid #365364;padding-left:4px;color:#d3e5ee}
 #app .topbar-main .qr-header-controls .top-grant-control{position:relative;display:inline-grid!important;grid-template-columns:minmax(0,1fr) 40px;align-items:center;column-gap:9px!important;width:136px!important;min-width:136px!important;max-width:136px!important;min-height:30px;padding:3px 5px!important;flex:none;margin:0;border-radius:5px;white-space:nowrap;font-size:11px;line-height:1.25}
 #app .topbar-main .qr-header-controls .top-grant-control>.grant-control-text{display:block;grid-column:1;grid-row:1;width:100%;max-width:none!important;min-width:0;white-space:nowrap;overflow:visible;line-height:1.25}

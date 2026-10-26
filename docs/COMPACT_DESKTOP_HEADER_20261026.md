@@ -17,6 +17,9 @@ Long Kit names retain their complete identity in the native title and connection
 panel. The offline cache is advanced with the new shell.
 
 The Devices workspace observes navigation height as well as toolbar height.
+Python sticky execution controls exclude the vertical rail from their top
+offset, so the rail cannot push Run/Stop over the editor or output controls.
+Input and mobile status reserve stable widths across live state changes.
 The Live Inputs test waits for actual fitted bounds after a viewport change;
 its strict viewport, scroll reachability and read-only assertions remain intact.
 

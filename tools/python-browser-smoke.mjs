@@ -141,7 +141,8 @@ try{
    const bar=document.querySelector('#tab-python .python-project-bar'),nav=document.querySelector('#app .tabs'),header=document.querySelector('#app>.topbar');
    const rect=bar.getBoundingClientRect(),stickyTop=Number.parseFloat(getComputedStyle(document.querySelector('#tab-python')).getPropertyValue('--py-sticky-top'));
    const run=document.querySelector('#runPythonBtn').getBoundingClientRect(),stop=document.querySelector('#stopPythonBtn').getBoundingClientRect();
-   return {pageY:window.scrollY,top:rect.top,stickyTop,headerBottom:header.getBoundingClientRect().bottom,navBottom:nav.getBoundingClientRect().bottom,run,stop,
+   const navRect=nav.getBoundingClientRect(),navOverlaps=navRect.right>rect.left&&navRect.left<rect.right;
+   return {pageY:window.scrollY,top:rect.top,stickyTop,headerBottom:header.getBoundingClientRect().bottom,navBottom:navOverlaps?navRect.bottom:0,run,stop,
      runVisible:getComputedStyle(document.querySelector('#runPythonBtn')).display!=='none',stopVisible:getComputedStyle(document.querySelector('#stopPythonBtn')).display!=='none'};
   });
   if(result.pageY<100||Math.abs(result.top-result.stickyTop)>5||!result.runVisible||!result.stopVisible||result.run.width<55||result.stop.width<55||result.run.top<result.navBottom-5)

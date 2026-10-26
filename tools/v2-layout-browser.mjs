@@ -59,6 +59,15 @@ try{
   assert.equal(await page.locator('#kitRcAccess').textContent(),'RC OFFLINE');
   assert.equal(await page.locator('#fwNetworkFlashBtn').isDisabled(),true,'Offline transport selection cannot enable OTA');
   if(width===1366){
+   const stable=await page.evaluate(()=>{
+    const x=()=>[document.getElementById('headerControlPath').getBoundingClientRect().left,document.getElementById('saveBtn').getBoundingClientRect().left];
+    const before=x(),mobile=document.getElementById('mobileHeaderStatus'),active=document.querySelector('[data-control-active]');
+    const original=[mobile.textContent,active.textContent];
+    mobile.textContent='Mobile: Awaiting approval';active.textContent='Android WebRTC';
+    const after=x();[mobile.textContent,active.textContent]=original;
+    return {before,after};
+   });
+   assert.deepEqual(stable.before,stable.after,'Status changes must not shift input or workspace actions');
    // Keep DOM nodes and handlers while changing pages; status text may grow
    // without moving the sidebar, toolbar, input or save controls.
    await page.evaluate(()=>{window.__shellNodes=[document.querySelector('.topbar'),document.getElementById('topGrantMobileSwitch'),document.getElementById('headerControlPath')]});

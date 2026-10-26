@@ -599,7 +599,11 @@ function updatePythonStickyToolbar(){
  const tab=$('tab-python'),sentinel=$('pythonToolbarSentinel'),bar=tab?.querySelector('.python-project-bar');
  if(!tab||!sentinel||!bar)return;
  const header=document.querySelector('#app>.topbar'),nav=document.querySelector('#app .tabs');
- const stickyTop=Math.ceil(Math.max(0,header?.getBoundingClientRect().bottom||0,nav?.getBoundingClientRect().bottom||0));
+ const navRect=nav?.getBoundingClientRect(),tabRect=tab.getBoundingClientRect();
+ // A vertical navigation rail does not cover the editor column. Only reserve
+ // a navigation row when it actually intersects the workspace horizontally.
+ const navBottom=navRect&&navRect.right>tabRect.left&&navRect.left<tabRect.right?navRect.bottom:0;
+ const stickyTop=Math.ceil(Math.max(0,header?.getBoundingClientRect().bottom||0,navBottom));
  tab.style.setProperty('--py-sticky-top',stickyTop+'px');
  if(!tab.classList.contains('active')){bar.classList.remove('is-stuck');sentinel.style.height='1px';return}
  const stuck=sentinel.getBoundingClientRect().top<stickyTop-5;

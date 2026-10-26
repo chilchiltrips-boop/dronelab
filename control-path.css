@@ -30,7 +30,7 @@
 #app .control-path-inline>label{font-size:11px;color:#a7bacb;flex:none}
 #app .control-path-inline>select{width:128px;min-width:0;min-height:30px;height:30px;padding:4px 2px;border:1px solid #39506b;border-radius:5px;background:#111c2e;color:#f1f5f9;font:inherit;font-size:12px}
 #app .control-path-inline>button{width:26px;min-width:26px;height:30px;min-height:30px;padding:2px!important;font-size:15px!important}
-#app .control-path-inline>[data-control-active]{min-width:0;max-width:82px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:500}
+#app .control-path-inline>[data-control-active]{width:82px;min-width:82px;max-width:82px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;font-weight:500}
 #app .control-path-info{position:relative;flex:none}
 #app .control-path-info>summary{display:flex;align-items:center;justify-content:center;width:26px;height:30px;min-height:30px;list-style:none;cursor:pointer;border:1px solid #39506b;border-radius:5px;background:#111c2e;color:#c9d6e6;font-size:15px}
 #app .control-path-info>summary::-webkit-details-marker{display:none}
