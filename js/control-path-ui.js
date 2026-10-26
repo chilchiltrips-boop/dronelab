@@ -43,7 +43,7 @@
    box.dataset.state=view.paused?'paused':view.active?'active':'idle';
   }
   const text=view.connection+' · Selected '+view.selectedLabel+' · '+(view.active?'Active '+view.activeLabel:view.activeLabel)+' · '+view.telemetryLabel+' · '+view.reason;
-  for(const summary of document.querySelectorAll('[data-control-summary]'))put(summary,text);
+  for(const summary of document.querySelectorAll('[data-control-summary]')){put(summary,text);if(summary.title!==text)summary.title=text;}
   return view;
  }
  async function selectPath(path){
