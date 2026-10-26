@@ -35,8 +35,11 @@
    const chosen=view.paths.find(p=>p.id===select.value);
    select.disabled=pending;
    apply.disabled=pending||!chosen?.selectable||chosen.id===kit.rcAccess?.controlPath;
-   put(apply,pending?'Switching…':'Select input');
+   put(apply,android?(pending?'Switching…':'Select input'):(pending?'…':'✓'));
+   apply.setAttribute('aria-label',pending?'Switching input':'Confirm selected input');
+   select.title='Selected: '+view.selectedLabel;
    put(box.querySelector('[data-control-active]'),view.activeLabel);
+   box.querySelector('[data-control-active]').title=view.activeLabel;
    put(box.querySelector('[data-control-selected]'),'Selected: '+view.selectedLabel);
    put(box.querySelector('[data-control-target]'),'Target: '+view.target);
    put(box.querySelector('[data-control-reason]'),message||chosen?.reason||view.reason);
@@ -64,11 +67,11 @@
  }
  function mount(host){
   if(!host||host.querySelector('[data-control-selector]'))return;
-  const details=document.createElement('details');details.className='control-path-selector';details.dataset.controlSelector='';
+  const details=document.createElement(android?'details':'div');details.className='control-path-selector'+(android?'':' control-path-inline');details.dataset.controlSelector='';
   const summary=document.createElement('summary');summary.append('Input: ');
   const active=document.createElement('b');active.dataset.controlActive='';summary.append(active);
   const panel=document.createElement('div');panel.className='control-path-popover';
-  const label=document.createElement('label');label.textContent='Control input';
+  const label=document.createElement('label');label.textContent=android?'Control input':'Input';
   const select=document.createElement('select');select.setAttribute('aria-label','Control input path');select.append(new Option('Select input…',''));
   for(const p of policy.paths)select.append(new Option(p.label,p.id));label.append(select);
   const selected=document.createElement('span');selected.dataset.controlSelected='';
@@ -77,14 +80,28 @@
   const apply=document.createElement('button');apply.type='button';apply.dataset.controlApply='';apply.className='btn primary';
   select.addEventListener('change',()=>{details.dataset.dirty='1';message='';refresh()});
   apply.addEventListener('click',()=>void selectPath(select.value).catch(()=>{}));
-  panel.append(label,selected,target,apply,reason);details.append(summary,panel);host.append(details);
+  if(android){
+   panel.append(label,selected,target,apply,reason);details.append(summary,panel);
+  }else{
+   select.id='headerControlPath';label.htmlFor=select.id;
+   // Keep the real selection and explicit confirmation visible. Opening input
+   // details only explains availability; it never changes the selected source.
+   label.removeChild(select);
+   const info=document.createElement('details');info.className='control-path-info';
+   const help=document.createElement('summary');help.textContent='i';help.setAttribute('aria-label','Input availability and target details');
+   const close=document.createElement('button');close.type='button';close.dataset.headerClose='';close.textContent='Close';close.className='btn ghost small';close.setAttribute('aria-label','Close input details');
+   panel.append(close,selected,target,reason);info.append(help,panel);
+   details.append(label,select,apply,active,info);
+  }
+  host.append(details);
  }
  function init(){
-  mount(android?document.querySelector('.flight-brand'):document.getElementById('kitTopStatus'));
+  mount(android?document.querySelector('.flight-brand'):document.getElementById('headerInputSlot')||document.getElementById('kitTopStatus'));
   if(!android){
-   const compact=matchMedia('(max-width:950px)'),selector=document.querySelector('[data-control-selector]');
-   const place=()=>{const host=compact.matches?document.querySelector('.topbar-main>.brand'):document.getElementById('kitTopStatus');if(host&&selector&&selector.parentElement!==host)host.append(selector)};
-   place();compact.addEventListener('change',place);
+   const header=document.querySelector('#app .topbar');
+   const close=box=>{box.open=false;box.querySelector('summary')?.focus()};
+   header?.addEventListener('click',event=>{const button=event.target.closest('[data-header-close]');if(button)close(button.closest('details'))});
+   header?.addEventListener('keydown',event=>{if(event.key==='Escape'){const box=event.target.closest('details[open]');if(box){event.preventDefault();close(box)}}});
   }
   // The monitor owns its single title; compact display rules live in control-path.css.
   for(const host of document.querySelectorAll('.dw-view:not(#dw-panel-inputs)>.dw-view-header,#fwLiveInputs .li-header>div,#tab-python .python-toolbar,#tab-python .python-target-row,#tab-pid .pid-workspace-header')){

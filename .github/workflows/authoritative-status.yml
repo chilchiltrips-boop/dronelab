@@ -1,7 +1,7 @@
 name: Authoritative status integration
 on:
   push:
-    branches: [feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
+    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
@@ -67,7 +67,7 @@ on:
       - 'live-inputs.css'
       - '.github/workflows/authoritative-status.yml'
   pull_request:
-    branches: [feat/unified-input-status-20261026, main]
+    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
   workflow_dispatch:
 permissions:
   contents: read

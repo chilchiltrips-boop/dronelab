@@ -90,7 +90,8 @@ test('unified Kit Connection opens the preserved legacy manual setup within one 
 
 test('header names and verified connection status remain readable at every breakpoint',()=>{
  const css=read('v2-header.css'),kit=read('js/classroom-kits.js');
- assert.match(css,/#app \.topbar \.kit-top-detail b,#app \.topbar \.kit-top-detail small\{[\s\S]*?text-overflow:clip!important/);
+ assert.match(css,/#app \.topbar \.kit-top-detail b\{[^\n]*text-overflow:ellipsis/);
+ assert.ok(kit.includes("$('kitGlobalName').title=label"),'Full Kit name remains available when truncated');
  assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="true"\]\{background:#167a4a!important/);
  assert.match(css,/#app \.topbar #kitGlobalState\[data-connected="false"\]\{background:#b32636!important/);
  assert.match(css,/@media\(max-width:660px\)/);

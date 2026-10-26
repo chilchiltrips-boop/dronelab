@@ -55,7 +55,7 @@
   if(!ready)return;
   const compact=root.matchMedia('(max-width:780px)').matches;
   const topbar=document.querySelector('#app .topbar');
-  // Header is sticky, but its height changes at tablet/phone breakpoints.
+  // The desktop bar is 44px; zoomed/narrow layouts can wrap naturally.
   const headerBottom=Math.max(0,Math.round(topbar?.getBoundingClientRect().bottom||0));
   // The header scrolls with the document. Keep the mobile menu at the viewport
   // edge instead of retaining the offscreen header's old height over a form.
@@ -263,6 +263,8 @@
   if(topbar)resize.observe(topbar);
   const tools=document.querySelector('.v2-workspace-tools');
   if(tools)resize.observe(tools);
+  const navigation=document.querySelector('#app>.app-navigation');
+  if(navigation)resize.observe(navigation);
  }
  shell.addEventListener('click',event=>{
   if(event.target.closest('button[data-open-admin]')){open('security');if($('smartAdvanced'))$('smartAdvanced').open=true;return;}

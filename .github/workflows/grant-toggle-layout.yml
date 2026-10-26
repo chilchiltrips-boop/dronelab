@@ -1,8 +1,11 @@
 name: Verify Grant Mobile Toggle Layout
 on:
   push:
-    branches: [main, work/sta-ap-diagnostics-20261012, fix/grant-mobile-toggle-no-overlap]
+    branches: [feat/compact-desktop-header-20261026, main, work/sta-ap-diagnostics-20261012, fix/grant-mobile-toggle-no-overlap]
     paths:
+      - 'v2-header.css'
+      - 'control-path.css'
+      - 'lab.html'
       - 'styles.css'
       - 'index.html'
       - 'tools/grant-toggle-layout-browser.mjs'

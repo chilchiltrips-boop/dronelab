@@ -85,6 +85,7 @@ function status(text){
  $('pairTopStatus').dataset.status=host?.status()?.approved?'success':host?.status()?.connected?'ready':'waiting';
  const s=host?.status(),e=$('mobileHeaderStatus');
  e.textContent='Mobile: '+(s?.connected?(s.approved?'Connected':'Awaiting approval'):'Disconnected');
+ e.title=e.textContent;
  e.className='qr-header-status '+(s?.connected?(s.approved?'good':'warn'):'disconnected');
 }
 function sync(){
