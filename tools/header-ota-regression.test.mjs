@@ -11,7 +11,7 @@ test('header is two horizontal rows with real STA/AP network toggle and controll
   assert.ok(kit.includes(handler),handler);
  const header=read('v2-header.css');
  assert.match(header,/#app \.topbar-main\{[\s\S]*?flex-wrap:nowrap!important/);
- assert.match(header,/@media\(min-width:736px\)[^\n]*height:64px!important/);
+ assert.match(header,/@media\(min-width:736px\)[^\n]*height:104px!important/);
  assert.ok(html.includes('id="workspaceFileMenu"'));
  assert.doesNotMatch(html,/<aside class="app-navigation"/);
  assert.doesNotMatch(html,/<details class="v2-workspace-tools"/);
