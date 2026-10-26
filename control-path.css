@@ -23,3 +23,11 @@
 .flight-brand .control-path-selector>summary{min-height:32px;padding:4px 7px}
 .flight-brand .control-path-selector [data-control-active]{min-width:0;max-width:150px;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:600px){#app .topbar-main>.kit-top-status>.control-path-selector{justify-self:stretch}.flight-brand .control-path-selector>summary{min-height:36px}.flight-brand .control-path-selector [data-control-active]{max-width:90px}}
+
+/* Share the brand row on narrow screens, retaining the 44px touch target
+   without adding another full-width row above the workspace. */
+@media(max-width:950px){
+ #app .topbar-main>.brand>.control-path-selector{margin-left:auto;flex:0 1 160px;min-width:0;max-width:160px;letter-spacing:normal}
+ #app .topbar-main>.brand>.control-path-selector>summary{min-height:44px;padding:5px 7px;font-size:11px}
+ #app .topbar-main>.brand .control-path-selector [data-control-active]{min-width:0;max-width:90px;overflow:hidden;text-overflow:ellipsis}
+}

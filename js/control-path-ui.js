@@ -81,6 +81,11 @@
  }
  function init(){
   mount(android?document.querySelector('.flight-brand'):document.getElementById('kitTopStatus'));
+  if(!android){
+   const compact=matchMedia('(max-width:950px)'),selector=document.querySelector('[data-control-selector]');
+   const place=()=>{const host=compact.matches?document.querySelector('.topbar-main>.brand'):document.getElementById('kitTopStatus');if(host&&selector&&selector.parentElement!==host)host.append(selector)};
+   place();compact.addEventListener('change',place);
+  }
   for(const host of document.querySelectorAll('.dw-view-header,#tab-python .python-toolbar,#tab-python .python-target-row,#tab-pid .pid-workspace-header')){
    if(host.querySelector('[data-control-summary]'))continue;
    const line=document.createElement('small');line.dataset.controlSummary='';line.className='control-path-summary';host.append(line);
