@@ -86,6 +86,7 @@
    const place=()=>{const host=compact.matches?document.querySelector('.topbar-main>.brand'):document.getElementById('kitTopStatus');if(host&&selector&&selector.parentElement!==host)host.append(selector)};
    place();compact.addEventListener('change',place);
   }
+  // The monitor owns its single title; compact display rules live in control-path.css.
   for(const host of document.querySelectorAll('.dw-view:not(#dw-panel-inputs)>.dw-view-header,#fwLiveInputs .li-header>div,#tab-python .python-toolbar,#tab-python .python-target-row,#tab-pid .pid-workspace-header')){
    if(host.querySelector('[data-control-summary]'))continue;
    const line=document.createElement('small');line.dataset.controlSummary='';line.className='control-path-summary';host.append(line);

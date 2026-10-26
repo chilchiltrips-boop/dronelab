@@ -82,10 +82,10 @@
    header. Tighten spacing while retaining readable fonts and control sizes. */
 @media(min-width:981px) and (max-height:850px){
  #dw-body-wifi .wifi-dashboard{gap:8px}
- #dw-body-wifi .wifi-panel{padding:12px}
- #dw-body-wifi .wifi-heading{margin-bottom:6px}
+ #dw-body-wifi .wifi-panel{padding:10px}
+ #dw-body-wifi .wifi-heading{margin-bottom:4px}
  #dw-body-wifi label{margin:6px 0 4px}
  #dw-body-wifi .wifi-summary>.fw-detail-grid{margin-top:8px}
  #dw-body-wifi .wifi-permission,#dw-body-wifi .wifi-startup{margin-top:6px}
- #dw-body-wifi .wifi-actions{margin-top:8px}
+ #dw-body-wifi .wifi-actions{margin-top:6px}
 }
