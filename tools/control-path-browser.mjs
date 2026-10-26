@@ -82,7 +82,7 @@ try{
   await page.waitForTimeout(150);
   const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,popover:document.querySelector('.control-path-popover').getBoundingClientRect().toJSON()}));
   assert.ok(size.scroll<=width+2,JSON.stringify(size));assert.ok(size.popover.x>=-1&&size.popover.right<=width+1,JSON.stringify(size));
-  if(width>=1280)assert.equal((await page.locator('.topbar').boundingBox()).height,44,'Connected header remains 44px');
+  if(width>=736)assert.equal((await page.locator('.topbar').boundingBox()).height,64,'Connected header remains two 32px rows');
   await page.screenshot({path:'test-output/control-path/web-'+width+'.png',fullPage:false});
  }
  // The real cockpit touch handlers respect the same confirmed PPM lock.

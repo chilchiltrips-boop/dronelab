@@ -84,8 +84,9 @@ function status(text){
  $('pairStatus').textContent=text;$('pairTopStatus').textContent=text;
  $('pairTopStatus').dataset.status=host?.status()?.approved?'success':host?.status()?.connected?'ready':'waiting';
  const s=host?.status(),e=$('mobileHeaderStatus');
- e.textContent='Mobile: '+(s?.connected?(s.approved?'Connected':'Awaiting approval'):'Disconnected');
- e.title=e.textContent;
+ e.textContent=s?.connected?(s.approved?'Mobile paired':'Mobile pending'):'Mobile off';
+ e.title='Mobile: '+(s?.connected?(s.approved?'Connected':'Awaiting approval'):'Disconnected');
+ e.setAttribute('aria-label',e.title);
  e.className='qr-header-status '+(s?.connected?(s.approved?'good':'warn'):'disconnected');
 }
 function sync(){
@@ -287,7 +288,7 @@ function disconnect(reason='Disconnected by Web App'){
  $('pairConnectCodeBtn').textContent='Connect with Code';$('pairAnswerState').textContent=reason;
  status('Disconnected');sync();
 }
-async function showVersion(){try{const r=await fetch('./app-version.json',{cache:'no-store'});if(r.ok){const meta=await r.json();$('webappVersion').textContent='v'+meta.version+' • '+meta.channel.toUpperCase()}}catch{}}
+async function showVersion(){try{const r=await fetch('./app-version.json',{cache:'no-store'});if(r.ok){const meta=await r.json();$('webappVersion').textContent='v'+meta.version}}catch{}}
 function bind(){
  window.addEventListener('zebjus:training-ready',()=>{host.setSimulatorReady(true);sync()});
  const localStop=reason=>training()?.stop(reason);

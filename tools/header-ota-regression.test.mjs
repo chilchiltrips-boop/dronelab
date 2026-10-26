@@ -4,15 +4,16 @@ import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const html=read('index.html'),css=read('classroom-kits.css'),kit=read('js/classroom-kits.js'),updater=read('firmware-updater.js'),network=read('FlightCore_Firmware/FlightCoreNetwork.h');
 
-test('header is one horizontal row with real STA/AP network toggle and controller action',()=>{
+test('header is two horizontal rows with real STA/AP network toggle and controller action',()=>{
  for(const id of ['kitTopNetworkSwitch','kitRcAccess','kitDiagnosticAccess','kitTopWifiConnect','kitTopConnect','kitTopStop','fwConnectStaBtn','fwConnectApBtn'])
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const handler of ['toggleHeaderNetwork','toggleHeaderControl','connectHeaderNetwork','applyMode','claim(\'WEB\')'])
   assert.ok(kit.includes(handler),handler);
  const header=read('v2-header.css');
  assert.match(header,/#app \.topbar-main\{[\s\S]*?flex-wrap:nowrap!important/);
- assert.match(header,/@media\(min-width:1280px\)[^\n]*height:44px!important/);
- assert.match(header,/grid-template-columns:96px minmax\(0,1fr\)/);
+ assert.match(header,/@media\(min-width:736px\)[^\n]*height:64px!important/);
+ assert.ok(html.includes('id="workspaceFileMenu"'));
+ assert.doesNotMatch(html,/<aside class="app-navigation"/);
  assert.doesNotMatch(html,/<details class="v2-workspace-tools"/);
  assert.ok(html.includes('id="kitTopRefresh"'));
 });

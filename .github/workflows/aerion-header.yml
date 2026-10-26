@@ -1,0 +1,69 @@
+name: Aerion horizontal header and version
+on:
+  push:
+    branches: [main, feat/aerion-horizontal-header-20261026]
+    paths:
+      - 'index.html'
+      - 'lab.html'
+      - 'v2-header.css'
+      - 'js/ui-controls.js'
+      - 'js/config.js'
+      - 'js/app-version.js'
+      - 'js/classroom-kits.js'
+      - 'pairing-web.js'
+      - 'app-version.json'
+      - 'package.json'
+      - 'sw.js'
+      - 'tools/v2-layout-browser.mjs'
+      - 'tools/stamp_webapp_version.py'
+      - 'tools/webapp-version.test.mjs'
+      - '.github/workflows/version-stamp.yml'
+      - '.github/workflows/aerion-header.yml'
+permissions:
+  contents: read
+jobs:
+  source:
+    if: ${{ !contains(github.event.head_commit.message, '[version-stamp]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+      - run: python3 tools/android_release_needed.py
+  browser:
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - name: Install Chromium from the official Microsoft distribution mirror
+        env:
+          PLAYWRIGHT_DOWNLOAD_HOST: https://playwright.download.prss.microsoft.com/dbazure/download/playwright
+        run: npx playwright install --with-deps chromium
+      - name: Verify two rows, File actions, Python, monitoring, pairing and offline use
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 >/tmp/aerion-header-http.log 2>&1 &
+          node tools/v2-layout-browser.mjs
+          node tools/grant-toggle-layout-browser.mjs
+          node tools/full-page-input-fit-browser.mjs
+          node tools/live-inputs-layout-browser.mjs
+          node tools/python-browser-smoke.mjs
+          node tools/control-path-browser.mjs
+          node tools/kit-access-browser.mjs
+          node tools/pid-shell-browser.mjs
+          node tools/qr-pairing-browser.mjs
+          node tools/offline-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aerion-horizontal-header-evidence
+          path: test-output/

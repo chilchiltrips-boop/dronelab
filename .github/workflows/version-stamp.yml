@@ -20,24 +20,12 @@ jobs:
         with:
           persist-credentials: true
           ref: main
-      - name: Increment production WebApp build version for each main update
+          fetch-depth: 0
+      - name: Advance WebApp releases 1.9, 1.10, 1.11 independently of build numbers
         env:
           SOURCE_SHA: ${{ github.sha }}
           BUILD_NUMBER: ${{ github.run_number }}
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import os,json
-          from datetime import datetime,timezone
-          f=Path('app-version.json')
-          meta=json.loads(f.read_text())
-          meta['version']=json.loads(Path('package.json').read_text())['version']+'+'+os.environ['BUILD_NUMBER']
-          meta['buildCommit']=os.environ['SOURCE_SHA'][:12]
-          meta['channel']='release'
-          meta['publishedAt']=datetime.now(timezone.utc).isoformat()
-          f.write_text(json.dumps(meta,indent=2)+'\n')
-          print('WebApp version:',meta['version'],'source:',meta['buildCommit'])
-          PY
+        run: python3 tools/stamp_webapp_version.py
       - name: Save WebApp production version on main
         run: |
           git config user.name 'github-actions[bot]'

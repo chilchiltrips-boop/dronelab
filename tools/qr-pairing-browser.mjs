@@ -29,7 +29,7 @@ try{
  const ui=await web.locator('body').textContent();if(/LED ON|LED OFF|ANDROID FLIGHT/.test(ui)||await web.locator('iframe').count())throw Error('Legacy control feature remains');
  await web.evaluate(()=>window.ZebjusQR.scan=async opts=>{window.__qrScanOptions=opts;return ()=>{}});
  await web.locator('#pairCameraMode').click();await onePair();await exerciseControl();
- await phone.evaluate(()=>window.zebjusNetworkChanged());await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
+ await phone.evaluate(()=>window.zebjusNetworkChanged());await wait(web,()=>document.getElementById('mobileHeaderStatus').classList.contains('disconnected'));
  await wait(phone,()=>document.getElementById('appPairCode').textContent==='------');await onePair();await exerciseControl();
  // Preserve the six-digit UI path. Only public signaling lookup is substituted.
  await web.locator('#pairDisconnectBtn').click();await phone.evaluate(()=>window.ZebjusMobileMenu?.select('pair'));await phone.locator('#resetPairBtn').click();await web.locator('#pairCodeMode').click();
@@ -38,7 +38,7 @@ try{
  const answer=await phone.locator('#answerText').inputValue();await web.exposeFunction('__testCodeReply',()=>answer);await web.evaluate(()=>window.ZebjusCodePair.resolveAnswer=async ({code})=>{if(code!=='654321')throw Error('Wrong test code');return window.__testCodeReply()});
  await web.locator('#pairStep1NextBtn').click();await web.locator('#pairPhoneCode').fill('654321');await web.locator('#pairConnectCodeBtn').click();await finishPair();await exerciseControl();
  await safeShot(web,'test-output/connection-confirmed.png');await safeShot(phone,'test-output/android-connection-sheet.png');
- await web.reload();await wait(phone,()=>document.getElementById('flightArm').disabled);await wait(web,()=>document.getElementById('mobileHeaderStatus').textContent.includes('Disconnected'));
+ await web.reload();await wait(phone,()=>document.getElementById('flightArm').disabled);await wait(web,()=>document.getElementById('mobileHeaderStatus').classList.contains('disconnected'));
  if(await web.locator('#pairCode').textContent()!=='------')throw Error('Refresh retained pairing');if(errors.length)throw Error(errors.join(' | '));
  console.log('PASS real encrypted QR pairing/input mirror/local STOP: camera pixels, code UI, PIN approval, Web-owned Run/Stop, Wi-Fi reset/fresh QR, refresh invalidation; no legacy LED');
 }catch(e){console.error(e.stack||e);console.error(errors);await safeShot(web,'test-output/qr-error-web.png').catch(()=>{});await safeShot(phone,'test-output/qr-error-phone.png').catch(()=>{});process.exitCode=1}finally{await browser.close()}

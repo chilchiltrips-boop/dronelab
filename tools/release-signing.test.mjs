@@ -38,9 +38,13 @@ test('release workflow only distributes certificate-pinned signed release APKs',
  assert.match(ignore,/\*\.p12/);
 });
 
-test('production web version stamping derives release version from package metadata',()=>{
+test('production web version stamping advances major/minor independently of build metadata',()=>{
  const workflow=read('.github/workflows/version-stamp.yml');
- assert.match(workflow,/Path\('package.json'\)/);assert.doesNotMatch(workflow,/meta\['version'\]='1\.4\.4/);
+ assert.match(workflow,/python3 tools\/stamp_webapp_version\.py/);
+ const stamp=read('tools/stamp_webapp_version.py');
+ assert.match(stamp,/int\(current\[2\]\) \+ 1/);
+ assert.match(stamp,/buildNumber=int\(build_number\)/);
+ assert.doesNotMatch(workflow,/meta\['version'\]='1\.4\.4/);
 });
 
 test('API30 SDK mirror retry verifies a real image and retains mandatory signed native instrumentation',()=>{

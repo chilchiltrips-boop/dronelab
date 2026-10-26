@@ -51,7 +51,8 @@ test('AP-only cache-busted scripts/styles load while firmware version keys stay 
 test('version metadata refreshes online and retains cache offline',async()=>{
  const r=runtime();await r.install();r.store.set('https://example.test/dronelab/app-version.json',new Response('{"version":"old"}'));
  const online=await r.request('./app-version.json'),onlineMeta=JSON.parse(await online.text());
- assert.match(onlineMeta.version,/^\d+\.\d+\.\d+\+\d+$/,'Stamped version must be valid');
+ assert.match(onlineMeta.version,/^\d+\.\d+$/,'Display version must be integer major.minor');
+ assert.match(onlineMeta.buildCommit,/^[0-9a-f]{12}$/,'Build source remains separate from the display version');
  r.setOffline();const cached=JSON.parse(await (await r.request('./app-version.json')).text());
  assert.equal(cached.version,onlineMeta.version,'Offline cache must retain latest online version');
 });
