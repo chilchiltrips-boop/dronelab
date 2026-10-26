@@ -76,12 +76,13 @@ try{
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().rcAccess.controlPath),'PPM');
  await page.evaluate(async()=>{const f=window.__controlFixture;f.mode='ap';await window.ZebjusKits.read();window.ZebjusControlUI.refresh()});
  assert.deepEqual(await availability(),['ANDROID_AP','PPM']);
- for(const width of [1366,768,390,320]){
+ for(const width of [1920,1366,1294,1280,1024,768,390,320]){
   await page.setViewportSize({width,height:900});await page.evaluate(()=>{window.ZebjusDevicesWorkspace.open('overview');scrollTo(0,0)});
-  await page.locator('[data-control-selector]').evaluate(e=>{e.open=true});
+  await page.locator('.control-path-info').evaluate(e=>{e.open=true});
   await page.waitForTimeout(150);
   const size=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,popover:document.querySelector('.control-path-popover').getBoundingClientRect().toJSON()}));
   assert.ok(size.scroll<=width+2,JSON.stringify(size));assert.ok(size.popover.x>=-1&&size.popover.right<=width+1,JSON.stringify(size));
+  if(width>=1280)assert.equal((await page.locator('.topbar').boundingBox()).height,44,'Connected header remains 44px');
   await page.screenshot({path:'test-output/control-path/web-'+width+'.png',fullPage:false});
  }
  // The real cockpit touch handlers respect the same confirmed PPM lock.

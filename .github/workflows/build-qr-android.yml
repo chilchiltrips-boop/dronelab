@@ -1,7 +1,7 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-full-height-menu-panel-20261016, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main, feature/authoritative-status-integration-20261021]
+    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-full-height-menu-panel-20261016, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main, feature/authoritative-status-integration-20261021]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'

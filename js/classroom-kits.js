@@ -128,6 +128,7 @@ function render(){
  const label=ready?(state.kitName||'AERION')+' • '+code:state.connected&&['sta','ap'].includes(state.transport)?(state.kitName||'AERION')+' • '+code:otaActive?(state.kitName||'AERION')+' • '+code:pendingNetworkTarget?'FINDING '+pendingNetworkTarget.transport.toUpperCase():'NO KIT';
  const access=accessView();
  byId('kitGlobalName',label);byId('kitGlobalDetail',otaActive?'Firmware update • '+state.transport.toUpperCase()+' • diagnostic controls disabled':ready?state.transport.toUpperCase()+' CONNECTED':pendingNetworkTarget?'Join matching Wi-Fi • approve Connect':'Connect the kit on router Wi-Fi or AP');
+ if($('kitGlobalName'))$('kitGlobalName').title=label;
  byId('kitRcAccess',!ready?'RC OFFLINE':access.access?.paused?'RC PAUSED':'RC '+access.source);
  byId('kitDiagnosticAccess','DIAG '+access.diagnostics);
  if($('kitDiagnosticAccess'))$('kitDiagnosticAccess').title=access.diagnosticHint||'Diagnostic permission is independent of RC ownership.';

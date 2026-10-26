@@ -9,9 +9,11 @@ test('header is one horizontal row with real STA/AP network toggle and controlle
   assert.ok(html.includes('id="'+id+'"'),id);
  for(const handler of ['toggleHeaderNetwork','toggleHeaderControl','connectHeaderNetwork','applyMode','claim(\'WEB\')'])
   assert.ok(kit.includes(handler),handler);
- assert.match(css,/#app \.topbar-main\{[\s\S]*?flex-wrap:nowrap!important/);
- assert.match(css,/height:82px!important/);
- assert.match(read('v2-header.css'),/grid-template-columns/);
+ const header=read('v2-header.css');
+ assert.match(header,/#app \.topbar-main\{[\s\S]*?flex-wrap:nowrap!important/);
+ assert.match(header,/@media\(min-width:1280px\)[^\n]*height:44px!important/);
+ assert.match(header,/grid-template-columns:96px minmax\(0,1fr\)/);
+ assert.doesNotMatch(html,/<details class="v2-workspace-tools"/);
  assert.ok(html.includes('id="kitTopRefresh"'));
 });
 

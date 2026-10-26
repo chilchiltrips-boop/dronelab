@@ -42,8 +42,10 @@ try{
    await page.setViewportSize({width,height});
    await page.evaluate(()=>{window.scrollTo(0,0);document.getElementById('dw-body-inputs').scrollTop=0});
    await page.waitForFunction(()=>{
-    const shell=document.getElementById('devicesWorkspace');
-    return innerWidth<=780||Math.abs(shell.getBoundingClientRect().bottom-innerHeight)<40;
+    const shell=document.getElementById('devicesWorkspace'),body=document.getElementById('dw-body-inputs');
+    // Wait for the resize observer to finish fitting the workspace, rather
+    // than accepting the previous viewport's height within a 40px tolerance.
+    return innerWidth<=780||(Math.abs(shell.getBoundingClientRect().bottom-innerHeight)<40&&body.getBoundingClientRect().bottom<=innerHeight+1);
    });
    const metrics=await page.evaluate(()=>{
     const card=document.getElementById('fwLiveInputs'),body=document.getElementById('dw-body-inputs');

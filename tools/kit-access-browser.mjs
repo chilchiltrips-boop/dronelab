@@ -94,7 +94,7 @@ try{
   });
   const overlaps=(a,b)=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
   assert.ok(m.overflow<=2,'Horizontal overflow '+JSON.stringify(m));assert.ok(!overlaps(m.network,m.access)&&!overlaps(m.access,m.details),'Header controls overlap '+JSON.stringify(m));
-  assert.ok(Math.max(m.status.bottom,m.access.bottom,m.network.bottom,m.details.bottom)<=m.header.bottom&&m.tools.top>=m.header.bottom-1,'Header overflows into workspace '+JSON.stringify(m));
+  assert.ok(Math.max(m.status.bottom,m.access.bottom,m.network.bottom,m.details.bottom,m.tools.bottom)<=m.header.bottom+1&&m.tools.top>=m.header.top,'Header overflows into workspace '+JSON.stringify(m));
   layouts.push(m);await page.screenshot({path:'test-output/kit-access/ppm-'+width+'.png',fullPage:true});
  }
  await page.evaluate(async()=>{window.__accessFixture.diag=false;await window.ZebjusKits.read()});

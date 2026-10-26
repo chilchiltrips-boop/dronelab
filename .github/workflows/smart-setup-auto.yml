@@ -1,9 +1,9 @@
 name: Smart Kit Setup, Python Auto and UI stability
 on:
   pull_request:
-    branches: [feat/unified-input-status-20261026, main]
+    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
   push:
-    branches: [feat/unified-input-status-20261026, main]
+    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
     paths: ['js/**', 'tools/**', 'index.html', 'lab.html', 'tripod*', 'pairing-web.js', '*workspace.css', 'python-lab.css', '.github/workflows/smart-setup-auto.yml']
   workflow_dispatch:
 permissions:

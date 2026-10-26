@@ -58,5 +58,5 @@ test('Android download occupies one small row, not the old full marketing card',
  assert.doesNotMatch(html,/dw-android-release-kicker|dw-android-release-copy/);
  assert.match(styles,/#tab-firmware \.dw-android-release\{[\s\S]*?width:fit-content/);
  assert.match(styles,/#tab-firmware \.dw-android-release-link\{[\s\S]*?min-height:30px/);
- assert.match(html,/v2-header\.css\?v=compact-scroll-header-20261016/);
+ assert.match(html,/v2-header\.css\?v=desktop-44px-20261026/);
 });

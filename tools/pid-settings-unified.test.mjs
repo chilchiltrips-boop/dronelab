@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 const get=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('PID TUNING uses one persistent DroneLab header and button navigation',()=>{
  const html=get('index.html'),ui=get('js/ui-controls.js'),pid=get('tripod.html');
- assert.match(html,/<button class="tab" data-tab="pid"[^>]*>PID TUNING<\/button>/i);
+ assert.match(html,/<button class="tab" data-tab="pid"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>PID TUNING<\/span><\/button>/i);
  assert.match(html,/id="pidFrame"[^>]*data-src="\.\/tripod\.html\?embedded=1"/);
  assert.match(pid,/pid-embedded/);
  assert.match(ui,/\$\$\('\.tab-panel'\)\.forEach\(p=>p\.classList\.toggle\('active'/);
