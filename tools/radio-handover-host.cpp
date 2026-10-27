@@ -43,5 +43,20 @@ int main(){
  assert(zjRcPaused&&!zjHandoverPending&&zjHandoverState=="FAILED");
  zjPrefs.putString("inputProfile","1|ap|WEB_STA|PPM|1");zjRcControlPath="AUTO";zjMode="auto";zjLoadRadioProfile();
  assert(zjMode=="auto"&&zjRcControlPath=="AUTO");
+ // AUTO Web input was released before mode POST: preserve the signed client's
+ // inferred path in the same atomic record, including failure/reboot behavior.
+ zjForgetRadioProfile();zjRcPaused=false;zjRcHandoverPaused=false;
+ frame(1000,false);zjRcRelease("TEST");
+ assert(zjRcClaim("WEB",zjKitCode,true,IPAddress(2),"STA"));
+ zjRcRelease("CLIENT_RELEASE");assert(zjRcControlPath=="AUTO"&&zjRcSource=="NONE");
+ errorIs(zjPrepareRadioHandover("ap","STA","ANDROID_AP"),"invalid_sta_input");
+ zjPrefs.failNextWrite=true;errorIs(zjPrepareRadioHandover("ap","STA","WEB_STA"),"input_profile_save_failed");
+ assert(zjRcControlPath=="AUTO"&&!zjRcPaused&&!zjHandoverPending);
+ assert(!zjPrepareRadioHandover("ap","STA","WEB_STA"));
+ assert(zjLastStaInput=="WEB_STA"&&zjRcControlPath=="ANDROID_AP");
+ zjRadioHandoverApplied("AP");
+ errorIs(zjPrepareRadioHandover("sta","AP","PPM"),"input_profile_changed");
+ assert(!zjPrepareRadioHandover("sta","AP","WEB_STA"));
+ assert(zjRcControlPath=="WEB_STA"&&!zjRcOwned&&!zjRcInputArmed);
  std::cout<<"PASS production coordinated handover: atomic save, failure preservation, safe PPM, ARM race, explicit claim, STA restore, reboot and corrupt profile\n";
 }

@@ -564,7 +564,7 @@ async function status(){
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
- const newer=kitSnapshot.bootId===data.bootId&&kitRcReadStartedAt>started,previousRc=kitSnapshot.rc;
+ const newer=!!kitSnapshot.bootId&&kitSnapshot.bootId===data.bootId&&(kitRcReadStartedAt>started||!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,data.rc)),previousRc=kitSnapshot.rc;
  online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
  if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});
@@ -661,7 +661,7 @@ async function performModeHandover(desired){
  try{
   show('SWITCHING '+before.toUpperCase()+' → '+physical.toUpperCase()+' • sending authenticated mode command','');
   trace('handover_request',{mode:desired,transport:link,selectedPath:snapshot.rcAccess?.controlPath,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,outcome:'pending'});
-  const response=await request('/api/wifi/mode','POST',{mode:desired});
+  const response=await request('/api/wifi/mode','POST',{mode:desired,lastStaInput:plan.lastStaInput});
   if(response.kitId!==id||response.mode!==desired||response.state!=='switching'||!window.ZebjusControlPaths.confirmedHandover(response,plan))
    throw Error('Kit did not confirm the saved Wi-Fi/input profile');
   kitSnapshot={...kitSnapshot,radioHandover:response.radioHandover,rcAccess:response.rcAccess,rc:{source:'NONE',active:false,claimed:false,inputArmed:false,throttle:1000}};
@@ -886,7 +886,7 @@ async function pollObservedInput(){
  try{
   const rc=await request('/api/rc/snapshot');
   if(epoch!==linkEpoch||id!==verifiedKitId||rc?.kitId!==id||started<kitRcReadStartedAt)return;
-  if(kitSnapshot.rc?.active&&rc.active&&kitSnapshot.rc.source===rc.source&&kitSnapshot.rc.ownerId===rc.ownerId&&Number(rc.seq)<Number(kitSnapshot.rc.seq))return;
+  if(!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,rc))return;
   kitSnapshot={...kitSnapshot,rc};kitSnapshotAt=Date.now();kitRcReadStartedAt=started;
   window.ZebjusAckDiagnostics?.observeInput?.(rc,getState());window.ZebjusControlUI?.refresh();
  }catch{}finally{inputReadBusy=false;}

@@ -274,7 +274,7 @@ static void zjSetupHttp(){
   if(!zjAllowModeChange())return;const String mode=zjArg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
   if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
-  const char* error=zjPrepareRadioHandover(mode,zjClientTransport());
+  const char* error=zjPrepareRadioHandover(mode,zjClientTransport(),zjArg("lastStaInput"));
   if(error){zjReply(String(error)=="input_profile_save_failed"?500:409,"{\"error\":"+zjJson(error)+"}");return;}
   zjUdpInvalidate();
   zjReply(202,"{\"kitId\":"+zjJson(zjKitId)+",\"mode\":"+zjJson(mode)+",\"state\":\"switching\",\"radioHandover\":"+zjRadioHandoverStatus()+",\"rcAccess\":"+zjAccessState(zjRequestSession>=0?zjSessions[zjRequestSession].id:String(""),zjAccessStationary())+"}");
@@ -554,9 +554,10 @@ static bool zjNetSerialCommand(char* line){
  }
  if(!strncmp(line,"ZJNET,MODE,",11)){
   if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
-  const String mode=line+11;
+  char* hint=strchr(line+11,',');if(hint)*hint++='\0';
+  const String mode=line+11,staHint=hint?hint:"";
   if(mode!="auto"&&mode!="ap"&&mode!="sta"){Serial.println("ZJNET,ERR,INVALID_MODE");return true;}
-  const char* error=zjPrepareRadioHandover(mode,zjControlRadio());
+  const char* error=zjPrepareRadioHandover(mode,zjControlRadio(),staHint);
   if(error){Serial.print("ZJNET,ERR,");Serial.println(error);return true;}
   zjUdpInvalidate();zjScheduleMode(mode);
   Serial.print("ZJNET,HANDOVER,");Serial.println(zjUsbHandoverStatus());

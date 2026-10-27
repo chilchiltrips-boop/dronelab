@@ -65,6 +65,7 @@ test('WebApp observes Android RX/APPLIED diagnostics without claiming its contro
   ZebjusKitAuth:{http:()=>({}),openLocal:async()=>({expiresAt:Date.now()+60000,
    request:async route=>{routes.push(route);assert.equal(route,'/api/status');return status;}})}};
  const document={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
+ const shared={};vm.runInNewContext(read('js/control-path-policy.js'),shared);window.ZebjusControlPaths=shared.ZebjusControlPaths;
  vm.runInNewContext(kit,{window,document,localStorage:{getItem:()=>null,setItem(){}},
   fetch:async()=>({ok:true,json:async()=>({kitId,kitCode,board:'ZFC-A2',simpleConnection:true})}),
   setTimeout,clearTimeout,AbortController,URLSearchParams,console,CustomEvent:class{}});

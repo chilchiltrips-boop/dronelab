@@ -628,7 +628,7 @@ function statusReadFailed(error){
 }
 function adoptRcObservation(rc,at,started){
  if(!rc||started<state.rcReadStartedAt)return false;
- if(state.rc?.active&&rc.active&&state.rc.source===rc.source&&state.rc.ownerId===rc.ownerId&&Number(rc.seq)<Number(state.rc.seq))return false;
+ if(!root.ZebjusControlPaths.acceptRcObservation(state.rc,rc))return false;
  state.rc=rc;state.rcObservedAt=at;state.rcReadStartedAt=started;
  return true;
 }
@@ -1524,10 +1524,10 @@ async function performKitNetworkHandover(mode){
    if(overUsbNetwork)await verifyPhysicalUsbForSelectedKit();
    const pending=waitSerial(/^ZJNET,(?:ACK,MODE|ERR,)/,3200),profile=waitSerial(/^ZJNET,HANDOVER,/,3200);
    pending.catch(()=>{});profile.catch(()=>{});
-   await usbWrite('ZJNET,MODE,'+mode);const ack=await pending;
+   await usbWrite('ZJNET,MODE,'+mode+','+plan.lastStaInput);const ack=await pending;
    if(!ack.startsWith('ZJNET,ACK,MODE,'))throw Error('Kit refused mode change: '+ack);
    result=JSON.parse((await profile).slice('ZJNET,HANDOVER,'.length));
-  }else result=await deviceRequest('/api/wifi/mode','POST',{mode});
+  }else result=await deviceRequest('/api/wifi/mode','POST',{mode,lastStaInput:plan.lastStaInput});
   if(ticket!==reconnectTicket||result.kitId!==target.kitId||result.mode!==mode||!root.ZebjusControlPaths.confirmedHandover(result,plan))throw Error('Kit did not confirm the saved Wi-Fi/input profile');
   state.radioHandover={...result.radioHandover};state.rcAccess=root.ZebjusKitAccessPolicy.normalize(result.rcAccess);
   ++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';state.rc={source:'NONE',claimed:false,active:false,inputArmed:false,throttle:1000};

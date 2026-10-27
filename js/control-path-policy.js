@@ -32,6 +32,16 @@
   }
   return {mode,targetInput:mode==='ap'?'ANDROID_AP':sta,lastStaInput:sta};
  }
+ function acceptRcObservation(previous,next){
+  if(!previous?.active||!next?.active||previous.source!==next.source||previous.ownerId!==next.ownerId||Number(next.seq)>=Number(previous.seq))return true;
+  // PPM reacquisition resets the lease sequence, but accepted is a boot-wide
+  // firmware counter. A newer accepted frame proves this is a new acquisition,
+  // including when loss/recovery happened entirely between observer polls.
+  const a=previous.accepted,b=next.accepted;
+  if(next.source!=='PPM'||![a,b].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=0xffffffff))return false;
+  const advance=(b-a)>>>0;
+  return advance>0&&advance<0x80000000;
+ }
  function confirmedHandover(reply,plan){
   const h=reply?.radioHandover,a=reply?.rcAccess,path=find(plan.targetInput);
   return !!path&&h?.version===1&&h.profileSaved===true&&Number.isSafeInteger(h.revision)&&h.revision>0&&
@@ -88,5 +98,5 @@
     selected==='ANDROID_WEBRTC'?'Android input targets the virtual simulator; Kit RC is not claimed':
     kit.linkState==='delayed'?'Kit response delayed; checking the same Device ID':'Only the selected controller may claim RC'};
  }
- root.ZebjusControlPaths=Object.freeze({paths,find,radio,sameBinding,failureState,radioTarget,confirmedHandover,describe});
+ root.ZebjusControlPaths=Object.freeze({paths,find,radio,sameBinding,failureState,radioTarget,acceptRcObservation,confirmedHandover,describe});
 })(globalThis);

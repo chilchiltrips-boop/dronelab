@@ -131,7 +131,7 @@ try{
  await page.locator('[data-wifi-mode="sta"]').click();
  assert.equal(await page.evaluate(()=>window.__wifiUsb.writes.length),0);assert.equal(await page.locator('#wifiActualMode').textContent(),'AP');
  await page.locator('#kitModeApply').click();await page.waitForFunction(()=>document.getElementById('wifiActualMode').textContent==='STA');
- assert.deepEqual(await page.evaluate(()=>window.__wifiUsb.writes),['ZJNET,MODE,sta']);
+ assert.deepEqual(await page.evaluate(()=>window.__wifiUsb.writes),['ZJNET,MODE,sta,ANDROID_WEBRTC']);
  assert.equal(await page.locator('#wifiBrowserLink').textContent(),'USB');
  await page.goto('http://127.0.0.1:8765/lab.html#firmware');await page.waitForFunction(()=>window.ZebjusWifiWorkspace);
  await page.evaluate(()=>window.ZebjusDevicesWorkspace.open('wifi'));

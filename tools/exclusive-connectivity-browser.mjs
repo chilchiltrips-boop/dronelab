@@ -8,9 +8,9 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 const id='ZFC-A1-012345ABCDEF',key='a1'.repeat(16),oldKey='b2'.repeat(16),boot='c3'.repeat(16);
 const hmac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map();let mode='ap',computer='ap',proofFailures=0,adminEnrollments=0,statusRequests=0,mdnsUnavailable=false;
-let inputPath='AUTO',lastStaInput='ANDROID_WEBRTC',revision=0,ppm=false,seqNo=0;
+let inputPath='AUTO',lastStaInput='ANDROID_WEBRTC',revision=0,ppm=false,seqNo=0,acceptedNo=0;
 const access=()=>({version:1,pathVersion:1,controlPath:inputPath,selection:inputPath==='PPM'?'PPM':inputPath==='WEB_STA'?'WEB':inputPath==='AUTO'?'AUTO':'ANDROID',paused:false,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}});
-const rc=()=>({kitId:id,source:ppm?'PPM':'NONE',claimed:ppm,active:ppm,inputValid:ppm,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500,seq:ppm?++seqNo:0,ageMs:ppm?25:-1,motorsDisabled:true});
+const rc=()=>({kitId:id,source:ppm?'PPM':'NONE',ownerId:ppm?'PPM':'',claimed:ppm,active:ppm,inputValid:ppm,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500,seq:ppm?++seqNo:0,accepted:ppm?++acceptedNo:acceptedNo,ageMs:ppm?25:-1,motorsDisabled:true});
 const result=(body,status=200,secret='',seq='')=>{const text=JSON.stringify(body);return {status,text,proof:secret?hmac(secret,['response',seq,status,text].join('|')):''}};
 function device(url,options={}){
  const u=new URL(url),ap=u.hostname==='192.168.4.1';
@@ -117,8 +117,11 @@ try{
 
  // PPM source remains stable through a full 2200ms status interval because
  // the shared header consumes fresh read-only snapshots between status polls.
- inputPath='PPM';ppm=true;await page.evaluate(()=>window.ZebjusKits.read());
+ inputPath='PPM';ppm=true;seqNo=16000;acceptedNo=18000;await page.evaluate(()=>window.ZebjusKits.read());
  for(let i=0;i<12;i++){await page.waitForTimeout(250);assert.equal(await page.evaluate(()=>window.ZebjusControlUI.refresh().active),'PPM');}
+ seqNo=0;await page.waitForTimeout(350);
+ assert.ok(await page.evaluate(()=>window.ZebjusKits.getState().rc.seq)<100,'PPM reacquisition between reads establishes a fresh sequence baseline');
+ assert.equal(await page.evaluate(()=>window.ZebjusControlUI.refresh().active),'PPM');
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
  // New tab has no sessionStorage key; the encrypted IndexedDB pairing survives.
  await page.close();page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));

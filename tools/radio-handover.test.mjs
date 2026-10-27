@@ -27,3 +27,10 @@ test('fresh observer samples keep PPM stable across the slow status poll, withou
  for(let t=0;t<=2200;t+=100){const observed=at+Math.floor(t/250)*250;const d=policy.describe({kit:{...kit,rcAt:observed},now:at+t});assert.equal(d.active,'PPM');assert.equal(d.selectedLabel,'Auto');assert.equal(d.telemetryLabel,'Telemetry fresh');}
  assert.equal(policy.describe({kit:{...kit,rcAt:at},now:at+500}).active,null,'a genuinely unrefreshed RC sample still expires');
 });
+test('PPM reacquisition with a reset sequence requires a newer boot-wide accepted counter',()=>{
+ const old={source:'PPM',ownerId:'PPM',active:true,seq:16000,accepted:18000};
+ assert.equal(policy.acceptRcObservation(old,{...old,seq:3,accepted:18003}),true);
+ for(const accepted of [17999,18000,undefined])assert.equal(policy.acceptRcObservation(old,{...old,seq:3,accepted}),false);
+ assert.equal(policy.acceptRcObservation({...old,accepted:0xffffffff},{...old,seq:3,accepted:2}),true);
+ assert.equal(policy.acceptRcObservation({...old,source:'WEB'},{...old,source:'WEB',seq:3,accepted:18003}),false);
+});

@@ -26,19 +26,25 @@ static void zjForgetRadioProfile(){
  zjPrefs.remove("inputProfile");zjHandoverSaved=false;zjHandoverPending=false;
  zjHandoverState="IDLE";zjHandoverError="";zjRcControlPath="AUTO";zjRcSelection="AUTO";
 }
-static const char* zjPrepareRadioHandover(const String& mode,const String& currentRadio){
+static const char* zjPrepareRadioHandover(const String& mode,const String& currentRadio,const String& staHint=""){
  if(mode!="ap"&&mode!="sta"&&mode!="auto")return "invalid_mode";
  if(zjHandoverPending)return "handover_busy";
  if(zjMaintenanceActive)return "maintenance_active";
  if(zjRcOwned&&zjRcSource!="PPM")return "release_current_controller_first";
  if(zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return "lower_throttle_and_disarm";
  if(mode!="ap"&&!zjSavedSsid.length())return "save_sta_credentials_first";
+ if(staHint.length()&&!zjStaInputPath(staHint))return "invalid_sta_input";
  String sta=zjLastStaInput;
  if(currentRadio=="STA"){
   if(zjStaInputPath(zjRcControlPath))sta=zjRcControlPath;
   else if(zjRcSource=="PPM")sta="PPM";
   else if(zjRcSource=="WEB")sta="WEB_STA";
+  // A client releases its own AUTO lease before mode handover. Carry the
+  // inferred STA path through that release without changing the old selection
+  // or persisting anything until this combined profile is validated and saved.
+  else if(zjRcControlPath=="AUTO"&&zjRcSource=="NONE"&&staHint.length())sta=staHint;
  }
+ if(staHint.length()&&staHint!=sta)return "input_profile_changed";
  const String path=mode=="ap"?String("ANDROID_AP"):sta;
  const uint32_t revision=zjHandoverRevision>=1000000000?1:zjHandoverRevision+1;
  const String record=String("1|")+mode+"|"+path+"|"+sta+"|"+String(revision);

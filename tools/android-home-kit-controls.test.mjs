@@ -12,8 +12,8 @@ const kitId='ZFC-A1-012345ABCDEF';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 function harness(){
- const handlers=new Map(),elements=new Map(),sent=[],expectedSsid='zebjus_drone_1';
- let denyMode=false,appliedLed=false;
+ const handlers=new Map(),elements=new Map(),sent=[],intervals=new Map(),expectedSsid='zebjus_drone_1';
+ let denyMode=false,appliedLed=false,observedRc={claimed:false,active:false,inputArmed:false,throttle:1000};
  const element=id=>{
   if(!elements.has(id))elements.set(id,{
    value:'',checked:false,disabled:false,textContent:'',dataset:{},attrs:{},
@@ -27,7 +27,8 @@ function harness(){
   sent.push({route,method,args});
   if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',mode:'ap',
    apActive:true,staConnected:false,requestTransport:'AP',apSsid:expectedSsid,
-   radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},rc:{claimed:false,active:false,inputArmed:false,throttle:1000},staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
+   radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},bootId:'same-boot',rc:{...observedRc},staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
+  if(route==='/api/rc/snapshot')return {...observedRc};
   if(route==='/api/wifi/saved')return {preferred:'School_Router',networks:[{ssid:'School_Router',preferred:true}]};
   if(route==='/api/command'){appliedLed=args.line.endsWith(',100');return {kitId,accepted:true,ledOn:appliedLed};}
   if(route==='/api/wifi/mode'){
@@ -59,9 +60,9 @@ function harness(){
  const later=(fn,ms)=>{const timer=setTimeout(fn,ms);if(ms>=4000)timer.unref?.();return timer};
  const policy={};runInNewContext(read('js/control-path-policy.js'),policy);win.ZebjusControlPaths=policy.ZebjusControlPaths;
  runInNewContext(networkSource,{window:win,document:doc,Date,performance,URLSearchParams,Promise,Set,Map,
-  Option:class{},setTimeout:later,clearTimeout,setInterval(){},CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
+  Option:class{},setTimeout:later,clearTimeout,setInterval(fn,ms){intervals.set(ms,fn)},CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
  handlers.get('document:DOMContentLoaded')();
- return {win,element,sent,deny:flag=>{denyMode=flag},click:id=>handlers.get(id+':click')?.()};
+ return {win,element,sent,deny:flag=>{denyMode=flag},rc:value=>{observedRc=value},observe:()=>intervals.get(100)(),click:id=>handlers.get(id+':click')?.()};
 }
 
 test('Home LED uses authenticated SET 100/0; saved STA SSID loads without exposing password',async()=>{
@@ -106,4 +107,13 @@ test('Home and network restrictions remain in place',()=>{
  assert.match(native,/route.equals\("\/api\/wifi\/saved"\)/);
  assert.match(networkSource,/Fallback AP belongs to a different Kit/);
  assert.match(networkSource,/handoverExpectedKit/);
+});
+test('Android read-only observer immediately accepts recovered PPM and rejects older samples',async()=>{
+ const h=harness(),old={kitId,source:'PPM',ownerId:'PPM',claimed:true,active:true,inputValid:true,seq:16000,accepted:18000,ageMs:25,inputArmed:false,throttle:1000};
+ h.rc(old);h.click('kitConnect');await sleep(30);
+ assert.equal(h.win.ZebjusNetwork.getState().rc.seq,16000);
+ h.rc({...old,seq:3,accepted:18003});h.observe();await sleep(20);
+ assert.equal(h.win.ZebjusNetwork.getState().rc.seq,3);
+ await sleep(260);h.rc({...old,seq:1,accepted:18002});h.observe();await sleep(20);
+ assert.equal(h.win.ZebjusNetwork.getState().rc.seq,3);
 });

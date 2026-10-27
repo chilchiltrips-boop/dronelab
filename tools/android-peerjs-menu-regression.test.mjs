@@ -53,7 +53,7 @@ test('Cockpit header AP/STA sends verified firmware mode command and keeps trans
  assert.match(html,/id="kitLink"/);
  assert.match(network,/action\('flightNetworkSwitch'/);
  assert.match(network,/await setMode\(next\)/);
- assert.match(network,/request\('\/api\/wifi\/mode','POST',\{mode:desired\}\)/);
+ assert.match(network,/request\('\/api\/wifi\/mode','POST',\{mode:desired,lastStaInput:plan\.lastStaInput\}\)/);
  assert.match(network,/if\(!online\|\|!onKitLink\)throw Error/);
  assert.match(network,/zebjus:kit-transport/);
  assert.match(network,/e\.dispatchEvent\(new Event\('change'/);

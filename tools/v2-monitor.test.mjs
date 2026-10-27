@@ -9,6 +9,7 @@ function fixture(){
  for(const [id,value] of Object.entries({kitCodeInput:'123456',kitTransport:'ap',kitIpInput:'192.168.4.1',kitKeyInput:'ab'.repeat(16)}))elements.set(id,{value});
  const document={readyState:'loading',hidden:false,addEventListener(){},getElementById:id=>elements.get(id)||null,querySelectorAll:()=>[]};
  const window={dispatchEvent(){},ZebjusKitPairingStore:{saveSession(){}},DroneLabSerial:{isOpen:()=>usbOpen,isFlashing:()=>false,writeLine:async line=>{if(line.trim()==='ZJKIT,GET')window.testSerial('ZJKIT,ID,'+usbIdentity)}}};
+ const shared={};vm.runInNewContext(readFileSync(new URL('../js/control-path-policy.js',import.meta.url),'utf8'),shared);window.ZebjusControlPaths=shared.ZebjusControlPaths;
  const fetch=async url=>{
   if(url.endsWith('/api/identify'))return {ok:true,json:async()=>({kitId:identity,kitCode:'123456',board:'ZFC-A1'})};
   calls++;if(gate)await gate;
