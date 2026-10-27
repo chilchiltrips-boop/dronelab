@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.12";
+constexpr const char* FW_VERSION="1.5.13";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -348,7 +348,7 @@ static bool zjAccessStationary(){
 }
 #include "FlightCoreNetwork.h"
 static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
-static bool zjAccessBusy(){return zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
+static bool zjAccessBusy(){return zjHandoverPending||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
  // A rate-change command can update telLast after loop() captured "now".

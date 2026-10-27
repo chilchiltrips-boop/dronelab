@@ -26,7 +26,7 @@ test('Link loss and AP/STA/Android Relay changes invalidate old input before a f
  assert.match(live,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate\.reset\(\);display\(\)/);
  assert.match(kit,/if\(!linkFresh\(\)\|\|state\.working\|\|state\.owner\|\|state\.rc\?\.claimed\|\|wifiTesting\)/);
  assert.match(kit,/await beginNetworkHandover\(target/);
- assert.match(kit,/result\.kitId&&result\.kitId!==target\.kitId/);
+ assert.match(kit,/result\.kitId!==target\.kitId/);
  assert.match(kit,/state\.linkState='stale';state\.owner=false;state\.rcSession=''/);
  assert.match(kit,/if\(\+\+pollErrors<3\)/);
  assert.match(kit,/recoverVerifiedLink\(old\)/);
@@ -76,7 +76,7 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  const current=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
  assert.ok(current>=32&&previous>0&&current>=previous);
- assert.match(gradle,/versionName '1\.8\.17-layout-safe'/);
+ assert.match(gradle,/versionName '1\.8\.18-radio-input-handover'/);
 });
 
 test('minimized STA tab does not tear down selected Kit on throttled network polls',()=>{

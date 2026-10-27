@@ -1,7 +1,7 @@
 name: Unified PID Tuning Shell & Persistent WebRTC
 on:
   push:
-    branches: [fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main, feature/pid-fullwidth-responsive-layout, feature/authoritative-status-integration-20261021]
+    branches: [feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/unified-pid-settings-shell-v1.6.3, feature/android-reference-cockpit-v1.6.2, main, feature/pid-fullwidth-responsive-layout, feature/authoritative-status-integration-20261021]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'

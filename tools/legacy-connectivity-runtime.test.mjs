@@ -91,9 +91,15 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
   requestTransport:mode==='android-relay'?'AP':mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
-  rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
+  radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},rcAccess:{version:1,pathVersion:1,controlPath:'AUTO',selection:'AUTO',paused:false,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}},
+  rc:{claimed:false,active:false,throttle:1000,inputArmed:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
  let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
  let relayState={connected:true,paired:true,approved:true,sessionId:'relay-session-1'},relayGate=null;
+ const handoverReply=(desired,hint)=>{
+  const selected=status.rcAccess?.controlPath;
+  const plan=window.ZebjusControlPaths.radioTarget({...status,transport:status.requestTransport.toLowerCase(),radioHandover:{...status.radioHandover,...(selected==='AUTO'&&!status.rc?.source&&hint?{lastStaInput:hint}:{})}},desired);
+  return {kitId:id,mode:desired,state:'switching',radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',...plan},rcAccess:{...status.rcAccess,version:1,pathVersion:1,controlPath:plan.targetInput,selection:plan.targetInput==='PPM'?'PPM':plan.targetInput==='WEB_STA'?'WEB':'ANDROID',paused:true,handoverPaused:true,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}};
+ };
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
@@ -109,7 +115,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    status.flightModeState={supported:true,stabilizationSupported:false,saved:args.flightMode,active,pending:active===args.flightMode?null:args.flightMode};status.flightMode=active;
    return {kitId:id,saved:true,motorsArmed:false,flightMode:active,flightModeState:{...status.flightModeState}};
   }
-  if(route==='/api/wifi/mode')return {kitId:id,mode:args.mode,state:'switching'};
+  if(route==='/api/wifi/mode')return handoverReply(args.mode,args.lastStaInput);
   if(route==='/api/rc/claim'){
    if(claimGate)await claimGate;
    status.rc={claimed:true,active:false,source:'WEB',ownerId:'owner-1'};
@@ -138,6 +144,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  window.ZebjusDeviceRelay={status:()=>({...relayState}),request:async(route,_method,args)=>{
   const result=await handler(route,args);if(relayGate)await relayGate;return result;
  }};
+ for(const file of ['control-path-policy.js','kit-access-policy.js']){const ctx={};vm.runInNewContext(readFileSync(new URL('../js/'+file,import.meta.url),'utf8'),ctx);Object.assign(window,ctx);}
  const smartPolicy={};vm.runInNewContext(readFileSync(new URL('../js/smart-kit-policy.js',import.meta.url),'utf8'),smartPolicy);window.ZebjusSmartKitPolicy=smartPolicy.ZebjusSmartKitPolicy;
  const shared={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
  const fetch=async(url,opts={})=>{
@@ -175,7 +182,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
     if(cmd==='ZJKIT,GET'){emit('ZJKIT,ID,'+usbId);emit('ZJKIT,CODE,'+usbCode);emit('ZJKIT,NAME,zebjus_drone_2');}
     else if(cmd==='ZJINFO,GET')emit('ZJINFO,FW,'+usbBoard+',1.4.9');
     else if(cmd==='ZJNET,PAIR')emit('ZJNET,PAIR,'+usbId+','+key);
-    else if(cmd.startsWith('ZJNET,MODE,'))emit('ZJNET,ACK,MODE,'+cmd.slice(11));
+    else if(cmd.startsWith('ZJNET,MODE,')){const [, ,desired,hint]=cmd.split(',');emit('ZJNET,HANDOVER,'+JSON.stringify(handoverReply(desired,hint)));emit('ZJNET,ACK,MODE,'+desired);}
    }};
   },
   smartUsb:(options={})=>{
@@ -494,9 +501,9 @@ test('same physical USB Kit can switch a verified STA link to AP without unavail
   await f.api.connect();f.enableUsb();
   await f.api.switchNetworkMode('ap');
   const messages=f.requests.filter(v=>String(v.route).startsWith('USB:')).map(v=>v.route);
-  assert.ok(messages.indexOf('USB:ZJKIT,GET')<messages.indexOf('USB:ZJNET,MODE,ap'));
+  assert.ok(messages.indexOf('USB:ZJKIT,GET')<messages.indexOf('USB:ZJNET,MODE,ap,ANDROID_WEBRTC'));
   assert.ok(messages.includes('USB:ZJINFO,GET'));
-  assert.ok(messages.includes('USB:ZJNET,MODE,ap'));
+  assert.ok(messages.includes('USB:ZJNET,MODE,ap,ANDROID_WEBRTC'));
   assert.equal(f.requests.some(v=>v.route==='/api/wifi/mode'),false,'network observer is never promoted implicitly');
   assert.equal(f.api.getState().connected,false,'STA link is retired after authenticated radio-mode acknowledgment');
   assert.equal(f.api.getState().pendingNetworkMode,'ap','await same-device AP rediscovery');
@@ -511,7 +518,7 @@ test('wrong USB Device ID or board is rejected before STA authorization and mode
    await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/mismatch|differs|identity/i);
    await assert.rejects(f.api.switchNetworkMode('ap'),/mismatch|differs|identity/i);
    assert.equal(f.requests.some(v=>v.route==='USB:ZJNET,PAIR'),false);
-   assert.equal(f.requests.some(v=>v.route==='USB:ZJNET,MODE,ap'),false);
+   assert.equal(f.requests.some(v=>v.route.startsWith('USB:ZJNET,MODE,ap')),false);
    assert.equal(f.api.getState().connected,true);
    assert.equal(f.api.getState().owner,false);
   }finally{f.dispose()}
@@ -571,4 +578,36 @@ test('relay verification rejects a phone session replaced while status was in fl
   assert.equal(f.api.getState().connected,false);
   assert.match(f.elements.get('kitMessage').textContent,/relay session changed/);
  }finally{finish?.();f.dispose()}
+});
+
+test('a verified new Kit boot resets the RC sequence baseline instead of rejecting every new PPM sample',async()=>{
+ const f=fixture({exclusive:true});try{
+  f.status({rc:{kitId:id,source:'PPM',claimed:true,active:true,inputValid:true,seq:16000,ageMs:25,inputArmed:false,throttle:1000}});
+  await f.api.connect(id);assert.equal(f.api.getState().rc.seq,16000);
+  f.status({bootId:'new-boot',rc:{kitId:id,source:'PPM',claimed:true,active:true,inputValid:true,seq:3,ageMs:25,inputArmed:false,throttle:1000}});
+  await f.api.read();assert.equal(f.api.getState().bootId,'new-boot');assert.equal(f.api.getState().rc.seq,3);
+ }finally{f.dispose();}
+});
+
+test('PPM loss and reacquisition between polls immediately adopts the new sequence',async()=>{
+ const f=fixture({exclusive:true});try{
+  const rc={kitId:id,source:'PPM',ownerId:'PPM',claimed:true,active:true,inputValid:true,seq:16000,accepted:18000,ageMs:25,inputArmed:false,throttle:1000};
+  f.status({rc});await f.api.connect();
+  f.status({rc:{...rc,seq:3,accepted:18003}});await f.api.read();
+  assert.equal(f.api.getState().rc.seq,3);
+  f.status({rc:{...rc,seq:1,accepted:18002}});await f.api.read();
+  assert.equal(f.api.getState().rc.seq,3,'older observations cannot overwrite recovered PPM');
+ }finally{f.dispose();}
+});
+test('AUTO WebApp release carries inferred WEB_STA through the atomic handover',async()=>{
+ const f=fixture({paired:true,encrypted:true,exclusive:true});try{
+  await f.api.connect();await f.api.toggleControl();
+  f.status({rc:{kitId:id,source:'WEB',ownerId:'owner-1',claimed:true,active:true,inputValid:true,seq:1,ageMs:25,inputArmed:false,throttle:1000}});
+  await f.api.read();assert.equal(f.api.getState().owner,true);
+  await f.api.switchNetworkMode('ap');
+  const write=f.requests.find(r=>r.route==='/api/wifi/mode');
+  assert.equal(write.args.lastStaInput,'WEB_STA');
+  assert.ok(f.requests.findIndex(r=>r.route==='/api/rc/release')<f.requests.indexOf(write));
+  assert.equal(f.api.getState().pendingNetworkMode,'ap');
+ }finally{f.dispose();}
 });

@@ -41,10 +41,10 @@ static void zjScheduleWifiTest(){
 static void zjWifiPolicyLoop(uint32_t now){
  // Send the signed HTTP / USB acknowledgement before removing its interface.
  if(zjPendingMode.length()&&int32_t(now-zjNetSwitchAt)>=0){
-  if(!zjAccessCanSwitchRadio())return; // PPM may have armed since the signed ACK.
+  if(!zjRadioHandoverMayApply()){zjPendingMode="";return;}
   const String mode=zjPendingMode;zjPendingMode="";
-  if(mode=="ap"){zjEnsureAP();zjPhase="ap_manual";}
-  else zjConnectSaved();
+  if(mode=="ap"){zjEnsureAP();zjPhase="ap_manual";if(zjApStarted)zjRadioHandoverApplied("AP");else zjRadioHandoverFailed("AP_START_FAILED");}
+  else {zjHandoverState=zjHandoverPending?String("SWITCHING"):zjHandoverState;zjConnectSaved();}
  }
  if(zjNetTesting&&zjTestStartAt&&int32_t(now-zjTestStartAt)>=0){
   zjTestStartAt=0;zjTestConnectedAt=0;zjTestAssociationEpoch=zjAssociationEpoch;
@@ -55,13 +55,13 @@ static void zjWifiPolicyLoop(uint32_t now){
  if(WiFi.status()==WL_CONNECTED){
   // Enforce the invariant even after a scan or a legacy mode migration.
   if(zjApStarted||(WiFi.getMode()&WIFI_AP)){WiFi.softAPdisconnect(true);zjApStarted=false;WiFi.mode(WIFI_STA);}
-  zjPhase="sta_connected";return;
+  zjPhase="sta_connected";zjRadioHandoverApplied("STA");return;
  }
  if(zjPhase=="sta_connecting"){
   if(int32_t(now-zjNetAttempt)<=int32_t(zjSavedAttemptTimeoutMs(zjStaDisconnectReason)))return;
   const int count=zjWifiCount?zjWifiCount:1;
   if(++zjWifiTried<count){zjWifiAttemptIndex=(zjWifiAttemptIndex+1)%count;zjConnectSaved(false);return;}
-  zjEnsureAP();zjPhase="sta_failed_ap_fallback";
+  zjEnsureAP();zjPhase="sta_failed_ap_fallback";zjRadioHandoverFailed("STA_UNAVAILABLE");
    zjNetNextRetry=millis()+zjSavedRetryDelayMs(zjStaDisconnectReason);return;
  }
  if(zjSavedSsid.length()&&int32_t(now-zjNetNextRetry)>=0){

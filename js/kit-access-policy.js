@@ -4,14 +4,14 @@
 (function(root){
  'use strict';
  function normalize(value){
-  const m=value?.maintenance;
+  const m=value?.maintenance,handover=value?.handoverPaused===true;
   if(value?.version!==1||!['AUTO','PPM','WEB','ANDROID'].includes(value.selection)||
    typeof value.paused!=='boolean'||typeof value.stationary!=='boolean'||!m||
    typeof m.active!=='boolean'||typeof m.owned!=='boolean'||
    !Number.isSafeInteger(m.leaseRemainingMs)||m.leaseRemainingMs<0||m.leaseRemainingMs>30000||
-   m.active!==value.paused||m.owned&&(!m.active||m.leaseRemainingMs===0)||!m.active&&m.leaseRemainingMs!==0)return null;
+   (m.active||handover)!==value.paused||m.active&&handover||m.owned&&(!m.active||m.leaseRemainingMs===0)||!m.active&&m.leaseRemainingMs!==0)return null;
   const pathVersion=value.pathVersion===1&&['AUTO','PPM','ANDROID_AP','ANDROID_WEBRTC','WEB_STA'].includes(value.controlPath)?1:0;
-  return {version:1,pathVersion,controlPath:pathVersion?value.controlPath:'AUTO',selection:value.selection,paused:value.paused,stationary:value.stationary,
+  return {version:1,pathVersion,controlPath:pathVersion?value.controlPath:'AUTO',selection:value.selection,paused:value.paused,handoverPaused:handover,stationary:value.stationary,
    reason:String(value.reason||'').slice(0,80),hardwarePidSupported:false,imuCalibrationSupported:false,
    maintenance:{active:m.active,owned:m.owned,leaseRemainingMs:m.leaseRemainingMs}};
  }

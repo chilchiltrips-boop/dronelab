@@ -49,6 +49,7 @@ static bool gyroReady=true,scanActive=false;static const char* GYRO_BOARD="A1";
 static uint32_t gyroSampleSeq=1,lastGyroSample=0,zjLastScanSeq=0;
 static constexpr int GYRO_ADDR=0x6b;static float RateRoll=1.25,RatePitch=-2.5,RateYaw=3;
 static uint8_t scanCount=1,scanAddresses[1]={0x6b};
+#include "../FlightCore_Firmware/FlightCoreHandover.h"
 #include "udp-network-extract.h"
 int main(){
  zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjKitName="zebjus_drone_1";clockMs=1000;zjEnrollmentInit();

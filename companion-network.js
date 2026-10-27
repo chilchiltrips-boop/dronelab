@@ -13,7 +13,7 @@ const validModeState=value=>value?.supported===true&&['angle','acro'].includes(v
 const modeStatus=d=>validModeState(d?.flightModeState)?{...d.flightModeState}:null;
 const modeTraffic=(route,method)=>route==='/api/flight/mode'&&method==='POST'||(flightModeSaving||ledBusy)&&route==='/api/status'&&method==='GET'||ledBusy&&route==='/api/command'&&method==='POST';
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
-let kitSnapshot={},kitSnapshotAt=0,controlPathBusy=false;
+let kitSnapshot={},kitSnapshotAt=0,kitRcReadStartedAt=0,controlPathBusy=false;
 function getState(){return {...kitSnapshot,rcAccess:window.ZebjusKitAccessPolicy?.normalize?.(kitSnapshot.rcAccess)||null,
  connected:online&&onKitLink&&controlLinkFresh(),linkVerified:!!verifiedKitId,transport:link,physicalLink:link,
  connectionGeneration:linkEpoch,kitId:verifiedKitId,owner:!!rcSession,controlAuthorized,
@@ -21,7 +21,7 @@ function getState(){return {...kitSnapshot,rcAccess:window.ZebjusKitAccessPolicy
  heartbeatAt:lastStatus,linkState:!online?'disconnected':statusFailures?'delayed':'connected'};}
 function selectedInputAllowsAndroid(){
  const a=kitSnapshot.rcAccess;
- return !a?.paused&&(!a||a.selection==='AUTO'||a.selection==='ANDROID')&&
+ return !(kitSnapshot.rc?.claimed&&kitSnapshot.rc.source==='PPM')&&!a?.paused&&(!a||a.selection==='AUTO'||a.selection==='ANDROID')&&
   (!a?.pathVersion||a.controlPath==='AUTO'||a.controlPath==='ANDROID_AP'&&link==='ap');
 }
 async function selectControlPath(path){
@@ -544,7 +544,7 @@ function scheduleFallbackCheck(delay=25000){
  },delay);
 }
 async function status(){
- const epoch=linkEpoch;
+ const epoch=linkEpoch,started=Date.now();
  const data=await request('/api/status');
  if(epoch!==linkEpoch)throw Error('Kit link changed during status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
@@ -564,7 +564,10 @@ async function status(){
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
- online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data};kitSnapshotAt=lastStatus;
+ const newer=!!kitSnapshot.bootId&&kitSnapshot.bootId===data.bootId&&(kitRcReadStartedAt>started||!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,data.rc)),previousRc=kitSnapshot.rc;
+ online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
+ if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
+ window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});
  window.dispatchEvent(new CustomEvent('zebjus:kit-status'));
  trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
   apActive:data.apActive,staConnected:data.staConnected,staReason:Number(data.staDisconnectReason)||0,
@@ -638,19 +641,31 @@ async function setSavedFlightMode(desired){
  const job=modeTail.catch(()=>{}).then(work);modeTail=job;return job;
 }
 async function setMode(desired=el('kitMode')?.value){
+ try{return await performModeHandover(desired);}
+ catch(error){trace('handover_error',{mode:desired,transport:link,reason:classify(error),outcome:'fail'});throw error;}
+}
+async function performModeHandover(desired){
  if(!['ap','sta','auto'].includes(desired))throw Error('Invalid Wi-Fi mode');
  if(otaBusy||connecting)throw Error('Kit operation is already in progress');
  if(!online||!onKitLink)throw Error('Connect and verify the Kit on its current AP/STA network before switching');
  const before=link,same=desired===before,physical=desired==='auto'?'sta':desired;
+ const snapshot=getState();
+ if(snapshot.radioHandover?.version!==1)throw Error('Update FlightCore to 1.5.13 for saved input and Wi-Fi handover');
+ if(rcInputArmed||snapshot.rc?.inputArmed===true||Number.isFinite(snapshot.rc?.throttle)&&snapshot.rc.throttle>1050||(snapshot.rc?.claimed||snapshot.rc?.active)&&!Number.isFinite(snapshot.rc?.throttle))throw Error('Disarm and lower throttle to 1000 µs before switching AP/STA');
+ if(snapshot.rc?.claimed&&!rcSession&&snapshot.rc.source!=='PPM')throw Error('Release the other controller first');
+ const plan=window.ZebjusControlPaths.radioTarget(snapshot,desired);
  if(same&&mode===desired){show('KIT '+before.toUpperCase()+' CONNECTED • already selected','good');return}
  if(rcSession||rcClaiming)await releaseRc();
  connecting=true;syncHeaderTransport();
  const id=verifiedKitId;
  try{
   show('SWITCHING '+before.toUpperCase()+' → '+physical.toUpperCase()+' • sending authenticated mode command','');
-  const response=await request('/api/wifi/mode','POST',{mode:desired});
-  if(response.kitId!==id||response.mode!==desired||response.state!=='switching')
-   throw Error('Kit did not verify mode switching acknowledgement');
+  trace('handover_request',{mode:desired,transport:link,selectedPath:snapshot.rcAccess?.controlPath,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,outcome:'pending'});
+  const response=await request('/api/wifi/mode','POST',{mode:desired,lastStaInput:plan.lastStaInput});
+  if(response.kitId!==id||response.mode!==desired||response.state!=='switching'||!window.ZebjusControlPaths.confirmedHandover(response,plan))
+   throw Error('Kit did not confirm the saved Wi-Fi/input profile');
+  kitSnapshot={...kitSnapshot,radioHandover:response.radioHandover,rcAccess:response.rcAccess,rc:{source:'NONE',active:false,claimed:false,inputArmed:false,throttle:1000}};
+  trace('handover_ack',{mode:desired,transport:link,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,profileSaved:true,profileRevision:response.radioHandover.revision,handoverState:response.radioHandover.state,outcome:'ok'});
   // Only switch Android's request target AFTER the authenticated command is accepted.
   ++linkEpoch;kitModeState=null;kitFlightModeVerified=false;kitFlightModeObserved=false;++modeRequestSeq;authOpening=null;finishHandover();forgetGrants();forgetNativePin();dropInput('Switching link • inputs disarmed');
   if(before==='sta'&&validHost(ip))staIp=ip;
@@ -663,7 +678,7 @@ async function setMode(desired=el('kitMode')?.value){
   if(physical==='sta'){
    handoverExpectedKit=id;
    show('STA CONNECTING • saved Wi-Fi selected • join same router when available; AP fallback remains enabled','');
-  }else show('AP SWITCHING • join Kit hotspot; waiting for signed connection','');
+  }else show('AP SWITCHING • Android AP input saved • join Kit hotspot; waiting for signed connection','');
  }finally{connecting=false;syncHeaderTransport()}
  if(physical==='ap')scheduleAutoApConnect(1200);
  else{scheduleStaObserver(3000);scheduleFallbackCheck()}
@@ -863,6 +878,18 @@ function previewControls(m,critical=false){
   if(critical)throw e;
  })
  .finally(()=>{previewBusy=false});
+}
+let inputReadBusy=false,nextInputReadAt=0;
+async function pollObservedInput(){
+ if(document.hidden||!online||!onKitLink||connecting||otaBusy||rcSession||inputReadBusy||Date.now()<nextInputReadAt||!kitSnapshot.rc?.active)return;
+ const epoch=linkEpoch,id=verifiedKitId,started=Date.now();inputReadBusy=true;nextInputReadAt=started+250;
+ try{
+  const rc=await request('/api/rc/snapshot');
+  if(epoch!==linkEpoch||id!==verifiedKitId||rc?.kitId!==id||started<kitRcReadStartedAt)return;
+  if(!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,rc))return;
+  kitSnapshot={...kitSnapshot,rc};kitSnapshotAt=Date.now();kitRcReadStartedAt=started;
+  window.ZebjusAckDiagnostics?.observeInput?.(rc,getState());window.ZebjusControlUI?.refresh();
+ }catch{}finally{inputReadBusy=false;}
 }
 async function pollConnection(){
  if(otaBusy||!reconnectEnabled||connecting||statusBusy||document.hidden)return;
@@ -1164,6 +1191,7 @@ function bind(){
   if(file)void uploadAdminApp(file).catch(error=>{if(!/OTA stopped:|UNCONFIRMED|NOT VERIFIED/.test(el('kitNetStatus')?.textContent||''))show('OTA: '+error.message,'warn');});
  });
  setInterval(pollConnection,3500);
+ setInterval(()=>void pollObservedInput(),100);
  setInterval(()=>{if(ledOn&&online&&onKitLink&&!rcSession&&!ledBusy&&!statusBusy&&!connecting&&!otaBusy&&!document.hidden)
   void command('ZJLED,'+(++ledSequence)+',KEEP').catch(()=>{ledOn=false;syncLedButton()});},1800);
  scheduleAutoApConnect(1000);

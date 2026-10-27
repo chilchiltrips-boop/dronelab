@@ -1,7 +1,7 @@
 name: Authoritative status integration
 on:
   push:
-    branches: [fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
+    branches: [feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
