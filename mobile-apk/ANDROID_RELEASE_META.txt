@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.8.17-layout-safe
-VersionCode: 55
+Version: 1.8.18-radio-input-handover
+VersionCode: 56
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: 2467d1eaf5bbceadff32a7fef0c6f5467c256f63
+Source commit: b3f33f325993113e17e83b7b1ba31043a96dfa23
