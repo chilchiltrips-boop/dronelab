@@ -578,3 +578,12 @@ test('relay verification rejects a phone session replaced while status was in fl
   assert.match(f.elements.get('kitMessage').textContent,/relay session changed/);
  }finally{finish?.();f.dispose()}
 });
+
+test('a verified new Kit boot resets the RC sequence baseline instead of rejecting every new PPM sample',async()=>{
+ const f=fixture({exclusive:true});try{
+  f.status({rc:{kitId:id,source:'PPM',claimed:true,active:true,inputValid:true,seq:16000,ageMs:25,inputArmed:false,throttle:1000}});
+  await f.api.connect(id);assert.equal(f.api.getState().rc.seq,16000);
+  f.status({bootId:'new-boot',rc:{kitId:id,source:'PPM',claimed:true,active:true,inputValid:true,seq:3,ageMs:25,inputArmed:false,throttle:1000}});
+  await f.api.read();assert.equal(f.api.getState().bootId,'new-boot');assert.equal(f.api.getState().rc.seq,3);
+ }finally{f.dispose();}
+});

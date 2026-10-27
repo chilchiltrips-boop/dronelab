@@ -18,7 +18,7 @@ test('AP chooses Android; STA restores the remembered compatible input and ACK m
  const kit={staConnected:true,rcAccess:{controlPath:'AUTO'},rc:{source:'PPM'}};
  const ap=policy.radioTarget(kit,'ap');assert.deepEqual(ap,{mode:'ap',targetInput:'ANDROID_AP',lastStaInput:'PPM'});
  const sta=policy.radioTarget({apActive:true,radioHandover:{lastStaInput:'PPM'}},'sta');assert.equal(sta.targetInput,'PPM');
- const reply={radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',...ap},rcAccess:{controlPath:'ANDROID_AP',paused:true}};
+ const reply={radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',...ap},rcAccess:{version:1,pathVersion:1,controlPath:'ANDROID_AP',selection:'ANDROID',paused:true,handoverPaused:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}};
  assert.equal(policy.confirmedHandover(reply,ap),true);
  for(const change of [{profileSaved:false},{targetInput:'WEB_STA'},{state:'WAITING_CONTROLLER'},{revision:0}])assert.equal(policy.confirmedHandover({...reply,radioHandover:{...reply.radioHandover,...change}},ap),false);
 });

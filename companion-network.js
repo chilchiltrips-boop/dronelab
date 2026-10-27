@@ -564,7 +564,7 @@ async function status(){
  // Pin Android's exact Wi-Fi Network + signed SSID/BSSID before any writes.
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
- const newer=kitRcReadStartedAt>started,previousRc=kitSnapshot.rc;
+ const newer=kitSnapshot.bootId===data.bootId&&kitRcReadStartedAt>started,previousRc=kitSnapshot.rc;
  online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
  if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});

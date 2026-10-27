@@ -33,10 +33,11 @@
   return {mode,targetInput:mode==='ap'?'ANDROID_AP':sta,lastStaInput:sta};
  }
  function confirmedHandover(reply,plan){
-  const h=reply?.radioHandover;
-  return h?.version===1&&h.profileSaved===true&&Number.isSafeInteger(h.revision)&&h.revision>0&&
+  const h=reply?.radioHandover,a=reply?.rcAccess,path=find(plan.targetInput);
+  return !!path&&h?.version===1&&h.profileSaved===true&&Number.isSafeInteger(h.revision)&&h.revision>0&&
    h.mode===plan.mode&&h.targetInput===plan.targetInput&&h.lastStaInput===plan.lastStaInput&&
-   h.state==='PREPARED'&&reply.rcAccess?.controlPath===plan.targetInput&&reply.rcAccess?.paused===true;
+   h.state==='PREPARED'&&a?.version===1&&a.pathVersion===1&&a.controlPath===plan.targetInput&&a.selection===path.source&&
+   a.paused===true&&a.handoverPaused===true&&a.maintenance?.active===false&&a.maintenance.owned===false&&a.maintenance.leaseRemainingMs===0;
  }
  function describe({kit={},peer={},virtual={},client='web',pending=false,now=Date.now()}={}){
   const connected=kit.connected===true,rc=kit.rc||{},access=kit.rcAccess,

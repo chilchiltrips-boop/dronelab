@@ -25,7 +25,7 @@ function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/input_profile_save_failed/.test(s))return 'PROFILE_SAVE_FAILED';
  if(/lower_throttle|disarm and lower|lower throttle/.test(s))return 'INPUT_UNSAFE';
- if(/handover_busy|maintenance_active/.test(s))return 'HANDOVER_BUSY';
+ if(/handover_busy|radio_handover_pending|maintenance_active/.test(s))return 'HANDOVER_BUSY';
  if(/save_sta_credentials_first/.test(s))return 'STA_CONFIG_REQUIRED';
  if(/udp_nack_owner_conflict/.test(s))return 'OWNER_BUSY';
  if(/udp_nack_invalid_frame/.test(s))return 'FRAME_REJECTED';

@@ -32,7 +32,7 @@ function harness(){
   if(route==='/api/command'){appliedLed=args.line.endsWith(',100');return {kitId,accepted:true,ledOn:appliedLed};}
   if(route==='/api/wifi/mode'){
    if(denyMode)throw Error('setup_authorization_required');
-   return {kitId,mode:args.mode,state:'switching',radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',mode:args.mode,targetInput:'ANDROID_WEBRTC',lastStaInput:'ANDROID_WEBRTC'},rcAccess:{controlPath:'ANDROID_WEBRTC',paused:true}};
+   return {kitId,mode:args.mode,state:'switching',radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',mode:args.mode,targetInput:'ANDROID_WEBRTC',lastStaInput:'ANDROID_WEBRTC'},rcAccess:{version:1,pathVersion:1,controlPath:'ANDROID_WEBRTC',selection:'ANDROID',paused:true,handoverPaused:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}};
   }
   throw Error('Unexpected authenticated route: '+route);
  };

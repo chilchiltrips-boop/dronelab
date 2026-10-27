@@ -683,6 +683,7 @@ async function readStatus(){
  state.physicalLink=actualTransport;state.apIp=d.apIp||'';
  const priorName=state.kitName,priorAddress=state.staIp;
  if(state.owner&&(!d.rc?.claimed||ownOwnerId&&d.rc.ownerId!==ownOwnerId||d.rc?.source!==state.rcSource)){state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId=''}
+ if(d.bootId&&d.bootId!==binding.bootId){state.rc=null;state.rcReadStartedAt=0;}
  adoptRcObservation(d.rc,Date.now(),statusStarted);state.version=d.version||state.version;state.mode=d.mode||state.mode;
  const wasSetupAuthorized=state.setupAuthorized;
  state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
