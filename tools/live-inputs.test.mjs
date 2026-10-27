@@ -85,7 +85,7 @@ test('monitor can display accepted RC from a newer verified status without claim
  assert.match(display,/now-at>SNAPSHOT_TTL_MS/);
  assert.match(display,/at<=Number\(sample\?\.at\|\|0\)/);
  assert.match(kits,/state\.rcObservedAt=Date\.now\(\)/);
- assert.match(kits,/rcAt:state\.transport==='usb'\?state\.ackAt:state\.rcObservedAt/);
+ assert.match(kits,/rcAt:state\.transport==='usb'\|\|state\.owner\?state\.ackAt:state\.rcObservedAt/);
  assert.doesNotMatch(display,/\/api\/rc\/claim|\/api\/rc\/preview/);
 });
 test('packet-rate tracker uses accepted counters and ignores polling without new accepted RC frames',()=>{

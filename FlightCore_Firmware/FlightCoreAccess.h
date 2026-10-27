@@ -47,7 +47,7 @@ static const char* zjAccessChange(const String& action,const String& source,
  if(zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return "lower_throttle_and_disarm";
  if(action=="BEGIN"&&!stationary)return "fresh_stationary_imu_required";
  if(action!="BEGIN"&&source=="PPM"&&!zjPpmSignalFresh(millis()))return "ppm_signal_required";
- zjRcPaused=true;zjRcRelease(action=="BEGIN"?"MAINTENANCE_PAUSE":"EXPLICIT_SOURCE_HANDOVER");
+ zjRcPaused=true;zjRcHandoverPaused=false;zjRcRelease(action=="BEGIN"?"MAINTENANCE_PAUSE":"EXPLICIT_SOURCE_HANDOVER");
  zjPpmSafeFrames=0;zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
  if(action=="BEGIN"){
   zjMaintenanceActive=true;zjMaintenanceOwner=caller;zjMaintenanceRenewedAt=millis();
@@ -64,7 +64,7 @@ static String zjAccessState(const String& caller,bool stationary){
  const bool held=zjMaintenanceActive&&zjMaintenanceOwner.length();
  const uint32_t remaining=held?ZJ_MAINTENANCE_LEASE_MS-uint32_t(millis()-zjMaintenanceRenewedAt):0;
  return String("{\"version\":1,\"pathVersion\":1,\"controlPath\":\"")+zjRcControlPath+"\",\"selection\":\""+zjRcSelection+"\",\"paused\":"+(zjRcPaused?"true":"false")+
-  ",\"stationary\":"+(stationary?"true":"false")+",\"reason\":\""+zjAccessReason+
+  ",\"handoverPaused\":"+(zjRcHandoverPaused?"true":"false")+",\"stationary\":"+(stationary?"true":"false")+",\"reason\":\""+zjAccessReason+
   "\",\"hardwarePidSupported\":false,\"imuCalibrationSupported\":false,\"maintenance\":{\"active\":"+
   (zjMaintenanceActive?"true":"false")+",\"owned\":"+(held&&zjMaintenanceOwner==caller?"true":"false")+
   ",\"leaseRemainingMs\":"+String(remaining)+"}}";

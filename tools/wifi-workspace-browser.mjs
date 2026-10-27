@@ -21,7 +21,7 @@ try{
   const f=window.__wifiFixture={id,mode:'sta',authorized:true,ppm:false,requests:[],saved:['Classroom','Workshop','<img src=x>']};
   const rc=()=>({kitId:f.id,source:f.ppm?'PPM':'NONE',claimed:f.ppm,active:f.ppm,inputValid:f.ppm,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500,seq:f.ppm?1:0});
   const status=()=>({kitId:f.id,kitCode:'123456',kitName:'A2 network classroom',board:'ZFC-A2',version:'1.5.11',bootId:'wifi-boot',requestTransport:'STA',mode:f.mode,
-   setupAuthorized:f.authorized,controlAuthorized:f.authorized,otaAuthorized:f.authorized,staConnected:true,apActive:false,ip:'192.168.1.20',ssid:'Classroom',exclusiveWifi:true,rc:rc(),motorsDisabled:true,motorsArmed:false});
+   setupAuthorized:f.authorized,controlAuthorized:f.authorized,otaAuthorized:f.authorized,staConnected:true,apActive:false,ip:'192.168.1.20',ssid:'Classroom',exclusiveWifi:true,radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC'},rc:rc(),motorsDisabled:true,motorsArmed:false});
   window.fetch=(u,o)=>String(u)==='http://192.168.1.20/api/identify'?Promise.resolve(new Response(JSON.stringify({kitId:id,kitCode:'123456',board:'ZFC-A2',simpleConnection:true,adminSessions:true}))):native(u,o);
   const request=async(route,method='GET',args={})=>{
    f.requests.push({route,method,args:{...args}});
@@ -110,14 +110,15 @@ try{
  await page.evaluate(async()=>{
   const id='ZFC-A1-ABCDEF012345',f=window.__wifiUsb={mode:'ap',writes:[]};
   const emit=line=>dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
-  f.report=()=>{emit('ZJNET,MODE,'+f.mode);emit('ZJNET,AP,'+(f.mode==='ap'?'ON,Kit-A1':'OFF'));emit(f.mode==='sta'?'ZJNET,STA,CONNECTED,192.168.1.21,Classroom':'ZJNET,STA,OFFLINE')};
+  const handover=()=>({kitId:id,mode:f.mode,radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',mode:f.mode,targetInput:f.mode==='ap'?'ANDROID_AP':'ANDROID_WEBRTC',lastStaInput:'ANDROID_WEBRTC'},rcAccess:{version:1,pathVersion:1,controlPath:f.mode==='ap'?'ANDROID_AP':'ANDROID_WEBRTC',selection:'ANDROID',paused:true,handoverPaused:true,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}});
+  f.report=()=>{emit('ZJNET,HANDOVER,'+JSON.stringify(handover()));emit('ZJNET,MODE,'+f.mode);emit('ZJNET,AP,'+(f.mode==='ap'?'ON,Kit-A1':'OFF'));emit(f.mode==='sta'?'ZJNET,STA,CONNECTED,192.168.1.21,Classroom':'ZJNET,STA,OFFLINE')};
   window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>88,writeLine:async line=>{
    line=String(line).trim();
    if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB network')}
    else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A1,1.5.11');
    else if(line==='ZJNET,PAIR')emit('ZJNET,PAIR,'+id+','+'b2'.repeat(16));
    else if(line==='ZJNET,GET'){f.report();dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'sta',line:'ZJNET,STA,CONNECTED,10.1.2.3,Wrong Kit Network'}}))}
-   else if(line.startsWith('ZJNET,MODE,')){f.writes.push(line);f.mode=line.split(',')[2];emit('ZJNET,ACK,MODE,'+f.mode)}
+   else if(line.startsWith('ZJNET,MODE,')){f.writes.push(line);f.mode=line.split(',')[2];emit('ZJNET,HANDOVER,'+JSON.stringify(handover()));emit('ZJNET,ACK,MODE,'+f.mode)}
   }};
   document.getElementById('kitTransport').value='usb';await window.ZebjusKits.connect();
  });

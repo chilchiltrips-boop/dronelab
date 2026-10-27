@@ -93,6 +93,7 @@ static void zjReply(int status,const String& body){
  if(zjRequestSession>=0){const auto& s=zjSessions[zjRequestSession];zjHttp.sendHeader("X-ZJ-Response",zjHmac(s.key,"response|"+String(s.seq)+"|"+String(status)+"|"+body));}
  zjHttp.send(status,"application/json",body);
 }
+#include "FlightCoreHandover.h"
 #include "FlightCoreWifiPolicy.h"
 static const char* zjClientTransport();
 static String zjMdnsKitHostname();
@@ -108,6 +109,7 @@ static String zjStatus(){
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"exclusiveWifi\":true";
+ out+=",\"radioHandover\":"+zjRadioHandoverStatus();
  out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
   ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
   ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
@@ -133,6 +135,9 @@ static String zjStatus(){
  return out;
 }
 static const char* zjClientTransport(){return zjHttp.localIP()==WiFi.softAPIP()?"AP":"STA";}
+static String zjUsbHandoverStatus(){
+ return String("{\"kitId\":")+zjJson(zjKitId)+",\"mode\":"+zjJson(zjMode)+",\"radioHandover\":"+zjRadioHandoverStatus()+",\"rcAccess\":"+zjAccessState("USB",zjAccessStationary())+"}";
+}
 static String zjMdnsKitHostname(){
  // Keep the original deterministic address until a custom Kit Name is saved.
  // User-friendly "zebjus_drone_7" becomes DNS-safe "zebjus-drone-7.local".
@@ -249,7 +254,7 @@ static void zjSetupHttp(){
   if(!zjAllowSetup())return;
   if(zjRcOwned||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjUsbScanning){zjReply(409,"{\"error\":\"network_busy\"}");return;}
   if(!zjSelectProfile(zjArg("ssid"))){zjReply(400,"{\"error\":\"profile_missing_or_storage_failed\"}");return;}
-  zjMode="sta";zjPrefs.putString("mode","sta");
+  zjForgetRadioProfile();zjMode="sta";zjPrefs.putString("mode","sta");
   zjReply(202,"{\"selected\":true}");zjScheduleMode("sta");
  });
  zjHttp.on("/api/wifi/forget",HTTP_POST,[](){
@@ -261,11 +266,11 @@ static void zjSetupHttp(){
  zjHttp.on("/api/wifi/mode",HTTP_POST,[](){
   if(!zjAllowModeChange())return;const String mode=zjArg("mode");
   if(mode!="ap"&&mode!="sta"&&mode!="auto"){zjReply(400,"{\"error\":\"invalid_mode\"}");return;}
-  if(zjNetTesting||!zjAccessCanSwitchRadio()||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
-  if(mode=="sta"&&!zjSavedSsid.length()){zjReply(409,"{\"error\":\"save_sta_credentials_first\"}");return;}
-  if(zjPrefs.putString("mode",mode)!=mode.length()){zjReply(500,"{\"error\":\"mode_save_failed\"}");return;}
-  if(zjRcSource!="PPM")zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;
-  zjReply(202,"{\"kitId\":"+zjJson(zjKitId)+",\"mode\":"+zjJson(mode)+",\"state\":\"switching\"}");
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning){zjReply(409,"{\"error\":\"control_or_wifi_test_busy\"}");return;}
+  const char* error=zjPrepareRadioHandover(mode,zjClientTransport());
+  if(error){zjReply(String(error)=="input_profile_save_failed"?500:409,"{\"error\":"+zjJson(error)+"}");return;}
+  zjUdpInvalidate();
+  zjReply(202,"{\"kitId\":"+zjJson(zjKitId)+",\"mode\":"+zjJson(mode)+",\"state\":\"switching\",\"radioHandover\":"+zjRadioHandoverStatus()+",\"rcAccess\":"+zjAccessState(zjRequestSession>=0?zjSessions[zjRequestSession].id:String(""),zjAccessStationary())+"}");
   zjScheduleMode(mode);
  });
  zjHttp.on("/api/telemetry",HTTP_GET,[](){
@@ -444,6 +449,7 @@ static void zjNetworkSetup(){
  const String saved=zjPrefs.getString("staConfig","");if(saved.length()>2){const int n=saved.substring(0,2).toInt();if(n>0&&n<=32&&saved.length()>=size_t(n+2)){zjSavedSsid=saved.substring(2,n+2);zjSavedPass=saved.substring(n+2);}}zjMode=zjPrefs.getString("mode","auto");
  zjLoadProfiles();
  if(zjMode!="auto"&&zjMode!="sta"&&zjMode!="ap")zjMode="auto";
+ zjLoadRadioProfile();
  zjNetKey=zjPrefs.getString("key","");if(zjNetKey.length()!=32){zjNetKey=zjNewSecret(16);zjPrefs.putString("key",zjNetKey);}
  // Default remains 12345678 until a teacher optionally changes it.
  zjApPass=zjEffectiveApPassword();
@@ -463,6 +469,7 @@ static void zjNetworkSetup(){
 // USB bench provisioning remains available even if saved STA mode has disabled the AP.
 // The physical USB terminal MUST NOT echo the Wi-Fi password or access key.
 static void zjNetUsbStatus(){
+ Serial.print("ZJNET,HANDOVER,");Serial.println(zjUsbHandoverStatus());
  Serial.print("ZJNET,MODE,");Serial.println(zjMode);
  Serial.print("ZJNET,AP,");Serial.print(zjApStarted&&(WiFi.getMode()==WIFI_AP||WiFi.getMode()==WIFI_AP_STA)?"ON,":"OFF,");Serial.println(zjApSsid);
  Serial.print("ZJNET,STA,");Serial.print(WiFi.status()==WL_CONNECTED?"CONNECTED,":"DISCONNECTED,");
@@ -508,7 +515,7 @@ static bool zjNetSerialCommand(char* line){
   const bool saved=use?zjSelectProfile(ssid):zjForgetProfile(ssid);
   if(!saved){Serial.println("ZJNET,ERR,PROFILE_OR_STORAGE_FAILED");return true;}
   Serial.println("ZJNET,ACK,PROFILE");
-  if(use){zjMode="sta";zjPrefs.putString("mode","sta");zjScheduleMode("sta");}
+  if(use){zjForgetRadioProfile();zjMode="sta";zjPrefs.putString("mode","sta");zjScheduleMode("sta");}
   zjNetUsbStatus();return true;
  }
  // A local USB-attached teacher can pair the *current browser session* without
@@ -538,11 +545,13 @@ static bool zjNetSerialCommand(char* line){
   Serial.println("ZJNET,TEST,STARTED");return true;
  }
  if(!strncmp(line,"ZJNET,MODE,",11)){
-  if(!zjAccessCanSwitchRadio()||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
+  if(zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning){Serial.println("ZJNET,ERR,CONTROL_OR_WIFI_BUSY");return true;}
   const String mode=line+11;
   if(mode!="auto"&&mode!="ap"&&mode!="sta"){Serial.println("ZJNET,ERR,INVALID_MODE");return true;}
-  if(mode=="sta"&&!zjSavedSsid.length()){Serial.println("ZJNET,ERR,SAVE_STA_FIRST");return true;}
-  if(zjRcSource!="PPM")zjRcRelease("NETWORK_MODE_CHANGED");zjMode=mode;zjPrefs.putString("mode",mode);zjScheduleMode(mode);
+  const char* error=zjPrepareRadioHandover(mode,zjControlRadio());
+  if(error){Serial.print("ZJNET,ERR,");Serial.println(error);return true;}
+  zjUdpInvalidate();zjScheduleMode(mode);
+  Serial.print("ZJNET,HANDOVER,");Serial.println(zjUsbHandoverStatus());
   Serial.print("ZJNET,ACK,MODE,");Serial.println(mode);return true;
  }
  return false;
@@ -584,7 +593,7 @@ static void zjNetworkLoop(uint32_t now){
    if(!zjRememberProfile(zjPendingSsid,zjPendingPass)){zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="failed";zjPhase="credential_storage_failed";zjEnsureAP();zjNetNextRetry=now+30000;return;}
    zjSavedSsid=zjPendingSsid;zjSavedPass=zjPendingPass;
    zjPendingPass="";zjPendingSsid="";zjNetTesting=false;zjWifiTestState="saved";zjLastStaFailureReason=0;zjPhase="sta_test_pass_saved";Serial.println("ZJNET,TEST,SAVED");
-   zjMode="sta";zjPrefs.putString("mode","sta"); // successful test stays STA-only
+   zjForgetRadioProfile();zjMode="sta";zjPrefs.putString("mode","sta"); // successful test stays STA-only
   }else if(int32_t(now-zjNetAttempt)>int32_t(ZJ_NET_TEST_TIMEOUT_MS)){
    // Record the last genuine association reason before our own disconnect can emit STA_LEAVING (36).
    if(zjLastStaFailureReason==0&&zjStaDisconnectReason!=36)zjLastStaFailureReason=zjStaDisconnectReason;

@@ -22,6 +22,22 @@
   const fatal=[401,403].includes(Number(error?.status))||/identity|device id|kit id|mismatch|boot changed|session changed|signature|proof|unauthoriz/i.test(String(error?.message||''));
   return {fatal,state:!fatal&&heartbeatAt>0&&now-heartbeatAt<=maxAge?'delayed':'stale'};
  }
+ function radioTarget(kit,mode){
+  if(!['ap','sta','auto'].includes(mode))throw Error('Invalid Wi-Fi mode');
+  let sta=kit.radioHandover?.lastStaInput||'ANDROID_WEBRTC';
+  if(radio(kit)==='sta'){
+   if(['PPM','WEB_STA','ANDROID_WEBRTC'].includes(kit.rcAccess?.controlPath))sta=kit.rcAccess.controlPath;
+   else if(kit.rc?.source==='PPM')sta='PPM';
+   else if(kit.rc?.source==='WEB')sta='WEB_STA';
+  }
+  return {mode,targetInput:mode==='ap'?'ANDROID_AP':sta,lastStaInput:sta};
+ }
+ function confirmedHandover(reply,plan){
+  const h=reply?.radioHandover;
+  return h?.version===1&&h.profileSaved===true&&Number.isSafeInteger(h.revision)&&h.revision>0&&
+   h.mode===plan.mode&&h.targetInput===plan.targetInput&&h.lastStaInput===plan.lastStaInput&&
+   h.state==='PREPARED'&&reply.rcAccess?.controlPath===plan.targetInput&&reply.rcAccess?.paused===true;
+ }
  function describe({kit={},peer={},virtual={},client='web',pending=false,now=Date.now()}={}){
   const connected=kit.connected===true,rc=kit.rc||{},access=kit.rcAccess,
    mode=radio(kit),capable=access?.pathVersion===1&&(access.controlPath==='AUTO'||!!find(access.controlPath)),
@@ -59,16 +75,17 @@
   });
   const item=find(selected),actual=find(active);
   const telemetryAgeMs=Number.isFinite(kit.heartbeatAt)&&kit.heartbeatAt>0?Math.max(0,now-kit.heartbeatAt):null;
-  const telemetryLabel=connected?(kit.linkState==='delayed'?'Telemetry delayed':telemetryAgeMs===null?'Telemetry age unknown':'Telemetry '+(telemetryAgeMs<1000?'fresh':(telemetryAgeMs/1000).toFixed(1)+' s ago')):'Telemetry offline';
-  const rcState=paused?'RC Paused':active?actual.label:selected==='PPM'&&kit.ppm?.present===false?'PPM Signal Lost':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
+  const telemetryLabel=connected?(kit.linkState==='delayed'?'Telemetry delayed':telemetryAgeMs===null?'Telemetry age unknown':'Telemetry '+(telemetryAgeMs<3500?'fresh':(telemetryAgeMs/1000).toFixed(1)+' s ago')):'Telemetry offline';
+  const switching=access?.handoverPaused===true;
+  const rcState=switching?(kit.radioHandover?.state==='FAILED'?'RC handover failed':'RC switching'):paused?'RC Paused':active?actual.label:selected==='PPM'&&kit.ppm?.present===false?'PPM Signal Lost':selected==='ANDROID_AP'&&kit.radioHandover?.state==='WAITING_CONTROLLER'?'Waiting for Android':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
   return {paths:options,selected,active,mode,capable,paused,safe,busy,authorized,telemetryAgeMs,telemetryLabel,
-   selectedLabel:item?.label||(access?.selection&&access.selection!=='AUTO'?'Legacy '+access.selection:'Not selected'),activeLabel:rcState,
+   selectedLabel:item?.label||(capable&&access.controlPath==='AUTO'?'Auto':access?.selection&&access.selection!=='AUTO'?'Legacy '+access.selection:'Not selected'),activeLabel:rcState,
    target:actual?.target||item?.target||'Kit',
    connection:connected?(kit.linkState==='delayed'?'Response delayed':mode?mode.toUpperCase()+' Connected':String(kit.transport||'').toUpperCase()+' Connected'):kit.linkVerified?'Reconnecting':'Offline',
-   joystickLocked:paused||selected==='PPM'||!connected,
-   reason:paused?'RC paused; telemetry remains available':selected==='PPM'?'PPM controls RC; joysticks locked; telemetry available':
+   joystickLocked:paused||selected==='PPM'||kitActive==='PPM'||!connected,
+   reason:switching?(kit.radioHandover?.state==='FAILED'?'Wi-Fi/input handover failed. Lower throttle, disarm and retry.':'Input saved; waiting for Kit Wi-Fi handover.'):paused?'RC paused; telemetry remains available':selected==='PPM'||kitActive==='PPM'?'PPM controls RC; joysticks locked; telemetry available':
     selected==='ANDROID_WEBRTC'?'Android input targets the virtual simulator; Kit RC is not claimed':
     kit.linkState==='delayed'?'Kit response delayed; checking the same Device ID':'Only the selected controller may claim RC'};
  }
- root.ZebjusControlPaths=Object.freeze({paths,find,radio,sameBinding,failureState,describe});
+ root.ZebjusControlPaths=Object.freeze({paths,find,radio,sameBinding,failureState,radioTarget,confirmedHandover,describe});
 })(globalThis);

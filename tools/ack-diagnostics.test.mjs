@@ -4,6 +4,20 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('js/kit-ack-diagnostics.js');
+test('input diagnostics retain channels, source selection, PPM loss/recovery and profile ACK without identifiers',()=>{
+ const b=bench('web'),rc={source:'PPM',active:true,inputValid:true,inputArmed:false,claimed:true,seq:10,ageMs:25,throttle:1000,roll:1500,pitch:1500,yaw:1500,channels:[1501,1502,1000,1504,1000,1506,1507,1508]};
+ const kit={kitId:'private-id',bootId:'private-boot',transport:'sta',rcAccess:{controlPath:'PPM'},ppm:{present:true,ageMs:12,seq:20,losses:0,faults:2}};
+ b.api.observeInput(rc,kit);b.api.observeInput(rc,kit);
+ assert.equal(b.events().filter(e=>e.event==='input_sample').length,1);
+ let data=b.events().find(e=>e.event==='input_sample').data;assert.equal(data.ch1,1501);assert.equal(data.ch8,1508);assert.equal(data.selectedPath,'PPM');assert.equal(data.ppmFaults,2);
+ b.api.observeInput({...rc,source:'NONE',active:false},{...kit,ppm:{...kit.ppm,present:false,losses:1}});
+ b.api.observeInput(rc,{...kit,ppm:{...kit.ppm,losses:1}});
+ assert.equal(b.events().filter(e=>e.event==='ppm_lost').length,1);assert.equal(b.events().filter(e=>e.event==='ppm_recovered').length,1);
+ b.api.record('handover_ack',{route:'/api/wifi/mode',targetInput:'ANDROID_AP',lastStaInput:'PPM',profileSaved:true,profileRevision:4,handoverState:'PREPARED',ssid:'private-network'});
+ data=b.events().at(-1).data;assert.equal(data.route,'/api/wifi/mode');assert.equal(data.profileRevision,4);
+ for(const secret of ['private-id','private-boot','private-network'])assert.ok(!b.api.exportData('csv').includes(secret));
+ assert.equal(b.api.reasonClass('input_profile_save_failed'),'PROFILE_SAVE_FAILED');assert.equal(b.api.reasonClass('lower_throttle_and_disarm'),'INPUT_UNSAFE');
+});
 function bench(client='android',seed){
  const saved=new Map(seed||[]),buttons={},panel={
   open:true,dataset:{client},addEventListener(){},
@@ -135,7 +149,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 55\s*versionName '1\.8\.17-layout-safe'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 56\s*versionName '1\.8\.18-radio-input-handover'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{

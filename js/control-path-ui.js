@@ -22,6 +22,7 @@
  }
  function refresh(){
   const kit=kitState();view=policy.describe({kit,peer:peerState(),virtual:virtualState(),client:android?'android':'web',pending});
+  root.ZebjusAckDiagnostics?.observeView?.(view,kit);
   const binding=[kit.kitId,kit.bootId,kit.connectionGeneration].join('|');
   if(binding!==lastBinding){lastBinding=binding;message='';for(const box of document.querySelectorAll('[data-control-selector]'))delete box.dataset.dirty;}
   announce(kit);

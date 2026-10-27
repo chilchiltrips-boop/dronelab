@@ -91,9 +91,14 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
   requestTransport:mode==='android-relay'?'AP':mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
-  rc:{claimed:false,active:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
+  radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},rcAccess:{version:1,pathVersion:1,controlPath:'AUTO',selection:'AUTO',paused:false,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}},
+  rc:{claimed:false,active:false,throttle:1000,inputArmed:false,motorsDisabled:true},firmwareBuiltAt:'Oct 13 2026 16:00:00'};
  let uploaded=false,claimGate=null,identityGate=null,identityOverride=null,reachableHosts=null,offset=0,digest='';
  let relayState={connected:true,paired:true,approved:true,sessionId:'relay-session-1'},relayGate=null;
+ const handoverReply=desired=>{
+  const plan=window.ZebjusControlPaths.radioTarget({...status,transport:status.requestTransport.toLowerCase()},desired);
+  return {kitId:id,mode:desired,state:'switching',radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',...plan},rcAccess:{...status.rcAccess,version:1,pathVersion:1,controlPath:plan.targetInput,selection:plan.targetInput==='PPM'?'PPM':plan.targetInput==='WEB_STA'?'WEB':'ANDROID',paused:true,handoverPaused:true,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}};
+ };
  const handler=async(route,args={})=>{
   requests.push({route,args});
   if(route==='/api/status')return {...status,rc:{...status.rc}};
@@ -109,7 +114,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    status.flightModeState={supported:true,stabilizationSupported:false,saved:args.flightMode,active,pending:active===args.flightMode?null:args.flightMode};status.flightMode=active;
    return {kitId:id,saved:true,motorsArmed:false,flightMode:active,flightModeState:{...status.flightModeState}};
   }
-  if(route==='/api/wifi/mode')return {kitId:id,mode:args.mode,state:'switching'};
+  if(route==='/api/wifi/mode')return handoverReply(args.mode);
   if(route==='/api/rc/claim'){
    if(claimGate)await claimGate;
    status.rc={claimed:true,active:false,source:'WEB',ownerId:'owner-1'};
@@ -138,6 +143,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  window.ZebjusDeviceRelay={status:()=>({...relayState}),request:async(route,_method,args)=>{
   const result=await handler(route,args);if(relayGate)await relayGate;return result;
  }};
+ for(const file of ['control-path-policy.js','kit-access-policy.js']){const ctx={};vm.runInNewContext(readFileSync(new URL('../js/'+file,import.meta.url),'utf8'),ctx);Object.assign(window,ctx);}
  const smartPolicy={};vm.runInNewContext(readFileSync(new URL('../js/smart-kit-policy.js',import.meta.url),'utf8'),smartPolicy);window.ZebjusSmartKitPolicy=smartPolicy.ZebjusSmartKitPolicy;
  const shared={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
  const fetch=async(url,opts={})=>{
@@ -175,7 +181,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
     if(cmd==='ZJKIT,GET'){emit('ZJKIT,ID,'+usbId);emit('ZJKIT,CODE,'+usbCode);emit('ZJKIT,NAME,zebjus_drone_2');}
     else if(cmd==='ZJINFO,GET')emit('ZJINFO,FW,'+usbBoard+',1.4.9');
     else if(cmd==='ZJNET,PAIR')emit('ZJNET,PAIR,'+usbId+','+key);
-    else if(cmd.startsWith('ZJNET,MODE,'))emit('ZJNET,ACK,MODE,'+cmd.slice(11));
+    else if(cmd.startsWith('ZJNET,MODE,')){emit('ZJNET,HANDOVER,'+JSON.stringify(handoverReply(cmd.slice(11))));emit('ZJNET,ACK,MODE,'+cmd.slice(11));}
    }};
   },
   smartUsb:(options={})=>{

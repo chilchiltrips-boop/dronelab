@@ -8,6 +8,9 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 const id='ZFC-A1-012345ABCDEF',key='a1'.repeat(16),oldKey='b2'.repeat(16),boot='c3'.repeat(16);
 const hmac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map();let mode='ap',computer='ap',proofFailures=0,adminEnrollments=0,statusRequests=0,mdnsUnavailable=false;
+let inputPath='AUTO',lastStaInput='ANDROID_WEBRTC',revision=0,ppm=false,seqNo=0;
+const access=()=>({version:1,pathVersion:1,controlPath:inputPath,selection:inputPath==='PPM'?'PPM':inputPath==='WEB_STA'?'WEB':inputPath==='AUTO'?'AUTO':'ANDROID',paused:false,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}});
+const rc=()=>({kitId:id,source:ppm?'PPM':'NONE',claimed:ppm,active:ppm,inputValid:ppm,inputArmed:false,throttle:1000,roll:1500,pitch:1500,yaw:1500,seq:ppm?++seqNo:0,ageMs:ppm?25:-1,motorsDisabled:true});
 const result=(body,status=200,secret='',seq='')=>{const text=JSON.stringify(body);return {status,text,proof:secret?hmac(secret,['response',seq,status,text].join('|')):''}};
 function device(url,options={}){
  const u=new URL(url),ap=u.hostname==='192.168.4.1';
@@ -44,12 +47,15 @@ function device(url,options={}){
   statusRequests++;
   return result({kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A1',version:'1.4.6',bootId:boot,
    exclusiveWifi:true,mode,requestTransport:mode.toUpperCase(),apActive:ap,apIp:ap?'192.168.4.1':'0.0.0.0',apSsid:'zebjus_drone_2',staConnected:!ap,ip:ap?'':'192.168.1.20',ssid:ap?'':'Classroom',
-   setupAuthorized:s.admin||ap,controlAuthorized:s.admin||ap,otaAuthorized:s.admin,firmwareControl:false,motorsArmed:false,rc:{claimed:false,active:false,motorsDisabled:true}},200,s.secret,seq);
+   setupAuthorized:s.admin||ap,controlAuthorized:s.admin||ap,otaAuthorized:s.admin,firmwareControl:false,motorsArmed:false,radioHandover:{version:1,profileSaved:revision>0,revision,state:'WAITING_CONTROLLER',mode,targetInput:inputPath,lastStaInput},rcAccess:access(),ppm:{present:ppm,losses:0},rc:rc()},200,s.secret,seq);
  }
+ if(route==='/api/rc/snapshot')return result(rc(),200,s.secret,seq);
  if(route==='/api/telemetry')return result({kitId:id,gyroReady:true},200,s.secret,seq);
  if(route==='/api/wifi/mode'){
   assert.ok(ap||s.admin);assert.ok(['ap','sta'].includes(plain.mode));
-  const response=result({kitId:id,mode:plain.mode,state:'switching'},202,s.secret,seq);mode=plain.mode;return response;
+  if(mode==='sta'&&['PPM','WEB_STA','ANDROID_WEBRTC'].includes(inputPath))lastStaInput=inputPath;
+  inputPath=plain.mode==='ap'?'ANDROID_AP':lastStaInput;ppm=false;revision++;
+  const response=result({kitId:id,mode:plain.mode,state:'switching',radioHandover:{version:1,profileSaved:true,revision,state:'PREPARED',mode:plain.mode,targetInput:inputPath,lastStaInput},rcAccess:{...access(),paused:true,handoverPaused:true}},202,s.secret,seq);mode=plain.mode;return response;
  }
  throw Error('Unexpected fixture route '+route);
 }
@@ -109,17 +115,27 @@ try{
  await page.screenshot({path:output+'/sta-ip-without-mdns.png',fullPage:true});
  mdnsUnavailable=false;
 
+ // PPM source remains stable through a full 2200ms status interval because
+ // the shared header consumes fresh read-only snapshots between status polls.
+ inputPath='PPM';ppm=true;await page.evaluate(()=>window.ZebjusKits.read());
+ for(let i=0;i<12;i++){await page.waitForTimeout(250);assert.equal(await page.evaluate(()=>window.ZebjusControlUI.refresh().active),'PPM');}
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
  // New tab has no sessionStorage key; the encrypted IndexedDB pairing survives.
  await page.close();page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  const prior=statusRequests;await page.goto('http://127.0.0.1:8765/');await page.locator('#kitReconnectDialog').waitFor({state:'visible',timeout:45000});
  assert.equal(statusRequests,prior);await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),true);
  await page.locator('#kitTopNetworkSwitch').click();await wait(()=>window.ZebjusKits.getState().pendingNetworkMode==='ap');assert.equal(mode,'ap');
+ assert.equal(inputPath,'ANDROID_AP');assert.equal(lastStaInput,'PPM');assert.equal(ppm,false);
  computer='ap';await page.evaluate(()=>window.ZebjusKits.discoverKits());await page.locator('#kitReconnectDialog').waitFor({state:'visible'});
  await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap');assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().staConnected),false);
  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();await page.locator('#fwAuthorizeUpdates').click();await wait(()=>window.ZebjusKits.getState().otaAuthorized);
  assert.equal(proofFailures,1,'The rejected saved key must never be replayed');
+ await page.locator('#kitTopNetworkSwitch').click();await wait(()=>window.ZebjusKits.getState().pendingNetworkMode==='sta');
+ assert.equal(inputPath,'PPM');assert.equal(ppm,false,'Restoring selection must not restore a controller lease or ARM');
+ computer='sta';await page.evaluate(()=>window.ZebjusKits.discoverKits());await page.locator('#kitReconnectDialog').waitFor({state:'visible'});await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().rcAccess.controlPath),'PPM');
  await page.setViewportSize({width:360,height:900});await page.screenshot({path:output+'/ap-only-360.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
  assert.deepEqual(errors,[]);writeFileSync(output+'/result.json',JSON.stringify({result:'PASS',proofFailures,adminEnrollments,statusRequests,persistentPairing:true,reconnectConsent:true,exclusiveModes:true,manualStaIpWithoutMdns:true,errors},null,2));

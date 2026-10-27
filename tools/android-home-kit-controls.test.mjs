@@ -27,12 +27,12 @@ function harness(){
   sent.push({route,method,args});
   if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',mode:'ap',
    apActive:true,staConnected:false,requestTransport:'AP',apSsid:expectedSsid,
-   staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
+   radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},rc:{claimed:false,active:false,inputArmed:false,throttle:1000},staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
   if(route==='/api/wifi/saved')return {preferred:'School_Router',networks:[{ssid:'School_Router',preferred:true}]};
   if(route==='/api/command'){appliedLed=args.line.endsWith(',100');return {kitId,accepted:true,ledOn:appliedLed};}
   if(route==='/api/wifi/mode'){
    if(denyMode)throw Error('setup_authorization_required');
-   return {kitId,mode:args.mode,state:'switching'};
+   return {kitId,mode:args.mode,state:'switching',radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',mode:args.mode,targetInput:'ANDROID_WEBRTC',lastStaInput:'ANDROID_WEBRTC'},rcAccess:{controlPath:'ANDROID_WEBRTC',paused:true}};
   }
   throw Error('Unexpected authenticated route: '+route);
  };
@@ -57,6 +57,7 @@ function harness(){
  const doc={readyState:'loading',hidden:false,getElementById:element,
   addEventListener(type,fn){handlers.set('document:'+type,fn)}};
  const later=(fn,ms)=>{const timer=setTimeout(fn,ms);if(ms>=4000)timer.unref?.();return timer};
+ const policy={};runInNewContext(read('js/control-path-policy.js'),policy);win.ZebjusControlPaths=policy.ZebjusControlPaths;
  runInNewContext(networkSource,{window:win,document:doc,Date,performance,URLSearchParams,Promise,Set,Map,
   Option:class{},setTimeout:later,clearTimeout,setInterval(){},CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
  handlers.get('document:DOMContentLoaded')();
