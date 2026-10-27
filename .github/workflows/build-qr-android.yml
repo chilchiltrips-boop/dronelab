@@ -64,6 +64,8 @@ on:
 permissions:
   contents: write
   actions: read
+# The layout review branch runs the signed upgrade/touch and API30 gates;
+# only main can publish the reviewed APK after its exact-source checks pass.
 concurrency:
   group: zebjus-android-release-${{ github.ref_name }}
   # Superseded review candidates may stop; production releases always finish their gates.
