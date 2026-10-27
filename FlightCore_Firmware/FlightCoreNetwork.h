@@ -74,7 +74,14 @@ static bool zjAllow();static const char* zjClientTransport();
 #include "FlightCoreOta.h"
 #include "FlightCoreSetupPortal.h"
 static bool zjAuthenticated(){return zjSessionAuthenticated();}
-static bool zjAllow(){if(zjAuthenticated())return true;zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
+static bool zjAllow(){
+ if(!zjAuthenticated()){zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
+ const String route=zjHttp.uri();
+ if(zjHandoverPending&&zjHttp.method()==HTTP_POST&&route!="/api/rc/stop"&&route!="/api/rc/release"){
+  zjReply(409,"{\"error\":\"radio_handover_pending\"}");return false;
+ }
+ return true;
+}
 static bool zjAllowSetup(){if(!zjAllow())return false;if(zjSetupAuthorized())return true;zjReply(403,"{\"error\":\"setup_authorization_required\"}");return false;}
 // A paired diagnostic STA client may change ONLY the Wi-Fi operating mode.
 // SSID/password changes, owner enrollment and firmware OTA keep their stricter scopes.
@@ -481,6 +488,7 @@ static void zjNetUsbStatus(){
  Serial.print("ZJNET,SAVED,");Serial.println(zjProfilesStatus());
 }
 static bool zjNetSerialCommand(char* line){
+ if(zjHandoverPending&&!strncmp(line,"ZJNET,",6)&&strcmp(line,"ZJNET,GET")){Serial.println("ZJNET,ERR,RADIO_HANDOVER_PENDING");return true;}
  if(!strncmp(line,"ZJMODE,",7)){
   char* save=nullptr;char* action=strtok_r(line+7,",",&save);
   char* id=strtok_r(nullptr,",",&save);char* token=strtok_r(nullptr,",",&save);

@@ -30,6 +30,7 @@ static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=
 // only accepted RC; a lost maintenance lease never resumes an input source.
 static bool zjRcPaused=false;
 static bool zjRcHandoverPaused=false;
+static bool zjHandoverPending=false;
 static String zjRcSelection="AUTO";
 // The user-facing control path also identifies the target. WebRTC commands
 // belong to the virtual simulator and must never claim the physical Kit.

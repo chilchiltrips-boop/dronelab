@@ -18,6 +18,7 @@ int main(){
  frame(1000);assert(!zjPrepareRadioHandover("ap","STA"));
  assert(zjPrefs.getString("inputProfile","")=="1|ap|ANDROID_AP|PPM|1");
  assert(zjHandoverSaved&&zjHandoverPending&&zjRcPaused&&!zjRcOwned&&!zjRcInputArmed);
+ errorIs(zjAccessChange("SELECT","WEB","another-client",false,true,"WEB_STA","STA"),"radio_handover_pending");
  assert(zjRcControlPath=="ANDROID_AP"&&zjLastStaInput=="PPM");
  frame(1000);frame(1000);frame(1000);assert(!zjRcOwned&&zjRcAccepted==accepted+3);
  errorIs(zjPrepareRadioHandover("sta","STA"),"handover_busy");

@@ -1,7 +1,7 @@
 #pragma once
 // One NVS value commits the desired radio AND input profile before radio loss.
 // Saving a selection never arms input or restores a previous controller lease.
-static bool zjHandoverPending=false,zjHandoverSaved=false;
+static bool zjHandoverSaved=false;
 static String zjHandoverState="IDLE",zjHandoverError,zjHandoverTargetInput="AUTO";
 static String zjLastStaInput="ANDROID_WEBRTC",zjHandoverPreviousMode;
 static uint32_t zjHandoverRevision=0;

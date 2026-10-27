@@ -348,7 +348,7 @@ static bool zjAccessStationary(){
 }
 #include "FlightCoreNetwork.h"
 static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
-static bool zjAccessBusy(){return zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
+static bool zjAccessBusy(){return zjHandoverPending||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
 void emitTelemetry(unsigned long now){
  const unsigned long period=1000UL/telRateHz;
  // A rate-change command can update telLast after loop() captured "now".
