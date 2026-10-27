@@ -33,14 +33,16 @@
   return {mode,targetInput:mode==='ap'?'ANDROID_AP':sta,lastStaInput:sta};
  }
  function acceptRcObservation(previous,next){
-  if(!previous?.active||!next?.active||previous.source!==next.source||previous.ownerId!==next.ownerId||Number(next.seq)>=Number(previous.seq))return true;
+  if(!previous?.active||!next?.active||previous.source!==next.source||previous.ownerId!==next.ownerId)return true;
   // PPM reacquisition resets the lease sequence, but accepted is a boot-wide
   // firmware counter. A newer accepted frame proves this is a new acquisition,
   // including when loss/recovery happened entirely between observer polls.
   const a=previous.accepted,b=next.accepted;
-  if(next.source!=='PPM'||![a,b].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=0xffffffff))return false;
-  const advance=(b-a)>>>0;
-  return advance>0&&advance<0x80000000;
+  if(next.source==='PPM'&&[a,b].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=0xffffffff)){
+   const advance=(b-a)>>>0;
+   if(advance>0)return advance<0x80000000;
+  }
+  return Number(next.seq)>=Number(previous.seq);
  }
  function confirmedHandover(reply,plan){
   const h=reply?.radioHandover,a=reply?.rcAccess,path=find(plan.targetInput);
