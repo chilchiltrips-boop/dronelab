@@ -26,13 +26,14 @@
   const node=document.createElement(tag);if(className)node.className=className;
   if(text!==undefined)node.textContent=text;return node;
  };
- const shell=make('div','mobile-adaptive-shell'),nav=make('nav','mobile-adaptive-nav'),groups=new Map(),buttons=new Map();
+ const shell=make('div','mobile-adaptive-shell'),nav=make('nav','mobile-adaptive-nav'),tablist=make('div','mobile-nav-tabs'),groups=new Map(),buttons=new Map();
  shell.id='mobileAdaptiveShell';nav.setAttribute('aria-label','Flight Control Center categories');
- nav.setAttribute('role','tablist');
- nav.setAttribute('aria-orientation','vertical');
+ tablist.setAttribute('role','tablist');
+ tablist.setAttribute('aria-label','Flight Control Center categories');
+ tablist.setAttribute('aria-orientation','vertical');
  // Preserve the original Back button and move it above sidebar tabs.
  const back=$('flightBack');back.textContent='←';back.setAttribute('aria-label','Back to Controller');back.title='Back to Controller';
- nav.append(back);
+ nav.append(back,tablist);
  for(const tab of tabs){
   const button=make('button','mobile-nav-item'),panel=make('section','mobile-adaptive-panel');
   button.type='button';button.id='mobile-nav-'+tab.id;button.setAttribute('role','tab');
@@ -48,7 +49,7 @@
   const live=make('span','mobile-panel-live','DISCONNECTED');live.id='mobile-live-'+tab.id;
   title.append(make('h2','',tab.title),live);
   panel.append(title);
-  nav.append(button);main.append(panel);groups.set(tab.id,panel);buttons.set(tab.id,button);
+  tablist.append(button);main.append(panel);groups.set(tab.id,panel);buttons.set(tab.id,button);
  }
  // Retain the original native input elements and listener-bound DOM nodes.
  function place(node,name){if(!node)throw Error('Missing original Android section in '+name);groups.get(name).append(node);}
@@ -104,7 +105,7 @@
    panel.hidden=!active;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;
   }
   main.scrollTop=0;refreshLive();
-  if(focus)buttons.get(name).focus({preventScroll:true});
+  if(focus){buttons.get(name).focus({preventScroll:true});buttons.get(name).scrollIntoView({block:'nearest',inline:'nearest'});}
   return true;
  }
  nav.addEventListener('click',e=>{const b=e.target.closest('[data-mobile-tab]');if(b)setActive(b.dataset.mobileTab)});

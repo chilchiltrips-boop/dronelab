@@ -1,7 +1,7 @@
 name: Verify UDP management, IMU and Python bridge
 on:
   push:
-    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main, fix/udp-management-20261018, feature/authoritative-status-integration-20261021]
+    branches: [fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main, fix/udp-management-20261018, feature/authoritative-status-integration-20261021]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'

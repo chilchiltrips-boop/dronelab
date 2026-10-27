@@ -1,7 +1,7 @@
 name: Tripod PID Simulator Tests
 on:
   pull_request:
-    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
+    branches: [fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'

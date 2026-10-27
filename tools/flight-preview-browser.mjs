@@ -4,6 +4,13 @@ try{
  for(const [width,height] of [[488,227],[595,227],[488,275],[595,275],[640,360],[800,450],[780,360],[844,390],[900,405],[1080,480]]){
   const c=await b.newContext({viewport:{width,height},hasTouch:true,isMobile:true,serviceWorkers:'block',reducedMotion:'reduce'});await configureContext(c);const p=await c.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
   await p.goto('http://127.0.0.1:8765/companion.html');await p.waitForFunction(()=>window.ZebjusFlightApp&&!document.getElementById('flightCockpit').hidden);
+  const utilityLayout=await p.evaluate(()=>{
+   const rail=document.querySelector('.flight-utilities').getBoundingClientRect(),zone=document.getElementById('flightRightZone').getBoundingClientRect(),footer=document.querySelector('.flight-footer').getBoundingClientRect();
+   return {rail:rail.toJSON(),zone:zone.toJSON(),footerTop:footer.top,buttons:[...document.querySelector('.flight-utilities').children].map(e=>({id:e.id,...e.getBoundingClientRect().toJSON()}))};
+  });
+  if(utilityLayout.zone.right>utilityLayout.rail.left-4||utilityLayout.rail.bottom>utilityLayout.footerTop+1||
+     utilityLayout.buttons.some(r=>r.width<44||r.height<44||r.left<utilityLayout.rail.left-1||r.right>width||r.top<utilityLayout.rail.top-1||r.bottom>utilityLayout.footerTop+1))
+   throw Error('Utility buttons cover a joystick, shrink below touch size or enter the footer '+JSON.stringify({width,height,utilityLayout}));
   await p.screenshot({path:`test-output/android-cockpit-${width}x${height}.png`});
   const l=await p.locator('#flightLeftZone').boundingBox(),r=await p.locator('#flightRightZone').boundingBox();const session=await c.newCDPSession(p);
   const left={id:1,x:l.x+l.width*.48,y:l.y+l.height*.67},right={id:2,x:r.x+r.width*.52,y:r.y+r.height*.66};
@@ -74,7 +81,7 @@ try{
   const layout=await p.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,footerTop:document.querySelector('.flight-footer').getBoundingClientRect().top,touchReadoutBottoms:['flightLeftTouch','flightRightTouch'].map(id=>document.getElementById(id).getBoundingClientRect().bottom),stop:(()=>{const r=document.getElementById('flightStop').getBoundingClientRect();return {x:r.x,right:r.right,y:r.y,height:r.height}})()}));
   if(layout.scroll>layout.width+1||layout.stop.right>width||layout.stop.height<44||layout.stop.y<0)throw Error('STOP clipped '+JSON.stringify(layout));
   if(layout.touchReadoutBottoms.some(v=>v>layout.footerTop+1))throw Error('Thumb readout clipped by footer '+JSON.stringify(layout));
-  if(errors.length)throw Error(errors.join(' | '));records.push({width,height,anchor,layout,errors});await c.close();
+  if(errors.length)throw Error(errors.join(' | '));records.push({width,height,anchor,layout,utilityLayout,errors});await c.close();
  }
  writeFileSync('test-output/preview-layout.json',JSON.stringify(records,null,2));console.log(`PASS Chromium touchscreen preview: ${records.length} landscape sizes including 16:9, 19.5:9 and 20:9, independent touches, capture/CANCEL, zero anchor, real third-finger STOP, reachability, presets, no flight commands`);
 }finally{await b.close()}

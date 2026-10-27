@@ -40,6 +40,11 @@ try{
   for(const category of categories){
    await page.locator('[data-mobile-tab="'+category+'"]').click();
    await page.waitForFunction(name=>window.ZebjusMobileMenu.active()===name,category);
+   const tabHit=await page.locator('[data-mobile-tab="'+category+'"]').evaluate(e=>{
+    const r=e.getBoundingClientRect(),back=document.getElementById('flightBack').getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+    return {top:r.top,bottom:r.bottom,backBottom:back.bottom,hit:!!hit&&e.contains(hit)};
+   });
+   assert.ok(tabHit.top>=tabHit.backBottom&&tabHit.bottom<=height&&tabHit.hit,'Menu tab is hidden behind Back or outside the scroll area: '+JSON.stringify({category,tabHit}));
    const panel=page.locator('[data-mobile-panel="'+category+'"]');
    assert.equal(await panel.isVisible(),true,category+' content not reachable');
    assert.equal(await page.locator('.mobile-adaptive-panel:visible').count(),1,'Exactly one active category');
@@ -57,6 +62,10 @@ try{
    await page.screenshot({path:`test-output/android-menu-${width}x${height}-${category}.png`});
    verified.push({category,layout});
   }
+  await page.locator('[data-mobile-tab="more"]').focus();
+  await page.keyboard.press('Home');
+  await page.waitForFunction(()=>window.ZebjusMobileMenu.active()==='pair');
+  assert.equal(await page.locator('[data-mobile-tab="pair"]').evaluate(e=>{const r=e.getBoundingClientRect();return r.top>=document.getElementById('flightBack').getBoundingClientRect().bottom&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}),true,'Keyboard Home must reveal Pair below Back');
   assert.equal(await page.locator('#scanOfferBtn').count(),1);
   assert.equal(await page.locator('#kitOtaAdminKey').count(),1);
   assert.equal(await page.locator('#kitRememberDiagnostic').count(),1);

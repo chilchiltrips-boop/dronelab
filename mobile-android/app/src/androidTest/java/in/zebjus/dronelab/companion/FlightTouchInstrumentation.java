@@ -172,6 +172,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         check("document.getElementById('flightArm').disabled && document.getElementById('flightThrottle').textContent==='1000 µs'");
         check("document.getElementById('flightStop').getBoundingClientRect().right<=innerWidth && document.getElementById('flightStop').getBoundingClientRect().height>=44");
         check("['flightLeftTouch','flightRightTouch'].every(id=>document.getElementById(id).getBoundingClientRect().bottom<=document.querySelector('.flight-footer').getBoundingClientRect().top+1)");
+        check("(()=>{const rail=document.querySelector('.flight-utilities').getBoundingClientRect(),zone=document.getElementById('flightRightZone').getBoundingClientRect(),footer=document.querySelector('.flight-footer').getBoundingClientRect();return zone.right<=rail.left-4&&rail.bottom<=footer.top+1&&['flightResponse','flightQuickScan','flightLedToggle'].every(id=>{const r=document.getElementById(id).getBoundingClientRect();return r.width>=44&&r.height>=44&&r.right<=innerWidth&&r.bottom<=footer.top+1})})()");
         check("typeof window.Peer==='function'");
         float[] transport=point("flightNetworkSwitch",.5f,.5f);
         touch(MotionEvent.ACTION_DOWN,new int[]{7},transport);touch(MotionEvent.ACTION_UP,new int[]{7},transport);
@@ -224,6 +225,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
         float[] gear=point("flightSettings",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},gear);touch(MotionEvent.ACTION_UP,new int[]{4},gear);
         check("document.getElementById('mobileConnection').open && document.getElementById('mobileSettingsStop').getClientRects().length===0 && document.getElementById('flightBack').getBoundingClientRect().height>=44");
         check("(()=>{const n=document.querySelector('.mobile-adaptive-nav').getBoundingClientRect(),m=document.querySelector('.mobile-adaptive-main').getBoundingClientRect();return Math.abs(n.top-m.top)<=2&&Math.abs(n.bottom-m.bottom)<=2&&m.left>=n.right-1})()");
+        check("(()=>{const back=document.getElementById('flightBack').getBoundingClientRect(),tabs=document.querySelector('.mobile-nav-tabs').getBoundingClientRect();return tabs.top>=back.bottom&&tabs.bottom<=innerHeight})()");
         float[] back=point("flightBack",.5f,.5f);touch(MotionEvent.ACTION_DOWN,new int[]{4},back);touch(MotionEvent.ACTION_UP,new int[]{4},back);
         check("!document.getElementById('mobileConnection').open");
         touch(MotionEvent.ACTION_DOWN,new int[]{0},l);touch(MotionEvent.ACTION_MOVE,new int[]{0},lm);
