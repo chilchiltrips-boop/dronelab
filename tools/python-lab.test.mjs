@@ -24,7 +24,8 @@ test('Python gyro RPC selects authenticated AP/STA telemetry rather than USB bri
  const page=file('js/python-lab.js');
  const gyro=page.slice(page.indexOf("}else if(m.method==='read_gyro')"),page.indexOf("}else if(m.method==='latest_scan')"));
  assert.ok(gyro.includes('window.DroneLabNetwork.getTelemetry()'));
- assert.ok(gyro.includes('parseNetworkGyroTelemetry(telemetry,before.kitId)'));
+ assert.ok(gyro.includes('readNetworkGyro('));
+ assert.ok(file('js/usb-i2c-bridge.js').includes('parseNetworkGyroTelemetry(data,expectedKitId)'));
  assert.ok(gyro.includes('after.kitId!==before.kitId'));
  assert.ok(gyro.includes('result=await gyroBridge.readGyro'));
  assert.ok(gyro.indexOf('window.DroneLabNetwork.getTelemetry()')<gyro.indexOf('result=await gyroBridge.readGyro'));

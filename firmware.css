@@ -296,3 +296,5 @@
  .firmware-page .fw-target-quick-status>div:last-child{grid-column:1/-1}
  .firmware-page .fw-target-advanced .firmware-usb-info:not(.firmware-id-info){grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+#fwHealthImu[data-state="calibrating"]{color:#efc76b}

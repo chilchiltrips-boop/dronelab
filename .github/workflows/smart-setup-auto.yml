@@ -54,6 +54,7 @@ jobs:
           node tools/control-path-browser.mjs
           node tools/smart-kit-setup-browser.mjs
           node tools/python-auto-browser.mjs
+          node tools/imu-status-browser.mjs
           node tools/python-connected-led-browser.mjs
           node tools/python-browser-smoke.mjs
           node tools/accordion-browser.mjs

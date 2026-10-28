@@ -24,7 +24,7 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
   const f=value.split(',');
   if(![12,20].includes(f.length)||!/^A[12]$/.test(f[2])||!safeInt(f[3])||!safeInt(f[4])||
      !/^0x[0-9a-f]{2}$/i.test(f[5])||!safeInt(f[11])||
-     !/^(?:READY|NOT_FOUND|READ_ERROR|STARTING)$/.test(f[6]))return value;
+     !/^(?:READY|NOT_FOUND|READ_ERROR|STARTING|SETTLING|CALIBRATING|CALIBRATION_FAILED)$/.test(f[6]))return value;
   const rates=f.slice(7,10).map(angle);
   if(rates.some(v=>v===null))return value;
   // The exact same validated RC frame feeds the dashboard and readable monitor.
@@ -37,8 +37,8 @@ export function createReadableKitMonitor({now=()=>Date.now(),intervalMs=200,stal
     'RC '+rc.transport+'/'+rc.source+' #'+rc.seq+' | THR='+rc.throttle+' ROLL='+rc.roll+' PITCH='+rc.pitch+
        ' YAW='+rc.yaw+' | INPUT '+(rc.armed?'ARMED':'DISARMED'):
     'RC '+(rc?'STALE / FAILSAFE':'IDLE')+' | THR=1000 ROLL=1500 PITCH=1500 YAW=1500 | INPUT OFF';
-  return f[2]+' | IMU '+f[6]+' ('+f[5]+') | Gyro R='+rates[0]+' P='+rates[1]+
-      ' Y='+rates[2]+' deg/s | '+out+' | MOTORS OFF';
+  const gyro=f[6]==='READY'?'Gyro R='+rates[0]+' P='+rates[1]+' Y='+rates[2]+' deg/s':'Gyro waiting for calibrated readings';
+  return f[2]+' | IMU '+f[6]+' ('+f[5]+') | '+gyro+' | '+out+' | MOTORS OFF';
  }
  return {view,clear};
 }

@@ -1,15 +1,16 @@
 {
-  "version": "1.5.13",
-  "builtAt": "2026-10-27T10:56:28Z",
-  "sourceCommit": "19c0d8fd74b7f5b2d131e2764ce23fb13bd2dc20",
+  "version": "1.5.14",
+  "builtAt": "2026-10-28T07:06:41Z",
+  "sourceCommit": "f1361bd1c3a7f7ea9677a8dd8dacd8bf34a0fe3b",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "23050d18938085e71e839f490a66f3e766c6a9fe61956711c619e4f1ec853465",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "de610681e1036f00ab4d5f0feac61e95aa47ccfe550d951b1a445004881873a5",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreAccess.h": "c4fb03dd2e7270317e6810cd8791dacb9715ae14b5293430806b25f8621025af",
     "FlightCore_Firmware/FlightCoreClassroom.h": "8700800cc5ab466cdfa9f56ae61c7b4c79e20ce0b3dce6344a9bd8122669dd2b",
     "FlightCore_Firmware/FlightCoreEnrollment.h": "882ad163ba4c80bcc0e152eef5c32eec829a27f5701d6caa3f9719159d7442b4",
+    "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
     "FlightCore_Firmware/FlightCoreHandover.h": "2bd4add7e4ebc3fab51e3c0ceea1b08eabf9eafa787673268a152c28fc3cc929",
-    "FlightCore_Firmware/FlightCoreNetwork.h": "151d2614273e55f2594cc5ed37937bf219513b30bfda2a165ef36d56d17c28dc",
+    "FlightCore_Firmware/FlightCoreNetwork.h": "970cd8bf10834520032e4214af94f0e2a83476f4f24e8a0c838b39d83561fbd2",
     "FlightCore_Firmware/FlightCoreOta.h": "906e344663c08f71a0a72107ddab905424ccfbcd640db98e34b8839bdc584ade",
     "FlightCore_Firmware/FlightCorePpm.h": "a39addbc57d29cc8ab9dead2ef58d5716a61b5afc8ea057b1444c5f6849c7c77",
     "FlightCore_Firmware/FlightCoreRpc.h": "c6d43d6f360650833d66ff4a03bb34b43a5c37c6e603d4ccaa6bac9deb4050e4",
@@ -26,7 +27,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc",
       "chipId": 5,
-      "appBytes": 1225024,
+      "appBytes": 1225840,
       "otaSlots": [
         {
           "address": 65536,
@@ -47,13 +48,13 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-27T10:57:40Z"
+      "compiledAt": "2026-10-28T07:07:54Z"
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1232768,
+      "appBytes": 1242144,
       "otaSlots": [
         {
           "address": 65536,
@@ -74,7 +75,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-27T10:58:35Z"
+      "compiledAt": "2026-10-28T07:08:52Z"
     }
   ]
 }

@@ -9,16 +9,17 @@ export function parseSerialPlotLine(line){
  if(rc)return {Throttle:Number(rc[1]),Roll:Number(rc[2]),Pitch:Number(rc[3]),Yaw:Number(rc[4])};
  const tel=s.split(',');
  if((tel.length===12||tel.length===20)&&tel[0]==='ZJTEL'&&tel[1]==='1'&&/^A[12]$/.test(tel[2])&&Number.isSafeInteger(Number(tel[3]))&&Number(tel[3])>=0&&Number.isSafeInteger(Number(tel[4]))&&/^0x[0-9a-f]{2}$/i.test(tel[5])&&Number.isSafeInteger(Number(tel[11]))&&tel.slice(7,10).every(x=>numberOnly.test(x))){
-  if(tel[6]!=='READY')return null;
-  const series={GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])};
-  if(tel.length===20&&/^RC=(?:NONE\/IDLE|(?:USB|STA|AP)\/(?:WEB|ANDROID))$/.test(tel[12])&&
+  if(!/^(?:READY|STARTING|SETTLING|CALIBRATING|CALIBRATION_FAILED|NOT_FOUND|READ_ERROR)$/.test(tel[6]))return null;
+  const series=tel[6]==='READY'?{GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])}:{};
+  if(tel.length===20&&/^RC=(?:NONE\/IDLE|(?:USB|STA|AP|PPM)\/(?:WEB|ANDROID|PPM))$/.test(tel[12])&&
     /^RCSEQ=\d+$/.test(tel[13])&&tel[19]==='MOTORS=OFF'&&/^INPUT_ARMED=[01]$/.test(tel[18])){
    for(const [i,label,field] of [[14,'Throttle','T'],[15,'Roll','R'],[16,'Pitch','P'],[17,'Yaw','Y']]){
     if(!new RegExp('^'+field+'=\\d+$').test(tel[i]))return null;
-    series[label]=Number(tel[i].split('=')[1]);
+    const pulse=Number(tel[i].split('=')[1]);if(pulse<1000||pulse>2000)return null;
+    series[label]=pulse;
    }
   }
-  return series;
+  return Object.keys(series).length?series:null;
  }
  const gyro=s.split(',');
  if(gyro.length===8&&gyro[0]==='ZJGYRO'&&gyro[1]==='DATA'&&/^A[12]$/.test(gyro[2])&&/^(MPU6050|LSM6DS3)$/.test(gyro[3])&&/^0x[0-9a-f]{2}$/i.test(gyro[4])&&gyro.slice(5).every(x=>numberOnly.test(x))){

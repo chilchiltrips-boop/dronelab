@@ -194,7 +194,7 @@ export function createPythonIDEShell(api){
  }
  root.addEventListener('dronelab:serial-line',()=>{}); // global USB dispatch is listened to below.
  window.addEventListener('dronelab:serial-line',e=>{const p=String(e.detail?.line||'').split(',');
-  if(p.length!==12||p[0]!=='ZJTEL'||p[1]!=='1')return;
+  if(![12,20].includes(p.length)||p[0]!=='ZJTEL'||p[1]!=='1'||p[6]!=='READY')return;
   const v=p.slice(7,10).map(Number);if(!v.every(Number.isFinite))return;samples.push({v});if(samples.length>150)samples.shift();paintPlot()
  });
  // Run/Terminal tool window below editor, collapsible to a narrow tab bar.

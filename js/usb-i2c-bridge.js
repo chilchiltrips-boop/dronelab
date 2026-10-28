@@ -64,6 +64,26 @@ export const FLIGHTCORE_GYROS=Object.freeze({
 });
 // The authenticated AP/STA telemetry endpoint is independent of Web Serial.
 // Never accept a cached frontend joystick preview or a response from another kit.
+// One caller deadline covers all calibration polls. Identity checks still run
+// before and after every read; calibration cannot redirect a Python session.
+export async function readNetworkGyro(read,expectedKitId,timeoutMs=3000,assertBinding=()=>{}){
+ const timeout=Math.max(200,Math.min(10000,Number(timeoutMs)||3000)),until=Date.now()+timeout;
+ let calibrating=false;
+ const expired=()=>new Error(calibrating?'GyroCalibrationTimeoutError: Gyro is still calibrating. Keep the A2 board still; retry when READY or use a longer read_gyro timeout.':'GyroTimeoutError: No Kit network/relay telemetry response within '+timeout+' ms. Check the connection.');
+ while(true){
+  assertBinding();const remaining=until-Date.now();if(remaining<=0)throw expired();
+  let timer;
+  try{
+   const data=await Promise.race([read(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(expired()),remaining);})]);
+   assertBinding();
+   try{return parseNetworkGyroTelemetry(data,expectedKitId);}
+   catch(error){if(error.code!=='GYRO_CALIBRATING')throw error;calibrating=true;}
+  }finally{clearTimeout(timer);}
+  const wait=Math.min(100,until-Date.now());if(wait<=0)throw expired();
+  await new Promise(resolve=>setTimeout(resolve,wait));
+ }
+}
+
 export function parseNetworkGyroTelemetry(data, expectedKitId){
  if(!expectedKitId||!data||data.kitId!==expectedKitId)
   throw new Error('NetworkDisconnectedError: Gyro telemetry Device ID does not match the connected kit.');
@@ -73,6 +93,16 @@ export function parseNetworkGyroTelemetry(data, expectedKitId){
  const numericAddress=Number(data.address);
  if(!Number.isSafeInteger(numericAddress)||('0x'+numericAddress.toString(16).toUpperCase())!==spec.address)
   throw new Error('SensorNotFoundError: '+board+' expected '+spec.sensor+' at '+spec.address+'; reported address '+String(data.address));
+ const imu=data.imu;
+ if(imu?.version===1&&imu.enabled===true){
+  if(board!=='A2'||imu.board!=='A2'||imu.target!==2000||!Number.isSafeInteger(imu.samples)||imu.samples<0||imu.samples>2000)
+   throw new Error('GyroCalibrationError: Invalid A2 calibration metadata.');
+  if(imu.state==='READY'&&(imu.samples!==2000||imu.configValid!==true||!Number.isSafeInteger(imu.attempt)||imu.attempt<1))
+   throw new Error('GyroCalibrationError: Firmware did not confirm completed gyro calibration.');
+  if(['SETTLING','CALIBRATING'].includes(imu.state)||imu.state==='READY'&&imu.dataReady!==true)
+   throw Object.assign(new Error('GyroCalibrating: Keep A2 board still ('+(imu.samples||0)+'/'+(imu.target||2000)+' samples).'),{code:'GYRO_CALIBRATING'});
+  if(imu.state==='FAILED')throw new Error('GyroCalibrationError: Calibration did not finish. Keep the A2 board still and retry.');
+ }
  if(data.gyroReady!==true)
   throw new Error('SensorNotFoundError: '+spec.sensor+' '+spec.address+' on '+board+' is NOT_READY. Check power and I2C SDA/SCL wiring.');
  if(data.sampleAgeMs!==undefined&&(data.sampleValid!==true||!Number.isSafeInteger(data.sampleAgeMs)||data.sampleAgeMs<0||data.sampleAgeMs+(data.transportAgeMs||0)>1000))
@@ -88,10 +118,11 @@ export function parseNetworkGyroTelemetry(data, expectedKitId){
   deviceDrops:null,timestamp:new Date().toISOString(),kitId:data.kitId};
 }
 
-export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
- let last=null,unifiedSeen=false,latestError='';
+export function createGyroParser(onReading=()=>{},onFailure=()=>{},onWaiting=()=>{}){
+ let last=null,unifiedSeen=false,latestError='',status='STARTING';
+ const wait=state=>{status=state;last=null;latestError='';onWaiting(state);};
  const fail=(message)=>{
-  last=null;latestError=message;onFailure(message);
+  status='ERROR';last=null;latestError=message;onFailure(message);
  };
  const makeReading=(board,address,roll,pitch,yaw,source,seq=null,boardMs=null,deviceDrops=0)=>{
   const spec=FLIGHTCORE_GYROS[board];
@@ -102,7 +133,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
    RateRoll:rates[0],RatePitch:rates[1],RateYaw:rates[2],
    units:'deg/s',status:'READY',source,sequence:seq,boardMs,deviceDrops,
    timestamp:new Date().toISOString()};
-  latestError='';last=data;onReading(data);return data;
+  status='READY';latestError='';last=data;onReading(data);return data;
  };
  function acceptLine(raw){
   const line=String(raw??'').trim();
@@ -113,14 +144,15 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
    const seq=Number(f[3]),ms=Number(f[4]),drops=Number(f[11]);
    if(!spec||addr!==spec.address||![seq,ms,drops].every(x=>Number.isSafeInteger(x)&&x>=0))return null;
    unifiedSeen=true;
-   if(f[6]==='STARTING')return null;
+   if(['STARTING','SETTLING','CALIBRATING'].includes(f[6])){wait(f[6]);return null;}
+   if(f[6]==='CALIBRATION_FAILED'){fail('GyroCalibrationError: Keep A2 board still; calibration did not complete.');return null;}
    if(f[6]!=='READY'){fail(spec.sensor+' '+addr+' on '+board+' is '+f[6]+'. Check sensor power and I2C wiring.');return null}
    return makeReading(board,addr,f[7],f[8],f[9],'ZJTEL',seq,ms,drops);
   }
   if(f[0]==='ZJGYRO'&&f[1]==='STATUS'&&f.length>=6){
    const board=f[2],spec=FLIGHTCORE_GYROS[board];
    if(spec&&f[3]===spec.sensor&&/^0x[0-9a-f]{2}$/i.test(f[4])&&('0x'+f[4].slice(2).toUpperCase())===spec.address&&f[5]!=='READY')
-    fail(spec.sensor+' '+spec.address+' on '+board+' is '+f[5]+'. Check SDA/SCL, 3V3, GND.');
+    {if(['STARTING','SETTLING','CALIBRATING'].includes(f[5]))wait(f[5]);else if(f[5]==='CALIBRATION_FAILED')fail('GyroCalibrationError: Keep A2 board still; calibration did not complete.');else fail(spec.sensor+' '+spec.address+' on '+board+' is '+f[5]+'. Check SDA/SCL, 3V3, GND.');}
    return null;
   }
   // Older FlightCore firmware has only ZJGYRO,DATA. Do not double-count the
@@ -132,7 +164,7 @@ export function createGyroParser(onReading=()=>{},onFailure=()=>{}){
   }
   return null;
  }
- return {acceptLine,getLatest:()=>last,getError:()=>latestError,reset:()=>{last=null;unifiedSeen=false;latestError=''}};
+ return {acceptLine,getLatest:()=>last,getError:()=>latestError,getStatus:()=>status,reset:()=>{last=null;unifiedSeen=false;latestError='';status='STARTING'}};
 }
 export function createGyroBridge({host=window,acceptEvent=()=>true}={}){
  const waiting=new Set();
@@ -144,7 +176,8 @@ export function createGyroBridge({host=window,acceptEvent=()=>true}={}){
   message=>{
    latestError=message;
    for(const p of [...waiting]){clearTimeout(p.timer);waiting.delete(p);p.reject(new Error(message))}
-  }
+  },
+  ()=>{latestError='';}
  );
  const serial=e=>{if(acceptEvent(e))parser.acceptLine(e?.detail?.line)};
  const usbState=e=>{
@@ -164,7 +197,7 @@ export function createGyroBridge({host=window,acceptEvent=()=>true}={}){
    const entry={resolve,reject,timer:null};
    entry.timer=setTimeout(()=>{
     waiting.delete(entry);
-    reject(new Error('No live gyro frame within '+timeout+' ms. Check USB Serial, firmware version, and A1 0x6B / A2 0x68 wiring.'));
+    reject(new Error(['SETTLING','CALIBRATING'].includes(parser.getStatus())?'GyroCalibrationTimeoutError: Keep the A2 board still; gyro calibration has not finished within '+timeout+' ms.':'No live gyro frame within '+timeout+' ms. Check USB Serial, firmware version, and A1 0x6B / A2 0x68 wiring.'));
    },timeout);
    waiting.add(entry);
   });

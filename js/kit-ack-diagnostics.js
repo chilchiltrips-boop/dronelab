@@ -21,6 +21,82 @@ const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['PROFILE_SAVE_FAILED','INPUT_UNSAFE','HANDOVER_BUSY','STA_CONFIG_REQUIRED','INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
  'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+// IMU records share the existing bounded/private diagnostic log. IDs below
+// select an observation internally and are never exported.
+const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
+const imuErrors=new Set(['NONE','I2C_ERROR','WHO_AM_I','CONFIG_MISMATCH','INVALID_SAMPLE','DATA_STALE','CALIBRATION_TIMEOUT']);
+const imuFloatFields=['gyroRawX','gyroRawY','gyroRawZ','gyroBiasX','gyroBiasY','gyroBiasZ','gyroRateX','gyroRateY','gyroRateZ','gyroStddevX','gyroStddevY','gyroStddevZ'];
+const imuCountFields=['imuAttempt','imuSamples','imuTarget','imuValidTotal','imuDurationMs','imuStartedMs','imuRestarts','imuReadFailures','imuWriteFailures','imuLastI2cCode','imuWhoAmI','imuSampleSequence','imuSampleAgeMs','imuMaxGapUs','imuCalibrationMaxGapUs','imuMissedSamples','imuMaxReadUs','imuDiagnosticDrops','imuFailures','imuLastFailureMs','imuLastFailureAttempt'];
+fields.push('imuState','imuError','imuLastFailure','imuDataReady','imuConfigValid','gyroUnits',...imuFloatFields,...imuCountFields);
+for(const event of ['imu_summary','imu_state','imu_calibration_restart','imu_i2c_error','imu_sample','imu_progress','imu_calibration_error'])allowedEvents.add(event);
+function normalizeImu(value,expectedBoard=''){
+ if(!value||value.version!==1||typeof value.enabled!=='boolean')return null;
+ const board=String(value.board||'').replace(/^ZFC-/,'');
+ if(!['A1','A2'].includes(board)||expectedBoard&&board!==String(expectedBoard).replace(/^ZFC-/,''))return null;
+ if(!imuStates.has(value.state)||value.enabled&&board!=='A2')return null;
+ const out={version:1,board,enabled:value.enabled,state:value.state,dataReady:value.dataReady===true};
+ if(typeof value.configValid==='boolean')out.configValid=value.configValid;
+ if(value.lastFailure!==undefined){if(!imuErrors.has(value.lastFailure))return null;out.lastFailure=value.lastFailure;}
+ if(value.error!==undefined){if(!imuErrors.has(value.error))return null;out.error=value.error;}
+ for(const key of ['attempt','samples','target','validTotal','durationMs','startedMs','restarts','readFailures','writeFailures','lastI2cCode','whoAmI','sampleSequence','maxGapUs','calibrationMaxGapUs','missedSamples','maxReadUs','diagnosticDrops','failures','lastFailureMs','lastFailureAttempt']){
+  if(value[key]===undefined)continue;
+  if(!Number.isSafeInteger(value[key])||value[key]<0||value[key]>0xffffffff)return null;
+  out[key]=value[key];
+ }
+ if(value.sampleAgeMs!==undefined&&value.sampleAgeMs!==null){if(!Number.isSafeInteger(value.sampleAgeMs)||value.sampleAgeMs<0||value.sampleAgeMs>0xffffffff)return null;out.sampleAgeMs=value.sampleAgeMs;}
+ if(out.enabled&&(out.target!==2000||!Number.isSafeInteger(out.samples)||out.samples>out.target))return null;
+ for(const key of ['raw','bias','corrected','stddev'])if(value[key]!==undefined){
+  if(!Array.isArray(value[key])||value[key].length!==3||!value[key].every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=1000))return null;
+  out[key]=[...value[key]];
+ }
+ if(out.enabled&&out.state==='READY'&&(out.samples!==2000||!out.attempt||out.configValid!==true))return null;
+ if(out.state!=='READY'||Number.isFinite(out.sampleAgeMs)&&out.sampleAgeMs>1000)out.dataReady=false;
+ return out;
+}
+function imuLabel(value){
+ const imu=normalizeImu(value);if(!imu)return 'NOT REPORTED';
+ if(['SETTLING','CALIBRATING'].includes(imu.state))return 'Calibrating '+imu.samples+'/'+imu.target+' • keep board still';
+ if(imu.state==='READY')return imu.dataReady?(imu.enabled?'READY • gyro calibrated':'READY'):'Calibration complete • waiting for fresh gyro';
+ if(imu.state==='FAILED')return 'Calibration failed • keep board still';
+ if(imu.state==='STARTING')return 'Gyro starting';
+ return 'Sensor error • '+(imu.error||imu.state);
+}
+function parseImuLine(line,previous=null){
+ const p=String(line||'').trim().split(',');
+ if(p[1]!=='1'||p[2]!=='A2')return null;
+ const number=i=>p[i]!==''&&Number.isFinite(Number(p[i]))?Number(p[i]):NaN;
+ if(p[0]==='ZJIMU'&&p.length===18){
+  const same=previous?.board==='A2'&&previous.attempt===number(3)&&!(number(5)<previous.samples&&['SETTLING','CALIBRATING'].includes(p[4]));
+  return normalizeImu({...(same?previous:{}),version:1,board:'A2',enabled:true,attempt:number(3),state:p[4],samples:number(5),target:number(6),durationMs:number(7),restarts:number(8),bias:[number(9),number(10),number(11)],error:p[12],readFailures:number(13),writeFailures:number(14),whoAmI:number(15),configValid:p[16]==='1',dataReady:p[17]==='1'});
+ }
+ if(p[0]==='ZJIMUE'&&p.length===7&&previous?.board==='A2')return normalizeImu({...previous,failures:number(3),lastFailure:p[4],lastFailureMs:number(5),lastFailureAttempt:number(6)});
+ if(p[0]==='ZJIMUS'&&p.length===15&&number(11)>=-1&&previous?.board==='A2'&&previous.attempt===number(3)){
+  return normalizeImu({...previous,...(number(10)<(previous.sampleSequence||0)?{failures:0,lastFailure:'NONE',lastFailureMs:0,lastFailureAttempt:0}:{}),raw:[number(4),number(5),number(6)],corrected:[number(7),number(8),number(9)],sampleSequence:number(10),sampleAgeMs:number(11)<0?null:number(11),maxGapUs:number(12),calibrationMaxGapUs:number(13),missedSamples:number(14)});
+ }
+ return null;
+}
+let lastImuBinding='',lastImu=null,lastImuAt=0,lastImuProgressAt=0;
+function observeImu(value,kit={}){
+ if(!kit.connected||!kit.kitId)return null;
+ const imu=normalizeImu(value,kit.board);if(!imu)return null;
+ const binding=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport].join('|');
+ if(binding!==lastImuBinding){lastImuBinding=binding;lastImu=null;lastImuAt=0;lastImuProgressAt=0;}
+ const data={transport:kit.transport,board:imu.board,version:kit.version,imuState:imu.state,imuError:imu.error||'NONE',imuLastFailure:imu.lastFailure,imuDataReady:imu.dataReady,imuConfigValid:imu.configValid,gyroUnits:'deg/s'};
+ for(const [key,field] of Object.entries({attempt:'imuAttempt',samples:'imuSamples',target:'imuTarget',validTotal:'imuValidTotal',durationMs:'imuDurationMs',startedMs:'imuStartedMs',restarts:'imuRestarts',readFailures:'imuReadFailures',writeFailures:'imuWriteFailures',lastI2cCode:'imuLastI2cCode',whoAmI:'imuWhoAmI',sampleSequence:'imuSampleSequence',sampleAgeMs:'imuSampleAgeMs',maxGapUs:'imuMaxGapUs',calibrationMaxGapUs:'imuCalibrationMaxGapUs',missedSamples:'imuMissedSamples',maxReadUs:'imuMaxReadUs',diagnosticDrops:'imuDiagnosticDrops',failures:'imuFailures',lastFailureMs:'imuLastFailureMs',lastFailureAttempt:'imuLastFailureAttempt'}))data[field]=imu[key];
+ for(const [key,prefix] of [['raw','gyroRaw'],['bias','gyroBias'],['corrected','gyroRate'],['stddev','gyroStddev']])if(imu[key])imu[key].forEach((v,i)=>data[prefix+'XYZ'[i]]=v);
+ const fresh=!lastImu||lastImu.attempt!==imu.attempt;
+ if(fresh)record('imu_summary',data);
+ if((imu.failures||0)>(lastImu?.failures||0))record('imu_calibration_error',data);
+ if(!fresh){
+  if(lastImu.state!==imu.state||lastImu.dataReady!==imu.dataReady)record('imu_state',data);
+  if((imu.restarts||0)>(lastImu.restarts||0))record('imu_calibration_restart',data);
+  if((imu.readFailures||0)+(imu.writeFailures||0)>(lastImu.readFailures||0)+(lastImu.writeFailures||0))record('imu_i2c_error',data);
+ }
+ if(['SETTLING','CALIBRATING'].includes(imu.state)&&(fresh||Date.now()-lastImuProgressAt>=1000)){record('imu_progress',data);lastImuProgressAt=Date.now();}
+ if(imu.dataReady&&(fresh||Date.now()-lastImuAt>=2000)){record('imu_sample',data);lastImuAt=Date.now();}
+ lastImu=imu;return imu;
+}
+
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
  if(/input_profile_save_failed/.test(s))return 'PROFILE_SAVE_FAILED';
@@ -50,7 +126,13 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(['sentSeq','feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected','rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed',
+  if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
+  else if(imuCountFields.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
+  else if(key==='imuState'){if(imuStates.has(v))result[key]=v;}
+  else if(['imuError','imuLastFailure'].includes(key)){if(imuErrors.has(v))result[key]=v;}
+  else if(['imuDataReady','imuConfigValid'].includes(key)){if(typeof v==='boolean')result[key]=v;}
+  else if(key==='gyroUnits'){if(v==='deg/s')result[key]=v;}
+  else if(['sentSeq','feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected','rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed',
    'nackSent','nackFailed','maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs',
    'apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
@@ -104,6 +186,8 @@ function paint(force=false){
  const p=panel();if(!p)return;
  const s=summary(),label=p.querySelector('[data-diag-summary]');
  if(label)label.textContent=events.length+' events • '+s.inputs+' input samples • source '+s.lastSource+' • selected '+s.lastSelection+(s.lastSource==='PPM'?' • PPM #'+s.lastInputSeq+' • age '+s.lastInputAgeMs+' ms • losses '+s.ppmLosses:'')+' • '+s.ack+' sampled ACKs • '+s.nack+' NACKs • RX #'+s.lastRxSeq+' / APPLIED #'+s.lastAppliedSeq+' • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
+ const imuView=p.querySelector('[data-diag-imu]');
+ if(imuView){const e=[...events].reverse().find(e=>e.data.imuState),d=e?.data;imuView.textContent=d?'Last IMU: '+d.board+' • '+d.imuState+(d.imuTarget?' • '+d.imuSamples+'/'+d.imuTarget+' samples':'')+(Number.isFinite(d.imuDurationMs)?' • '+d.imuDurationMs+' ms':'')+(Number.isFinite(d.gyroBiasX)?' • bias '+[d.gyroBiasX,d.gyroBiasY,d.gyroBiasZ].join(' / ')+' deg/s':'')+' • read errors '+(d.imuReadFailures||0)+' • calibration failures '+(d.imuFailures||0)+(d.imuLastFailure&&d.imuLastFailure!=='NONE'?' • last '+d.imuLastFailure:'')+(d.imuError&&d.imuError!=='NONE'?' • '+d.imuError:''):'IMU diagnostics: connect a Kit';}
  const view=p.querySelector('[data-diag-events]');
  if(view&&p.open)view.textContent=events.slice(-30).reverse().map(e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data)).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
 }
@@ -199,6 +283,6 @@ root.zebjusNativeDiagnosticSaveResult=data=>{
  const status=panel()?.querySelector('[data-diag-export-status]');
  if(status)status.textContent=data?.ok?'Diagnostic file saved in chosen location':data?.cancelled?'Export cancelled; local diagnostics retained':'Export failed; local diagnostics retained';
 };
-root.ZebjusAckDiagnostics=Object.freeze({record,observeInput,observeView,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
+root.ZebjusAckDiagnostics=Object.freeze({record,observeInput,observeView,normalizeImu,parseImuLine,imuLabel,observeImu,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(window);
