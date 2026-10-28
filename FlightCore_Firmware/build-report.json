@@ -1,14 +1,14 @@
 {
   "version": "1.5.14",
-  "builtAt": "2026-10-28T06:34:41Z",
-  "sourceCommit": "5d009c39c68fa98d6e7646e1e299ed170f93e282",
+  "builtAt": "2026-10-28T07:06:41Z",
+  "sourceCommit": "f1361bd1c3a7f7ea9677a8dd8dacd8bf34a0fe3b",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "3b2afcbea90e68360b65ca3aafca8f5b7289661f581465c88f992819e5446d89",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "de610681e1036f00ab4d5f0feac61e95aa47ccfe550d951b1a445004881873a5",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreAccess.h": "c4fb03dd2e7270317e6810cd8791dacb9715ae14b5293430806b25f8621025af",
     "FlightCore_Firmware/FlightCoreClassroom.h": "8700800cc5ab466cdfa9f56ae61c7b4c79e20ce0b3dce6344a9bd8122669dd2b",
     "FlightCore_Firmware/FlightCoreEnrollment.h": "882ad163ba4c80bcc0e152eef5c32eec829a27f5701d6caa3f9719159d7442b4",
-    "FlightCore_Firmware/FlightCoreGyroCalibration.h": "ac3a47c8b821355ac511bdec7d69d502986ec1cf6cfd82afc2644d679ee463d3",
+    "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
     "FlightCore_Firmware/FlightCoreHandover.h": "2bd4add7e4ebc3fab51e3c0ceea1b08eabf9eafa787673268a152c28fc3cc929",
     "FlightCore_Firmware/FlightCoreNetwork.h": "970cd8bf10834520032e4214af94f0e2a83476f4f24e8a0c838b39d83561fbd2",
     "FlightCore_Firmware/FlightCoreOta.h": "906e344663c08f71a0a72107ddab905424ccfbcd640db98e34b8839bdc584ade",
@@ -48,13 +48,13 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-28T06:35:55Z"
+      "compiledAt": "2026-10-28T07:07:54Z"
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1241344,
+      "appBytes": 1242144,
       "otaSlots": [
         {
           "address": 65536,
@@ -75,7 +75,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-28T06:36:56Z"
+      "compiledAt": "2026-10-28T07:08:52Z"
     }
   ]
 }
