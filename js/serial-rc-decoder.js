@@ -31,7 +31,7 @@
   const p=s.split(',');
   if(p.length!==20||!/^A[12]$/.test(p[2])||!decimal(p[3])||!decimal(p[4])||
      p[5].toLowerCase()!==(p[2]==='A1'?'0x6b':'0x68')||
-     !/^(?:READY|STARTING|NOT_FOUND|READ_ERROR)$/.test(p[6])||
+     !/^(?:READY|STARTING|SETTLING|CALIBRATING|CALIBRATION_FAILED|NOT_FOUND|READ_ERROR)$/.test(p[6])||
      !p.slice(7,10).every(x=>/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(x)&&Number.isFinite(Number(x)))||
      !/^[A-Z0-9_]+$/.test(p[10])||!decimal(p[11]))return null;
   const suffix=p.slice(12);

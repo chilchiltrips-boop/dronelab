@@ -1,7 +1,7 @@
 name: Android Landscape Flight WebRTC Tests
 on:
   push:
-    branches: [feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/unified-pid-settings-shell-v1.6.3, main, feature/pid-fullwidth-responsive-layout, feature/classroom-my-kits-webapp-v1-3-5, feature/authoritative-status-integration-20261021]
+    branches: [feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/unified-pid-settings-shell-v1.6.3, main, feature/pid-fullwidth-responsive-layout, feature/classroom-my-kits-webapp-v1-3-5, feature/authoritative-status-integration-20261021]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'

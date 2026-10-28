@@ -11,7 +11,7 @@ const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
- version:'',flightMode:null,flightModeState:null,rc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
+ version:'',imu:null,imuObservedAt:0,flightMode:null,flightModeState:null,rc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',relaySessionId:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let usbMonitorPacketAt=0;let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
@@ -390,7 +390,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const slot of authSessions.keys())if(slot.startsWith(priorId+'@'))authSessions.delete(slot);
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
- state.connected=false;state.ppm=null;state.radioHandover=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
+ state.connected=false;state.imu=null;state.imuObservedAt=0;state.ppm=null;state.radioHandover=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
  Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:false});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
@@ -691,7 +691,7 @@ async function readStatus(){
  if(wasSetupAuthorized&&!state.setupAuthorized&&state.transport==='ap')setupHint('AP setup access lost. Reconnect the Kit AP and retry.');
  if(state.tone==='error'){state.tone='good';state.lastError=''}
  state.apActive=!!d.apActive;state.staConnected=!!d.staConnected;state.staIp=d.ip||'';state.staDisconnectReason=Number(d.staDisconnectReason)||0;state.rssi=Number.isFinite(Number(d.rssi))?Number(d.rssi):null;
- adoptNetworkStatus(d);root.ZebjusAckDiagnostics?.observeInput?.(state.rc||{},{...state,rcAt:state.rcObservedAt});
+ adoptNetworkStatus(d);state.imu=root.ZebjusAckDiagnostics?.normalizeImu?.(d.imu,d.board)||null;state.imuObservedAt=Date.now();root.ZebjusAckDiagnostics?.observeImu?.(state.imu,state);root.ZebjusAckDiagnostics?.observeInput?.(state.rc||{},{...state,rcAt:state.rcObservedAt});
  if(priorName!==state.kitName||priorAddress!==state.staIp){
   for(const kit of discoveredKits)if(kit.kitId===state.kitId){kit.kitName=state.kitName;kit.hostname=state.hostname;}
   recordKnown();root.dispatchEvent(new CustomEvent('dronelab:kit-name',{detail:{kitId:state.kitId,name:state.kitName}}));
@@ -1150,6 +1150,8 @@ function onSerial(e){
   return;
  }
  if(state.transport==='usb'&&usbCandidate.kitId===state.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()){
+  const imu=root.ZebjusAckDiagnostics?.parseImuLine?.(line,state.imu);
+  if(imu&&String(state.board).replace(/^ZFC-/,'')===imu.board){state.imu=imu;state.imuObservedAt=Date.now();root.ZebjusAckDiagnostics.observeImu(imu,state);render();}
   const ppm=root.ZebjusSerialRcDecoder?.parsePpmChannels?.(line);
   if(ppm)state.ppm={present:true,ageMs:0,observedAt:Date.now()};
   else if(line.startsWith('ZJPPM,1,LOST,'))state.ppm={present:false,ageMs:null,observedAt:Date.now()};

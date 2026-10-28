@@ -14,6 +14,7 @@ firmware's I2C scanner. Only the board's assigned gyro is decoded here.
 """
 import argparse
 import time
+import math
 from contextlib import contextmanager
 import serial
 
@@ -40,17 +41,28 @@ def safe_serial(path):
 
 def decode_gyro(line):
     fields = line.strip().split(",")
-    if len(fields) != 12 or fields[:2] != ["ZJTEL", "1"]:
+    if len(fields) == 18 and fields[:3] == ["ZJIMU", "1", "A2"]:
+        try:
+            samples, target = int(fields[5]), int(fields[6])
+            if target != 2000 or not 0 <= samples <= target:
+                return None
+        except ValueError:
+            return None
+        if fields[4] not in ("STARTING", "SETTLING", "CALIBRATING", "FAILED", "SENSOR_ERROR"):
+            return None
+        return {"board": "A2", "address": "0x68", "status": fields[4],
+                "samples": samples, "target": target}
+    if len(fields) not in (12, 20) or fields[:2] != ["ZJTEL", "1"]:
         return None
     board = fields[2]
-    if board not in GYROS or fields[5].upper() != GYROS[board][1]:
+    if board not in GYROS or fields[5].upper() != GYROS[board][1].upper():
         return None
     try:
         sequence = int(fields[3])
         uptime_ms = int(fields[4])
         drops = int(fields[11])
         RateRoll, RatePitch, RateYaw = map(float, fields[7:10])
-        if sequence < 0 or uptime_ms < 0 or drops < 0:
+        if sequence < 0 or uptime_ms < 0 or drops < 0 or not all(map(math.isfinite, (RateRoll, RatePitch, RateYaw))):
             return None
     except ValueError:
         return None
@@ -85,7 +97,8 @@ def main():
                 if sample is None:
                     continue
                 if sample["status"] != "READY":
-                    print(f"Sensor {sample['address']} on {sample['board']}: {sample['status']}")
+                    progress = f" {sample['samples']}/{sample['target']} - keep board still" if "samples" in sample else ""
+                    print(f"Sensor {sample['address']} on {sample['board']}: {sample['status']}{progress}")
                     continue
                 if sample["board"] != identified:
                     identified = sample["board"]

@@ -138,10 +138,11 @@ function render(){
  const t=telemetryBinding&&root.ZebjusControlPaths?.sameBinding(telemetryBinding,s)&&telemetry?.kitId===s.kitId&&telemetryAge<15000?telemetry:null;
  const historical=!!t&&(!current||s.linkState==='delayed'||telemetryAge>=6500);
  const historicalNote=historical?' · LAST '+Math.floor(telemetryAge/1000)+'s ago':'';
- set('fwHealthImu',t?(t.gyroReady?'READY':'NOT FOUND')+historicalNote:'NOT REPORTED');
+ const imu=current&&Date.now()-(s.imuObservedAt||0)<6500?s.imu:t?.imu;
+ set('fwHealthImu',imu?(root.ZebjusAckDiagnostics?.imuLabel?.(imu)||imu.state):t?(t.gyroReady?'READY':'NOT FOUND')+historicalNote:'NOT REPORTED');
  set('fwHealthBaro','NOT REPORTED');set('fwHealthLidar','NOT REPORTED');
  set('fwHealthReceiver',t?(t.rcAlive||t.rc?.inputValid?(historical?'RC CONFIRMED':'RC LIVE'):'NO LIVE RC')+historicalNote:'NOT REPORTED');
- for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthCommand'&&current||id==='fwHealthImu'&&t?.gyroReady&&!historical||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)&&!historical?'live':historical&&['fwHealthImu','fwHealthReceiver'].includes(id)?'stale':'lost'}
+ for(const id of ['fwHealthCommand','fwHealthImu','fwHealthBaro','fwHealthLidar','fwHealthReceiver']){const x=$(id);if(x)x.dataset.state=id==='fwHealthImu'&&imu&&['SETTLING','CALIBRATING'].includes(imu.state)?'calibrating':id==='fwHealthCommand'&&current||id==='fwHealthImu'&&(imu?imu.dataReady:t?.gyroReady)&&!historical||id==='fwHealthReceiver'&&(t?.rcAlive||t?.rc?.inputValid)&&!historical?'live':historical&&['fwHealthImu','fwHealthReceiver'].includes(id)?'stale':'lost'}
  set('fwDetailName',live?s.kitName:'--');
  set('fwDetailId',live?s.kitId:'--');
  set('fwDetailAccess',live?(s.transport==='usb'||s.controlAuthorized?'Diagnostics authorized':'Diagnostics read-only'):'--');

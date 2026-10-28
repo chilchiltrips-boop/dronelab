@@ -73,9 +73,10 @@
 <div class="actions"><button id="kitScan">Scan Nearby Wi-Fi</button><button class="primary" id="kitTestSave">Test Wi-Fi &amp; Save on Success</button></div>
 </div></details>
 <details class="settings-accordion"><summary>Diagnostics • Telemetry / I²C</summary><div class="settings-accordion-body"><details class="zj-ack-panel" id="kitAckDiagnostics" data-client="android">
-<summary>Input / PPM / Wi-Fi Diagnostics • save &amp; export</summary>
-<p>Local-only log: selected/active input, CH1–CH8, PPM loss/recovery, packet age, RC ACKs, saved Wi-Fi/input handover and disarm cause. Saved automatically on this device. Passwords, Kit ID, IP and session keys are never exported. Motors remain disabled.</p>
+<summary>IMU / Input / PPM / Wi-Fi Diagnostics • save &amp; export</summary>
+<p>Local-only log: A2 gyro calibration, raw/bias/corrected rates, I²C errors, selected/active input, CH1–CH8, PPM loss/recovery, packet age, RC ACKs, saved Wi-Fi/input handover and disarm cause. Saved automatically on this device. Passwords, Kit ID, IP and session keys are never exported. Motors remain disabled.</p>
 <div class="zj-ack-buttons"><button type="button" data-diag-export="json">Save / Download JSON</button><button type="button" data-diag-export="csv">Save / Download CSV</button><button type="button" data-diag-clear>Clear Saved Log</button></div>
+<p data-diag-imu role="status">Keep A2 still during power-on calibration. IMU status requires FlightCore 1.5.14.</p>
 <p data-diag-summary role="status">Diagnostic recorder starting…</p><p data-diag-export-status role="status"></p>
 <pre data-diag-events aria-label="Recent sanitized ACK events">No diagnostic events yet.</pre>
 </details>

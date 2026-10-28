@@ -567,6 +567,7 @@ async function status(){
  const newer=!!kitSnapshot.bootId&&kitSnapshot.bootId===data.bootId&&(kitRcReadStartedAt>started||!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,data.rc)),previousRc=kitSnapshot.rc;
  online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
  if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
+ window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});
  window.dispatchEvent(new CustomEvent('zebjus:kit-status'));
  trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
@@ -689,7 +690,7 @@ async function command(line){
 }
 async function pollTelemetry(){
  if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead('/api/telemetry','GET'))throw Error('Release diagnostic input before requesting full IMU telemetry; RC ACK has priority.');
- const data=await request('/api/telemetry');const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
+ const data=await request('/api/telemetry');if(data.kitId===verifiedKitId){kitSnapshot.imu=data.imu;window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());}const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.imu?.enabled&&(['SETTLING','CALIBRATING'].includes(data.imu.state)||data.imu.state==='READY'&&!data.imu.dataReady)?'CALIBRATING':data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
  window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:mode,device:'android-native'}}));return data;
 }
 async function onWebRequest(req,peer){

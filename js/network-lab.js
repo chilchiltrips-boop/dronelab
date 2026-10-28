@@ -46,7 +46,7 @@ async function switchMode(){
 }
 function telemetryLine(d){
  const addr='0x'+Number(d.address||0).toString(16).toUpperCase();
- return 'ZJTEL,1,'+d.board+','+(++frameSeq)+','+d.millis+','+addr+','+(d.gyroReady?'READY':'NOT_FOUND')+','+d.roll+','+d.pitch+','+d.yaw+',1,0';
+ return 'ZJTEL,1,'+d.board+','+(++frameSeq)+','+d.millis+','+addr+','+(d.imu?.enabled&&(['SETTLING','CALIBRATING'].includes(d.imu.state)||d.imu.state==='READY'&&!d.imu.dataReady)?'CALIBRATING':d.gyroReady?'READY':'NOT_FOUND')+','+d.roll+','+d.pitch+','+d.yaw+',1,0';
 }
 async function getTelemetry(){
  const started=Date.now(),d=await request('/api/telemetry');d.transportAgeMs=Date.now()-started;lastSeen=Date.now();netReady=true;
@@ -58,7 +58,8 @@ async function getTelemetry(){
   const frame='ZJSCAN,'+d.board+','+d.millis+','+d.scanner.length+d.scanner.map(x=>',0x'+Number(x).toString(16).toUpperCase().padStart(2,'0')).join('');
   window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:frame,transport:netMode||'network'}}));
  }
- const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+(d.managementProtocol==='ZJM1'?' • UDP':'')+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
+ window.ZebjusAckDiagnostics?.observeImu?.(d.imu,window.ZebjusKits?.getState?.());
+ const e=$('netTelemetry');if(e)e.textContent='Gyro '+d.board+(d.imu?' • '+window.ZebjusAckDiagnostics?.imuLabel?.(d.imu):'')+(d.managementProtocol==='ZJM1'?' • UDP':'')+' • Roll '+d.roll+'°/s • Pitch '+d.pitch+'°/s • Yaw '+d.yaw+'°/s • '+d.scanner?.length+' I²C devices'+(d.rc?' • RC '+(d.rc.active?'LIVE':'IDLE')+' T'+d.rc.throttle+' R'+d.rc.roll+' P'+d.rc.pitch+' Y'+d.rc.yaw:'');
  return d;
 }
 async function writeLine(text,binding=null){
