@@ -320,7 +320,8 @@ bool gyroSignals(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static void gyroA2Fault(const char* reason,uint32_t now,bool sensor=true){
  gyroReady=false;gyroConfigured=false;gyroConfigValid=false;gyroWaitingFresh=false;
- lastGyroProbe=now;zjGyroCalibration.fail(reason,now,sensor);
+ lastGyroProbe=now;
+ if(sensor||!zjGyroCalibration.is("FAILED"))zjGyroCalibration.fail(reason,now,sensor);
  gyroStatus(sensor?"READ_ERROR":"CALIBRATION_FAILED");
 }
 #endif
@@ -388,7 +389,9 @@ static String zjImuStatus(){
   "\",\"attempt\":"+String(zjGyroCalibration.attempt)+",\"samples\":"+String(zjGyroCalibration.samples)+",\"target\":2000,\"validTotal\":"+String(zjGyroCalibration.validTotal)+
   ",\"durationMs\":"+String(zjGyroCalibration.duration(millis()))+",\"startedMs\":"+String(zjGyroCalibration.startedMs)+",\"restarts\":"+String(zjGyroCalibration.restarts)+
   ",\"bias\":"+zjImuVector(zjGyroCalibration.bias)+",\"raw\":"+zjImuVector(gyroRaw)+",\"corrected\":"+zjImuVector(corrected)+
-  ",\"stddev\":"+zjImuVector(zjGyroCalibration.stddev)+",\"readFailures\":"+String(gyroReadFailures)+",\"writeFailures\":"+String(gyroWriteFailures)+
+  ",\"stddev\":"+zjImuVector(zjGyroCalibration.stddev)+",\"failures\":"+String(zjGyroCalibration.failures)+
+  ",\"lastFailure\":\""+zjGyroCalibration.lastFailure+"\",\"lastFailureMs\":"+String(zjGyroCalibration.lastFailureMs)+",\"lastFailureAttempt\":"+String(zjGyroCalibration.lastFailureAttempt)+
+  ",\"readFailures\":"+String(gyroReadFailures)+",\"writeFailures\":"+String(gyroWriteFailures)+
   ",\"lastI2cCode\":"+String(gyroLastI2cCode)+",\"whoAmI\":"+String(gyroWhoAmI)+",\"configValid\":"+(gyroConfigValid?"true":"false")+
   ",\"maxGapUs\":"+String(gyroMaxGapUs)+",\"calibrationMaxGapUs\":"+String(zjGyroCalibration.maxGapUs)+",\"missedSamples\":"+String(zjGyroCalibration.missedSamples)+
   ",\"maxReadUs\":"+String(gyroMaxReadUs)+",\"diagnosticDrops\":"+String(gyroDiagnosticDrops);
@@ -399,10 +402,14 @@ static String zjImuStatus(){
 }
 static void emitImuDiagnostics(unsigned long now){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
- static uint32_t last=0;static bool sample=false;
+ static uint32_t last=0,lastErrorAt=0,lastErrorCount=0;static bool sample=false;
  if(uint32_t(now-last)<500)return;last=now;
  String line;
- if(!sample){
+ const bool history=zjGyroCalibration.failures&&(zjGyroCalibration.failures!=lastErrorCount||uint32_t(now-lastErrorAt)>=2000);
+ if(history){
+  line=String("ZJIMUE,1,A2,")+String(zjGyroCalibration.failures)+","+zjGyroCalibration.lastFailure+","+
+   String(zjGyroCalibration.lastFailureMs)+","+String(zjGyroCalibration.lastFailureAttempt);
+ }else if(!sample){
   line=String("ZJIMU,1,A2,")+String(zjGyroCalibration.attempt)+","+zjGyroCalibration.state+","+String(zjGyroCalibration.samples)+",2000,"+
    String(zjGyroCalibration.duration(now))+","+String(zjGyroCalibration.restarts)+","+String(zjGyroCalibration.bias[0],4)+","+
    String(zjGyroCalibration.bias[1],4)+","+String(zjGyroCalibration.bias[2],4)+","+zjGyroCalibration.error+","+
@@ -412,8 +419,9 @@ static void emitImuDiagnostics(unsigned long now){
    String(RateRoll,3)+","+String(RatePitch,3)+","+String(RateYaw,3)+","+String(gyroSampleSeq)+","+
    (gyroSampleSeq?String(uint32_t(now-lastGyroSample)):String("-1"))+","+String(gyroMaxGapUs)+","+String(zjGyroCalibration.maxGapUs)+","+String(zjGyroCalibration.missedSamples);
  }
- sample=!sample;
- if(size_t(Serial.availableForWrite())>=line.length()+2)Serial.println(line);else ++gyroDiagnosticDrops;
+ if(!history)sample=!sample;
+ if(size_t(Serial.availableForWrite())>=line.length()+2){Serial.println(line);if(history){lastErrorAt=now;lastErrorCount=zjGyroCalibration.failures;}}
+ else ++gyroDiagnosticDrops;
 #endif
 }
 

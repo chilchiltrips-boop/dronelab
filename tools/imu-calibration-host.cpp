@@ -65,10 +65,12 @@ int main(){
  Wire.shortRead=true;advance(20000);assert(!gyroReady&&gyroReadFailures==1&&zjGyroCalibration.is("SENSOR_ERROR"));
  Wire.x=262;Wire.y=-131;advance(2500000);assert(zjGyroCalibration.attempt==2&&zjGyroCalibration.samples==0);
  finish();assert(fabs(zjGyroCalibration.bias[0]-4)<0.0001&&fabs(RateRoll)<0.0001);
+ assert(zjGyroCalibration.failures==1&&std::string(zjGyroCalibration.lastFailure)=="I2C_ERROR"&&zjGyroCalibration.lastFailureAttempt==1);
  // Motion repeatedly resets the window, then reaches a bounded failure.
  reset();for(int i=0;i<15001;i++){Wire.x=4000;advance();}
  assert(!gyroReady&&zjGyroCalibration.is("FAILED")&&zjGyroCalibration.restarts>0);
  assert(std::string(zjGyroCalibration.error)=="CALIBRATION_TIMEOUT");
+ assert(zjGyroCalibration.failures==1);
  // Configuration read-back catches an acknowledged but unapplied write.
  reset();gyroConfigured=false;lastGyroProbe=clockMs-2500;Wire.badConfig=true;updateGyro(clockMs);
  assert(!gyroReady&&!gyroConfigured&&std::string(zjGyroCalibration.error)=="CONFIG_MISMATCH");

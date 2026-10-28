@@ -10,6 +10,8 @@ struct ZjGyroCalibration {
  static constexpr float MAX_RATE=25.0f,MAX_SPREAD=1.5f,MAX_STDDEV=0.35f;
  const char* state="STARTING";
  const char* error="NONE";
+ const char* lastFailure="NONE";
+ uint32_t failures=0,lastFailureMs=0,lastFailureAttempt=0;
  uint32_t attempt=0,samples=0,validTotal=0,restarts=0,startedMs=0,endedMs=0;
  uint32_t lastSampleUs=0,maxGapUs=0,missedSamples=0,cooldownMs=0;
  bool haveSampleTime=false,cooling=false;
@@ -28,6 +30,7 @@ struct ZjGyroCalibration {
   for(float& v:bias)v=0;
  }
  void fail(const char* reason,uint32_t now,bool sensor=false){
+  ++failures;lastFailure=reason;lastFailureMs=now;lastFailureAttempt=attempt;
   state=sensor?"SENSOR_ERROR":"FAILED";error=reason;endedMs=now;
  }
  void tick(uint32_t now){
