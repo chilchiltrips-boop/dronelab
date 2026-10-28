@@ -117,6 +117,7 @@ static String zjStatus(){
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
  out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"exclusiveWifi\":true";
  out+=",\"radioHandover\":"+zjRadioHandoverStatus();
+ out+=",\"imu\":"+zjImuStatus();
  out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
   ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
   ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
@@ -284,6 +285,7 @@ static void zjSetupHttp(){
   if(!zjAllow())return;
   String out="{\"kitId\":"+zjJson(zjKitId)+",\"board\":"+zjJson(GYRO_BOARD)+",\"millis\":"+String(millis())+",\"gyroReady\":"+(gyroReady?String("true"):String("false"));
   out+=",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+",\"sampleValid\":"+((gyroReady&&gyroSampleSeq)?String("true"):String("false"))+",\"sampleSequence\":"+String(gyroSampleSeq)+",\"sampleAgeMs\":"+String(uint32_t(millis()-lastGyroSample));
+  out+=",\"imu\":"+zjImuStatus();
   out+=",\"address\":"+String(GYRO_ADDR)+",\"roll\":"+String(RateRoll,3)+",\"pitch\":"+String(RatePitch,3)+",\"yaw\":"+String(RateYaw,3);
   out+=",\"scanner\":[";
   for(uint8_t i=0;i<scanCount;i++){if(i)out+=',';out+=String(scanAddresses[i]);}
