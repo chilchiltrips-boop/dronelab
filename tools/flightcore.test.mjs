@@ -57,7 +57,7 @@ test('actual firmware identifies hardware and GPIOs over live USB Serial',()=>{
 });
 
 test('A1 has dedicated safe SDA4/SCL5 while GPIO8 remains usable for LED',()=>{
- for(const token of ['BUS_SDA=4,BUS_SCL=5','Wire.begin(BUS_SDA,BUS_SCL)','ledcAttach(LED_PIN,5000,8)','ZJI2C,MODE,','DEDICATED_4_5','ZJLED,ACK,'])assert.ok(sketch.includes(token),token);
+ for(const token of ['BUS_SDA=4,BUS_SCL=5','Wire.begin(BUS_SDA,BUS_SCL)','ledcAttachChannel(LED_PIN,5000,8,5)','ZJI2C,MODE,','DEDICATED_4_5','ZJLED,ACK,'])assert.ok(sketch.includes(token),token);
  assert.ok(!sketch.includes('Wire.begin();'),'A1 must not silently fall back to GPIO8/9');
 });
 

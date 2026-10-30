@@ -6,6 +6,16 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const telemetry=(seq=3226)=>'ZJTEL,1,A2,'+seq+',1840448,0x68,READY,-5.68,4.29,-0.27,1,2';
 const rc=(seq=8)=>'ZJRC,AP,ANDROID,'+seq+',T=1000,R=1500,P=1500,Y=1645,ARM=1';
 
+test('idle RC can coexist with active ESC calibration and motor output expires to unknown',async()=>{
+ const {parseTelemetry}=await import('../js/usb-live-diagnostic.js');
+ let time=0;const p=createReadableKitMonitor({now:()=>time,intervalMs:0});
+ const active=telemetry()+',RC=NONE/IDLE,RCSEQ=0,T=1000,R=1500,P=1500,Y=1500,INPUT_ARMED=0,MOTORS=ACTIVE';
+ assert.equal(parseTelemetry(active).rc.motorsDisabled,false);
+ assert.equal(globalThis.ZebjusSerialRcDecoder.parseSerialRc(active).motorsDisabled,false);
+ assert.match(p.view(active),/RC IDLE.*MOTOR OUTPUT ENABLED/);
+ time=351;assert.match(p.view(telemetry()),/MOTOR OUTPUT UNKNOWN/);
+});
+
 test('A2 telemetry and joystick appear together in ONE readable line; firmware input arm is not motor arm',()=>{
  let time=0;const p=createReadableKitMonitor({now:()=>time});
  assert.equal(p.view(rc()),null,'diagnostic RC packets update display state, not add a second line');
@@ -13,7 +23,7 @@ test('A2 telemetry and joystick appear together in ONE readable line; firmware i
  assert.match(display,/^A2 \| IMU READY \(0x68\)/);
  assert.match(display,/Gyro R=-5\.68 P=\+4\.29 Y=-0\.27 deg\/s/);
  assert.match(display,/RC AP\/ANDROID #8 \| THR=1000 ROLL=1500 PITCH=1500 YAW=1645/);
- assert.match(display,/INPUT ARMED \| MOTORS OFF$/);
+ assert.match(display,/INPUT ARMED \| MOTOR OUTPUT UNKNOWN$/);
  assert.equal(display.includes('MOTORS ON'),false);
 });
 test('fast sensor updates are capped at 5 Hz; serial data remains independent',()=>{
@@ -28,8 +38,8 @@ test('missing frames and failsafe cannot leave a stale ARMED or elevated throttl
  p.view('ZJRC,AP,ANDROID,12,T=1154,R=1500,P=1500,Y=1623,ARM=1');
  assert.match(p.view(telemetry()),/THR=1154.*INPUT ARMED/);
  time=351;
- assert.match(p.view(telemetry(3227)),/RC STALE \/ FAILSAFE \| THR=1000 ROLL=1500 PITCH=1500 YAW=1500 \| INPUT OFF \| MOTORS OFF/);
- assert.match(p.view('ZJRC,FAILSAFE,INPUT_TIMEOUT'),/MOTORS OFF/);
+ assert.match(p.view(telemetry(3227)),/RC STALE \/ FAILSAFE \| THR=1000 ROLL=1500 PITCH=1500 YAW=1500 \| INPUT OFF \| MOTOR OUTPUT UNKNOWN/);
+ assert.match(p.view('ZJRC,FAILSAFE,INPUT_TIMEOUT'),/MOTOR OUTPUT UNKNOWN/);
  assert.match(p.view(telemetry(3228)),/RC IDLE/);
 });
 test('USB serial monitor always exposes acknowledgments and diagnostic system events',()=>{
@@ -44,7 +54,7 @@ test('malformed frames are not impersonated as verified gyro or diagnostic RC',(
  const bad='ZJTEL,1,A2,0,0,0x68,READY,-5.68,4.29,-0.27,1,2,INJECT=1';
  assert.equal(p.view(bad),bad);
  assert.equal(p.view('ZJRC,AP,ANDROID,1,T=0,R=1500,P=1500,Y=1500,ARM=1'),null);
- assert.match(p.view(telemetry()),/RC IDLE.*MOTORS OFF/);
+ assert.match(p.view(telemetry()),/RC IDLE.*MOTOR OUTPUT UNKNOWN/);
 });
 test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, copy and offline cache retained',()=>{
  const code=read('firmware-updater.js'),html=read('index.html'),lab=read('lab.html'),sw=read('sw.js');
@@ -55,7 +65,7 @@ test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, 
  assert.match(code,/rawView=\$\('#fwSerialRawFrames'\)\?\.checked===true/);
  assert.match(code,/readableKitMonitor\?\.clear\(\)/);
  assert.match(html,/id="fwSerialRawFrames"/);
- assert.match(html,/MOTORS remain OFF|physical motors remain OFF/);
+ assert.match(html,/Motor output status is reported separately by firmware/);
  assert.match(sw,/serial-readable-monitor\.js\?v=usb-rc-shared-20261017/);
  assert.match(sw,/firmware-updater\.js\?v=compile-time-verified-20261017/);
 });

@@ -17,7 +17,7 @@ test('FlightCore saves authenticated Angle/Acro independently from Wi-Fi mode, d
  assert.match(enrolled,/path=="\/api\/flight\/mode"/);
  assert.match(rc,/static String zjFlightMode="angle"/);
  assert.match(rc,/zjRcInputArmed/);
- assert.match(firmware,/\\"motorsArmed\\":false/);
+ assert.match(firmware,/zjMotorFlags/);
 });
 test('Android mode selection verifies kit ID and signed saved result; never treats Wi-Fi mode as flight mode',()=>{
  const net=read('companion-network.js'),app=read('companion-flight.js');

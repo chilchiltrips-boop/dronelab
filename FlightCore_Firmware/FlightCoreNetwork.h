@@ -1,5 +1,5 @@
 #pragma once
-// FlightCore AP/STA laboratory transport: no motor outputs or flight arming.
+// FlightCore AP/STA transport; motor outputs require a separate bench session.
 // Native Android/local bridge use UDP; ordinary browsers retain HTTP compatibility.
 #include <WiFi.h>
 #include <WebServer.h>
@@ -77,7 +77,8 @@ static bool zjAuthenticated(){return zjSessionAuthenticated();}
 static bool zjAllow(){
  if(!zjAuthenticated()){zjReply(401,"{\"error\":\"session_required_or_expired\"}");return false;}
  const String route=zjHttp.uri();
- if(zjHandoverPending&&zjHttp.method()==HTTP_POST&&route!="/api/rc/stop"&&route!="/api/rc/release"){
+ if(zjMotorSessionActive&&(route.startsWith("/api/wifi")||(zjHttp.method()==HTTP_POST&&route!="/api/motor"&&!route.startsWith("/api/rc/")))){zjReply(409,"{\"error\":\"stop_motor_setup_first\"}");return false;}
+ if(zjHandoverPending&&zjHttp.method()==HTTP_POST&&route!="/api/rc/stop"&&route!="/api/rc/release"&&route!="/api/motor"){
   zjReply(409,"{\"error\":\"radio_handover_pending\"}");return false;
  }
  return true;
@@ -121,7 +122,7 @@ static String zjStatus(){
  out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
   ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
   ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
- out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+",\"motorsDisabled\":true";
+ out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+","+zjMotorFlags();
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
  out+=",\"flightModeState\":"+zjFlightModeState()+",\"inputArmSupported\":true,\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"));
  out+=",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"firmwareBuiltAt\":"+zjJson(String(__DATE__)+" "+__TIME__)+",\"partitionLayout\":\"ZFC_DUAL_1E0000\",\"otaMaxBytes\":1966080,\"encryptedOta\":true,\"otaChunkMaxBytes\":2048";
@@ -137,7 +138,7 @@ static String zjStatus(){
   out+=",\"rebootPending\":"+(zjOtaRebootAt?String("true"):String("false"))+"}";
  }
  out+=",\"rcAccess\":"+zjAccessState(zjRequestSession>=0?zjSessions[zjRequestSession].id:String(""),zjAccessStationary());
- out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false,\"motorsArmed\":false,\"otaAppOnly\":true";
+ out+=",\"ppm\":"+zjPpmStatus()+",\"rc\":"+zjRcState()+",\"requestTransport\":"+zjJson(zjClientTransport())+",\"firmwareControl\":false ,\"otaAppOnly\":true";
  out+=",\"udp\":"+zjUdpStatistics()+",\"managementProtocol\":"+zjJson(zjHttp.isRpc()?"ZJM1":"HTTP")+
   ",\"rpcMaxLoopUs\":"+String(zjRpcMaxLoopUs)+",\"rpcMaxDispatchUs\":"+String(zjRpcMaxDispatchUs)+",\"udpManagementPort\":4211}";
  return out;
@@ -205,7 +206,7 @@ static void zjSetupHttp(){
   if(!zjSaveFlightMode(zjPrefs,next)){
    zjReply(500,"{\"error\":\"flight_mode_save_failed\"}");return;
   }
-  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"flightModeState\":"+zjFlightModeState()+",\"saved\":true,\"motorsArmed\":false}");
+  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"flightModeState\":"+zjFlightModeState()+",\"saved\":true,"+zjMotorFlags()+"}");
  });
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"udpManagement\":\"ZJM1\",\"udpManagementPort\":4211,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
  // AP-local Kit identity maintenance; full immutable Device ID is never changed.
@@ -331,7 +332,7 @@ static void zjSetupHttp(){
    if(!sc.localSta&&uint32_t(millis()-sc.at)<1800000)
     udpReady=zjUdpBind(sc.key,zjRcSession,zjHttp.peerIP(),feedbackVersion);
   }
-  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+",\"motorsArmed\":false,\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpFeedbackVersion\":"+String(udpReady?feedbackVersion:0)+",\"udpChannels\":7,\"udpAckFields\":"+String(feedbackVersion==2?12:5)+"}");
+  zjReply(200,"{\"claimed\":true,\"session\":"+zjJson(zjRcSession)+",\"ownerId\":"+zjJson(zjRcOwnerId)+",\"kitId\":"+zjJson(zjKitId)+","+zjMotorFlags()+",\"udpPort\":"+String(udpReady?ZJ_UDP_PORT:0)+",\"udpProtocol\":"+zjJson(udpReady?String("ZJUDP1"):String("HTTP"))+",\"udpFeedbackVersion\":"+String(udpReady?feedbackVersion:0)+",\"udpChannels\":7,\"udpAckFields\":"+String(feedbackVersion==2?12:5)+"}");
  });
  zjHttp.on("/api/rc/release",HTTP_POST,[](){
   if(!zjAllow())return;
@@ -357,9 +358,9 @@ static void zjSetupHttp(){
   }
   zjRcResponse=response.length()?response:String("Medium");
   if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
-  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"flightModeState\":"+zjFlightModeState()+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+",\"motorsArmed\":false}");
+  zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"flightModeState\":"+zjFlightModeState()+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+","+zjMotorFlags()+"}");
  });
- zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjMotorEmergencyStop();zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
  zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 

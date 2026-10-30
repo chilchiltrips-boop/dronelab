@@ -1,5 +1,5 @@
 // Shared Aerion WebApp shell: a 56px control row and a 48px centered navigation row and real File actions.
-// The same authenticated controls stay mounted across all five pages.
+// The same authenticated controls stay mounted across all six pages.
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import assert from 'node:assert/strict';
@@ -34,7 +34,8 @@ try{
   assert.ok(metrics.scroll<=width,JSON.stringify(metrics));
   assert.equal(metrics.hiddenWorkspaceTools,false);
   assert.ok(metrics.inputVisible,'Input selection must be directly visible');
-  assert.equal(metrics.navButtons.length,6);
+  assert.equal(metrics.navButtons.length,7);
+  assert.deepEqual(await page.locator('.topbar-main .tab').evaluateAll(es=>es.map(e=>e.dataset.tab)),['assembly','wiring','python','setup','pid','firmware']);
   assert.equal(metrics.navigationOnly,true,'Only navigation belongs in the lower row');
   assert.deepEqual(metrics.shop,{count:1,text:'Shop',href:'https://www.zebjus.in/category/all-products',target:'_blank'});
   for(const {id,rect,primary} of metrics.controls){

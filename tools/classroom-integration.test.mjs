@@ -31,7 +31,7 @@ test('Kit uses separate identity, session lock and motor-disabled preview',()=>{
   assert.ok(fw.includes(line));
  assert.match(net,/hardware_arming_disabled/);
  assert.match(net,/controller_locked_or_invalid_source/);
- assert.match(net,/motorsArmed/);
+ assert.match(net,/zjMotorFlags/);
  assert.match(kits,/ack\?\.received!==true/);
  assert.match(kits,/root\.ZebjusSerialRcDecoder\?\.parseSerialRc\(line\)/);
  assert.match(read('js/serial-rc-decoder.js'),/ZJRC,\(USB\|AP\|STA\|PPM\),\(WEB\|ANDROID\|PPM\)/);

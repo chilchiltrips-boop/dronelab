@@ -1,5 +1,5 @@
 /* ZEBJUS AERION Classroom Kit Center.
- * Firmware >=1.3.4: kit identity, authenticated RC diagnostics, NO MOTOR OUTPUTS.
+ * Firmware >=1.3.4: kit identity, authenticated RC diagnostics; A2 1.6.0 adds explicit motor bench sessions.
  * The kit code is a selector. It MUST NOT authorize RC or admin actions.
  * Device secrets never go into localStorage, DOM logs, URLs or WebRTC messages.
  */
@@ -69,7 +69,7 @@ function adoptNetworkStatus(d){
   hostname:d.hostname||state.hostname,bootId:d.bootId||'',firmwareBuiltAt:d.firmwareBuiltAt||'',
   // Trusted status only; never infer physical LED/motor state from UI input.
   ledOn:typeof d.ledOn==='boolean'?d.ledOn:null,
-  motorsDisabled:d.motorsDisabled===true,motorsArmed:typeof d.motorsArmed==='boolean'?d.motorsArmed:null,
+  motorsDisabled:typeof d.motorsDisabled==='boolean'?d.motorsDisabled:null,motorsArmed:typeof d.motorsArmed==='boolean'?d.motorsArmed:null,
    udp:d.udp&&d.udp.protocol==='ZJUDP1'?d.udp:null,
    managementProtocol:d.managementProtocol==='ZJM1'?'ZJM1':'HTTP',
   partitionLayout:d.partitionLayout||'',otaMaxBytes:Number(d.otaMaxBytes)||0,otaChunkMaxBytes:supportedOtaChunkSize(d),networkState:d.networkState||d.phase||'',exclusiveWifi:d.exclusiveWifi===true,
@@ -391,7 +391,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
  state.connected=false;state.imu=null;state.imuObservedAt=0;state.ppm=null;state.radioHandover=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
- Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:false});
+ Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:null});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
 function waitSerial(pattern,timeout=2300){
@@ -1229,7 +1229,7 @@ function onSerial(e){
  if(statusRecord){
   if(statusRecord.kitId!==state.kitId||usbCandidate.kitId!==state.kitId||usbCandidate.serialGeneration!==serial()?.generation?.())return;
   state.flightModeState={...statusRecord.flightModeState};state.flightMode=statusRecord.flightModeState.active;
-  state.ledOn=statusRecord.ledOn;state.motorsArmed=false;state.motorsDisabled=true;
+  state.ledOn=statusRecord.ledOn;state.motorsArmed=statusRecord.rc.motorsArmed;state.motorsDisabled=statusRecord.rc.motorsDisabled;
   if(!state.rc||statusRecord.rc.seq>=state.rc.seq||statusRecord.rc.active===false){
    // Compact ZJSTATE carries the authoritative source, including a reserved
    // producer before its first frame; it has no separate claimed field.
@@ -1241,12 +1241,13 @@ function onSerial(e){
  // Shared with Readable Serial Monitor: supports RAW ZJRC and 1.4.11+ COMBINED ZJTEL.
  // Only apply USB frames after this physical USB Kit identity has been verified.
  const rc=root.ZebjusSerialRcDecoder?.parseSerialRc(line);
+ if(typeof rc?.motorsDisabled==='boolean')state.motorsDisabled=rc.motorsDisabled;
  if(rc?.kind==='frame'){
   state.rc={...(state.rc||{}),active:true,claimed:true,transport:rc.transport,source:rc.source,seq:rc.seq,
-   throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,inputArmed:rc.inputArmed};
+   throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,inputArmed:rc.inputArmed,...(typeof rc.motorsDisabled==='boolean'?{motorsDisabled:rc.motorsDisabled}:{})};
   state.ackAt=Date.now();render();
  }else if(rc?.kind==='idle'){
-  state.rc={claimed:false,active:false,seq:0,throttle:1000,roll:1500,pitch:1500,yaw:1500,inputArmed:false,source:'NONE'};
+  state.rc={claimed:false,active:false,seq:0,throttle:1000,roll:1500,pitch:1500,yaw:1500,inputArmed:false,source:'NONE',motorsDisabled:rc.motorsDisabled};
   state.ackAt=0;render();
  }
  if(line.startsWith('ZJRC,FAILSAFE')||line.startsWith('ZJRC,RELEASE,')){if(line.startsWith('ZJRC,FAILSAFE')&&state.owner)void usbWrite('ZJRC,RELEASE').catch(()=>{});state.owner=false;state.rcSession='';state.rcSource='';state.rc={claimed:false,active:false,throttle:1000,roll:1500,pitch:1500,yaw:1500};audit(line,'warn');render()}
@@ -2189,6 +2190,8 @@ function getUsbMonitorState(){
  const record=usbCandidate.statusRecord;
  return {connected:true,transport:'usb',kitId:path.kitId,board:usbCandidate.board,bootId:state.bootId,
   rc:usbCandidate.rc||{},rcAt:usbCandidate.rcAt||0,
+  motorsDisabled:typeof usbCandidate.rc?.motorsDisabled==='boolean'?usbCandidate.rc.motorsDisabled:null,
+  motorsArmed:typeof usbCandidate.rc?.motorsArmed==='boolean'?usbCandidate.rc.motorsArmed:null,
   flightModeState:record?.flightModeState||null,flightMode:record?.flightModeState?.active||null};
 }
 root.ZebjusKits={
@@ -2198,7 +2201,7 @@ root.ZebjusKits={
  setFlightMode,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   networkBusy:!!(wifiTesting||headerModePending),authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled===true,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,requestBound:(binding,route,method='GET',args={})=>deviceRequest(route,method,args,()=>root.ZebjusKitData.assertBoundSession(binding,root.ZebjusKits.getState(),{allowDelayed:route==='/api/status'||/,(?:STOP)\s*$/.test(args.line||'')})),pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

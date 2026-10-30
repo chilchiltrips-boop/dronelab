@@ -38,7 +38,7 @@ test('actual Android UDP stream starts off UI, authenticates ACKs, neutralizes r
    public class Network {public static Thread uiThread;public static volatile int binds;
     public void bindSocket(DatagramSocket s){if(Thread.currentThread()==uiThread)throw new android.os.NetworkOnMainThreadException();binds++;}}`,
   'org/json/JSONObject.java':`package org.json; import java.util.*;
-   public class JSONObject {private final Map<String,Object> data=new LinkedHashMap<>();
+   public class JSONObject {public static final Object NULL=new Object(){public String toString(){return "null";}};private final Map<String,Object> data=new LinkedHashMap<>();
     public void put(String k,Object v){data.put(k,v);}public String toString(){StringJoiner out=new StringJoiner(",","{","}");
      data.forEach((k,v)->out.add("\\\""+k+"\\\":"+(v instanceof String?"\\\""+v+"\\\"":v)));return out.toString();}}`,
   'in/zebjus/dronelab/companion/FlightCoreWifiLink.java':`package in.zebjus.dronelab.companion;

@@ -35,7 +35,7 @@ export function initControls(ctx){
     if(['simcontrol','flight','led','tripod'].includes(name))name='pid';
     // Preserve existing old My Kits links.
     if(name==='settings'){name='firmware';window.ZebjusDevicesWorkspace?.open('wifi',{activateTab:false})}
-    if(!['assembly','wiring','python','firmware','pid'].includes(name))return;
+    if(!['assembly','wiring','python','firmware','pid','setup'].includes(name))return;
     if(name!=='wiring')ctx.stopMotorTest();
     $$('.tab').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-selected',String(b.dataset.tab===name));});
     $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
@@ -121,6 +121,6 @@ export function initControls(ctx){
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
   requestAnimationFrame(ctx.animate2DMotors);ctx.setWireMode(false,true);
   const linkedTab=location.hash.slice(1);
-  ctx.setActiveTab(['assembly','wiring','python','pid','firmware','led','settings','simcontrol','flight'].includes(linkedTab)?linkedTab:'assembly');
+  ctx.setActiveTab(['assembly','wiring','python','pid','firmware','setup','led','settings','simcontrol','flight'].includes(linkedTab)?linkedTab:'assembly');
   addEventListener('hashchange',()=>{const name=location.hash.slice(1);ctx.setActiveTab(name)});applyBranding(ctx);
 }

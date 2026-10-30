@@ -9,6 +9,12 @@ const rc=(source='ANDROID',seq=88)=>({kitId:kit.kitId,source,transport:'STA',seq
  throttle:1250,roll:1535,pitch:1450,yaw:1720,inputArmed:true,accepted:80,rejected:2,ageMs:25,motorsArmed:false,motorsDisabled:true});
 const snap=(source='ANDROID',time=1000)=>({kitId:kit.kitId,at:time,rc:rc(source),motorsOff:true,ledOn:true,rateHz:19.8});
 
+test('calibration and single-motor output remain enabled while input ARM is false',()=>{
+ const report={...snap(),rc:{...rc(),inputArmed:false,motorsArmed:false,motorsDisabled:false}};
+ assert.equal(normalizeAcceptedInput(kit,report,{now:1100}).motors,'ENABLED');
+ assert.equal(normalizeAcceptedInput({...kit,motorsDisabled:null},null,{now:1100}).motors,'NOT REPORTED');
+});
+
 test('Android accepted RC renders exact kit channels, LINK, packet age and diagnostic safety',()=>{
  const m=normalizeAcceptedInput(kit,snap(),{now:1100});
  assert.equal(m.state,'live');assert.equal(m.source,'ANDROID');assert.equal(m.transport,'STA');
@@ -48,7 +54,7 @@ test('USB uses verified status extensions for LED/motor state and preserves unkn
  const usb={...kit,transport:'usb',ledOn:true,motorsDisabled:true,motorsArmed:false};
  const m=normalizeAcceptedInput(usb,{...snap('WEB'),rc:{...rc('WEB'),transport:'USB'},motorsOff:true},{now:1100});
  assert.equal(m.state,'live');assert.equal(m.transport,'USB');assert.equal(m.led,'ON');assert.equal(m.motors,'DISABLED');
- const raw=normalizeAcceptedInput({...usb,ledOn:undefined,motorsDisabled:false,motorsArmed:undefined},{...snap('WEB'),motorsOff:false},{now:1100});
+ const raw=normalizeAcceptedInput({...usb,ledOn:undefined,motorsDisabled:null,motorsArmed:undefined},{...snap('WEB'),rc:{...rc('WEB'),motorsDisabled:undefined},motorsOff:undefined},{now:1100});
  assert.equal(raw.motors,'NOT REPORTED','legacy RAW USB does not report physical motor state');
 });
 test('a current HTTP reply cannot resurrect a stale firmware RC packet or frozen sequence',()=>{

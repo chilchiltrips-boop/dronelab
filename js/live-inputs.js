@@ -16,6 +16,7 @@ const neutral={throttle:1000,roll:1500,pitch:1500,yaw:1500};
 const finitePulse=n=>Number.isInteger(n)&&n>=1000&&n<=2000;
 const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
 
+const motorLabel=flags=>flags?.motorsDisabled===true?'DISABLED':flags?.motorsDisabled===false?'ENABLED':'NOT REPORTED';
 const ownerKey=rc=>String(rc?.ownerId||rc?.diagnosticId||'');
 export function isOlderAcceptedInput(previous,next){
  const before=previous?.accepted,after=next?.accepted;
@@ -34,7 +35,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  if(!connected)return base;
  const network=['AP','STA','ANDROID-RELAY'].includes(transport);
  const m={...base,state:'idle',led:typeof kit.ledOn==='boolean'?(kit.ledOn?'ON':'OFF'):'NOT REPORTED',
-  motors:(kit.motorsDisabled===true||kit.motorsArmed===false)?'DISABLED':'NOT REPORTED'};
+  motors:motorLabel(kit)};
  if(!sample||sample.kitId!==kit.kitId)return {...m,state:'waiting'};
  const rc=sample.rc;
  if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
@@ -65,7 +66,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
    flightMode:['angle','acro'].includes(rc.flightMode)?rc.flightMode:
     ['angle','acro'].includes(kit.flightMode)?kit.flightMode:null,
   led:typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
-  motors:sample.motorsOff===true?'DISABLED':m.motors
+  motors:!sample.historicalOnly&&receiveAge<=SNAPSHOT_TTL_MS&&typeof rc.motorsDisabled==='boolean'?motorLabel(rc):m.motors
  };
 }
 
@@ -102,7 +103,7 @@ function initLiveInputs(){
   const kit=window.ZebjusKits?.getState?.()||{connected:false};
   const selected=window.ZebjusKitData?.selectMonitorPath?.(kit,window.ZebjusKits?.getMonitorPaths?.()||[],monitorChoice);
   selectionReason=selected?.reason||'No verified monitor connection';
-  return selected?.path?{...kit,...(selected.path.transport==='usb'&&kit.usbStatus?{flightModeState:kit.usbStatus.flightModeState,flightMode:kit.usbStatus.flightModeState.active,ledOn:kit.usbStatus.ledOn,motorsDisabled:true,motorsArmed:false}:{}),connected:true,transport:selected.path.transport,
+  return selected?.path?{...kit,...(selected.path.transport==='usb'&&kit.usbStatus?{flightModeState:kit.usbStatus.flightModeState,flightMode:kit.usbStatus.flightModeState.active,ledOn:kit.usbStatus.ledOn,motorsDisabled:kit.usbStatus.rc?.motorsDisabled,motorsArmed:kit.usbStatus.rc?.motorsArmed}:{}),connected:true,transport:selected.path.transport,
    physicalLink:selected.path.transport==='usb'?'usb':kit.physicalLink}:{...kit,connected:false};
  };
  const rate=createInputRateTracker(),simInputs=sharedInputStore();
@@ -130,7 +131,7 @@ function initLiveInputs(){
    previous.sequenceAt??previous.at:at;
   sample={kitId:kit.kitId,rc:{...rc},at,sequenceAt,
    rateHz:rate.observe(kit.kitId,rc,at),ledOn:kit.ledOn,
-   motorsOff:rc.motorsDisabled===true||rc.motorsArmed===false};
+   motorsOff:rc.motorsDisabled};
  }
  const write=(id,value)=>{const e=$(id),text=String(value);if(e&&e.textContent!==text)e.textContent=text};
  function display(){
@@ -245,7 +246,7 @@ function initLiveInputs(){
     (current.rc?.active===true?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS);
    readFailures=0;nextPollAt=Math.max(at,startedAt+interval);
    sample={kitId:id,rc:reply,at,sequenceAt,rateHz:hz,ledOn:current.ledOn,
-    motorsOff:reply.motorsDisabled===true||reply.motorsArmed===false};
+    motorsOff:reply.motorsDisabled};
    display();
   }catch{
    // Connection might be temporarily unavailable; don't invent a fresh packet.
@@ -275,12 +276,12 @@ function initLiveInputs(){
    const at=Date.now(),rc=statusRecord.rc,previous=sample;
    const same=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source&&previous.rc.accepted===rc.accepted;
    sample={kitId:kit.kitId,rc,at,sequenceAt:same?previous.sequenceAt??previous.at:at,
-    rateHz:rate.observe(kit.kitId,rc,at),ledOn:statusRecord.ledOn,motorsOff:true};
+    rateHz:rate.observe(kit.kitId,rc,at),ledOn:statusRecord.ledOn,motorsOff:rc.motorsDisabled};
    if(visible())display();return;
   }
   const received=decoder?.parseSerialRc?.(line);
   if(!received)return;
-  const at=Date.now(),motorReported=line.startsWith('ZJTEL,1,')&&line.includes(',MOTORS=OFF');
+  const at=Date.now(),motorReported=received.motorsDisabled;
   if(received.kind==='frame'){
    if(sample?.rc?.active&&sample.rc.source===received.source&&Number(received.seq)<Number(sample.rc.seq))return;
    const hz=rate.observe(kit.kitId,received,at);
@@ -293,7 +294,7 @@ function initLiveInputs(){
     rateHz:hz,motorsOff:motorReported};
   }else if(received.kind==='idle'||received.kind==='reset'||received.kind==='claim'){
    rate.reset();simInputs.clearKit();
-   sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false},
+   sample={kitId:kit.kitId,rc:{...neutral,source:'NONE',active:false,seq:0,inputArmed:false,motorsDisabled:received.motorsDisabled},
     at,rateHz:null,motorsOff:motorReported};
   }
   if(visible())display();

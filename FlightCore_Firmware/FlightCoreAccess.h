@@ -25,6 +25,7 @@ static bool zjAccessCanSwitchRadio(){
 static const char* zjAccessChange(const String& action,const String& source,
  const String& caller,bool ownsCurrent,bool stationary,const String& path="",const String& radio=""){
  zjAccessLoop();
+ if(zjMotorSessionActive)return "stop_motor_setup_first";
  if(caller.isEmpty())return "authorization_required";
  if(zjHandoverPending)return "radio_handover_pending";
  if(action=="KEEP"){

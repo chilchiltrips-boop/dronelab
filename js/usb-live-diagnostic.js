@@ -14,10 +14,10 @@ export function parseTelemetry(line){
   if(!/^RC=(?:NONE\/IDLE|(?:USB|STA|AP|PPM)\/(?:WEB|ANDROID|PPM))$/.test(extra[0])||
      !/^RCSEQ=\d+$/.test(extra[1])||
      !['T','R','P','Y'].every((label,i)=>new RegExp('^'+label+'=\\d+$').test(extra[i+2]))||
-     !/^INPUT_ARMED=[01]$/.test(extra[6])||extra[7]!=='MOTORS=OFF')return null;
+     !/^INPUT_ARMED=[01]$/.test(extra[6])||!/^MOTORS=(OFF|ACTIVE)$/.test(extra[7]))return null;
   rc={link:extra[0].slice(3),seq:Number(extra[1].slice(6)),throttle:Number(extra[2].slice(2)),
    roll:Number(extra[3].slice(2)),pitch:Number(extra[4].slice(2)),yaw:Number(extra[5].slice(2)),
-   inputArmed:extra[6].endsWith('1')};
+   inputArmed:extra[6].endsWith('1'),motorsDisabled:extra[7]==='MOTORS=OFF'};
   if([rc.throttle,rc.roll,rc.pitch,rc.yaw].some(n=>!Number.isInteger(n)||n<1000||n>2000))return null;
   if(rc.link==='NONE/IDLE'&&(rc.inputArmed||rc.seq!==0))return null;
  }

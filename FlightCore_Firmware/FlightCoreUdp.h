@@ -186,7 +186,7 @@ static String zjUdpStatistics(){
   ",\"appliedAckSent\":"+String(appliedSent)+",\"appliedAckFailed\":"+String(appliedFailed)+
   ",\"nackSent\":"+String(nackSent)+",\"nackFailed\":"+String(nackFailed)+
   ",\"maxAckTxUs\":"+String(maxTxUs)+",\"maxRxToAckUs\":"+String(maxRxToAckUs)+
-  ",\"nackReason\":\""+String(zjUdpReason(nack))+"\",\"motorsDisabled\":true}";
+  ",\"nackReason\":\""+String(zjUdpReason(nack))+"\","+zjMotorFlags()+"}";
 }
 static void zjUdpReceiverTask(void*){
  uint8_t packet[ZJ_UDP_SIZE+4],plain[14],key[32],token[8],owner[4];

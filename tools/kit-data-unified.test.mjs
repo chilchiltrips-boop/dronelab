@@ -26,7 +26,7 @@ test('a data read must be bound to same current Kit ID and transport',()=>{
  assert.throws(()=>data.validateReply(before,before,{kitId:'ZFC-A2-000000000000'}),/Device ID/);
 });
 test('USB joystick is only accepted from fresh verified physical serial data',()=>{
- const t=kit('usb'),fresh={...t,rc:{active:true,seq:12,source:'ANDROID',throttle:1135,roll:1500,pitch:1410,yaw:1660,inputArmed:true},rcAt:3000};
+ const t=kit('usb'),fresh={...t,motorsDisabled:true,motorsArmed:false,rc:{active:true,seq:12,source:'ANDROID',throttle:1135,roll:1500,pitch:1410,yaw:1660,inputArmed:true},rcAt:3000};
  let r=data.usbJoystick(fresh,3220);
  assert.equal(r.input_valid,true);assert.equal(r.throttle,1135);assert.equal(r.source,'ANDROID');
  assert.equal(r.age_ms,220);assert.equal(r.motors_disabled,true);assert.equal(r.motorsArmed,false);
@@ -62,7 +62,7 @@ test('Android controller names actual Kit versus WebRTC simulator, never claims 
  assert.match(control,/TARGET • SIMULATOR \/ WEBRTC/);
  assert.match(control,/TARGET • KIT \/ /);
  assert.match(control,/TARGET • PREVIEW ONLY/);
- assert.match(control,/FlightCore diagnostic input • MOTOR OUTPUTS DISABLED/);
+ assert.match(control,/FlightCore input • motor output state comes from the A2 setup session/);
  assert.match(control,/if\(directKit\(\)\)window\.ZebjusNetwork\?\.previewControls/);
  assert.match(control,/s\?\.connected&&!mirroring\(\)&&window\.ZebjusNetwork\?\.hasControl\?\.\(\)/);
  assert.match(css,/\.flight-sim-badge\[data-target=kit\]/);
