@@ -2190,6 +2190,8 @@ function getUsbMonitorState(){
  const record=usbCandidate.statusRecord;
  return {connected:true,transport:'usb',kitId:path.kitId,board:usbCandidate.board,bootId:state.bootId,
   rc:usbCandidate.rc||{},rcAt:usbCandidate.rcAt||0,
+  motorsDisabled:typeof usbCandidate.rc?.motorsDisabled==='boolean'?usbCandidate.rc.motorsDisabled:null,
+  motorsArmed:typeof usbCandidate.rc?.motorsArmed==='boolean'?usbCandidate.rc.motorsArmed:null,
   flightModeState:record?.flightModeState||null,flightMode:record?.flightModeState?.active||null};
 }
 root.ZebjusKits={

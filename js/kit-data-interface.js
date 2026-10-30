@@ -127,8 +127,8 @@
    throttle:fresh?rc.throttle:neutral.throttle,roll:fresh?rc.roll:neutral.roll,
    pitch:fresh?rc.pitch:neutral.pitch,yaw:fresh?rc.yaw:neutral.yaw,
    ch5:safePulse(rc.ch5)?rc.ch5:null,ch6:safePulse(rc.ch6)?rc.ch6:null,flightMode:kit.flightMode||null,flightModeState:kit.flightModeState||null,
-   accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:kit.motorsDisabled===true,motors_disabled:kit.motorsDisabled===true,
-   motorsArmed:kit.motorsArmed===true,readSource:'verified-usb-serial'};
+   accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:kit.motorsDisabled??null,motors_disabled:kit.motorsDisabled??null,
+   motorsArmed:kit.motorsArmed??null,readSource:'verified-usb-serial'};
  }
  root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,detectPythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
 })(globalThis);
