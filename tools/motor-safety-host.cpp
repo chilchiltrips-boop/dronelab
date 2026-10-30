@@ -2,6 +2,7 @@
 #include <cstring>
 #include <iostream>
 #include "../FlightCore_Firmware/FlightCoreMotorSafety.h"
+#include "../FlightCore_Firmware/FlightCoreA2MotorLayout.h"
 
 using M=ZjMotorSafety;
 static void min(const M& m){for(auto p:m.pulses)assert(p==1000);}
@@ -16,7 +17,15 @@ static void ppmArm(M& m,uint32_t start,bool sw=true){
 }
 int main(int argc,char**argv){
  assert(argc==2);const char* c=argv[1];M m;auto i=input(ZjMotorInput::PPM,0,1);
- if(!strcmp(c,"boot")){assert(m.mode==M::DISABLED&&!m.armed&&!m.benchEnabled);min(m);assert(!m.prepare(0,false,true));assert(!m.prepare(0,true,false));assert(!m.startCalibration(0,true));}
+ if(!strcmp(c,"layout")){
+  const auto* l=ZJ_A2_MOTOR_LAYOUT;
+  for(uint8_t n=0;n<4;n++){assert(l[n].motor==n+1);assert(l[n].digitalPin==n);}
+  assert(l[0].position==ZjMotorPosition::FRONT_LEFT&&l[0].rotation==ZjMotorRotation::CLOCKWISE);
+  assert(l[1].position==ZjMotorPosition::FRONT_RIGHT&&l[1].rotation==ZjMotorRotation::COUNTERCLOCKWISE);
+  assert(l[2].position==ZjMotorPosition::BACK_RIGHT&&l[2].rotation==ZjMotorRotation::CLOCKWISE);
+  assert(l[3].position==ZjMotorPosition::BACK_LEFT&&l[3].rotation==ZjMotorRotation::COUNTERCLOCKWISE);
+ }
+ else if(!strcmp(c,"boot")){assert(m.mode==M::DISABLED&&!m.armed&&!m.benchEnabled);min(m);assert(!m.prepare(0,false,true));assert(!m.prepare(0,true,false));assert(!m.startCalibration(0,true));}
  else if(!strcmp(c,"gesture")){begin(m,0);ppmArm(m,0);i=input(ZjMotorInput::PPM,2080,104,1700,1500);m.keep(2080);m.update(2080,i);assert(m.armed);for(auto p:m.pulses)assert(p==1200);
   i=input(ZjMotorInput::PPM,2100,105,1000,1500);m.keep(2100);m.update(2100,i);for(uint32_t n=1;n<=102;n++){uint32_t t=2100+n*20;m.keep(t);i=input(ZjMotorInput::PPM,t,105+n,1000,1050);m.update(t,i);}assert(m.mode==M::DISABLED&&!m.armed);min(m);}
  else if(!strcmp(c,"gesture_needs_neutral")){begin(m,0);for(uint32_t n=1;n<=110;n++){uint32_t t=n*20;m.keep(t);i=input(ZjMotorInput::PPM,t,n,1000,1950);m.update(t,i);}assert(!m.armed);min(m);}

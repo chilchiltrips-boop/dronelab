@@ -19,10 +19,23 @@ hard-coded status messages in place while PWM is active would be unsafe.
 
 The earlier `A2_PCB_Review.pdf` and `A2_Gerber_Review.pdf` reviewed an October
 23, 2026 EasyEDA source/export. They are not proof of the current board revision.
-That source review identifies ESC1 -> D0/GPIO0, ESC2 -> D1/GPIO1, ESC3 ->
-D2/GPIO2, ESC4 -> D3/GPIO21. This differs from the earlier standalone sketch's
-{D1,D2,D3,D0} order. Verify each physical connector against the actual PCB;
-the motor position/direction mapping is an additional separate confirmation.
+The requested motor layout, with the aircraft facing forward and direction
+viewed from above, is:
+
+| Motor | Position | XIAO pin | Rotation |
+| --- | --- | --- | --- |
+| M1 | Front left | D0 | Clockwise |
+| M2 | Front right | D1 | Counterclockwise |
+| M3 | Back right | D2 | Clockwise |
+| M4 | Back left | D3 | Counterclockwise |
+
+The requested pin order matches the dated source review's ESC1 -> D0/GPIO0,
+ESC2 -> D1/GPIO1, ESC3 -> D2/GPIO2, ESC4 -> D3/GPIO21, but differs from the
+earlier standalone sketch's {D1,D2,D3,D0}. The logical layout in
+`FlightCoreA2MotorLayout.h` does not configure or drive pins. Verify each
+physical connector and direction on the actual PCB; the requested mapping is
+not evidence of a completed bench test. PWM does not set motor direction;
+the ESC/motor wiring or supported ESC configuration determines it.
 
 The reviewed Gerber reported that the U4 regulated-5V input was connected to
 XIAO BAT+ rather than the 5V/VBUS input, with the return routed via BAT-. The
