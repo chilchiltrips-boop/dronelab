@@ -1,0 +1,38 @@
+name: A2 Motor Setup Browser
+on:
+  push:
+    branches: [main, feat/a2-motor-setup-20261030]
+    paths:
+      - 'js/motor-setup.js'
+      - 'js/a2-setup-wizard.js'
+      - 'a2-setup-wizard.css'
+      - 'index.html'
+      - 'lab.html'
+      - 'python-lab-worker.js'
+      - 'js/python-lab.js'
+      - 'tools/a2-motor-setup-browser.mjs'
+      - '.github/workflows/a2-motor-setup.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --no-package-lock playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - name: Test wizard with a simulated A2 transport
+        run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/a2-http.log 2>&1 &
+          for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
+          node tools/a2-motor-setup-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: a2-setup-browser
+          path: test-output/

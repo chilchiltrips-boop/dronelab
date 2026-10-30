@@ -12,7 +12,7 @@ export function parseSerialPlotLine(line){
   if(!/^(?:READY|STARTING|SETTLING|CALIBRATING|CALIBRATION_FAILED|NOT_FOUND|READ_ERROR)$/.test(tel[6]))return null;
   const series=tel[6]==='READY'?{GyroX:Number(tel[7]),GyroY:Number(tel[8]),GyroZ:Number(tel[9])}:{};
   if(tel.length===20&&/^RC=(?:NONE\/IDLE|(?:USB|STA|AP|PPM)\/(?:WEB|ANDROID|PPM))$/.test(tel[12])&&
-    /^RCSEQ=\d+$/.test(tel[13])&&tel[19]==='MOTORS=OFF'&&/^INPUT_ARMED=[01]$/.test(tel[18])){
+    /^RCSEQ=\d+$/.test(tel[13])&&/^MOTORS=(OFF|ACTIVE)$/.test(tel[19])&&/^INPUT_ARMED=[01]$/.test(tel[18])){
    for(const [i,label,field] of [[14,'Throttle','T'],[15,'Roll','R'],[16,'Pitch','P'],[17,'Yaw','Y']]){
     if(!new RegExp('^'+field+'=\\d+$').test(tel[i]))return null;
     const pulse=Number(tel[i].split('=')[1]);if(pulse<1000||pulse>2000)return null;

@@ -1,8 +1,10 @@
+import {motorClient,confirmMotor} from './motor-setup.js';
 import {createI2CBridge,createGyroBridge,parseNetworkGyroTelemetry,readNetworkGyro} from './usb-i2c-bridge.js?v=gyro-sta-20261014';
 import {createPythonIDEShell} from './python-ide-workspace.js?v=compact-run-20261011';
 import {createPythonLedSession} from './python-led-session.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
 const EXAMPLES={"joystick":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\n# Values below come from the ESP32 receiver, not WebRTC or frontend sticks.\n# Android owns input; this browser reads the verified Kit connection.\nwhile True:\n    rc = await drone.read_joystick()\n    print(rc[\"source\"], \"T\", rc[\"throttle\"], \"R\", rc[\"roll\"], \"P\", rc[\"pitch\"], \"Y\", rc[\"yaw\"], \"frame\", rc[\"seq\"], \"age\", rc[\"age_ms\"], \"valid\", rc[\"input_valid\"])\n    await asyncio.sleep(0.1)\n","wifi_scan":"from zebjus_simple import Drone\n\ndrone = Drone()\nnetworks = await drone.wifi_scan()\nfor router in networks:\n    print(router[\"ssid\"], router[\"rssi\"], \"dBm\", \"Secure\" if router[\"secure\"] else \"Open\")\nprint(\"Found\", len(networks), \"2.4 GHz networks\")\n","wifi_save":"from zebjus_simple import Drone\n\ndrone = Drone()\n# Keep credentials private: this file is autosaved in your browser.\nssid = \"REPLACE_WITH_2_4GHZ_WIFI\"\npassword = \"REPLACE_WITH_WIFI_PASSWORD\"\nresult = await drone.wifi_test_save(ssid, password)\nprint(result)\nif result[\"saved\"]:\n    print(\"Wi-Fi saved in FlightCore NVS; reconnect and Take Control.\")\nelse:\n    print(\"Not saved/verified. Check status via USB before retry.\")\n","scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=10000 if not identified else 3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
+Object.assign(EXAMPLES,{"motor_layout": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.set_layout(\"A2_QUAD_X\"))\n", "esc_calibration": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.calibrate_esc())\n", "motor_test": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.test_motor(motor=1, pulse_us=1050, duration_ms=800))\n", "motor_input": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.test_input(source=\"selected\", duration_ms=10000))\n"});
 const bridge=createI2CBridge({acceptEvent:e=>{
  const transport=e?.detail?.transport||'usb';
  return pythonBinding?pythonBinding.transport==='usb'?transport==='usb':transport===pythonBinding.transport:false;
@@ -275,6 +277,8 @@ function startLedSession(packet){
  }
  ledController.set(packet,bound);
 }
+let motorWorkerAlive=0;
+setInterval(()=>{if(motorClient.owner==="python"&&(!running||Date.now()-motorWorkerAlive>1000))void motorClient.stop("python").catch(()=>{});},250);
 const ERROR_DESCRIPTIONS={
  SyntaxError:'Check quotes, colons, brackets and punctuation.',
  IndentationError:'Align block indentation using four spaces.',
@@ -320,6 +324,7 @@ function closePythonHardwareControl(){
  if(owned&&wifiPythonSelected())void window.ZebjusKits?.releaseRc?.().catch(()=>{});
 }
 function stopPython(notify=true){
+ void motorClient.stop("python").catch(()=>{});
  ++pythonRunEpoch;pythonStarting=false;
  closePythonHardwareControl();
  stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);
@@ -327,12 +332,56 @@ function stopPython(notify=true){
  pythonBinding=null;pythonRunIdentity=null;
  updateButtons();usbStatus();if(notify){terminal('\n[Python stopped]\n','warn');status('Stopped','warn');$('pyLastRun').textContent='STOPPED'}
 }
+async function pythonMotorOperation(operation,a,w){
+ const current=()=>{if(worker!==w||!running||document.hidden)throw Error('Python motor operation cancelled.');};
+ current();
+ const confirm=async text=>{await confirmMotor(text);current();};
+ const wait=async()=>{
+  for(let n=0;n<400;n++){
+   await new Promise(r=>setTimeout(r,100));current();
+   const s=motorClient.state;
+   if(s&&['DISABLED','FAULT','UNCONFIRMED'].includes(s.mode)){
+    if(s.mode!=='DISABLED'||!['TEST_FINISHED','CAL_FINISHED'].includes(s.reason))throw Error(s.reason||'Motor test stopped');
+    return s;
+   }
+  }
+  throw Error('Motor operation timed out');
+ };
+ try{
+  if(operation==='status')return await motorClient.status();
+  if(operation==='stop'){await motorClient.stop('python');return motorClient.state||{};}
+  if(operation==='begin'){
+   await confirm('A2 motor setup: remove all propellers. Verify D0–D3 ESC wiring, the controller power circuit, and that your ESC supports 50 Hz PWM with 1000–2000 µs endpoints. USB requires Teacher Unlock. Continue?');
+   motorWorkerAlive=Date.now();return await motorClient.begin('python',pythonBinding);
+  }
+  if(operation==='layout')return await motorClient.command('LAYOUT',[a.layout],'python');
+  if(operation==='calibrate'){
+   await confirm('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH?');
+   await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED'],'python');
+   await confirm('HIGH signal is active for at most 15 seconds. Connect the motor battery; wait for the calibration prompt specified by your ESC manual, then Continue to send LOW.');
+   await motorClient.command('CAL_LOW',[],'python');const s=await wait();
+   await confirm('Output has ended. Confirm only if you heard your ESC success tones.');return {...s,escSuccess:'user confirmed'};
+  }
+  if(operation==='single'){
+   await confirm('Run motor '+a.motor+' at '+a.pulse_us+' µs for '+a.duration_ms+' ms? Propellers must be removed.');
+   await motorClient.command('SINGLE',[a.motor,a.pulse_us,a.duration_ms],'python');return await wait();
+  }
+  if(operation==='input'){
+   await confirm('Test ALL FOUR motors using the selected input for '+a.duration_ms+' ms? Lower throttle and disarm input first. Output is capped at 1200 µs; enable input ARM or use the PPM yaw gesture after the test begins.');
+   await motorClient.command('INPUT',[a.source,a.duration_ms,'CONFIRM_ALL_MOTORS'],'python');return await wait();
+  }
+  throw Error('Unknown motor operation');
+ }catch(e){await motorClient.stop('python').catch(()=>{});throw e;}
+}
+
 async function onRpc(w,m){
  try{
   if(worker!==w)return;
   bindPythonOperation(m.method);
   let result;
-  if(m.method==='read_joystick'){
+  if(m.method.startsWith('motor_')){
+   result=await pythonMotorOperation(m.method.slice(6),m.args||{},w);
+  }else if(m.method==='read_joystick'){
    selectedPythonKit(); // Same verified AP / STA / USB / Android Relay reader.
    result=pythonTransport()==='usb'?kitData().usbJoystick(selectedPythonKit()):await window.DroneLabNetwork.readJoystick();
   }else if(m.method==='i2c_scan'){
@@ -380,7 +429,8 @@ function makeWorker(){
  const w=new Worker('./python-lab-worker.js');
  w.onmessage=e=>{
   if(worker!==w&&syntaxWorker!==w)return;const m=e.data||{};
-  if(m.type==='rpc')return void onRpc(w,m);
+  if(m.type==='motor-worker-alive'){motorWorkerAlive=Date.now();return;}
+   if(m.type==='rpc')return void onRpc(w,m);
   if(w===syntaxWorker&&m.type!=='syntax-error'&&m.type!=='syntax-ok')return;
   if(m.type==='led-write'){if(/,STOP\n$/.test(m.packet)){stopLedSession();return}startLedSession(m.packet);return}
   if(m.type==='image')return showPythonPlot(m);
@@ -390,6 +440,7 @@ function makeWorker(){
   if(m.type==='syntax-error'){markPythonError(m,'syntax');if(w===syntaxWorker){w.terminate();syntaxWorker=null}return}
   if(m.type==='syntax-ok'){clearPythonMarkers();if(w===syntaxWorker){terminal('[Syntax check] No Python syntax errors found.\n');w.terminate();syntaxWorker=null}return}
   if(m.type==='done'||m.type==='error'){
+    void motorClient.stop('python').catch(()=>{});
    closePythonHardwareControl();
    if(m.type==='error'){
     stopLedSession();if(wifiPythonSelected())window.DroneLabNetwork?.stream?.(false);markPythonError(m,'runtime');
@@ -535,6 +586,8 @@ function addCompletions(M){
      led_sos:['led_sos()','SOS Morse pattern'],
      led_pattern:['led_pattern([(100,150),(0,900)])','Custom brightness/duration sequence'],
      led_stop:['led_stop()','Switch LED off and end effect'],
+     motor_setup:['motor_setup()','Async A2 setup session: use async with await drone.motor_setup()'],
+     motor_status:['motor_status()','Read authoritative motor status'],
      read_joystick:['read_joystick()','Read identity-verified ESP32 receive state over STA without claiming control'],
      read_gyro:['read_gyro(timeout=3000)','Await fresh A1/A2 gyro sample with address and angular rates'],
      i2c_scan:['i2c_scan()','Last complete I2C scan (or None)'],

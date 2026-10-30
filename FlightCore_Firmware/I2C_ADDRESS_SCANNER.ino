@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.5.14";
+constexpr const char* FW_VERSION="1.6.0";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -125,7 +125,10 @@ void ledCommand(char* line){
 }
 void requestScan();
 static bool zjNetSerialCommand(char* line); // implemented by network module later in this sketch
+static bool zjMotorSerial(char* line);
 void serialCommand(char* line){
+ if(zjMotorSerial(line))return;
+ if(zjMotorSessionActive&&strncmp(line,"ZJRC,",5)&&strncmp(line,"ZJINFO,",7)){Serial.println("ZJMOTOR,ERR,STOP_SETUP_FIRST");return;}
  if(zjAccessSerialCommand(line,zjAccessStationary(),zjAccessBusy(),zjControlRadio()))return;
  if(zjRcSerialCommand(line))return;
  if(zjPpmSerialCommand(line))return;
@@ -512,10 +515,11 @@ void emitTelemetry(unsigned long now){
   Serial.print(",P=");Serial.print(fresh?zjRcPitch:1500);
   Serial.print(",Y=");Serial.print(fresh?zjRcYaw:1500);
   Serial.print(",INPUT_ARMED=");Serial.print(fresh&&zjRcInputArmed?1:0);
-  Serial.print(",MOTORS=OFF");
+  Serial.print(zjMotorEnabled?",MOTORS=ACTIVE":",MOTORS=OFF");
  }
  Serial.println();
 }
+#include "FlightCoreMotor.h"
 // Network code can access verified scanner/gyro state and existing serial commands.
 void setup(){
  Serial.begin(115200);
@@ -524,19 +528,21 @@ void setup(){
  selectI2cBus();
  digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
- ledcAttach(LED_PIN,5000,8);
+ ledcAttachChannel(LED_PIN,5000,8,5);
  ledOff();
  // No decorative startup banner.
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
  Serial.println("ZJTEL,ACK,FORMAT,COMBINED");
  zjNetworkSetup();
+ zjMotorSetup();
  lastGyro=millis()-GYRO_PERIOD_MS;
  lastGyroProbe=millis()-2500;
  telLast=millis();
 }
 void loop(){
  const unsigned long now=millis();
+ zjMotorLoop();
  readLedCommands();
  updateLedEffect(now);
  updateGyro(now);
@@ -552,11 +558,11 @@ void loop(){
  if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>=108){
   lastState=millis();
   // Compact record avoids repeating the large network JSON on a 115200-baud link.
-  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u\n",
+  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u,%u,%u\n",
    zjKitId.c_str(),zjSavedFlightMode.c_str(),zjFlightMode.c_str(),zjFlightModePending?zjSavedFlightMode.c_str():"none",
    zjRcThrottle,zjRcRoll,zjRcPitch,zjRcYaw,zjRcCh5,zjRcCh6,unsigned(ledMode),
    (unsigned long)zjRcSeq,(unsigned long)(zjRcSeq?uint32_t(millis()-zjRcLast):0),(unsigned long)zjRcAccepted,(unsigned long)zjRcRejected,
-   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U);
+   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U,zjMotorEnabled?1U:0U,zjMotorArmed?1U:0U);
  }
  // Legacy ZJGYRO duplicates are disabled.
  static uint32_t lastAccess=0;

@@ -39,7 +39,7 @@
   if(!link||!/^RCSEQ=(\d+)$/.test(suffix[1])||
      !/^T=(\d+)$/.test(suffix[2])||!/^R=(\d+)$/.test(suffix[3])||
      !/^P=(\d+)$/.test(suffix[4])||!/^Y=(\d+)$/.test(suffix[5])||
-     !/^INPUT_ARMED=[01]$/.test(suffix[6])||suffix[7]!=='MOTORS=OFF')return null;
+     !/^INPUT_ARMED=[01]$/.test(suffix[6])||!/^MOTORS=(OFF|ACTIVE)$/.test(suffix[7]))return null;
   const seq=suffix[1].slice(6),pulses=suffix.slice(2,6).map(x=>x.slice(2));
   if(!decimal(seq)||!pulses.every(pulse))return null;
   const [throttle,roll,pitch,yaw]=pulses.map(Number),inputArmed=suffix[6]==='INPUT_ARMED=1';
@@ -49,7 +49,7 @@
   }
   if(Number(seq)===0)return null;
   return {kind:'frame',transport:link[2],source:link[3],seq:Number(seq),
-   throttle,roll,pitch,yaw,inputArmed,active:true,claimed:true};
+   throttle,roll,pitch,yaw,inputArmed,active:true,claimed:true,motorsDisabled:suffix[7]==='MOTORS=OFF'};
  }
  function parseSerialStatus(line){
   const text=String(line??'').trim();
@@ -59,12 +59,12 @@
    if(text[10]==='{')d=JSON.parse(text.slice(10));
    else{
     const p=text.split(',');
-    if(p.length!==21||!p.slice(6,12).every(pulse)||!p.slice(12,17).every(decimal)||
+    if(![21,23].includes(p.length)||(p.length===23&&!p.slice(21).every(v=>/^[01]$/.test(v)))||!p.slice(6,12).every(pulse)||!p.slice(12,17).every(decimal)||
      !/^[01]$/.test(p[17])||!/^(WEB|ANDROID|PPM|NONE)$/.test(p[18])||!/^(USB|AP|STA|PPM|NONE)$/.test(p[19])||!/^[01]$/.test(p[20])||Number(p[12])>7)return null;
     d={kitId:p[2],flightModeState:{supported:true,stabilizationSupported:false,saved:p[3],active:p[4],pending:p[5]==='none'?null:p[5]},
      ledOn:Number(p[12])!==0,ledEffect:Number(p[12]),rc:{kitId:p[2],throttle:Number(p[6]),roll:Number(p[7]),pitch:Number(p[8]),yaw:Number(p[9]),
       ch5:Number(p[10]),ch6:Number(p[11]),seq:Number(p[13]),ageMs:Number(p[14]),accepted:Number(p[15]),rejected:Number(p[16]),
-      inputArmed:p[17]==='1',source:p[18],transport:p[19],active:p[20]==='1',inputValid:p[20]==='1',motorsArmed:false,motorsDisabled:true,flightMode:p[4]}};
+      inputArmed:p[17]==='1',source:p[18],transport:p[19],active:p[20]==='1',inputValid:p[20]==='1',motorsArmed:p[22]==='1',motorsDisabled:p.length===21||p[21]==='0',flightMode:p[4]}};
    }
    const m=d.flightModeState,rc=d.rc;
    if(!/^ZFC-A[12]-[A-F0-9]{12}$/.test(d.kitId||'')||!m||m.supported!==true||
@@ -73,7 +73,7 @@
     typeof d.ledOn!=='boolean'||!rc||rc.kitId!==d.kitId||
     !['throttle','roll','pitch','yaw','ch5','ch6'].every(k=>Number.isInteger(rc[k])&&rc[k]>=1000&&rc[k]<=2000)||
     !Number.isInteger(rc.seq)||rc.seq<0||rc.seq>4294967295||
-    typeof rc.active!=='boolean'||rc.active&&rc.seq===0||typeof rc.inputArmed!=='boolean'||rc.motorsArmed!==false||rc.motorsDisabled!==true)return null;
+    typeof rc.active!=='boolean'||rc.active&&rc.seq===0||typeof rc.inputArmed!=='boolean'||typeof rc.motorsArmed!=='boolean'||typeof rc.motorsDisabled!=='boolean'||rc.motorsArmed&&rc.motorsDisabled)return null;
    return d;
   }catch{return null}
  }

@@ -61,8 +61,10 @@
   const candidates=(Array.isArray(paths)?paths:[]).filter(p=>p.verified===true&&p.available===true&&p.kitId===kit?.kitId&&(p.transport==='usb'||kit?.connected===true)&&
    (p.transport==='usb'?(p.fresh===true||p.lastPacketAt>0&&at-p.lastPacketAt<=900):p.fresh===true)&&
    (p.transport!=='android-relay'||p.permitted===true));
-  const write=['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation);
+  const motor=operation.startsWith('motor_');
+  const write=motor||['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation);
   const compatible=p=>{
+   if(motor)return p.transport!=='android-relay'&&(p.transport==='usb'||kit.controlAuthorized===true);
    if(['wifi_scan','wifi_test_save'].includes(operation))return ['ap','sta'].includes(p.transport)&&kit.setupAuthorized===true&&!kit.owner&&!kit.rc?.claimed;
    if(write&&p.transport==='android-relay'&&requested==='auto')return false; // Auto relay is read-only; manual Android grants still govern every request
    return !write||p.transport==='usb'||kit.controlAuthorized===true;
@@ -125,8 +127,8 @@
    throttle:fresh?rc.throttle:neutral.throttle,roll:fresh?rc.roll:neutral.roll,
    pitch:fresh?rc.pitch:neutral.pitch,yaw:fresh?rc.yaw:neutral.yaw,
    ch5:safePulse(rc.ch5)?rc.ch5:null,ch6:safePulse(rc.ch6)?rc.ch6:null,flightMode:kit.flightMode||null,flightModeState:kit.flightModeState||null,
-   accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:true,motors_disabled:true,
-   motorsArmed:false,readSource:'verified-usb-serial'};
+   accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:kit.motorsDisabled===true,motors_disabled:kit.motorsDisabled===true,
+   motorsArmed:kit.motorsArmed===true,readSource:'verified-usb-serial'};
  }
  root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,detectPythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
 })(globalThis);

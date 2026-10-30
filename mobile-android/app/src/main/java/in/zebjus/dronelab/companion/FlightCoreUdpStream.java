@@ -125,7 +125,7 @@ final class FlightCoreUdpStream {
                 SystemClock.elapsedRealtime()-lastAckAt>ACK_WARN_MS?"DEGRADED":"HEALTHY");
             o.put("firmwareDeadmanMs",FW_DEADMAN_MS);
             o.put("feedbackWarnMs",ACK_WARN_MS);o.put("feedbackStopMs",apStreaming?0:ACK_TIMEOUT_MS);
-            o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",false);
+            o.put("inputArmed",!"error".equals(type)&&acknowledgedArm);o.put("motorsArmed",JSONObject.NULL); // RC ACK has no motor-output field; /api/status is authoritative.
             if(reason!=null)o.put("reason",reason);
             final long generation=startupGeneration;
             String script="window.zebjusNativeUdpEvent && window.zebjusNativeUdpEvent("+o.toString()+")";

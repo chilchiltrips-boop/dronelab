@@ -78,3 +78,18 @@ No LED Python command can arm motors, change PID values or invoke flight control
 ## PID tuning orientation
 
 The tripod starts in **Front view**. The front red arms and red arrow (+Z) face the viewer. Forward stick remains positive pitch, and the nose moves down toward the viewer; roll/yaw and the underlying PID controller mapping are unchanged.
+
+## A2 motor setup (FlightCore 1.6.0+)
+
+Use the A2 motor examples in the examples selector on a verified direct USB/AP/STA
+target. USB requires Teacher Unlock. The async `drone.motor_setup()` session
+provides `set_layout`, `calibrate_esc`, `test_motor`, `test_input`, `status`,
+`stop` and `close`. Use `async with await drone.motor_setup() as setup` so scope
+exit stops outputs. Every timed output ends the session; begin again for another
+test. Confirm the propeller-free bench, wiring and ESC profile in the dialog.
+`test_motor(motor=1, pulse_us=1050, duration_ms=800)` is bounded to 1000–1200 us
+and at most 2 seconds. `test_input(source="selected", duration_ms=10000)` uses
+the firmware-selected input for at most 30 seconds. These methods await the
+terminal firmware result. Calibration requires interactive battery/tone steps.
+See [A2 motor setup](docs/A2_MOTOR_BENCH_READINESS.md) for transport, input and
+physical verification details. This is bench output, not flight stabilization.

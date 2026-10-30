@@ -107,7 +107,7 @@ static String zjPpmStatus(){
    (good?zjPpmChannelsJson():String("null"));
  output+=",\"map\":[";
  for(uint8_t i=0;i<5;i++){if(i)output+=',';output+=String(zjPpmMap[i]+1);}output+="]";
- output+=",\"inputArmed\":"+(zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed?String("true"):String("false"))+",\"motorsDisabled\":true}";
+ output+=",\"inputArmed\":"+(zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed?String("true"):String("false"))+","+zjMotorFlags()+"}";
  return output;
 }
 static void zjPpmLoop(uint32_t now){

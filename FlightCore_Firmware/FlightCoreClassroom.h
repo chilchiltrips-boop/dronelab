@@ -1,7 +1,8 @@
 #pragma once
-// ZEBJUS AERION classroom diagnostics • NO MOTOR OUTPUTS.
+// ZEBJUS AERION input ownership; motor setup has its own explicit session.
 // An identifying six-digit code is NOT a password or an authorization secret.
 #include <Preferences.h>
+#include "FlightCoreMotorStatus.h"
 #include <mbedtls/sha256.h>
 
 static Preferences zjKitPrefs;
@@ -110,6 +111,7 @@ static void zjRcNeutral(){
  zjRcCh5=zjRcCh6=1000;zjApplyPendingFlightMode();
 }
 static void zjRcRelease(const char* reason){
+ if(zjMotorInputTest)zjMotorEmergencyStop();
  const bool had=zjRcOwned;
  if(had){zjRcLastReleaseReason=reason;zjRcLastReleaseAt=millis();}
  zjRcNeutral();zjRcOwned=false;zjRcNetwork=false;zjRcUdpOwned=false;zjRcLeaseAt=0;zjRcLast=0;zjRcSeq=0;
@@ -165,13 +167,13 @@ static void zjRcLoop(uint32_t now){
 static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
- return String("{\"kitId\":\"")+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"motorsDisabled\":true,\"claimed\":"+(zjRcOwned?"true":"false")+
+ return String("{")+zjMotorFlags()+",\"kitId\":\""+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"claimed\":"+(zjRcOwned?"true":"false")+
   ",\"flightModeState\":"+zjFlightModeState()+",\"ch5\":"+String(zjRcCh5)+",\"ch6\":"+String(zjRcCh6)+",\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"motorsArmed\":false,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+" ,\"channels\":"+zjPpmRcChannelsJson()+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.
@@ -294,7 +296,7 @@ static bool zjRcSerialCommand(char* line){
   Serial.print("ZJKIT,ACK,CODE,");Serial.println(zjKitCode);
   Serial.println("ZJKIT,INFO,VERIFY_NO_DUPLICATE_IN_CLASSROOM_REBOOT_TO_REFRESH_AP");return true;
  }
- if(!strcmp(line,"ZJRC,STOP")){zjRcRelease("USB_STOP");return true;}
+ if(!strcmp(line,"ZJRC,STOP")){zjMotorEmergencyStop();zjRcRelease("USB_STOP");return true;}
  if(!strcmp(line,"ZJRC,RELEASE")){
   if(zjRcOwned&&!zjRcNetwork)zjRcRelease("USB_RELEASE");
   else Serial.println("ZJRC,ERR,NOT_USB_OWNER");

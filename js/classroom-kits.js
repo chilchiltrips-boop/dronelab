@@ -1229,7 +1229,7 @@ function onSerial(e){
  if(statusRecord){
   if(statusRecord.kitId!==state.kitId||usbCandidate.kitId!==state.kitId||usbCandidate.serialGeneration!==serial()?.generation?.())return;
   state.flightModeState={...statusRecord.flightModeState};state.flightMode=statusRecord.flightModeState.active;
-  state.ledOn=statusRecord.ledOn;state.motorsArmed=false;state.motorsDisabled=true;
+  state.ledOn=statusRecord.ledOn;state.motorsArmed=statusRecord.rc.motorsArmed;state.motorsDisabled=statusRecord.rc.motorsDisabled;
   if(!state.rc||statusRecord.rc.seq>=state.rc.seq||statusRecord.rc.active===false){
    // Compact ZJSTATE carries the authoritative source, including a reserved
    // producer before its first frame; it has no separate claimed field.

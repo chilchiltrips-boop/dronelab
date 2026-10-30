@@ -1,8 +1,8 @@
 #pragma once
 #include <stdint.h>
 
-// Logical layout only. digitalPin is the XIAO D-label number, not GPIO number.
-// No pins are configured and no outputs are driven by this definition.
+// Shared logical layout. digitalPin is the XIAO D-label, not the GPIO number.
+// FlightCoreMotor.h configures the A2 hardware driver for this fixed preset.
 enum class ZjMotorPosition : uint8_t { FRONT_LEFT, FRONT_RIGHT, BACK_RIGHT, BACK_LEFT };
 enum class ZjMotorRotation : uint8_t { CLOCKWISE, COUNTERCLOCKWISE };
 struct ZjA2MotorLayoutEntry {

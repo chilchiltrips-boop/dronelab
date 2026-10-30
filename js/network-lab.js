@@ -123,7 +123,7 @@ async function readJoystick(){
   if(wait)await new Promise(r=>setTimeout(r,wait));
   const start=performance.now(),rc=await request('/api/rc/snapshot'),after=window.ZebjusKits?.getState?.();
   contract.validateReply(before,after,rc);
-  if(rc.motorsDisabled!==true)throw Error('Hardware motor-disabled confirmation absent');
+  if(typeof rc.motorsDisabled!=='boolean')throw Error('Hardware motor status absent');
   const rtt=Math.round(performance.now()-start),valid=rc.inputValid===true&&rc.failsafe===false&&
    Number.isFinite(rc.ageMs)&&rc.ageMs+rtt<=350;
   joystickReadAt=performance.now();
@@ -131,7 +131,7 @@ async function readJoystick(){
    age_ms:rc.ageMs===null?null:rc.ageMs+rtt,input_valid:valid,failsafe:!valid,
    throttle:valid?rc.throttle:1000,roll:valid?rc.roll:1500,
    pitch:valid?rc.pitch:1500,yaw:valid?rc.yaw:1500,response_mode:rc.responseMode,
-   received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:true,
+   received_at_ms:rc.receivedAtMs,round_trip_ms:rtt,motors_disabled:rc.motorsDisabled,
    transport:before.transport,physical_transport:before.physicalLink||before.transport};
  };
  joystickPending=operation().finally(()=>{joystickPending=null});return joystickPending;

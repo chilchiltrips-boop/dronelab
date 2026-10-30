@@ -1,19 +1,71 @@
-# A2 motor bench integration: review in progress
+# A2 motor setup — FlightCore 1.6.0
 
-This branch currently contains a **hardware-independent interlock model only**.
-It has not been wired into the production firmware, WebApp, Android app, Python
-bridge, telemetry or ESC pins. It cannot drive a motor. Do not present the
-branch as a completed motor test, ESC calibration or a flight controller.
+A2 D0–D3 outputs are integrated with the production firmware, Setup Wizard and
+Python Lab. This is a bounded, propeller-free bench feature, with no flight
+mixer or attitude stabilization. A1 reports motor setup unsupported.
 
-## Existing production contract
+## Operation and protocol
 
-Main at `fa595cde4a464c9babfef7545abaa652897b57d7` (FlightCore 1.5.14)
-deliberately reports `motorsDisabled:true`, `motorsArmed:false`, and USB
-`MOTORS=OFF`. Input-arm means a diagnostic input, not motor arming. Android
-WebRTC currently targets the simulator; Android relay automatic Python access
-is read-only. Live actuation requires an explicit protocol/capability update
-across the firmware, all serial/network consumers and Android. Leaving old
-hard-coded status messages in place while PWM is active would be unsafe.
+The fixed A2_QUAD_X preset uses 50 Hz PWM with 1000–2000 us endpoints. The user
+must verify that the ESC supports this profile. Motors have dedicated LEDC
+channels 0–3 on timer 0; the onboard LED uses channel 5. Startup emits no pulses.
+The ESP timer supervisor stops channels if the main output service misses a
+100 ms deadline; that trip requires a new explicit setup session.
+
+USB ZJMOTOR and encrypted POST /api/motor share the same command handler.
+BEGIN requires props/pin/profile confirmations, low disarmed input, and either
+USB Teacher Unlock or an authorized network control session. STA observer
+and automatic Android Relay access cannot operate motors. The random session
+is bound to its caller and boot; it is never broadcast. KEEP expires after
+1500 ms. SINGLE/ALL are limited to 2 s and 1200 us. CAL_HIGH has a 15 s deadline;
+CAL_LOW ends after 3 s. INPUT is limited to 30 s, ends on producer/path/radio
+change, and uses firmware input freshness (PPM 150 ms; network 300 ms).
+
+PPM uses the low-throttle yaw gesture; Android AP and WebApp use their input
+ARM at low throttle. WebRTC remains a simulator source outside an explicit
+bench session. Inside an explicitly started bench, the authorized browser
+forwards only new fresh frames from the locked paired phone to the selected
+STA A2. CH5 low is required at start; CH5 high enables the bounded output.
+Stale/repeated frames, a changed peer, STOP or loss cannot restart a test.
+
+Input ARM and motor-output state are distinct. Network and serial reports use
+live output state. The extended USB status adds output-enabled/output-armed
+flags; legacy decoders reject unknown active records instead of confirming OFF.
+The native Android RC ACK does not contain motor state and now reports it as
+unknown; signed /api/status is authoritative. Old Android clients must update
+before using physical bench outputs.
+
+## WebApp and Python
+
+Setup Wizard: Board → Wiring → Input → ESC calibration → Motor test → Report.
+The report distinguishes user observations from commanded pulse outputs.
+Python examples are in the existing examples menu. Use:
+
+```python
+from zebjus_simple import Drone
+
+drone = Drone()
+async with await drone.motor_setup() as setup:
+    print(await setup.set_layout("A2_QUAD_X"))
+    print(await setup.test_motor(motor=1, pulse_us=1050, duration_ms=800))
+```
+
+Use a fresh setup session for each timed output operation. `calibrate_esc()`
+provides interactive battery/tone confirmations; `test_input(source="selected",
+duration_ms=10000)` runs the selected source. Python Stop, completion, error,
+worker liveness loss and page hiding close the motor session. Firmware deadlines
+also apply when the browser cannot send STOP. Acknowledged output is not measured
+rotation/RPM. Browser dialogs do not prove physical preconditions.
+
+## Verification status
+
+Production-handler host tests cover authorization, ownership, NVS, finite tests,
+calibration, stale inputs, source changes, replay rejection and STOP. Shared
+client tests cover boot/device/transport binding and cancelled starts. Browser
+CI exercises the rendered wizard using a clearly simulated board.
+Physical PWM timing, watchdog behavior on a real C6, wiring, ESC tones and actual
+motor stopping remain **NOT RUN** in this environment. A physical power cutoff
+and propeller-free bench acceptance are required before hardware qualification.
 
 ## Hardware evidence that must be reconciled before physical output
 
@@ -52,40 +104,10 @@ ESC. Power-on high-throttle calibration is an operator-directed, props-off
 operation; firmware cannot verify completion tones by itself. Do not connect
 or parallel multiple BECs unless the power design specifically supports it.
 
-## Interlock behavior under host tests
+## Physical acceptance still required
 
-`FlightCoreMotorSafety.h` starts disabled. It models explicit mapped-pin and
-props-removed confirmation, a short supervisor lease, bounded timed single/all
-motor tests, and explicit calibration high/low phases with deadlines. PPM
-arming is only after a fresh neutral observation and continuous low-throttle /
-yaw-right gesture from distinct fresh frames; low-throttle / yaw-left disarms.
-CH5 switch gating is selectable. Stale inputs, source changes, late lease
-renewal, stop and output fault latch off. The first bench cap is 20% of the
-configured 1000–2000 us range, not a measured RPM or guaranteed nonrotation.
-
-Host tests exercise that model; they do not validate PWM timing, ESP32 task
-scheduling, wiring, ESC power or actual motor stopping. The model has not been
-reviewed as an independent physical safety system. A hardware adapter must have
-its own watchdog/deadline design; ESP32 hardware PWM can keep its last duty if
-the controlling task stalls. A separately verified physical power cutoff is
-needed for bench work.
-
-## Required integration and acceptance
-
-* Implement A2-only pin driver, safe default-off state, authenticated and
-  boot/device-bound supervisor, explicit configuration and finite deadlines.
-* Reconcile selected PPM/Android AP/WebApp input ownership with motor-test
-  ownership. Implement any physical Android WebRTC bridge as a separately
-  authorized path; do not reuse simulator input implicitly.
-* Change status/ACK/serial contracts and every consumer so `MOTORS=OFF`,
-  `motorsDisabled`, `motorsArmed` and input-arm cannot falsely report a safe
-  state. Old clients must fail closed on new capabilities.
-* Add WebApp configuration, calibration wizard, diagnostics, scoped Python
-  API and Android status/control with reliable STOP and session expiry.
-* On a known-good separate C6 board, props removed, verify actual PPM loss,
-  exact connector pin mapping, PWM frequency/pulse widths, bounded outputs,
-  SimonK beep sequence, watchdog reset, unexpected power loss, STOP, all
-  transports and cross-source rejection. Then test the corrected A2 board.
-* Only after implementation and required tests: build signed artifacts, wait
-  for exact-source CI and merge. Physical acceptance must never be inferred from
-  a host test or a successful CI run.
+On the current corrected A2 board, verify the actual D0–D3 connector map, 50 Hz
+frequency and pulse widths, low/no-signal stop behavior, PPM and network loss,
+Python/browser termination, watchdog trip, calibration tones, reboot and power
+loss. Record each observation against the board revision and running firmware.
+CI success does not establish hardware or flight acceptance.
