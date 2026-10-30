@@ -46,5 +46,29 @@ try{
  await page.locator('[data-step="1"]').click();
  assert.equal(await page.evaluate(()=>document.querySelector('#a2SetupRoot').scrollWidth<=document.querySelector('#tab-setup').clientWidth),true,'wizard must fit mobile width');
  await page.screenshot({path:'test-output/a2-setup-mobile.png',fullPage:true});
- assert.deepEqual(errors,[]);console.log('PASS A2 wizard desktop/mobile, board detect, single motor, calibration, terminal result and STOP');
+ // Execute the actual Python Worker, RPC bridge and main-thread confirmations.
+ await page.setViewportSize({width:1366,height:900});
+ await page.evaluate(()=>{
+  window.ZebjusKits.getMonitorPaths=()=>[{kitId:window.ZebjusKits.getState().kitId,transport:'sta',verified:true,available:true,fresh:true,permitted:true}];
+  window.DroneLabNetwork.read=async()=>window.ZebjusKits.getState();
+  window.DroneLabNetwork.stream=()=>{};
+ });
+ await page.locator('[data-tab="python"]').click();
+ await page.waitForFunction(()=>window.monaco?.editor?.getModels().some(m=>m.uri.toString().includes('main.py'))&&document.getElementById('pythonTarget').value==='sta',null,{timeout:45000});
+ const edit=code=>page.evaluate(code=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue(code),code);
+ await edit('from zebjus_simple import Drone\nasync with await Drone().motor_setup() as setup:\n    await setup.set_layout()\n    result = await setup.test_motor(2, 1100, 800)\n    print("PYTHON_MOTOR", result["reason"])\n');
+ await page.locator('#runPythonBtn').click();
+ const confirm=page.getByRole('button',{name:'Confirm / Continue',exact:true});
+ await confirm.waitFor({timeout:90000});await confirm.click();
+ await page.waitForFunction(()=>document.querySelector('dialog.motor-confirm p')?.textContent.startsWith('Run motor 2'));
+ await confirm.click();
+ await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='COMPLETE',null,{timeout:30000});
+ assert.match(await page.locator('#pythonTerminal').textContent(),/PYTHON_MOTOR TEST_FINISHED/);
+ assert.equal(await page.evaluate(()=>window.ZebjusMotorSetup.active),false);
+ await edit('import asyncio\nfrom zebjus_simple import Drone\nasync with await Drone().motor_setup() as setup:\n    print("PYTHON_SESSION_READY")\n    await asyncio.sleep(30)\n');
+ await page.locator('#runPythonBtn').click();await confirm.waitFor({timeout:90000});await confirm.click();
+ await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
+ await page.locator('#stopPythonBtn').click();
+ await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
+ assert.deepEqual(errors,[]);console.log('PASS A2 wizard desktop/mobile, board detect, single motor, calibration, terminal result, Python motor RPC and Python STOP');
 }finally{await browser.close();}

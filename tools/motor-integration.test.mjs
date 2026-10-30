@@ -1,10 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createMotorClient,rtcBenchFrame} from '../js/motor-setup.js';
+test('production Python worker motor bridge forwards arguments and firmware results',async()=>{
+ const messages=[],self={location:{href:'https://example.test/python-lab-worker.js'}};
+ vm.runInNewContext(readFileSync('python-lab-worker.js','utf8'),{self,URL,postMessage:m=>messages.push(m)});
+ const result=self.zebjusI2cBridge.motor('single',JSON.stringify({motor:2,pulse_us:1100,duration_ms:800}));
+ const request=messages.at(-1);
+ assert.equal(request.method,'motor_single');
+ assert.deepEqual(JSON.parse(JSON.stringify(request.args)),{motor:2,pulse_us:1100,duration_ms:800});
+ self.onmessage({data:{type:'rpc-result',id:request.id,ok:true,value:'{"mode":"DISABLED","reason":"TEST_FINISHED"}'}});
+ assert.equal(JSON.parse(await result).reason,'TEST_FINISHED');
+ const failure=self.zebjusI2cBridge.motor('begin','{}');
+ self.onmessage({data:{type:'rpc-result',id:messages.at(-1).id,ok:false,error:'Wrong Kit'}});
+ await assert.rejects(failure,/Wrong Kit/);
+});
+test('Python MotorSetup context closes after success and exceptions and keeps calibration interactive',()=>{
+ const source=readFileSync('python-lab-worker.js','utf8');
+ const api=JSON.parse(/const MOTOR_PY=("(?:[^"\\]|\\.)*");/.exec(source)[1]);
+ const program=`import asyncio, sys, types, json
+calls=[]
+class Bridge:
+    async def motor(self, operation, values):
+        calls.append((operation,json.loads(values)))
+        return json.dumps({'operation':operation,'reason':'TEST_FINISHED'})
+sys.modules['js']=types.SimpleNamespace(zebjusI2cBridge=Bridge())
+class Drone: pass
+`+api+`
+async def check():
+    drone=Drone()
+    async with await drone.motor_setup() as setup:
+        await setup.set_layout()
+        assert (await setup.test_motor(2,1100,800))['reason']=='TEST_FINISHED'
+    assert [c[0] for c in calls]==['begin','layout','single','stop']
+    assert calls[2][1]==dict(motor=2,pulse_us=1100,duration_ms=800)
+    try:
+        async with await drone.motor_setup() as setup:
+            await setup.calibrate_esc(interactive=False)
+    except ValueError: pass
+    else: raise AssertionError('noninteractive calibration accepted')
+    assert calls[-1][0]=='stop' and not any(c[0]=='calibrate' for c in calls)
+    async with await drone.motor_setup() as setup:
+        await setup.test_input(duration_ms=1000)
+    assert calls[-2]==('input',dict(source='selected',duration_ms=1000))
+    print('PASS Python motor API')
+asyncio.run(check())
+`;
+ const result=spawnSync('python3',['-'],{input:program,encoding:'utf8'});
+ assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/PASS Python motor API/);
+});
 test('production motor command handler stops on expiry, loss, ownership change and STOP',()=>{
  const dir=mkdtempSync(join(tmpdir(),'a2-integration-'));
  try{const bin=join(dir,'motor');const build=spawnSync('g++',['-std=c++17','-Itools/host-stubs','tools/motor-integration-host.cpp','-lcrypto','-o',bin],{encoding:'utf8'});assert.equal(build.status,0,build.stderr);const run=spawnSync(bin,[],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/PASS production/);}finally{rmSync(dir,{recursive:true,force:true});}

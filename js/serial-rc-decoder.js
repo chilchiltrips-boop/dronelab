@@ -45,7 +45,7 @@
   const [throttle,roll,pitch,yaw]=pulses.map(Number),inputArmed=suffix[6]==='INPUT_ARMED=1';
   if(link[1]==='NONE/IDLE'){
    if(Number(seq)!==0||inputArmed||throttle!==1000||roll!==1500||pitch!==1500||yaw!==1500)return null;
-   return {kind:'idle',...neutral,seq:0,active:false,claimed:false,inputArmed:false};
+   return {kind:'idle',...neutral,seq:0,active:false,claimed:false,inputArmed:false,motorsDisabled:suffix[7]==='MOTORS=OFF'};
   }
   if(Number(seq)===0)return null;
   return {kind:'frame',transport:link[2],source:link[3],seq:Number(seq),

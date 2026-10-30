@@ -47,6 +47,7 @@ self.zebjusI2cBridge={
  wifiScan:()=>rpc('wifi_scan'),
  wifiTestSave:(ssid,password)=>rpc('wifi_test_save',{ssid:String(ssid),password:String(password)}),
  latestScan:()=>rpc('latest_scan'),
+ motor:(operation,values)=>rpc('motor_'+String(operation),JSON.parse(String(values))),
  emitImage:(base64,title='Python Plot')=>send('image',{base64:String(base64),title:String(title)})
 };
 const BOOTSTRAP="import sys, types, json, asyncio\nfrom js import zebjusI2cBridge as _zebjus_usb\n_zebjus = types.ModuleType('zebjus')\nasync def i2c_scan(timeout=12000):\n    \"\"\"Await next complete scan received over USB Serial.\n    Return {'addresses':['0x68','0x77'], 'total':2, 'timestamp':...}.\n    \"\"\"\n    response = await _zebjus_usb.i2cScan(int(timeout))\n    return json.loads(str(response))\nasync def latest_i2c_scan():\n    \"\"\"Return last scan or None without waiting.\"\"\"\n    response = await _zebjus_usb.latestScan()\n    return json.loads(str(response))\n_zebjus.i2c_scan=i2c_scan\n_zebjus.latest_i2c_scan=latest_i2c_scan\nsys.modules['zebjus']=_zebjus\n";
