@@ -13,7 +13,7 @@ struct ZjMotorInput {
 };
 
 struct ZjMotorSafety {
- enum Mode : uint8_t { DISABLED, READY, INPUT_TEST, SINGLE_TEST, ALL_TEST, CAL_HIGH, CAL_LOW, FAULT };
+ enum Mode : uint8_t { OUTPUT_DISABLED, READY, INPUT_TEST, SINGLE_TEST, ALL_TEST, CAL_HIGH, CAL_LOW, FAULT };
  enum Reason : uint8_t { NONE, USER_STOP, SESSION_EXPIRED, INPUT_LOST, INPUT_CHANGED,
   ARM_REQUIRED, THROTTLE_HIGH, SWITCH_REQUIRED, TEST_FINISHED, CAL_TIMEOUT, CAL_FINISHED,
   OUTPUT_ERROR, DEADLINE_MISSED, CONFIG_ERROR };
@@ -22,7 +22,7 @@ struct ZjMotorSafety {
  static constexpr uint16_t MIN_US=1000, MAX_US=2000, LOW_US=1050, LEFT_US=1100, RIGHT_US=1900;
  static constexpr uint8_t MAX_TEST_PERCENT=20;
 
- Mode mode=DISABLED;
+ Mode mode=OUTPUT_DISABLED;
  Reason reason=NONE;
  bool armed=false, requireSwitch=false, neutralSeen=false, holding=false;
  bool pinsConfirmed=false, benchEnabled=false;
@@ -37,16 +37,16 @@ struct ZjMotorSafety {
  void minimum(){for(uint8_t i=0;i<4;i++)pulses[i]=MIN_US;}
  void resetGesture(){neutralSeen=false;holding=false;holdAt=0;lastSequence=0;lastInputAt=0;}
  void disable(Reason why=USER_STOP){
-  minimum();mode=DISABLED;reason=why;armed=false;benchEnabled=false;sessionSource=ZjMotorInput::NONE;resetGesture();
+  minimum();mode=OUTPUT_DISABLED;reason=why;armed=false;benchEnabled=false;sessionSource=ZjMotorInput::NONE;resetGesture();
  }
  void fault(Reason why){disable(why);mode=FAULT;}
  bool prepare(uint32_t now,bool mappingConfirmed,bool propsRemoved){
-  if(mode!=DISABLED||!mappingConfirmed||!propsRemoved)return false;
+  if(mode!=OUTPUT_DISABLED||!mappingConfirmed||!propsRemoved)return false;
   pinsConfirmed=true;benchEnabled=true;armed=false;mode=READY;reason=NONE;sessionAt=modeAt=now;
   minimum();resetGesture();return true;
  }
  bool keep(uint32_t now){
-  if(!benchEnabled||mode==DISABLED||mode==FAULT)return false;
+  if(!benchEnabled||mode==OUTPUT_DISABLED||mode==FAULT)return false;
   if(elapsed(now,sessionAt,SESSION_MS)){disable(SESSION_EXPIRED);return false;}
   sessionAt=now;return true;
  }
@@ -86,7 +86,7 @@ struct ZjMotorSafety {
   armed=true;reason=NONE;return true;
  }
  void update(uint32_t now,const ZjMotorInput& i){
-  if(mode==DISABLED||mode==FAULT)return;
+  if(mode==OUTPUT_DISABLED||mode==FAULT)return;
   if(elapsed(now,sessionAt,SESSION_MS)){disable(SESSION_EXPIRED);return;}
   if(mode==CAL_HIGH){if(elapsed(now,modeAt,CAL_HIGH_MAX_MS))disable(CAL_TIMEOUT);return;}
   if(mode==CAL_LOW){if(elapsed(now,modeAt,CAL_LOW_MS))disable(CAL_FINISHED);return;}

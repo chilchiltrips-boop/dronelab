@@ -17,6 +17,7 @@ static int zjRequestSession=0;
 static bool zjAllow(){return true;}
 static String zjArg(const String&){return "";}
 static void zjReply(int,const String&){}
+#define DISABLED 0x00 // Arduino GPIO macro must not collide with the motor state enum.
 #include "../FlightCore_Firmware/FlightCoreMotor.h"
 static bool contains(const String& s,const char* text){return std::string(s.c_str()).find(text)!=std::string::npos;}
 static String token;

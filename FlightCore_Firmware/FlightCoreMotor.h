@@ -83,13 +83,14 @@ static void zjMotorLoop(){
 }
 static String zjMotorStatus(){
  zjMotorLoop();
+ const auto input=zjMotorReadInput();const bool rtc=zjRcControlPath=="ANDROID_WEBRTC";
  String out="{\"version\":1,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"supported\":"+(zjMotorDriverReady?String("true"):String("false"))+
   ",\"mode\":"+zjJson(zjMotorMode())+",\"reason\":"+zjJson(zjMotorReason())+","+zjMotorFlags()+
   ",\"layout\":"+zjJson(zjKitPrefs.getString("motorLayout","A2_QUAD_X"))+
   ",\"profile\":\"PWM_50HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":1200,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
-  ",\"selectedInput\":"+zjJson(zjRcControlPath)+",\"inputSource\":"+zjJson(zjRcSource)+
-  ",\"inputAgeMs\":"+(zjRcHasFrame?String(uint32_t(millis()-zjRcLast)):String("null"))+
-  ",\"throttle\":"+String(zjRcThrottle)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+",\"pulseUs\":[";
+  ",\"selectedInput\":"+zjJson(zjRcControlPath)+",\"inputSource\":"+zjJson(rtc?(input.valid?String("ANDROID_WEBRTC"):String("NONE")):zjRcSource)+
+  ",\"inputAgeMs\":"+(input.valid?String(uint32_t(millis()-input.receivedMs)):String("null"))+
+  ",\"throttle\":"+String(input.throttle)+",\"inputArmed\":"+(input.inputArmed?"true":"false")+",\"pulseUs\":[";
  for(int n=0;n<4;n++){if(n)out+=',';out+=String(zjMotorEnabled?zjMotor.pulses[n]:0);}
  out+="],\"layoutPins\":[\"D0\",\"D1\",\"D2\",\"D3\"],\"sessionRemainingMs\":"+
   String(zjMotor.benchEnabled?ZjMotorSafety::SESSION_MS-uint32_t(millis()-zjMotor.sessionAt):0);
