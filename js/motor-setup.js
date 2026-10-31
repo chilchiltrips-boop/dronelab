@@ -6,7 +6,7 @@ export function rtcBenchFrame(snapshot,kitId,peerId){
  return {peerId:p.sessionId,seq:s.seq,args:[s.seq,s.channels.throttle,`${s.channels.yaw}:${s.aux.ch5>1700?1:0}:${Math.ceil(snapshot.ageMs)}`]};
 }
 export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=setInterval,clearTimer=clearInterval,onState=()=>{},rtcSnapshot=()=>globalThis.ZebjusSimulatorInputs?.snapshot?.()}){
- let session=null,timer=null,rtcTimer=null,busy=false,epoch=0,starting=false,last=null;
+ let session=null,timer=null,rtcTimer=null,sliderTimer=null,busy=false,epoch=0,starting=false,last=null;
  const identity=k=>JSON.stringify([k?.kitId,k?.transport,k?.bootId||'',k?.generation,k?.connectionGeneration]);
  const check=k=>{if(!k?.connected||!/^ZFC-A2-/.test(k.kitId||'')||!['usb','ap','sta'].includes(k.transport))throw Error('Connect a verified A2 using USB, AP or STA. Android Relay is read-only.');};
  const publish=s=>{last=s;onState(s);return s;};
@@ -21,6 +21,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
  async function stop(owner){
   if(owner&&session?.owner!==owner&&starting!==owner)return;
   ++epoch;starting=false;clearTimer(timer);timer=null;clearTimer(rtcTimer);rtcTimer=null;
+  clearTimer(sliderTimer);sliderTimer=null;
   const s=session;session=null;
   try{return await send('STOP',[],s)}catch(e){publish({...last,mode:'UNCONFIRMED',reason:e.message});throw e;}
  }
@@ -43,7 +44,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
     if(busy||!session)return;
     if(now()-s.started>120000){void stop().catch(()=>{});return;}
     busy=true;
-    try{const state=await send('KEEP',[],s);if(session!==s)return;if(!['READY','SINGLE_TEST','ALL_TEST','INPUT_TEST','CAL_HIGH','CAL_LOW'].includes(state.mode)){clearTimer(timer);timer=null;clearTimer(rtcTimer);rtcTimer=null;session=null;}}
+    try{const state=await send('KEEP',[],s);if(session!==s)return;if(!['READY','SINGLE_TEST','ALL_TEST','INPUT_TEST','CAL_HIGH','CAL_LOW','SLIDER_TEST'].includes(state.mode)){clearTimer(timer);timer=null;clearTimer(rtcTimer);rtcTimer=null;clearTimer(sliderTimer);sliderTimer=null;session=null;}}
     catch(e){if(session===s){void stop().catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
     finally{busy=false;}
    },400);
@@ -68,7 +69,21 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   if(run!==epoch)throw Error('Motor operation cancelled.');
   return r;
  }
- return {begin,command,stop,status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;}};
+ async function startSlider(mask,readPulse,owner='wizard',duration=30000){
+  if(last?.version<2||!last?.sliderDurationMaxMs)throw Error('Flash A2 FlightCore 1.7.0+ for live slider tests.');
+  await command('SLIDER',[mask,1000,duration],owner);
+  const s=session;let pending=false,seq=0;
+  const tick=async()=>{
+   if(pending||session!==s)return;pending=true;
+   try{
+    const pulse=Number(readPulse());if(!Number.isInteger(pulse)||pulse<1000||pulse>2000)throw Error('Slider pulse must be 1000–2000 µs.');
+    await command('SLIDE',[mask,pulse,++seq],owner);
+   }catch(e){if(session===s){void stop(owner).catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
+   finally{pending=false;}
+  };
+  sliderTimer=setTimer(tick,150);await tick();return last;
+ }
+ return {begin,command,startSlider,stop,status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;}};
 }
 
 function selectedKit(binding){

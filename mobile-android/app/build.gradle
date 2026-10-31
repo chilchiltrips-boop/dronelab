@@ -15,8 +15,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 59
-    versionName '1.8.20-a2-motor-setup'
+    versionCode 60
+    versionName '1.8.21-setup-wizard'
   }
   testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {

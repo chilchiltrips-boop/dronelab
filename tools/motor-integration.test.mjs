@@ -78,3 +78,14 @@ test('WebRTC bridge rejects stale, changed-peer and different-kit samples',()=>{
  for(const next of [{...s,ageMs:201},{...s,fresh:false},{...s,sample:{...s.sample,kitId:'other'}}])assert.throws(()=>rtcBenchFrame(next,'kit'));
  assert.throws(()=>rtcBenchFrame(s,'kit','p2'));
 });
+test('live slider sends full-range commands, locks selection and cancels its pump on STOP',async()=>{
+ const timers=new Map(),calls=[];let desired=1000;
+ const k=kit(),state={kitId:k.kitId,bootId:k.bootId,supported:true,version:2,sliderDurationMaxMs:30000,mode:'READY'};
+ const client=createMotorClient({getKit:()=>k,setTimer:(fn,ms)=>(timers.set(ms,fn),ms),clearTimer:id=>timers.delete(id),request:async(_,a)=>{
+  calls.push(a);if(a.action==='SLIDER'){state.mode='SLIDER_TEST';state.sliderMask=Number(a.a);}if(a.action==='STOP')state.mode='DISABLED';return {...state,session:a.action==='BEGIN'?'token':undefined};
+ }});
+ await client.begin();await client.startSlider(15,()=>desired);
+ assert.equal(calls.at(-1).action,'SLIDE');assert.equal(calls.at(-1).b,'1000');
+ desired=2000;const pump=timers.get(150);await pump();assert.equal(calls.at(-1).b,'2000');assert.equal(calls.at(-1).a,'15');
+ await client.stop();const count=calls.length;await pump();assert.equal(calls.length,count);assert.equal(client.active,false);assert.equal(timers.size,0);
+});

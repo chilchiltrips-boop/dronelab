@@ -354,7 +354,15 @@ async function pythonMotorOperation(operation,a,w){
    await confirm('A2 motor setup: remove all propellers. Verify D0–D3 ESC wiring, the controller power circuit, and that your ESC supports 50 Hz PWM with 1000–2000 µs endpoints. USB requires Teacher Unlock. Continue?');
    motorWorkerAlive=Date.now();return await motorClient.begin('python',pythonBinding);
   }
-  if(operation==='layout')return await motorClient.command('LAYOUT',[a.layout],'python');
+  if(operation==='layout'){
+   const pins=a.pins==null?'-':a.pins.map(p=>String(p).replace(/^D/,'')).join('');
+   const rotations=a.rotations==null?'-':a.rotations.map(r=>r==='CW'?'0':r==='CCW'?'1':'?').join('');
+   return await motorClient.command('LAYOUT',[a.layout,pins,rotations],'python');
+  }
+  if(operation==='minimum'){
+   await confirm('Save '+a.pulse_us+' µs as the observed minimum starting pulse for M'+a.motor+'? Confirm you physically observed that motor spinning.');
+   return await motorClient.command('MINIMUM',[a.motor,a.pulse_us,'OBSERVED_SPIN'],'python');
+  }
   if(operation==='calibrate'){
    await confirm('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH?');
    await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED'],'python');
@@ -362,9 +370,10 @@ async function pythonMotorOperation(operation,a,w){
    await motorClient.command('CAL_LOW',[],'python');const s=await wait();
    await confirm('Output has ended. Confirm only if you heard your ESC success tones.');return {...s,escSuccess:'user confirmed'};
   }
-  if(operation==='single'){
-   await confirm('Run motor '+a.motor+' at '+a.pulse_us+' µs for '+a.duration_ms+' ms? Propellers must be removed.');
-   await motorClient.command('SINGLE',[a.motor,a.pulse_us,a.duration_ms],'python');return await wait();
+  if(operation==='single'||operation==='all'){
+   const label=operation==='all'?'ALL FOUR motors':'motor '+a.motor;
+   await confirm('Run '+label+' at '+a.pulse_us+' µs for '+a.duration_ms+' ms? Propellers must be removed.');
+   await motorClient.command(operation==='all'?'ALL':'SINGLE',[operation==='all'?1:a.motor,a.pulse_us,a.duration_ms],'python');return await wait();
   }
   if(operation==='input'){
    await confirm('Test ALL FOUR motors using the selected input for '+a.duration_ms+' ms? Lower throttle and disarm input first. Output is capped at 1200 µs; enable input ARM or use the PPM yaw gesture after the test begins.');

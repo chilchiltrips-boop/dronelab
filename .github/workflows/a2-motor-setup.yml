@@ -1,10 +1,11 @@
 name: A2 Motor Setup Browser
 on:
   push:
-    branches: [main, feat/a2-motor-setup-20261030]
+    branches: [feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
     paths:
       - 'js/motor-setup.js'
       - 'js/a2-setup-wizard.js'
+      - 'js/a2-setup-visuals.js'
       - 'a2-setup-wizard.css'
       - 'index.html'
       - 'lab.html'
