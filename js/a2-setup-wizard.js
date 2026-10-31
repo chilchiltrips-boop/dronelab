@@ -5,7 +5,7 @@ if(root){
  const steps=['Board','Wiring','Inputs','ESC calibration','Motor test','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',calFinished=false,calConfirmed=false;
- let draft={layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']};
+ let draft={layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']},visualStep=-1,visualMarkup='';
  const pendingMinimum={},observations={},history=[];
  root.innerHTML=`<header class="a2-title"><div><small>AERION · HARDWARE SETUP</small><h2>A2 Setup Wizard</h2></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
  <div class="a2-status" role="status">Waiting for a verified controller</div>
@@ -57,7 +57,12 @@ if(root){
   if(step===4&&scene.dataset.layout===visualConfig&&scene.querySelector('[data-motor]')){
    const active=['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(safe.mode);
    scene.querySelectorAll('[data-motor]').forEach(g=>{const n=Number(g.dataset.motor)-1,p=safe.pulseUs?.[n]||0,r=g.querySelector('.a2-rotor');g.classList.toggle('output-active',active&&p>1000);r?.classList.toggle('spinning',active&&p>1000);r?.style.setProperty('--spin',Math.max(.12,1.5-(p-1000)/750)+'s');const label=g.querySelector('.a2-svg-small');if(label)label.textContent=(safe.rotations?.[n]||(['CW','CCW','CW','CCW'][n]))+' · '+(p?p+' µs':'OFF');});
-  }else{scene.innerHTML=v.html;scene.dataset.layout=step===4?visualConfig:'';}
+  }else{
+   // Preserve static SVG nodes so connection/ESC animations survive status polls.
+   if(visualStep!==step||visualMarkup!==v.html){scene.innerHTML=v.html;visualMarkup=v.html;}
+   scene.dataset.layout=step===4?visualConfig:'';
+  }
+  visualStep=step;
   $('.a2-pulses').hidden=step!==4;
   $('.a2-pulses').textContent=safe.mode==='UNCONFIRMED'?'Output state unconfirmed':(safe.pulseUs||[]).map((p,i)=>`M${i+1} ${p?p+' µs':'OFF'}`).join(' · ');
  }
