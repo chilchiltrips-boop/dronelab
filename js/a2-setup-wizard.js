@@ -90,8 +90,10 @@ if(root){
   $('.a2-phase').textContent=m.mode==='CAL_HIGH'?`HIGH active · ${Math.ceil(m.remainingMs/1000)} s. Connect the motor battery and listen for the calibration prompt.`:m.mode==='CAL_LOW'?`LOW active · ${Math.ceil(m.remainingMs/1000)} s remaining.`:calFinished?'CAL_FINISHED · Output ended. Confirm the ESC success tones.':`${m.mode||'OFF'} · ${m.reason||'Calibration not started'}`;
   root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===(m.mode==='CAL_HIGH'?'high':m.mode==='CAL_LOW'?'low':calFinished?'tones':'power')));
   $('[data-action="low"]').disabled=m.mode!=='CAL_HIGH'||working;$('#a2Tones').disabled=!calFinished;$('[data-action="confirm-cal"]').disabled=!calFinished||!$('#a2Tones').checked;
+  $('[data-action="high"]').disabled=working||['CAL_HIGH','CAL_LOW'].includes(m.mode);
   const sliding=m.mode==='SLIDER_TEST'&&motorClient.owner==='wizard';$('#a2Motor').disabled=sliding;$('#a2PulseSlider').disabled=!sliding;
   $('[data-action="slider"]').disabled=working||m.version<2||!m.supported||sliding;
+  $('[data-action="single"]').disabled=working||motorClient.active;$('[data-action="input"]').disabled=working||motorClient.active;
   $('.a2-test-state').textContent=sliding?`LIVE · ${Math.ceil((m.remainingMs||0)/1000)} s left · Firmware-acknowledged pulses shown at right.`:m.mode==='UNCONFIRMED'?'Output state unconfirmed. Reconnect before testing.':`Outputs ${m.motorsDisabled===true||m.mode==='DISABLED'?'off':m.mode||'not reported'} · ${m.reason||'Start at 1000 µs'}`;
   $('.a2-minima').innerHTML=[1,2,3,4].map((n,i)=>`<div><b>M${n}</b><span>${m.observedMinimumUs?.[i]?m.observedMinimumUs[i]+' µs saved':'Not recorded'}</span>${pendingMinimum[n]?`<em>${pendingMinimum[n]} µs pending</em>`:''}</div>`).join('');
   $('.a2-report').innerHTML=`<dl>${[['Board',k.kitId||'Not connected'],['Saved frame',layouts[m.layout]?.name||'Not reported'],['Saved pins',(m.layoutPins||[]).map((p,i)=>'M'+(i+1)+' → '+p).join(' · ')||'—'],['ESC calibration',calConfirmed?'Success tones confirmed by operator':'Not confirmed'],['Minimum pulses',(m.observedMinimumUs||[]).map((p,i)=>'M'+(i+1)+': '+(p?p+' µs':'—')).join(' · ')||'Not recorded'],['Physical flight acceptance','Pending']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
@@ -123,7 +125,7 @@ if(root){
    await motorClient.stop('wizard');message('Minimum pulses saved in the board.');render();return;
   }
   if(name==='high'){
-   if(!$('#a2PowerOff').checked)throw Error('Disconnect motor-battery power and confirm the controller power arrangement.');await prepare();calFinished=calConfirmed=false;$('#a2Tones').checked=false;
+   if(!$('#a2PowerOff').checked)throw Error('Disconnect motor-battery power and confirm the controller power arrangement.');await prepare();calFinished=calConfirmed=false;$('#a2Tones').checked=false;$('#a2PowerOff').checked=false;
    render(await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED']));message('HIGH acknowledged. Connect the motor battery now and listen for the calibration prompt.');return;
   }
   if(name==='low'){await prepare();render(await motorClient.command('CAL_LOW'));message('LOW acknowledged. Wait for output to end and confirm success tones.');return;}
@@ -142,7 +144,7 @@ if(root){
   act(b.dataset.action).catch(async e=>{message(e.message);if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
  });
  root.addEventListener('input',e=>{
-  if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){draftDirty=true;draft={layout:$('#a2Layout').value,layoutPins:[...root.querySelectorAll('[data-pin]')].map(x=>x.value),rotations:[...root.querySelectorAll('[data-rotation]')].map(x=>x.value)};renderDraft();}
+  if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){draftDirty=true;draft={layout:$('#a2Layout').value,layoutPins:[...root.querySelectorAll('[data-pin]')].map(x=>x.value),rotations:[...root.querySelectorAll('[data-rotation]')].map(x=>x.value)};$('.a2-save-state').textContent='Unsaved wiring changes · Save to board to apply them.';renderDraft();}
   if(e.target.id==='a2Pulse'||e.target.id==='a2PulseSlider')setPulse(e.target.value);
   if(e.target.id==='a2Tones'){if(!e.target.checked){calConfirmed=false;delete observations.calibration;}render();}
  });

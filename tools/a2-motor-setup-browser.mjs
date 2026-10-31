@@ -49,6 +49,10 @@ try{
  await page.locator('[data-step="2"]').click();
  await page.evaluate(()=>{window.__motorFixture.state.channels[0]=1750;window.__motorFixture.state.channels[2]=1475;});
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1475 µs');
+ await page.waitForFunction(()=>{
+  const knobs=document.querySelectorAll('.a2-visual .a2-stick-knob');
+  return knobs.length===2&&Number(knobs[0].getAttribute('cy'))===149.5&&Number(knobs[1].getAttribute('cx'))===315;
+ });
  await page.screenshot({path:'test-output/a2-inputs.png',fullPage:true});
  await page.evaluate(()=>window.__motorFixture.state.inputValid=false);
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
@@ -75,6 +79,7 @@ try{
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
  await page.locator('[data-step="3"]').click();await page.locator('#a2PowerOff').check();
  await page.locator('[data-action=high]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('HIGH active'));
+ assert.equal(await page.locator('#a2PowerOff').isChecked(),false,'each calibration must require a fresh battery-disconnected confirmation');
  await page.screenshot({path:'test-output/a2-calibration.png',fullPage:true});
  await page.locator('[data-action=low]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('CAL_FINISHED'));
  await page.locator('#a2Tones').check();await page.locator('[data-action=confirm-cal]').click();
