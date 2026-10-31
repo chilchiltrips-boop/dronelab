@@ -1,14 +1,14 @@
 // Step-specific, code-native diagrams. Movement depicts acknowledged PWM only.
 export const layouts={
  A2_QUAD_X:{name:'Quad X',positions:['Front left','Front right','Back right','Back left'],points:[[105,112],[295,112],[295,302],[105,302]]},
- A2_QUAD_PLUS:{name:'Quad +',positions:['Front','Right','Back','Left'],points:[[200,87],[320,207],[200,327],[80,207]]}
+ A2_QUAD_PLUS:{name:'Quad +',positions:['Front','Right','Back','Left'],points:[[200,102],[305,207],[200,312],[95,207]]}
 };
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const svg=(name,body)=>`<svg viewBox="0 0 400 410" role="img" aria-label="${esc(name)}">${body}</svg>`;
 const text=(x,y,value,cls='')=>`<text x="${x}" y="${y}" text-anchor="middle" class="${cls}">${esc(value)}</text>`;
 export function motorDiagram(config={},pulses=[],testing=false){
  const l=layouts[config.layout]||layouts.A2_QUAD_X,pins=config.layoutPins||['D0','D1','D2','D3'],rot=config.rotations||['CW','CCW','CW','CCW'];
- return svg(l.name+' motor layout, top view',`<path d="M200 38V10m-10 13 10-13 10 13" class="a2-front"/>${text(200,57,'FRONT','a2-svg-small')}
+ return svg(l.name+' motor layout, top view',`<path d="M34 38V10m-10 13 10-13 10 13" class="a2-front"/>${text(34,58,'FRONT','a2-svg-small')}
  ${l.points.map(([x,y])=>`<path d="M200 207L${x} ${y}" class="a2-arm"/>`).join('')}<rect x="171" y="177" width="58" height="60" rx="12" class="a2-chip"/>${text(200,212,'A2')}
  ${l.points.map(([x,y],i)=>{const pulse=pulses[i]||0,spin=testing&&pulse>1000;return `<g data-motor="${i+1}" class="${spin?'output-active':''}"><circle cx="${x}" cy="${y}" r="49" class="a2-motor-circle"/><g transform="translate(${x} ${y})"><g class="a2-rotor ${spin?'spinning':''}" style="--spin:${Math.max(.12,1.5-(pulse-1000)/750)}s;animation-direction:${rot[i]==='CCW'?'reverse':'normal'}"><path d="M-31 0Q-11 -17 0 0Q11 17 31 0Q11 -17 0 0Q-11 17-31 0Z"/></g></g>${text(x,y-57,'M'+(i+1)+' · '+pins[i],'a2-svg-label')}${text(x,y+65,rot[i]+' · '+(pulse?pulse+' µs':'OFF'),'a2-svg-small')}</g>`;}).join('')}${text(200,398,l.name+' · top view','a2-svg-small')}`);
 }

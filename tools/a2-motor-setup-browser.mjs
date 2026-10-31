@@ -44,6 +44,7 @@ try{
  await page.locator('[data-action=layout]').click();
  await page.waitForFunction(()=>window.__motorFixture.state.layout==='A2_QUAD_PLUS'&&!window.ZebjusMotorSetup.active);
  assert.deepEqual(await page.evaluate(()=>window.__motorFixture.state.layoutPins),['D2','D1','D0','D3']);
+ await page.waitForFunction(()=>!document.querySelector('[data-action=layout]').disabled);
  await page.screenshot({path:'test-output/a2-wiring.png',fullPage:true});
  await page.locator('[data-step="2"]').click();
  await page.evaluate(()=>{window.__motorFixture.state.channels[0]=1750;window.__motorFixture.state.channels[2]=1475;});
@@ -79,12 +80,14 @@ try{
  await page.locator('#a2Tones').check();await page.locator('[data-action=confirm-cal]').click();
  await page.locator('[data-step="5"]').click();assert.match(await page.locator('.a2-report').textContent(),/1137 µs/);
  await page.screenshot({path:'test-output/a2-report.png',fullPage:true});
- await page.setViewportSize({width:390,height:844});
+ for(const width of [390,320]){
+ await page.setViewportSize({width,height:844});
  for(let step=0;step<6;step++){
   await page.locator('[data-step="'+step+'"]').click();
   assert.equal(await page.evaluate(()=>document.querySelector('#a2SetupRoot').scrollWidth<=document.querySelector('#tab-setup').clientWidth),true,'wizard step '+step+' must fit mobile width');
  }
- await page.screenshot({path:'test-output/a2-setup-mobile.png',fullPage:true});
+ await page.screenshot({path:'test-output/a2-setup-mobile-'+width+'.png',fullPage:true});
+ }
  // Execute the actual Python Worker, RPC bridge and main-thread confirmations.
  await page.setViewportSize({width:1366,height:900});
  await page.evaluate(()=>{

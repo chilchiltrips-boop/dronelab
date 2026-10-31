@@ -79,6 +79,7 @@ if(root){
   if(key!==identity){identity=key;state=s||null;draftDirty=false;calFinished=calConfirmed=false;history.length=0;for(const group of [pendingMinimum,observations])for(const key of Object.keys(group))delete group[key];if(state)loadDraft();}
   if(state&&!draftDirty){const next=config(state);if(JSON.stringify(next)!==JSON.stringify(draft))loadDraft();}
   const m=state||{},connected=k.connected===true;
+  $('[data-action="layout"]').disabled=working||new Set(draft.layoutPins).size!==4;
   $('.a2-status').textContent=connected?`${k.board||'Kit'} · ${k.transport?.toUpperCase()} · Firmware ${k.version||'—'} · ${m.mode||'READING STATUS'}`:'No verified Kit connected · Open Devices & Firmware';
   $('.a2-identity').innerHTML=`<dl>${[['Board',k.board||'Not detected'],['Kit name',k.kitName||'—'],['Device ID',k.kitId||'—'],['Firmware',k.version||'—'],['Connection',connected?(k.transport||'').toUpperCase():'OFFLINE'],['Motor setup',m.supported?(m.version>=2?'Supported · configurable wiring & sliders':'Supported · update to 1.7.0 for editable wiring/sliders'):'Waiting for verified A2'],['USB Teacher',k.transport==='usb'?(k.adminUnlocked?'UNLOCKED':'Unlock in Devices & Firmware'):'Not required for authorized AP/STA control']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
   const input=selectedInput();$('.a2-input').textContent=`${input.source} · ${input.valid?'LIVE · '+Math.round(input.age||0)+' ms':'NO FRESH SIGNAL'} · Input ${m.inputArmed?'armed':'disarmed'}`;
