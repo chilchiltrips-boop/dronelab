@@ -45,7 +45,9 @@ try{
    const sim=page.frameLocator('#pidFrame');
    await sim.locator('#tpFallback').waitFor({state:'visible'});
    await page.waitForFunction(()=>window.ZebjusTraining.snapshot().activeSource==='ppm'&&window.ZebjusTraining.snapshot().input?.fresh);
-   check((await sim.locator('#tpSourceState').textContent()).includes('PPM '+transport.toUpperCase()),'PPM must show its monitor transport');
+   // The receiver snapshot updates before the iframe's scheduled UI render.
+   // Require the displayed transport too, without racing that animation frame.
+   await sim.locator('#tpSourceState').filter({hasText:'PPM '+transport.toUpperCase()}).waitFor({state:'visible',timeout:5000});
    check(await page.evaluate(()=>window.ZebjusKits.getState().owner===false),'No WebApp hardware ownership is required');
    await sim.locator('#tpInputSource').selectOption('ppm');
    await page.waitForFunction(()=>window.ZebjusTraining.snapshot().previewAxes.roll===.3);
