@@ -76,7 +76,7 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  const current=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
  assert.ok(current>=32&&previous>0&&current>=previous);
- assert.match(gradle,/versionName '1\.8\.20-a2-motor-setup'/);
+ assert.match(gradle,/versionName '1\.8\.21-setup-wizard'/);
 });
 
 test('minimized STA tab does not tear down selected Kit on throttled network polls',()=>{
