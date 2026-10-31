@@ -9,7 +9,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
  let session=null,timer=null,rtcTimer=null,sliderTimer=null,busy=false,epoch=0,starting=false,last=null;
  const identity=k=>JSON.stringify([k?.kitId,k?.transport,k?.bootId||'',k?.generation,k?.connectionGeneration]);
  const check=k=>{if(!k?.connected||!/^ZFC-A2-/.test(k.kitId||'')||!['usb','ap','sta'].includes(k.transport))throw Error('Connect a verified A2 using USB, AP or STA. Android Relay is read-only.');};
- const publish=s=>{last=s;onState(s);return s;};
+ const publish=s=>{const {session:privateToken,...safe}=s;last=safe;onState(safe);return safe;};
  async function send(action,args=[],s=session){
   const k=getKit(s?.binding);check(k);
   if(s&&identity(k)!==s.identity)throw Error('Motor setup stopped: Kit, boot or transport changed.');
@@ -39,7 +39,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    const s={...initial,bootId:r.bootId,token:r.session,started:now()};
    if(!r.session||r.kitId!==k.kitId||r.bootId!==status.bootId)throw Error('Motor setup was not acknowledged.');
    if(run!==epoch||identity(getKit(binding))!==initial.identity){try{await send('STOP',[],s)}catch{}throw Error('Motor start cancelled.');}
-   session=s;publish(r);
+   session=s;const publicState=publish(r);
    timer=setTimer(async()=>{
     if(busy||!session)return;
     if(now()-s.started>120000){void stop().catch(()=>{});return;}
@@ -48,7 +48,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
     catch(e){if(session===s){void stop().catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
     finally{busy=false;}
    },400);
-   return r;
+   return publicState;
   }finally{if(run===epoch)starting=false;}
  }
  async function command(action,args=[],owner='wizard'){

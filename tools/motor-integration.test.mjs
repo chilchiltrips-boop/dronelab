@@ -62,7 +62,7 @@ function harness(){let k=kit(),calls=[],tick,resolveBegin;const state={kitId:k.k
  const client=createMotorClient({getKit:()=>k,setTimer:fn=>(tick=fn,1),clearTimer:()=>{},request:async(_,a)=>{calls.push(a);if(a.action==='BEGIN'&&resolveBegin)return await new Promise(r=>resolveBegin(r));return {...state,session:a.action==='BEGIN'?'token':undefined};}});
  return {client,calls,change:v=>k={...k,...v},state,tick:()=>tick(),delayBegin:fn=>resolveBegin=fn};}
 test('client binds Kit/boot/transport and never redirects a motor operation',async()=>{
- const h=harness();await h.client.begin();h.change({bootId:'b2'});await assert.rejects(h.client.command('SINGLE',[1,1100,800]),/changed/);assert.equal(h.calls.filter(x=>x.action==='SINGLE').length,0);
+ const h=harness();const result=await h.client.begin();assert.equal(result.session,undefined);assert.equal(h.client.state.session,undefined);h.change({bootId:'b2'});await assert.rejects(h.client.command('SINGLE',[1,1100,800]),/changed/);assert.equal(h.calls.filter(x=>x.action==='SINGLE').length,0);
  await h.client.stop().catch(()=>{});assert.equal(h.client.active,false);
 });
 test('a STOP racing BEGIN invalidates the returned token and issues STOP',async()=>{
