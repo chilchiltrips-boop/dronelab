@@ -13,14 +13,15 @@ struct ZjMotorInput {
 };
 
 struct ZjMotorSafety {
- enum Mode : uint8_t { OUTPUT_DISABLED, READY, INPUT_TEST, SINGLE_TEST, ALL_TEST, CAL_HIGH, CAL_LOW, FAULT };
+ enum Mode : uint8_t { OUTPUT_DISABLED, READY, INPUT_TEST, SINGLE_TEST, ALL_TEST, CAL_HIGH, CAL_LOW, FAULT, SLIDER_TEST };
  enum Reason : uint8_t { NONE, USER_STOP, SESSION_EXPIRED, INPUT_LOST, INPUT_CHANGED,
   ARM_REQUIRED, THROTTLE_HIGH, SWITCH_REQUIRED, TEST_FINISHED, CAL_TIMEOUT, CAL_FINISHED,
-  OUTPUT_ERROR, DEADLINE_MISSED, CONFIG_ERROR };
+  OUTPUT_ERROR, DEADLINE_MISSED, CONFIG_ERROR, CONTROL_LOST };
  static constexpr uint32_t SESSION_MS=1500, INPUT_PPM_MS=150, INPUT_NETWORK_MS=300;
  static constexpr uint32_t GESTURE_MS=2000, TEST_MAX_MS=2000, CAL_HIGH_MAX_MS=15000, CAL_LOW_MS=3000;
  static constexpr uint16_t MIN_US=1000, MAX_US=2000, LOW_US=1050, LEFT_US=1100, RIGHT_US=1900;
  static constexpr uint8_t MAX_TEST_PERCENT=20;
+ static constexpr uint32_t SLIDER_MAX_MS=30000,SLIDER_FRESH_MS=750;
 
  Mode mode=OUTPUT_DISABLED;
  Reason reason=NONE;
@@ -30,6 +31,8 @@ struct ZjMotorSafety {
  uint16_t pulses[4]={MIN_US,MIN_US,MIN_US,MIN_US};
  uint32_t sessionAt=0, modeAt=0, holdAt=0, lastSequence=0, lastInputAt=0;
  ZjMotorInput::Source sessionSource=ZjMotorInput::NONE;
+ uint8_t sliderMask=0;
+ uint32_t sliderAt=0,sliderSequence=0,sliderDuration=0;
 
  static bool elapsed(uint32_t now,uint32_t start,uint32_t ms){return uint32_t(now-start)>=ms;}
  static bool pulseValid(uint16_t p){return p>=MIN_US&&p<=MAX_US;}
@@ -57,15 +60,27 @@ struct ZjMotorSafety {
  }
  bool startSingle(uint32_t now,uint8_t motor,uint8_t requestedPercent,uint32_t durationMs){
   if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||motor<1||motor>4||
-     requestedPercent>MAX_TEST_PERCENT||durationMs==0||durationMs>TEST_MAX_MS)return false;
+     requestedPercent>100||durationMs==0||durationMs>TEST_MAX_MS)return false;
   testMotor=motor;percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
   mode=SINGLE_TEST;armed=false;reason=NONE;minimum();pulses[motor-1]=percentPulse(percent);return true;
  }
  bool startAll(uint32_t now,uint8_t requestedPercent,uint32_t durationMs){
-  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||requestedPercent>MAX_TEST_PERCENT||
+  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||requestedPercent>100||
      durationMs==0||durationMs>TEST_MAX_MS)return false;
   percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
   mode=ALL_TEST;armed=false;reason=NONE;for(uint8_t i=0;i<4;i++)pulses[i]=percentPulse(percent);return true;
+ }
+ bool startSlider(uint32_t now,uint8_t mask,uint32_t duration){
+  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||!mask||mask>15||!duration||duration>SLIDER_MAX_MS)return false;
+  mode=SLIDER_TEST;modeAt=sliderAt=now;sliderMask=mask;sliderSequence=0;sliderDuration=duration;
+  armed=false;reason=NONE;minimum();return true;
+ }
+ bool slide(uint32_t now,uint16_t pulse,uint32_t sequence){
+  if(mode!=SLIDER_TEST||!pulseValid(pulse)||sequence<=sliderSequence||elapsed(now,sessionAt,SESSION_MS)||
+     elapsed(now,modeAt,sliderDuration)||elapsed(now,sliderAt,SLIDER_FRESH_MS))return false;
+  sliderSequence=sequence;sliderAt=now;
+  for(uint8_t i=0;i<4;i++)pulses[i]=(sliderMask&(1U<<i))?pulse:MIN_US;
+  return true;
  }
  bool startCalibration(uint32_t now,bool powerDisconnectedConfirmed){
   if(mode!=READY||!powerDisconnectedConfirmed||elapsed(now,sessionAt,SESSION_MS))return false;
@@ -88,6 +103,11 @@ struct ZjMotorSafety {
  void update(uint32_t now,const ZjMotorInput& i){
   if(mode==OUTPUT_DISABLED||mode==FAULT)return;
   if(elapsed(now,sessionAt,SESSION_MS)){disable(SESSION_EXPIRED);return;}
+  if(mode==SLIDER_TEST){
+   if(elapsed(now,modeAt,sliderDuration))disable(TEST_FINISHED);
+   else if(elapsed(now,sliderAt,SLIDER_FRESH_MS))disable(CONTROL_LOST);
+   return;
+  }
   if(mode==CAL_HIGH){if(elapsed(now,modeAt,CAL_HIGH_MAX_MS))disable(CAL_TIMEOUT);return;}
   if(mode==CAL_LOW){if(elapsed(now,modeAt,CAL_LOW_MS))disable(CAL_FINISHED);return;}
   if(mode==SINGLE_TEST||mode==ALL_TEST){if(elapsed(now,modeAt,lastInputAt))disable(TEST_FINISHED);return;}

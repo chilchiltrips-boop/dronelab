@@ -1,4 +1,4 @@
-# A2 motor setup — FlightCore 1.6.0
+# A2 motor setup — FlightCore 1.7.0
 
 A2 D0–D3 outputs are integrated with the production firmware, Setup Wizard and
 Python Lab. This is a bounded, propeller-free bench feature, with no flight
@@ -6,7 +6,7 @@ mixer or attitude stabilization. A1 reports motor setup unsupported.
 
 ## Operation and protocol
 
-The fixed A2_QUAD_X preset uses 50 Hz PWM with 1000–2000 us endpoints. The user
+The A2_QUAD_X and A2_QUAD_PLUS presets use 50 Hz PWM with 1000–2000 us endpoints. Logical M1–M4 can be assigned to D0–D3, with unique pins and expected CW/CCW direction metadata. A single canonical NVS record stores the layout, pin order, direction expectations and operator-observed minimum starting pulses. Changing wiring resets those observations. PWM does not reverse an ESC. The user
 must verify that the ESC supports this profile. Motors have dedicated LEDC
 channels 0–3 on timer 0; the onboard LED uses channel 5. Startup emits no pulses.
 The ESP timer supervisor stops channels if the main output service misses a
@@ -17,7 +17,7 @@ BEGIN requires props/pin/profile confirmations, low disarmed input, and either
 USB Teacher Unlock or an authorized network control session. STA observer
 and automatic Android Relay access cannot operate motors. The random session
 is bound to its caller and boot; it is never broadcast. KEEP expires after
-1500 ms. SINGLE/ALL are limited to 2 s and 1200 us. CAL_HIGH has a 15 s deadline;
+1500 ms. SINGLE/ALL accept 1000–2000 us in 10 us steps and are limited to 2 s. SLIDER starts at 1000 us, locks a selected motor mask, and accepts 1000–2000 us updates in 1 us command increments for at most 30 s. Replayed sequence numbers are rejected; a 750 ms slider-update gap ends the session independently of KEEP. The 14-bit PWM duty resolution quantizes actual pulse timing; UI values are requested/acknowledged commands. CAL_HIGH has a 15 s deadline;
 CAL_LOW ends after 3 s. INPUT is limited to 30 s, ends on producer/path/radio
 change, and uses firmware input freshness (PPM 150 ms; network 300 ms).
 
@@ -37,7 +37,7 @@ before using physical bench outputs.
 
 ## WebApp and Python
 
-Setup Wizard: Board → Wiring → Input → ESC calibration → Motor test → Report.
+Setup Wizard: Board → Wiring → Inputs → ESC calibration → Motor test → Report. Each step has its own diagram: controller connection, editable frame/wiring preview, live sticks/channel history, ESC pulse sequence, acknowledged motor animation, and saved minimum summary. Inputs refresh at 4 Hz and stale/unreported channels remain blank. WebRTC input monitoring uses paired fresh phone frames; it does not operate motors. Minimum pulses are recorded from an acknowledged live command after the operator confirms spin, then output is stopped before saving. There is no RPM sensor or automatic minimum-speed measurement.
 The report distinguishes user observations from commanded pulse outputs.
 Python examples are in the existing examples menu. Use:
 
@@ -111,3 +111,14 @@ frequency and pulse widths, low/no-signal stop behavior, PPM and network loss,
 Python/browser termination, watchdog trip, calibration tones, reboot and power
 loss. Record each observation against the board revision and running firmware.
 CI success does not establish hardware or flight acceptance.
+
+## Version 2 setup protocol
+
+STATUS has version 2, layoutPins, rotations, observedMinimumUs, channels, inputValid, maxTestPulseUs=2000, maxInputPulseUs=1200 and sliderDurationMaxMs=30000.
+
+- LAYOUT: A2_QUAD_X / A2_QUAD_PLUS, four unique pin digits (for example 0123), four direction digits (0=CW, 1=CCW). Only READY permits saving.
+- MINIMUM: motor 1–4, observed pulse 1000–2000, literal OBSERVED_SPIN. READY only; NVS write failure preserves the previous configuration.
+- SLIDER: mask 1–15, literal 1000, duration 1–30000 ms.
+- SLIDE: the locked mask, pulse 1000–2000, strictly increasing positive sequence. It cannot extend the original deadline.
+
+All commands retain device/boot/owner binding, propeller/wiring/profile confirmations, selected-input low/disarmed start, STOP and independent output supervision. Slider position is never restored automatically after reconnect or a new test.

@@ -62,7 +62,7 @@ function harness(){let k=kit(),calls=[],tick,resolveBegin;const state={kitId:k.k
  const client=createMotorClient({getKit:()=>k,setTimer:fn=>(tick=fn,1),clearTimer:()=>{},request:async(_,a)=>{calls.push(a);if(a.action==='BEGIN'&&resolveBegin)return await new Promise(r=>resolveBegin(r));return {...state,session:a.action==='BEGIN'?'token':undefined};}});
  return {client,calls,change:v=>k={...k,...v},state,tick:()=>tick(),delayBegin:fn=>resolveBegin=fn};}
 test('client binds Kit/boot/transport and never redirects a motor operation',async()=>{
- const h=harness();await h.client.begin();h.change({bootId:'b2'});await assert.rejects(h.client.command('SINGLE',[1,1100,800]),/changed/);assert.equal(h.calls.filter(x=>x.action==='SINGLE').length,0);
+ const h=harness();const result=await h.client.begin();assert.equal(result.session,undefined);assert.equal(h.client.state.session,undefined);h.change({bootId:'b2'});await assert.rejects(h.client.command('SINGLE',[1,1100,800]),/changed/);assert.equal(h.calls.filter(x=>x.action==='SINGLE').length,0);
  await h.client.stop().catch(()=>{});assert.equal(h.client.active,false);
 });
 test('a STOP racing BEGIN invalidates the returned token and issues STOP',async()=>{
@@ -77,4 +77,15 @@ test('WebRTC bridge rejects stale, changed-peer and different-kit samples',()=>{
  assert.deepEqual(rtcBenchFrame(s,'kit').args,[5,1000,'1500:0:10']);
  for(const next of [{...s,ageMs:201},{...s,fresh:false},{...s,sample:{...s.sample,kitId:'other'}}])assert.throws(()=>rtcBenchFrame(next,'kit'));
  assert.throws(()=>rtcBenchFrame(s,'kit','p2'));
+});
+test('live slider sends full-range commands, locks selection and cancels its pump on STOP',async()=>{
+ const timers=new Map(),calls=[];let desired=1000;
+ const k=kit(),state={kitId:k.kitId,bootId:k.bootId,supported:true,version:2,sliderDurationMaxMs:30000,mode:'READY'};
+ const client=createMotorClient({getKit:()=>k,setTimer:(fn,ms)=>(timers.set(ms,fn),ms),clearTimer:id=>timers.delete(id),request:async(_,a)=>{
+  calls.push(a);if(a.action==='SLIDER'){state.mode='SLIDER_TEST';state.sliderMask=Number(a.a);}if(a.action==='STOP')state.mode='DISABLED';return {...state,session:a.action==='BEGIN'?'token':undefined};
+ }});
+ await client.begin();await client.startSlider(15,()=>desired);
+ assert.equal(calls.at(-1).action,'SLIDE');assert.equal(calls.at(-1).b,'1000');
+ desired=2000;const pump=timers.get(150);await pump();assert.equal(calls.at(-1).b,'2000');assert.equal(calls.at(-1).a,'15');
+ await client.stop();const count=calls.length;await pump();assert.equal(calls.length,count);assert.equal(client.active,false);assert.equal(timers.size,0);
 });

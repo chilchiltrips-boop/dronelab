@@ -32,7 +32,7 @@ int main(){
  assert(contains(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000","USB",false),"unlock_usb"));
  begin();assert(!contains(cmd("STATUS"),token.c_str()));
  assert(contains(cmd("SINGLE","1","1100","800","intruder"),"not_owner"));
- assert(contains(cmd("SINGLE","1","1300","800"),"invalid_motor"));
+ assert(contains(cmd("SINGLE","1","2001","800"),"invalid_motor"));
  assert(contains(cmd("LAYOUT","A2_QUAD_X"),"A2_QUAD_X"));
  assert(!contains(cmd("SINGLE","2","1100","800"),"error"));
  assert(zjMotorEnabled&&zjMotor.pulses[1]==1100&&zjMotor.pulses[0]==1000);
@@ -56,5 +56,25 @@ int main(){
  assert(contains(cmd("RTC","3","1000","1500:1:0"),"repeated"));
  clockMs+=301;zjMotorLoop();assert(!zjMotorEnabled);
  begin();cmd("SINGLE","1","1100","800");zjMotorEmergencyStop();assert(!zjMotorEnabled&&zjMotorToken.isEmpty());
+ begin();assert(!contains(cmd("LAYOUT","A2_QUAD_PLUS","2031","0101"),"error"));
+ assert(zjMotorConfig.plus&&zjMotorConfig.pins[1]==0);
+ assert(contains(cmd("LAYOUT","A2_QUAD_X","0012","0101"),"duplicate_pin"));assert(zjMotorConfig.plus);
+ assert(!contains(cmd("MINIMUM","2","1301","OBSERVED_SPIN"),"error"));assert(zjMotorConfig.minimumUs[1]==1301);
+ assert(contains(cmd("MINIMUM","2","2001","OBSERVED_SPIN"),"confirm_observed"));
+ zjKitPrefs.failNextWrite=true;assert(contains(cmd("MINIMUM","2","1350","OBSERVED_SPIN"),"minimum_save_failed"));assert(zjMotorConfig.minimumUs[1]==1301);
+ ZjMotorConfig restored;assert(restored.decode(zjKitPrefs.getString("motorConfig2","").c_str()));assert(restored.plus&&restored.minimumUs[1]==1301);
+ assert(!restored.decode("X:0012:0101:0:0:0:0"));assert(!restored.decode("X:0123:0101:0:0:0:4294968296"));assert(restored.plus);
+ assert(!contains(cmd("SLIDER","2","1000","30000"),"error"));
+ assert(contains(cmd("MINIMUM","2","1300","OBSERVED_SPIN"),"stop_outputs"));
+ assert(!contains(cmd("SLIDE","2","2000","1"),"error"));assert(zjMotor.pulses[1]==2000&&zjMotor.pulses[0]==1000);
+ assert(zjMotorConfig.physicalPulse(0,zjMotor.pulses)==2000);
+ assert(contains(cmd("SLIDE","2","1100","1"),"invalid_motor_transition"));
+ assert(contains(cmd("SLIDE","15","1100","2"),"invalid_slider"));
+ clockMs+=751;cmd("KEEP");assert(!zjMotorEnabled&&zjMotor.reason==ZjMotorSafety::CONTROL_LOST);
+ assert(contains(cmd("SLIDE","2","1800","3"),"expired"));
+ begin();cmd("SLIDER","15","1000","200");clockMs+=150;cmd("SLIDE","15","1750","1");for(auto p:zjMotor.pulses)assert(p==1750);
+ clockMs+=50;zjMotorLoop();assert(!zjMotorEnabled&&zjMotor.reason==ZjMotorSafety::TEST_FINISHED);
+ begin();cmd("SINGLE","1","2000","800");assert(zjMotor.pulses[0]==2000);cmd("STOP");assert(!zjMotorEnabled);
+ begin();cmd("LAYOUT","A2_QUAD_X","0123","0101");for(auto p:zjMotorConfig.minimumUs)assert(p==0);cmd("STOP");
  std::cout<<"PASS production motor handler: authentication, ownership, NVS, deadlines, input loss, RTC replay and STOP\n";
 }

@@ -93,3 +93,11 @@ the firmware-selected input for at most 30 seconds. These methods await the
 terminal firmware result. Calibration requires interactive battery/tone steps.
 See [A2 motor setup](docs/A2_MOTOR_BENCH_READINESS.md) for transport, input and
 physical verification details. This is bench output, not flight stabilization.
+
+### A2 configurable setup (FlightCore 1.7.0+)
+
+`set_layout("A2_QUAD_PLUS", pins=["D0","D1","D2","D3"], rotations=["CW","CCW","CW","CCW"])` stores the frame and unique D0–D3 assignments. Use `A2_QUAD_X` for an X frame. Direction is an expectation to verify physically, not an ESC reversal command.
+
+`test_motor(1, 1100, 800)` and `test_all(1100, 800)` run finite tests, with 1000–2000 µs commands in 10 µs increments and a maximum 2000 ms duration. Each finite test ends its session; open a new `motor_setup()` session for the next operation.
+
+After observing the motor starting pulse with the Wizard's live slider, use `save_minimum(motor=1, pulse_us=1137, observed=True)` in a fresh setup session to store that operator observation. The UI asks for confirmation. `status()` returns the saved `observedMinimumUs` values. These are starting-pulse observations, not measured RPM. The 30-second live slider stays in the Wizard; Python finite tests retain their own deadlines and Stop supervision.
