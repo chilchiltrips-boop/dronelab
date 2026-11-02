@@ -8,19 +8,25 @@ const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
  'rc_ack_error','udp_start','udp_tx','udp_ack','udp_nack','udp_warning','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
- 'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect','input_freshness','input_sample','ppm_lost','ppm_recovered','input_path_change','handover_request','handover_ack','handover_error','handover_state','motor_ack','motor_error']);
+ 'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect','input_freshness','input_sample','ppm_lost','ppm_recovered','input_path_change','handover_preflight','handover_request','handover_ack','handover_error','handover_state','motor_ack','motor_error']);
 const fields=['ackRequired','requestedInputArmed','sentSeq','route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
    'feedbackVersion','ackKind','nackReason','feedbackHealth','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
- 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','targetInput','lastStaInput','handoverState','handoverError'];
+ 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','targetInput','lastStaInput','handoverState','handoverError','handoverBlocker','handoverLastReject','ppmThrottleUs','handMotorDisabled','diagnosticArmReleased'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status','/api/motor','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['PROFILE_SAVE_FAILED','INPUT_UNSAFE','HANDOVER_BUSY','STA_CONFIG_REQUIRED','INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
  'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+const handoverBlockers=new Set(['NONE','KIT_LINK_UNVERIFIED','FIRMWARE_UNSUPPORTED','HANDOVER_PENDING',
+ 'MOTOR_OUTPUT_ACTIVE','MAINTENANCE_ACTIVE','OTHER_CONTROLLER_ACTIVE','RC_THROTTLE_HIGH',
+ 'PPM_THROTTLE_HIGH','PPM_ARM_UNSAFE','INPUT_ARMED','RC_THROTTLE_UNKNOWN','FIRMWARE_REJECTED']);
+const handoverRejects=new Set(['NONE','invalid_mode','handover_busy','stop_motor_setup_first',
+ 'maintenance_active','release_current_controller_first','lower_throttle_and_disarm',
+ 'save_sta_credentials_first','invalid_sta_input','input_profile_changed','input_profile_save_failed']);
 const motorActions=new Set(['STATUS','STOP','BEGIN','KEEP','RTC','LAYOUT','MINIMUM','SLIDER','SLIDE','SINGLE','ALL','INPUT','CAL_HIGH','CAL_LOW']);
 const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TEST','CAL_HIGH','CAL_LOW','FAULT','SLIDER_TEST']);
 const motorReasons=new Set(['NONE','USER_STOP','SESSION_EXPIRED','INPUT_LOST','INPUT_CHANGED','ARM_REQUIRED','THROTTLE_HIGH','SWITCH_REQUIRED','TEST_FINISHED','CAL_TIMEOUT','CAL_FINISHED','OUTPUT_ERROR','DEADLINE_MISSED','CONFIG_ERROR','CONTROL_LOST',...reasons]);
@@ -136,6 +142,10 @@ function clean(data){
   const v=data[key];
   if(v===undefined||v===null)continue;
   if(key==='ppmCaptureBackend'){if(['RMT_RX','GPIO_ISR'].includes(v))result[key]=v;}
+  else if(key==='handoverBlocker'){if(handoverBlockers.has(v))result[key]=v;}
+  else if(key==='handoverLastReject'){if(handoverRejects.has(v))result[key]=v;}
+  else if(key==='ppmThrottleUs'){if(Number.isSafeInteger(v)&&v>=0&&v<=2150)result[key]=v;}
+  else if(['handMotorDisabled','diagnosticArmReleased'].includes(key)){if(typeof v==='boolean')result[key]=v;}
   else if(key==='motorPolicy'){if(['TIMED_MANUAL','LIVE_LEASE'].includes(v))result[key]=v;}
   else if(ppmCaptureCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
   else if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
@@ -179,7 +189,7 @@ try{const old=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(old))
 let lastWrite=0,lastPaint=0,ackSamples=0,lastRecordedArm,flushTimer=null;
 const panel=()=>document.getElementById('kitAckDiagnostics');
 function summary(){
- const counts={inputs:0,ppmSamples:0,lastSource:'NONE',lastSelection:'AUTO',lastInputSeq:0,lastInputAgeMs:0,ppmLosses:0,ack:0,nack:0,lastRxSeq:0,lastAppliedSeq:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
+ const counts={handoverBlocker:'NONE',inputs:0,ppmSamples:0,lastSource:'NONE',lastSelection:'AUTO',lastInputSeq:0,lastInputAgeMs:0,ppmLosses:0,ack:0,nack:0,lastRxSeq:0,lastAppliedSeq:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
  for(const e of events){
   if(e.event==='input_sample'){counts.inputs++;if(e.data.source==='PPM')counts.ppmSamples++;}
   if(e.data.source){counts.lastSource=e.data.source;if(Number.isFinite(e.data.seq))counts.lastInputSeq=e.data.seq;if(Number.isFinite(e.data.ageMs))counts.lastInputAgeMs=e.data.ageMs;}
