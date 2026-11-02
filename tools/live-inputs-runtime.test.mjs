@@ -28,7 +28,9 @@ function usbBench(){
  context.window=context;context.globalThis=context;vm.createContext(context);
  vm.runInContext(read('js/serial-rc-decoder.js'),context);
  vm.runInContext(read('js/kit-data-interface.js'),context);
+ vm.runInContext(read('js/input-monitor.js').replace(/^export /gm,''),context);
  vm.runInContext(read('js/live-inputs.js')
+  .replace(/^(?:import|export) \{describePpmMonitorHealth\} from '\.\/input-monitor.js';\n/gm,'')
   .replace(/import \{sharedInputStore\} from '\.\/simulator-input.js';/,'const sharedInputStore=()=>globalThis.store;')
   .replace(/export function /g,'function '),context);
  const tick=()=>ticks.forEach(fn=>fn());

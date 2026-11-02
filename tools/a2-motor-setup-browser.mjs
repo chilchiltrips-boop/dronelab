@@ -12,13 +12,19 @@ try{
  await page.locator('[data-action=detect]').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('verified A2'));
  await page.evaluate(()=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.2',controlAuthorized:true};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.4',controlAuthorized:true};
   const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
   window.__motorCalls=[];
   const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0]};},ms);};
   window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
    guard?.();
-   if(route!=='/api/motor')throw Error('Unexpected fixture request');window.__motorCalls.push(a.action);f.calls.push({...a});let state=f.state;
+   if(route!=='/api/motor')throw Error('Unexpected fixture request');window.__motorCalls.push(a.action);f.calls.push({...a});
+   if(a.action==='STATUS'){
+    if(f.failNextStatus){f.failNextStatus=false;f.statusErrorSeen=true;throw Error('Simulated status read timeout');}
+    if(f.holdStatus)await new Promise(resolve=>{f.releaseStatus=resolve;});
+    if(f.statusDelay)await new Promise(resolve=>setTimeout(resolve,f.statusDelay));
+   }
+   let state=f.state;
    if(a.action==='BEGIN'){++f.run;state={...state,session:'fixture',mode:'READY',pulseUs:[1000,1000,1000,1000]};}
    if(a.action==='STOP'){++f.run;state={...state,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0]};}
    if(a.action==='LAYOUT')state={...state,layout:a.a,layoutPins:a.b==='-'?state.layoutPins:[...a.b].map(p=>'D'+p),rotations:a.c==='-'?state.rotations:[...a.c].map(p=>p==='0'?'CW':'CCW')};
@@ -66,6 +72,22 @@ try{
  await page.evaluate(()=>{const s=window.__motorFixture.state;s.inputValid=false;s.inputSource='NONE';s.ppm={present:true,ageMs:0,captureHz:50,captureBackend:'RMT_RX',captureReady:true,channels:[1500,1500,1800,1500,2000,1500,1500,1500]};});
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs'&&document.querySelector('.a2-input').textContent.includes('receiver monitor'));
  assert.match(await page.locator('.a2-input-health').textContent(),/RMT_RX · 50 Hz/);
+ await page.evaluate(()=>{window.__inputMarker=document.querySelector('[data-input-throttle]');window.__motorFixture.statusDelay=220;});
+ await page.waitForFunction(()=>window.ZebjusMotorSetup.state.roundTripMs>=200&&document.querySelector('.a2-input').textContent.includes('MONITORING'));
+ await page.waitForTimeout(450);
+ assert.equal(await page.locator('[data-channel="2"]').getAttribute('data-fresh'),'true','read-only observation must not flicker at the 150 ms control cutoff');
+ assert.equal(await page.evaluate(()=>window.__inputMarker===document.querySelector('[data-input-throttle]')),true,'input SVG nodes must survive status and animation ticks');
+ await page.evaluate(()=>{window.__motorFixture.failNextStatus=true;window.__motorFixture.holdStatus=true;});
+ await page.waitForFunction(()=>window.__motorFixture.statusErrorSeen);
+ await page.waitForTimeout(350);
+ assert.equal(await page.locator('[data-channel="2"] output').textContent(),'1800 µs','one failed refresh must not erase a valid display observation');
+ assert.match(await page.locator('.a2-input-health').textContent(),/Status refresh delayed/);
+ await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—',null,{timeout:6000});
+ assert.match(await page.locator('.a2-input-health').textContent(),/UNVERIFIED/,'expired observation is not evidence of physical receiver loss');
+ await page.evaluate(()=>{const f=window.__motorFixture;f.holdStatus=false;f.statusDelay=0;f.releaseStatus?.();});
+ await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs');
+ assert.equal(await page.evaluate(()=>window.__inputMarker===document.querySelector('[data-input-throttle]')),true);
+ await page.screenshot({path:'test-output/a2-input-monitor-recovery.png',fullPage:true});
  await page.evaluate(()=>{const s=window.__motorFixture.state;s.ppm.present=false;s.ppm.channels=null;});
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
  await page.evaluate(()=>{const s=window.__motorFixture.state;delete s.ppm;s.inputValid=true;s.inputSource='PPM';s.channels[2]=1000;});

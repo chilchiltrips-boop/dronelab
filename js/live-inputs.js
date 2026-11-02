@@ -1,3 +1,5 @@
+import {describePpmMonitorHealth} from './input-monitor.js';
+export {describePpmMonitorHealth} from './input-monitor.js';
 /* Live Inputs — read-only hardware-received RC telemetry.
  * Never claims controller ownership, arms motors, or writes joystick values.
  * AP/STA reads authenticated /api/rc/snapshot; USB follows the verified
@@ -68,25 +70,6 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   led:typeof sample.ledOn==='boolean'?(sample.ledOn?'ON':'OFF'):m.led,
   motors:!sample.historicalOnly&&receiveAge<=SNAPSHOT_TTL_MS&&typeof rc.motorsDisabled==='boolean'?motorLabel(rc):m.motors
  };
-}
-
-// A stale WebApp RC snapshot is NOT proof of physical PPM signal loss.
-// Receiver health is the most recent authenticated FlightCore /api/status
-// observation, explicitly age bounded. Never use this health label to make
-// an old controller frame LIVE, ARM a motor, or refresh simulator inputs.
-export function describePpmMonitorHealth(kit,input,{now=Date.now()}={}){
- if(kit?.connected!==true)return 'KIT LINK OFFLINE • PPM UNVERIFIED';
- const staleRc=input?.source==='PPM'&&input?.state==='stale';
- const ppm=kit.ppm,observedAt=Number(kit.ppmObservedAt);
- const known=ppm&&typeof ppm.present==='boolean'&&Number.isFinite(observedAt)&&observedAt>0&&
-  now>=observedAt&&now-observedAt<=3500;
- if(!known)return staleRc?'PPM UNVERIFIED • RC TELEMETRY DELAYED':'PPM SIGNAL NOT VERIFIED';
- if(!ppm.present)return 'PPM SIGNAL ABSENT • CHECK RX/POWER/WIRING';
- const measured=Number(ppm.captureHz),hz=Number.isFinite(measured)&&measured>0?' '+Math.round(measured)+' Hz':'';
- if(input?.source==='PPM'&&input?.state==='live')return 'PPM INPUT LIVE'+hz;
- if(staleRc)return 'PPM LAST VERIFIED'+hz+' • RC TELEMETRY DELAYED';
- if(input?.source==='PPM')return 'PPM PRESENT'+hz+' • RC DATA NOT LIVE';
- return 'PPM PRESENT'+hz+' • RC NOT SELECTED/ACCEPTED';
 }
 
 export function createInputRateTracker(){
