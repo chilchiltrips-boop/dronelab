@@ -48,15 +48,17 @@ if(root){
   if(motor===selectedMotor&&all===allMotors&&!save)return;
   selectionPending=true;render();
   try{
+   let savePending=false;
    if(save){
     if($('#a2Spinning').checked)await act('observe-min');
     const motors=allMotors?[1,2,3,4]:[selectedMotor];
     if(motors.some(n=>!pendingMinimum[n]&&!state?.observedMinimumUs?.[n-1]))throw Error('Observe spinning and record a starting pulse before Save & next.');
-    if(Object.keys(pendingMinimum).length)await act('save-min');
+    savePending=Object.keys(pendingMinimum).length>0;
    }
    // A mask change retires the old slider pump and waits for STOP before
    // changing the selection. Selecting another output never starts it.
    if(motorClient.busy||kit().connected&&state?.mode&&state.mode!=='DISABLED'){message('Stopping outputs…');await motorClient.stop(motorClient.owner==='wizard'?'wizard':undefined);}
+   if(savePending)await act('save-min');
    selectedMotor=motor;allMotors=all;setPulse(1000);$('#a2ObservedMotor').value=String(motor);$('#a2Spinning').checked=false;
    operationError='';message(all?'All motors selected.':save?`Minimum saved · M${motor} selected.`:`M${motor} selected.`);
   }catch(e){operationError=e.message;message(e.message);if(save&&motorClient.owner==='wizard')await motorClient.stop('wizard').catch(()=>{});}

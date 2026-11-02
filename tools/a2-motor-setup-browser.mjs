@@ -168,11 +168,16 @@ try{
  // A failed STOP must keep the original selected motor and not start a new mask.
  await page.locator('[data-action=slider]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
+ await page.locator('#a2Pulse').fill('1150');
+ await page.waitForFunction(()=>window.__motorFixture.state.pulseUs[1]===1150);
+ await page.locator('#a2Spinning').check();await page.locator('[data-action=observe-min]').click();
  await page.evaluate(()=>window.__motorFixture.rejectStop=true);
  await page.locator('#a2AllMotors').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('Simulated STOP failure'));
  assert.equal(await chosen(),'2');assert.equal(await page.locator('#a2AllMotors').isChecked(),false);
- await page.locator('[data-action=stop]').click();
+ await page.locator('[data-action=next-motor]').click();
+ await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection==='3');
+ assert.equal(await page.evaluate(()=>window.__motorFixture.state.observedMinimumUs[1]),1150,'Save & next retries STOP before saving after a failed stop');
  await page.locator('.a2-visual [data-motor="1"]').click();
  await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='1');
  const confirmedBegins=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
@@ -219,9 +224,11 @@ try{
    await page.locator('[data-step="'+step+'"]').click();
    const box=await page.evaluate(()=>{
     const root=document.querySelector('#a2SetupRoot'),tab=document.querySelector('#tab-setup'),main=document.querySelector('.a2-content').getBoundingClientRect(),visual=document.querySelector('.a2-visual').getBoundingClientRect(),row=document.querySelector('.a2-columns').getBoundingClientRect();
-    return {fits:root.scrollWidth<=tab.clientWidth,height:row.height,bottomGap:Math.abs(main.bottom-visual.bottom)};
+    const stop=document.querySelector('[data-action=stop]').getBoundingClientRect(),title=document.querySelector('.a2-title').getBoundingClientRect();
+    return {fits:root.scrollWidth<=tab.clientWidth,height:row.height,bottomGap:Math.abs(main.bottom-visual.bottom),stopInHeader:stop.top>=title.top&&stop.bottom<=title.bottom};
    });
    assert.equal(box.fits,true,'wizard step '+step+' fits '+width+'px');
+   assert.equal(box.stopInHeader,true,'STOP must not float over form controls on step '+step+' at '+width+'px');
    if(width>=1024){
     assert.ok(box.bottomGap<2,'task and visual cards share a bottom edge on step '+step);
     assert.ok(box.height<=(width===1366?540:620),'primary task must stay compact on step '+step+' at '+width+'px: '+box.height);
