@@ -50,7 +50,7 @@ static const char* zjAccessChange(const String& action,const String& source,
  if(action=="BEGIN"&&!stationary)return "fresh_stationary_imu_required";
  if(action!="BEGIN"&&source=="PPM"&&!zjPpmSignalFresh(millis()))return "ppm_signal_required";
  zjRcPaused=true;zjRcHandoverPaused=false;zjRcRelease(action=="BEGIN"?"MAINTENANCE_PAUSE":"EXPLICIT_SOURCE_HANDOVER");
- zjPpmSafeFrames=0;zjPpmArm.reset();
+ zjPpmSafeFrames=0; // PPM ARM resets on loss/reacquisition in zjPpmLoop
  if(action=="BEGIN"){
   zjMaintenanceActive=true;zjMaintenanceOwner=caller;zjMaintenanceRenewedAt=millis();
   zjAccessReason="MAINTENANCE_PAUSED";
