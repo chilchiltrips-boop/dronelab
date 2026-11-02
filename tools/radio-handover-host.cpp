@@ -58,5 +58,31 @@ int main(){
  errorIs(zjPrepareRadioHandover("sta","AP","PPM"),"input_profile_changed");
  assert(!zjPrepareRadioHandover("sta","AP","WEB_STA"));
  assert(zjRcControlPath=="WEB_STA"&&!zjRcOwned&&!zjRcInputArmed);
+ // Status-only PPM ARM must never force a receiver disconnect for AP/STA switch.
+ // This is safe only with physical low throttle, zero motor output, and
+ // no active motor bench session. A confirmed handover clears input ARM.
+ zjRadioHandoverApplied("STA");zjRcRelease("TEST");zjRcPaused=false;
+ zjRcControlPath="PPM";zjRcSelection="PPM";zjMode="sta";
+ frame(1000);frame(1000);frame(1000);
+ assert(zjRcOwned&&zjRcSource=="PPM");
+ arm();assert(zjRcInputArmed&&!zjMotorEnabled&&!zjMotorArmed&&!zjMotorSessionActive);
+ const String safe=zjRadioHandoverStatus();
+ assert(std::string(safe.c_str()).find("preflightBlocker")!=std::string::npos);
+ zjMotorSessionActive=true;
+ errorIs(zjPrepareRadioHandover("ap","STA"),"stop_motor_setup_first");
+ assert(zjHandoverLastReject=="stop_motor_setup_first"&&zjRcInputArmed);
+ zjMotorSessionActive=false;
+ frame(1000,true,1500,1800);
+ errorIs(zjPrepareRadioHandover("ap","STA"),"lower_throttle_and_disarm");
+ assert(std::string(zjRadioHandoverStatus().c_str()).find("RC_THROTTLE_HIGH")!=std::string::npos);
+ frame(1000,true,1500,1000);
+ assert(zjRcInputArmed&&zjPpmSignalFresh(clockMs));
+ assert(!zjPrepareRadioHandover("ap","STA"));
+ assert(zjHandoverPending&&zjHandoverDiagnosticArmReleased);
+ assert(!zjRcInputArmed&&!zjRcOwned&&zjRcPaused);
+ assert(std::string(zjRadioHandoverStatus().c_str()).find("diagnosticArmReleased")!=std::string::npos);
+ assert(zjRadioHandoverMayApply());
+ zjRadioHandoverApplied("AP");
+ assert(!zjRcPaused&&!zjHandoverPending&&!zjRcInputArmed);
  std::cout<<"PASS production coordinated handover: atomic save, failure preservation, safe PPM, ARM race, explicit claim, STA restore, reboot and corrupt profile\n";
 }

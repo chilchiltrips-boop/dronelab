@@ -45,6 +45,31 @@ function bench(client='android',seed){
  vm.runInNewContext(source,ctx);
  return {root,saved,buttons,downloads,api:root.ZebjusAckDiagnostics,events:()=>JSON.parse(root.ZebjusAckDiagnostics.exportData('json')).events};
 }
+test('AP/STA handover diagnosis records exact PPM ARM blocker without IDs or Wi-Fi secrets',()=>{
+ const b=bench('web');
+ b.api.record('handover_preflight',{mode:'ap',source:'PPM',reason:'INPUT_UNSAFE',
+  handoverBlocker:'RC_THROTTLE_HIGH',ppmPresent:true,ppmThrottleUs:1670,
+  throttle:1670,inputArmed:true,handMotorDisabled:true,diagnosticArmReleased:false,
+  ssid:'PRIVATE_SSID',kitId:'PRIVATE_DEVICE',password:'PRIVATE_PASSWORD'});
+ let e=b.events().at(-1);assert.equal(e.event,'handover_preflight');
+ assert.equal(e.data.handoverBlocker,'RC_THROTTLE_HIGH');
+ assert.equal(e.data.ppmThrottleUs,1670);
+ assert.equal(e.data.handMotorDisabled,true);
+ b.api.record('handover_ack',{mode:'ap',source:'PPM',handoverBlocker:'NONE',
+  diagnosticArmReleased:true,profileSaved:true,profileRevision:9});
+ e=b.events().at(-1);assert.equal(e.data.diagnosticArmReleased,true);
+ b.api.record('handover_state',{handoverBlocker:'MOTOR_OUTPUT_ACTIVE',
+  handoverLastReject:'stop_motor_setup_first'});
+ assert.equal(b.events().at(-1).data.handoverLastReject,'stop_motor_setup_first');
+ b.api.record('handover_error',{handoverBlocker:'PRIVATE_SSID',handoverLastReject:'PRIVATE_PASSWORD'});
+ assert.equal(b.events().at(-1).data.handoverBlocker,undefined);
+ assert.equal(b.events().at(-1).data.handoverLastReject,undefined);
+ for(const secret of ['PRIVATE_SSID','PRIVATE_DEVICE','PRIVATE_PASSWORD']){
+  assert.ok(!b.api.exportData('csv').includes(secret));
+  assert.ok(!b.api.exportData('json').includes(secret));
+ }
+ assert.equal(JSON.parse(b.api.exportData('json')).summary.handoverBlocker,'MOTOR_OUTPUT_ACTIVE');
+});
 test('UDP input staleness and missing ACK are distinct, and UDP completion timings survive export',()=>{
  const b=bench();
  assert.equal(b.api.reasonClass('UDP_INPUT_STALE'),'INPUT_STALE');
