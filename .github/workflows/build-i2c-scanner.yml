@@ -28,6 +28,7 @@ on:
       - 'tools/firmware-host.test.mjs'
       - 'tools/ppm-host.cpp'
       - 'tools/access-host.cpp'
+      - 'tools/radio-handover-host.cpp'
       - 'tools/ppm-host.test.mjs'
       - 'tools/led-failsafe.test.mjs'
       - 'tools/UdpStreamInterop.java'
