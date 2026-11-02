@@ -11,6 +11,7 @@ static bool zjHandoverDiagnosticArmReleased=false;
 // may clear it only at low physical throttle with every motor output disabled.
 static bool zjPpmDiagnosticRadioSafe(){
  return zjRcOwned&&zjRcSource=="PPM"&&!zjRcNetwork&&
+  zjPpmSignalFresh(millis())&&
   !zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed&&
   zjRcThrottle<=1050&&zjPpmAccessSafe();
 }
