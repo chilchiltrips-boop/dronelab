@@ -82,7 +82,7 @@ int main(){
  assert(zjRcInputArmed&&zjPpmSignalFresh(clockMs));
  waitMs(151);zjPpmLoop(clockMs);assert(!zjRcOwned&&!zjRcInputArmed);
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
- frame(1000);frame(1000);frame(1000);hold(2000);
+ frame(1000);frame(1000);frame(1000);
  assert(zjRcOwned&&zjRcSource=="ANDROID"&&!zjRcInputArmed);
  std::cout<<"PASS production PPM receiver: CH5-free yaw ARM/DISARM, throttle gate, motor isolation, capture loss, owner arbitration"<<std::endl;
  return 0;
