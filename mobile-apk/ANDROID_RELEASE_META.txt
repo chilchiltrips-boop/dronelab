@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.8.23-ppm-bench-capture
-VersionCode: 62
+Version: 1.8.24-setup-input-monitor
+VersionCode: 63
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: 8b30785810b8e709e284105c2ae58d8f75729839
+Source commit: 55168405b6e01ce7e58d450fe19d8fac59ffa475
