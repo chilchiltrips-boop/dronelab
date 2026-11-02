@@ -96,6 +96,7 @@ test('input sample age advances between packets and lost input never becomes a n
  sample=setupInputSample(frame,1000,1250);assert.equal(sample.valid,false);assert.equal(sample.reported,true);assert.equal(sample.channels[2],1100);assert.equal(sample.age,270);
  sample=setupInputSample(frame,1000,2000);assert.equal(sample.reported,false);assert.deepEqual(sample.channels,[]);
  sample=setupInputSample({...frame,inputValid:false,channels:null},1000,1020);assert.equal(sample.valid,false);assert.deepEqual(sample.channels,[]);
+ sample=setupInputSample({...frame,roundTripMs:2560},1000,1000);assert.equal(sample.valid,false,'a slow response must not make an old input sample fresh again');assert.equal(sample.age,2580);assert.equal(sample.ageUpperBound,true);
 });
 test('motor stop guidance distinguishes control loss, input loss and expected test completion',()=>{
  assert.match(motorStopDescription({reason:'CONTROL_LOST'}),/750 ms/);

@@ -4,9 +4,10 @@ export function cancelMotorConfirmations(){for(const cancel of [...pendingConfir
 export function setupInputSample(state,observedAt,at=Date.now()){
  const s=state||{},elapsed=Math.max(0,at-observedAt),source=s.selectedInput==='AUTO'?'AUTO → '+(s.inputSource||'NONE'):(s.selectedInput||'Not selected');
  const reported=s.inputValid===true&&observedAt>0&&elapsed<1000&&Array.isArray(s.channels);
- const age=Number.isFinite(s.inputAgeMs)?s.inputAgeMs+elapsed:null;
+ const transit=Number.isFinite(s.roundTripMs)?Math.max(0,s.roundTripMs):0;
+ const age=Number.isFinite(s.inputAgeMs)&&s.inputAgeMs>=0?s.inputAgeMs+transit+elapsed:null;
  const maximum=s.inputSource==='PPM'?150:300;
- return {source,reported,valid:reported&&age!==null&&age<=maximum,age,channels:reported?s.channels:[]};
+ return {source,reported,valid:reported&&age!==null&&age<=maximum,age,ageUpperBound:transit>0,channels:reported?s.channels:[]};
 }
 export function rtcBenchFrame(snapshot,kitId,peerId){
  const s=snapshot?.sample,p=snapshot?.peer;
