@@ -7,7 +7,7 @@ struct ZjPpmArmGesture {
  static constexpr uint16_t THROTTLE_LOW_US=1050;
  static constexpr uint16_t YAW_LEFT_US=1100,YAW_RIGHT_US=1900;
  static constexpr uint16_t YAW_CENTER_MIN_US=1400,YAW_CENTER_MAX_US=1600;
- static constexpr uint32_t HOLD_MS=2000,FRAME_GAP_MS=150;
+ static constexpr uint32_t HOLD_MS=2000;
  bool armed=false,neutralSeen=false,holding=false;
  uint8_t holdDirection=0; // 1=ARM, 2=DISARM
  uint32_t holdAt=0,lastAt=0;
@@ -17,9 +17,11 @@ struct ZjPpmArmGesture {
  }
  void accept(uint16_t throttle,uint16_t yaw,uint32_t capturedAt){
   // Only new, chronologically ordered complete PPM frames count toward a
-  // gesture. Missing frames and source loss require a new safe ARM gesture.
+  // gesture. Physical receiver loss is reset by the PPM mailbox owner.
   if(lastAt&&int32_t(capturedAt-lastAt)<=0)return;
-  if(lastAt&&uint32_t(capturedAt-lastAt)>FRAME_GAP_MS)reset();
+  // The caller uses hardware capture continuity to detect a physical loss.
+  // A busy HTTP/main loop may coalesce many valid frames into one mailbox
+  // observation; that is NOT a receiver gap and must not clear ARM.
   lastAt=capturedAt;
   if(throttle>THROTTLE_LOW_US){
    holding=false;holdDirection=0;
