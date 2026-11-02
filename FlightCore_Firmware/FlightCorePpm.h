@@ -169,7 +169,7 @@ static String zjPpmStatus(){
  output+=",\"map\":[";
  for(uint8_t i=0;i<5;i++){if(i)output+=',';output+=String(zjPpmMap[i]+1);}output+="]";
  output+=",\"armMethod\":\"THROTTLE_LOW_YAW_GESTURE\",\"armStatus\":"+
-   zjJson(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?"ARMED":"DISARMED");
+   String("\"")+(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?"ARMED":"DISARMED")+"\"";
  output+=",\"armHoldMs\":"+String(ZjPpmArmGesture::HOLD_MS)+",\"throttleLowUs\":1050,\"yawRightUs\":1900,\"yawLeftUs\":1100";
  output+=",\"inputArmed\":"+(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?String("true"):String("false"))+","+zjMotorFlags()+"}";
  return output;
