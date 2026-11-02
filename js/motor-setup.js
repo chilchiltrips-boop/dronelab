@@ -1,16 +1,7 @@
 // Shared WebApp/Python motor command client. The firmware owns PWM and deadlines.
 const pendingConfirmations=new Set();
 export function cancelMotorConfirmations(){for(const cancel of [...pendingConfirmations])cancel();}
-export function setupInputSample(state,observedAt,at=Date.now()){
- const s=state||{},elapsed=Math.max(0,at-observedAt),source=s.selectedInput==='AUTO'?'AUTO → '+(s.inputSource||'NONE'):(s.selectedInput||'Not selected');
- const monitor=s.ppm&&['PPM','AUTO'].includes(s.selectedInput)&&(!s.inputValid||s.inputSource==='PPM');
- const sample=monitor?{inputValid:s.ppm.present,channels:s.ppm.channels,inputAgeMs:s.ppm.ageMs,inputSource:'PPM'}:s;
- const reported=sample.inputValid===true&&observedAt>0&&elapsed<1000&&Array.isArray(sample.channels);
- const transit=Number.isFinite(s.roundTripMs)?Math.max(0,s.roundTripMs):0;
- const age=Number.isFinite(sample.inputAgeMs)&&sample.inputAgeMs>=0?sample.inputAgeMs+transit+elapsed:null;
- const maximum=sample.inputSource==='PPM'?150:300;
- return {source:monitor?'PPM · receiver monitor':source,reported,valid:reported&&age!==null&&age<=maximum,age,ageUpperBound:transit>0,channels:reported?sample.channels:[],controlValid:s.inputValid===true,captureHz:monitor?s.ppm.captureHz:null};
-}
+export {setupInputSample} from './input-monitor.js';
 export function rtcBenchFrame(snapshot,kitId,peerId){
  const s=snapshot?.sample,p=snapshot?.peer;
  if(!snapshot?.fresh||snapshot.ageMs>200||!s?.aux||!p.connected||!p.approved||!p.supported||

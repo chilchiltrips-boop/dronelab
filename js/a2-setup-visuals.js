@@ -22,13 +22,13 @@ export function stepVisual(step,{kit={},state={},draft={},input={},history=[],ca
  <rect x="171" y="303" width="58" height="28" rx="5" class="a2-usb"/><path d="M200 332v34" class="a2-wire"/>
  ${text(200,60,linked?'CONNECTED':'WAITING FOR KIT','a2-svg-label')}${text(200,394,(kit.transport||'USB · AP · STA').toUpperCase(),'a2-svg-label')}`)};
  if(step===1)return {title:'Match each ESC to its pin',description:'Preview of the form. Save and verify the board read-back before testing.',html:motorDiagram(draft)};
- if(step===2){const channels=input.channels||[],thr=channels[2],roll=channels[0],pitch=channels[1],points=history.map((v,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(v-1000)*.08}`).join(' ');return {title:'Live receiver monitor',description:'Read-only channels from the selected source. Delayed samples are dimmed; lost or missing channels show —.',html:svg('Live input sticks and throttle trace',`
- ${text(200,40,input.source||'NO SIGNAL','a2-svg-label')}
+ if(step===2){const channels=input.channels||[],thr=channels[2],roll=channels[0],pitch=channels[1],points=history.map((v,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(v-1000)*.08}`).join(' ');return {title:'Live receiver monitor',description:'Read-only channels from the selected source. Read-only last board observations with their age. Receiver loss and delayed telemetry are reported separately.',html:svg('Live input sticks and throttle trace',`
+ <g data-input-source>${text(200,40,input.source||'NO SIGNAL','a2-svg-label')}</g>
  ${[110,290].map(x=>`<circle cx="${x}" cy="147" r="66" class="a2-stick-ring"/><path d="M${x-55} 147h110m-55-55v110" class="a2-grid-line"/>`).join('')}
- <circle cx="110" cy="${Number.isFinite(thr)?197-(thr-1000)/10:147}" r="14" class="${input.valid?'a2-stick-knob':'a2-off-dot'}"/>
- <circle cx="${Number.isFinite(roll)?290+(roll-1500)/10:290}" cy="${Number.isFinite(pitch)?147-(pitch-1500)/10:147}" r="14" class="${input.valid?'a2-stick-knob':'a2-off-dot'}"/>
+ <circle data-input-throttle cx="110" cy="${Number.isFinite(thr)?197-(thr-1000)/10:147}" r="14" class="${(input.monitoring??input.valid)?'a2-stick-knob':'a2-off-dot'}"/>
+ <circle data-input-sticks cx="${Number.isFinite(roll)?290+(roll-1500)/10:290}" cy="${Number.isFinite(pitch)?147-(pitch-1500)/10:147}" r="14" class="${(input.monitoring??input.valid)?'a2-stick-knob':'a2-off-dot'}"/>
  ${text(110,241,'THROTTLE','a2-svg-small')}${text(290,241,'ROLL / PITCH','a2-svg-small')}
- <path d="M28 260H372M28 300H372M28 340H372" class="a2-grid-line"/><polyline points="${points}" class="a2-trace"/>${text(200,380,'THROTTLE HISTORY · 1000–2000 µs','a2-svg-small')}`)};}
+ <path d="M28 260H372M28 300H372M28 340H372" class="a2-grid-line"/><polyline data-input-history points="${points}" class="a2-trace"/>${text(200,380,'THROTTLE HISTORY · 1000–2000 µs','a2-svg-small')}`)};}
  if(step===3){const high=state.mode==='CAL_HIGH',low=state.mode==='CAL_LOW',phase=high?'HIGH · 2000 µs':low?'LOW · 1000 µs':calConfirmed?'TONES CONFIRMED':'OUTPUT OFF';return {title:'ESC calibration sequence',description:'The board confirms pulses; you confirm battery connection and ESC tones.',html:svg('ESC calibration signal and four ESCs',`
  ${text(200,42,phase,'a2-svg-label')}<path d="${high||low?`M20 145H40V70h${high?20:10}V145h${high?180:190}V70h${high?20:10}V145H380`:'M20 145H380'}" class="a2-pwm ${high||low?'a2-pwm-live':''}"/>
  ${[0,1,2,3].map(i=>`<rect x="${30+i*91}" y="204" width="67" height="100" rx="10" class="a2-esc ${high||low?'a2-esc-live':''}"/>${text(63+i*91,247,'ESC '+(i+1),'a2-svg-small')}${text(63+i*91,278,high?'HIGH':low?'LOW':'OFF','a2-svg-small')}`).join('')}
