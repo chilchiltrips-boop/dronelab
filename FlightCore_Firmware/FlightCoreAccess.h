@@ -50,7 +50,7 @@ static const char* zjAccessChange(const String& action,const String& source,
  if(action=="BEGIN"&&!stationary)return "fresh_stationary_imu_required";
  if(action!="BEGIN"&&source=="PPM"&&!zjPpmSignalFresh(millis()))return "ppm_signal_required";
  zjRcPaused=true;zjRcHandoverPaused=false;zjRcRelease(action=="BEGIN"?"MAINTENANCE_PAUSE":"EXPLICIT_SOURCE_HANDOVER");
- zjPpmSafeFrames=0;zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+ zjPpmSafeFrames=0;zjPpmArm.reset();
  if(action=="BEGIN"){
   zjMaintenanceActive=true;zjMaintenanceOwner=caller;zjMaintenanceRenewedAt=millis();
   zjAccessReason="MAINTENANCE_PAUSED";
