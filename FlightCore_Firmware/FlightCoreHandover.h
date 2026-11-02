@@ -54,7 +54,7 @@ static const char* zjPrepareRadioHandover(const String& mode,const String& curre
  zjHandoverPreviousMode=zjMode;zjHandoverRevision=revision;zjLastStaInput=sta;
  zjHandoverTargetInput=path;zjHandoverSaved=true;zjHandoverError="";
  zjRcPaused=true;zjRcHandoverPaused=true;zjRcRelease("RADIO_HANDOVER");
- zjPpmSafeFrames=0;zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+ zjPpmSafeFrames=0;zjPpmArm.reset();
  zjRcControlPath=path;zjRcSelection=zjPathSource(path);zjMode=mode;
  zjHandoverPending=true;zjHandoverState="PREPARED";
  return nullptr;
