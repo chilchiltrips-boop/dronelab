@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {normalizeAcceptedInput,createInputRateTracker} from '../js/live-inputs.js';
+import {normalizeAcceptedInput,createInputRateTracker,describePpmMonitorHealth} from '../js/live-inputs.js';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const kit={connected:true,kitId:'ZFC-A2-ABCDEF123456',kitName:'zebjus_drone_1',transport:'sta',
  ledOn:true,motorsDisabled:true,motorsArmed:false};
@@ -94,6 +94,28 @@ test('monitor can display accepted RC from a newer verified status without claim
  assert.match(kits,/rcAt:state\.transport==='usb'\|\|state\.owner\?state\.ackAt:state\.rcObservedAt/);
  assert.doesNotMatch(display,/\/api\/rc\/claim|\/api\/rc\/preview/);
 });
+test('PPM 50 Hz receiver status remains distinct from a stale network RC snapshot',()=>{
+ const ppmRc={...rc('PPM'),transport:'PPM',channels:[1535,1450,1000,1720,1000,1000,1500,1500]};
+ const kitPpm={...kit,ppm:{present:true,captureBackend:'RMT_RX',captureHz:50,losses:0,faults:0},ppmObservedAt:1000};
+ const snapshot={...snap('PPM'),rc:ppmRc};
+ const live=normalizeAcceptedInput(kitPpm,snapshot,{now:1100});
+ assert.equal(live.state,'live');
+ assert.equal(describePpmMonitorHealth(kitPpm,live,{now:1100}),'PPM INPUT LIVE 50 Hz');
+ const stale=normalizeAcceptedInput(kitPpm,snapshot,{now:1700});
+ assert.equal(stale.state,'stale');
+ assert.equal(stale.inputArm,'STALE');
+ assert.equal(describePpmMonitorHealth(kitPpm,stale,{now:1700}),
+  'PPM LAST VERIFIED 50 Hz • RC TELEMETRY DELAYED');
+ assert.equal(describePpmMonitorHealth(kitPpm,stale,{now:5000}),
+  'PPM UNVERIFIED • RC TELEMETRY DELAYED','expired hardware status cannot certify present');
+ assert.equal(describePpmMonitorHealth({...kitPpm,connected:false},stale,{now:1100}),
+  'KIT LINK OFFLINE • PPM UNVERIFIED','offline link cannot claim receiver health');
+ assert.equal(describePpmMonitorHealth({...kitPpm,ppm:{...kitPpm.ppm,present:false}},stale,{now:1200}),
+  'PPM SIGNAL ABSENT • CHECK RX/POWER/WIRING');
+ assert.equal(describePpmMonitorHealth(kitPpm,normalizeAcceptedInput(kitPpm,null,{now:1200}),{now:1200}),
+  'PPM PRESENT 50 Hz • RC NOT SELECTED/ACCEPTED');
+});
+
 test('packet-rate tracker uses accepted counters and ignores polling without new accepted RC frames',()=>{
  const tracker=createInputRateTracker();const a=rc();
  assert.equal(tracker.observe(kit.kitId,a,1000),null);
