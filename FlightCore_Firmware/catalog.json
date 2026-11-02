@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "product": "ZEBJUS_FLIGHTCORE",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "defaultBoardId": "ZFC-A1",
   "boards": [
     {
@@ -12,27 +12,27 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.7.2",
+        "version": "1.7.3",
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A1_APP.bin",
-          "sha256": "81f317c04902587ca7f8d41df41c83a8f667e5e1205fd9b70236c8122b05e6a7",
-          "size": 1256368,
-          "builtAt": "2026-11-02T10:01:54Z",
-          "buildId": "1.7.2-ZFC-A1-81f317c04902",
-          "compiledAt": "2026-11-02T10:02:57Z"
+          "sha256": "c9bfa23db8eea955f41c8f4401f2a8ee9f04d5a0f710119cb16ae6f3e890405e",
+          "size": 1256816,
+          "builtAt": "2026-11-02T11:44:20Z",
+          "buildId": "1.7.3-ZFC-A1-c9bfa23db8ee",
+          "compiledAt": "2026-11-02T11:45:32Z"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A1_FACTORY.bin",
-          "sha256": "ba5333ba75a65d72d3118155524f1eda109a0ef782c35312e28a9f9d4893c2cc",
+          "sha256": "9c53e86a79558aaa516e7b279a859875a189129184ab81250b0a86509481b4ff",
           "size": 4194304,
-          "builtAt": "2026-11-02T10:01:54Z",
-          "buildId": "1.7.2-ZFC-A1-FACTORY-ba5333ba75a6",
-          "compiledAt": "2026-11-02T10:02:57Z"
+          "builtAt": "2026-11-02T11:44:20Z",
+          "buildId": "1.7.3-ZFC-A1-FACTORY-9c53e86a7955",
+          "compiledAt": "2026-11-02T11:45:32Z"
         },
-        "builtAt": "2026-11-02T10:01:54Z",
-        "compiledAt": "2026-11-02T10:02:57Z"
+        "builtAt": "2026-11-02T11:44:20Z",
+        "compiledAt": "2026-11-02T11:45:32Z"
       },
       "usbMatch": [
         "ESP32-C3",
@@ -60,27 +60,27 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.7.2",
+        "version": "1.7.3",
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_APP.bin",
-          "sha256": "5a9fa5c4ddb4b7c9107986d2395406ea5d8fc531e6113413dbdf892afa590812",
-          "size": 1267008,
-          "builtAt": "2026-11-02T10:01:54Z",
-          "buildId": "1.7.2-ZFC-A2-5a9fa5c4ddb4",
-          "compiledAt": "2026-11-02T10:03:38Z"
+          "sha256": "a763cfddfbef07da027ebb0741017f67274b110c3be758d36056b73e7a28badb",
+          "size": 1267456,
+          "builtAt": "2026-11-02T11:44:20Z",
+          "buildId": "1.7.3-ZFC-A2-a763cfddfbef",
+          "compiledAt": "2026-11-02T11:46:20Z"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY.bin",
-          "sha256": "de63a4162443c0c34bada931e27d861cac8c3035fd0e9463f63bc414f7b081e2",
+          "sha256": "993d5e333a48003f670497ee111ff1e55acaae6bac7f95793e792716205bdd6a",
           "size": 4194304,
-          "builtAt": "2026-11-02T10:01:54Z",
-          "buildId": "1.7.2-ZFC-A2-FACTORY-de63a4162443",
-          "compiledAt": "2026-11-02T10:03:38Z"
+          "builtAt": "2026-11-02T11:44:20Z",
+          "buildId": "1.7.3-ZFC-A2-FACTORY-993d5e333a48",
+          "compiledAt": "2026-11-02T11:46:20Z"
         },
-        "builtAt": "2026-11-02T10:01:54Z",
-        "compiledAt": "2026-11-02T10:03:38Z"
+        "builtAt": "2026-11-02T11:44:20Z",
+        "compiledAt": "2026-11-02T11:46:20Z"
       },
       "usbMatch": [
         "ZEBJUS Aerion F1",
@@ -101,5 +101,5 @@
       "recommendedSensor": "MPU6050"
     }
   ],
-  "builtAt": "2026-11-02T10:01:54Z"
+  "builtAt": "2026-11-02T11:44:20Z"
 }
