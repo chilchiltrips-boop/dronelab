@@ -87,6 +87,7 @@ try{
  await page.evaluate(()=>{const f=window.__motorFixture;f.holdStatus=false;f.statusDelay=0;f.releaseStatus?.();});
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs');
  assert.equal(await page.evaluate(()=>window.__inputMarker===document.querySelector('[data-input-throttle]')),true);
+ assert.match(await page.locator('.a2-message').textContent(),/Status refresh recovered/);
  await page.screenshot({path:'test-output/a2-input-monitor-recovery.png',fullPage:true});
  await page.evaluate(()=>{const s=window.__motorFixture.state;s.ppm.present=false;s.ppm.channels=null;});
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');

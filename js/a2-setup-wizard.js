@@ -86,7 +86,10 @@ if(root){
   $('[data-nav="-1"]').disabled=step===0;$('[data-nav="1"]').disabled=step===5;render();
  }
  function render(s){
-  if(s){state=s;lastStateAt=s.receivedAt||Date.now();readError='';}
+  if(s){
+   if(readError&&$('.a2-message').textContent.startsWith('Status refresh delayed ·'))message('Status refresh recovered. Check the sample age.');
+   state=s;lastStateAt=s.receivedAt||Date.now();readError='';
+  }
   const k=kit(),key=[k.kitId,k.bootId||state?.bootId,k.transport,k.connectionGeneration].join('|');
   if(key!==identity){identity=key;state=s||null;nextPollAt=0;readFailures=0;draftDirty=false;calFinished=calConfirmed=false;history.length=0;historyAt=0;readError='';for(const group of [pendingMinimum,observations])for(const key of Object.keys(group))delete group[key];if(state)loadDraft();}
   if(state&&!draftDirty){const next=config(state);if(JSON.stringify(next)!==JSON.stringify(draft))loadDraft();}
