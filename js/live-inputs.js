@@ -70,6 +70,25 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  };
 }
 
+// A stale WebApp RC snapshot is NOT proof of physical PPM signal loss.
+// Receiver health is the most recent authenticated FlightCore /api/status
+// observation, explicitly age bounded. Never use this health label to make
+// an old controller frame LIVE, ARM a motor, or refresh simulator inputs.
+export function describePpmMonitorHealth(kit,input,{now=Date.now()}={}){
+ if(kit?.connected!==true)return 'KIT LINK OFFLINE • PPM UNVERIFIED';
+ const staleRc=input?.source==='PPM'&&input?.state==='stale';
+ const ppm=kit.ppm,observedAt=Number(kit.ppmObservedAt);
+ const known=ppm&&typeof ppm.present==='boolean'&&Number.isFinite(observedAt)&&observedAt>0&&
+  now>=observedAt&&now-observedAt<=3500;
+ if(!known)return staleRc?'PPM UNVERIFIED • RC TELEMETRY DELAYED':'PPM SIGNAL NOT VERIFIED';
+ if(!ppm.present)return 'PPM SIGNAL ABSENT • CHECK RX/POWER/WIRING';
+ const measured=Number(ppm.captureHz),hz=Number.isFinite(measured)&&measured>0?' '+Math.round(measured)+' Hz':'';
+ if(input?.source==='PPM'&&input?.state==='live')return 'PPM INPUT LIVE'+hz;
+ if(staleRc)return 'PPM LAST VERIFIED'+hz+' • RC TELEMETRY DELAYED';
+ if(input?.source==='PPM')return 'PPM PRESENT'+hz+' • RC DATA NOT LIVE';
+ return 'PPM PRESENT'+hz+' • RC NOT SELECTED/ACCEPTED';
+}
+
 export function createInputRateTracker(){
  let previous=null,rate=null;
  function reset(){previous=null;rate=null}
@@ -203,14 +222,13 @@ function initLiveInputs(){
   write('liRightRoll',v.values?n.roll:'—');write('liRightPitch',v.values?n.pitch:'—');
   const message=v.state==='live'?'Received by physical Kit • monitoring only; no control session was claimed.':
    v.state==='idle'?'No current accepted RC input. Joysticks neutral; no Take Control needed to view.':
-   v.state==='stale'?'Last confirmed packet is stale. Values are historical, not live control.':
+   v.state==='stale'?'RC telemetry is delayed or stale. Values are historical, not live control; this alone does not prove PPM receiver loss.':
    v.state==='waiting'?'Waiting for authenticated accepted-input telemetry from this Kit. PPM requires firmware support.':
    v.historical?'Kit connection unavailable. Dimmed values are the last confirmed input; verify this Kit to resume.':
    'Select and connect a verified Kit to view its accepted RC inputs.';
   write('liHelp',message+' INPUT ARM is diagnostic only; motors are never armed by this monitor.');
   const ppmActive=v.source==='PPM'&&v.ppmChannels!==null;
-  write('liPpmHealth',ppmActive?(v.state==='live'?'RECEIVER LIVE': 'RECEIVER STALE'):
-   'No accepted PPM channels');
+  write('liPpmHealth',describePpmMonitorHealth(kit,accepted));
   for(let i=0;i<8;i++){
    const n=ppmActive?v.ppmChannels[i]:null;
    write('liCh'+(i+1),n??'—');
