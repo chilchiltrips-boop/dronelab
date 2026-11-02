@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-test('production PPM receiver expires old frames and prevents high-switch re-arm after loss',()=>{
+test('production PPM receiver uses throttle/yaw status gestures, survives bursts and disarms on loss',()=>{
  const root=fileURLToPath(new URL('../',import.meta.url)),dir=mkdtempSync(join(tmpdir(),'zj-ppm-'));
  try{
   const bin=join(dir,'ppm-host');

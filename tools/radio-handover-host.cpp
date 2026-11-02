@@ -13,7 +13,7 @@ int main(){
  const auto accepted=zjRcAccepted;zjPrefs.failNextWrite=true;
  errorIs(zjPrepareRadioHandover("ap","STA"),"input_profile_save_failed");
  assert(zjRcOwned&&zjRcSource=="PPM"&&!zjRcPaused&&zjMode=="sta");
- frame(1800);errorIs(zjPrepareRadioHandover("ap","STA"),"lower_throttle_and_disarm");
+ frame(1800,true,1500,1800);errorIs(zjPrepareRadioHandover("ap","STA"),"lower_throttle_and_disarm");
  frame(1000,true,1500,1800);errorIs(zjPrepareRadioHandover("ap","STA"),"lower_throttle_and_disarm");
  frame(1000);assert(!zjPrepareRadioHandover("ap","STA"));
  assert(zjPrefs.getString("inputProfile","")=="1|ap|ANDROID_AP|PPM|1");
@@ -22,7 +22,7 @@ int main(){
  assert(zjRcControlPath=="ANDROID_AP"&&zjLastStaInput=="PPM");
  frame(1000);frame(1000);frame(1000);assert(!zjRcOwned&&zjRcAccepted==accepted+3);
  errorIs(zjPrepareRadioHandover("sta","STA"),"handover_busy");
- // An ARM switch raised after ACK cancels application; input remains paused.
+ // Throttle raised after the ACK cancels application; input remains paused.
  frame(1000,true,1500,1800);assert(!zjRadioHandoverMayApply());
  assert(!zjHandoverPending&&zjHandoverState=="FAILED"&&zjRcPaused&&!zjRcOwned);
  frame(1000);assert(!zjPrepareRadioHandover("ap","STA"));assert(zjRadioHandoverMayApply());
