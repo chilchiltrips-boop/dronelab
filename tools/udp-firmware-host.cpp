@@ -58,6 +58,7 @@ int main(){
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  setupHostTelemetry();int commands=0;
  zjHttp.on("/api/command",HTTP_POST,[&](){if(!zjAllow())return;commands++;testDropReplies=1;zjReply(200,"{\"count\":"+String(commands)+"}");});
+ zjHttp.send(200,"application/json","{}");if(!zjHttp.client().noDelay)return 3;
  zjRpcSetup();if(!zjRpcReady)return 2;
  std::cout<<testRpcPort<<std::endl;
  const auto start=std::chrono::steady_clock::now();

@@ -56,7 +56,7 @@ class ZjNetworkServer : public WebServer {
   if(name=="X-ZJ-Response")rpcProof=value;
  }
  void send(int status,const char* type,const String& body){
-  if(!rpc){WebServer::send(status,type,body);return;}rpcStatus=status;rpcBody=body;
+  if(!rpc){WebServer::client().setNoDelay(true);WebServer::send(status,type,body);return;}rpcStatus=status;rpcBody=body;
  }
  // Strict length-prefixed UTF-8 fields; no truncation, embedded NUL or trailing bytes.
  bool dispatch(const uint8_t* bytes,size_t size,const IPAddress& peer,String& response){

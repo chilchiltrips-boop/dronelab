@@ -1,4 +1,4 @@
-# FlightCore PPM-SUM receiver — firmware 1.5.10 (hardware verification required)
+# FlightCore PPM-SUM receiver — firmware 1.7.2 (hardware verification required)
 
 ## Wiring — do not confuse D10 with GPIO10
 | Board | Board marking | Real MCU input | FlightCore profile |
@@ -15,12 +15,10 @@ Install a suitable receiver power supply separately if its current exceeds
 the board 3V3 regulator budget. Never apply receiver supply voltage to D10.
 
 ## Receiver signal
-One PPM-SUM wire carries eight pulse widths; rising-edge to rising-edge
-deltas 850–2150 µs, synchronization gap 3200–30000 µs. The decoder
+One PPM-SUM wire carries eight pulse widths, 850–2150 µs. A2 uses the built-in ESP-IDF RMT RX driver at 1 MHz, with 1 µs glitch filtering and a 2.5 ms idle delimiter. Nine separator pulses (80–650 µs) delimit eight channels, for either polarity. A dedicated receiver task rearms capture independently of HTTP/main-loop polling. A1 retains rising-edge GPIO capture with a 3200–30000 µs sync gap. The decoder
 accepts **exactly eight channels** per frame (standard 20–30ms frame).
 Different receiver protocols such as SBUS, CRSF, individual PWM, CPPM
-with >8 channels, or inverted/nonstandard PPM timings require another
-decoder. This is **diagnostic input only**: firmware never drives motors.
+with >8 channels, or nonstandard PPM timings require another decoder. A1 requires positive PPM. PPM monitoring itself never starts motors; A2 output requires a separate explicitly confirmed bench test.
 
 ### Channel mapping (defaults)
 | Channel | Meaning | Center / default |
@@ -58,8 +56,7 @@ and switch thresholds with the receiver on a bench.
 - After acquisition, CH5 must have been low and then move high at throttle
   <=1050 to assert *diagnostic INPUT ARM*. That is **NOT motor ARM**.
 - Complete frames retain their ISR arrival timestamp; the mailbox keeps the latest
-  complete frame. Stale pending frames are discarded. The previous input expires
-  before any resumed frame is processed, so a high ARM switch cannot hide a gap.
+  complete frame. Stale pending frames are discarded. Hardware capture continuity distinguishes a delayed consumer from a real receiver gap. A real gap releases control before accepting any resumed frame, so a high ARM switch cannot hide signal loss.
 - On 150ms PPM signal loss, the PPM owner releases, channels return neutral,
   diagnostic input is disarmed. The existing 350ms/1800ms network/USB
   RC deadman/lease protections remain unchanged.
@@ -72,7 +69,7 @@ and switch thresholds with the receiver on a bench.
 - USB monitor emits `ZJPPM,1,ACTIVE|LOCKED,<seq>,ARM=0|1,CH1=...,...,CH8=...`
   at most ~10Hz if present, plus a one-time LOST event.
   Existing combined 20-field `ZJTEL` remains backward compatible.
-  The Live Inputs panel shows CH1–CH8 only for *accepted PPM ownership*;
+  Setup Wizard displays raw/calibrated CH1–CH8, capture backend, measured Hz and faults independently of control ownership. Its reading monitor has no ARM/throttle gate. The separate Live Inputs control panel shows CH1–CH8 for *accepted PPM ownership*;
   a merely connected receiver does not overwrite active Android/Web values.
 
 ## PID Tuning with a PPM receiver

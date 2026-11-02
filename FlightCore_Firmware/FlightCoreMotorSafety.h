@@ -22,11 +22,13 @@ struct ZjMotorSafety {
  static constexpr uint16_t MIN_US=1000, MAX_US=2000, LOW_US=1050, LEFT_US=1100, RIGHT_US=1900;
  static constexpr uint8_t MAX_TEST_PERCENT=20;
  static constexpr uint32_t SLIDER_MAX_MS=30000,SLIDER_FRESH_MS=750;
+ static constexpr uint32_t READY_TIMED_MS=10000;
 
  Mode mode=OUTPUT_DISABLED;
  Reason reason=NONE;
  bool armed=false, requireSwitch=false, neutralSeen=false, holding=false;
  bool pinsConfirmed=false, benchEnabled=false;
+ bool timedBench=false;
  uint8_t testMotor=0, percent=0;
  uint16_t pulses[4]={MIN_US,MIN_US,MIN_US,MIN_US};
  uint32_t sessionAt=0, modeAt=0, holdAt=0, lastSequence=0, lastInputAt=0;
@@ -37,57 +39,62 @@ struct ZjMotorSafety {
  static bool elapsed(uint32_t now,uint32_t start,uint32_t ms){return uint32_t(now-start)>=ms;}
  static bool pulseValid(uint16_t p){return p>=MIN_US&&p<=MAX_US;}
  static uint16_t percentPulse(uint8_t p){return uint16_t(MIN_US+10U*p);}
+ bool timedManual()const{return timedBench&&(mode==SLIDER_TEST||mode==CAL_HIGH||mode==CAL_LOW);}
+ uint32_t leaseMs()const{return timedBench&&mode==READY?READY_TIMED_MS:SESSION_MS;}
+ bool leaseExpired(uint32_t now)const{return !timedManual()&&elapsed(now,sessionAt,leaseMs());}
+ uint32_t operationLimit()const{return mode==CAL_HIGH?CAL_HIGH_MAX_MS:mode==CAL_LOW?CAL_LOW_MS:mode==SLIDER_TEST?sliderDuration:mode==READY&&timedBench?READY_TIMED_MS:0;}
  void minimum(){for(uint8_t i=0;i<4;i++)pulses[i]=MIN_US;}
  void resetGesture(){neutralSeen=false;holding=false;holdAt=0;lastSequence=0;lastInputAt=0;}
  void disable(Reason why=USER_STOP){
   minimum();mode=OUTPUT_DISABLED;reason=why;armed=false;benchEnabled=false;sessionSource=ZjMotorInput::NONE;resetGesture();
  }
  void fault(Reason why){disable(why);mode=FAULT;}
- bool prepare(uint32_t now,bool mappingConfirmed,bool propsRemoved){
+ bool prepare(uint32_t now,bool mappingConfirmed,bool propsRemoved,bool boundedManual=false){
   if(mode!=OUTPUT_DISABLED||!mappingConfirmed||!propsRemoved)return false;
-  pinsConfirmed=true;benchEnabled=true;armed=false;mode=READY;reason=NONE;sessionAt=modeAt=now;
+  pinsConfirmed=true;benchEnabled=true;timedBench=boundedManual;armed=false;mode=READY;reason=NONE;sessionAt=modeAt=now;
   minimum();resetGesture();return true;
  }
  bool keep(uint32_t now){
   if(!benchEnabled||mode==OUTPUT_DISABLED||mode==FAULT)return false;
-  if(elapsed(now,sessionAt,SESSION_MS)){disable(SESSION_EXPIRED);return false;}
-  sessionAt=now;return true;
+  if(leaseExpired(now)){disable(SESSION_EXPIRED);return false;}
+  if(!(timedBench&&mode==READY))sessionAt=now;
+  return true;
  }
  bool startInput(uint32_t now,ZjMotorInput::Source source,bool switchRequired){
-  if(mode!=READY||source==ZjMotorInput::NONE||elapsed(now,sessionAt,SESSION_MS))return false;
-  mode=INPUT_TEST;sessionSource=source;requireSwitch=switchRequired;armed=false;modeAt=now;reason=NONE;
+  if(mode!=READY||source==ZjMotorInput::NONE||leaseExpired(now))return false;
+  sessionAt=now;mode=INPUT_TEST;sessionSource=source;requireSwitch=switchRequired;armed=false;modeAt=now;reason=NONE;
   minimum();resetGesture();return true;
  }
  bool startSingle(uint32_t now,uint8_t motor,uint8_t requestedPercent,uint32_t durationMs){
-  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||motor<1||motor>4||
+  if(mode!=READY||leaseExpired(now)||motor<1||motor>4||
      requestedPercent>100||durationMs==0||durationMs>TEST_MAX_MS)return false;
-  testMotor=motor;percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
+  sessionAt=now;testMotor=motor;percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
   mode=SINGLE_TEST;armed=false;reason=NONE;minimum();pulses[motor-1]=percentPulse(percent);return true;
  }
  bool startAll(uint32_t now,uint8_t requestedPercent,uint32_t durationMs){
-  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||requestedPercent>100||
+  if(mode!=READY||leaseExpired(now)||requestedPercent>100||
      durationMs==0||durationMs>TEST_MAX_MS)return false;
-  percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
+  sessionAt=now;percent=requestedPercent;modeAt=now;lastInputAt=durationMs;
   mode=ALL_TEST;armed=false;reason=NONE;for(uint8_t i=0;i<4;i++)pulses[i]=percentPulse(percent);return true;
  }
  bool startSlider(uint32_t now,uint8_t mask,uint32_t duration){
-  if(mode!=READY||elapsed(now,sessionAt,SESSION_MS)||!mask||mask>15||!duration||duration>SLIDER_MAX_MS)return false;
+  if(mode!=READY||leaseExpired(now)||!mask||mask>15||!duration||duration>SLIDER_MAX_MS)return false;
   mode=SLIDER_TEST;modeAt=sliderAt=now;sliderMask=mask;sliderSequence=0;sliderDuration=duration;
   armed=false;reason=NONE;minimum();return true;
  }
  bool slide(uint32_t now,uint16_t pulse,uint32_t sequence){
-  if(mode!=SLIDER_TEST||!pulseValid(pulse)||sequence<=sliderSequence||elapsed(now,sessionAt,SESSION_MS)||
-     elapsed(now,modeAt,sliderDuration)||elapsed(now,sliderAt,SLIDER_FRESH_MS))return false;
+  if(mode!=SLIDER_TEST||!pulseValid(pulse)||sequence<=sliderSequence||leaseExpired(now)||
+     elapsed(now,modeAt,sliderDuration)||(!timedBench&&elapsed(now,sliderAt,SLIDER_FRESH_MS)))return false;
   sliderSequence=sequence;sliderAt=now;
   for(uint8_t i=0;i<4;i++)pulses[i]=(sliderMask&(1U<<i))?pulse:MIN_US;
   return true;
  }
  bool startCalibration(uint32_t now,bool powerDisconnectedConfirmed){
-  if(mode!=READY||!powerDisconnectedConfirmed||elapsed(now,sessionAt,SESSION_MS))return false;
+  if(mode!=READY||!powerDisconnectedConfirmed||leaseExpired(now))return false;
   mode=CAL_HIGH;modeAt=now;reason=NONE;armed=false;minimum();for(uint8_t i=0;i<4;i++)pulses[i]=MAX_US;return true;
  }
  bool calibrationLow(uint32_t now){
-  if(mode!=CAL_HIGH||elapsed(now,modeAt,CAL_HIGH_MAX_MS)||elapsed(now,sessionAt,SESSION_MS))return false;
+  if(mode!=CAL_HIGH||elapsed(now,modeAt,CAL_HIGH_MAX_MS)||leaseExpired(now))return false;
   mode=CAL_LOW;modeAt=now;minimum();return true;
  }
  bool validInput(uint32_t now,const ZjMotorInput& i)const{
@@ -97,15 +104,15 @@ struct ZjMotorSafety {
  }
  bool armRemote(uint32_t now,const ZjMotorInput& i){
   if(mode!=INPUT_TEST||i.source==ZjMotorInput::PPM||!validInput(now,i)||!i.inputArmed||i.throttle>LOW_US||
-     elapsed(now,sessionAt,SESSION_MS))return false;
+     leaseExpired(now))return false;
   armed=true;reason=NONE;return true;
  }
  void update(uint32_t now,const ZjMotorInput& i){
   if(mode==OUTPUT_DISABLED||mode==FAULT)return;
-  if(elapsed(now,sessionAt,SESSION_MS)){disable(SESSION_EXPIRED);return;}
+  if(leaseExpired(now)){disable(SESSION_EXPIRED);return;}
   if(mode==SLIDER_TEST){
    if(elapsed(now,modeAt,sliderDuration))disable(TEST_FINISHED);
-   else if(elapsed(now,sliderAt,SLIDER_FRESH_MS))disable(CONTROL_LOST);
+   else if(!timedBench&&elapsed(now,sliderAt,SLIDER_FRESH_MS))disable(CONTROL_LOST);
    return;
   }
   if(mode==CAL_HIGH){if(elapsed(now,modeAt,CAL_HIGH_MAX_MS))disable(CAL_TIMEOUT);return;}

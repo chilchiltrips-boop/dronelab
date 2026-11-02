@@ -11,7 +11,7 @@ const ppm={kitId:base.kitId,source:'PPM',transport:'PPM',seq:24,ageMs:20,active:
  throttle:1000,roll:1560,pitch:1460,yaw:1630,channels:[1560,1460,1000,1630,1000,1500,1200,1800]};
 test('board-specific PPM pin mapping: A1 GPIO10, A2 XIAO D10=GPIO18',()=>{
  const ppmHdr=read('FlightCore_Firmware/FlightCorePpm.h'),sketch=read('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
- assert.match(ppmHdr,/#if defined\(CONFIG_IDF_TARGET_ESP32C6\)\s*static constexpr uint8_t ZJ_PPM_PIN=18/);
+ assert.match(ppmHdr,/#if defined\(CONFIG_IDF_TARGET_ESP32C6\)\s*(?:#include[^\n]+\n)*static constexpr uint8_t ZJ_PPM_PIN=18/);
  assert.match(ppmHdr,/#else\s*static constexpr uint8_t ZJ_PPM_PIN=10/);
  assert.match(sketch,/#include "FlightCorePpm.h"/);
  assert.match(sketch,/zjPpmSetup\(\)/);assert.match(sketch,/zjPpmLoop\(millis\(\)\)/);

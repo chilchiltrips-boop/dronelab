@@ -3,6 +3,7 @@
 #include <iostream>
 #include "../FlightCore_Firmware/FlightCoreClassroom.h"
 static String zjPpmRcChannelsJson(){return "null";}
+static String zjPpmStatus(){return "{}";}
 static String zjBootId="boot-1";
 static bool zjMaintenanceActive=false,busy=false;
 static bool zjAccessBusy(){return busy;}
@@ -22,8 +23,8 @@ static void zjReply(int,const String&){}
 static bool contains(const String& s,const char* text){return std::string(s.c_str()).find(text)!=std::string::npos;}
 static String token;
 static String cmd(const char* action,const char* a="-",const char* b="-",const char* c="-",const char* owner="USB",bool auth=true){return zjMotorCommand(action,owner,token,a,b,c,auth);}
-static void begin(){
- token="";auto s=cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000");
+static void begin(bool timed=false){
+ token="";auto s=cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED",timed?"PWM_50HZ_1000_2000_TIMED":"PWM_50HZ_1000_2000");
  assert(!contains(s,"error"));token=zjMotorToken;assert(token.length()==32);assert(zjMotor.mode==ZjMotorSafety::READY);
 }
 int main(){
@@ -38,7 +39,7 @@ int main(){
  assert(zjMotorEnabled&&zjMotor.pulses[1]==1100&&zjMotor.pulses[0]==1000);
  clockMs=801;zjMotorLoop();assert(!zjMotorEnabled&&zjMotorToken.isEmpty());
  assert(contains(cmd("KEEP"),"TEST_FINISHED"));assert(!zjMotorEnabled);
- assert(contains(cmd("SINGLE","2","1100","800"),"expired"));
+ assert(contains(cmd("SINGLE","2","1100","800"),"TEST_FINISHED"));
  begin();cmd("CAL_HIGH","POWER_DISCONNECTED");assert(zjMotor.pulses[0]==2000);
  clockMs+=1501;zjMotorLoop();assert(!zjMotorEnabled&&zjMotor.reason==ZjMotorSafety::SESSION_EXPIRED);
  begin();cmd("CAL_HIGH","POWER_DISCONNECTED");cmd("CAL_LOW");assert(zjMotor.pulses[0]==1000);
@@ -71,10 +72,22 @@ int main(){
  assert(contains(cmd("SLIDE","2","1100","1"),"invalid_motor_transition"));
  assert(contains(cmd("SLIDE","15","1100","2"),"invalid_slider"));
  clockMs+=751;cmd("KEEP");assert(!zjMotorEnabled&&zjMotor.reason==ZjMotorSafety::CONTROL_LOST);
- assert(contains(cmd("SLIDE","2","1800","3"),"expired"));
+ assert(contains(cmd("SLIDE","2","1800","3"),"CONTROL_LOST"));
  begin();cmd("SLIDER","15","1000","200");clockMs+=150;cmd("SLIDE","15","1750","1");for(auto p:zjMotor.pulses)assert(p==1750);
  clockMs+=50;zjMotorLoop();assert(!zjMotorEnabled&&zjMotor.reason==ZjMotorSafety::TEST_FINISHED);
  begin();cmd("SINGLE","1","2000","800");assert(zjMotor.pulses[0]==2000);cmd("STOP");assert(!zjMotorEnabled);
  begin();cmd("LAYOUT","A2_QUAD_X","0123","0101");for(auto p:zjMotorConfig.minimumUs)assert(p==0);cmd("STOP");
+ // Explicit modern bench profile tolerates delayed ACKs, never extends hard timers.
+ begin(true);clockMs+=3200;assert(!contains(cmd("CAL_HIGH","POWER_DISCONNECTED"),"error"));
+ clockMs+=2800;assert(!contains(cmd("CAL_LOW"),"error"));assert(zjMotor.mode==ZjMotorSafety::CAL_LOW);
+ clockMs+=3000;assert(contains(cmd("KEEP"),"CAL_FINISHED"));assert(!zjMotorEnabled);
+ assert(contains(cmd("SLIDE","1","1500","2"),"CAL_FINISHED"));
+ begin(true);cmd("SLIDER","1","1000","30000");cmd("SLIDE","1","1400","1");
+ clockMs+=3100;cmd("KEEP");assert(zjMotorEnabled&&zjMotor.pulses[0]==1400);
+ assert(!contains(cmd("SLIDE","1","1500","2"),"error"));
+ clockMs+=26900;assert(contains(cmd("SLIDE","1","1600","3"),"TEST_FINISHED"));assert(!zjMotorEnabled);
+ begin(true);cmd("CAL_HIGH","POWER_DISCONNECTED");clockMs+=15000;
+ assert(contains(cmd("CAL_LOW"),"CAL_TIMEOUT"));assert(!zjMotorEnabled);
+ begin(true);clockMs+=10000;assert(contains(cmd("KEEP"),"SESSION_EXPIRED"));assert(!zjMotorEnabled);
  std::cout<<"PASS production motor handler: authentication, ownership, NVS, deadlines, input loss, RTC replay and STOP\n";
 }

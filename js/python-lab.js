@@ -364,7 +364,7 @@ async function pythonMotorOperation(operation,a,w){
    return await motorClient.command('MINIMUM',[a.motor,a.pulse_us,'OBSERVED_SPIN'],'python');
   }
   if(operation==='calibrate'){
-   await confirm('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH?');
+   await confirm('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH? The board holds HIGH until LOW or its 15-second limit even if browser updates are delayed.');
    await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED'],'python');
    await confirm('HIGH signal is active for at most 15 seconds. Connect the motor battery; wait for the calibration prompt specified by your ESC manual, then Continue to send LOW.');
    await motorClient.command('CAL_LOW',[],'python');const s=await wait();

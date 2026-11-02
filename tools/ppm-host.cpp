@@ -37,6 +37,16 @@ static void acquire(){
 int main(){
  clockMs=1000;zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjPpmSetup();
  acquire();
+ // Capture continues while HTTP occupies the main consumer: no false PPM loss.
+ const auto losses=zjPpmLostCount;
+ for(unsigned n=0;n<40;n++)frame(2000,false);
+ zjPpmLoop(clockMs);assert(zjRcInputArmed&&zjPpmLostCount==losses);
+ // Monitoring remains available without owning control or lowering throttle.
+ zjRcRelease("test");zjRcControlPath="ANDROID_AP";
+ frame(2000,true,1900,1800);
+ assert(!zjRcOwned&&zjPpmSignalFresh(clockMs)&&zjPpmValues[2]==1800);
+ assert(std::string(zjPpmStatus().c_str()).find("\"channels\":[1900,1500,1800")!=std::string::npos);
+ zjRcControlPath="AUTO";acquire();
  // A completed packet must retain its arrival time while the loop is occupied.
  frame(2000,false);waitMs(500);zjPpmLoop(clockMs);
  assert(!zjRcOwned&&!zjRcInputArmed&&!zjPpmSignalFresh(clockMs));
