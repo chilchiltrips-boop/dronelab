@@ -9,7 +9,7 @@ static void errorIs(const char* actual,const char* expected){
 }
 int main(){
  ppm_regression_main();
- frame(1000); // physical receiver ARM switch must also be low before handover
+ frame(1000); // PPM present; CH5 is auxiliary, not an ARM or ownership gate
  const String token=zjRcSession;
  errorIs(zjAccessChange("BEGIN","","",false,true),"authorization_required");
  errorIs(zjAccessChange("BEGIN","","browser-a",false,true),"rc_owned_by_other_controller");
@@ -34,12 +34,12 @@ int main(){
  waitMs(30001);zjAccessLoop();
  assert(zjRcPaused&&zjMaintenanceActive&&zjMaintenanceOwner.isEmpty()&&!zjRcOwned);
  errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"ppm_signal_required");
- frame(2000);frame(2000);errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"lower_throttle_and_disarm");
+ frame(2000,true,1500,1800);errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"lower_throttle_and_disarm");
  frame(1000,true,1500,1800);errorIs(zjAccessChange("RESUME","WEB","browser-b",false,true),"lower_throttle_and_disarm");
  frame(1000);assert(!zjAccessChange("RESUME","PPM","browser-b",false,true));
  assert(!zjRcOwned&&!zjRcInputArmed&&!zjRcPaused&&zjRcSelection=="PPM");
- frame(2000);assert(!zjRcOwned);frame(1000);frame(1000);assert(!zjRcOwned);frame(1000);
- assert(zjRcOwned&&zjRcSource=="PPM"&&!zjRcInputArmed);
+ frame(2000);assert(!zjRcOwned);frame(1000);assert(!zjRcOwned);frame(1000);
+ assert(zjRcOwned&&zjRcSource=="PPM"&&!zjRcInputArmed); // CH5 high does not block PPM
  assert(!zjAccessChange("SELECT","WEB","browser-b",false,true));
  frame(1000);frame(1000);frame(1000);assert(!zjRcOwned);
  assert(zjRcClaim("WEB",zjKitCode,true,IPAddress(2),"STA"));
@@ -66,7 +66,7 @@ int main(){
  assert(zjRcOwned&&zjRcSource=="PPM"&&zjAccessCanSwitchRadio());
  const auto ppmSeq=zjRcSeq;
  assert(zjAccessCanSwitchRadio()&&zjRcSeq==ppmSeq&&zjRcOwned);
- frame(2000);assert(!zjAccessCanSwitchRadio());frame(1000);
+ frame(2000);assert(zjAccessCanSwitchRadio());frame(1000); // CH5 alone never blocks radio switching
  errorIs(zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","STA"),"control_path_requires_matching_wifi");
  assert(zjRcSource=="PPM"&&zjRcControlPath=="PPM");
  assert(!zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","AP"));
