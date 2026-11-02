@@ -133,7 +133,7 @@ if(root){
   }
   if(name==='low'){await prepare();render(await motorClient.command('CAL_LOW'));message('LOW acknowledged. Wait for output to end and confirm success tones.');return;}
   if(name==='slider'){
-   checked();await confirmMotor('Start a 30-second motor slider test? Remove all propellers and secure the frame. Selection: '+($('#a2Motor').value==='all'?'ALL FOUR MOTORS':'M'+$('#a2Motor').value)+'. You may command 1000–2000 µs. The board holds the last commanded pulse until STOP or the 30-second limit, even if browser updates are delayed. Keep a physical power cutoff ready.');if(!live())throw Error('Motor start cancelled: return to Setup Wizard and start again.');
+   checked();await confirmMotor('Start a 30-second motor slider test? Remove all propellers and secure the frame. Selection: '+($('#a2Motor').value==='all'?'ALL FOUR MOTORS':'M'+$('#a2Motor').value)+'. You may command 1000–2000 µs. '+(state?.timedBenchSupported===true?'The board holds the last commanded pulse until STOP or the 30-second limit, even if browser updates are delayed. ':'Legacy firmware stops on delayed updates; flash FlightCore 1.7.2+ for a board-timed manual test. ')+'Keep a physical power cutoff ready.');if(!live())throw Error('Motor start cancelled: return to Setup Wizard and start again.');
    setPulse(1000);await prepare(true);const mask=$('#a2Motor').value==='all'?15:1<<(Number($('#a2Motor').value)-1);
    await motorClient.startSlider(mask,()=>Number($('#a2Pulse').value));message('Live test started at 1000 µs. Raise the slider slowly; STOP ends the test.');return;
   }
