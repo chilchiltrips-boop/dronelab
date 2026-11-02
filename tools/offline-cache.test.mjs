@@ -7,7 +7,8 @@ function runtime(){
  const origin='https://example.test',base=origin+'/dronelab/',events={},store=new Map();let offline=false,skip=false,fail='';
  const key=x=>new URL(typeof x==='string'?x:x.url,base).href;
  const cache={async put(req,res){store.set(key(req),res.clone())},async match(req){return store.get(key(req))?.clone()}};
- const ctx={URL,Request,Response,AbortController,setTimeout,clearTimeout,caches:{open:async()=>cache,keys:async()=>['dronelab-qr-pairing-v1.4.4-smart-pair','dronelab-wix-iframe-lan-guard-20261017','dronelab-embed-clean-20261017','unrelated-cache'],delete:async name=>{ctx.deleted.push(name)}},deleted:[],fetch:async(req)=>{
+ const ctx={URL,Request,Response,AbortController,setTimeout,clearTimeout,caches:{open:async()=>cache,keys:async()=>['dronelab-qr-pairing-v1.4.4-smart-pair','dronelab-wix-iframe-lan-guard-20261017','dronelab-embed-clean-20261017','unrelated-cache'],delete:async name=>{ctx.deleted.push(name)}},deleted:[],fetches:[],fetch:async(req,options={})=>{
+  ctx.fetches.push({url:key(req),cache:options.cache});
   if(offline)throw Error('offline');const url=new URL(key(req));if(url.pathname.endsWith(fail)&&fail)return new Response('',{status:404});
   const rel=url.pathname.slice('/dronelab/'.length)||'index.html',file=new URL(rel,root);
   if(!existsSync(file))return new Response('',{status:404});return new Response(readFileSync(file));
@@ -56,6 +57,18 @@ test('version metadata refreshes online and retains cache offline',async()=>{
  r.setOffline();const cached=JSON.parse(await (await r.request('./app-version.json')).text());
  assert.equal(cached.version,onlineMeta.version,'Offline cache must retain latest online version');
 });
+test('published Android version and checksum replace stale cache online and remain readable offline',async()=>{
+ const r=runtime();
+ for(const name of ['ANDROID_RELEASE_META','SHA256SUMS']){
+  const path='./mobile-apk/'+name+'.txt',key=new URL(path,'https://example.test/dronelab/').href;
+  r.store.set(key,new Response('OLD_APK_RELEASE'));
+  const text=await (await r.request(path)).text();
+  assert.equal(text,readFileSync(new URL('mobile-apk/'+name+'.txt',root),'utf8'));
+  assert.equal(r.ctx.fetches.at(-1).cache,'no-store');
+ }
+ r.setOffline();
+ for(const name of ['ANDROID_RELEASE_META','SHA256SUMS'])assert.equal(await (await r.request('./mobile-apk/'+name+'.txt')).text(),readFileSync(new URL('mobile-apk/'+name+'.txt',root),'utf8'));
+});
 test('failed essential installation retains previous worker; activation preserves unrelated caches',async()=>{
  const failed=runtime();failed.setFailure('python-lab-worker.js');await assert.rejects(failed.install(),/Essential offline assets/);assert.equal(failed.skipped(),false);
  const r=runtime();await r.install();await r.activate();assert.deepEqual(r.ctx.deleted,['dronelab-qr-pairing-v1.4.4-smart-pair','dronelab-wix-iframe-lan-guard-20261017','dronelab-embed-clean-20261017']);
@@ -102,7 +115,7 @@ test('Wix iframe page refresh is network-first and retires old HTML cache even a
  assert.ok(!latest.includes('kit-embed-notice'),'current deployed HTML must not contain banner');
  r.setOffline();
  assert.equal(await (await r.request('./index.html?v=embed-clean-20261017')).text(),latest);
- assert.match(source,/cache:documentRequest\?'reload':'default'/);
+ assert.match(source,/cache:documentRequest\?'reload':releaseMetadata\?'no-store':'default'/);
  assert.match(source,/documentRequest\?10000:2500/);
  assert.match(source,/startsWith\('dronelab-'\)/);
 });
