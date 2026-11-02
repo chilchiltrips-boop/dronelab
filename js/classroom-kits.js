@@ -1530,20 +1530,76 @@ function watchHandoverDiscovery(ticket,until){
    setTimeout(()=>watchHandoverDiscovery(ticket,until),3000);
  });
 }
+// Live preflight is advisory only: the authenticated firmware independently
+// rejects unsafe RC and motor states after a fresh PPM snapshot. No silent
+// network/controller takeover, automatic motor ARM or unchecked force switch.
+function radioSwitchPreflight(){
+ const rc=state.rc||{},ppm=state.ppm||{},source=String(rc.source||'NONE');
+ const motorDisabled=rc.motorsDisabled===true&&rc.motorsArmed===false;
+ const receiverFresh=ppm.present===true&&Number.isFinite(state.ppmObservedAt)&&
+  Date.now()-state.ppmObservedAt<=3500;
+ const physicalThrottle=Number.isFinite(ppm.channels?.[2])?ppm.channels[2]:
+  Number.isFinite(ppm.raw?.[2])?ppm.raw[2]:null;
+ const rcThrottle=Number.isFinite(rc.throttle)?rc.throttle:null;
+ const low=rcThrottle!==null&&rcThrottle<=1050,physicalLow=receiverFresh&&
+  (physicalThrottle===null||physicalThrottle<=1050);
+ const safePpmArm=source==='PPM'&&rc.claimed===true&&rc.inputArmed===true&&
+  low&&physicalLow&&motorDisabled&&!state.motorBenchActive;
+ let blocker='NONE',message='';
+ if(!linkFresh()||state.working||headerModePending||wifiTesting){
+  blocker='KIT_LINK_UNVERIFIED';message='Wait for a fresh, verified Kit link.';
+ }else if(state.radioHandover?.version!==1){
+  blocker='FIRMWARE_UNSUPPORTED';message='Update FlightCore to support verified AP/STA handover.';
+ }else if(rc.motorsDisabled===false||rc.motorsArmed===true){
+  blocker='MOTOR_OUTPUT_ACTIVE';message='STOP motor tests and confirm motors disabled before Wi-Fi switching.';
+ }else if(rc.claimed===true&&source!=='PPM'&&!state.owner){
+  blocker='OTHER_CONTROLLER_ACTIVE';message='Release the Android/Web controller first.';
+ }else if(rcThrottle!==null&&rcThrottle>1050){
+  blocker='RC_THROTTLE_HIGH';message='Lower throttle to 1050 µs or less.';
+ }else if(source==='PPM'&&receiverFresh&&physicalThrottle!==null&&physicalThrottle>1050){
+  blocker='PPM_THROTTLE_HIGH';message='Lower receiver throttle to 1050 µs or less.';
+ }else if(rc.inputArmed===true&&!safePpmArm){
+  blocker=source==='PPM'?'PPM_ARM_UNSAFE':'INPUT_ARMED';
+  message=source==='PPM'?'PPM INPUT ARM is ON. Lower throttle and verify motors disabled; or hold Yaw LEFT for 2 seconds to DISARM.':
+   'Disarm the current controller before changing Wi-Fi.';
+ }else if((rc.claimed===true||rc.active===true)&&rcThrottle===null){
+  blocker='RC_THROTTLE_UNKNOWN';message='Wait for a fresh RC throttle value.';
+ }
+ return {blocker,message,source,throttle:rcThrottle,inputArmed:rc.inputArmed===true,
+  ppmPresent:receiverFresh,ppmThrottleUs:physicalThrottle,motorsDisabled:motorDisabled,
+  diagnosticArmReleased:safePpmArm};
+}
+function radioSwitchDiagnosticFields(p){
+ return {handoverBlocker:p.blocker,source:p.source,inputArmed:p.inputArmed,throttle:p.throttle,
+  ppmPresent:p.ppmPresent,ppmThrottleUs:p.ppmThrottleUs,handMotorDisabled:p.motorsDisabled,
+  diagnosticArmReleased:p.diagnosticArmReleased};
+}
 async function switchKitNetworkMode(mode){
+ const preflight=radioSwitchPreflight();
+ trace('handover_preflight',{mode,transport:state.transport,...radioSwitchDiagnosticFields(preflight),
+  outcome:preflight.blocker==='NONE'?'ok':'fail'});
  try{return await performKitNetworkHandover(mode);}
- catch(error){trace('handover_error',{mode,transport:state.transport,reason:classify(error),outcome:'fail'});throw error;}
+ catch(error){
+  const latest=radioSwitchPreflight();
+  const blocker=latest.blocker!=='NONE'?latest.blocker:
+   state.radioHandover?.preflightBlocker&&state.radioHandover.preflightBlocker!=='NONE'?
+    state.radioHandover.preflightBlocker:'FIRMWARE_REJECTED';
+  trace('handover_error',{mode,transport:state.transport,reason:classify(error),
+   ...radioSwitchDiagnosticFields({...latest,blocker}),outcome:'fail'});
+  wifiNote((latest.message||'Wi-Fi/input switch was not confirmed by FlightCore.')+
+    ' [Diagnostic: '+blocker+']','warn');
+  throw error;
+ }
 }
 async function performKitNetworkHandover(mode){
  if(!['ap','sta','auto'].includes(mode))throw Error('Invalid Wi-Fi mode');
- if(!linkFresh()||state.working||headerModePending||wifiTesting)throw Error('Wait for a verified idle Kit connection');
- if(state.radioHandover?.version!==1)throw Error('Update FlightCore to 1.5.13 for saved input and Wi-Fi handover');
- if(state.rc?.inputArmed===true||Number.isFinite(state.rc?.throttle)&&state.rc.throttle>1050||(state.rc?.claimed||state.rc?.active)&&!Number.isFinite(state.rc?.throttle))throw Error('Disarm and lower throttle to 1000 µs before switching AP/STA');
- if(state.rc?.claimed&&!state.owner&&state.rc.source!=='PPM')throw Error('Release the other Android/Web controller first');
+ const gate=radioSwitchPreflight();
+ if(gate.blocker!=='NONE')throw Error(gate.message+' ('+gate.blocker+')');
  const target=connectionTarget(),ticket=reconnectTicket,plan=root.ZebjusControlPaths.radioTarget(state,mode);
  if(state.owner)await releaseRc();
  headerModePending=true;render();
- trace('handover_request',{mode,selectedPath:state.rcAccess?.controlPath,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,transport:state.transport,outcome:'pending'});
+ trace('handover_request',{mode,selectedPath:state.rcAccess?.controlPath,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,
+   transport:state.transport,...radioSwitchDiagnosticFields(gate),outcome:'pending'});
  try{
   let result;
   const overUsb=state.transport==='usb'||serial()?.isOpen?.()&&['sta','ap'].includes(state.transport);
@@ -1560,7 +1616,10 @@ async function performKitNetworkHandover(mode){
   state.radioHandover={...result.radioHandover};state.rcAccess=root.ZebjusKitAccessPolicy.normalize(result.rcAccess);
   ++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';state.rc={source:'NONE',claimed:false,active:false,inputArmed:false,throttle:1000};
   state.mode=mode;headerNetworkChoice=mode==='ap'?'ap':'sta';
-  trace('handover_ack',{mode,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,profileSaved:true,profileRevision:result.radioHandover.revision,handoverState:result.radioHandover.state,transport:state.transport,outcome:'ok'});
+  trace('handover_ack',{mode,targetInput:plan.targetInput,lastStaInput:plan.lastStaInput,profileSaved:true,
+    profileRevision:result.radioHandover.revision,handoverState:result.radioHandover.state,transport:state.transport,
+    ...radioSwitchDiagnosticFields({...gate,diagnosticArmReleased:result.radioHandover.diagnosticArmReleased===true}),
+    outcome:'ok'});
   const message='Saved '+plan.targetInput+' input; Kit switching to '+mode.toUpperCase()+'. New controller starts disarmed.';
   if(overUsb&&!overUsbNetwork){wifiNote(message+' USB stays connected.','info');await usbWrite('ZJNET,GET');}
   else await beginNetworkHandover(target,mode==='ap'?'ap':'sta',message);
