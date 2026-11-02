@@ -14,6 +14,32 @@
    (m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active))?{...m}:null;
  }
  function isNetwork(transport){return network.has(String(transport||'').toLowerCase())}
+ // Keep signed requests ordered, but let motor control and STOP pass queued
+ // monitoring reads. A request already sent is never interrupted or replayed.
+ function createRequestScheduler({now=()=>Date.now(),limit=32}={}){
+  const slots=new Map();
+  function pump(key,slot){
+   if(slot.running)return;
+   const job=slot.jobs.shift();
+   if(!job){if(slots.get(key)===slot)slots.delete(key);return;}
+   slot.running=true;
+   Promise.resolve().then(()=>{
+    job.guard?.();
+    if(now()-job.at>job.maxQueueMs){const e=Error('Control request waited too long in the Kit queue; test stopped.');e.code='REQUEST_QUEUE_STALE';throw e;}
+    return job.run();
+   }).then(job.resolve,job.reject).finally(()=>{slot.running=false;pump(key,slot)});
+  }
+  function schedule(key,run,{priority=0,maxQueueMs=Infinity,guard}={}){
+   let slot=slots.get(key);if(!slot){slot={running:false,jobs:[]};slots.set(key,slot)}
+   if(slot.jobs.length>=limit)return Promise.reject(Error('Kit request queue full'));
+   return new Promise((resolve,reject)=>{
+    slot.jobs.push({run,resolve,reject,priority,maxQueueMs,guard,at:now()});
+    slot.jobs.sort((a,b)=>b.priority-a.priority);
+    pump(key,slot);
+   });
+  }
+  return {schedule};
+ }
  // Single-flight diagnostic GETs; no control or mutation request may be queued here.
  function createReadScheduler({now=()=>Date.now(),limit=16}={}){
   const entries=new Map();let epoch=0;
@@ -130,5 +156,5 @@
    accepted:null,rejected:null,round_trip_ms:0,motorsDisabled:kit.motorsDisabled??null,motors_disabled:kit.motorsDisabled??null,
    motorsArmed:kit.motorsArmed??null,readSource:'verified-usb-serial'};
  }
- root.ZebjusKitData=Object.freeze({flightModeState,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,detectPythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
+ root.ZebjusKitData=Object.freeze({flightModeState,createRequestScheduler,createReadScheduler,selectMonitorPath,isNetwork,matchesTarget,resolvePythonTarget,detectPythonTarget,validatePythonBinding,assertBoundSession,validateReply,usbJoystick});
 })(globalThis);

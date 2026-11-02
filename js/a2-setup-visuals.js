@@ -22,7 +22,7 @@ export function stepVisual(step,{kit={},state={},draft={},input={},history=[],ca
  <rect x="171" y="303" width="58" height="28" rx="5" class="a2-usb"/><path d="M200 332v34" class="a2-wire"/>
  ${text(200,60,linked?'CONNECTED':'WAITING FOR KIT','a2-svg-label')}${text(200,394,(kit.transport||'USB · AP · STA').toUpperCase(),'a2-svg-label')}`)};
  if(step===1)return {title:'Match each ESC to its pin',description:'Preview of the form. Save and verify the board read-back before testing.',html:motorDiagram(draft)};
- if(step===2){const channels=input.channels||[],thr=channels[2],roll=channels[0],pitch=channels[1],points=history.map((v,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(v-1000)*.08}`).join(' ');return {title:'Live receiver monitor',description:'Read-only channels from the selected source. Missing or stale channels show —.',html:svg('Live input sticks and throttle trace',`
+ if(step===2){const channels=input.channels||[],thr=channels[2],roll=channels[0],pitch=channels[1],points=history.map((v,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(v-1000)*.08}`).join(' ');return {title:'Live receiver monitor',description:'Read-only channels from the selected source. Delayed samples are dimmed; lost or missing channels show —.',html:svg('Live input sticks and throttle trace',`
  ${text(200,40,input.source||'NO SIGNAL','a2-svg-label')}
  ${[110,290].map(x=>`<circle cx="${x}" cy="147" r="66" class="a2-stick-ring"/><path d="M${x-55} 147h110m-55-55v110" class="a2-grid-line"/>`).join('')}
  <circle cx="110" cy="${Number.isFinite(thr)?197-(thr-1000)/10:147}" r="14" class="${input.valid?'a2-stick-knob':'a2-off-dot'}"/>

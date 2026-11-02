@@ -16,7 +16,8 @@ try{
   const f=window.__motorFixture={run:0,kit,state:{version:2,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
   window.__motorCalls=[];
   const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0]};},ms);};
-  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a)=>{
+  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
+   guard?.();
    if(route!=='/api/motor')throw Error('Unexpected fixture request');window.__motorCalls.push(a.action);f.calls.push({...a});let state=f.state;
    if(a.action==='BEGIN'){++f.run;state={...state,session:'fixture',mode:'READY',pulseUs:[1000,1000,1000,1000]};}
    if(a.action==='STOP'){++f.run;state={...state,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0]};}
@@ -24,6 +25,7 @@ try{
    if(a.action==='MINIMUM'){state.observedMinimumUs=[...state.observedMinimumUs];state.observedMinimumUs[Number(a.a)-1]=Number(a.b);}
    if(a.action==='SLIDER')state={...state,mode:'SLIDER_TEST',sliderMask:Number(a.a),remainingMs:Number(a.c),pulseUs:[1000,1000,1000,1000]};
    if(a.action==='SLIDE')state={...state,pulseUs:[0,1,2,3].map(i=>(state.sliderMask&(1<<i))?Number(a.b):1000)};
+   if(a.action==='SLIDE'&&f.loseControl){f.loseControl=false;state={...state,mode:'DISABLED',reason:'CONTROL_LOST',pulseUs:[0,0,0,0]};}
    if(a.action==='SINGLE'||a.action==='ALL'){state={...state,mode:a.action==='ALL'?'ALL_TEST':'SINGLE_TEST',remainingMs:Number(a.c),pulseUs:[1000,1000,1000,1000]};if(a.action==='ALL')state.pulseUs.fill(Number(a.b));else state.pulseUs[Number(a.a)-1]=Number(a.b);finishAfter(Number(a.c),'TEST_FINISHED');}
    if(a.action==='CAL_HIGH')state={...state,mode:'CAL_HIGH',pulseUs:[2000,2000,2000,2000],remainingMs:15000};
    if(a.action==='CAL_LOW'){state={...state,mode:'CAL_LOW',pulseUs:[1000,1000,1000,1000],remainingMs:3000};finishAfter(3000,'CAL_FINISHED');}
@@ -56,8 +58,16 @@ try{
  await page.screenshot({path:'test-output/a2-inputs.png',fullPage:true});
  await page.evaluate(()=>window.__motorFixture.state.inputValid=false);
  await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
+ await page.evaluate(()=>{window.__motorFixture.state.inputValid=true;window.__motorFixture.state.inputAgeMs=250;});
+ await page.waitForFunction(()=>document.querySelector('.a2-input').textContent.includes('LAST SAMPLE')&&document.querySelector('[data-channel="2"] output').textContent==='1475 µs');
+ assert.equal(await page.locator('[data-channel="2"]').getAttribute('data-fresh'),'false','a delayed last sample must never be labelled LIVE');
+ await page.evaluate(()=>window.__motorFixture.state.inputAgeMs=0);
  await page.evaluate(()=>{window.__motorFixture.state.inputValid=true;window.__motorFixture.state.channels[2]=1000;});
  await page.locator('[data-step="4"]').click();
+ const begins=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
+ await page.locator('[data-action=slider]').click();await page.getByRole('button',{name:'Cancel / STOP',exact:true}).click();
+ await page.waitForFunction(()=>!document.querySelector('dialog.motor-confirm'));
+ assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),begins,'cancelled confirmation must not start output');
  await page.locator('[data-action=slider]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
  await page.locator('#a2Pulse').fill('1137');
@@ -74,6 +84,10 @@ try{
  await page.locator('[data-action=stop]').click();await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
  const slides=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDE').length);await page.waitForTimeout(400);
  assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDE').length),slides,'STOP must cancel the slider command pump');
+ await page.evaluate(()=>window.__motorFixture.loseControl=true);
+ await page.locator('[data-action=slider]').click();await confirm.click();
+ await page.waitForFunction(()=>document.querySelector('.a2-test-state').textContent.includes('750 ms')&&!window.ZebjusMotorSetup.active);
+ assert.ok(!(await page.locator('.a2-message').textContent()).includes('Live test started'),'a terminal first SLIDE ACK must not report start success');
  await page.locator('#a2Pulse').fill('1100');await page.locator('[data-action=single]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorCalls.includes('ALL'));
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
@@ -116,5 +130,5 @@ try{
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
  await page.locator('#stopPythonBtn').click();
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
- assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/stale channels, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
+ assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
 }finally{await browser.close();}

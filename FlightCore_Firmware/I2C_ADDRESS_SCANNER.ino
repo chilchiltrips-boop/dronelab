@@ -5,7 +5,7 @@
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.0";
+constexpr const char* FW_VERSION="1.7.1";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -526,9 +526,9 @@ void setup(){
  zjKitSetup();
  zjPpmSetup();
  selectI2cBus();
- digitalWrite(LED_PIN,HIGH);
  pinMode(LED_PIN,OUTPUT);
- ledcAttachChannel(LED_PIN,5000,8,5);
+ digitalWrite(LED_PIN,HIGH);
+ ledAvailable=ledcAttachChannel(LED_PIN,5000,8,5);
  ledOff();
  // No decorative startup banner.
  printFirmwareInfo();

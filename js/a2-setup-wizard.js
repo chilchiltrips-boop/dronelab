@@ -1,10 +1,10 @@
-import {motorClient,confirmMotor} from './motor-setup.js';
+import {motorClient,confirmMotor,cancelMotorConfirmations,motorStopDescription,setupInputSample} from './motor-setup.js';
 import {layouts,stepVisual} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','ESC calibration','Motor test','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',calFinished=false,calConfirmed=false;
+ let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',calFinished=false,calConfirmed=false,operationError='';
  let draft={layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']},visualStep=-1,visualMarkup='';
  const pendingMinimum={},observations={},history=[];
  root.innerHTML=`<header class="a2-title"><div><small>AERION · HARDWARE SETUP</small><h2>A2 Setup Wizard</h2></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
@@ -17,7 +17,7 @@ if(root){
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Expected direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
  <p class="a2-wiring-validation" role="status"></p><div class="a2-note">Signal → selected D pin · signal ground → GND. Verify connector orientation and the board power circuit before attaching a BEC/5V lead. Rotation is a wiring expectation; change motor phase wires or supported ESC settings to reverse it.</div>
  <div class="a2-actions"><button class="btn" data-action="layout">Save wiring to board</button><button class="btn ghost" data-action="reload-layout">Load saved wiring</button></div><p class="a2-save-state">Not saved in this session. Changing wiring clears saved minimum-pulse observations.</p></section>
- <section data-panel="2"><small class="a2-eyebrow">03 / MONITOR</small><h3>Live input channels</h3><p class="a2-input">Waiting for a selected input.</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><div class="a2-note">Select the source in the header: PPM RX/TX, Android AP, Android WebRTC or WebApp Joystick. This step reads channels and does not start motors.</div><p>Move each stick and check direction, centre and endpoints. Unreported channels remain blank; stale data is not shown as live.</p></section>
+ <section data-panel="2"><small class="a2-eyebrow">03 / MONITOR</small><h3>Live input channels</h3><p class="a2-input">Waiting for a selected input.</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><div class="a2-input-health a2-note" role="status"></div><div class="a2-note">Select the source in the header: PPM RX/TX, Android AP, Android WebRTC or WebApp Joystick. This step reads channels and does not start motors.</div><p>Move each stick and check direction, centre and endpoints. A delayed last sample is dimmed with its age; missing or lost input is shown as —.</p></section>
  <section data-panel="3"><small class="a2-eyebrow">04 / CALIBRATE</small><h3>ESC endpoint calibration</h3><p>Use only ESCs that support 50 Hz PWM and 1000–2000 µs power-on calibration. Follow the tone sequence in the ESC manual.</p>
  <ol class="a2-cal-steps"><li data-cal-stage="power"><b>Separate controller power</b><span>Remove motor-battery power. Keep the A2 powered through a verified separate supply.</span></li><li data-cal-stage="high"><b>Send HIGH · 2000 µs</b><span>Start HIGH, then connect the motor battery. Wait for the ESC calibration prompt.</span></li><li data-cal-stage="low"><b>Send LOW · 1000 µs</b><span>After hearing the prompt, send LOW and wait for the 3-second phase to end.</span></li><li data-cal-stage="tones"><b>Confirm success tones</b><span>Only an operator or sensors can confirm the ESC accepted its endpoints.</span></li></ol>
  <label class="a2-check"><input type="checkbox" id="a2PowerOff"> Motor battery disconnected; controller power verified</label>
@@ -40,12 +40,12 @@ if(root){
  function loadDraft(){draft=config(state);draftDirty=false;$('#a2Layout').value=draft.layout;draft.layoutPins.forEach((p,i)=>$(`[data-pin="${i}"]`).value=p);draft.rotations.forEach((r,i)=>$(`[data-rotation="${i}"]`).value=r);renderDraft();}
  function renderDraft(){const l=layouts[draft.layout];l.positions.forEach((p,i)=>$(`[data-position="${i}"]`).textContent=p);const unique=new Set(draft.layoutPins).size===4;$('.a2-wiring-validation').textContent=unique?'Four unique ESC outputs · D0–D3':'Each motor needs a different pin. Duplicate assignments cannot be saved.';$('.a2-wiring-validation').dataset.valid=String(unique);$('[data-action="layout"]').disabled=!unique||working;renderVisual();}
  function selectedInput(){
-  const s=state||{},valid=s.inputValid===true&&Date.now()-lastStateAt<1000;
+  const s=state||{};
   if(s.selectedInput==='ANDROID_WEBRTC'){
    const p=window.ZebjusSimulatorInputs?.snapshot?.(),sample=p?.sample;
    if(p?.fresh&&p.ageMs<=300&&p.peer?.approved&&(!sample?.kitId||sample.kitId===kit().kitId))return {source:'Android WebRTC · paired phone',valid:true,age:p.ageMs,channels:sample?.channels?[sample.channels.roll,sample.channels.pitch,sample.channels.throttle,sample.channels.yaw,sample.aux?.ch5,sample.aux?.ch6,null,null]:[]};
   }
-  return {source:s.selectedInput||'Not selected',valid,age:s.inputAgeMs,channels:valid?(s.channels||[]):[]};
+  return setupInputSample(kit().connected?s:null,lastStateAt);
  }
  function renderVisual(){
   const k=kit(),input=selectedInput(),safe=Date.now()-lastStateAt<1200?state||{}:{...state,mode:'UNCONFIRMED',pulseUs:[]};
@@ -67,14 +67,14 @@ if(root){
   $('.a2-pulses').textContent=safe.mode==='UNCONFIRMED'?'Output state unconfirmed':(safe.pulseUs||[]).map((p,i)=>`M${i+1} ${p?p+' µs':'OFF'}`).join(' · ');
  }
  function show(n){
-  const next=Math.max(0,Math.min(5,n));if(next!==step&&motorClient.owner==='wizard')void motorClient.stop('wizard').catch(e=>message(e.message));step=next;
+  const next=Math.max(0,Math.min(5,n));if(next!==step){cancelMotorConfirmations();if(motorClient.owner==='wizard')void motorClient.stop('wizard').catch(e=>message(e.message));}step=next;
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
   root.querySelectorAll('[data-step]').forEach(b=>b.setAttribute('aria-current',Number(b.dataset.step)===step?'step':'false'));
   $('.a2-checks').hidden=![1,3,4].includes(step);$('.a2-step-count').textContent=`${step+1} / ${steps.length}`;
   $('[data-nav="-1"]').disabled=step===0;$('[data-nav="1"]').disabled=step===5;render();
  }
  function render(s){
-  if(s){state=s;lastStateAt=Date.now();}
+  if(s){state=s;lastStateAt=s.receivedAt||Date.now();}
   const k=kit(),key=[k.kitId,k.bootId||state?.bootId,k.transport].join('|');
   if(key!==identity){identity=key;state=s||null;draftDirty=false;calFinished=calConfirmed=false;history.length=0;for(const group of [pendingMinimum,observations])for(const key of Object.keys(group))delete group[key];if(state)loadDraft();}
   if(state&&!draftDirty){const next=config(state);if(JSON.stringify(next)!==JSON.stringify(draft))loadDraft();}
@@ -82,8 +82,10 @@ if(root){
   $('[data-action="layout"]').disabled=working||new Set(draft.layoutPins).size!==4;
   $('.a2-status').textContent=connected?`${k.board||'Kit'} · ${k.transport?.toUpperCase()} · Firmware ${k.version||'—'} · ${m.mode||'READING STATUS'}`:'No verified Kit connected · Open Devices & Firmware';
   $('.a2-identity').innerHTML=`<dl>${[['Board',k.board||'Not detected'],['Kit name',k.kitName||'—'],['Device ID',k.kitId||'—'],['Firmware',k.version||'—'],['Connection',connected?(k.transport||'').toUpperCase():'OFFLINE'],['Motor setup',m.supported?(m.version>=2?'Supported · configurable wiring & sliders':'Supported · update to 1.7.0 for editable wiring/sliders'):'Waiting for verified A2'],['USB Teacher',k.transport==='usb'?(k.adminUnlocked?'UNLOCKED':'Unlock in Devices & Firmware'):'Not required for authorized AP/STA control']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
-  const input=selectedInput();$('.a2-input').textContent=`${input.source} · ${input.valid?'LIVE · '+Math.round(input.age||0)+' ms':'NO FRESH SIGNAL'} · Input ${m.inputArmed?'armed':'disarmed'}`;
-  root.querySelectorAll('[data-channel]').forEach(row=>{const value=input.channels?.[Number(row.dataset.channel)],valid=input.valid&&Number.isFinite(value)&&value>=1000&&value<=2000;row.dataset.fresh=String(valid);row.querySelector('output').textContent=valid?value+' µs':'—';row.querySelector('i').style.width=valid?((value-1000)/10)+'%':'0%';});
+  const input=selectedInput(),inputAge=(input.ageUpperBound?'≤ ':'')+Math.round(input.age||0)+' ms';$('.a2-input').textContent=`${input.source} · ${input.valid?'LIVE · '+inputAge:input.reported?'LAST SAMPLE · '+inputAge+' · waiting for update':'NO FRESH SIGNAL'} · Input ${m.inputArmed?'armed':'disarmed'}`;
+  root.querySelectorAll('[data-channel]').forEach(row=>{const value=input.channels?.[Number(row.dataset.channel)],reported=Number.isFinite(value)&&value>=1000&&value<=2000;row.dataset.fresh=String(reported&&input.valid);row.querySelector('output').textContent=reported?value+' µs':'—';row.querySelector('i').style.width=reported?((value-1000)/10)+'%':'0%';});
+  const ppm=k.ppm;
+  $('.a2-input-health').textContent=ppm?`PPM receiver at last board status · ${ppm.present?'signal present':'no fresh frame'} · losses ${ppm.losses||0} · invalid intervals ${ppm.faults||0} · checked ${k.ppmObservedAt?Math.round(Math.max(0,Date.now()-k.ppmObservedAt)/1000)+' s ago':'at an unknown time'}. ${m.selectedInput==='ANDROID_AP'?'Android AP is selected; PPM does not control the motors. ':''}${(ppm.faults||0)>0?'Increasing invalid intervals require checking the D10 signal, common GND and receiver PPM mode.':''}`:'PPM signal diagnostics are not reported yet.';
   if(step===2&&input.valid&&Number.isFinite(input.channels?.[2])&&s){history.push(input.channels[2]);if(history.length>48)history.shift();}
   if(m.mode==='CAL_LOW')calFinished=false;
   if(m.mode==='DISABLED'&&m.reason==='CAL_FINISHED')calFinished=true;
@@ -94,7 +96,7 @@ if(root){
   const sliding=m.mode==='SLIDER_TEST'&&motorClient.owner==='wizard';$('#a2Motor').disabled=sliding;$('#a2PulseSlider').disabled=!sliding;
   $('[data-action="slider"]').disabled=working||m.version<2||!m.supported||sliding;
   $('[data-action="single"]').disabled=working||motorClient.active;$('[data-action="input"]').disabled=working||motorClient.active;
-  $('.a2-test-state').textContent=sliding?`LIVE · ${Math.ceil((m.remainingMs||0)/1000)} s left · Firmware-acknowledged pulses shown at right.`:m.mode==='UNCONFIRMED'?'Output state unconfirmed. Reconnect before testing.':`Outputs ${m.motorsDisabled===true||m.mode==='DISABLED'?'off':m.mode||'not reported'} · ${m.reason||'Start at 1000 µs'}`;
+  $('.a2-test-state').textContent=operationError?'Test not running · '+operationError:sliding?(Date.now()-lastStateAt>=750?'Waiting for motor ACK · output state unconfirmed. STOP or verify the connection.':`LIVE · ${Math.ceil((m.remainingMs||0)/1000)} s left · Firmware-acknowledged pulses shown at right. Last ACK ${m.roundTripMs??'—'} ms.`):m.mode==='UNCONFIRMED'?'Output state unconfirmed · '+(m.reason||'Reconnect before testing.'): `Outputs ${m.motorsDisabled===true||m.mode==='DISABLED'?'off':m.mode||'not reported'} · ${motorStopDescription(m)}`;
   $('.a2-minima').innerHTML=[1,2,3,4].map((n,i)=>`<div><b>M${n}</b><span>${m.observedMinimumUs?.[i]?m.observedMinimumUs[i]+' µs saved':'Not recorded'}</span>${pendingMinimum[n]?`<em>${pendingMinimum[n]} µs pending</em>`:''}</div>`).join('');
   $('.a2-report').innerHTML=`<dl>${[['Board',k.kitId||'Not connected'],['Saved frame',layouts[m.layout]?.name||'Not reported'],['Saved pins',(m.layoutPins||[]).map((p,i)=>'M'+(i+1)+' → '+p).join(' · ')||'—'],['ESC calibration',calConfirmed?'Success tones confirmed by operator':'Not confirmed'],['Minimum pulses',(m.observedMinimumUs||[]).map((p,i)=>'M'+(i+1)+': '+(p?p+' µs':'—')).join(' · ')||'Not recorded'],['Physical flight acceptance','Pending']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
   $('.a2-diagnostics').textContent=state?JSON.stringify(state,null,2):'No firmware response.';renderVisual();
@@ -130,7 +132,7 @@ if(root){
   }
   if(name==='low'){await prepare();render(await motorClient.command('CAL_LOW'));message('LOW acknowledged. Wait for output to end and confirm success tones.');return;}
   if(name==='slider'){
-   checked();await confirmMotor('Start a 30-second motor slider test? Remove all propellers and secure the frame. Selection: '+($('#a2Motor').value==='all'?'ALL FOUR MOTORS':'M'+$('#a2Motor').value)+'. You may command 1000–2000 µs. Keep a physical power cutoff ready.');
+   checked();await confirmMotor('Start a 30-second motor slider test? Remove all propellers and secure the frame. Selection: '+($('#a2Motor').value==='all'?'ALL FOUR MOTORS':'M'+$('#a2Motor').value)+'. You may command 1000–2000 µs. Keep a physical power cutoff ready.');if(!live())throw Error('Motor start cancelled: return to Setup Wizard and start again.');
    setPulse(1000);await prepare(true);const mask=$('#a2Motor').value==='all'?15:1<<(Number($('#a2Motor').value)-1);
    await motorClient.startSlider(mask,()=>Number($('#a2Pulse').value));message('Live test started at 1000 µs. Raise the slider slowly; STOP ends the test.');return;
   }
@@ -141,7 +143,8 @@ if(root){
   if(name==='input'){checked();await confirmMotor('Start a 10-second selected-input throttle test on ALL FOUR motors? Lower throttle and disarm input first. Output is capped at 1200 µs.');await prepare();render(await motorClient.command('INPUT',['selected',10000,'CONFIRM_ALL_MOTORS']));message('Input test started. Enable input ARM at low throttle or use the PPM yaw gesture.');}
  }
  root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.step!==undefined){show(Number(b.dataset.step));return;}if(b.dataset.nav){show(step+Number(b.dataset.nav));return;}if(!b.dataset.action||working&&b.dataset.action!=='stop')return;working=true;
-  act(b.dataset.action).catch(async e=>{message(e.message);if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
+  operationError='';
+  act(b.dataset.action).catch(async e=>{operationError=e.message==='stop_maintenance_lower_throttle_and_disarm_input'?'Start blocked: lower receiver/controller throttle, turn ARM off and stop maintenance, then confirm again.':e.message;message(operationError);if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
  });
  root.addEventListener('input',e=>{
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){draftDirty=true;draft={layout:$('#a2Layout').value,layoutPins:[...root.querySelectorAll('[data-pin]')].map(x=>x.value),rotations:[...root.querySelectorAll('[data-rotation]')].map(x=>x.value)};$('.a2-save-state').textContent='Unsaved wiring changes · Save to board to apply them.';renderDraft();}
@@ -151,7 +154,7 @@ if(root){
  window.addEventListener('zebjus:motor-state',e=>{if(live())render(e.detail);});
  let lastPoll=0;
  const observe=()=>{
-  if(!live()){if(motorClient.owner==='wizard')void motorClient.stop('wizard').catch(()=>{});return;}
+  if(!live()){if(working)cancelMotorConfirmations();if(motorClient.owner==='wizard')void motorClient.stop('wizard').catch(()=>{});return;}
   render();if(polling||motorClient.active||working||Date.now()-lastPoll<(step===2?250:1000))return;
   polling=true;lastPoll=Date.now();motorClient.status().then(render).catch(e=>{message(e.message);lastStateAt=0;render();}).finally(()=>polling=false);
  };
