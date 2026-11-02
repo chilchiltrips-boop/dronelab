@@ -1538,8 +1538,9 @@ function radioSwitchPreflight(){
  const motorDisabled=rc.motorsDisabled===true&&rc.motorsArmed===false;
  const receiverFresh=ppm.present===true&&Number.isFinite(state.ppmObservedAt)&&
   Date.now()-state.ppmObservedAt<=3500;
- const physicalThrottle=Number.isFinite(ppm.channels?.[2])?ppm.channels[2]:
-  Number.isFinite(ppm.raw?.[2])?ppm.raw[2]:null;
+ const throttleIndex=Number.isInteger(ppm.map?.[2])&&ppm.map[2]>=1&&ppm.map[2]<=8?ppm.map[2]-1:2;
+ const physicalThrottle=Number.isFinite(ppm.channels?.[throttleIndex])?ppm.channels[throttleIndex]:
+  Number.isFinite(ppm.raw?.[throttleIndex])?ppm.raw[throttleIndex]:null;
  const rcThrottle=Number.isFinite(rc.throttle)?rc.throttle:null;
  const low=rcThrottle!==null&&rcThrottle<=1050,physicalLow=receiverFresh&&
   (physicalThrottle===null||physicalThrottle<=1050);
