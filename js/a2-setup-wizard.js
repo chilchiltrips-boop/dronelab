@@ -156,8 +156,8 @@ if(root){
  let lastPoll=0;
  const observe=()=>{
   if(!live()){if(working)cancelMotorConfirmations();if(motorClient.owner==='wizard')void motorClient.stop('wizard').catch(()=>{});return;}
-  render();if(polling||motorClient.active||working||Date.now()-lastPoll<(step===2?250:1000))return;
+  render();if(polling||motorClient.active||working||Date.now()-lastPoll<(step===2?100:1000))return;
   polling=true;lastPoll=Date.now();motorClient.status().then(render).catch(e=>{message(e.message);lastStateAt=0;render();}).finally(()=>polling=false);
  };
- setInterval(observe,250);new MutationObserver(observe).observe(document.getElementById('tab-setup'),{attributes:true,attributeFilter:['class']});renderDraft();show(0);observe();
+ setInterval(observe,100);new MutationObserver(observe).observe(document.getElementById('tab-setup'),{attributes:true,attributeFilter:['class']});renderDraft();show(0);observe();
 }
