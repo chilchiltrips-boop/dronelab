@@ -1,4 +1,4 @@
-# A2 motor setup — FlightCore 1.7.0
+# A2 motor setup — FlightCore 1.7.1
 
 A2 D0–D3 outputs are integrated with the production firmware, Setup Wizard and
 Python Lab. This is a bounded, propeller-free bench feature, with no flight
@@ -8,7 +8,7 @@ mixer or attitude stabilization. A1 reports motor setup unsupported.
 
 The A2_QUAD_X and A2_QUAD_PLUS presets use 50 Hz PWM with 1000–2000 us endpoints. Logical M1–M4 can be assigned to D0–D3, with unique pins and expected CW/CCW direction metadata. A single canonical NVS record stores the layout, pin order, direction expectations and operator-observed minimum starting pulses. Changing wiring resets those observations. PWM does not reverse an ESC. The user
 must verify that the ESC supports this profile. Motors have dedicated LEDC
-channels 0–3 on timer 0; the onboard LED uses channel 5. Startup emits no pulses.
+channels 0–3 on explicitly reserved timer 3; the onboard LED uses Arduino channel 5 with its own 5 kHz / 8-bit timer. Startup emits no pulses. Channel numbering alone does not reserve an independent timer in Arduino-ESP32 3.3.12.
 The ESP timer supervisor stops channels if the main output service misses a
 100 ms deadline; that trip requires a new explicit setup session.
 

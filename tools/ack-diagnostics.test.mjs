@@ -4,6 +4,15 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const source=read('js/kit-ack-diagnostics.js');
+test('motor diagnostics retain stop reasons and pulse ACKs without tokens or unstructured errors',()=>{
+ const b=bench('web');
+ b.api.record('motor_ack',{route:'/api/motor',transport:'ap',motorAction:'SLIDE',motorMode:'DISABLED',motorReason:'CONTROL_LOST',pulseM1:0,pulseM2:0,pulseM3:0,pulseM4:0,sliderMask:1,sessionRemainingMs:0,commandSequence:81,roundTripMs:790,session:'PRIVATE_TOKEN',kitId:'PRIVATE_DEVICE'});
+ const event=b.events().at(-1);assert.equal(event.event,'motor_ack');assert.equal(event.data.motorReason,'CONTROL_LOST');assert.equal(event.data.commandSequence,81);assert.equal(event.data.route,'/api/motor');
+ b.api.record('motor_error',{motorAction:'PRIVATE_TOKEN',motorMode:'PRIVATE_MODE',motorReason:'PRIVATE_ERROR'});
+ assert.deepEqual(b.events().at(-1).data,{});
+ const exported=b.api.exportData('csv');for(const secret of ['PRIVATE_TOKEN','PRIVATE_DEVICE','PRIVATE_MODE','PRIVATE_ERROR'])assert.ok(!exported.includes(secret));
+ assert.equal(b.api.reasonClass(Object.assign(Error('original Kit heartbeat is delayed; authenticated re-verification is required'),{code:'KIT_DELAYED'})),'TIMEOUT');
+});
 test('input diagnostics retain channels, source selection, PPM loss/recovery and profile ACK without identifiers',()=>{
  const b=bench('web'),rc={source:'PPM',active:true,inputValid:true,inputArmed:false,claimed:true,seq:10,ageMs:25,throttle:1000,roll:1500,pitch:1500,yaw:1500,channels:[1501,1502,1000,1504,1000,1506,1507,1508]};
  const kit={kitId:'private-id',bootId:'private-boot',transport:'sta',rcAccess:{controlPath:'PPM'},ppm:{present:true,ageMs:12,seq:20,losses:0,faults:2}};

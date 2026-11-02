@@ -8,7 +8,7 @@ const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
  'rc_ack_error','udp_start','udp_tx','udp_ack','udp_nack','udp_warning','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
- 'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect','input_freshness','input_sample','ppm_lost','ppm_recovered','input_path_change','handover_request','handover_ack','handover_error','handover_state']);
+ 'request_error','web_claim','web_ack','web_ack_error','web_release','web_status','web_disconnect','input_freshness','input_sample','ppm_lost','ppm_recovered','input_path_change','handover_request','handover_ack','handover_error','handover_state','motor_ack','motor_error']);
 const fields=['ackRequired','requestedInputArmed','sentSeq','route','transport','source','mode','board','version','outcome','reason','seq',
  'accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs',
   'phase','releaseReason','lastReleaseAtMs','staReason','rssi','rcOwned',
@@ -17,10 +17,15 @@ const fields=['ackRequired','requestedInputArmed','sentSeq','route','transport',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
  'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','targetInput','lastStaInput','handoverState','handoverError'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
- '/api/rc/snapshot','/api/status','/api/telemetry','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode']);
+ '/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status','/api/motor','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['PROFILE_SAVE_FAILED','INPUT_UNSAFE','HANDOVER_BUSY','STA_CONFIG_REQUIRED','INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
  'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
+const motorActions=new Set(['STATUS','STOP','BEGIN','KEEP','RTC','LAYOUT','MINIMUM','SLIDER','SLIDE','SINGLE','ALL','INPUT','CAL_HIGH','CAL_LOW']);
+const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TEST','CAL_HIGH','CAL_LOW','FAULT','SLIDER_TEST']);
+const motorReasons=new Set(['NONE','USER_STOP','SESSION_EXPIRED','INPUT_LOST','INPUT_CHANGED','ARM_REQUIRED','THROTTLE_HIGH','SWITCH_REQUIRED','TEST_FINISHED','CAL_TIMEOUT','CAL_FINISHED','OUTPUT_ERROR','DEADLINE_MISSED','CONFIG_ERROR','CONTROL_LOST',...reasons]);
+const motorCounts=['sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4'];
+fields.push('motorAction','motorMode','motorReason',...motorCounts);
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
 const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
@@ -99,6 +104,7 @@ function observeImu(value,kit={}){
 
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
+ if(error?.code==='KIT_DELAYED'||/heartbeat is delayed|networkdelayerror/.test(s))return 'TIMEOUT';
  if(/input_profile_save_failed/.test(s))return 'PROFILE_SAVE_FAILED';
  if(/lower_throttle|disarm and lower|lower throttle/.test(s))return 'INPUT_UNSAFE';
  if(/handover_busy|radio_handover_pending|maintenance_active/.test(s))return 'HANDOVER_BUSY';
@@ -126,7 +132,11 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
+  if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
+  else if(key==='motorMode'){if(motorModes.has(v))result[key]=v;}
+  else if(key==='motorReason'){if(motorReasons.has(v))result[key]=v;}
+  else if(motorCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
+  else if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
   else if(imuCountFields.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
   else if(key==='imuState'){if(imuStates.has(v))result[key]=v;}
   else if(['imuError','imuLastFailure'].includes(key)){if(imuErrors.has(v))result[key]=v;}
@@ -249,7 +259,7 @@ function observeInput(rc={},kit={}){
 function exportData(format){
  const s=summary();
  if(format==='json')return JSON.stringify({schema:'zebjus-ack-diagnostics-v1',client,generatedAt:new Date().toISOString(),
-  notes:'Local diagnostic input only; motor outputs disabled. ACK success is sampled every fifth frame or on slow RTT. No credentials/Device ID/SSID/IP are included.',
+  notes:'Input and explicit motor-bench diagnostics. ACKs are sampled; slow motor ACKs and motor state changes are retained. No credentials/Device ID/SSID/IP are included.',
   summary:s,events},null,2);
  const columns=['at','event',...fields];
  const quote=v=>'"'+String(v===undefined||v===null?'':v).replace(/"/g,'""')+'"';

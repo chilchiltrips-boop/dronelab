@@ -7,6 +7,9 @@
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 static constexpr int ZJ_MOTOR_PINS[]={D0,D1,D2,D3};
+// Arduino-ESP32 3.3.12 allocates the LED's first timer dynamically: channel 5
+// still takes timer 0. Reserve timer 3 for ESCs so LED PWM stays 5 kHz / 8-bit.
+static constexpr ledc_timer_t ZJ_MOTOR_TIMER=LEDC_TIMER_3;
 static portMUX_TYPE zjMotorMux=portMUX_INITIALIZER_UNLOCKED;
 static volatile bool zjMotorWatchActive=false,zjMotorWatchTripped=false;
 static volatile uint32_t zjMotorServicedAt=0;
@@ -202,10 +205,10 @@ static void zjMotorSetup(){
  const String saved=zjKitPrefs.getString("motorConfig2","");
  zjMotorConfigValid=!saved.length()||zjMotorConfig.decode(saved.c_str());
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
- ledc_timer_config_t timer={};timer.speed_mode=LEDC_LOW_SPEED_MODE;timer.duty_resolution=LEDC_TIMER_14_BIT;timer.timer_num=LEDC_TIMER_0;timer.freq_hz=50;timer.clk_cfg=LEDC_AUTO_CLK;
+ ledc_timer_config_t timer={};timer.speed_mode=LEDC_LOW_SPEED_MODE;timer.duty_resolution=LEDC_TIMER_14_BIT;timer.timer_num=ZJ_MOTOR_TIMER;timer.freq_hz=50;timer.clk_cfg=LEDC_AUTO_CLK;
  bool ok=ledc_timer_config(&timer)==ESP_OK;
  for(int n=0;n<4;n++){
-  ledc_channel_config_t channel={};channel.gpio_num=ZJ_MOTOR_PINS[n];channel.speed_mode=LEDC_LOW_SPEED_MODE;channel.channel=ledc_channel_t(n);channel.timer_sel=LEDC_TIMER_0;channel.duty=0;
+  ledc_channel_config_t channel={};channel.gpio_num=ZJ_MOTOR_PINS[n];channel.speed_mode=LEDC_LOW_SPEED_MODE;channel.channel=ledc_channel_t(n);channel.timer_sel=ZJ_MOTOR_TIMER;channel.duty=0;
   ok=(ledc_channel_config(&channel)==ESP_OK)&&ok;
  }
  esp_timer_create_args_t args={};args.callback=zjMotorWatch;args.name="motor_deadline";
