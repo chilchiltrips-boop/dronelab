@@ -59,7 +59,7 @@ and switch thresholds with the receiver on a bench.
   **2 seconds** to DISARM. The gesture changes only diagnostic status; it
   never activates motor pins. **CH5 is not used for ARM or DISARM.**
 - Complete frames retain their ISR arrival timestamp; the mailbox keeps the latest
-  complete frame. Stale pending frames are discarded. Hardware capture continuity distinguishes a delayed consumer from a real receiver gap. A real gap releases control before accepting any resumed frame, so a high ARM switch cannot hide signal loss.
+  complete frame. Stale pending frames are discarded. Hardware capture continuity distinguishes a delayed consumer from a real receiver gap. A real gap releases control before accepting any resumed frame, so a stale yaw gesture cannot hide signal loss.
 - On 150ms PPM signal loss, the PPM owner releases, channels return neutral,
   diagnostic input is disarmed. The existing 350ms/1800ms network/USB
   RC deadman/lease protections remain unchanged.
@@ -116,7 +116,7 @@ This feature requires a WebApp update, not a firmware or Android APK rebuild.
 6. Cut RX power or disconnect signal: within 150ms status loses input,
    old RC values do not remain LIVE; motor output remains disabled.
 7. During active Android/Web ownership connect receiver: PPM must not
-   steal ownership. After release require low throttle and CH5 OFF to acquire.
+   steal ownership. After release require low throttle, yaw centre and a new RIGHT hold to ARM.
 8. Test mapping/calibration edits over admin USB, reboot and verify persistence.
    Reject duplicate channels, invalid min/mid/max, and edits while RC owned.
 9. AP↔STA switch and Android background/foreground must not implicitly
