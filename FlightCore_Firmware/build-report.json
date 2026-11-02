@@ -1,24 +1,25 @@
 {
-  "version": "1.7.1",
-  "builtAt": "2026-11-02T08:21:54Z",
-  "sourceCommit": "1d447642141023d4f0578b32584d91fb1e127dd1",
+  "version": "1.7.2",
+  "builtAt": "2026-11-02T10:01:54Z",
+  "sourceCommit": "599944b216fcc54d862ccab4b0b1efbbf9815138",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "f4f3a2ccb6f2208ec3f0488159c1ac32e002eeb664033693c92bd904168cd618",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "5ce495fc513d616492e91f093040054406d5c98c7a8f143b985d2b81131366c2",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreA2MotorLayout.h": "a62b1dbf4ffc53069404da011a2dada4787660b7ee7fe96d44eeef0e6019e475",
     "FlightCore_Firmware/FlightCoreAccess.h": "d7fad26c4ec4f3dd4f627117b4a450bacd51f24171ee389d90a598f21457270c",
     "FlightCore_Firmware/FlightCoreClassroom.h": "4ea7d09bf5e9c89aaaa2650a529e5c16fe294ea1105489fc1cabde1a9b029655",
-    "FlightCore_Firmware/FlightCoreEnrollment.h": "b80efd14aa7f143c92d85a8ae1e8df9e0867abd0f985fa4074a43b913728acd5",
+    "FlightCore_Firmware/FlightCoreEnrollment.h": "c799bde522daecab5d627ce0ca3321287ff2f467aa52214a153c4f069b1e38ff",
     "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
     "FlightCore_Firmware/FlightCoreHandover.h": "2bd4add7e4ebc3fab51e3c0ceea1b08eabf9eafa787673268a152c28fc3cc929",
-    "FlightCore_Firmware/FlightCoreMotor.h": "285aa61f51b668b88d4e885548b21a7d330ab5e1e8c5bd85128eb58aafe03306",
+    "FlightCore_Firmware/FlightCoreMotor.h": "f5f2ae0d6c3fb073bcb13df416cb2478f44e0e372c496d4f7ea64471dfb424a6",
     "FlightCore_Firmware/FlightCoreMotorConfig.h": "9216eabb7bc34bfbee3071904836883dbf0066be068a29714d1dcea5a686fdf1",
-    "FlightCore_Firmware/FlightCoreMotorSafety.h": "bd0b69afccc3e9e6735113f80bcb05ef6f7155812d2899536a102dca4bd81d6e",
+    "FlightCore_Firmware/FlightCoreMotorSafety.h": "c5edb22b9c5b3eb2a131d2e6df0f94931d95f1a88cdebe0c1ff2085f1daa0ec8",
     "FlightCore_Firmware/FlightCoreMotorStatus.h": "47bfa77236d636f95ba6c6cf23de4872da4d3ed9c6960773aef7c840cbdefc6d",
     "FlightCore_Firmware/FlightCoreNetwork.h": "e8f864c74b2042c7dd66d2ace718350e1b5d806cc19dd73193ca62b264ba9fe4",
     "FlightCore_Firmware/FlightCoreOta.h": "906e344663c08f71a0a72107ddab905424ccfbcd640db98e34b8839bdc584ade",
-    "FlightCore_Firmware/FlightCorePpm.h": "4ed1cd1929fe13ec9a82da87ce22d60dbd5d8d3897555307f65d0e16b353d73e",
-    "FlightCore_Firmware/FlightCoreRpc.h": "c6d43d6f360650833d66ff4a03bb34b43a5c37c6e603d4ccaa6bac9deb4050e4",
+    "FlightCore_Firmware/FlightCorePpm.h": "0495cf66ab103b7acd8601890d9eb0770ecf7b45fc6c5f7a3967d1faef6d6794",
+    "FlightCore_Firmware/FlightCorePpmDecode.h": "cf6d73c5f5de7e08d53dfca2a264f3c0f6bdbbd655715f27583b0123aff153de",
+    "FlightCore_Firmware/FlightCoreRpc.h": "610f6315d3b585c165d2ee45cd461fceedaabe2617358b36e28fe34d145e2cc9",
     "FlightCore_Firmware/FlightCoreSetupPortal.h": "5ef45273ccd866f070b9d1089a76d63fa0d96c0ee18e34ed0263da52f9194de9",
     "FlightCore_Firmware/FlightCoreUdp.h": "9ea320e330fe1dc9de8aad3c06fce88dba8220958746210495d8a952d5037309",
     "FlightCore_Firmware/FlightCoreWifiPolicy.h": "85c60bcfcbdc491b7d41a7f7dd5ff241e05cbf6553c111fb33e6310726cb640b",
@@ -32,7 +33,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc",
       "chipId": 5,
-      "appBytes": 1255296,
+      "appBytes": 1256368,
       "otaSlots": [
         {
           "address": 65536,
@@ -53,13 +54,13 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-02T08:23:12Z"
+      "compiledAt": "2026-11-02T10:02:57Z"
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1259552,
+      "appBytes": 1267008,
       "otaSlots": [
         {
           "address": 65536,
@@ -80,7 +81,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-02T08:24:00Z"
+      "compiledAt": "2026-11-02T10:03:38Z"
     }
   ]
 }
