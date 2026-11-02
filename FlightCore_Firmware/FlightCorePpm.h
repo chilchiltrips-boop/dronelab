@@ -12,6 +12,7 @@ static constexpr uint8_t ZJ_PPM_PIN=18;
 #else
 static constexpr uint8_t ZJ_PPM_PIN=10;
 #endif
+#include "FlightCorePpmArm.h"
 static constexpr uint8_t ZJ_PPM_CHANNELS=8;
 static constexpr uint32_t ZJ_PPM_SYNC_US=3200,ZJ_PPM_MAX_GAP_US=30000;
 static constexpr uint32_t ZJ_PPM_LOST_MS=150,ZJ_PPM_LOG_MS=100;
@@ -27,11 +28,11 @@ static volatile uint32_t zjPpmCaptureAt=0,zjPpmCaptureLosses=0;
 static uint32_t zjPpmSeenCaptureLosses=0,zjPpmRateAt=0,zjPpmRateFrames=0,zjPpmCaptureHz=0;
 static uint16_t zjPpmRaw[ZJ_PPM_CHANNELS]={},zjPpmValues[ZJ_PPM_CHANNELS]={};
 static uint16_t zjPpmMin[ZJ_PPM_CHANNELS],zjPpmMid[ZJ_PPM_CHANNELS],zjPpmMax[ZJ_PPM_CHANNELS];
-static uint8_t zjPpmMap[5]={0,1,2,3,4}; // roll,pitch,throttle,yaw,arm switch
+static uint8_t zjPpmMap[5]={0,1,2,3,4}; // roll,pitch,throttle,yaw,CH5 auxiliary
 static uint32_t zjPpmLastFrameAt=0,zjPpmFrameSeq=0,zjPpmReportAt=0,zjPpmLostCount=0;
 static uint8_t zjPpmSafeFrames=0;
-static bool zjPpmInputAvailable=false,zjPpmArmingLowSeen=false;
-static bool zjPpmInputSwitchArmed=false,zjPpmReportedLost=false;
+static bool zjPpmInputAvailable=false,zjPpmReportedLost=false;
+static ZjPpmArmGesture zjPpmArm;
 
 // Caller holds the mailbox lock (ISR or receiver task). Keep physical arrival
 // continuity even when an HTTP handler temporarily occupies the Arduino loop.
@@ -167,7 +168,10 @@ static String zjPpmStatus(){
    (good?zjPpmChannelsJson():String("null"));
  output+=",\"map\":[";
  for(uint8_t i=0;i<5;i++){if(i)output+=',';output+=String(zjPpmMap[i]+1);}output+="]";
- output+=",\"inputArmed\":"+(zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed?String("true"):String("false"))+","+zjMotorFlags()+"}";
+ output+=",\"armMethod\":\"THROTTLE_LOW_YAW_GESTURE\",\"armStatus\":"+
+   zjJson(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?"ARMED":"DISARMED");
+ output+=",\"armHoldMs\":"+String(ZjPpmArmGesture::HOLD_MS)+",\"throttleLowUs\":1050,\"yawRightUs\":1900,\"yawLeftUs\":1100";
+ output+=",\"inputArmed\":"+(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?String("true"):String("false"))+","+zjMotorFlags()+"}";
  return output;
 }
 static void zjPpmLoop(uint32_t now){
@@ -190,13 +194,13 @@ static void zjPpmLoop(uint32_t now){
  // releases control even when a newer mailbox frame arrived before this loop.
  if(zjPpmInputAvailable&&(captureGap||(!zjPpmSignalFresh(now)&&!continuous))){
   zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
-  zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+  zjPpmArm.reset();
   if(zjRcOwned&&zjRcSource=="PPM")zjRcRelease("PPM_SIGNAL_LOST");
  }
  if(newFrame&&uint32_t(now-receivedAt)>ZJ_PPM_LOST_MS)newFrame=false;
  if(newFrame){
   // Process each complete frame once. PPM has no authentication; physical
-  // ownership must be established at throttle-low and arm-switch-low.
+  // ownership requires consecutive low-throttle frames. ARM is diagnostic only.
   for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++){
    if(captured[i]<850||captured[i]>2150){newFrame=false;break;}
   }
@@ -207,30 +211,28 @@ static void zjPpmLoop(uint32_t now){
    zjPpmLastFrameAt=receivedAt;zjPpmFrameSeq=capturedFrames;zjPpmInputAvailable=true;
    const int t=zjPpmValues[zjPpmMap[2]],r=zjPpmValues[zjPpmMap[0]],
     p=zjPpmValues[zjPpmMap[1]],y=zjPpmValues[zjPpmMap[3]];
-   const bool armHigh=zjPpmValues[zjPpmMap[4]]>=1700;
-   const bool armLow=zjPpmValues[zjPpmMap[4]]<=1300;
+
    if(!zjRcSourceAllowed("PPM")){
-    zjPpmSafeFrames=0;zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
+    zjPpmSafeFrames=0;zjPpmArm.reset();
    }else if(zjRcOwned&&zjRcSource=="PPM"){
-    if(armLow){zjPpmArmingLowSeen=true;zjPpmInputSwitchArmed=false;}
-    if(armHigh&&zjPpmArmingLowSeen&&!zjPpmInputSwitchArmed&&t<=1050)zjPpmInputSwitchArmed=true;
-    if(!armHigh)zjPpmInputSwitchArmed=false;
+    zjPpmArm.accept(t,y,receivedAt);
     zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
-    zjRcInputArmed=zjPpmInputSwitchArmed&&armHigh;zjRcHasFrame=true;
+    zjRcInputArmed=zjPpmArm.armed;zjRcHasFrame=true;
     zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
     zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
    }else if(!zjRcOwned){
-    if(armLow&&t<=1050)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
+    zjPpmArm.reset(); // no old ARM state crosses an RC ownership release
+    if(t<=ZjPpmArmGesture::THROTTLE_LOW_US)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
     else zjPpmSafeFrames=0;
     if(zjPpmSafeFrames>=3){
      zjRcOwned=true;zjRcNetwork=false;zjRcSource="PPM";zjRcTransport="PPM";
      zjRcSession="";zjRcOwnerId="PPM";zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;
-     zjRcInputArmed=false;zjPpmInputSwitchArmed=false;zjPpmArmingLowSeen=true;
+     zjRcInputArmed=false;zjPpmArm.accept(t,y,receivedAt);
      zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;zjRcHasFrame=true;
      zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
      zjRcSeq=1;++zjRcAccepted;
     }
-   }else zjPpmSafeFrames=0; // Never steal a currently owned WEB/ANDROID session.
+   }else {zjPpmSafeFrames=0;zjPpmArm.reset();} // Never steal a WEB/ANDROID session.
   }
  }
  if(uint32_t(now-zjPpmRateAt)>=1000){
