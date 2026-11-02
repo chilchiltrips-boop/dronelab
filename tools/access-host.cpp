@@ -34,7 +34,8 @@ int main(){
  waitMs(30001);zjAccessLoop();
  assert(zjRcPaused&&zjMaintenanceActive&&zjMaintenanceOwner.isEmpty()&&!zjRcOwned);
  errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"ppm_signal_required");
- frame(2000,true,1500,1800);errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"lower_throttle_and_disarm");
+ frame(2000,true,1500,1800);frame(2000,true,1500,1800); // resync after 30s receiver silence
+ errorIs(zjAccessChange("RESUME","PPM","browser-b",false,true),"lower_throttle_and_disarm");
  frame(1000,true,1500,1800);errorIs(zjAccessChange("RESUME","WEB","browser-b",false,true),"lower_throttle_and_disarm");
  frame(1000);assert(!zjAccessChange("RESUME","PPM","browser-b",false,true));
  assert(!zjRcOwned&&!zjRcInputArmed&&!zjRcPaused&&zjRcSelection=="PPM");
