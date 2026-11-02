@@ -23,6 +23,8 @@ FlightCore 1.7.1 reserves timer 3 for all ESC channels and leaves the LED on its
 
 References: [pinned Arduino-ESP32 3.3.12 LEDC allocation](https://github.com/espressif/arduino-esp32/blob/3.3.12/cores/esp32/esp32-hal-ledc.c), [Espressif channel/timer sharing](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html#channels-timers-and-frequency-sharing). The XIAO USER LED is GPIO15; this fix does not control a separate power/charging indicator.
 
+Android 1.8.22 (versionCode 61) packages the updated diagnostic recorder and firmware catalog as an upgrade to the installed 1.8.21 release. The existing stable signer, exact-source checks and native/emulator publication gates still apply.
+
 The 750 ms slider-control deadline, 1.5 s session lease, 150 ms PPM freshness, 300 ms network-input freshness, independent motor watchdog, output limits and absolute test durations remain enforced.
 
 ## Hardware verification
