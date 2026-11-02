@@ -191,6 +191,7 @@ const panel=()=>document.getElementById('kitAckDiagnostics');
 function summary(){
  const counts={handoverBlocker:'NONE',inputs:0,ppmSamples:0,lastSource:'NONE',lastSelection:'AUTO',lastInputSeq:0,lastInputAgeMs:0,ppmLosses:0,ack:0,nack:0,lastRxSeq:0,lastAppliedSeq:0,loss:0,slow:0,maxRtt:0,latestGap:null,maxNativeWait:0,maxNativeQueue:0};
  for(const e of events){
+  if(['handover_preflight','handover_request','handover_error','handover_ack','handover_state'].includes(e.event)&&e.data.handoverBlocker)counts.handoverBlocker=e.data.handoverBlocker;
   if(e.event==='input_sample'){counts.inputs++;if(e.data.source==='PPM')counts.ppmSamples++;}
   if(e.data.source){counts.lastSource=e.data.source;if(Number.isFinite(e.data.seq))counts.lastInputSeq=e.data.seq;if(Number.isFinite(e.data.ageMs))counts.lastInputAgeMs=e.data.ageMs;}
   if(e.data.selectedPath)counts.lastSelection=e.data.selectedPath;
@@ -211,7 +212,7 @@ function paint(force=false){
  const at=Date.now();if(!force&&at-lastPaint<800)return;lastPaint=at;
  const p=panel();if(!p)return;
  const s=summary(),label=p.querySelector('[data-diag-summary]');
- if(label)label.textContent=events.length+' events • '+s.inputs+' input samples • source '+s.lastSource+' • selected '+s.lastSelection+(s.lastSource==='PPM'?' • PPM #'+s.lastInputSeq+' • age '+s.lastInputAgeMs+' ms • losses '+s.ppmLosses:'')+' • '+s.ack+' sampled ACKs • '+s.nack+' NACKs • RX #'+s.lastRxSeq+' / APPLIED #'+s.lastAppliedSeq+' • '+s.loss+' errors/disarms • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
+ if(label)label.textContent=events.length+' events • '+s.inputs+' input samples • source '+s.lastSource+' • selected '+s.lastSelection+(s.lastSource==='PPM'?' • PPM #'+s.lastInputSeq+' • age '+s.lastInputAgeMs+' ms • losses '+s.ppmLosses:'')+' • '+s.ack+' sampled ACKs • '+s.nack+' NACKs • RX #'+s.lastRxSeq+' / APPLIED #'+s.lastAppliedSeq+' • '+s.loss+' errors/disarms • radio blocker '+s.handoverBlocker+' • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
  const imuView=p.querySelector('[data-diag-imu]');
  if(imuView){const e=[...events].reverse().find(e=>e.data.imuState),d=e?.data;imuView.textContent=d?'Last IMU: '+d.board+' • '+d.imuState+(d.imuTarget?' • '+d.imuSamples+'/'+d.imuTarget+' samples':'')+(Number.isFinite(d.imuDurationMs)?' • '+d.imuDurationMs+' ms':'')+(Number.isFinite(d.gyroBiasX)?' • bias '+[d.gyroBiasX,d.gyroBiasY,d.gyroBiasZ].join(' / ')+' deg/s':'')+' • read errors '+(d.imuReadFailures||0)+' • calibration failures '+(d.imuFailures||0)+(d.imuLastFailure&&d.imuLastFailure!=='NONE'?' • last '+d.imuLastFailure:'')+(d.imuError&&d.imuError!=='NONE'?' • '+d.imuError:''):'IMU diagnostics: connect a Kit';}
  const view=p.querySelector('[data-diag-events]');
@@ -260,14 +261,17 @@ function observeInput(rc={},kit={}){
   ppmCaptureBackend:ppm.captureBackend,ppmCaptureHz:ppm.captureHz,ppmCaptureErrors:ppm.captureErrors,ppmPresent:ppm.present,ppmAgeMs:ppm.ageMs,ppmSeq:ppm.seq,ppmLosses:ppm.losses,ppmFaults:ppm.faults,
   telemetryAgeMs:Number.isFinite(kit.heartbeatAt)?Math.max(0,Date.now()-kit.heartbeatAt):undefined,
   observationAgeMs:Number.isFinite(kit.rcAt)?Math.max(0,Date.now()-kit.rcAt):undefined,
-  releaseReason:rc.lastReleaseReason,handoverState:h.state,handoverError:h.error,profileSaved:h.profileSaved,profileRevision:h.revision,targetInput:h.targetInput,lastStaInput:h.lastStaInput};
+  releaseReason:rc.lastReleaseReason,handoverState:h.state,handoverError:h.error,
+  handoverBlocker:h.preflightBlocker,handoverLastReject:h.lastReject,ppmThrottleUs:h.ppmThrottleUs,
+  handMotorDisabled:h.motorsDisabled,diagnosticArmReleased:h.diagnosticArmReleased,
+  profileSaved:h.profileSaved,profileRevision:h.revision,targetInput:h.targetInput,lastStaInput:h.lastStaInput};
  for(let i=0;i<8;i++)if(Number.isFinite(channels[i]))data['ch'+(i+1)]=channels[i];
  if(!Number.isFinite(channels[4])&&Number.isFinite(rc.ch5))data.ch5=rc.ch5;if(!Number.isFinite(channels[5])&&Number.isFinite(rc.ch6))data.ch6=rc.ch6;
  const present=typeof ppm.present==='boolean'?ppm.present:rc.source==='PPM'&&rc.active===true;
  if(Number(ppm.losses)>lastPpmLosses&&lastPpmPresent!==undefined){record('ppm_lost',data);if(present)record('ppm_recovered',data);}
  else if(lastPpmPresent!==undefined&&present!==lastPpmPresent)record(present?'ppm_recovered':'ppm_lost',data);
  if(lastPath&&path!==lastPath)record('input_path_change',data);
- const hs=[h.revision,h.state,h.error].join('|');if(h.state&&hs!==lastHandover)record('handover_state',data);
+ const hs=[h.revision,h.state,h.error,h.preflightBlocker,h.lastReject].join('|');if(h.state&&hs!==lastHandover)record('handover_state',data);
  lastPpmPresent=present;lastPpmLosses=Number(ppm.losses)||0;lastPath=path;lastHandover=hs;
  const key=[rc.source,rc.active,rc.inputArmed,rc.failsafe,path].join('|');
  if(key!==lastInputState||Date.now()-lastInputAt>=2000){record('input_sample',data);lastInputAt=Date.now();lastInputState=key;}
