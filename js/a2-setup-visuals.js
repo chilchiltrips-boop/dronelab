@@ -20,7 +20,7 @@ export function motorDiagram(config={},pulses=[],testing=false,{selectedMask=0,p
  <g class="a2-rotation-guide" style="animation-direction:${rotations[i]==='CCW'?'reverse':'normal'}"><g class="a2-rotation-shape" transform="scale(${rotations[i]==='CCW'?-1:1} 1)"><path d="M-49 0A49 49 0 0 1 37-32"/><path d="m27-34 10 2-2-10"/><path d="M49 0A49 49 0 0 1-37 32"/><path d="m-27 34-10-2 2 10"/></g></g>
  <g class="a2-rotor ${spin?'spinning':''}" style="--spin:${Math.max(.12,1.5-(pulse-1000)/750)}s;animation-direction:${rotations[i]==='CCW'?'reverse':'normal'}"><path d="M-37 0Q-15-19 0 0Q15 19 37 0Q15-19 0 0Q-15 19-37 0Z"/></g>
  <circle r="20" class="a2-motor-hub"/>${text(0,6,'M'+(i+1),'a2-motor-number')}
- <rect x="-58" y="70" width="116" height="38" rx="8" class="a2-node-caption"/>${text(0,-84,l.positions[i].toUpperCase(),'a2-position-label')}${text(0,85,pins[i]+' · '+rotations[i],'a2-motor-pin')}${text(0,101,preview?'DIRECTION GUIDE':pulse?pulse+' µs':'OUTPUT OFF','a2-motor-pulse')}
+ <rect x="-58" y="70" width="116" height="38" rx="8" class="a2-node-caption"/>${text(0,-84,l.positions[i].toUpperCase(),'a2-position-label')}${text(0,85,pins[i]+' · '+rotations[i],'a2-motor-pin')}${text(0,101,preview?'':pulse?pulse+' µs':'OUTPUT OFF','a2-motor-pulse')}
  </g>`;}).join('')}${text(260,530,l.name+' · TOP VIEW','a2-frame-layout-label')}</svg>`;
 }
 // Keep the same motors on screen while geometry, selection and ACKs change.
@@ -37,7 +37,7 @@ export function updateMotorDiagram(scene,config,pulses=[],testing=false,{selecte
   else for(const name of ['role','tabindex','aria-label','aria-pressed','aria-disabled'])motor.removeAttribute(name);
   const rotor=motor.querySelector('.a2-rotor');rotor.classList.toggle('spinning',spin);rotor.style.setProperty('--spin',Math.max(.12,1.5-(pulse-1000)/750)+'s');rotor.style.animationDirection=rotations[i]==='CCW'?'reverse':'normal';
   motor.querySelector('.a2-rotation-guide').style.animationDirection=rotations[i]==='CCW'?'reverse':'normal';motor.querySelector('.a2-rotation-shape').setAttribute('transform',`scale(${rotations[i]==='CCW'?-1:1} 1)`);
-  motor.querySelector('.a2-position-label').textContent=l.positions[i].toUpperCase();motor.querySelector('.a2-motor-pin').textContent=pins[i]+' · '+rotations[i];motor.querySelector('.a2-motor-pulse').textContent=preview?'DIRECTION GUIDE':pulse?pulse+' µs':'OUTPUT OFF';
+  motor.querySelector('.a2-position-label').textContent=l.positions[i].toUpperCase();motor.querySelector('.a2-motor-pin').textContent=pins[i]+' · '+rotations[i];motor.querySelector('.a2-motor-pulse').textContent=preview?'':pulse?pulse+' µs':'OUTPUT OFF';
  });
  scene.querySelector('.a2-frame-layout-label').textContent=l.name+' · TOP VIEW';
 }
@@ -50,7 +50,7 @@ export function stepVisual(step,{kit={},state={},draft={},input={},history=[],ca
  <circle cx="282" cy="110" r="7" class="${linked?'a2-live-dot':'a2-off-dot'}"/>
  <rect x="171" y="303" width="58" height="28" rx="5" class="a2-usb"/><path d="M200 332v34" class="a2-wire"/>
  ${text(200,60,linked?'CONNECTED':'WAITING FOR KIT','a2-svg-label')}${text(200,394,(kit.transport||'USB · AP · STA').toUpperCase(),'a2-svg-label')}`)};
- if(step===1)return {title:(layouts[draft.layout]||layouts.A2_QUAD_X).name+' · airframe preview',description:'Animated arrows show expected direction only. Save the wiring, then verify each physical motor.',html:motorDiagram(draft,[],false,{preview:true})};
+ if(step===1)return {title:(layouts[draft.layout]||layouts.A2_QUAD_X).name+' · pin layout',description:'Animated arrows show expected direction only. Save the wiring, then verify each physical motor.',html:motorDiagram(draft,[],false,{preview:true})};
  if(step===2){const channels=input.channels||[],thr=channels[2],roll=channels[0],pitch=channels[1],points=history.map((v,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(v-1000)*.08}`).join(' ');return {title:'Live receiver monitor',description:'Read-only channels from the selected source. Read-only last board observations with their age. Receiver loss and delayed telemetry are reported separately.',html:svg('Live input sticks and throttle trace',`
  <g data-input-source>${text(200,40,input.source||'NO SIGNAL','a2-svg-label')}</g>
  ${[110,290].map(x=>`<circle cx="${x}" cy="147" r="66" class="a2-stick-ring"/><path d="M${x-55} 147h110m-55-55v110" class="a2-grid-line"/>`).join('')}
