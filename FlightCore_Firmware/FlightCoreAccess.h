@@ -14,8 +14,7 @@ static void zjAccessLoop(){
  }
 }
 static bool zjPpmAccessSafe(){
- return !zjPpmSignalFresh(millis())||
-  (zjPpmValues[zjPpmMap[2]]<=1050&&zjPpmValues[zjPpmMap[4]]<=1300);
+ return !zjPpmSignalFresh(millis())||zjPpmValues[zjPpmMap[2]]<=1050; // CH5 is auxiliary
 }
 static bool zjAccessCanSwitchRadio(){
  // A monitoring network is not the PPM producer. Preserve its ISR/ownership;
