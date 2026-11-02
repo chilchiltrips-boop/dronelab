@@ -24,8 +24,10 @@ const reasons=new Set(['PROFILE_SAVE_FAILED','INPUT_UNSAFE','HANDOVER_BUSY','STA
 const motorActions=new Set(['STATUS','STOP','BEGIN','KEEP','RTC','LAYOUT','MINIMUM','SLIDER','SLIDE','SINGLE','ALL','INPUT','CAL_HIGH','CAL_LOW']);
 const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TEST','CAL_HIGH','CAL_LOW','FAULT','SLIDER_TEST']);
 const motorReasons=new Set(['NONE','USER_STOP','SESSION_EXPIRED','INPUT_LOST','INPUT_CHANGED','ARM_REQUIRED','THROTTLE_HIGH','SWITCH_REQUIRED','TEST_FINISHED','CAL_TIMEOUT','CAL_FINISHED','OUTPUT_ERROR','DEADLINE_MISSED','CONFIG_ERROR','CONTROL_LOST',...reasons]);
-const motorCounts=['sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4'];
-fields.push('motorAction','motorMode','motorReason',...motorCounts);
+const ppmCaptureCounts=['ppmCaptureHz','ppmCaptureErrors'];
+fields.push('ppmCaptureBackend',...ppmCaptureCounts);
+const motorCounts=['motorRemainingMs','sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4'];
+fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts);
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
 const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
@@ -104,6 +106,7 @@ function observeImu(value,kit={}){
 
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
+ if(/motor_session_expired_or_not_owner/.test(s))return 'OWNER_STALE';
  if(error?.code==='KIT_DELAYED'||/heartbeat is delayed|networkdelayerror/.test(s))return 'TIMEOUT';
  if(/input_profile_save_failed/.test(s))return 'PROFILE_SAVE_FAILED';
  if(/lower_throttle|disarm and lower|lower throttle/.test(s))return 'INPUT_UNSAFE';
@@ -132,7 +135,10 @@ function clean(data){
  for(const key of fields){
   const v=data[key];
   if(v===undefined||v===null)continue;
-  if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
+  if(key==='ppmCaptureBackend'){if(['RMT_RX','GPIO_ISR'].includes(v))result[key]=v;}
+  else if(key==='motorPolicy'){if(['TIMED_MANUAL','LIVE_LEASE'].includes(v))result[key]=v;}
+  else if(ppmCaptureCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
+  else if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
   else if(key==='motorMode'){if(motorModes.has(v))result[key]=v;}
   else if(key==='motorReason'){if(motorReasons.has(v))result[key]=v;}
   else if(motorCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
@@ -241,7 +247,7 @@ function observeInput(rc={},kit={}){
   ageMs:rc.ageMs,rcOwned:rc.claimed===true,rcActive:rc.active===true,inputArmed:rc.inputArmed===true,
   inputValid:rc.inputValid,failsafe:rc.failsafe,throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,
   selectedPath:path,activePath:rc.active?(rc.source==='PPM'?'PPM':rc.source==='WEB'?'WEB_STA':rc.source==='ANDROID'&&kit.transport==='ap'?'ANDROID_AP':'NONE'):'NONE',
-  ppmPresent:ppm.present,ppmAgeMs:ppm.ageMs,ppmSeq:ppm.seq,ppmLosses:ppm.losses,ppmFaults:ppm.faults,
+  ppmCaptureBackend:ppm.captureBackend,ppmCaptureHz:ppm.captureHz,ppmCaptureErrors:ppm.captureErrors,ppmPresent:ppm.present,ppmAgeMs:ppm.ageMs,ppmSeq:ppm.seq,ppmLosses:ppm.losses,ppmFaults:ppm.faults,
   telemetryAgeMs:Number.isFinite(kit.heartbeatAt)?Math.max(0,Date.now()-kit.heartbeatAt):undefined,
   observationAgeMs:Number.isFinite(kit.rcAt)?Math.max(0,Date.now()-kit.rcAt):undefined,
   releaseReason:rc.lastReleaseReason,handoverState:h.state,handoverError:h.error,profileSaved:h.profileSaved,profileRevision:h.revision,targetInput:h.targetInput,lastStaInput:h.lastStaInput};

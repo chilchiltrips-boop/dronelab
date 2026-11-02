@@ -158,7 +158,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 61\s*versionName '1\.8\.22-motor-link-stability'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 62\s*versionName '1\.8\.23-ppm-bench-capture'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
@@ -185,4 +185,15 @@ test('stalled Android RC preview is cancelled without relaxing the 500ms firmwar
  assert.match(native,/stages\.put\("responseWaitMs"/);
  assert.match(firmware,/ZJ_RC_DEADMAN_MS=500/);
  assert.match(firmware,/zjRcLastReleaseReason/);
+});
+
+
+test('PPM capture and finite motor deadlines are exported without confusing completion with authentication',()=>{
+ const b=bench();
+ assert.equal(b.api.reasonClass('motor_session_expired_or_not_owner'),'OWNER_STALE');
+ b.api.record('motor_ack',{motorAction:'SLIDE',motorMode:'DISABLED',motorReason:'TEST_FINISHED',motorPolicy:'TIMED_MANUAL',motorRemainingMs:0,ppmCaptureBackend:'RMT_RX',ppmCaptureHz:50,ppmCaptureErrors:0,token:'private-token'});
+ const d=b.events().at(-1).data;assert.equal(d.motorReason,'TEST_FINISHED');assert.equal(d.ppmCaptureHz,50);assert.equal(d.ppmCaptureBackend,'RMT_RX');assert.equal(d.motorRemainingMs,0);
+ assert.ok(!b.api.exportData('csv').includes('private-token'));
+ b.api.record('motor_ack',{ppmCaptureBackend:'private-hostname',motorPolicy:'private-token',ppmCaptureHz:-1});
+ assert.equal(b.events().at(-1).data.ppmCaptureBackend,undefined);
 });

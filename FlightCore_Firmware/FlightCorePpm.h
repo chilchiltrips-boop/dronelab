@@ -4,6 +4,10 @@
 // Rising-to-rising 8 channel PPM frame; 3.2ms+ sync gap, 850..2150us pulses.
 // All ISR operations stay in IRAM and copy fixed-size integers, not String/Serial.
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+#include <driver/rmt_rx.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include "FlightCorePpmDecode.h"
 static constexpr uint8_t ZJ_PPM_PIN=18;
 #else
 static constexpr uint8_t ZJ_PPM_PIN=10;
@@ -19,6 +23,8 @@ static volatile uint8_t zjPpmIndex=0;
 static volatile bool zjPpmFrameReady=false;
 static volatile uint32_t zjPpmReadyAt=0;
 static volatile uint32_t zjPpmIsrFrames=0,zjPpmFaults=0;
+static volatile uint32_t zjPpmCaptureAt=0,zjPpmCaptureLosses=0;
+static uint32_t zjPpmSeenCaptureLosses=0,zjPpmRateAt=0,zjPpmRateFrames=0,zjPpmCaptureHz=0;
 static uint16_t zjPpmRaw[ZJ_PPM_CHANNELS]={},zjPpmValues[ZJ_PPM_CHANNELS]={};
 static uint16_t zjPpmMin[ZJ_PPM_CHANNELS],zjPpmMid[ZJ_PPM_CHANNELS],zjPpmMax[ZJ_PPM_CHANNELS];
 static uint8_t zjPpmMap[5]={0,1,2,3,4}; // roll,pitch,throttle,yaw,arm switch
@@ -27,6 +33,54 @@ static uint8_t zjPpmSafeFrames=0;
 static bool zjPpmInputAvailable=false,zjPpmArmingLowSeen=false;
 static bool zjPpmInputSwitchArmed=false,zjPpmReportedLost=false;
 
+// Caller holds the mailbox lock (ISR or receiver task). Keep physical arrival
+// continuity even when an HTTP handler temporarily occupies the Arduino loop.
+static void IRAM_ATTR zjPpmPublish(const volatile uint16_t* channels,uint32_t at){
+ if(zjPpmIsrFrames&&uint32_t(at-zjPpmCaptureAt)>ZJ_PPM_LOST_MS)++zjPpmCaptureLosses;
+ for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++)zjPpmReady[i]=channels[i];
+ zjPpmCaptureAt=zjPpmReadyAt=at;zjPpmFrameReady=true;++zjPpmIsrFrames;
+}
+
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static rmt_channel_handle_t zjPpmRx=nullptr;
+static rmt_symbol_word_t zjPpmSymbols[48];
+static TaskHandle_t zjPpmRxTask=nullptr;
+static volatile size_t zjPpmSymbolCount=0;
+static volatile uint32_t zjPpmArmedAt=0,zjPpmCompletedAt=0,zjPpmRxErrors=0;
+static bool zjPpmCaptureReady=false;
+static bool IRAM_ATTR zjPpmRxDone(rmt_channel_handle_t,const rmt_rx_done_event_data_t* data,void*){
+ // Use receive-start time as a conservative arrival bound. A delayed callback
+ // or stalled receiver task cannot turn an old hardware packet into fresh RC.
+ zjPpmSymbolCount=data->num_symbols;zjPpmCompletedAt=zjPpmArmedAt;
+ BaseType_t woken=pdFALSE;vTaskNotifyGiveFromISR(zjPpmRxTask,&woken);return woken==pdTRUE;
+}
+static void zjPpmReceiveTask(void*){
+ // C6 filter uses the 80 MHz group clock, not the 1 MHz channel tick.
+ // Its 8-bit threshold permits 1 us (80 ticks), not a 40 us filter.
+ rmt_receive_config_t receive={};receive.signal_range_min_ns=1000;receive.signal_range_max_ns=2500000;
+ for(;;){
+  zjPpmArmedAt=millis();
+  if(rmt_receive(zjPpmRx,zjPpmSymbols,sizeof(zjPpmSymbols),&receive)!=ESP_OK){++zjPpmRxErrors;vTaskDelay(pdMS_TO_TICKS(2));continue;}
+  ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+  uint16_t channels[8];const size_t count=zjPpmSymbolCount;
+  const bool good=zjDecodePpm(zjPpmSymbols,count,channels);
+  portENTER_CRITICAL(&zjPpmMux);
+  if(good)zjPpmPublish(channels,zjPpmCompletedAt);
+  else if(count>=5)++zjPpmFaults; // Empty/no-signal captures are not invalid frames.
+  portEXIT_CRITICAL(&zjPpmMux);
+ }
+}
+static void zjPpmCaptureSetup(){
+ rmt_rx_channel_config_t config={};config.gpio_num=gpio_num_t(ZJ_PPM_PIN);
+ config.clk_src=RMT_CLK_SRC_DEFAULT;config.resolution_hz=1000000;config.mem_block_symbols=48;
+ if(rmt_new_rx_channel(&config,&zjPpmRx)!=ESP_OK){++zjPpmRxErrors;return;}
+ rmt_rx_event_callbacks_t callbacks={};callbacks.on_recv_done=zjPpmRxDone;
+ if(rmt_rx_register_event_callbacks(zjPpmRx,&callbacks,nullptr)!=ESP_OK||rmt_enable(zjPpmRx)!=ESP_OK){++zjPpmRxErrors;return;}
+ zjPpmCaptureReady=xTaskCreate(zjPpmReceiveTask,"zj-ppm-rx",3072,nullptr,4,&zjPpmRxTask)==pdPASS;
+ if(!zjPpmCaptureReady)++zjPpmRxErrors;
+}
+#endif
+
 static void IRAM_ATTR zjPpmInterrupt(){
  const uint32_t at=micros();
  portENTER_CRITICAL_ISR(&zjPpmMux);
@@ -34,11 +88,7 @@ static void IRAM_ATTR zjPpmInterrupt(){
  zjPpmLastEdge=at;
  if(gap>=ZJ_PPM_SYNC_US&&gap<=ZJ_PPM_MAX_GAP_US){
   if(zjPpmIndex==ZJ_PPM_CHANNELS){
-   for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++)zjPpmReady[i]=zjPpmBuilding[i];
-   // Always publish the latest complete frame and its actual arrival time.
-   // Processing an old mailbox entry must never renew the signal-loss timer.
-   zjPpmReadyAt=millis();
-   zjPpmFrameReady=true;++zjPpmIsrFrames;
+   zjPpmPublish(zjPpmBuilding,millis());
   }else if(zjPpmIndex&&zjPpmIndex!=ZJ_PPM_CHANNELS)++zjPpmFaults;
   zjPpmIndex=0;
  }else if(gap>=850&&gap<=2150){
@@ -75,7 +125,11 @@ static void zjPpmSetup(){
   if(!valid){for(uint8_t i=0;i<5;i++)zjPpmMap[i]=i;}
  }
  pinMode(ZJ_PPM_PIN,INPUT_PULLDOWN); // receiver must drive a proper 3.3V signal
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ zjPpmCaptureSetup(); // Hardware timestamps every edge; Arduino loop is not the sample clock.
+#else
  attachInterrupt(digitalPinToInterrupt(ZJ_PPM_PIN),zjPpmInterrupt,RISING);
+#endif
  Serial.printf("ZJPPM,PIN,%s,GPIO%u,CH8,MOTORS_OFF\n",FC_BOARD,unsigned(ZJ_PPM_PIN));
 }
 static bool zjPpmSignalFresh(uint32_t now){
@@ -103,6 +157,12 @@ static String zjPpmStatus(){
  output+=",\"ageMs\":"+(zjPpmLastFrameAt?String(now-zjPpmLastFrameAt):String("null"));
  output+=",\"seq\":"+String(zjPpmFrameSeq)+",\"losses\":"+String(zjPpmLostCount)+
    ",\"faults\":"+String(uint32_t(zjPpmFaults));
+ output+=",\"expectedHz\":50,\"captureHz\":"+String(zjPpmSignalFresh(now)?zjPpmCaptureHz:0);
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ output+=",\"captureBackend\":\"RMT_RX\",\"captureReady\":"+String(zjPpmCaptureReady?"true":"false")+",\"captureErrors\":"+String(uint32_t(zjPpmRxErrors));
+#else
+ output+=",\"captureBackend\":\"GPIO_ISR\",\"captureReady\":true,\"captureErrors\":0";
+#endif
  output+=",\"raw\":"+(good?zjPpmRawJson():String("null"))+",\"channels\":"+
    (good?zjPpmChannelsJson():String("null"));
  output+=",\"map\":[";
@@ -112,7 +172,7 @@ static String zjPpmStatus(){
 }
 static void zjPpmLoop(uint32_t now){
  uint16_t captured[ZJ_PPM_CHANNELS];
- uint32_t receivedAt=0;
+ uint32_t receivedAt=0,capturedFrames=0,captureLosses=0;
  bool newFrame=false;
  portENTER_CRITICAL(&zjPpmMux);
  if(zjPpmFrameReady){
@@ -120,11 +180,15 @@ static void zjPpmLoop(uint32_t now){
   receivedAt=zjPpmReadyAt;
   zjPpmFrameReady=false;newFrame=true;
  }
+ capturedFrames=zjPpmIsrFrames;captureLosses=zjPpmCaptureLosses;
  portEXIT_CRITICAL(&zjPpmMux);
- // Snapshot the clock after the ISR mailbox, then expire the PREVIOUS input
- // before accepting a resumed frame. A high ARM switch cannot hide a gap.
  now=millis();
- if(zjPpmInputAvailable&&!zjPpmSignalFresh(now)){
+ const bool captureGap=captureLosses!=zjPpmSeenCaptureLosses;
+ zjPpmSeenCaptureLosses=captureLosses;
+ const bool continuous=newFrame&&!captureGap&&uint32_t(now-receivedAt)<=ZJ_PPM_LOST_MS;
+ // Distinguish a busy consumer from an actual receiver gap. A real gap still
+ // releases control even when a newer mailbox frame arrived before this loop.
+ if(zjPpmInputAvailable&&(captureGap||(!zjPpmSignalFresh(now)&&!continuous))){
   zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
   zjPpmArmingLowSeen=false;zjPpmInputSwitchArmed=false;
   if(zjRcOwned&&zjRcSource=="PPM")zjRcRelease("PPM_SIGNAL_LOST");
@@ -140,7 +204,7 @@ static void zjPpmLoop(uint32_t now){
    for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++){
     zjPpmRaw[i]=captured[i];zjPpmValues[i]=zjPpmScaled(captured[i],i);
    }
-   zjPpmLastFrameAt=receivedAt;++zjPpmFrameSeq;zjPpmInputAvailable=true;
+   zjPpmLastFrameAt=receivedAt;zjPpmFrameSeq=capturedFrames;zjPpmInputAvailable=true;
    const int t=zjPpmValues[zjPpmMap[2]],r=zjPpmValues[zjPpmMap[0]],
     p=zjPpmValues[zjPpmMap[1]],y=zjPpmValues[zjPpmMap[3]];
    const bool armHigh=zjPpmValues[zjPpmMap[4]]>=1700;
@@ -168,6 +232,10 @@ static void zjPpmLoop(uint32_t now){
     }
    }else zjPpmSafeFrames=0; // Never steal a currently owned WEB/ANDROID session.
   }
+ }
+ if(uint32_t(now-zjPpmRateAt)>=1000){
+  zjPpmCaptureHz=uint32_t(capturedFrames-zjPpmRateFrames)*1000UL/uint32_t(now-zjPpmRateAt);
+  zjPpmRateFrames=capturedFrames;zjPpmRateAt=now;
  }
  if(uint32_t(now-zjPpmReportAt)>=ZJ_PPM_LOG_MS&&Serial.availableForWrite()>145){
   zjPpmReportAt=now;

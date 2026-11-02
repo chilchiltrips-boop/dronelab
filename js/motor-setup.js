@@ -3,11 +3,13 @@ const pendingConfirmations=new Set();
 export function cancelMotorConfirmations(){for(const cancel of [...pendingConfirmations])cancel();}
 export function setupInputSample(state,observedAt,at=Date.now()){
  const s=state||{},elapsed=Math.max(0,at-observedAt),source=s.selectedInput==='AUTO'?'AUTO → '+(s.inputSource||'NONE'):(s.selectedInput||'Not selected');
- const reported=s.inputValid===true&&observedAt>0&&elapsed<1000&&Array.isArray(s.channels);
+ const monitor=s.ppm&&['PPM','AUTO'].includes(s.selectedInput)&&(!s.inputValid||s.inputSource==='PPM');
+ const sample=monitor?{inputValid:s.ppm.present,channels:s.ppm.channels,inputAgeMs:s.ppm.ageMs,inputSource:'PPM'}:s;
+ const reported=sample.inputValid===true&&observedAt>0&&elapsed<1000&&Array.isArray(sample.channels);
  const transit=Number.isFinite(s.roundTripMs)?Math.max(0,s.roundTripMs):0;
- const age=Number.isFinite(s.inputAgeMs)&&s.inputAgeMs>=0?s.inputAgeMs+transit+elapsed:null;
- const maximum=s.inputSource==='PPM'?150:300;
- return {source,reported,valid:reported&&age!==null&&age<=maximum,age,ageUpperBound:transit>0,channels:reported?s.channels:[]};
+ const age=Number.isFinite(sample.inputAgeMs)&&sample.inputAgeMs>=0?sample.inputAgeMs+transit+elapsed:null;
+ const maximum=sample.inputSource==='PPM'?150:300;
+ return {source:monitor?'PPM · receiver monitor':source,reported,valid:reported&&age!==null&&age<=maximum,age,ageUpperBound:transit>0,channels:reported?sample.channels:[],controlValid:s.inputValid===true,captureHz:monitor?s.ppm.captureHz:null};
 }
 export function rtcBenchFrame(snapshot,kitId,peerId){
  const s=snapshot?.sample,p=snapshot?.peer;
@@ -26,7 +28,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
  const check=(k,readOrStop=false)=>{if(!(k?.connected||readOrStop&&k?.linkVerified===true)||!/^ZFC-A2-/.test(k?.kitId||'')||!['usb','ap','sta'].includes(k?.transport))throw Error('Connect a verified A2 using USB, AP or STA. Android Relay is read-only.');};
  const publish=s=>{const {session:privateToken,...safe}=s;last=safe;onState(safe);return safe;};
  function clearPumps(){clearTimer(timer);timer=null;clearTimer(rtcTimer);rtcTimer=null;clearTimer(sliderTimer);sliderTimer=null;}
- function diagnostic(event,k,action,r={},ms=0){record(event,{route:'/api/motor',transport:k.transport,motorAction:action,motorMode:r.mode,motorReason:r.reason,sliderMask:r.sliderMask,sessionRemainingMs:r.sessionRemainingMs,commandSequence:r.commandSequence,roundTripMs:ms,pulseM1:r.pulseUs?.[0],pulseM2:r.pulseUs?.[1],pulseM3:r.pulseUs?.[2],pulseM4:r.pulseUs?.[3]});}
+ function diagnostic(event,k,action,r={},ms=0){record(event,{route:'/api/motor',transport:k.transport,motorAction:action,motorMode:r.mode,motorReason:r.reason,motorPolicy:r.benchPolicy,motorRemainingMs:r.remainingMs,ppmCaptureBackend:r.ppm?.captureBackend,ppmCaptureHz:r.ppm?.captureHz,ppmCaptureErrors:r.ppm?.captureErrors,ppmPresent:r.ppm?.present,ppmAgeMs:r.ppm?.ageMs,ppmSeq:r.ppm?.seq,ppmLosses:r.ppm?.losses,ppmFaults:r.ppm?.faults,sliderMask:r.sliderMask,sessionRemainingMs:r.sessionRemainingMs,commandSequence:r.commandSequence,roundTripMs:ms,pulseM1:r.pulseUs?.[0],pulseM2:r.pulseUs?.[1],pulseM3:r.pulseUs?.[2],pulseM4:r.pulseUs?.[3]});}
  async function send(action,args=[],s=session){
   const k=getKit(s?.binding),run=epoch,at=now(),readOrStop=action==='STATUS'||action==='STOP';
   const guard=()=>{
@@ -70,12 +72,13 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    const guard=()=>{check(getKit(binding));if(run!==epoch||identity(getKit(binding))!==initial.identity)throw Error('Motor start cancelled.');};
    guard();
    const beginAt=now();
-   const r=await request(getKit(binding),{action:'BEGIN',session:'',a:'PROPS_REMOVED',b:'PINS_VERIFIED',c:'PWM_50HZ_1000_2000'},guard);
+   const r=await request(getKit(binding),{action:'BEGIN',session:'',a:'PROPS_REMOVED',b:'PINS_VERIFIED',c:status.timedBenchSupported===true?'PWM_50HZ_1000_2000_TIMED':'PWM_50HZ_1000_2000'},guard);
    if(r.error)throw Error(r.error);
    const s={...initial,bootId:r.bootId,token:r.session,started:now(),keepAt:beginAt};
    if(!r.session||r.mode!=='READY'||r.kitId!==k.kitId||r.bootId!==status.bootId)throw Error('Motor setup was not acknowledged.');
    if(run!==epoch||identity(getKit(binding))!==initial.identity){try{await send('STOP',[],s)}catch{}throw Error('Motor start cancelled.');}
-   session=s;diagnostic('motor_ack',k,'BEGIN',r);const publicState=publish({...r,receivedAt:now()});
+   const beginRtt=Math.max(0,now()-beginAt);
+   session=s;diagnostic('motor_ack',k,'BEGIN',r,beginRtt);const publicState=publish({...r,roundTripMs:beginRtt,receivedAt:now()});
    timer=setTimer(async()=>{
     if(busy||inFlight||session!==s)return;
     if(now()-s.started>120000){void stop().catch(()=>{});return;}

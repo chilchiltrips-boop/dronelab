@@ -40,7 +40,7 @@ static String zjArg(const String& name){
 static bool zjLocalDiagnosticRoute(){
  const String path=zjHttp.uri();const bool get=zjHttp.method()==HTTP_GET;
  const bool ap=String(zjClientTransport())=="AP";
- if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot")||
+ if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot"||path=="/api/ppm/status")||
    (ap&&(path=="/api/wifi/scan"||path=="/api/wifi/saved"));
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/motor"||path=="/api/command"||path=="/api/rc/access"||path=="/api/rc/claim"||path=="/api/rc/preview"||

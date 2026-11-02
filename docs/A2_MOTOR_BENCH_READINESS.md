@@ -1,4 +1,4 @@
-# A2 motor setup — FlightCore 1.7.1
+# A2 motor setup — FlightCore 1.7.2
 
 A2 D0–D3 outputs are integrated with the production firmware, Setup Wizard and
 Python Lab. This is a bounded, propeller-free bench feature, with no flight
@@ -9,15 +9,13 @@ mixer or attitude stabilization. A1 reports motor setup unsupported.
 The A2_QUAD_X and A2_QUAD_PLUS presets use 50 Hz PWM with 1000–2000 us endpoints. Logical M1–M4 can be assigned to D0–D3, with unique pins and expected CW/CCW direction metadata. A single canonical NVS record stores the layout, pin order, direction expectations and operator-observed minimum starting pulses. Changing wiring resets those observations. PWM does not reverse an ESC. The user
 must verify that the ESC supports this profile. Motors have dedicated LEDC
 channels 0–3 on explicitly reserved timer 3; the onboard LED uses Arduino channel 5 with its own 5 kHz / 8-bit timer. Startup emits no pulses. Channel numbering alone does not reserve an independent timer in Arduino-ESP32 3.3.12.
-The ESP timer supervisor stops channels if the main output service misses a
-100 ms deadline; that trip requires a new explicit setup session.
+The ESP timer supervisor enforces the absolute manual-operation deadline independently of the main loop. For input tests and legacy sessions it stops channels if the main output service misses a 100 ms deadline. A timer trip requires a new explicit setup session.
 
 USB ZJMOTOR and encrypted POST /api/motor share the same command handler.
 BEGIN requires props/pin/profile confirmations, low disarmed input, and either
 USB Teacher Unlock or an authorized network control session. STA observer
 and automatic Android Relay access cannot operate motors. The random session
-is bound to its caller and boot; it is never broadcast. KEEP expires after
-1500 ms. SINGLE/ALL accept 1000–2000 us in 10 us steps and are limited to 2 s. SLIDER starts at 1000 us, locks a selected motor mask, and accepts 1000–2000 us updates in 1 us command increments for at most 30 s. Replayed sequence numbers are rejected; a 750 ms slider-update gap ends the session independently of KEEP. The 14-bit PWM duty resolution quantizes actual pulse timing; UI values are requested/acknowledged commands. CAL_HIGH has a 15 s deadline;
+is bound to its caller and boot; it is never broadcast. Version 3 advertises `timedBenchSupported`. New WebApp/Python sessions explicitly confirm `PWM_50HZ_1000_2000_TIMED`: READY expires after an absolute 10 s, slider tests hold the last accepted pulse until STOP or their absolute maximum 30 s, calibration HIGH until LOW or 15 s, and LOW until 3 s. These manual phases do not depend on browser KEEP/SLIDE cadence. A late request returns the terminal result and never restarts output. Older clients using `PWM_50HZ_1000_2000` retain the original 1500 ms KEEP lease and 750 ms slider freshness deadline. SINGLE/ALL accept 1000–2000 us in 10 us steps and are limited to 2 s. SLIDER starts at 1000 us, locks a selected motor mask, and accepts 1000–2000 us updates in 1 us command increments for at most 30 s. Replayed sequence numbers are rejected; a 750 ms slider-update gap ends legacy sessions independently of KEEP. The 14-bit PWM duty resolution quantizes actual pulse timing; UI values are requested/acknowledged commands. CAL_HIGH has a 15 s deadline;
 CAL_LOW ends after 3 s. INPUT is limited to 30 s, ends on producer/path/radio
 change, and uses firmware input freshness (PPM 150 ms; network 300 ms).
 
@@ -37,7 +35,7 @@ before using physical bench outputs.
 
 ## WebApp and Python
 
-Setup Wizard: Board → Wiring → Inputs → ESC calibration → Motor test → Report. Each step has its own diagram: controller connection, editable frame/wiring preview, live sticks/channel history, ESC pulse sequence, acknowledged motor animation, and saved minimum summary. Inputs refresh at 4 Hz and stale/unreported channels remain blank. WebRTC input monitoring uses paired fresh phone frames; it does not operate motors. Minimum pulses are recorded from an acknowledged live command after the operator confirms spin, then output is stopped before saving. There is no RPM sensor or automatic minimum-speed measurement.
+Setup Wizard: Board → Wiring → Inputs → ESC calibration → Motor test → Report. Each step has its own diagram: controller connection, editable frame/wiring preview, live sticks/channel history, ESC pulse sequence, acknowledged motor animation, and saved minimum summary. The wizard polls input observations at up to 10 Hz. A2 RMT captures receiver frames independently (50 Hz when the receiver emits 20 ms frames). The monitor exposes physical PPM channels without requiring throttle-low/ARM/control ownership; stale samples remain labelled and lost frames are blank. Actual input-driven motor control still requires fresh, selected, owned input. WebRTC input monitoring uses paired fresh phone frames; it does not operate motors. Minimum pulses are recorded from an acknowledged live command after the operator confirms spin, then output is stopped before saving. There is no RPM sensor or automatic minimum-speed measurement.
 The report distinguishes user observations from commanded pulse outputs.
 Python examples are in the existing examples menu. Use:
 

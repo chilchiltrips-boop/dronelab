@@ -12,8 +12,8 @@ try{
  await page.locator('[data-action=detect]').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('verified A2'));
  await page.evaluate(()=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.0',controlAuthorized:true};
-  const f=window.__motorFixture={run:0,kit,state:{version:2,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.2',controlAuthorized:true};
+  const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
   window.__motorCalls=[];
   const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0]};},ms);};
   window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
@@ -46,6 +46,7 @@ try{
  await page.locator('[data-action=layout]').click();
  await page.waitForFunction(()=>window.__motorFixture.state.layout==='A2_QUAD_PLUS'&&!window.ZebjusMotorSetup.active);
  assert.deepEqual(await page.evaluate(()=>window.__motorFixture.state.layoutPins),['D2','D1','D0','D3']);
+ assert.equal(await page.evaluate(()=>window.__motorFixture.calls.find(c=>c.action==='BEGIN').c),'PWM_50HZ_1000_2000_TIMED');
  await page.waitForFunction(()=>!document.querySelector('[data-action=layout]').disabled);
  await page.screenshot({path:'test-output/a2-wiring.png',fullPage:true});
  await page.locator('[data-step="2"]').click();
@@ -62,7 +63,12 @@ try{
  await page.waitForFunction(()=>document.querySelector('.a2-input').textContent.includes('LAST SAMPLE')&&document.querySelector('[data-channel="2"] output').textContent==='1475 µs');
  assert.equal(await page.locator('[data-channel="2"]').getAttribute('data-fresh'),'false','a delayed last sample must never be labelled LIVE');
  await page.evaluate(()=>window.__motorFixture.state.inputAgeMs=0);
- await page.evaluate(()=>{window.__motorFixture.state.inputValid=true;window.__motorFixture.state.channels[2]=1000;});
+ await page.evaluate(()=>{const s=window.__motorFixture.state;s.inputValid=false;s.inputSource='NONE';s.ppm={present:true,ageMs:0,captureHz:50,captureBackend:'RMT_RX',captureReady:true,channels:[1500,1500,1800,1500,2000,1500,1500,1500]};});
+ await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs'&&document.querySelector('.a2-input').textContent.includes('receiver monitor'));
+ assert.match(await page.locator('.a2-input-health').textContent(),/RMT_RX · 50 Hz/);
+ await page.evaluate(()=>{const s=window.__motorFixture.state;s.ppm.present=false;s.ppm.channels=null;});
+ await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
+ await page.evaluate(()=>{const s=window.__motorFixture.state;delete s.ppm;s.inputValid=true;s.inputSource='PPM';s.channels[2]=1000;});
  await page.locator('[data-step="4"]').click();
  const begins=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
  await page.locator('[data-action=slider]').click();await page.getByRole('button',{name:'Cancel / STOP',exact:true}).click();

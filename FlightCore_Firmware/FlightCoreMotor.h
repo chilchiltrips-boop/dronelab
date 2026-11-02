@@ -13,10 +13,12 @@ static constexpr ledc_timer_t ZJ_MOTOR_TIMER=LEDC_TIMER_3;
 static portMUX_TYPE zjMotorMux=portMUX_INITIALIZER_UNLOCKED;
 static volatile bool zjMotorWatchActive=false,zjMotorWatchTripped=false;
 static volatile uint32_t zjMotorServicedAt=0;
+static volatile uint32_t zjMotorWatchAt=0,zjMotorWatchLimit=100;
+static volatile ZjMotorSafety::Reason zjMotorWatchReason=ZjMotorSafety::DEADLINE_MISSED;
 static esp_timer_handle_t zjMotorWatchTimer=nullptr;
 static void zjMotorWatch(void*){
  portENTER_CRITICAL(&zjMotorMux);
- if(zjMotorWatchActive&&uint32_t(millis()-zjMotorServicedAt)>100){
+ if(zjMotorWatchActive&&uint32_t(millis()-zjMotorWatchAt)>=zjMotorWatchLimit){
   zjMotorWatchTripped=true;zjMotorWatchActive=false;
   for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
  }
@@ -48,7 +50,10 @@ static void zjMotorApply(){
  const bool enabled=zjMotor.benchEnabled&&zjMotor.mode!=ZjMotorSafety::FAULT;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  portENTER_CRITICAL(&zjMotorMux);
- if(zjMotorWatchTripped&&enabled)zjMotor.fault(ZjMotorSafety::DEADLINE_MISSED);
+ if(zjMotorWatchTripped&&enabled){
+  if(zjMotorWatchReason==ZjMotorSafety::DEADLINE_MISSED)zjMotor.fault(zjMotorWatchReason);
+  else zjMotor.disable(zjMotorWatchReason);
+ }
  if(zjMotorDriverReady){
   for(int n=0;n<4;n++){
    const uint32_t duty=zjMotor.benchEnabled?uint32_t(zjMotorConfig.physicalPulse(n,zjMotor.pulses))*16384UL/20000UL:0;
@@ -58,6 +63,11 @@ static void zjMotorApply(){
   if(!zjMotor.benchEnabled)for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
  }
  zjMotorServicedAt=millis();zjMotorWatchActive=zjMotor.benchEnabled;
+ const bool timed=zjMotor.timedManual()||(zjMotor.timedBench&&zjMotor.mode==ZjMotorSafety::READY);
+ zjMotorWatchAt=timed?zjMotor.modeAt:zjMotorServicedAt;
+ zjMotorWatchLimit=timed?zjMotor.operationLimit():100;
+ zjMotorWatchReason=!timed?ZjMotorSafety::DEADLINE_MISSED:zjMotor.mode==ZjMotorSafety::CAL_HIGH?ZjMotorSafety::CAL_TIMEOUT:
+  zjMotor.mode==ZjMotorSafety::CAL_LOW?ZjMotorSafety::CAL_FINISHED:zjMotor.mode==ZjMotorSafety::READY?ZjMotorSafety::SESSION_EXPIRED:ZjMotorSafety::TEST_FINISHED;
  portEXIT_CRITICAL(&zjMotorMux);
 #endif
  zjMotorEnabled=zjMotorDriverReady&&zjMotor.benchEnabled;
@@ -97,7 +107,7 @@ static String zjMotorStatus(){
  zjMotorLoop();
  const auto input=zjMotorReadInput();const bool rtc=zjRcControlPath=="ANDROID_WEBRTC";
  const bool fresh=input.valid&&input.selected&&uint32_t(millis()-input.receivedMs)<=(input.source==ZjMotorInput::PPM?ZjMotorSafety::INPUT_PPM_MS:ZjMotorSafety::INPUT_NETWORK_MS);
- String out="{\"version\":2,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"supported\":"+(zjMotorDriverReady?String("true"):String("false"))+
+ String out="{\"version\":3,\"timedBenchSupported\":true,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"supported\":"+(zjMotorDriverReady?String("true"):String("false"))+
   ",\"mode\":"+zjJson(zjMotorMode())+",\"reason\":"+zjJson(zjMotorReason())+","+zjMotorFlags()+
   ",\"layout\":"+zjJson(zjMotorConfig.layout())+",\"configValid\":"+(zjMotorConfigValid?"true":"false")+
   ",\"profile\":\"PWM_50HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":2000,\"maxInputPulseUs\":1200,\"sliderDurationMaxMs\":30000,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
@@ -108,7 +118,8 @@ static String zjMotorStatus(){
  else if(!rtc&&zjRcSource=="PPM")out+=zjPpmRcChannelsJson();
  else if(rtc)out+="[null,null,"+String(input.throttle)+","+String(input.yaw)+","+String(input.inputArmed?2000:1000)+",null,null,null]";
  else out+="["+String(zjRcRoll)+","+String(zjRcPitch)+","+String(input.throttle)+","+String(input.yaw)+","+String(zjRcCh5)+","+String(zjRcCh6)+",null,null]";
- out+=",\"pulseUs\":[";
+ out+=",\"ppm\":"+zjPpmStatus()+",\"benchPolicy\":"+zjJson(zjMotor.timedBench?"TIMED_MANUAL":"LIVE_LEASE")+
+  ",\"keepaliveRequired\":"+(zjMotor.timedManual()?String("false"):String("true"))+",\"pulseUs\":[";
  for(int n=0;n<4;n++){if(n)out+=',';out+=String(zjMotorEnabled?zjMotor.pulses[n]:0);}
  out+="],\"layoutPins\":[";
  for(int n=0;n<4;n++){if(n)out+=',';out+=zjJson(String("D")+String(zjMotorConfig.pins[n]));}
@@ -117,7 +128,7 @@ static String zjMotorStatus(){
  out+="],\"observedMinimumUs\":[";
  for(int n=0;n<4;n++){if(n)out+=',';out+=String(zjMotorConfig.minimumUs[n]);}
  out+="],\"sliderMask\":"+String(zjMotor.mode==ZjMotorSafety::SLIDER_TEST?zjMotor.sliderMask:0)+",\"sessionRemainingMs\":"+
-  String(zjMotor.benchEnabled?ZjMotorSafety::SESSION_MS-uint32_t(millis()-zjMotor.sessionAt):0);
+  String(zjMotor.benchEnabled&&!zjMotor.timedManual()&&uint32_t(millis()-zjMotor.sessionAt)<zjMotor.leaseMs()?zjMotor.leaseMs()-uint32_t(millis()-zjMotor.sessionAt):0);
  const uint32_t limit=zjMotor.mode==ZjMotorSafety::CAL_HIGH?ZjMotorSafety::CAL_HIGH_MAX_MS:zjMotor.mode==ZjMotorSafety::CAL_LOW?ZjMotorSafety::CAL_LOW_MS:
   zjMotor.mode==ZjMotorSafety::SLIDER_TEST?zjMotor.sliderDuration:zjMotor.mode==ZjMotorSafety::INPUT_TEST?zjMotorInputDuration:(zjMotor.mode==ZjMotorSafety::SINGLE_TEST||zjMotor.mode==ZjMotorSafety::ALL_TEST)?zjMotor.lastInputAt:0;
  out+=",\"remainingMs\":"+String(limit&&uint32_t(millis()-zjMotor.modeAt)<limit?limit-uint32_t(millis()-zjMotor.modeAt):0)+"}";
@@ -136,18 +147,21 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   if(!authorized)return error("unlock_usb_teacher_or_authorize_network_control");
   if(!zjMotorConfigValid)return error("saved_motor_config_invalid_factory_reset_required");
   if(zjMotor.benchEnabled)return error("motor_setup_already_owned");
-  if(a!="PROPS_REMOVED"||b!="PINS_VERIFIED"||c!="PWM_50HZ_1000_2000")return error("confirm_props_pins_and_esc_profile");
+  if(a!="PROPS_REMOVED"||b!="PINS_VERIFIED"||(c!="PWM_50HZ_1000_2000"&&c!="PWM_50HZ_1000_2000_TIMED"))return error("confirm_props_pins_and_esc_profile");
   if(zjAccessBusy()||zjMaintenanceActive||zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return error("stop_maintenance_lower_throttle_and_disarm_input");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   portENTER_CRITICAL(&zjMotorMux);zjMotorWatchTripped=false;portEXIT_CRITICAL(&zjMotorMux);
 #endif
-  zjMotor.disable();zjMotorRtc=ZjMotorInput();if(!zjMotor.prepare(now,true,true))return error("setup_rejected");
+  zjMotor.disable();zjMotorRtc=ZjMotorInput();if(!zjMotor.prepare(now,true,true,c=="PWM_50HZ_1000_2000_TIMED"))return error("setup_rejected");
   zjMotorOwner=caller;zjMotorToken=zjRcNewSession();zjMotorCommandSeq=0;zjMotorApply();
   String result=zjMotorStatus();return result.substring(0,result.length()-1)+",\"session\":"+zjJson(zjMotorToken)+"}";
  }
  // An operation deadline invalidates its token. KEEP may read the terminal
  // result but must never resurrect that expired session or reset its deadline.
  if(action=="KEEP"&&!zjMotor.benchEnabled)return zjMotorStatus();
+ // A queued update can arrive just after the hard timer ends. Report normal
+ // completion as the terminal state, rather than an authentication failure.
+ if(token.length()&&!zjMotor.benchEnabled)return zjMotorStatus();
  if(!token.length()||token!=zjMotorToken||caller!=zjMotorOwner||!zjMotor.benchEnabled)return error("motor_session_expired_or_not_owner");
  if(action=="KEEP"){zjMotor.keep(now);zjMotorApply();return zjMotorStatus();}
  bool ok=false;long n=0,p=0,d=0;
