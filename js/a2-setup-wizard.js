@@ -25,7 +25,7 @@ if(root){
  <div class="a2-actions"><button class="btn" data-action="high">Start calibration · HIGH</button><button class="btn" data-action="low" disabled>Heard prompt · Send LOW</button></div><p class="a2-phase" role="status">Calibration not started.</p>
  <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard after LOW</label><button class="btn ghost" data-action="confirm-cal" disabled>Record successful calibration</button></section>
  <section data-panel="4"><h3>Motor test</h3>
- <div class="a2-output-selection"><div class="a2-motor-selection"><span>Motor selection</span><div><output id="a2MotorSelection" data-selection="1">M1</output><button class="btn ghost" data-action="next-motor">Next motor · M2 →</button></div></div><label>Pulse (µs)<input id="a2Pulse" type="number" min="1000" max="2000" step="1" value="1000"></label></div>
+ <div class="a2-output-selection"><div class="a2-motor-selection"><span>Motor selection</span><div><output id="a2MotorSelection" data-selection="1">M1</output><button class="btn ghost" data-action="next-motor">Save &amp; next · M2 →</button></div></div><label>Pulse (µs)<input id="a2Pulse" type="number" min="1000" max="2000" step="1" value="1000"></label></div>
  <label class="a2-check a2-all-output"><input id="a2AllMotors" type="checkbox"> All motors</label><div class="a2-target-note" role="status"></div>
  <div class="a2-slider"><label for="a2PulseSlider"><span>Output pulse</span><output id="a2PulseValue">1000 µs</output></label><input id="a2PulseSlider" type="range" min="1000" max="2000" step="1" value="1000" disabled><div><span>1000</span><span>1500</span><span>2000 µs</span></div></div>
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="slider">Start motor test · 30 s</button></div><p class="a2-test-state" role="status">Outputs off.</p></section>
@@ -43,17 +43,23 @@ if(root){
  const selectionValue=()=>allMotors?'all':String(selectedMotor);
  const selectionLocked=()=>selectionPending||working||motorClient.busy&&motorClient.owner!=='wizard';
  function selectedMotorMask(){return ['INPUT_TEST','ALL_TEST'].includes(state?.mode)||allMotors?15:1<<(selectedMotor-1);}
- async function selectMotor(motor,all=false){
+ async function selectMotor(motor,all=false,{save=false}={}){
   if(selectionLocked()){render();return;}
-  if(motor===selectedMotor&&all===allMotors)return;
+  if(motor===selectedMotor&&all===allMotors&&!save)return;
   selectionPending=true;render();
   try{
+   if(save){
+    if($('#a2Spinning').checked)await act('observe-min');
+    const motors=allMotors?[1,2,3,4]:[selectedMotor];
+    if(motors.some(n=>!pendingMinimum[n]&&!state?.observedMinimumUs?.[n-1]))throw Error('Observe spinning and record a starting pulse before Save & next.');
+    if(Object.keys(pendingMinimum).length)await act('save-min');
+   }
    // A mask change retires the old slider pump and waits for STOP before
    // changing the selection. Selecting another output never starts it.
    if(motorClient.busy||kit().connected&&state?.mode&&state.mode!=='DISABLED'){message('Stopping outputs…');await motorClient.stop(motorClient.owner==='wizard'?'wizard':undefined);}
    selectedMotor=motor;allMotors=all;setPulse(1000);$('#a2ObservedMotor').value=String(motor);$('#a2Spinning').checked=false;
-   operationError='';message(all?'All motors selected.':`M${motor} selected.`);
-  }catch(e){operationError=e.message;message(e.message);}
+   operationError='';message(all?'All motors selected.':save?`Minimum saved · M${motor} selected.`:`M${motor} selected.`);
+  }catch(e){operationError=e.message;message(e.message);if(save&&motorClient.owner==='wizard')await motorClient.stop('wizard').catch(()=>{});}
   finally{selectionPending=false;render();}
  }
  function selectedInput(){
@@ -137,10 +143,10 @@ if(root){
   $('#a2MotorSelection').dataset.selection=selectionValue();$('#a2MotorSelection').textContent=allMotors?'All motors':'M'+selected;
   $('.a2-target-note').textContent=allMotors?'M1 · M2 · M3 · M4':`${layout.positions[selected-1]} · ${m.layoutPins?.[selected-1]||'D'+(selected-1)} · ${m.rotations?.[selected-1]||(['CW','CCW','CW','CCW'][selected-1])}`;
   $('.a2-check-count').textContent=['#a2Props','#a2Pins','#a2Profile'].filter(id=>$(id).checked).length+' / 3 confirmed';
-  $('[data-action="next-motor"]').disabled=selectionLocked();$('[data-action="next-motor"]').textContent='Next motor · M'+(selected%4+1)+' →';
+  $('[data-action="next-motor"]').disabled=selectionLocked();$('[data-action="next-motor"]').textContent='Save & next · M'+(allMotors?1:selected%4+1)+' →';
   const toggle=$('[data-action="slider"]');toggle.textContent=sliding?'Stop motor test':'Start motor test · 30 s';toggle.classList.toggle('danger',sliding);
   $('[data-action="slider"]').disabled=selectionPending||working&&!sliding||m.version<2||!m.supported||locked&&!sliding;
-  $('[data-action="single"]').disabled=working||motorClient.active;$('[data-action="input"]').disabled=working||motorClient.active;
+  $('[data-action="single"]').disabled=working||selectionPending||motorClient.active;$('[data-action="input"]').disabled=working||selectionPending||motorClient.active;
   $('.a2-test-state').textContent=operationError?(m.mode==='UNCONFIRMED'?'Output state unconfirmed · ':'Motor test · ')+operationError:sliding?(Date.now()-lastStateAt>=750?'Waiting for motor ACK · output state unconfirmed. STOP or verify the connection.':`LIVE · ${Math.ceil(remaining/1000)} s · ACK ${m.roundTripMs??'—'} ms`):m.mode==='UNCONFIRMED'?'Output state unconfirmed · '+(m.reason||'Reconnect before testing.'): `Outputs ${m.motorsDisabled===true||m.mode==='DISABLED'?'off':m.mode||'not reported'} · ${motorStopDescription(m)}`;
   $('.a2-minima').innerHTML=[1,2,3,4].map((n,i)=>`<div><b>M${n}</b><span>${m.observedMinimumUs?.[i]?m.observedMinimumUs[i]+' µs saved':'Not recorded'}</span>${pendingMinimum[n]?`<em>${pendingMinimum[n]} µs pending</em>`:''}</div>`).join('');
   $('.a2-report').innerHTML=`<dl>${[['Board',k.kitId||'Not connected'],['Saved frame',layouts[m.layout]?.name||'Not reported'],['Saved pins',(m.layoutPins||[]).map((p,i)=>'M'+(i+1)+' → '+p).join(' · ')||'—'],['ESC calibration',calConfirmed?'Success tones confirmed by operator':'Not confirmed'],['Minimum pulses',(m.observedMinimumUs||[]).map((p,i)=>'M'+(i+1)+': '+(p?p+' µs':'—')).join(' · ')||'Not recorded'],['Physical flight test','Not recorded']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
@@ -188,7 +194,7 @@ if(root){
   }
   if(name==='input'){checked();await confirmMotor('Start a 10-second selected-input throttle test on ALL FOUR motors? Lower throttle and disarm input first. Output is capped at 1200 µs.');await prepare();render(await motorClient.command('INPUT',['selected',10000,'CONFIRM_ALL_MOTORS']));message('Selected-input test started.');}
  }
- root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.action==='next-motor'){void selectMotor(selectedMotor%4+1);return;}if(b.dataset.step!==undefined){show(Number(b.dataset.step));return;}if(b.dataset.nav){show(step+Number(b.dataset.nav));return;}if(!b.dataset.action||selectionPending&&b.dataset.action!=='stop'||working&&b.dataset.action!=='stop'&&!(b.dataset.action==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'))return;working=true;
+ root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.action==='next-motor'){void selectMotor(allMotors?1:selectedMotor%4+1,false,{save:true});return;}if(b.dataset.step!==undefined){show(Number(b.dataset.step));return;}if(b.dataset.nav){show(step+Number(b.dataset.nav));return;}if(!b.dataset.action||selectionPending&&b.dataset.action!=='stop'||working&&b.dataset.action!=='stop'&&!(b.dataset.action==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'))return;working=true;
   operationError='';
   act(b.dataset.action).catch(async e=>{operationError=e.message==='stop_maintenance_lower_throttle_and_disarm_input'?'Start blocked: lower receiver/controller throttle, turn ARM off and stop maintenance, then confirm again.':e.message;message(operationError);if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
  });
@@ -204,7 +210,7 @@ if(root){
  let nextPollAt=0,readFailures=0;
  const observe=()=>{
   if(!live()){if(working)cancelMotorConfirmations();if(motorClient.owner==='wizard')void motorClient.stop('wizard').catch(()=>{});return;}
-  render();if(polling||motorClient.active||working||Date.now()<nextPollAt)return;
+  render();if(polling||motorClient.active||working||selectionPending||Date.now()<nextPollAt)return;
   polling=true;const started=Date.now();
   motorClient.status().then(()=>{readFailures=0;nextPollAt=Math.max(Date.now(),started+(step===2?100:1000));})
    .catch(e=>{readError=e.message;readFailures=Math.min(5,readFailures+1);nextPollAt=Date.now()+Math.min(2400,100*2**readFailures);message(kit().connected?'Status refresh delayed · '+e.message:'');render();})

@@ -68,6 +68,7 @@ try{
  assert.deepEqual(await page.evaluate(()=>window.__motorFixture.state.layoutPins),['D2','D1','D0','D3']);
  assert.equal(await page.evaluate(()=>window.__motorFixture.calls.find(c=>c.action==='BEGIN').c),'PWM_50HZ_1000_2000_TIMED');
  await page.waitForFunction(()=>!document.querySelector('[data-action=layout]').disabled);
+ await page.waitForFunction(()=>{const m=new DOMMatrixReadOnly(getComputedStyle(document.querySelector('[data-motor="1"]')).transform);return Math.abs(m.m41-260)<.5&&Math.abs(m.m42-108)<.5;});
  await page.screenshot({path:'test-output/a2-wiring.png',fullPage:true});
  await page.locator('[data-step="4"]').click();assert.equal(await page.locator('.a2-visual [data-motor="2"]').getAttribute('role'),'button','direct Wiring to Motor Test navigation enables diagram selection');
  await page.locator('[data-step="1"]').click();assert.equal(await page.locator('.a2-visual [data-motor="2"]').getAttribute('role'),null,'configuration preview is not a motor test control');
@@ -117,12 +118,24 @@ try{
  await page.locator('#a2AllMotors').check();await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='all');
  assert.equal(await page.locator('.a2-visual .is-selected').count(),4);
  await page.locator('#a2AllMotors').uncheck();await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='2');
- // Every motor can be visited one by one, including returning from M4 to M1.
- for(const motor of [3,4,1]){
-  await page.locator('[data-action=next-motor]').click();
-  await page.waitForFunction(n=>document.querySelector('#a2MotorSelection').dataset.selection===String(n),motor);
- }
  assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),begins,'selecting outputs must never start them');
+ await page.locator('.a2-visual [data-motor="1"]').click();
+ await page.locator('[data-action=next-motor]').click();
+ await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('record a starting pulse'));
+ assert.equal(await chosen(),'1','Save & next cannot invent an unobserved minimum');
+ // Save an observed minimum for each motor and advance one by one.
+ for(let motor=1;motor<=4;motor++){
+  await page.locator('[data-action=slider]').click();await confirm.click();
+  await page.waitForFunction(n=>window.__motorFixture.state.mode==='SLIDER_TEST'&&window.__motorFixture.state.sliderMask===(1<<(n-1)),motor);
+  await page.locator('#a2Pulse').fill(String(1100+motor*10));
+  await page.waitForFunction(n=>window.__motorFixture.state.pulseUs[n-1]===1100+n*10,motor);
+  await page.locator('#a2Spinning').check();
+  const starts=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDER').length);
+  await page.locator('[data-action=next-motor]').click();
+  await page.waitForFunction(n=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection===String(n%4+1),motor);
+  assert.equal(await page.evaluate(n=>window.__motorFixture.state.observedMinimumUs[n-1],motor),1100+motor*10,'Save & next persists the observed pulse');
+  assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDER').length),starts,'Save & next must not start the next motor');
+ }
  await page.locator('[data-action=slider]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
  assert.match(await page.locator('[data-action=slider]').textContent(),/Stop motor test/);
@@ -156,7 +169,7 @@ try{
  await page.locator('[data-action=slider]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
  await page.evaluate(()=>window.__motorFixture.rejectStop=true);
- await page.locator('#a2AllMotors').check();
+ await page.locator('#a2AllMotors').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('Simulated STOP failure'));
  assert.equal(await chosen(),'2');assert.equal(await page.locator('#a2AllMotors').isChecked(),false);
  await page.locator('[data-action=stop]').click();
@@ -239,5 +252,5 @@ try{
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
  await page.locator('#stopPythonBtn').click();
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
- assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, STOP-before-next and all-output transitions, compact six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
+ assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, compact six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
 }finally{await browser.close();}
