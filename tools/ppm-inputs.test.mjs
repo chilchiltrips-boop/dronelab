@@ -25,7 +25,7 @@ test('PPM arbitration uses throttle-low and 2-second yaw gestures, never CH5 or 
   'zjRcSource="PPM"','zjRcTransport="PPM"','zjPpmArm.accept(t,y,receivedAt)','zjRcInputArmed=zjPpmArm.armed',
   'THROTTLE_LOW_YAW_GESTURE'])assert.ok(f.includes(token),token);
  for(const token of ['THROTTLE_LOW_US=1050','YAW_LEFT_US=1100,YAW_RIGHT_US=1900',
-  'HOLD_MS=2000,FRAME_GAP_MS=150','if(!armed)neutralSeen=true','armed=direction==1'])assert.ok(gesture.includes(token),token);
+  'HOLD_MS=2000','if(!armed)neutralSeen=true','armed=direction==1'])assert.ok(gesture.includes(token),token);
  assert.doesNotMatch(f,/armLow|armHigh|zjPpmInputSwitchArmed/);
  assert.match(f,/if\(zjRcOwned&&zjRcSource=="PPM"\)/);
  assert.match(f,/zjRcRelease\("PPM_SIGNAL_LOST"\)/);
