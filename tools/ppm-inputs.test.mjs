@@ -18,18 +18,22 @@ test('board-specific PPM pin mapping: A1 GPIO10, A2 XIAO D10=GPIO18',()=>{
  assert.match(ppmHdr,/attachInterrupt\(digitalPinToInterrupt\(ZJ_PPM_PIN\),zjPpmInterrupt,RISING\)/);
  assert.match(ppmHdr,/portENTER_CRITICAL_ISR/);
 });
-test('PPM arbitration is throttle-low, arm-low, and never preempts active WEB or ANDROID',()=>{
+test('PPM arbitration uses throttle-low and 2-second yaw gestures, never CH5 or motor pins',()=>{
  const f=read('FlightCore_Firmware/FlightCorePpm.h'),rc=read('FlightCore_Firmware/FlightCoreClassroom.h');
- for(const token of ["zjPpmSafeFrames>=3","armLow&&t<=1050",'else if(!zjRcOwned)',"zjRcSource=\"PPM\"",'zjRcTransport="PPM"','zjPpmInputSwitchArmed&&armHigh']){
-  assert.ok(f.includes(token),token);
- }
+ const gesture=read('FlightCore_Firmware/FlightCorePpmArm.h');
+ for(const token of ['zjPpmSafeFrames>=3','t<=ZjPpmArmGesture::THROTTLE_LOW_US','else if(!zjRcOwned)',
+  'zjRcSource="PPM"','zjRcTransport="PPM"','zjPpmArm.accept(t,y,receivedAt)','zjRcInputArmed=zjPpmArm.armed',
+  'THROTTLE_LOW_YAW_GESTURE'])assert.ok(f.includes(token),token);
+ for(const token of ['THROTTLE_LOW_US=1050','YAW_LEFT_US=1100,YAW_RIGHT_US=1900',
+  'HOLD_MS=2000,FRAME_GAP_MS=150','if(!armed)neutralSeen=true','armed=direction==1'])assert.ok(gesture.includes(token),token);
+ assert.doesNotMatch(f,/armLow|armHigh|zjPpmInputSwitchArmed/);
  assert.match(f,/if\(zjRcOwned&&zjRcSource=="PPM"\)/);
  assert.match(f,/zjRcRelease\("PPM_SIGNAL_LOST"\)/);
  assert.match(f,/ZJ_PPM_LOST_MS=150/);
  assert.match(rc,/zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS/);
- assert.doesNotMatch(f,/ledcWrite|motorArm|digitalWrite\(/);
+ assert.doesNotMatch(f+gesture,/ledcWrite|motorArm|digitalWrite\(/);
 });
-test('physical USB administrator may calibrate PPM channels or remap roll/pitch/throttle/yaw/ARM',()=>{
+test('physical USB administrator may calibrate PPM channels or remap roll/pitch/throttle/yaw/CH5 auxiliary',()=>{
  const s=read('FlightCore_Firmware/FlightCorePpm.h');
  for(const token of ['ZJPPM,GET','ZJPPM,CAL,','ZJPPM,MAP,','zjAdminAuthorized()','zjRcOwned',
   'getUShort','putUShort','putString("ppmMap"','ppm1'])if(token==='ppm1')continue;else assert.ok(s.includes(token),token);
