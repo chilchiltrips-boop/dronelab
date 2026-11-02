@@ -1,9 +1,9 @@
 {
-  "version": "1.7.0",
-  "builtAt": "2026-10-31T18:49:58Z",
-  "sourceCommit": "cbf99fd2a6cccd66619441c998ab6ddc7f61894b",
+  "version": "1.7.1",
+  "builtAt": "2026-11-02T08:21:54Z",
+  "sourceCommit": "1d447642141023d4f0578b32584d91fb1e127dd1",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "981468669c1bcdd4fa6dc2f33d9c23b1214fe15e09f81c80429b25d5bae93c7a",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "f4f3a2ccb6f2208ec3f0488159c1ac32e002eeb664033693c92bd904168cd618",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreA2MotorLayout.h": "a62b1dbf4ffc53069404da011a2dada4787660b7ee7fe96d44eeef0e6019e475",
     "FlightCore_Firmware/FlightCoreAccess.h": "d7fad26c4ec4f3dd4f627117b4a450bacd51f24171ee389d90a598f21457270c",
@@ -11,7 +11,7 @@
     "FlightCore_Firmware/FlightCoreEnrollment.h": "b80efd14aa7f143c92d85a8ae1e8df9e0867abd0f985fa4074a43b913728acd5",
     "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
     "FlightCore_Firmware/FlightCoreHandover.h": "2bd4add7e4ebc3fab51e3c0ceea1b08eabf9eafa787673268a152c28fc3cc929",
-    "FlightCore_Firmware/FlightCoreMotor.h": "5e1295aaadf225776a997ba81f160230b6547c88d3026796370bf2afbd88167a",
+    "FlightCore_Firmware/FlightCoreMotor.h": "285aa61f51b668b88d4e885548b21a7d330ab5e1e8c5bd85128eb58aafe03306",
     "FlightCore_Firmware/FlightCoreMotorConfig.h": "9216eabb7bc34bfbee3071904836883dbf0066be068a29714d1dcea5a686fdf1",
     "FlightCore_Firmware/FlightCoreMotorSafety.h": "bd0b69afccc3e9e6735113f80bcb05ef6f7155812d2899536a102dca4bd81d6e",
     "FlightCore_Firmware/FlightCoreMotorStatus.h": "47bfa77236d636f95ba6c6cf23de4872da4d3ed9c6960773aef7c840cbdefc6d",
@@ -53,7 +53,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-31T18:51:09Z"
+      "compiledAt": "2026-11-02T08:23:12Z"
     },
     {
       "boardId": "ZFC-A2",
@@ -80,7 +80,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-10-31T18:51:59Z"
+      "compiledAt": "2026-11-02T08:24:00Z"
     }
   ]
 }
