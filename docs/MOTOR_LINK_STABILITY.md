@@ -7,7 +7,7 @@ The STA capture ending 07:39:58 UTC contains request-error round trips up to 10,
 ## Corrected WebApp behavior
 
 - Motor commands and STOP take priority over queued telemetry/status reads. An already transmitted signed request is completed without interrupting or replaying it. Queued KEEP, SLIDE and RTC requests older than 250 ms are rejected before transmission.
-- Competing automatic status and RC-observer polling pauses during an owned or starting motor session. Selected-input producers and firmware watchdogs remain independent.
+- Competing automatic network status and RC-observer polling pauses during an owned or starting motor session. USB identity polling continues so a long wired test retains its physical-link heartbeat. Selected-input producers and firmware watchdogs remain independent.
 - A signed motor acknowledgment refreshes hardware heartbeat only when Device ID, boot, connection generation and transport match. Motor STATUS can reverify a delayed original Kit; STOP remains available on that verified link. Motor writes do not bypass delayed-link checks.
 - Repeated motor STATUS reads coalesce. A terminal acknowledgment immediately clears the client token and command pumps. Replies from an earlier cancelled session cannot reactivate the UI. Queued commands recheck cancellation immediately before delivery.
 - The slider pump services a due KEEP before its next SLIDE, avoiding starvation of the separate motor-session lease. There is no automatic test restart after loss.

@@ -19,7 +19,7 @@ let setupBusy=false,adminBoundId='',adminBoundGeneration=-1,setupPrefix='',setup
 function clearAdminBinding(){adminUnlockedUntil=0;adminEnrolled=null;adminBoundId='';adminBoundGeneration=-1;setupPrefix='';setupReadAt=0;hideAdminApCredentials();}
 const readScheduler=root.ZebjusKitData?.createReadScheduler?.();
 const requestScheduler=root.ZebjusKitData?.createRequestScheduler?.();
-const motorTrafficBusy=()=>root.ZebjusMotorSetup?.busy===true;
+const motorTrafficBusy=()=>['ap','sta'].includes(state.transport)&&root.ZebjusMotorSetup?.busy===true;
 let apRevealTimer=null;
 function hideAdminApCredentials(){
  if(apRevealTimer){clearTimeout(apRevealTimer);apRevealTimer=null}

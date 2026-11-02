@@ -8,6 +8,22 @@ const turn=()=>new Promise(resolve=>setImmediate(resolve));
 function dataApi(){const context={};vm.runInNewContext(read('js/kit-data-interface.js'),context);return context.ZebjusKitData;}
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
 
+test('30-second USB motor tests retain physical heartbeat polling while network bench polls yield',async()=>{
+ const source=read('js/classroom-kits.js');
+ const policy=/const motorTrafficBusy=[^\n]+/.exec(source)[0];
+ const start=source.indexOf(' pollTimer=setInterval(async()=>{'),end=source.indexOf(' setInterval(()=>void observeController()',start);
+ assert.ok(start>=0&&end>start);
+ for(const transport of ['usb','ap','sta']){
+  let at=100000,reads=0,poll;class Clock extends Date{static now(){return at;}}
+  const state={connected:true,working:false,transport,heartbeatAt:at};
+  const context={state,root:{ZebjusMotorSetup:{busy:true}},document:{hidden:false},Date:Clock,otaActive:false,wifiTesting:false,pollBusy:false,reconnectTicket:1,pollErrors:0,lastBackgroundStatusAt:0,foregroundResumedAt:0,
+   backgroundLinkPolicy:()=>({poll:true,penalize:true}),read:async()=>{reads++;state.heartbeatAt=at;},setInterval:(fn,ms)=>{assert.equal(ms,2200);poll=fn;return 1;}};
+  vm.runInNewContext('let pollTimer;'+policy+source.slice(start,end),context);
+  for(let elapsed=0;elapsed<=30000;elapsed+=2200){at=100000+elapsed;await poll();if(transport==='usb')assert.ok(at-state.heartbeatAt<6500);}
+  assert.equal(reads,transport==='usb'?14:0,transport+' heartbeat scheduling during motor test');
+ }
+});
+
 test('signed request queue gives STOP and motor commands priority without interrupting an active read',async()=>{
  const queue=dataApi().createRequestScheduler(),hold=deferred(),order=[];
  let active=0,maximum=0;
