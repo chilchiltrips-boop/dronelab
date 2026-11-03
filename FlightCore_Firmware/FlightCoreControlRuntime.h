@@ -11,6 +11,24 @@ static bool zjControlRuntimeReady=false;
 static SemaphoreHandle_t zjI2cMutex=nullptr;
 static portMUX_TYPE zjTimingMux=portMUX_INITIALIZER_UNLOCKED;
 static ZjImuAcquisition zjImuMailbox;
+static ZjAccelModel zjSavedAccelModel;
+static ZjImuAction zjPendingImuAction=ZjImuAction::NONE;
+static uint8_t zjPendingImuFace=0;
+static bool zjImuActionInFlight=false;
+static void zjSetAccelModel(const ZjAccelModel& model){
+ portENTER_CRITICAL(&zjTimingMux);zjSavedAccelModel=model;portEXIT_CRITICAL(&zjTimingMux);
+}
+static bool zjImuMaintenanceBusy(){
+ portENTER_CRITICAL(&zjTimingMux);
+ const bool busy=zjPendingImuAction!=ZjImuAction::NONE||zjImuActionInFlight||zjImuMailbox.manualGyro||zjImuMailbox.accelCapture.running;
+ portEXIT_CRITICAL(&zjTimingMux);return busy;
+}
+static bool zjQueueImuAction(ZjImuAction action,uint8_t face){
+ portENTER_CRITICAL(&zjTimingMux);
+ const bool accepted=zjControlRuntimeReady&&zjPendingImuAction==ZjImuAction::NONE&&!zjImuActionInFlight;
+ if(accepted){zjPendingImuAction=action;zjPendingImuFace=face;}
+ portEXIT_CRITICAL(&zjTimingMux);return accepted;
+}
 static TaskHandle_t zjControlTaskHandle=nullptr,zjImuTaskHandle=nullptr;
 static esp_timer_handle_t zjControlTimer=nullptr,zjImuTimer=nullptr;
 // TASK dispatch, never ISR: notify only. Both callbacks share esp_timer with
@@ -23,8 +41,17 @@ static void zjImuTask(void*){
  for(;;){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY); // coalesce notifications, no catch-up reads
   if(!zjTryI2c())continue; // on-demand scanner owns at most one bounded transaction
-  zjImuDriver.updateGyro(millis());zjReleaseI2c();
-  portENTER_CRITICAL(&zjTimingMux);zjImuMailbox=zjImuDriver;portEXIT_CRITICAL(&zjTimingMux);
+  portENTER_CRITICAL(&zjTimingMux);
+  const auto action=zjPendingImuAction;const uint8_t face=zjPendingImuFace;
+  zjImuActionInFlight=action!=ZjImuAction::NONE;zjPendingImuAction=ZjImuAction::NONE;
+  zjImuDriver.accelModel=zjSavedAccelModel;
+  portEXIT_CRITICAL(&zjTimingMux);
+  const uint32_t now=millis();
+  if(action!=ZjImuAction::NONE)zjImuDriver.imuAction(action,face,now);
+  zjImuDriver.updateGyro(now);zjReleaseI2c();
+  portENTER_CRITICAL(&zjTimingMux);
+  zjImuMailbox=zjImuDriver;zjImuActionInFlight=false;
+  portEXIT_CRITICAL(&zjTimingMux);
  }
 }
 static void zjControlTask(void*){
