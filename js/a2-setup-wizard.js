@@ -102,7 +102,7 @@ if(root){
  const compatibleEsc=()=>!escCleared()&&activeEsc();
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
- const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.supported&&base?.bootId===saved.bootId&&!conflict;
+ const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict;
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid();
  const checkList=ids=>ids.every(id=>$(id).checked);
  const outputChecks=()=>checkList(['#a2Props','#a2Pins','#a2Profile']);
@@ -172,11 +172,7 @@ if(root){
     base={bootId:s.bootId,revision:s.configRevision};draft=config(s);loadWiring();setCalPulse(currentResult());
    }else if(s.configRevision!==base.revision&&!ambiguousSave)conflict=true;
    if(step===6&&!activeRun&&!working)setCalPulse(currentResult());
-   if(captureRequest&&!s.capture?.running){
-    if(s.capture?.ready&&s.capture.model&&s.capture.state==='CAPTURED'){
-     accelAction='CAPTURED:'+s.capture.model;captureRequest=null;
-    }else if(s.capture?.state!==captureRequest.initial||Date.now()-captureRequest.at>1800)captureRequest=null;
-   }
+   updateCapture(s.capture);
   }
   // The safety invalidation is visible in ordinary motor acknowledgements too.
   if(saved&&s.escCalibrationSaved===false&&old?.escCalibrationSaved!==false)saved={...saved,escCalibrationSaved:false};
@@ -188,6 +184,16 @@ if(root){
   }
   if(ambiguousSave&&s.wizardVersion===1&&!working)checkSaveReadback(s);
   render();
+ }
+ function updateCapture(capture){
+  if(!captureRequest?.sequence)return;
+  if(capture?.sequence!==captureRequest.sequence){
+   if(Date.now()-captureRequest.at>7000)captureRequest=null;
+   return;
+  }
+  if(capture.running)return;
+  if(capture.ready&&capture.model&&capture.state==='CAPTURED')accelAction='CAPTURED:'+capture.model;
+  captureRequest=null;
  }
  function renderVisual(){
   const scene=$('.a2-visual-scene'),input=selectedInput();
@@ -235,7 +241,7 @@ if(root){
   for(const a of ['imu-face','imu-level'])$(`[data-action="${a}"]`).disabled=!ready||!imuFresh()||!$('#a2Still').checked||capture.running||!!captureRequest;
   $('[data-action="imu-clear"]').disabled=!ready;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
-  $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Draft correction pending Save':''}`;
+  $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Draft correction pending Save':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`;
   const model=(accelAction.startsWith('CAPTURED:')?accelAction.slice(9):saved?.accelModel||'').split(':').map(Number);
   const fresh=imuFresh(),xyz=v=>Array.isArray(v)?v.map(p=>Number(p).toFixed(3)).join(' / '):'—';
   const inclination=fresh&&imu.accelG?.length===3?imu.accelG.map((v,i)=>v-(saved.accelModel?.split(':')[8+i]||0)/1000):null;
@@ -480,7 +486,7 @@ if(root){
  }
  function checkSaveReadback(board){
   const intent=ambiguousSave;
-  if(!intent||!outputOff(board))return false;
+  if(!intent||!outputOff(board)||board.configVerified===false)return false;
   if(board.bootId!==intent.bootId||board.configRevision!==intent.revision+1||!board.configValid||
    encode(config(board),board.observedMinimumUs)!==intent.mapping||board.escCalibrationSaved!==intent.esc||board.accelModel!==intent.accel){
    if(board.configRevision!==intent.revision)conflict=true;
@@ -493,9 +499,9 @@ if(root){
  }
  async function save(){
   if(ambiguousSave){
-   const readback=await motorClient.wizardStatus();
+   const pending=ambiguousSave,readback=await motorClient.wizardStatus();
    if(checkSaveReadback(readback))return;
-   if(readback.configRevision!==ambiguousSave.revision)throw Error('Board state changed. The save could not be verified.');
+   if(ambiguousSave!==pending||readback.configVerified===false||readback.configRevision!==pending.revision)throw Error('Board state changed or readback is unverified.');
    ambiguousSave=null;
   }
   if(!validSave())throw Error('Complete calibration or stage a reset and verify outputs are off.');
@@ -508,7 +514,7 @@ if(root){
   try{
    const readback=await motorClient.wizardStatus();
    if(checkSaveReadback(readback))return;
-   if(readback.configRevision===intent.revision){
+   if(readback.configVerified!==false&&readback.configRevision===intent.revision){
     ambiguousSave=null;
     saveState='Save incomplete · verified previous board setup. Draft retained.';
    }else saveState='Save incomplete · readback differs from the requested setup.';
@@ -550,12 +556,17 @@ if(root){
    const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO','imu-level':'LEVEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL'};
    const capture=['imu-level','imu-face'].includes(name);
    if((capture||name==='imu-gyro')&&!$('#a2Still').checked)throw Error('Confirm the board is stationary in the requested pose.');
-   if(capture)captureRequest={initial:saved?.capture?.state,at:Date.now()};
    if(name==='imu-clear'){
     captureRequest=null;
     if(accelAction.startsWith('CAPTURED:'))accelAction='KEEP';
    }
-   await motorClient.wizardCommand('WIZARD_IMU',[actions[name],Number($('#a2Face').value),base.bootId],base.bootId);
+   const ack=await motorClient.wizardCommand('WIZARD_IMU',[actions[name],Number($('#a2Face').value),base.bootId],base.bootId);
+   ensureOperation(run);
+   if(capture){
+    if(accelAction.startsWith('CAPTURED:'))accelAction='KEEP';
+    captureRequest={sequence:ack.imuRequestSequence,at:Date.now()};
+    updateCapture(ack.capture);
+   }
    $('#a2Still').checked=false;return;
   }
   if(name==='high'){
@@ -661,7 +672,7 @@ if(root){
   render();
   if(!kit().connected||polling||motorClient.busy||working||Date.now()<nextPollAt)return;
   polling=true;const started=Date.now();
-  const read=step===2&&saved?motorClient.status():motorClient.wizardStatus();
+  const read=step===2?motorClient.status():motorClient.wizardStatus();
   read.then(()=>{readFailures=0;nextPollAt=Math.max(Date.now(),started+(step===2?100:step===3?300:850));})
    .catch(e=>{readError=e.message;readFailures=Math.min(5,readFailures+1);nextPollAt=Date.now()+Math.min(2400,100*2**readFailures);render();})
    .finally(()=>{polling=false;});

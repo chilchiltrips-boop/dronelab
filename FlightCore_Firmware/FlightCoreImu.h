@@ -24,6 +24,7 @@ ZjAccelModel accelModel;
 ZjAccelCapture accelCapture;
 float accelRawG[3]={};
 bool manualGyro=false,gyroPaused=false;
+uint32_t maintenanceSequence=0;
 bool gyroConfigured=false,gyroConfigValid=false,gyroWaitingFresh=false;
 uint8_t gyroWhoAmI=0,gyroLastI2cCode=0;
 uint32_t gyroReadFailures=0,gyroWriteFailures=0,gyroLastPollUs=0,gyroWaitStarted=0;

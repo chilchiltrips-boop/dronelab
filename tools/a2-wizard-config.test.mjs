@@ -33,12 +33,12 @@ static int ledc_update_duty(int,int){return 0;}
 enum class ZjImuAction {NONE,GYRO,CANCEL_GYRO,LEVEL,FACE,CLEAR_ACCEL};
 static ZjAccelModel applied;
 static ZjImuAction queued=ZjImuAction::NONE;
-static struct {bool gyroConfigured=true;ZjAccelCapture accelCapture;} imu;
+static struct {bool gyroConfigured=true;uint32_t maintenanceSequence=0;ZjAccelCapture accelCapture;} imu;
 static auto zjReadImu(uint32_t){return imu;}
 static String zjImuStatus(){return "{}";}
 static void zjSetAccelModel(const ZjAccelModel& m){applied=m;}
 static bool zjImuMaintenanceBusy(){return false;}
-static bool zjQueueImuAction(ZjImuAction a,uint8_t){queued=a;return true;}
+static uint32_t zjQueueImuAction(ZjImuAction a,uint8_t){queued=a;return ++imu.maintenanceSequence;}
 #include "FlightCoreMotor.h"
 static bool has(const String& s,const char* needle){return strstr(s.c_str(),needle)!=nullptr;}
 static String token;

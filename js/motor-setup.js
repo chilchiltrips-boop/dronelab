@@ -139,6 +139,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   if(session||starting||stopping)throw Error('Verify outputs are off before changing Wizard settings.');
   const k=getKit();
   if(!bootId||last?.kitId!==k?.kitId||last?.bootId!==bootId)throw Error('Refresh the verified A2 before changing settings.');
+  ++epoch;
   return send(action,args,{identity:identity(k),bootId,token:''});
  }
  return {begin,command,startSlider,stop,confirmCalibration,wizardCommand,wizardStatus:()=>send('WIZARD_STATUS'),status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
