@@ -58,6 +58,16 @@ static std::vector<uint8_t> feedback(uint8_t kind,uint8_t reason=0,bool terminal
  assert(plain[25]==kind&&plain[26]==reason&&bool(plain[24]&16)==terminal&&plain[27]==0);
  return std::vector<uint8_t>(plain,plain+28);
 }
+static void rateTests(){
+ for(uint32_t period:{20,50}){
+  newGrant();
+  for(uint32_t seq=1;seq<=100;seq++){clockMs+=period;deliver(frame(seq,true));expectAck(true);zjUdpLoop(clockMs);}
+  assert(zjUdpReceiveRate.known&&zjUdpApplyRate.known);
+  assert(std::abs(zjUdpReceiveRate.actual(micros())-1000.0f/period)<1.0f);
+  assert(std::abs(zjUdpApplyRate.actual(micros())-1000.0f/period)<1.0f);
+  assert(zjUdpCoalesced==0);
+ }
+}
 static void feedbackTests(){
  newGrant(2);deliver(frame(1,true));auto rx=feedback(1);
  assert(zjUdpGet32(rx.data())==1&&zjUdpGet32(rx.data()+4)==0&&!(rx[24]&2));
@@ -68,6 +78,7 @@ static void feedbackTests(){
  assert(zjUdpHasPending&&zjRcSeq==1&&zjRcRejected==rejected);
  deliver(frame(3,true,1000,1800));feedback(1);zjUdpLoop(clockMs);assert(zjRcSeq==1);
  clockMs++;zjUdpLoop(clockMs);pump();applied=feedback(2);
+ assert(zjUdpCoalesced==1);
  assert(zjRcSeq==3&&zjRcRoll==1800&&zjUdpAppliedCount==2&&zjRcRejected==rejected);
  assert(((applied[8]<<8)|applied[9])==1&&((applied[10]<<8)|applied[11])==0);
  const uint32_t lastRx=zjUdpLastRx;
@@ -141,6 +152,6 @@ int main(){
  deliver(frame(1,true));expectAck(true);zjUdpLoop(clockMs);
  clockMs+=51;deliver(frame(2,true));expectAck(false);zjUdpLoop(clockMs);
  assert(!zjUdpActive&&!zjRcOwned&&!zjRcInputArmed);
- feedbackTests();close(peerSocket);zjUdpSocket.stop();
+ rateTests();feedbackTests();close(peerSocket);zjUdpSocket.stop();
  std::cout<<"PASS actual UDP RC receiver: encrypted ARM, ACK, grant race rejection, parent close/replacement/expiry, watchdog"<<std::endl;
 }

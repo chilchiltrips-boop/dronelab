@@ -2,10 +2,13 @@
 #include <Wire.h>
 #include <string.h>
 #include <stdlib.h>
+#include "FlightCoreTiming.h"
+#include "FlightCoreEscProfile.h"
+static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.5";
+constexpr const char* FW_VERSION="1.7.6";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -149,7 +152,7 @@ void serialCommand(char* line){
    telRateHz=uint16_t(rate);
    // Reset reported loss on a fresh telemetry-rate session. An earlier loop
    // timestamp may predate this command: emitTelemetry() handles that safely.
-   telemetryDropped=0;telemetrySeq=0;telLast=millis();
+   telemetryDropped=0;telemetrySeq=0;telLast=millis();zjTelemetryRate.reset(micros());
    Serial.print("ZJTEL,ACK,RATE,");Serial.println(telRateHz);
   }else Serial.println("ZJTEL,ERR,RATE,USE_10_20_50");
   return;
@@ -217,189 +220,78 @@ void updateLedEffect(unsigned long now){
 // Canonical ZJTEL records carry sensor health and X/Y/Z rates (degrees/second).
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t GYRO_ADDR=0x68;
-constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling independent of USB telemetry
+constexpr unsigned long GYRO_PERIOD_MS=4; // 250 Hz normal acquisition; calibration retains 1 kHz
 constexpr const char* GYRO_BOARD="A2",*GYRO_NAME="MPU6050";
 #else
 constexpr uint8_t GYRO_ADDR=0x6B; // Verified GY-LSM6DS3 SA0 high
 constexpr unsigned long GYRO_PERIOD_MS=20; // 50 Hz sensor sampling; LSM6DS3 ODR 104 Hz
 constexpr const char* GYRO_BOARD="A1",*GYRO_NAME="LSM6DS3";
 #endif
+#include "FlightCoreImu.h"
+#include "FlightCoreControlRuntime.h"
+// Main-loop projection for legacy USB telemetry and stationary checks. The
+// acquisition task never writes these globals; a protected mailbox owns copies.
 bool gyroReady=false;
 unsigned long lastGyro=0,lastGyroProbe=0,lastGyroSample=0;
 uint32_t gyroSampleSeq=0;
 const char* gyroHealth="STARTING";
 float RateRoll=0,RatePitch=0,RateYaw=0;
-#include "FlightCoreGyroCalibration.h"
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
-static ZjGyroCalibration zjGyroCalibration;
-static bool gyroConfigured=false,gyroConfigValid=false,gyroWaitingFresh=false;
-static uint8_t gyroWhoAmI=0,gyroLastI2cCode=0;
-static uint32_t gyroReadFailures=0,gyroWriteFailures=0,gyroLastPollUs=0,gyroWaitStarted=0;
-static uint32_t gyroLastNormalUs=0,gyroMaxGapUs=0,gyroMaxReadUs=0,gyroDiagnosticDrops=0;
-static float gyroRaw[3]={};
-#endif
-
-bool gyroWrite(uint8_t reg,uint8_t value){
- Wire.beginTransmission(GYRO_ADDR);Wire.write(reg);Wire.write(value);
- const uint8_t error=Wire.endTransmission();
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- if(error){++gyroWriteFailures;gyroLastI2cCode=error;}
-#endif
- return error==0;
-}
-bool gyroRead(uint8_t reg,uint8_t* data,uint8_t length){
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- const uint32_t started=micros();
-#endif
- Wire.beginTransmission(GYRO_ADDR);Wire.write(reg);
- const uint8_t error=Wire.endTransmission(false);
- const uint8_t received=error?0:Wire.requestFrom(GYRO_ADDR,length);
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- const uint32_t duration=micros()-started;if(duration>gyroMaxReadUs)gyroMaxReadUs=duration;
- if(error||received!=length){++gyroReadFailures;gyroLastI2cCode=error?error:255;return false;}
-#else
- if(error||received!=length)return false;
-#endif
- for(uint8_t i=0;i<length;i++)data[i]=uint8_t(Wire.read());
- return true;
-}
-void gyroStatus(const char* state){
- gyroHealth=state;
- Serial.print("ZJGYRO,STATUS,");Serial.print(GYRO_BOARD);Serial.print(',');
- Serial.print(GYRO_NAME);Serial.print(",0x");
- if(GYRO_ADDR<16)Serial.print('0');
- Serial.print(GYRO_ADDR,HEX);Serial.print(',');Serial.println(state);
-}
-bool beginGyro(){
- uint8_t id=0;
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- // Keep the working MPU6050 DLPF=5 and +/-500 dps / 65.5 configuration.
- gyroConfigValid=false;gyroWhoAmI=0;
- if(!gyroRead(0x75,&id,1))return false;
- gyroWhoAmI=id;if(id!=0x68){zjGyroCalibration.error="WHO_AM_I";return false;}
- if(!gyroWrite(0x6B,0x00))return false;
- if(!gyroWrite(0x1A,0x05))return false;
- if(!gyroWrite(0x1B,0x08))return false;
- // DLPF-enabled output is 1kHz. Poll DATA_RDY rather than counting repeated
- // snapshots. INT is not wired to an MCU pin; status clears only on 0x3A read.
- if(!gyroWrite(0x19,0x00)||!gyroWrite(0x37,0x00)||!gyroWrite(0x38,0x01))return false;
- const uint8_t registers[]={0x6B,0x1A,0x1B,0x19,0x37,0x38};
- const uint8_t expected[]={0x00,0x05,0x08,0x00,0x00,0x01};
- for(uint8_t i=0;i<6;i++){
-  if(!gyroRead(registers[i],&id,1))return false;
-  if(id!=expected[i]){zjGyroCalibration.error="CONFIG_MISMATCH";return false;}
+static ZjImuAcquisition zjImu;
+static void updateGyro(unsigned long now){
+ zjImu=zjReadImu(now);
+ gyroReady=zjImu.gyroReady;lastGyroSample=zjImu.lastGyroSample;gyroSampleSeq=zjImu.gyroSampleSeq;
+ RateRoll=zjImu.RateRoll;RatePitch=zjImu.RatePitch;RateYaw=zjImu.RateYaw;
+ if(strcmp(gyroHealth,zjImu.gyroHealth)){
+  gyroHealth=zjImu.gyroHealth;
+  if(Serial.availableForWrite()>=64){Serial.print("ZJGYRO,STATUS,");Serial.print(GYRO_BOARD);Serial.print(',');
+   Serial.print(GYRO_NAME);Serial.print(",0x");Serial.print(GYRO_ADDR,HEX);Serial.print(',');Serial.println(gyroHealth);}
  }
- gyroConfigValid=true;
-#else
- // LSM6DS3 WHO_AM_I=0x69. 0x6C is accepted for compatible LSM6DS-family revisions.
- if(!gyroRead(0x0F,&id,1)||(id!=0x69&&id!=0x6C))return false;
- if(!gyroWrite(0x12,0x44))return false;
- if(!gyroWrite(0x11,0x4C))return false;
-#endif
- return true;
-}
-bool gyroSignals(){
- uint8_t d[6];
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- if(!gyroRead(0x43,d,6))return false;
- const int16_t x=int16_t((uint16_t(d[0])<<8)|d[1]);
- const int16_t y=int16_t((uint16_t(d[2])<<8)|d[3]);
- const int16_t z=int16_t((uint16_t(d[4])<<8)|d[5]);
- gyroRaw[0]=float(x)/65.5f;gyroRaw[1]=float(y)/65.5f;gyroRaw[2]=float(z)/65.5f;
- if(zjGyroCalibration.is("READY")){
-  RateRoll=gyroRaw[0]-zjGyroCalibration.bias[0];
-  RatePitch=gyroRaw[1]-zjGyroCalibration.bias[1];
-  RateYaw=gyroRaw[2]-zjGyroCalibration.bias[2];
- }
-#else
- if(!gyroRead(0x22,d,6))return false;
- const int16_t x=int16_t((uint16_t(d[1])<<8)|d[0]);
- const int16_t y=int16_t((uint16_t(d[3])<<8)|d[2]);
- const int16_t z=int16_t((uint16_t(d[5])<<8)|d[4]);
- RateRoll=float(x)*0.070f;RatePitch=float(y)*0.070f;RateYaw=float(z)*0.070f;
-#endif
- return true;
-}
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
-static void gyroA2Fault(const char* reason,uint32_t now,bool sensor=true){
- gyroReady=false;gyroConfigured=false;gyroConfigValid=false;gyroWaitingFresh=false;
- lastGyroProbe=now;
- if(sensor||!zjGyroCalibration.is("FAILED"))zjGyroCalibration.fail(reason,now,sensor);
- gyroStatus(sensor?"READ_ERROR":"CALIBRATION_FAILED");
-}
-#endif
-void updateGyro(unsigned long now){
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- if(!gyroConfigured){
-  if(uint32_t(now-lastGyroProbe)<2500)return;
-  lastGyroProbe=now;zjGyroCalibration.error="I2C_ERROR";
-  if(!beginGyro()){
-   zjGyroCalibration.fail(zjGyroCalibration.error,now,true);gyroStatus("NOT_FOUND");return;
-  }
-  gyroConfigured=true;gyroReady=false;gyroWaitingFresh=false;
-  zjGyroCalibration.start(now);gyroLastPollUs=micros();gyroLastNormalUs=0;
-  gyroStatus("CALIBRATING");return;
- }
- zjGyroCalibration.tick(now);
- if(zjGyroCalibration.is("FAILED")){gyroA2Fault(zjGyroCalibration.error,now,false);return;}
- if(zjGyroCalibration.is("SETTLING"))return;
- const uint32_t atUs=micros();
- if(zjGyroCalibration.is("READY")){
-  if(uint32_t(now-lastGyro)<GYRO_PERIOD_MS)return;
-  lastGyro=now;
- }else{if(uint32_t(atUs-gyroLastPollUs)<1000)return;gyroLastPollUs=atUs;}
- uint8_t ready=0;
- if(!gyroRead(0x3A,&ready,1)){gyroA2Fault("I2C_ERROR",now);return;}
- if(!(ready&1)){
-  if(!gyroWaitingFresh){gyroWaitingFresh=true;gyroWaitStarted=now;}
-  else if(uint32_t(now-gyroWaitStarted)>=200)gyroA2Fault("DATA_STALE",now);
-  return;
- }
- gyroWaitingFresh=false;
- if(!gyroSignals()){gyroA2Fault("I2C_ERROR",now);return;}
- if(zjGyroCalibration.is("CALIBRATING")){
-  if(zjGyroCalibration.feed(gyroRaw,now,atUs))lastGyro=now;
-  return; // Never publish a calibration sample as corrected live telemetry.
- }
- if(gyroLastNormalUs){const uint32_t gap=atUs-gyroLastNormalUs;if(gap>gyroMaxGapUs)gyroMaxGapUs=gap;}
- gyroLastNormalUs=atUs;lastGyroSample=now;++gyroSampleSeq;
- if(!gyroReady){gyroReady=true;gyroStatus("READY");}
-#else
- if(!gyroReady){
-  if(now-lastGyroProbe<2500)return;
-  lastGyroProbe=now;gyroReady=beginGyro();
-  gyroStatus(gyroReady?"READY":"NOT_FOUND");
-  if(gyroReady)lastGyro=now-GYRO_PERIOD_MS;
-  return;
- }
- if(now-lastGyro<GYRO_PERIOD_MS)return;
- lastGyro=now;
- if(!gyroSignals()){
-  gyroReady=false;lastGyroProbe=now;gyroStatus("READ_ERROR");return;
- }
- lastGyroSample=now;gyroSampleSeq++;
-#endif
 }
 static String zjImuVector(const float values[3]){
  return String("[")+String(values[0],4)+","+String(values[1],4)+","+String(values[2],4)+"]";
 }
+static uint32_t gyroDiagnosticDrops=0;
+static String zjControlTimingStatus(){
+ const auto c=zjReadControl();const uint32_t now=micros();
+ const char* health=!zjControlRuntimeReady?"UNAVAILABLE":!c.ticks?"STARTING":c.healthy(now)?"HEALTHY":"LATE";
+ return String("\"controlTargetHz\":250,\"controlActuating\":false,\"controlHealth\":\"")+health+"\",\"controlActualHz\":"+
+  (c.rate.known?String(c.rate.actual(now),2):String("null"))+",\"controlIntervalUs\":"+String(c.intervalUs)+
+  ",\"controlMinIntervalUs\":"+String(c.minIntervalUs)+",\"controlMaxIntervalUs\":"+String(c.maxIntervalUs)+
+  ",\"controlJitterUs\":"+String(c.jitterUs)+",\"controlMaxJitterUs\":"+String(c.maxJitterUs)+
+  ",\"controlExecutionUs\":"+String(c.executionUs)+",\"controlMaxExecutionUs\":"+String(c.maxExecutionUs)+
+  ",\"controlMissedTicks\":"+String(c.missedTicks)+",\"controlDeadlineMisses\":"+String(c.deadlineMisses)+",\"controlOverruns\":"+String(c.overruns)+
+  ",\"controlLastTickUs\":"+(c.ticks?String(c.lastSuccessfulUs):String("null"));
+}
 static String zjImuStatus(){
+ updateGyro(millis());
  const float corrected[3]={RateRoll,RatePitch,RateYaw};
  String out=String("{\"version\":1,\"board\":\"")+GYRO_BOARD+"\",\"dataReady\":"+(gyroReady?"true":"false")+
   ",\"sampleSequence\":"+String(gyroSampleSeq)+",\"sampleAgeMs\":"+(gyroSampleSeq?String(uint32_t(millis()-lastGyroSample)):String("null"));
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
- out+=",\"enabled\":true,\"state\":\""+String(zjGyroCalibration.state)+"\",\"error\":\""+String(zjGyroCalibration.error)+
-  "\",\"attempt\":"+String(zjGyroCalibration.attempt)+",\"samples\":"+String(zjGyroCalibration.samples)+",\"target\":2000,\"validTotal\":"+String(zjGyroCalibration.validTotal)+
-  ",\"durationMs\":"+String(zjGyroCalibration.duration(millis()))+",\"startedMs\":"+String(zjGyroCalibration.startedMs)+",\"restarts\":"+String(zjGyroCalibration.restarts)+
-  ",\"bias\":"+zjImuVector(zjGyroCalibration.bias)+",\"raw\":"+zjImuVector(gyroRaw)+",\"corrected\":"+zjImuVector(corrected)+
-  ",\"stddev\":"+zjImuVector(zjGyroCalibration.stddev)+",\"failures\":"+String(zjGyroCalibration.failures)+
-  ",\"lastFailure\":\""+zjGyroCalibration.lastFailure+"\",\"lastFailureMs\":"+String(zjGyroCalibration.lastFailureMs)+",\"lastFailureAttempt\":"+String(zjGyroCalibration.lastFailureAttempt)+
-  ",\"readFailures\":"+String(gyroReadFailures)+",\"writeFailures\":"+String(gyroWriteFailures)+
-  ",\"lastI2cCode\":"+String(gyroLastI2cCode)+",\"whoAmI\":"+String(gyroWhoAmI)+",\"configValid\":"+(gyroConfigValid?"true":"false")+
-  ",\"maxGapUs\":"+String(gyroMaxGapUs)+",\"calibrationMaxGapUs\":"+String(zjGyroCalibration.maxGapUs)+",\"missedSamples\":"+String(zjGyroCalibration.missedSamples)+
-  ",\"maxReadUs\":"+String(gyroMaxReadUs)+",\"diagnosticDrops\":"+String(gyroDiagnosticDrops);
+ out+=",\"enabled\":true,\"state\":\""+String(zjImu.zjGyroCalibration.state)+"\",\"error\":\""+String(zjImu.zjGyroCalibration.error)+
+  "\",\"attempt\":"+String(zjImu.zjGyroCalibration.attempt)+",\"samples\":"+String(zjImu.zjGyroCalibration.samples)+",\"target\":2000,\"validTotal\":"+String(zjImu.zjGyroCalibration.validTotal)+
+  ",\"durationMs\":"+String(zjImu.zjGyroCalibration.duration(millis()))+",\"startedMs\":"+String(zjImu.zjGyroCalibration.startedMs)+",\"restarts\":"+String(zjImu.zjGyroCalibration.restarts)+
+  ",\"bias\":"+zjImuVector(zjImu.zjGyroCalibration.bias)+",\"raw\":"+zjImuVector(zjImu.gyroRaw)+",\"corrected\":"+zjImuVector(corrected)+
+  ",\"stddev\":"+zjImuVector(zjImu.zjGyroCalibration.stddev)+",\"failures\":"+String(zjImu.zjGyroCalibration.failures)+
+  ",\"lastFailure\":\""+zjImu.zjGyroCalibration.lastFailure+"\",\"lastFailureMs\":"+String(zjImu.zjGyroCalibration.lastFailureMs)+",\"lastFailureAttempt\":"+String(zjImu.zjGyroCalibration.lastFailureAttempt)+
+  ",\"readFailures\":"+String(zjImu.gyroReadFailures)+",\"writeFailures\":"+String(zjImu.gyroWriteFailures)+
+  ",\"lastI2cCode\":"+String(zjImu.gyroLastI2cCode)+",\"whoAmI\":"+String(zjImu.gyroWhoAmI)+",\"configValid\":"+(zjImu.gyroConfigValid?"true":"false")+
+  ",\"maxGapUs\":"+String(zjImu.gyroMaxGapUs)+",\"calibrationMaxGapUs\":"+String(zjImu.zjGyroCalibration.maxGapUs)+",\"missedSamples\":"+String(zjImu.zjGyroCalibration.missedSamples)+
+  ",\"maxReadUs\":"+String(zjImu.gyroMaxReadUs)+",\"diagnosticDrops\":"+String(gyroDiagnosticDrops);
 #else
  out+=",\"enabled\":false,\"state\":\""+String(gyroHealth)+"\"";
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ const uint32_t at=micros();
+ out+=","+zjControlTimingStatus()+",\"imuTargetHz\":250,\"imuSensorOdrHz\":1000,\"imuActualHz\":"+
+  (zjImu.sampleRate.known?String(zjImu.sampleRate.actual(at),2):String("null"))+
+  ",\"imuSampleAgeUs\":"+(zjImu.sample.valid?String(zjImu.sample.ageUs(at)):String("null"))+
+  ",\"imuValid\":"+(zjImu.sample.fresh(at,12000)?"true":"false")+
+  ",\"imuErrors\":"+String(zjImu.sample.errors)+",\"imuMissedNormalSamples\":"+String(zjImu.sample.missed)+
+  ",\"imuDlpFilter\":5,\"imuGyroBandwidthHz\":10,\"imuFilterDelayMs\":13.4,\"gyroRangeDps\":500,\"accelRangeG\":8,\"accelG\":"+zjImuVector(zjImu.accelG)+
+  ",\"escPwmHz\":"+String(ZJ_ESC_PROFILE.hz)+",\"esc250HzEnabled\":false,\"telemetryConfiguredHz\":"+String(telRateHz)+
+  ",\"telemetryActualHz\":"+(zjTelemetryRate.known?String(zjTelemetryRate.actual(at),2):String("null"))+
+  ",\"telemetryDrops\":"+String(telemetryDropped);
 #endif
  return out+"}";
 }
@@ -408,27 +300,42 @@ static void emitImuDiagnostics(unsigned long now){
  static uint32_t last=0,lastErrorAt=0,lastErrorCount=0;static bool sample=false;
  if(uint32_t(now-last)<500)return;last=now;
  String line;
- const bool history=zjGyroCalibration.failures&&(zjGyroCalibration.failures!=lastErrorCount||uint32_t(now-lastErrorAt)>=2000);
+ const bool history=zjImu.zjGyroCalibration.failures&&(zjImu.zjGyroCalibration.failures!=lastErrorCount||uint32_t(now-lastErrorAt)>=2000);
  if(history){
-  line=String("ZJIMUE,1,A2,")+String(zjGyroCalibration.failures)+","+zjGyroCalibration.lastFailure+","+
-   String(zjGyroCalibration.lastFailureMs)+","+String(zjGyroCalibration.lastFailureAttempt);
+  line=String("ZJIMUE,1,A2,")+String(zjImu.zjGyroCalibration.failures)+","+zjImu.zjGyroCalibration.lastFailure+","+
+   String(zjImu.zjGyroCalibration.lastFailureMs)+","+String(zjImu.zjGyroCalibration.lastFailureAttempt);
  }else if(!sample){
-  line=String("ZJIMU,1,A2,")+String(zjGyroCalibration.attempt)+","+zjGyroCalibration.state+","+String(zjGyroCalibration.samples)+",2000,"+
-   String(zjGyroCalibration.duration(now))+","+String(zjGyroCalibration.restarts)+","+String(zjGyroCalibration.bias[0],4)+","+
-   String(zjGyroCalibration.bias[1],4)+","+String(zjGyroCalibration.bias[2],4)+","+zjGyroCalibration.error+","+
-   String(gyroReadFailures)+","+String(gyroWriteFailures)+","+String(gyroWhoAmI)+","+(gyroConfigValid?"1":"0")+","+(gyroReady?"1":"0");
+  line=String("ZJIMU,1,A2,")+String(zjImu.zjGyroCalibration.attempt)+","+zjImu.zjGyroCalibration.state+","+String(zjImu.zjGyroCalibration.samples)+",2000,"+
+   String(zjImu.zjGyroCalibration.duration(now))+","+String(zjImu.zjGyroCalibration.restarts)+","+String(zjImu.zjGyroCalibration.bias[0],4)+","+
+   String(zjImu.zjGyroCalibration.bias[1],4)+","+String(zjImu.zjGyroCalibration.bias[2],4)+","+zjImu.zjGyroCalibration.error+","+
+   String(zjImu.gyroReadFailures)+","+String(zjImu.gyroWriteFailures)+","+String(zjImu.gyroWhoAmI)+","+(zjImu.gyroConfigValid?"1":"0")+","+(gyroReady?"1":"0");
  }else{
-  line=String("ZJIMUS,1,A2,")+String(zjGyroCalibration.attempt)+","+String(gyroRaw[0],3)+","+String(gyroRaw[1],3)+","+String(gyroRaw[2],3)+","+
+  line=String("ZJIMUS,1,A2,")+String(zjImu.zjGyroCalibration.attempt)+","+String(zjImu.gyroRaw[0],3)+","+String(zjImu.gyroRaw[1],3)+","+String(zjImu.gyroRaw[2],3)+","+
    String(RateRoll,3)+","+String(RatePitch,3)+","+String(RateYaw,3)+","+String(gyroSampleSeq)+","+
-   (gyroSampleSeq?String(uint32_t(now-lastGyroSample)):String("-1"))+","+String(gyroMaxGapUs)+","+String(zjGyroCalibration.maxGapUs)+","+String(zjGyroCalibration.missedSamples);
+   (gyroSampleSeq?String(uint32_t(now-lastGyroSample)):String("-1"))+","+String(zjImu.gyroMaxGapUs)+","+String(zjImu.zjGyroCalibration.maxGapUs)+","+String(zjImu.zjGyroCalibration.missedSamples);
  }
  if(!history)sample=!sample;
- if(size_t(Serial.availableForWrite())>=line.length()+2){Serial.println(line);if(history){lastErrorAt=now;lastErrorCount=zjGyroCalibration.failures;}}
+ if(size_t(Serial.availableForWrite())>=line.length()+2){Serial.println(line);if(history){lastErrorAt=now;lastErrorCount=zjImu.zjGyroCalibration.failures;}}
  else ++gyroDiagnosticDrops;
 #endif
 }
 
-// Non-blocking I2C scan: up to 3 addresses per pass.
+static void emitTimingDiagnostics(uint32_t now){
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ static uint32_t last=0;
+ if(uint32_t(now-last)<1000)return;last=now;
+ const auto c=zjReadControl();const uint32_t at=micros();
+ const String line=String("ZJTIMING,1,A2,")+String(c.rate.known?c.rate.actual(at):-1,2)+","+
+  String(c.intervalUs)+","+String(c.minIntervalUs)+","+String(c.maxIntervalUs)+","+String(c.jitterUs)+","+String(c.maxJitterUs)+","+
+  String(c.executionUs)+","+String(c.maxExecutionUs)+","+String(c.missedTicks)+","+String(c.overruns)+","+
+  (!zjControlRuntimeReady?"UNAVAILABLE":!c.ticks?"STARTING":c.healthy(at)?"HEALTHY":"LATE")+","+
+  String(zjImu.sampleRate.known?zjImu.sampleRate.actual(at):-1,2)+","+(zjImu.sample.valid?String(zjImu.sample.ageUs(at)):String("-1"))+","+
+  String(zjImu.sample.errors)+","+String(telRateHz)+","+String(zjTelemetryRate.known?zjTelemetryRate.actual(at):-1,2)+","+String(telemetryDropped);
+ if(size_t(Serial.availableForWrite())>=line.length()+2)Serial.println(line);
+ else ++gyroDiagnosticDrops;
+#endif
+}
+// Non-blocking I2C scan: at most one bounded bus transaction per pass.
 // Scan once on boot or after ZJI2C,SCAN; no periodic bus probing during telemetry.
 uint8_t scanAddress=1,scanCount=0,scanAddresses[126]={0};
 bool scanActive=false,scanRequested=true;
@@ -440,7 +347,8 @@ void scanI2C(unsigned long now){
 
   // Structured scan only.
  }
- for(uint8_t budget=0;budget<3&&scanAddress<127;budget++,scanAddress++){
+ if(!zjTryI2c())return;
+ for(uint8_t budget=0;budget<1&&scanAddress<127;budget++,scanAddress++){
   Wire.beginTransmission(scanAddress);
   const byte error=Wire.endTransmission();
   if(error==0){
@@ -451,6 +359,7 @@ void scanI2C(unsigned long now){
    // Suppress noisy I2C diagnostic output.
   }
  }
+ zjReleaseI2c();
  if(scanAddress>=127){
 
   // ZJSCAN summary follows.
@@ -467,6 +376,9 @@ void selectI2cBus(){
  // A1 dedicated SDA4/SCL5, preserving GPIO8 for the active-low LED.
  // A2 remains GPIO22/23. Both controllers use 400 kHz.
  Wire.begin(BUS_SDA,BUS_SCL);Wire.setClock(400000);
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ Wire.setTimeOut(2); // Each I2C operation is bounded; scanner shares a mutex.
+#endif
  activeSda=BUS_SDA;activeScl=BUS_SCL;ledAvailable=true;
 }
 static uint32_t zjStationarySince=0;
@@ -517,7 +429,7 @@ void emitTelemetry(unsigned long now){
   Serial.print(",INPUT_ARMED=");Serial.print(fresh&&zjRcInputArmed?1:0);
   Serial.print(zjMotorEnabled?",MOTORS=ACTIVE":",MOTORS=OFF");
  }
- Serial.println();
+ Serial.println();zjTelemetryRate.event(micros());
 }
 #include "FlightCoreMotor.h"
 // Network code can access verified scanner/gyro state and existing serial commands.
@@ -536,6 +448,7 @@ void setup(){
  Serial.println("ZJTEL,ACK,FORMAT,COMBINED");
  zjNetworkSetup();
  zjMotorSetup();
+ zjControlRuntimeSetup();
  lastGyro=millis()-GYRO_PERIOD_MS;
  lastGyroProbe=millis()-2500;
  telLast=millis();
@@ -553,6 +466,8 @@ void loop(){
   emitImuDiagnostics(now);
  zjNetworkLoop(now);
  zjRcLoop(now);
+ zjPublishControlInput();
+ emitTimingDiagnostics(millis());
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;
  if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>=108){

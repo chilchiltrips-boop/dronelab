@@ -14,6 +14,7 @@ test('production hardware watchdog enforces absolute manual deadlines during a s
 #include <cassert>
 #include <string>
 #include <iostream>
+#include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreEscProfile.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreMotorSafety.h'))}
 using portMUX_TYPE=int;using esp_timer_handle_t=void*;using ledc_channel_t=int;
 #define portMUX_INITIALIZER_UNLOCKED 0

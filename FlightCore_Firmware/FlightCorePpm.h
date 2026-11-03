@@ -30,6 +30,7 @@ static uint16_t zjPpmRaw[ZJ_PPM_CHANNELS]={},zjPpmValues[ZJ_PPM_CHANNELS]={};
 static uint16_t zjPpmMin[ZJ_PPM_CHANNELS],zjPpmMid[ZJ_PPM_CHANNELS],zjPpmMax[ZJ_PPM_CHANNELS];
 static uint8_t zjPpmMap[5]={0,1,2,3,4}; // roll,pitch,throttle,yaw,CH5 auxiliary
 static uint32_t zjPpmLastFrameAt=0,zjPpmFrameSeq=0,zjPpmReportAt=0,zjPpmLostCount=0;
+static uint32_t zjPpmConsumedFrames=0,zjPpmCoalescedFrames=0;
 static uint8_t zjPpmSafeFrames=0;
 static bool zjPpmInputAvailable=false,zjPpmReportedLost=false;
 static ZjPpmArmGesture zjPpmArm;
@@ -158,6 +159,7 @@ static String zjPpmStatus(){
  output+=",\"ageMs\":"+(zjPpmLastFrameAt?String(now-zjPpmLastFrameAt):String("null"));
  output+=",\"seq\":"+String(zjPpmFrameSeq)+",\"losses\":"+String(zjPpmLostCount)+
    ",\"faults\":"+String(uint32_t(zjPpmFaults));
+ output+=",\"coalescedFrames\":"+String(zjPpmCoalescedFrames);
  output+=",\"expectedHz\":50,\"captureHz\":"+String(zjPpmSignalFresh(now)?zjPpmCaptureHz:0);
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  output+=",\"captureBackend\":\"RMT_RX\",\"captureReady\":"+String(zjPpmCaptureReady?"true":"false")+",\"captureErrors\":"+String(uint32_t(zjPpmRxErrors));
@@ -187,6 +189,7 @@ static void zjPpmLoop(uint32_t now){
  capturedFrames=zjPpmIsrFrames;captureLosses=zjPpmCaptureLosses;
  portEXIT_CRITICAL(&zjPpmMux);
  now=millis();
+ if(newFrame){const uint32_t count=capturedFrames-zjPpmConsumedFrames;if(count>1)zjPpmCoalescedFrames+=count-1;zjPpmConsumedFrames=capturedFrames;}
  const bool captureGap=captureLosses!=zjPpmSeenCaptureLosses;
  zjPpmSeenCaptureLosses=captureLosses;
  const bool continuous=newFrame&&!captureGap&&uint32_t(now-receivedAt)<=ZJ_PPM_LOST_MS;

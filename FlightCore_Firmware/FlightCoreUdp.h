@@ -5,6 +5,9 @@
 // applied/u32, rejected/u32, flags/u8, kind/u8, reason/u8, reserved zero/u8.
 // Kind 1=RX_ACK, 2=APPLIED_ACK, 3=NACK. Unknown age=65535. No motor outputs.
 #include <WiFiUdp.h>
+#include "FlightCoreTiming.h"
+static ZjRateCounter zjUdpReceiveRate,zjUdpApplyRate;
+static uint32_t zjUdpCoalesced=0;
 #include <mbedtls/gcm.h>
 static constexpr uint16_t ZJ_UDP_PORT=4210;
 static constexpr size_t ZJ_UDP_SIZE=58,ZJ_UDP_FEEDBACK_SIZE=72;
@@ -73,6 +76,7 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  portENTER_CRITICAL(&zjUdpMux);
  ++zjUdpGeneration;memcpy(zjUdpKey,key,32);memcpy(zjUdpToken,tag,8);
  for(int i=0;i<4;i++)zjUdpOwner[i]=peer[i];
+ zjUdpReceiveRate.reset(micros());zjUdpApplyRate.reset(micros());zjUdpCoalesced=0;
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
  zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
@@ -169,8 +173,9 @@ static void zjUdpFlushFeedback(){
 }
 static String zjUdpStatistics(){
  uint32_t recv,rej,seq,rx,applied,at,count;uint8_t version,nack;bool active;
- uint32_t rxSent,rxFailed,appliedSent,appliedFailed,nackSent,nackFailed,maxTxUs,maxRxToAckUs;
+ uint32_t rxSent,rxFailed,appliedSent,appliedFailed,nackSent,nackFailed,maxTxUs,maxRxToAckUs,coalesced;ZjRateCounter receiveRate,applyRate;
  portENTER_CRITICAL(&zjUdpMux);
+ receiveRate=zjUdpReceiveRate;applyRate=zjUdpApplyRate;coalesced=zjUdpCoalesced;
  recv=zjUdpReceived;rej=zjUdpRejected;seq=zjUdpLastSeq;rx=zjUdpLastRx;active=zjUdpActive;
  applied=zjUdpLastAppliedSeq;at=zjUdpLastAppliedAt;count=zjUdpAppliedCount;version=zjUdpFeedbackVersion;nack=zjUdpLastNack;
  rxSent=zjUdpAckSent[1];rxFailed=zjUdpAckFailed[1];appliedSent=zjUdpAckSent[2];appliedFailed=zjUdpAckFailed[2];
@@ -186,7 +191,9 @@ static String zjUdpStatistics(){
   ",\"appliedAckSent\":"+String(appliedSent)+",\"appliedAckFailed\":"+String(appliedFailed)+
   ",\"nackSent\":"+String(nackSent)+",\"nackFailed\":"+String(nackFailed)+
   ",\"maxAckTxUs\":"+String(maxTxUs)+",\"maxRxToAckUs\":"+String(maxRxToAckUs)+
-  ",\"nackReason\":\""+String(zjUdpReason(nack))+"\","+zjMotorFlags()+"}";
+  ",\"nackReason\":\""+String(zjUdpReason(nack))+"\",\"androidUdpReceivedHz\":"+(receiveRate.known?String(receiveRate.actual(micros()),2):String("null"))+
+  ",\"androidUdpAppliedHz\":"+(applyRate.known?String(applyRate.actual(micros()),2):String("null"))+
+  ",\"coalescedFrames\":"+String(coalesced)+","+zjMotorFlags()+"}";
 }
 static void zjUdpReceiverTask(void*){
  uint8_t packet[ZJ_UDP_SIZE+4],plain[14],key[32],token[8],owner[4];
@@ -228,6 +235,7 @@ static void zjUdpReceiverTask(void*){
     uint32_t(now-zjUdpLastRxNoticeAt)>=ZJ_UDP_RX_FEEDBACK_MS;
    if(notify){zjUdpLastRxNoticeAt=now;zjUdpNotifiedRxArm=armed;}
    if(!zjUdpLastSeq)zjUdpFirstRx=now;
+   zjUdpReceiveRate.event(micros());if(zjUdpHasPending)++zjUdpCoalesced;
    zjUdpLastSeq=seq;zjUdpLastRx=now;zjUdpRequestedArm=armed;++zjUdpReceived;
    zjUdpPendingSeq=seq;zjUdpPendingAt=now;
    for(int i=0;i<6;i++)zjUdpPendingChannels[i]=ch[i];
@@ -280,7 +288,7 @@ static void zjUdpLoop(uint32_t now){
   zjUdpStop(ZJ_UDP_INVALID_FRAME);zjRcRelease("UDP_FRAME_REJECTED");return;
  }
  portENTER_CRITICAL(&zjUdpMux);const bool current=generation==zjUdpGeneration&&zjUdpActive;
- if(current){zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis();zjUdpAppliedArm=zjRcInputArmed;++zjUdpAppliedCount;}
+ if(current){zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis();zjUdpAppliedArm=zjRcInputArmed;++zjUdpAppliedCount;zjUdpApplyRate.event(micros());}
  const uint8_t stopped=zjUdpEndReason;portEXIT_CRITICAL(&zjUdpMux);
  if(!current){zjUdpStop(stopped);zjRcRelease(zjUdpReleaseReason(stopped));}
 }
