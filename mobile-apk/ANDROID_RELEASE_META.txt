@@ -1,5 +1,5 @@
 App: in.zebjus.dronelab.companion
-Version: 1.8.27-diagnostic-freshness
-VersionCode: 66
+Version: 1.8.28-a2-setup
+VersionCode: 67
 Release certificate SHA256: F1:B8:65:75:B3:59:07:34:65:4F:63:8E:4E:0D:68:05:6D:37:B2:E8:88:4A:C7:D6:C2:46:36:FE:9B:51:68:94
-Source commit: 53b2dc9fde38cc4d31f05d8b372ad1854b0d9fd5
+Source commit: 7cedc814a534659a9d61b6078c89a5e777c26a56
