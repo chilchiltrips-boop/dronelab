@@ -1,14 +1,14 @@
 {
   "version": "1.7.6",
-  "builtAt": "2026-11-03T06:36:44Z",
-  "sourceCommit": "55c85fb8121213ea4976d6395514ebdeb1d19c29",
+  "builtAt": "2026-11-03T06:42:25Z",
+  "sourceCommit": "741394f6ecc1bee6109513596a0a59419d0ad2d0",
   "sourceSha256": {
-    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "9e00471cf8bf079fdac3b15760289c15c859a395ee76ce4929d576a7d8ec0449",
+    "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "02b69415767c9c024efbbcae1de15436d5ee397c7bc75526c25eb8846aabe8c0",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
     "FlightCore_Firmware/FlightCoreA2MotorLayout.h": "a62b1dbf4ffc53069404da011a2dada4787660b7ee7fe96d44eeef0e6019e475",
     "FlightCore_Firmware/FlightCoreAccess.h": "90c45e6ce003c9c1d8028d52dcfed5f6222eb6f7c05a4fe71a2bd9170a66f63c",
     "FlightCore_Firmware/FlightCoreClassroom.h": "4ea7d09bf5e9c89aaaa2650a529e5c16fe294ea1105489fc1cabde1a9b029655",
-    "FlightCore_Firmware/FlightCoreControlRuntime.h": "c787a71978327ad4053654e55f3f627aaf17c92b39e9f4639c5efac5cbef9c19",
+    "FlightCore_Firmware/FlightCoreControlRuntime.h": "0a6a453c02fb43b4a9d2261a6243c9195a42db7bac6717e22183994316a7e37b",
     "FlightCore_Firmware/FlightCoreEnrollment.h": "c799bde522daecab5d627ce0ca3321287ff2f467aa52214a153c4f069b1e38ff",
     "FlightCore_Firmware/FlightCoreEscProfile.h": "120094bdb8de4729f2ae10ac9909b8321c3c3bab62c3c3d45d22140059a491e5",
     "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
@@ -26,7 +26,7 @@
     "FlightCore_Firmware/FlightCoreRpc.h": "610f6315d3b585c165d2ee45cd461fceedaabe2617358b36e28fe34d145e2cc9",
     "FlightCore_Firmware/FlightCoreSetupPortal.h": "5ef45273ccd866f070b9d1089a76d63fa0d96c0ee18e34ed0263da52f9194de9",
     "FlightCore_Firmware/FlightCoreTiming.h": "f917a494f374db8b0fe41fa883f617c8e7295e790615a09073fd60b0215ba466",
-    "FlightCore_Firmware/FlightCoreUdp.h": "9ee18cb3ec72e64f683580cae653e641af2c4a0dc72cbae9071768ed43e2b815",
+    "FlightCore_Firmware/FlightCoreUdp.h": "137437fdc21a782e3c4b172a6cb341b54a9d1384c88baa7cf52fa3ee98c661d9",
     "FlightCore_Firmware/FlightCoreWifiPolicy.h": "85c60bcfcbdc491b7d41a7f7dd5ff241e05cbf6553c111fb33e6310726cb640b",
     "FlightCore_Firmware/FlightCoreWifiProfiles.h": "8a6b796c56945f24014a33c68371f8cff77d8b30e5daea938958b6c3960c528c",
     "FlightCore_Firmware/FlightCoreWifiRetryPolicy.h": "b2ec355a52422b804c5515a980bcad50d2c2c2fde7b698a7a9a9bd08f3baeb77"
@@ -38,7 +38,7 @@
       "boardId": "ZFC-A1",
       "fqbn": "esp32:esp32:esp32c3:CDCOnBoot=cdc",
       "chipId": 5,
-      "appBytes": 1259712,
+      "appBytes": 1259728,
       "otaSlots": [
         {
           "address": 65536,
@@ -59,13 +59,13 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-03T06:37:46Z"
+      "compiledAt": "2026-11-03T06:43:35Z"
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1278416,
+      "appBytes": 1278480,
       "otaSlots": [
         {
           "address": 65536,
@@ -86,7 +86,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-03T06:38:34Z"
+      "compiledAt": "2026-11-03T06:44:26Z"
     }
   ]
 }
