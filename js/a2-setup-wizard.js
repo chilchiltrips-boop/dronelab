@@ -8,9 +8,8 @@ if(root){
  let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',readError='',historyAt=0,calFinished=false,calConfirmed=false,operationError='',selectedMotor=1,allMotors=false,selectionPending=false;
  let draft={layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']},visualStep=-1,visualMarkup='';
  const pendingMinimum={},observations={},history=[];
- root.innerHTML=`<header class="a2-title"><h2>A2 Setup Wizard</h2><button class="btn danger" data-action="stop">STOP outputs</button></header>
- <div class="a2-status" role="status">Waiting for controller</div>
- <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}"><span>${i+1}</span>${s}</button>`).join('')}</nav>
+ root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
+ <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}"><span>${i+1}</span>${s}</button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
  <div class="a2-checks" role="group" aria-label="Output checks"><span class="a2-check-count">0 / 3 confirmed</span>${[['a2Props','Propellers removed'],['a2Pins','Wiring & power verified'],['a2Profile','50 Hz PWM · 1000–2000 µs ESC']].map(([id,label])=>`<label class="a2-check"><input type="checkbox" id="${id}">${label}</label>`).join('')}</div>
  <div class="a2-columns"><main class="a2-content">
  <section data-panel="0"><h3>Board connection</h3><div class="a2-identity"></div><div class="a2-actions"><button class="btn" data-action="detect">Refresh board</button><button class="btn ghost" data-action="connect">Open connection</button></div></section>
@@ -121,6 +120,7 @@ if(root){
   const m=state||{},connected=k.connected===true;
   $('[data-action="layout"]').disabled=working||new Set(draft.layoutPins).size!==4;
   $('.a2-status').textContent=connected?`${k.board||'Kit'} · ${k.transport?.toUpperCase()} · Firmware ${k.version||'—'} · ${m.mode||'READING STATUS'}`:'No Kit connected';
+  $('.a2-status').title=$('.a2-status').textContent;
   $('.a2-identity').innerHTML=`<dl>${[['Board',k.board||'Not detected'],['Kit name',k.kitName||'—'],['Device ID',k.kitId||'—'],['Firmware',k.version||'—'],['Connection',connected?(k.transport||'').toUpperCase():'OFFLINE'],['Motor setup',m.supported?(m.version>=2?'Supported · configurable wiring & sliders':'Firmware update required'):'Waiting for verified A2'],['USB Teacher',k.transport==='usb'?(k.adminUnlocked?'UNLOCKED':'Unlock in Devices & Firmware'):'—']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
   const remaining=Math.max(0,(m.remainingMs||0)-(lastStateAt?Date.now()-lastStateAt:0));
   const input=selectedInput(),inputAge=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';

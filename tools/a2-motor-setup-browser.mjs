@@ -11,6 +11,7 @@ try{
  await page.locator('#tab-setup.active').waitFor();
  await page.locator('[data-action=detect]').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('verified A2'));
+ mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-toolbar-offline.png',fullPage:true});
  await page.evaluate(()=>{
   const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.4',controlAuthorized:true};
   const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
@@ -218,18 +219,22 @@ try{
  await page.locator('[data-step="5"]').click();assert.match(await page.locator('.a2-report').textContent(),/1137 µs/);
  await page.screenshot({path:'test-output/a2-report.png',fullPage:true});
  // Review every page at desktop, small laptop and mobile widths.
- for(const [width,height] of [[1366,900],[1024,768],[390,844],[320,844]]){
+ for(const [width,height] of [[1920,1080],[1366,900],[1024,768],[390,844],[320,844]]){
   await page.setViewportSize({width,height});
   for(let step=0;step<6;step++){
    await page.locator('[data-step="'+step+'"]').click();
    const box=await page.evaluate(()=>{
     const root=document.querySelector('#a2SetupRoot'),tab=document.querySelector('#tab-setup'),main=document.querySelector('.a2-content').getBoundingClientRect(),visual=document.querySelector('.a2-visual').getBoundingClientRect(),row=document.querySelector('.a2-columns').getBoundingClientRect();
-    const stop=document.querySelector('[data-action=stop]').getBoundingClientRect(),title=document.querySelector('.a2-title').getBoundingClientRect();
-    return {fits:root.scrollWidth<=tab.clientWidth,height:row.height,bottomGap:Math.abs(main.bottom-visual.bottom),stopInHeader:stop.top>=title.top&&stop.bottom<=title.bottom};
+    const stop=document.querySelector('[data-action=stop]').getBoundingClientRect(),title=document.querySelector('.a2-title').getBoundingClientRect(),bar=document.querySelector('.a2-toolbar-main'),middle=stop.top+stop.height/2;
+    const items=[document.querySelector('.a2-title h2'),document.querySelector('.a2-status'),...document.querySelectorAll('.a2-steps button')];
+    return {fits:root.scrollWidth<=tab.clientWidth,height:row.height,bottomGap:Math.abs(main.bottom-visual.bottom),stopInHeader:stop.top>=title.top&&stop.bottom<=title.bottom,headerHeight:title.height,oneLine:items.every(e=>{const r=e.getBoundingClientRect();return Math.abs(r.top+r.height/2-middle)<4;}),toolbarFits:bar.scrollWidth<=bar.clientWidth+1};
    });
    assert.equal(box.fits,true,'wizard step '+step+' fits '+width+'px');
    assert.equal(box.stopInHeader,true,'STOP must not float over form controls on step '+step+' at '+width+'px');
+   assert.equal(box.oneLine,true,'title, status, all six steps and STOP share one line at '+width+'px');
+   assert.ok(box.headerHeight<=64,'wizard toolbar must stay compact at '+width+'px');
    if(width>=1024){
+    assert.equal(box.toolbarFits,true,'desktop toolbar must show all steps without horizontal scrolling at '+width+'px');
     assert.ok(box.bottomGap<2,'task and visual cards share a bottom edge on step '+step);
     assert.ok(box.height<=(width===1366?540:620),'primary task must stay compact on step '+step+' at '+width+'px: '+box.height);
    }
@@ -259,5 +264,5 @@ try{
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
  await page.locator('#stopPythonBtn').click();
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
- assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, compact six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
+ assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, single-row toolbar and larger six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
 }finally{await browser.close();}
