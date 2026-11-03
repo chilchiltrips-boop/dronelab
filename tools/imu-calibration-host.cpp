@@ -41,7 +41,17 @@ struct ImuWire {
 #include "FlightCoreEscProfile.h"
 static ZjRateCounter zjTelemetryRate;
 static uint16_t telRateHz=20;static uint32_t telemetryDropped=0;
+struct ImuSerialCapture {
+ std::string line;
+ int availableForWrite(){return 512;}
+ template<class... T>void print(T...){}
+ template<class... T>void printf(T...){}
+ template<class... T>void println(T...){}
+ void println(const String& value){line=value.c_str();}
+} imuSerialCapture;
+#define Serial imuSerialCapture
 #include "generated-imu.h"
+#undef Serial
 static void advance(uint32_t us=1000,bool fresh=true){clockUs+=us;clockMs=clockUs/1000;Wire.fresh=fresh;updateGyro(clockMs);}
 static void reset(){
  Wire=ImuWire{};clockUs=100000;clockMs=100;gyroReady=false;gyroSampleSeq=0;lastGyroSample=0;lastGyroProbe=clockMs-2500;
@@ -82,6 +92,15 @@ int main(){
  const auto seq=gyroSampleSeq;advance(4000,false);assert(gyroSampleSeq==seq);
  advance(12000);assert(zjImuDriver.sample.missed>=2);
  assert(zjImuDriver.sample.fresh(clockUs,12000));
+ // An asynchronous sensor can publish after loop() captured its clock. The
+ // production serial writer must timestamp at emission, not underflow age.
+ emitImuDiagnostics(clockMs);
+ advance(600000);emitImuDiagnostics(clockMs-20);
+ std::stringstream diagnostic(imuSerialCapture.line);std::string field;
+ std::vector<std::string> diagnosticFields;
+ while(std::getline(diagnostic,field,','))diagnosticFields.push_back(field);
+ assert(diagnosticFields.size()==15&&diagnosticFields[0]=="ZJIMUS");
+ assert(std::stoul(diagnosticFields[11])==uint32_t(millis()-lastGyroSample));
  // A short read invalidates readiness; no invalid sample enters calibration.
  Wire.shortRead=true;advance(20000);assert(!gyroReady&&zjImuDriver.gyroReadFailures==1&&zjImuDriver.zjGyroCalibration.is("SENSOR_ERROR"));
  Wire.x=262;Wire.y=-131;advance(2500000);assert(zjImuDriver.zjGyroCalibration.attempt==2&&zjImuDriver.zjGyroCalibration.samples==0);
@@ -95,6 +114,7 @@ int main(){
  // Configuration read-back catches an acknowledged but unapplied write.
  reset();zjImuDriver.gyroConfigured=false;zjImuDriver.lastGyroProbe=clockMs-2500;Wire.badConfig=true;updateGyro(clockMs);
  assert(!gyroReady&&!zjImuDriver.gyroConfigured&&std::string(zjImuDriver.zjGyroCalibration.error)=="CONFIG_MISMATCH");
+ assert(zjImuDriver.sample.errors==1&&!zjImuDriver.sample.valid);
  // Never count repeated stale registers as new samples.
  reset();for(int i=0;i<600;i++)advance(1000,false);
  assert(!gyroReady&&zjImuDriver.zjGyroCalibration.is("SENSOR_ERROR")&&zjImuDriver.zjGyroCalibration.samples==0);

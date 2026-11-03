@@ -88,6 +88,14 @@ function imuLabel(value){
 }
 function parseImuLine(line,previous=null){
  const p=String(line||'').trim().split(',');
+ // Fast negative sensor status must not wait for the slower calibration
+ // summary before clearing READY. A positive status alone cannot prove a
+ // completed bias calibration or a fresh sample.
+ if(p[0]==='ZJGYRO'&&p[1]==='STATUS'&&p.length===6&&p[2]==='A2'&&p[3]==='MPU6050'&&p[4].toLowerCase()==='0x68'&&previous?.board==='A2'){
+  const state={READ_ERROR:'READ_ERROR',NOT_FOUND:'NOT_FOUND',CALIBRATION_FAILED:'FAILED'}[p[5]];
+  if(!state)return null;
+  return normalizeImu({...previous,state,dataReady:false,imuValid:false,error:undefined});
+ }
  if(p[1]!=='1'||p[2]!=='A2')return null;
  const number=i=>p[i]!==''&&Number.isFinite(Number(p[i]))?Number(p[i]):NaN;
  if(p[0]==='ZJTIMING'&&p.length===20&&previous?.board==='A2'){
@@ -97,6 +105,10 @@ function parseImuLine(line,previous=null){
    if(keys[i]==='controlHealth')data[keys[i]]=p[i+3];
    else {const v=number(i+3);if(v===-1&&['controlActualHz','imuActualHz','imuSampleAgeUs','telemetryActualHz'].includes(keys[i]))delete data[keys[i]];else data[keys[i]]=v;}
   }
+  const age=number(15);
+  data.imuValid=Number.isFinite(age)&&age>=0&&age<=12000;
+  data.sampleAgeMs=age>=0?Math.floor(age/1000):null;
+  data.dataReady=data.imuValid&&data.state==='READY';
   return normalizeImu(data);
  }
  if(p[0]==='ZJIMU'&&p.length===18){
@@ -105,7 +117,11 @@ function parseImuLine(line,previous=null){
  }
  if(p[0]==='ZJIMUE'&&p.length===7&&previous?.board==='A2')return normalizeImu({...previous,failures:number(3),lastFailure:p[4],lastFailureMs:number(5),lastFailureAttempt:number(6)});
  if(p[0]==='ZJIMUS'&&p.length===15&&number(11)>=-1&&previous?.board==='A2'&&previous.attempt===number(3)){
-  return normalizeImu({...previous,...(number(10)<(previous.sampleSequence||0)?{failures:0,lastFailure:'NONE',lastFailureMs:0,lastFailureAttempt:0}:{}),raw:[number(4),number(5),number(6)],corrected:[number(7),number(8),number(9)],sampleSequence:number(10),sampleAgeMs:number(11)<0?null:number(11),maxGapUs:number(12),calibrationMaxGapUs:number(13),missedSamples:number(14)});
+  const age=number(11),maxAge=previous.imuTargetHz===250?12:1000;
+  const valid=number(10)>0&&age>=0&&age<=maxAge;
+  // This record reports milliseconds, so discard a microsecond observation
+  // from another record rather than combining two different sample ages.
+  return normalizeImu({...previous,...(number(10)<(previous.sampleSequence||0)?{failures:0,lastFailure:'NONE',lastFailureMs:0,lastFailureAttempt:0}:{}),raw:[number(4),number(5),number(6)],corrected:[number(7),number(8),number(9)],sampleSequence:number(10),sampleAgeMs:age<0?null:age,imuSampleAgeUs:undefined,imuValid:valid,dataReady:valid&&previous.state==='READY',maxGapUs:number(12),calibrationMaxGapUs:number(13),missedSamples:number(14)});
  }
  return null;
 }

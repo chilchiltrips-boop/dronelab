@@ -33,6 +33,27 @@ function diagnostics(){
  vm.runInNewContext(readFileSync('js/kit-ack-diagnostics.js','utf8'),{window:win,document:doc,localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},Date:class extends Date{static now(){return now}},setTimeout(){return 1},clearTimeout(){},console});
  return {d:win.ZebjusAckDiagnostics,advance:ms=>now+=ms};
 }
+test('USB timing invalidates stale/unknown IMU data and fresh samples restore readiness',()=>{
+ const {d}=diagnostics();
+ const timing=age=>'ZJTIMING,1,A2,250,4000,4000,4000,0,0,20,20,0,0,HEALTHY,250,'+age+',0,20,20,0';
+ const stale=d.parseImuLine(timing(16000),{...ready,sampleAgeMs:0});
+ assert.equal(stale.dataReady,false,'a 16ms A2 sample exceeds the 12ms timing validity bound');
+ assert.equal(stale.imuValid,false);
+ const fresh=d.parseImuLine(timing(500),stale);
+ assert.equal(fresh.dataReady,true);assert.equal(fresh.imuValid,true);
+ assert.equal(fresh.sampleAgeMs,0);
+ const unknown=d.parseImuLine(timing(-1),fresh);
+ assert.equal(unknown.dataReady,false);assert.equal(unknown.imuValid,false);
+ const sample=d.parseImuLine('ZJIMUS,1,A2,1,1,2,3,0,0,0,2,1,4000,1000,0',unknown);
+ assert.equal(sample.dataReady,true);assert.equal(sample.imuValid,true);
+ assert.equal(sample.imuSampleAgeUs,undefined,'do not retain a microsecond age from a different record');
+ const fault=d.parseImuLine('ZJGYRO,STATUS,A2,MPU6050,0x68,READ_ERROR',sample);
+ assert.equal(fault.dataReady,false);assert.equal(fault.state,'READ_ERROR');
+ assert.equal(d.parseImuLine('ZJGYRO,STATUS,A1,MPU6050,0x68,READ_ERROR',sample),null);
+ assert.equal(d.parseImuLine('ZJGYRO,STATUS,A2,OTHER,0x68,READ_ERROR',sample),null);
+ const old=d.parseImuLine('ZJIMUS,1,A2,1,1,2,3,0,0,0,2,20,20000,1000,0',ready);
+ assert.equal(old.dataReady,true,'older 50Hz IMU firmware keeps its existing validity policy');
+});
 test('calibration diagnostics record progress/result/errors, preserve fractional rates and exclude private fields',()=>{
  const {d,advance}=diagnostics();
  for(let i=0;i<2000;i++){advance(1);d.observeImu({...base,samples:i,ssid:'SECRET-SSID',session:'SECRET-TOKEN'},kit);}
