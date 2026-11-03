@@ -6,6 +6,8 @@ on:
       - 'js/input-monitor.js'
       - 'js/motor-setup.js'
       - 'js/a2-setup-wizard.js'
+      - 'js/setup-cues.js'
+      - 'sw.js'
       - 'js/a2-setup-visuals.js'
       - 'js/classroom-kits.js'
       - 'js/kit-data-interface.js'

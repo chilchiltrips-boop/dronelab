@@ -368,7 +368,9 @@ async function pythonMotorOperation(operation,a,w){
    await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED'],'python');
    await confirm('HIGH signal is active for at most 15 seconds. Connect the motor battery; wait for the calibration prompt specified by your ESC manual, then Continue to send LOW.');
    await motorClient.command('CAL_LOW',[],'python');const s=await wait();
-   await confirm('Output has ended. Confirm only if you heard your ESC success tones.');return {...s,escSuccess:'user confirmed'};
+   await confirm('Output has ended. Confirm only if you heard your ESC success tones.');
+   const saved=s.calibrationSaveSupported===true?await motorClient.confirmCalibration(pythonBinding):s;
+   return {...saved,escSuccess:'user confirmed',calibrationPersisted:saved.escCalibrationSaved===true};
   }
   if(operation==='single'||operation==='all'){
    const label=operation==='all'?'ALL FOUR motors':'motor '+a.motor;

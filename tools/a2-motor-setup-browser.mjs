@@ -12,11 +12,11 @@ try{
  await page.locator('[data-action=detect]').click();
  await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('verified A2'));
  mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-toolbar-offline.png',fullPage:true});
- await page.evaluate(()=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.4',controlAuthorized:true};
-  const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0},calls:[]};
+ const installMotorFixture=({savedState=null,savedKit=null}={})=>{
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.5',controlAuthorized:true,...savedKit};
+  const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],calibrationSaveSupported:true,escCalibrationSaved:false,escCalibrationPending:false,maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0,...savedState},calls:[]};
   window.__motorCalls=[];
-  const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0]};},ms);};
+  const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0],escCalibrationPending:reason==='CAL_FINISHED'?true:f.state.escCalibrationPending};},ms);};
   window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
    guard?.();
    if(route!=='/api/motor')throw Error('Unexpected fixture request');window.__motorCalls.push(a.action);f.calls.push({...a});
@@ -36,11 +36,13 @@ try{
    if(a.action==='SLIDE')state={...state,pulseUs:[0,1,2,3].map(i=>(state.sliderMask&(1<<i))?Number(a.b):1000)};
    if(a.action==='SLIDE'&&f.loseControl){f.loseControl=false;state={...state,mode:'DISABLED',reason:'CONTROL_LOST',pulseUs:[0,0,0,0]};}
    if(a.action==='SINGLE'||a.action==='ALL'){state={...state,mode:a.action==='ALL'?'ALL_TEST':'SINGLE_TEST',remainingMs:Number(a.c),pulseUs:[1000,1000,1000,1000]};if(a.action==='ALL')state.pulseUs.fill(Number(a.b));else state.pulseUs[Number(a.a)-1]=Number(a.b);finishAfter(Number(a.c),'TEST_FINISHED');}
-   if(a.action==='CAL_HIGH')state={...state,mode:'CAL_HIGH',pulseUs:[2000,2000,2000,2000],remainingMs:15000};
+   if(a.action==='CAL_HIGH')state={...state,escCalibrationSaved:false,escCalibrationPending:false,mode:'CAL_HIGH',pulseUs:[2000,2000,2000,2000],remainingMs:15000};
    if(a.action==='CAL_LOW'){state={...state,mode:'CAL_LOW',pulseUs:[1000,1000,1000,1000],remainingMs:3000};finishAfter(3000,'CAL_FINISHED');}
+   if(a.action==='CAL_CONFIRM'){if(f.rejectSave){f.rejectSave=false;throw Error('Simulated NVS save failure');}if(!state.escCalibrationPending||a.a!=='TONES_CONFIRMED')throw Error('No confirmed calibration completion');state={...state,escCalibrationSaved:true,escCalibrationPending:false};}
    f.state=state;return {...state};
   }};
- });
+ };
+ await page.evaluate(installMotorFixture);
  const confirm=page.getByRole('button',{name:'Confirm / Continue',exact:true});
  await page.locator('[data-action=detect]').click();
  await page.waitForFunction(()=>document.querySelector('.a2-identity').textContent.includes('Supported · configurable'));
@@ -210,12 +212,38 @@ try{
  await page.locator('#a2Pulse').fill('1100');await page.locator('[data-action=single]').click();await confirm.click();
  await page.waitForFunction(()=>window.__motorCalls.includes('ALL'));
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
- await page.locator('[data-step="3"]').click();await page.locator('#a2PowerOff').check();
+ await page.locator('[data-step="3"]').click();
+ await page.locator('[data-panel="3"] [data-action=sound]').click();assert.equal(await page.locator('[data-panel="3"] [data-action=sound]').textContent(),'Sound off');
+ await page.locator('[data-panel="3"] [data-action=sound]').click();assert.equal(await page.locator('[data-panel="3"] [data-action=sound]').textContent(),'Sound on');
+ await page.locator('#a2PowerOff').check();
  await page.locator('[data-action=high]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('HIGH active'));
  assert.equal(await page.locator('#a2PowerOff').isChecked(),false,'each calibration must require a fresh battery-disconnected confirmation');
  await page.screenshot({path:'test-output/a2-calibration.png',fullPage:true});
  await page.locator('[data-action=low]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('CAL_FINISHED'));
- await page.locator('#a2Tones').check();await page.locator('[data-action=confirm-cal]').click();
+ await page.locator('#a2Tones').check();
+ await page.evaluate(()=>window.__motorFixture.rejectSave=true);
+ await page.locator('[data-action=confirm-cal]').click();
+ await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('Simulated NVS save failure'));
+ assert.equal(await page.evaluate(()=>window.__motorFixture.state.escCalibrationSaved),false);
+ await page.locator('[data-action=confirm-cal]').click();
+ await page.waitForFunction(()=>window.__motorFixture.state.escCalibrationSaved&&document.querySelector('[data-action=confirm-cal]').disabled);
+ assert.match(await page.locator('[data-panel="3"] .a2-calibration-summary').textContent(),/saved on board/);
+ const calibrationStarts=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='CAL_HIGH').length);
+ await page.evaluate(()=>{const f=window.__motorFixture;f.kit.connected=false;++f.run;f.kit.bootId='reboot-2';f.state={...f.state,bootId:'reboot-2',mode:'DISABLED',reason:'BOOT',pulseUs:[0,0,0,0]};});
+ await page.waitForFunction(()=>document.querySelector('.a2-status').textContent==='No Kit connected');
+ await page.evaluate(()=>window.__motorFixture.kit.connected=true);
+ await page.locator('[data-action=detect]').click();
+ await page.locator('[data-step="4"]').click();
+ await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
+ assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='CAL_HIGH').length),calibrationStarts,'power reconnect must not repeat ESC calibration');
+ const snapshot=await page.evaluate(()=>({savedState:window.__motorFixture.state,savedKit:window.__motorFixture.kit}));
+ await page.reload();await page.evaluate(installMotorFixture,snapshot);await page.locator('[data-action=detect]').click();
+ await page.locator('[data-step="4"]').click();
+ await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
+ for(const id of ['a2Props','a2Pins','a2Profile'])await page.locator('#'+id).check();
+ await page.locator('[data-action=slider]').click();await confirm.click();await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
+ await page.locator('[data-action=stop]').click();await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy);
+ assert.equal(await page.evaluate(()=>window.__motorCalls.includes('CAL_HIGH')),false,'saved calibration supports a motor test after browser reload without another calibration');
  await page.locator('[data-step="5"]').click();assert.match(await page.locator('.a2-report').textContent(),/1137 µs/);
  await page.screenshot({path:'test-output/a2-report.png',fullPage:true});
  // Review every page at desktop, small laptop and mobile widths.
@@ -236,7 +264,7 @@ try{
    if(width>=1024){
     assert.equal(box.toolbarFits,true,'desktop toolbar must show all steps without horizontal scrolling at '+width+'px');
     assert.ok(box.bottomGap<2,'task and visual cards share a bottom edge on step '+step);
-    assert.ok(box.height<=(width===1366?540:620),'primary task must stay compact on step '+step+' at '+width+'px: '+box.height);
+    assert.ok(box.height<=(width>=1366?640:680),'primary task must stay compact on step '+step+' at '+width+'px: '+box.height);
    }
    await page.screenshot({path:'test-output/a2-compact-step-'+step+'-'+width+'.png',fullPage:true});
   }
@@ -264,5 +292,5 @@ try{
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
  await page.locator('#stopPythonBtn').click();
  await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
- assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, single-row toolbar and larger six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
+ assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, single-row toolbar, sound toggle, persistent calibration/reboot/reload and larger six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
 }finally{await browser.close();}

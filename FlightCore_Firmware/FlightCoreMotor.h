@@ -28,6 +28,20 @@ static void zjMotorWatch(void*){
 static ZjMotorSafety zjMotor;
 static ZjMotorConfig zjMotorConfig;
 static bool zjMotorConfigValid=true;
+// This records an operator's confirmation, not sensor detection of ESC tones.
+// Endpoints live in each ESC; this board record survives ordinary power cycles.
+static bool zjMotorCalibrationSaved=false,zjMotorCalibrationPending=false;
+static const char* ZJ_ESC_CALIBRATION_RECORD="PWM_50HZ_1000_2000:TONES_CONFIRMED";
+static void zjMotorLoadCalibration(){
+ zjMotorCalibrationSaved=zjKitPrefs.getString("motorCal1","")==ZJ_ESC_CALIBRATION_RECORD;
+ zjMotorCalibrationPending=false;
+}
+static bool zjMotorSaveCalibration(bool saved){
+ const String value=saved?String(ZJ_ESC_CALIBRATION_RECORD):String("");
+ if(zjKitPrefs.getString("motorCal1","")!=value&&zjKitPrefs.putString("motorCal1",value)!=value.length())return false;
+ if(zjKitPrefs.getString("motorCal1","")!=value)return false;
+ zjMotorCalibrationSaved=saved;return true;
+}
 static bool zjMotorSaveConfig(const ZjMotorConfig& next){
  char encoded[64];next.encode(encoded,sizeof(encoded));const String value(encoded);
  if(zjKitPrefs.getString("motorConfig2","")!=value&&zjKitPrefs.putString("motorConfig2",value)!=value.length())return false;
@@ -91,6 +105,7 @@ static ZjMotorInput zjMotorReadInput(){
 }
 static void zjMotorLoop(){
  const uint32_t now=millis();
+ const bool wasCalibrationLow=zjMotor.mode==ZjMotorSafety::CAL_LOW;
  if(zjMotor.benchEnabled){
   if(zjMotor.mode==ZjMotorSafety::INPUT_TEST&&
     (zjMotorPath!=zjRcControlPath||zjMotorProducer!=zjRcOwnerId||zjMotorRadio!=zjControlRadio()))zjMotor.disable(ZjMotorSafety::INPUT_CHANGED);
@@ -102,6 +117,7 @@ static void zjMotorLoop(){
   zjMotor.update(now,i);
  }
  zjMotorApply();
+ if(wasCalibrationLow&&zjMotor.mode==ZjMotorSafety::OUTPUT_DISABLED&&zjMotor.reason==ZjMotorSafety::CAL_FINISHED)zjMotorCalibrationPending=true;
 }
 static String zjMotorStatus(){
  zjMotorLoop();
@@ -110,6 +126,7 @@ static String zjMotorStatus(){
  String out="{\"version\":3,\"timedBenchSupported\":true,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"supported\":"+(zjMotorDriverReady?String("true"):String("false"))+
   ",\"mode\":"+zjJson(zjMotorMode())+",\"reason\":"+zjJson(zjMotorReason())+","+zjMotorFlags()+
   ",\"layout\":"+zjJson(zjMotorConfig.layout())+",\"configValid\":"+(zjMotorConfigValid?"true":"false")+
+  ",\"calibrationSaveSupported\":"+(zjMotorDriverReady?"true":"false")+",\"escCalibrationSaved\":"+(zjMotorCalibrationSaved?"true":"false")+",\"escCalibrationPending\":"+(zjMotorCalibrationPending?"true":"false")+
   ",\"profile\":\"PWM_50HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":2000,\"maxInputPulseUs\":1200,\"sliderDurationMaxMs\":30000,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
   ",\"selectedInput\":"+zjJson(zjRcControlPath)+",\"inputSource\":"+zjJson(rtc?(input.valid?String("ANDROID_WEBRTC"):String("NONE")):zjRcSource)+
   ",\"inputAgeMs\":"+(input.valid?String(uint32_t(millis()-input.receivedMs)):String("null"))+
@@ -142,6 +159,12 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  if(action=="STATUS")return zjMotorStatus();
  if(action=="STOP"){if(!authorized&&!(token==zjMotorToken&&caller==zjMotorOwner&&token.length()))return error("authorization_required");zjMotorStop();return zjMotorStatus();}
  if(!zjMotorDriverReady)return error("a2_motor_driver_required");
+ if(action=="CAL_CONFIRM"){
+  if(!authorized)return error("authorization_required");
+  if(a!="TONES_CONFIRMED"||zjMotor.benchEnabled||(!zjMotorCalibrationSaved&&!zjMotorCalibrationPending))return error("complete_low_and_confirm_esc_success_tones");
+  if(!zjMotorSaveCalibration(true))return error("esc_calibration_save_failed");
+  zjMotorCalibrationPending=false;++zjMotorCommandSeq;return zjMotorStatus();
+ }
  const uint32_t now=millis();
  if(action=="BEGIN"){
   if(!authorized)return error("unlock_usb_teacher_or_authorize_network_control");
@@ -195,7 +218,14 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  }else if(action=="SINGLE"||action=="ALL"){
   if(!parseNumber(a.c_str(),1,4,n)||!parseNumber(b.c_str(),1000,2000,p)||!parseNumber(c.c_str(),1,2000,d)||(p-1000)%10)return error("invalid_motor_pulse_or_duration");
   ok=action=="SINGLE"?zjMotor.startSingle(now,n,(p-1000)/10,d):zjMotor.startAll(now,(p-1000)/10,d);
- }else if(action=="CAL_HIGH")ok=zjMotor.startCalibration(now,a=="POWER_DISCONNECTED");
+ }else if(action=="CAL_HIGH"){
+  ok=zjMotor.startCalibration(now,a=="POWER_DISCONNECTED");
+  if(ok){
+   // Invalidate an older confirmation before HIGH reaches the physical outputs.
+   if(!zjMotorSaveCalibration(false)){zjMotorStop();return error("esc_calibration_save_failed");}
+   zjMotorCalibrationPending=false;
+  }
+ }
  else if(action=="CAL_LOW")ok=zjMotor.calibrationLow(now);
  else if(action=="INPUT"){
   const auto i=zjMotorReadInput();
@@ -216,6 +246,7 @@ static bool zjMotorSerial(char* line){
 }
 static void zjMotorSetup(){
  zjMotorStopHandler=zjMotorStop;
+ zjMotorLoadCalibration();
  const String saved=zjKitPrefs.getString("motorConfig2","");
  zjMotorConfigValid=!saved.length()||zjMotorConfig.decode(saved.c_str());
 #if defined(CONFIG_IDF_TARGET_ESP32C6)

@@ -1,11 +1,12 @@
 import {motorClient,confirmMotor,cancelMotorConfirmations,motorStopDescription} from './motor-setup.js';
+import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','ESC calibration','Motor test','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',readError='',historyAt=0,calFinished=false,calConfirmed=false,operationError='',selectedMotor=1,allMotors=false,selectionPending=false;
+ let step=0,state=null,lastStateAt=0,polling=false,working=false,draftDirty=false,identity='',readError='',historyAt=0,calFinished=false,calConfirmed=false,operationError='',selectedMotor=1,allMotors=false,selectionPending=false,previousCalMode='';
  let draft={layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']},visualStep=-1,visualMarkup='';
  const pendingMinimum={},observations={},history=[];
  root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
@@ -18,12 +19,12 @@ if(root){
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
  <p class="a2-wiring-validation" role="status"></p><div class="a2-actions"><button class="btn" data-action="layout">Save wiring to board</button><button class="btn ghost" data-action="reload-layout">Load saved wiring</button></div><p class="a2-save-state">Not saved.</p></section>
  <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
- <section data-panel="3"><h3>ESC calibration</h3>
+ <section data-panel="3"><div class="a2-panel-heading"><h3>ESC calibration</h3><button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button></div><p class="a2-calibration-summary" role="status"></p><small class="a2-sound-note">App cues · confirm the ESC’s own tones</small>
  <ol class="a2-cal-steps"><li data-cal-stage="power"><b>Disconnect motor battery</b><span>Keep the controller powered separately.</span></li><li data-cal-stage="high"><b>HIGH · 2000 µs</b><span>Start HIGH, connect the battery, wait for the ESC prompt.</span></li><li data-cal-stage="low"><b>LOW · 1000 µs</b><span>Send LOW after the prompt; wait for completion.</span></li><li data-cal-stage="tones"><b>Confirm success tones</b></li></ol>
  <label class="a2-check"><input type="checkbox" id="a2PowerOff"> Motor battery disconnected; controller powered</label>
  <div class="a2-actions"><button class="btn" data-action="high">Start calibration · HIGH</button><button class="btn" data-action="low" disabled>Heard prompt · Send LOW</button></div><p class="a2-phase" role="status">Calibration not started.</p>
- <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard after LOW</label><button class="btn ghost" data-action="confirm-cal" disabled>Record successful calibration</button></section>
- <section data-panel="4"><h3>Motor test</h3>
+ <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard after LOW</label><button class="btn ghost" data-action="confirm-cal" disabled>Save successful calibration</button></section>
+ <section data-panel="4"><div class="a2-panel-heading"><h3>Motor test</h3><button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button></div><p class="a2-calibration-summary" role="status"></p>
  <div class="a2-output-selection"><div class="a2-motor-selection"><span>Motor selection</span><div><output id="a2MotorSelection" data-selection="1">M1</output><button class="btn ghost" data-action="next-motor">Save &amp; next · M2 →</button></div></div><label>Pulse (µs)<input id="a2Pulse" type="number" min="1000" max="2000" step="1" value="1000"></label></div>
  <label class="a2-check a2-all-output"><input id="a2AllMotors" type="checkbox"> All motors</label><div class="a2-target-note" role="status"></div>
  <div class="a2-slider"><label for="a2PulseSlider"><span>Output pulse</span><output id="a2PulseValue">1000 µs</output></label><input id="a2PulseSlider" type="range" min="1000" max="2000" step="1" value="1000" disabled><div><span>1000</span><span>1500</span><span>2000 µs</span></div></div>
@@ -33,6 +34,9 @@ if(root){
  <section class="a2-output-extras" data-extra="4" hidden><div class="a2-minimum-card"><div class="a2-minimum-heading"><h4>Minimum starting pulses</h4><div class="a2-minima"></div></div><div class="a2-minimum-controls"><label>Observed motor<select id="a2ObservedMotor">${[1,2,3,4].map(m=>`<option value="${m}">M${m}</option>`).join('')}</select></label><label class="a2-check"><input id="a2Spinning" type="checkbox"> I observe this motor spinning</label><button class="btn ghost" data-action="observe-min">Record observed minimum</button><button class="btn" data-action="save-min">Stop &amp; save minimum pulses</button></div></div>
  <details class="a2-secondary-test"><summary>Additional output tests</summary><div class="a2-actions"><button class="btn ghost" data-action="single">Pulse test · 800 ms</button><button class="btn ghost" data-action="input">Test selected input · all motors</button></div><small>Input test: 10 s, maximum 1200 µs. Start with low throttle and disarmed input.</small></details></section>
  <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
+ let soundEnabled=true;try{soundEnabled=localStorage.getItem('zebjus.setup.sound')!=='off';}catch{}
+ const cues=createSetupCues({enabled:soundEnabled});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)cues.stop();});
  const $=s=>root.querySelector(s),message=t=>$('.a2-message').textContent=t;
  const kit=()=>window.ZebjusKits?.getState?.()||{};
  const live=()=>document.getElementById('tab-setup')?.classList.contains('active')&&!document.hidden;
@@ -115,7 +119,7 @@ if(root){
    state=s;lastStateAt=s.receivedAt||Date.now();readError='';
   }
   const k=kit(),key=[k.kitId,k.bootId||state?.bootId,k.transport,k.connectionGeneration].join('|');
-  if(key!==identity){identity=key;state=s||null;nextPollAt=0;readFailures=0;draftDirty=false;calFinished=calConfirmed=false;history.length=0;historyAt=0;readError='';for(const group of [pendingMinimum,observations])for(const key of Object.keys(group))delete group[key];if(state)loadDraft();}
+  if(key!==identity){identity=key;state=s||null;nextPollAt=0;readFailures=0;draftDirty=false;calFinished=calConfirmed=false;previousCalMode='';history.length=0;historyAt=0;readError='';for(const group of [pendingMinimum,observations])for(const key of Object.keys(group))delete group[key];if(state)loadDraft();}
   if(state&&!draftDirty){const next=config(state);if(JSON.stringify(next)!==JSON.stringify(draft))loadDraft();}
   const m=state||{},connected=k.connected===true;
   $('[data-action="layout"]').disabled=working||new Set(draft.layoutPins).size!==4;
@@ -133,11 +137,20 @@ if(root){
    (readError?' Status refresh delayed; showing a bounded last observation.':'')+
    (m.selectedInput==='ANDROID_AP'?' Android AP is selected; PPM does not control the motors.':'');
   if(step===2&&input.monitoring&&Number.isFinite(input.channels?.[2])&&s&&lastStateAt!==historyAt){historyAt=lastStateAt;history.push(input.channels[2]);if(history.length>48)history.shift();}
-  if(m.mode==='CAL_LOW')calFinished=false;
-  if(m.mode==='DISABLED'&&m.reason==='CAL_FINISHED')calFinished=true;
-  $('.a2-phase').textContent=m.mode==='CAL_HIGH'?`HIGH active · ${Math.ceil(remaining/1000)} s. Connect the motor battery and listen for the calibration prompt.`:m.mode==='CAL_LOW'?`LOW active · ${Math.ceil(remaining/1000)} s remaining.`:calFinished?'CAL_FINISHED · Output ended. Confirm the ESC success tones.':`${m.mode||'OFF'} · ${m.reason||'Calibration not started'}`;
-  root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===(m.mode==='CAL_HIGH'?'high':m.mode==='CAL_LOW'?'low':calFinished?'tones':'power')));
-  $('[data-action="low"]').disabled=m.mode!=='CAL_HIGH'||working;$('#a2Tones').disabled=!calFinished;$('[data-action="confirm-cal"]').disabled=!calFinished||!$('#a2Tones').checked;
+  const calibrationSaved=m.escCalibrationSaved===true;
+  if(m.calibrationSaveSupported===true)calConfirmed=calibrationSaved;
+  if(m.mode==='CAL_HIGH'||m.mode==='CAL_LOW')calFinished=false;
+  else if(m.escCalibrationPending===true||m.mode==='DISABLED'&&m.reason==='CAL_FINISHED')calFinished=true;
+  if(previousCalMode==='CAL_LOW'&&m.mode==='DISABLED'&&m.reason==='CAL_FINISHED')cues.play('finished');
+  previousCalMode=m.mode||'';
+  root.querySelectorAll('[data-action="sound"]').forEach(button=>{button.textContent=cues.available?(cues.enabled?'Sound on':'Sound off'):'Sound unavailable';button.setAttribute('aria-pressed',String(cues.enabled&&cues.available));button.disabled=!cues.available;});
+  root.querySelectorAll('.a2-calibration-summary').forEach(node=>{node.dataset.saved=String(calibrationSaved);node.textContent=!connected?'Connect Kit to read saved calibration':calibrationSaved?'ESC calibration saved on board':calConfirmed?'ESC tones confirmed · session only':m.calibrationSaveSupported===true?'ESC calibration not saved':'Board save requires FlightCore 1.7.5+';});
+  $('.a2-phase').textContent=m.mode==='CAL_HIGH'?`HIGH active · ${Math.ceil(remaining/1000)} s. Connect the motor battery and listen for the calibration prompt.`:m.mode==='CAL_LOW'?`LOW active · ${Math.ceil(remaining/1000)} s remaining.`:calibrationSaved?'Saved · Ready for motor test':calFinished?'CAL_FINISHED · Output ended. Confirm the ESC success tones.':`${m.mode||'OFF'} · ${m.reason||'Calibration not started'}`;
+  root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===(m.mode==='CAL_HIGH'?'high':m.mode==='CAL_LOW'?'low':calFinished||calibrationSaved?'tones':'power')));
+  $('[data-action="low"]').disabled=m.mode!=='CAL_HIGH'||working;$('#a2Tones').disabled=calibrationSaved||!calFinished;if(calibrationSaved)$('#a2Tones').checked=true;
+  $('[data-action="confirm-cal"]').disabled=working||calConfirmed||!calFinished||!$('#a2Tones').checked;
+  $('[data-action="confirm-cal"]').textContent=calibrationSaved?'Saved on board':m.calibrationSaveSupported===true?'Save successful calibration':'Record session confirmation';
+  $('[data-action="high"]').textContent=calibrationSaved?'Recalibrate · HIGH':'Start calibration · HIGH';
   $('[data-action="high"]').disabled=working||['CAL_HIGH','CAL_LOW'].includes(m.mode);
   const sliding=m.mode==='SLIDER_TEST'&&motorClient.owner==='wizard',locked=motorClient.busy;
   $('#a2AllMotors').disabled=selectionLocked();$('#a2AllMotors').checked=allMotors;$('#a2PulseSlider').disabled=!sliding||selectionPending;
@@ -151,19 +164,25 @@ if(root){
   $('[data-action="single"]').disabled=working||selectionPending||motorClient.active;$('[data-action="input"]').disabled=working||selectionPending||motorClient.active;
   $('.a2-test-state').textContent=operationError?(m.mode==='UNCONFIRMED'?'Output state unconfirmed · ':'Motor test · ')+operationError:sliding?(Date.now()-lastStateAt>=750?'Waiting for motor ACK · output state unconfirmed. STOP or verify the connection.':`LIVE · ${Math.ceil(remaining/1000)} s · ACK ${m.roundTripMs??'—'} ms`):m.mode==='UNCONFIRMED'?'Output state unconfirmed · '+(m.reason||'Reconnect before testing.'): `Outputs ${m.motorsDisabled===true||m.mode==='DISABLED'?'off':m.mode||'not reported'} · ${motorStopDescription(m)}`;
   $('.a2-minima').innerHTML=[1,2,3,4].map((n,i)=>`<div><b>M${n}</b><span>${m.observedMinimumUs?.[i]?m.observedMinimumUs[i]+' µs saved':'Not recorded'}</span>${pendingMinimum[n]?`<em>${pendingMinimum[n]} µs pending</em>`:''}</div>`).join('');
-  $('.a2-report').innerHTML=`<dl>${[['Board',k.kitId||'Not connected'],['Saved frame',layouts[m.layout]?.name||'Not reported'],['Saved pins',(m.layoutPins||[]).map((p,i)=>'M'+(i+1)+' → '+p).join(' · ')||'—'],['ESC calibration',calConfirmed?'Success tones confirmed by operator':'Not confirmed'],['Minimum pulses',(m.observedMinimumUs||[]).map((p,i)=>'M'+(i+1)+': '+(p?p+' µs':'—')).join(' · ')||'Not recorded'],['Physical flight test','Not recorded']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
+  $('.a2-report').innerHTML=`<dl>${[['Board',k.kitId||'Not connected'],['Saved frame',layouts[m.layout]?.name||'Not reported'],['Saved pins',(m.layoutPins||[]).map((p,i)=>'M'+(i+1)+' → '+p).join(' · ')||'—'],['ESC calibration',calibrationSaved?'Saved on board · operator confirmed':calConfirmed?'Confirmed this session':'Not confirmed'],['Minimum pulses',(m.observedMinimumUs||[]).map((p,i)=>'M'+(i+1)+': '+(p?p+' µs':'—')).join(' · ')||'Not recorded'],['Physical flight test','Not recorded']].map(([a,b])=>`<div><dt>${a}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
   $('.a2-diagnostics').textContent=state?JSON.stringify(state,null,2):'No firmware response.';renderVisual();
  }
  function checked(){if(!['#a2Props','#a2Pins','#a2Profile'].every(id=>$(id).checked))throw Error('Confirm the three output checks above.');}
  async function prepare(modern=false){checked();if(modern&&state?.version<2)throw Error('Flash A2 FlightCore 1.7.0+ for editable wiring and slider tests.');if(!motorClient.active)await motorClient.begin('wizard');if(motorClient.owner!=='wizard')throw Error('Python owns motor setup. Stop Python first.');}
  function setPulse(value){const p=Number(value);$('#a2Pulse').value=value;$('#a2PulseSlider').value=value;$('#a2PulseValue').textContent=Number.isInteger(p)?p+' µs':'Enter a valid pulse';}
  async function act(name){
-  if(name==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'){await motorClient.stop('wizard');setPulse(1000);message('Test stopped. Outputs ended. Record or save your observed minimum.');return;}
-  if(name==='stop'){await motorClient.stop();setPulse(1000);message('STOP acknowledged. Outputs ended.');return;}
+  if(name==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'){await motorClient.stop('wizard');setPulse(1000);cues.play('stop');message('Test stopped. Outputs ended. Record or save your observed minimum.');return;}
+  if(name==='stop'){await motorClient.stop();setPulse(1000);cues.play('stop');message('STOP acknowledged. Outputs ended.');return;}
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
   if(name==='detect'){render();render(await motorClient.status());message('Board status refreshed.');return;}
   if(name==='reload-layout'){render(await motorClient.status());loadDraft();message('Loaded board-saved layout.');return;}
-  if(name==='confirm-cal'){if(!calFinished||!$('#a2Tones').checked)throw Error('Complete LOW and confirm the success tones first.');calConfirmed=true;observations.calibration={successTones:'user confirmed',at:new Date().toISOString()};message('Calibration success tones recorded.');render();return;}
+  if(name==='confirm-cal'){
+   if(!calFinished||!$('#a2Tones').checked)throw Error('Complete LOW and confirm the success tones first.');
+   if(state?.calibrationSaveSupported===true)render(await motorClient.confirmCalibration());
+   else calConfirmed=true;
+   observations.calibration={successTones:'user confirmed',persisted:state?.escCalibrationSaved===true,at:new Date().toISOString()};
+   cues.play('saved');message(state?.escCalibrationSaved===true?'ESC calibration saved on board. Reconnect power and use Motor test.':'Tones confirmed for this session. Flash FlightCore 1.7.5+ for board save.');render();return;
+  }
   if(name==='observe-min'){
    const motor=Number($('#a2ObservedMotor').value),pulse=state?.pulseUs?.[motor-1];
    if(state?.mode!=='SLIDER_TEST'||!(state.sliderMask&(1<<(motor-1)))||Date.now()-lastStateAt>600||!$('#a2Spinning').checked||!Number.isInteger(pulse)||pulse<1000)throw Error('During a live slider test, select a running motor and confirm you observe spinning.');
@@ -182,13 +201,13 @@ if(root){
   }
   if(name==='high'){
    if(!$('#a2PowerOff').checked)throw Error('Disconnect motor-battery power and confirm the controller power arrangement.');await prepare();calFinished=calConfirmed=false;$('#a2Tones').checked=false;$('#a2PowerOff').checked=false;
-   render(await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED']));message('HIGH acknowledged. Connect motor battery.');return;
+   render(await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED']));cues.play('high');message('HIGH acknowledged. Connect motor battery.');return;
   }
-  if(name==='low'){await prepare();render(await motorClient.command('CAL_LOW'));message('LOW acknowledged. Wait for output to end and confirm success tones.');return;}
+  if(name==='low'){await prepare();render(await motorClient.command('CAL_LOW'));cues.play('low');message('LOW acknowledged. Wait for output to end and confirm success tones.');return;}
   if(name==='slider'){
    checked();await confirmMotor('Start a 30-second motor slider test? Remove all propellers and secure the frame. Selection: '+(selectionValue()==='all'?'ALL FOUR MOTORS':'M'+selectionValue())+'. You may command 1000–2000 µs. '+(state?.timedBenchSupported===true?'The board holds the last commanded pulse until STOP or the 30-second limit, even if browser updates are delayed. ':'Legacy firmware stops on delayed updates; flash FlightCore 1.7.2+ for a board-timed manual test. ')+'Keep a physical power cutoff ready.');if(!live())throw Error('Motor start cancelled: return to Setup Wizard and start again.');
    setPulse(1000);await prepare(true);const mask=selectionValue()==='all'?15:1<<(Number(selectionValue())-1);
-   await motorClient.startSlider(mask,()=>Number($('#a2Pulse').value));message('Live test started at 1000 µs.');return;
+   await motorClient.startSlider(mask,()=>Number($('#a2Pulse').value));cues.play('start');message('Live test started at 1000 µs.');return;
   }
   if(name==='single'){
    const motor=selectionValue(),pulse=Number($('#a2Pulse').value);if(!Number.isInteger(pulse)||pulse<1000||pulse>(state?.maxTestPulseUs||1200)||pulse%10)throw Error('For the 800 ms pulse test enter a 1000–'+(state?.maxTestPulseUs||1200)+' µs value in steps of 10. The live slider supports 1 µs steps.');
@@ -196,9 +215,9 @@ if(root){
   }
   if(name==='input'){checked();await confirmMotor('Start a 10-second selected-input throttle test on ALL FOUR motors? Lower throttle and disarm input first. Output is capped at 1200 µs.');await prepare();render(await motorClient.command('INPUT',['selected',10000,'CONFIRM_ALL_MOTORS']));message('Selected-input test started.');}
  }
- root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.action==='next-motor'){void selectMotor(allMotors?1:selectedMotor%4+1,false,{save:true});return;}if(b.dataset.step!==undefined){show(Number(b.dataset.step));return;}if(b.dataset.nav){show(step+Number(b.dataset.nav));return;}if(!b.dataset.action||selectionPending&&b.dataset.action!=='stop'||working&&b.dataset.action!=='stop'&&!(b.dataset.action==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'))return;working=true;
+ root.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;cues.unlock();if(b.dataset.action==='sound'){cues.setEnabled(!cues.enabled);try{localStorage.setItem('zebjus.setup.sound',cues.enabled?'on':'off');}catch{}if(cues.enabled){cues.unlock();cues.play('start');}render();return;}if(b.dataset.action==='next-motor'){void selectMotor(allMotors?1:selectedMotor%4+1,false,{save:true});return;}if(b.dataset.step!==undefined){show(Number(b.dataset.step));return;}if(b.dataset.nav){show(step+Number(b.dataset.nav));return;}if(!b.dataset.action||selectionPending&&b.dataset.action!=='stop'||working&&b.dataset.action!=='stop'&&!(b.dataset.action==='slider'&&state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard'))return;working=true;
   operationError='';
-  act(b.dataset.action).catch(async e=>{operationError=e.message==='stop_maintenance_lower_throttle_and_disarm_input'?'Start blocked: lower receiver/controller throttle, turn ARM off and stop maintenance, then confirm again.':e.message;message(operationError);if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
+  act(b.dataset.action).catch(async e=>{operationError=e.message==='stop_maintenance_lower_throttle_and_disarm_input'?'Start blocked: lower receiver/controller throttle, turn ARM off and stop maintenance, then confirm again.':e.message;message(operationError);if(!['detect','reload-layout'].includes(b.dataset.action))cues.play('error');if(!['detect','reload-layout','observe-min'].includes(b.dataset.action))await motorClient.stop('wizard').catch(()=>{});}).finally(()=>{working=false;render();});
  });
  root.addEventListener('input',e=>{
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){draftDirty=true;draft={layout:$('#a2Layout').value,layoutPins:[...root.querySelectorAll('[data-pin]')].map(x=>x.value),rotations:[...root.querySelectorAll('[data-rotation]')].map(x=>x.value)};$('.a2-save-state').textContent='Unsaved changes';renderDraft();}

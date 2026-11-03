@@ -120,7 +120,16 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   if(session!==s||last?.mode!=='SLIDER_TEST')throw Error(motorStopDescription(last));
   return last;
  }
- return {begin,command,startSlider,stop,status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
+ async function confirmCalibration(binding=null){
+  if(session||starting||stopping)throw Error('Stop outputs before saving ESC calibration.');
+  if(last?.calibrationSaveSupported!==true)throw Error('Flash A2 FlightCore 1.7.5+ to save ESC calibration on the board.');
+  const k=getKit(binding);
+  if(last.kitId!==k?.kitId)throw Error('Kit changed before saving ESC calibration.');
+  const saved=await send('CAL_CONFIRM',['TONES_CONFIRMED'],{binding,identity:identity(k),bootId:last.bootId,token:''});
+  if(saved.escCalibrationSaved!==true)throw Error('ESC calibration save was not acknowledged.');
+  return saved;
+ }
+ return {begin,command,startSlider,stop,confirmCalibration,status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
 }
 
 function selectedKit(binding){
