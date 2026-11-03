@@ -103,7 +103,19 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add FlightCore_Firmware firmware-catalog.json firmware-latest.json app-version.json
+          outputs=(FlightCore_Firmware/*_APP.bin FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json FlightCore_Firmware/catalog.json
+            FlightCore_Firmware/latest.json firmware-catalog.json firmware-latest.json)
+          git add -- "${outputs[@]}" app-version.json
+          generated="$(git write-tree)"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git worktree add --detach "$RUNNER_TEMP/flightcore-publish" FETCH_HEAD
+          cd "$RUNNER_TEMP/flightcore-publish"
+          git restore --source="$generated" --staged --worktree -- "${outputs[@]}"
+          if git diff --quiet "$GITHUB_SHA" HEAD -- app-version.json; then
+            git restore --source="$generated" --staged --worktree -- app-version.json
+          fi
+          # Verify against the branch tip, including any source pushed during compilation.
+          python3 tools/verify_release.py
           git diff --cached --quiet || git commit -m "build: verified FlightCore $(cat VERSION.txt) APP and FACTORY images"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"
