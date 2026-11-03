@@ -232,12 +232,11 @@ try{
  await page.evaluate(()=>{const f=window.__motorFixture;f.kit.connected=false;++f.run;f.kit.bootId='reboot-2';f.state={...f.state,bootId:'reboot-2',mode:'DISABLED',reason:'BOOT',pulseUs:[0,0,0,0]};});
  await page.waitForFunction(()=>document.querySelector('.a2-status').textContent==='No Kit connected');
  await page.evaluate(()=>window.__motorFixture.kit.connected=true);
- await page.locator('[data-action=detect]').click();
  await page.locator('[data-step="4"]').click();
  await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
  assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='CAL_HIGH').length),calibrationStarts,'power reconnect must not repeat ESC calibration');
  const snapshot=await page.evaluate(()=>({savedState:window.__motorFixture.state,savedKit:window.__motorFixture.kit}));
- await page.reload();await page.evaluate(installMotorFixture,snapshot);await page.locator('[data-action=detect]').click();
+ await page.reload();await page.locator('[data-action=detect]').waitFor();await page.evaluate(installMotorFixture,snapshot);await page.locator('[data-action=detect]').click();
  await page.locator('[data-step="4"]').click();
  await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
  for(const id of ['a2Props','a2Pins','a2Profile'])await page.locator('#'+id).check();
