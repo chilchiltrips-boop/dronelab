@@ -89,5 +89,26 @@ int main(){
  begin(true);cmd("CAL_HIGH","POWER_DISCONNECTED");clockMs+=15000;
  assert(contains(cmd("CAL_LOW"),"CAL_TIMEOUT"));assert(!zjMotorEnabled);
  begin(true);clockMs+=10000;assert(contains(cmd("KEEP"),"SESSION_EXPIRED"));assert(!zjMotorEnabled);
+ // Confirmation is board-persistent, authenticated, and never turns outputs on.
+ zjMotorLoadCalibration();assert(!zjMotorCalibrationSaved&&!zjMotorCalibrationPending);
+ assert(contains(cmd("CAL_CONFIRM","TONES_CONFIRMED"),"complete_low"));
+ begin(true);cmd("CAL_HIGH","POWER_DISCONNECTED");cmd("CAL_LOW");clockMs+=3000;cmd("STATUS");
+ assert(zjMotorCalibrationPending&&!zjMotorCalibrationSaved&&!zjMotorEnabled);
+ assert(contains(cmd("CAL_CONFIRM","TONES_CONFIRMED","-","-","intruder",false),"authorization_required"));
+ zjKitPrefs.failNextWrite=true;assert(contains(cmd("CAL_CONFIRM","TONES_CONFIRMED"),"save_failed"));
+ assert(zjMotorCalibrationPending&&!zjMotorCalibrationSaved&&!zjMotorEnabled);
+ assert(!contains(cmd("CAL_CONFIRM","TONES_CONFIRMED"),"error"));
+ assert(zjMotorCalibrationSaved&&!zjMotorCalibrationPending&&!zjMotorEnabled);
+ const unsigned savedWrites=zjKitPrefs.writes;cmd("CAL_CONFIRM","TONES_CONFIRMED");assert(zjKitPrefs.writes==savedWrites);
+ // Simulate boot with NVS intact; no calibration or output starts automatically.
+ zjMotor=ZjMotorSafety();zjMotorCalibrationSaved=false;zjMotorCalibrationPending=false;zjMotorSetup();
+ assert(zjMotorCalibrationSaved&&!zjMotorCalibrationPending&&!zjMotorEnabled);
+ begin(true);cmd("SLIDER","1","1000","1000");cmd("SLIDE","1","1150","1");cmd("STOP");assert(zjMotorCalibrationSaved);
+ begin(true);cmd("LAYOUT","A2_QUAD_PLUS","0123","0101");cmd("MINIMUM","1","1150","OBSERVED_SPIN");cmd("STOP");assert(zjMotorCalibrationSaved);
+ begin(true);cmd("CAL_HIGH","POWER_DISCONNECTED");assert(!zjMotorCalibrationSaved&&!zjMotorCalibrationPending);cmd("STOP");
+ zjMotorLoadCalibration();assert(!zjMotorCalibrationSaved);assert(contains(cmd("CAL_CONFIRM","TONES_CONFIRMED"),"complete_low"));
+ begin(true);cmd("CAL_HIGH","POWER_DISCONNECTED");clockMs+=15000;cmd("STATUS");assert(!zjMotorCalibrationPending);
+ zjKitPrefs.putString("motorCal1","corrupt");zjMotorLoadCalibration();assert(!zjMotorCalibrationSaved);
+ zjKitPrefs.putString("motorCal1",ZJ_ESC_CALIBRATION_RECORD);zjKitPrefs.clear();zjMotorLoadCalibration();assert(!zjMotorCalibrationSaved);
  std::cout<<"PASS production motor handler: authentication, ownership, NVS, deadlines, input loss, RTC replay and STOP\n";
 }

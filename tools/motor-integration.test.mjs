@@ -58,6 +58,21 @@ test('production motor command handler stops on expiry, loss, ownership change a
  try{const bin=join(dir,'motor');const build=spawnSync('g++',['-std=c++17','-Itools/host-stubs','tools/motor-integration-host.cpp','-lcrypto','-o',bin],{encoding:'utf8'});assert.equal(build.status,0,build.stderr);const run=spawnSync(bin,[],{encoding:'utf8'});assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/PASS production/);}finally{rmSync(dir,{recursive:true,force:true});}
 });
 const kit=()=>({connected:true,kitId:'ZFC-A2-012345ABCDEF',transport:'usb',bootId:'b1',generation:1});
+test('calibration confirmation keeps the Python binding and cannot begin output',async()=>{
+ const bound=kit(),other={...kit(),kitId:'ZFC-A2-FEDCBA987654',transport:'sta'},calls=[];
+ let selected=bound,fail=true;
+ const client=createMotorClient({getKit:b=>b?.transport==='usb'?bound:selected,request:async(k,a)=>{
+  calls.push([k.kitId,a.action]);
+  if(a.action==='CAL_CONFIRM'&&fail){fail=false;throw Error('NVS save failed');}
+  return {kitId:k.kitId,bootId:k.bootId,mode:'DISABLED',calibrationSaveSupported:true,escCalibrationSaved:a.action==='CAL_CONFIRM'};
+ }});
+ await client.status();selected=other;
+ await assert.rejects(client.confirmCalibration(),/Kit changed/);
+ await assert.rejects(client.confirmCalibration({transport:'usb'}),/NVS save failed/);
+ assert.equal((await client.confirmCalibration({transport:'usb'})).escCalibrationSaved,true);
+ assert.equal(client.active,false);assert.ok(calls.every(([id,action])=>id===bound.kitId&&['STATUS','CAL_CONFIRM'].includes(action)));
+});
+
 function harness(){let k=kit(),calls=[],tick,resolveBegin;const state={kitId:k.kitId,bootId:k.bootId,supported:true,mode:'READY'};
  const client=createMotorClient({getKit:()=>k,setTimer:fn=>(tick=fn,1),clearTimer:()=>{},request:async(_,a)=>{calls.push(a);if(a.action==='BEGIN'&&resolveBegin)return await new Promise(r=>resolveBegin(r));return {...state,session:a.action==='BEGIN'?'token':undefined};}});
  return {client,calls,change:v=>k={...k,...v},state,tick:()=>tick(),delayBegin:fn=>resolveBegin=fn};}
