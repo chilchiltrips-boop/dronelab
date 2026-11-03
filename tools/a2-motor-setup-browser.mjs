@@ -1,295 +1,206 @@
-// Rendered wizard integration against an explicitly simulated firmware transport.
+// Simulated A2 transport. PWM, tones and NVS behavior on a physical kit require bench verification.
 import {chromium} from 'playwright';
-import {browserOptions} from './browser-harness.mjs';
+import {browserOptions,configureContext} from './browser-harness.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync} from 'node:fs';
+
 const browser=await chromium.launch(browserOptions);
 try{
  const page=await browser.newPage({viewport:{width:1366,height:900}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
+ page.on('dialog',dialog=>dialog.accept());
+ await configureContext(page.context());
  await page.goto('http://127.0.0.1:8765/#setup');
- await page.locator('#tab-setup.active').waitFor();
- await page.locator('[data-action=detect]').click();
- await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('verified A2'));
- mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-toolbar-offline.png',fullPage:true});
- const installMotorFixture=({savedState=null,savedKit=null}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Browser test fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'ZFC-A2',version:'1.7.5',controlAuthorized:true,...savedKit};
-  const f=window.__motorFixture={run:0,kit,state:{version:3,timedBenchSupported:true,kitId:kit.kitId,bootId:kit.bootId,supported:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],calibrationSaveSupported:true,escCalibrationSaved:false,escCalibrationPending:false,maxTestPulseUs:2000,sliderDurationMaxMs:30000,profile:'PWM_50HZ_1000_2000',selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500,1000,1500,1500,1500],throttle:1000,inputArmed:false,pulseUs:[0,0,0,0],remainingMs:0,...savedState},calls:[]};
-  window.__motorCalls=[];
-  const finishAfter=(ms,reason)=>{const run=++f.run;setTimeout(()=>{if(f.run===run)f.state={...f.state,mode:'DISABLED',reason,pulseUs:[0,0,0,0],escCalibrationPending:reason==='CAL_FINISHED'?true:f.state.escCalibrationPending};},ms);};
+ const wizard=page.locator('#a2SetupRoot');
+ await wizard.locator('[data-step="0"]').waitFor();
+ assert.equal(await wizard.locator('[data-step]').count(),9);
+ await page.evaluate(()=>{
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'A2',version:'1.7.8'};
+  const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
+  const f=window.__wizard={
+   kit,calls:[],writes:0,run:0,imuSequence:3,
+   board:{wizardVersion:1,version:3,kitId:kit.kitId,bootId:kit.bootId,configRevision:0,supported:true,configValid:true,mode:'DISABLED',reason:'USER_STOP',layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,pulseUs:[0,0,0,0],remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
+    imu:{state:'READY',imuValid:true,accelG:[0,0,1],accelRawG:[0,0,1],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000},
+    capture:{sequence:3,state:'CAPTURED',ready:true,model:'0:1:0:0:0:1000:1000:1000:91:0:0'}}
+  };
+  const stop=(reason='USER_STOP')=>{Object.assign(f.board,{mode:'DISABLED',reason,pulseUs:[0,0,0,0]});};
   window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
    guard?.();
-   if(route!=='/api/motor')throw Error('Unexpected fixture request');window.__motorCalls.push(a.action);f.calls.push({...a});
-   if(a.action==='STATUS'){
-    if(f.failNextStatus){f.failNextStatus=false;f.statusErrorSeen=true;throw Error('Simulated status read timeout');}
-    if(f.holdStatus)await new Promise(resolve=>{f.releaseStatus=resolve;});
-    if(f.statusDelay)await new Promise(resolve=>setTimeout(resolve,f.statusDelay));
+   if(route!=='/api/motor')throw Error('Unexpected fixture request');
+   f.calls.push({...a});
+   const b=f.board;
+   let extra={};
+   switch(a.action){
+    case 'WIZARD_IMU':{
+     const sequence=++f.imuSequence;
+     extra={imuRequestSequence:sequence};
+     setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,samples:128,model:'0:1:0:0:0:1000:1000:1000:42:0:0'};},450);
+     break;
+    }
+    case 'WIZARD_BEGIN':
+     f.run++;f.mapping=a.c;Object.assign(b,{mode:'READY',reason:'NONE'});
+     extra={session:'fixture-token'};break;
+    case 'CAL_HIGH':
+     Object.assign(b,{mode:'CAL_HIGH',pulseUs:[2000,2000,2000,2000],remainingMs:15000,escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false});break;
+    case 'CAL_LOW':{
+     Object.assign(b,{mode:'CAL_LOW',pulseUs:[1000,1000,1000,1000],remainingMs:3000});
+     const run=f.run;setTimeout(()=>{if(f.run===run){stop('CAL_FINISHED');b.escCalibrationPending=true;}},1000);break;
+    }
+    case 'WIZARD_ESC_CONFIRM':
+     if(!b.escCalibrationPending)throw Error('ESC incomplete');
+     b.escConfirmationStaged=true;break;
+    case 'CAL_SLIDER':
+    case 'SLIDER':
+     f.cal=a.action==='CAL_SLIDER';
+     Object.assign(b,{mode:'SLIDER_TEST',sliderMask:Number(a.a),remainingMs:30000,pulseUs:[0,1,2,3].map(i=>Number(a.a)&(1<<i)?1000:f.cal?0:1000)});break;
+    case 'SLIDE':
+     if(f.cal&&Number(a.b)>1500)throw Error('Calibration cap');
+     if(f.holdPulse&&a.b===f.holdPulse){
+      await new Promise(resolve=>{f.release=resolve;});guard?.();
+     }
+     if(b.mode==='SLIDER_TEST')b.pulseUs=[0,1,2,3].map(i=>b.sliderMask&(1<<i)?Number(a.b):f.cal?0:1000);
+     break;
+    case 'STOP':
+     if(b.mode==='SLIDER_TEST'&&f.cal&&a.session)extra={stoppedSlider:true,stoppedMask:b.sliderMask,stoppedPulseUs:b.pulseUs.find(Boolean)};
+     f.run++;if(!b.escConfirmationStaged)b.escCalibrationPending=false;stop();break;
+    case 'WIZARD_SAVE':{
+     if(b.mode!=='DISABLED'||Number(a.b)!==b.configRevision)throw Error('Save interlock');
+     if(f.failSave){f.failSave=false;throw Error('Simulated NVS failure');}
+     const [frame,pins,rotations,...mins]=a.a.split(':');
+     const esc=a.c.split(':')[1].startsWith('1');
+     const imu=a.c.split(':').slice(2).join(':');
+     if(imu==='RESET')b.accelModel=identityModel;
+     if(imu.startsWith('CAPTURED:'))b.accelModel=imu.slice(9);
+     Object.assign(b,{layout:frame==='P'?'A2_QUAD_PLUS':'A2_QUAD_X',layoutPins:[...pins].map(n=>'D'+n),rotations:[...rotations].map(n=>n==='0'?'CW':'CCW'),observedMinimumUs:mins.map(Number),configRevision:b.configRevision+1,escCalibrationSaved:esc,escCalibrationPending:false,escConfirmationStaged:false});
+     f.writes++;
+     if(f.dropSaveAck){f.dropSaveAck=false;throw Error('Simulated lost Save acknowledgement');}
+     break;
+    }
    }
-   if(a.action==='STOP'&&f.holdStop){f.stopPending=true;await new Promise(resolve=>f.releaseStop=resolve);f.stopPending=false;}
-   if(a.action==='STOP'&&f.rejectStop){f.rejectStop=false;throw Error('Simulated STOP failure');}
-   let state=f.state;
-   if(a.action==='BEGIN'){++f.run;state={...state,session:'fixture',mode:'READY',pulseUs:[1000,1000,1000,1000]};}
-   if(a.action==='STOP'){++f.run;state={...state,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0]};}
-   if(a.action==='LAYOUT')state={...state,layout:a.a,layoutPins:a.b==='-'?state.layoutPins:[...a.b].map(p=>'D'+p),rotations:a.c==='-'?state.rotations:[...a.c].map(p=>p==='0'?'CW':'CCW')};
-   if(a.action==='MINIMUM'){state.observedMinimumUs=[...state.observedMinimumUs];state.observedMinimumUs[Number(a.a)-1]=Number(a.b);}
-   if(a.action==='SLIDER')state={...state,mode:'SLIDER_TEST',sliderMask:Number(a.a),remainingMs:Number(a.c),pulseUs:[1000,1000,1000,1000]};
-   if(a.action==='SLIDE')state={...state,pulseUs:[0,1,2,3].map(i=>(state.sliderMask&(1<<i))?Number(a.b):1000)};
-   if(a.action==='SLIDE'&&f.loseControl){f.loseControl=false;state={...state,mode:'DISABLED',reason:'CONTROL_LOST',pulseUs:[0,0,0,0]};}
-   if(a.action==='SINGLE'||a.action==='ALL'){state={...state,mode:a.action==='ALL'?'ALL_TEST':'SINGLE_TEST',remainingMs:Number(a.c),pulseUs:[1000,1000,1000,1000]};if(a.action==='ALL')state.pulseUs.fill(Number(a.b));else state.pulseUs[Number(a.a)-1]=Number(a.b);finishAfter(Number(a.c),'TEST_FINISHED');}
-   if(a.action==='CAL_HIGH')state={...state,escCalibrationSaved:false,escCalibrationPending:false,mode:'CAL_HIGH',pulseUs:[2000,2000,2000,2000],remainingMs:15000};
-   if(a.action==='CAL_LOW'){state={...state,mode:'CAL_LOW',pulseUs:[1000,1000,1000,1000],remainingMs:3000};finishAfter(3000,'CAL_FINISHED');}
-   if(a.action==='CAL_CONFIRM'){if(f.rejectSave){f.rejectSave=false;throw Error('Simulated NVS save failure');}if(!state.escCalibrationPending||a.a!=='TONES_CONFIRMED')throw Error('No confirmed calibration completion');state={...state,escCalibrationSaved:true,escCalibrationPending:false};}
-   f.state=state;return {...state};
+   return {...b,...extra,motorsDisabled:b.mode==='DISABLED'};
   }};
- };
- await page.evaluate(installMotorFixture);
- const confirm=page.getByRole('button',{name:'Confirm / Continue',exact:true});
- await page.locator('[data-action=detect]').click();
- await page.waitForFunction(()=>document.querySelector('.a2-identity').textContent.includes('Supported · configurable'));
- assert.match(await page.locator('.a2-visual-title').textContent(),/flight controller/);
- mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-board.png',fullPage:true});
- await page.locator('[data-step="1"]').click();
- await page.waitForFunction(()=>document.querySelector('.a2-visual-title').textContent.includes('Quad X'));
- await page.evaluate(()=>window.__airframeNode=document.querySelector('[data-frame-diagram]'));
- await page.screenshot({path:'test-output/a2-quad-x-preview.png',fullPage:true});
- await page.locator('#a2Layout').selectOption('A2_QUAD_PLUS');
- await page.waitForFunction(()=>{const node=document.querySelector('[data-motor="1"]'),m=new DOMMatrixReadOnly(getComputedStyle(node).transform);return Math.abs(m.m41-260)<.5&&Math.abs(m.m42-108)<.5;});
- assert.equal(await page.evaluate(()=>window.__airframeNode===document.querySelector('[data-frame-diagram]')),true,'frame selection morphs the existing diagram');
- assert.equal(await page.locator('.configuration-preview .a2-rotation-guide').count(),4);
- assert.equal(await page.locator('.configuration-preview .spinning').count(),0,'configuration arrows must not claim physical motor output');
- await page.screenshot({path:'test-output/a2-quad-plus-preview.png',fullPage:true});
- await page.locator('#a2Layout').selectOption('A2_QUAD_X');
- await page.waitForFunction(()=>{const m=new DOMMatrixReadOnly(getComputedStyle(document.querySelector('[data-motor="1"]')).transform);return Math.abs(m.m41-142)<.5&&Math.abs(m.m42-132)<.5;});
-
- for(const id of ['a2Props','a2Pins','a2Profile'])await page.locator('#'+id).check();
- await page.locator('#a2Layout').selectOption('A2_QUAD_PLUS');
- await page.locator('[data-pin="0"]').selectOption('D2');
- assert.equal(await page.locator('[data-action=layout]').isDisabled(),true,'duplicate output pins must be rejected');
- await page.locator('[data-pin="2"]').selectOption('D0');
- await page.locator('[data-action=layout]').click();
- await page.waitForFunction(()=>window.__motorFixture.state.layout==='A2_QUAD_PLUS'&&!window.ZebjusMotorSetup.active);
- assert.deepEqual(await page.evaluate(()=>window.__motorFixture.state.layoutPins),['D2','D1','D0','D3']);
- assert.equal(await page.evaluate(()=>window.__motorFixture.calls.find(c=>c.action==='BEGIN').c),'PWM_50HZ_1000_2000_TIMED');
- await page.waitForFunction(()=>!document.querySelector('[data-action=layout]').disabled);
- await page.waitForFunction(()=>{const m=new DOMMatrixReadOnly(getComputedStyle(document.querySelector('[data-motor="1"]')).transform);return Math.abs(m.m41-260)<.5&&Math.abs(m.m42-108)<.5;});
- await page.screenshot({path:'test-output/a2-wiring.png',fullPage:true});
- await page.locator('[data-step="4"]').click();assert.equal(await page.locator('.a2-visual [data-motor="2"]').getAttribute('role'),'button','direct Wiring to Motor Test navigation enables diagram selection');
- await page.locator('[data-step="1"]').click();assert.equal(await page.locator('.a2-visual [data-motor="2"]').getAttribute('role'),null,'configuration preview is not a motor test control');
- await page.locator('[data-step="2"]').click();
- await page.evaluate(()=>{window.__motorFixture.state.channels[0]=1750;window.__motorFixture.state.channels[2]=1475;});
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1475 µs');
+ });
+ const button=action=>wizard.locator(`[data-action="${action}"]`);
+ const step=index=>wizard.locator(`[data-step="${index}"]`);
+ const nav=value=>wizard.locator(`[data-nav="${value}"]`);
+ const check=async(...ids)=>{for(const id of ids)await wizard.locator('#'+id).check();};
+ const expectText=async(selector,value)=>page.waitForFunction(({selector,value})=>document.querySelector(selector)?.textContent.includes(value),{selector,value});
+ const fixture=fn=>page.evaluate(fn);
+ await button('detect').click();
+ await expectText('.a2-identity','Supported');
+ await step(1).click();
+ await wizard.locator('#a2Layout').selectOption('A2_QUAD_PLUS');
+ await wizard.locator('[data-pin="0"]').selectOption('D2');
+ assert.equal(await nav(1).isDisabled(),true,'duplicate pin mapping blocks Next');
+ await wizard.locator('[data-pin="2"]').selectOption('D0');
+ await check('a2Props','a2Pins','a2Profile');
+ assert.equal(await fixture(()=>__wizard.board.layout),'A2_QUAD_X','wiring stays in the draft');
+ await step(2).click();
+ await expectText('[data-channel="2"] output','1000 µs');
+ await step(3).click();
+ await expectText('.a2-gyro-status','2000 / 2000');
+ await check('a2Still');
+ await button('imu-level').click();
+ await expectText('.a2-capture-status','128 / 128');
+ await expectText('.a2-capture-status','Draft correction pending Save');
+ assert.equal(await fixture(()=>__wizard.writes),0);
+ await step(4).click();
+ await expectText('.a2-visual-title','timing illustration');
+ await step(5).click();
+ assert.equal(await button('high').isDisabled(),true);
+ await check('a2EscProps','a2PowerOff','a2ReadProcedure');
+ await button('high').click();
+ await expectText('.a2-phase','HIGH · 2000 µs');
+ assert.match(await fixture(()=>__wizard.mapping),/P:2103:0101/);
+ await button('low').click();
+ await expectText('.a2-phase','LOW · 1000 µs');
+ await expectText('.a2-phase','PWM off. Confirm');
+ assert.equal(await nav(1).isDisabled(),true);
+ await check('a2Tones','a2EscDisconnected');
+ await button('confirm-cal').click();
+ await expectText('.a2-calibration-summary','pending final save');
+ await nav(1).click();
+ assert.equal(await wizard.locator('[data-panel="6"] [data-action=single]').count(),0);
+ assert.equal(await wizard.locator('#a2CalAll').isChecked(),false);
+ await expectText('.a2-cal-target','Motor 1 of 4');
+ const pulse=wizard.locator('#a2CalPulse');
+ assert.equal(await pulse.getAttribute('max'),'1500');
+ assert.equal(await pulse.isDisabled(),true);
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','Live · ACK 1000');
+ await pulse.fill('1087');
+ await expectText('.a2-cal-output','ACK 1087');
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','Outputs off · Pending final save');
+ assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await fixture(()=>__wizard.writes),0);
+ await nav(1).click();
+ await expectText('.a2-cal-target','Motor 2 of 4');
+ assert.equal(await pulse.inputValue(),'1000');
+ await nav(-1).click();
+ assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','ACK 1000');
+ await button('resume-cal').click();
+ await expectText('.a2-cal-output','ACK 1087');
+ await fixture(()=>{__wizard.holdPulse='1125';});
+ await pulse.fill('1125');
+ await page.waitForFunction(()=>!!__wizard.release);
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','Repeat the attempt');
+ await fixture(()=>__wizard.release());
+ assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
+ await wizard.locator('#a2CalAll').check();
+ assert.equal(await pulse.inputValue(),'1000','mixed motor results do not resume as a group');
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','ACK 1000');
+ await pulse.fill('1150');
+ await expectText('.a2-cal-output','ACK 1150');
+ await button('cal-slider').click();
+ await expectText('.a2-cal-output','Pending final save');
+ await nav(1).click();
+ assert.equal(await button('single').isVisible(),false,'secondary tests are collapsed on Motor Test');
+ await wizard.locator('[data-panel="7"] summary').click();
+ assert.equal(await button('single').isVisible(),true);
+ await nav(1).click();
+ assert.equal(await nav(1).textContent(),'Save');
+ await fixture(()=>{__wizard.failSave=true;});
+ await nav(1).click();
+ await expectText('.a2-report-state','Draft retained');
+ assert.equal(await fixture(()=>__wizard.writes),0);
+ await fixture(()=>{__wizard.dropSaveAck=true;});
+ await nav(1).click();
+ await expectText('.a2-report-state','Saved on board');
+ assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);
+ assert.match(await fixture(()=>__wizard.board.accelModel),/:42:0:0$/,'the older capture response cannot replace the requested result');
+ assert.equal(await fixture(()=>__wizard.writes),1,'lost ACK is resolved by readback without another write');
+ await nav(-1).click();
+ await nav(-1).click();
+ assert.equal(await wizard.locator('#a2CalAll').isChecked(),true);
+ assert.equal(await pulse.inputValue(),'1150');
+ await page.setViewportSize({width:390,height:844});
+ assert.equal(await button('stop').isVisible(),true);
  await page.waitForFunction(()=>{
-  const knobs=document.querySelectorAll('.a2-visual .a2-stick-knob');
-  return knobs.length===2&&Number(knobs[0].getAttribute('cy'))===149.5&&Number(knobs[1].getAttribute('cx'))===315;
+  const nav=document.querySelector('.a2-steps'),current=nav.querySelector('[aria-current="step"]');
+  const viewport=nav.getBoundingClientRect(),button=current.getBoundingClientRect();
+  return button.left>=viewport.left-1&&button.right<=viewport.right+1;
  });
- await page.screenshot({path:'test-output/a2-inputs.png',fullPage:true});
- await page.evaluate(()=>window.__motorFixture.state.inputValid=false);
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
- await page.evaluate(()=>{window.__motorFixture.state.inputValid=true;window.__motorFixture.state.inputAgeMs=250;});
- await page.waitForFunction(()=>document.querySelector('.a2-input').textContent.includes('LAST SAMPLE')&&document.querySelector('[data-channel="2"] output').textContent==='1475 µs');
- assert.equal(await page.locator('[data-channel="2"]').getAttribute('data-fresh'),'false','a delayed last sample must never be labelled LIVE');
- await page.evaluate(()=>window.__motorFixture.state.inputAgeMs=0);
- await page.evaluate(()=>{const s=window.__motorFixture.state;s.inputValid=false;s.inputSource='NONE';s.ppm={present:true,ageMs:0,captureHz:50,captureBackend:'RMT_RX',captureReady:true,channels:[1500,1500,1800,1500,2000,1500,1500,1500]};});
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs'&&document.querySelector('.a2-input').textContent.includes('receiver monitor'));
- assert.match(await page.locator('.a2-input-health').textContent(),/RMT_RX · 50 Hz/);
- await page.evaluate(()=>{window.__inputMarker=document.querySelector('[data-input-throttle]');window.__motorFixture.statusDelay=220;});
- await page.waitForFunction(()=>window.ZebjusMotorSetup.state.roundTripMs>=200&&document.querySelector('.a2-input').textContent.includes('MONITORING'));
- await page.waitForTimeout(450);
- assert.equal(await page.locator('[data-channel="2"]').getAttribute('data-fresh'),'true','read-only observation must not flicker at the 150 ms control cutoff');
- assert.equal(await page.evaluate(()=>window.__inputMarker===document.querySelector('[data-input-throttle]')),true,'input SVG nodes must survive status and animation ticks');
- await page.evaluate(()=>{window.__motorFixture.failNextStatus=true;window.__motorFixture.holdStatus=true;});
- await page.waitForFunction(()=>window.__motorFixture.statusErrorSeen);
- await page.waitForTimeout(350);
- assert.equal(await page.locator('[data-channel="2"] output').textContent(),'1800 µs','one failed refresh must not erase a valid display observation');
- assert.match(await page.locator('.a2-input-health').textContent(),/Status refresh delayed/);
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—',null,{timeout:6000});
- assert.match(await page.locator('.a2-input-health').textContent(),/UNVERIFIED/,'expired observation is not evidence of physical receiver loss');
- await page.evaluate(()=>{const f=window.__motorFixture;f.holdStatus=false;f.statusDelay=0;f.releaseStatus?.();});
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='1800 µs');
- assert.equal(await page.evaluate(()=>window.__inputMarker===document.querySelector('[data-input-throttle]')),true);
- assert.match(await page.locator('.a2-message').textContent(),/Status refresh recovered/);
- await page.screenshot({path:'test-output/a2-input-monitor-recovery.png',fullPage:true});
- await page.evaluate(()=>{const s=window.__motorFixture.state;s.ppm.present=false;s.ppm.channels=null;});
- await page.waitForFunction(()=>document.querySelector('[data-channel="2"] output').textContent==='—');
- await page.evaluate(()=>{const s=window.__motorFixture.state;delete s.ppm;s.inputValid=true;s.inputSource='PPM';s.channels[2]=1000;});
- await page.locator('[data-step="4"]').click();
- const begins=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
- const chosen=()=>page.locator('#a2MotorSelection').getAttribute('data-selection');
- assert.equal(await page.locator('select#a2Motor').count(),0,'motor selection uses Next, without a native dropdown rebuilt during polling');
- await page.locator('.a2-visual [data-motor="2"]').click();
- assert.equal(await chosen(),'2');
- await page.locator('#a2AllMotors').check();await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='all');
- assert.equal(await page.locator('.a2-visual .is-selected').count(),4);
- await page.locator('#a2AllMotors').uncheck();await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='2');
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),begins,'selecting outputs must never start them');
- await page.locator('.a2-visual [data-motor="1"]').click();
- await page.locator('[data-action=next-motor]').click();
- await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('record a starting pulse'));
- assert.equal(await chosen(),'1','Save & next cannot invent an unobserved minimum');
- // Save an observed minimum for each motor and advance one by one.
- for(let motor=1;motor<=4;motor++){
-  await page.locator('[data-action=slider]').click();await confirm.click();
-  await page.waitForFunction(n=>window.__motorFixture.state.mode==='SLIDER_TEST'&&window.__motorFixture.state.sliderMask===(1<<(n-1)),motor);
-  await page.locator('#a2Pulse').fill(String(1100+motor*10));
-  await page.waitForFunction(n=>window.__motorFixture.state.pulseUs[n-1]===1100+n*10,motor);
-  await page.locator('#a2Spinning').check();
-  const starts=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDER').length);
-  await page.locator('[data-action=next-motor]').click();
-  await page.waitForFunction(n=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection===String(n%4+1),motor);
-  assert.equal(await page.evaluate(n=>window.__motorFixture.state.observedMinimumUs[n-1],motor),1100+motor*10,'Save & next persists the observed pulse');
-  assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDER').length),starts,'Save & next must not start the next motor');
- }
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
- assert.match(await page.locator('[data-action=slider]').textContent(),/Stop motor test/);
- assert.equal(await page.locator('#a2AllMotors').isEnabled(),true,'All motors can be selected during a wizard test by stopping it first');
- const started=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
- await page.evaluate(()=>window.__motorFixture.holdStop=true);
- await page.locator('[data-action=next-motor]').click();
- await page.waitForFunction(()=>window.__motorFixture.stopPending);
- assert.equal(await chosen(),'1','selection waits for a STOP acknowledgement');
- assert.equal(await page.locator('[data-action=next-motor]').isDisabled(),true);
- assert.equal(await page.locator('#a2AllMotors').isDisabled(),true);
- await page.evaluate(()=>{window.__motorFixture.holdStop=false;window.__motorFixture.releaseStop();});
- await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection==='2');
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),started,'Next motor stops without automatically starting another output');
- assert.equal(await page.locator('#a2Pulse').inputValue(),'1000');
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.sliderMask===2&&window.__motorFixture.state.mode==='SLIDER_TEST');
- await page.locator('[data-action=slider]').click();await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy);
- assert.equal(await page.locator('#a2Pulse').inputValue(),'1000');
- assert.equal(await page.locator('.a2-visual .spinning').count(),0,'the same primary button stops output');
- // Switching to all outputs stops a running individual test; it requires Start again.
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
- const beforeAll=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
- await page.locator('#a2AllMotors').check();
- await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection==='all');
- assert.equal(await page.evaluate(()=>window.__motorFixture.state.mode),'DISABLED');
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),beforeAll);
- await page.locator('#a2AllMotors').uncheck();await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='2');
- // A failed STOP must keep the original selected motor and not start a new mask.
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
- await page.locator('#a2Pulse').fill('1150');
- await page.waitForFunction(()=>window.__motorFixture.state.pulseUs[1]===1150);
- await page.locator('#a2Spinning').check();await page.locator('[data-action=observe-min]').click();
- await page.evaluate(()=>window.__motorFixture.rejectStop=true);
- await page.locator('#a2AllMotors').click();
- await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('Simulated STOP failure'));
- assert.equal(await chosen(),'2');assert.equal(await page.locator('#a2AllMotors').isChecked(),false);
- await page.locator('[data-action=next-motor]').click();
- await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy&&document.querySelector('#a2MotorSelection').dataset.selection==='3');
- assert.equal(await page.evaluate(()=>window.__motorFixture.state.observedMinimumUs[1]),1150,'Save & next retries STOP before saving after a failed stop');
- await page.locator('.a2-visual [data-motor="1"]').click();
- await page.waitForFunction(()=>document.querySelector('#a2MotorSelection').dataset.selection==='1');
- const confirmedBegins=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length);
-
- await page.locator('[data-action=slider]').click();await page.getByRole('button',{name:'Cancel / STOP',exact:true}).click();
- await page.waitForFunction(()=>!document.querySelector('dialog.motor-confirm'));
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='BEGIN').length),confirmedBegins,'cancelled confirmation must not start output');
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
- await page.locator('#a2Pulse').fill('1137');
- await page.waitForFunction(()=>window.__motorFixture.state.pulseUs[0]===1137);
- assert.equal(await page.locator('.a2-visual [data-motor="1"] .spinning').count(),1);
- await page.locator('#a2Spinning').check();await page.locator('[data-action=observe-min]').click();
- await page.locator('[data-action=save-min]').click();
- await page.waitForFunction(()=>window.__motorFixture.state.observedMinimumUs[0]===1137&&!window.ZebjusMotorSetup.active);
- await page.locator('#a2AllMotors').check();await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');await page.locator('#a2Pulse').fill('2000');
- await page.waitForFunction(()=>window.__motorFixture.state.pulseUs.every(p=>p===2000));
- assert.equal(await page.locator('.a2-visual .spinning').count(),4);
- await page.screenshot({path:'test-output/a2-motor-test.png',fullPage:true});
- await page.locator('[data-action=stop]').click();await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
- const slides=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDE').length);await page.waitForTimeout(400);
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='SLIDE').length),slides,'STOP must cancel the slider command pump');
- await page.evaluate(()=>window.__motorFixture.loseControl=true);
- await page.locator('[data-action=slider]').click();await confirm.click();
- await page.waitForFunction(()=>document.querySelector('.a2-test-state').textContent.includes('750 ms')&&!window.ZebjusMotorSetup.active);
- assert.ok(!(await page.locator('.a2-message').textContent()).includes('Live test started'),'a terminal first SLIDE ACK must not report start success');
- await page.locator('.a2-secondary-test summary').click();
- await page.locator('#a2Pulse').fill('1100');await page.locator('[data-action=single]').click();await confirm.click();
- await page.waitForFunction(()=>window.__motorCalls.includes('ALL'));
- await page.waitForFunction(()=>!window.ZebjusMotorSetup.active);
- await page.locator('[data-step="3"]').click();
- await page.locator('[data-panel="3"] [data-action=sound]').click();assert.equal(await page.locator('[data-panel="3"] [data-action=sound]').textContent(),'Sound off');
- await page.locator('[data-panel="3"] [data-action=sound]').click();assert.equal(await page.locator('[data-panel="3"] [data-action=sound]').textContent(),'Sound on');
- await page.locator('#a2PowerOff').check();
- await page.locator('[data-action=high]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('HIGH active'));
- assert.equal(await page.locator('#a2PowerOff').isChecked(),false,'each calibration must require a fresh battery-disconnected confirmation');
- await page.screenshot({path:'test-output/a2-calibration.png',fullPage:true});
- await page.locator('[data-action=low]').click();await page.waitForFunction(()=>document.querySelector('.a2-phase').textContent.includes('CAL_FINISHED'));
- await page.locator('#a2Tones').check();
- await page.evaluate(()=>window.__motorFixture.rejectSave=true);
- await page.locator('[data-action=confirm-cal]').click();
- await page.waitForFunction(()=>document.querySelector('.a2-message').textContent.includes('Simulated NVS save failure'));
- assert.equal(await page.evaluate(()=>window.__motorFixture.state.escCalibrationSaved),false);
- await page.locator('[data-action=confirm-cal]').click();
- await page.waitForFunction(()=>window.__motorFixture.state.escCalibrationSaved&&document.querySelector('[data-action=confirm-cal]').disabled);
- assert.match(await page.locator('[data-panel="3"] .a2-calibration-summary').textContent(),/saved on board/);
- const calibrationStarts=await page.evaluate(()=>window.__motorCalls.filter(c=>c==='CAL_HIGH').length);
- await page.evaluate(()=>{const f=window.__motorFixture;f.kit.connected=false;++f.run;f.kit.bootId='reboot-2';f.state={...f.state,bootId:'reboot-2',mode:'DISABLED',reason:'BOOT',pulseUs:[0,0,0,0]};});
- await page.waitForFunction(()=>document.querySelector('.a2-status').textContent==='No Kit connected');
- await page.evaluate(()=>window.__motorFixture.kit.connected=true);
- await page.locator('[data-step="4"]').click();
- await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
- assert.equal(await page.evaluate(()=>window.__motorCalls.filter(c=>c==='CAL_HIGH').length),calibrationStarts,'power reconnect must not repeat ESC calibration');
- const snapshot=await page.evaluate(()=>({savedState:window.__motorFixture.state,savedKit:window.__motorFixture.kit}));
- await page.reload();await page.locator('[data-action=detect]').waitFor();await page.evaluate(installMotorFixture,snapshot);await page.locator('[data-action=detect]').click();
- await page.locator('[data-step="4"]').click();
- await page.waitForFunction(()=>document.querySelector('[data-panel="4"] .a2-calibration-summary').dataset.saved==='true');
- for(const id of ['a2Props','a2Pins','a2Profile'])await page.locator('#'+id).check();
- await page.locator('[data-action=slider]').click();await confirm.click();await page.waitForFunction(()=>window.__motorFixture.state.mode==='SLIDER_TEST');
- await page.locator('[data-action=stop]').click();await page.waitForFunction(()=>!window.ZebjusMotorSetup.busy);
- assert.equal(await page.evaluate(()=>window.__motorCalls.includes('CAL_HIGH')),false,'saved calibration supports a motor test after browser reload without another calibration');
- await page.locator('[data-step="5"]').click();assert.match(await page.locator('.a2-report').textContent(),/1137 µs/);
- await page.screenshot({path:'test-output/a2-report.png',fullPage:true});
- // Review every page at desktop, small laptop and mobile widths.
- for(const [width,height] of [[1920,1080],[1366,900],[1024,768],[390,844],[320,844]]){
-  await page.setViewportSize({width,height});
-  for(let step=0;step<6;step++){
-   await page.locator('[data-step="'+step+'"]').click();
-   const box=await page.evaluate(()=>{
-    const root=document.querySelector('#a2SetupRoot'),tab=document.querySelector('#tab-setup'),main=document.querySelector('.a2-content').getBoundingClientRect(),visual=document.querySelector('.a2-visual').getBoundingClientRect(),row=document.querySelector('.a2-columns').getBoundingClientRect();
-    const stop=document.querySelector('[data-action=stop]').getBoundingClientRect(),title=document.querySelector('.a2-title').getBoundingClientRect(),bar=document.querySelector('.a2-toolbar-main'),middle=stop.top+stop.height/2;
-    const items=[document.querySelector('.a2-title h2'),document.querySelector('.a2-status'),...document.querySelectorAll('.a2-steps button')];
-    return {fits:root.scrollWidth<=tab.clientWidth,height:row.height,bottomGap:Math.abs(main.bottom-visual.bottom),stopInHeader:stop.top>=title.top&&stop.bottom<=title.bottom,headerHeight:title.height,oneLine:items.every(e=>{const r=e.getBoundingClientRect();return Math.abs(r.top+r.height/2-middle)<4;}),toolbarFits:bar.scrollWidth<=bar.clientWidth+1};
-   });
-   assert.equal(box.fits,true,'wizard step '+step+' fits '+width+'px');
-   assert.equal(box.stopInHeader,true,'STOP must not float over form controls on step '+step+' at '+width+'px');
-   assert.equal(box.oneLine,true,'title, status, all six steps and STOP share one line at '+width+'px');
-   assert.ok(box.headerHeight<=64,'wizard toolbar must stay compact at '+width+'px');
-   if(width>=1024){
-    assert.equal(box.toolbarFits,true,'desktop toolbar must show all steps without horizontal scrolling at '+width+'px');
-    assert.ok(box.bottomGap<2,'task and visual cards share a bottom edge on step '+step);
-    assert.ok(box.height<=(width>=1366?640:680),'primary task must stay compact on step '+step+' at '+width+'px: '+box.height);
-   }
-   await page.screenshot({path:'test-output/a2-compact-step-'+step+'-'+width+'.png',fullPage:true});
-  }
- }
- // Execute the actual Python Worker, RPC bridge and main-thread confirmations.
- await page.setViewportSize({width:1366,height:900});
- await page.evaluate(()=>{
-  window.ZebjusKits.getMonitorPaths=()=>[{kitId:window.ZebjusKits.getState().kitId,transport:'sta',verified:true,available:true,fresh:true,permitted:true}];
-  window.DroneLabNetwork.read=async()=>window.ZebjusKits.getState();
-  window.DroneLabNetwork.stream=()=>{};
- });
- await page.locator('[data-tab="python"]').click();
- await page.waitForFunction(()=>window.monaco?.editor?.getModels().some(m=>m.uri.toString().includes('main.py'))&&document.getElementById('pythonTarget').value==='sta',null,{timeout:45000});
- const edit=code=>page.evaluate(code=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).setValue(code),code);
- await edit('from zebjus_simple import Drone\nasync with await Drone().motor_setup() as setup:\n    await setup.set_layout()\n    result = await setup.test_motor(2, 1100, 800)\n    print("PYTHON_MOTOR", result["reason"])\n');
- await page.locator('#runPythonBtn').click();
- await confirm.waitFor({timeout:90000});await confirm.click();
- await page.waitForFunction(()=>document.querySelector('dialog.motor-confirm p')?.textContent.startsWith('Run motor 2'));
- await confirm.click();
- await page.waitForFunction(()=>document.getElementById('pyLastRun').textContent==='COMPLETE',null,{timeout:30000});
- assert.match(await page.locator('#pythonTerminal').textContent(),/PYTHON_MOTOR TEST_FINISHED/);
- assert.equal(await page.evaluate(()=>window.ZebjusMotorSetup.active),false);
- await edit('import asyncio\nfrom zebjus_simple import Drone\nasync with await Drone().motor_setup() as setup:\n    print("PYTHON_SESSION_READY")\n    await asyncio.sleep(30)\n');
- await page.locator('#runPythonBtn').click();await confirm.waitFor({timeout:90000});await confirm.click();
- await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('PYTHON_SESSION_READY'));
- await page.locator('#stopPythonBtn').click();
- await page.waitForFunction(()=>!window.ZebjusMotorSetup.active&&window.__motorCalls.at(-1)==='STOP');
- assert.deepEqual(errors,[]);console.log('PASS A2 six-step visuals, X/+ wiring read-back, live/aged/lost channels, confirmation cancellation, terminal SLIDE acknowledgment, Save-before-next for all four motors and all-output transitions, single-row toolbar, sound toggle, persistent calibration/reboot/reload and larger six-page layout, individual/all 1000–2000 slider, observed minimum persistence, calibration, mobile fit and real Python motor RPC/STOP');
+ const layout=await wizard.locator('.a2-columns').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length);
+ assert.equal(layout,1);
+ mkdirSync('test-output',{recursive:true});
+ await page.screenshot({path:'test-output/a2-output-calibration-mobile.png',fullPage:true});
+ await step(8).click();
+ await wizard.locator('[data-panel="8"] summary').click();
+ await button('reset-all').click();
+ await expectText('.a2-report-state','Reset pending');
+ assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
+ await nav(1).click();
+ await expectText('.a2-report-state','Saved on board');
+ assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);
+ assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
+ assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
+ assert.deepEqual(errors,[]);
+ console.log('PASS simulated A2 Wizard · 9 steps, ESC phases, individual/group draft, safe resume, delayed ACK, Save readback, reset and mobile layout');
 }finally{await browser.close();}

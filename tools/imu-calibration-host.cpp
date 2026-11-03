@@ -118,6 +118,38 @@ int main(){
  // Never count repeated stale registers as new samples.
  reset();for(int i=0;i<600;i++)advance(1000,false);
  assert(!gyroReady&&zjImuDriver.zjGyroCalibration.is("SENSOR_ERROR")&&zjImuDriver.zjGyroCalibration.samples==0);
+ // Manual calibration uses the same fresh sample state machine.
+ reset();finish();zjImuDriver.imuAction(ZjImuAction::GYRO,4,clockMs);
+ for(int i=0;i<500;i++)advance();
+ assert(zjImuDriver.manualGyro&&!gyroReady&&zjImuDriver.zjGyroCalibration.samples>0);
+ zjImuDriver.imuAction(ZjImuAction::CANCEL_GYRO,4,clockMs);
+ advance(3000000);assert(!gyroReady&&zjImuDriver.gyroPaused&&!zjImuDriver.sample.valid);
+ zjImuDriver.imuAction(ZjImuAction::GYRO,4,clockMs);finish();
+ Wire.ax=410;Wire.ay=-123;Wire.az=4588;
+ zjImuDriver.imuAction(ZjImuAction::LEVEL,4,clockMs);
+ for(int i=0;i<128;i++)advance(4000);
+ const auto level=zjImuDriver.accelCapture.result;
+ assert(zjImuDriver.accelCapture.ready&&level.level&&!level.six);
+ assert(level.trim[0]==100&&level.trim[1]==-30&&level.trim[2]==120);
+ assert(!zjImuDriver.accelModel.level); // Capture does not apply or persist correction.
+ ZjAccelCapture six;const float bias[]={-.10f,.03f,.12f},scale[]={1.1f,.95f,1.05f},stationary[]={0.f,0.f,0.f};
+ for(int f=0;f<6;f++){
+  six.start(clockMs,f,false,ZjAccelModel{});
+  float rawG[]={bias[0],bias[1],bias[2]};
+  rawG[f/2]+=((f&1)?-1.f:1.f)/scale[f/2];
+  for(int n=0;n<128;n++)six.feed(rawG,stationary);
+ }
+ assert(six.ready&&six.mask==63&&six.result.six);
+ for(int i=0;i<3;i++)assert(fabs(six.result.correct(bias[i],i))<.001f&&fabs(six.result.scale[i]/1000.f-scale[i])<.002f);
+ const float wrong[]={0,1,0},still[]={0,0,1},moving[]={4,0,0},unstable[]={.09f,0,1};
+ six.start(clockMs,4,true,ZjAccelModel{});six.feed(wrong,stationary);
+ assert(!six.ready&&std::string(six.state)=="WRONG_ORIENTATION");
+ six.start(clockMs,4,true,ZjAccelModel{});six.feed(still,moving);
+ assert(!six.ready&&std::string(six.state)=="MOVING_OR_INVALID");
+ six.start(clockMs,4,true,ZjAccelModel{});six.feed(still,stationary);six.feed(unstable,stationary);
+ assert(!six.ready&&std::string(six.state)=="UNSTABLE");
+ six.start(clockMs,4,true,ZjAccelModel{});six.tick(clockMs+6000);
+ assert(!six.ready&&std::string(six.state)=="TIMEOUT");
  // Calibration arithmetic, timing rollover, and exactly-once correction.
  ZjGyroCalibration cal;const uint32_t start=0xfffffff0u;cal.start(start);
  const float raw[]={1.5f,-2.25f,0.5f};

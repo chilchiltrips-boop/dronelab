@@ -8,7 +8,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.7";
+constexpr const char* FW_VERSION="1.7.8";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -289,6 +289,7 @@ static String zjImuStatus(){
   ",\"imuValid\":"+(zjImu.sample.fresh(at,12000)?"true":"false")+
   ",\"imuErrors\":"+String(zjImu.sample.errors)+",\"imuMissedNormalSamples\":"+String(zjImu.sample.missed)+
   ",\"imuDlpFilter\":5,\"imuGyroBandwidthHz\":10,\"imuFilterDelayMs\":13.4,\"gyroRangeDps\":500,\"accelRangeG\":8,\"accelG\":"+zjImuVector(zjImu.accelG)+
+  ",\"accelRawG\":"+zjImuVector(zjImu.accelRawG)+",\"manualGyro\":"+(zjImu.manualGyro?"true":"false")+
   ",\"escPwmHz\":"+String(ZJ_ESC_PROFILE.hz)+",\"esc250HzEnabled\":false,\"telemetryConfiguredHz\":"+String(telRateHz)+
   ",\"telemetryActualHz\":"+(zjTelemetryRate.known?String(zjTelemetryRate.actual(at),2):String("null"))+
   ",\"telemetryDrops\":"+String(telemetryDropped);

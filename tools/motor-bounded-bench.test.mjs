@@ -8,7 +8,7 @@ import {createMotorClient,setupInputSample} from '../js/motor-setup.js';
 
 test('production hardware watchdog enforces absolute manual deadlines during a stalled main loop',()=>{
  const source=readFileSync('FlightCore_Firmware/FlightCoreMotor.h','utf8');
- const watch=source.slice(source.indexOf('static portMUX_TYPE zjMotorMux='),source.indexOf('\n#endif'));
+ const watch=source.slice(source.indexOf('static portMUX_TYPE zjMotorMux='),source.indexOf('\n#endif',source.indexOf('static portMUX_TYPE zjMotorMux=')));
  const apply=source.slice(source.indexOf('static void zjMotorApply(){'),source.indexOf('static void zjMotorStop()'));
  const code=`#define CONFIG_IDF_TARGET_ESP32C6 1
 #include <cassert>
@@ -27,7 +27,8 @@ static int ledc_set_duty(int,int channel,uint32_t duty){duties[channel]=duty;ret
 static int ledc_update_duty(int,int){return 0;}
 ${watch}
 static ZjMotorSafety zjMotor;
-struct {uint16_t physicalPulse(int n,const uint16_t* p){return p[n];}} zjMotorConfig;
+struct Mapping {uint16_t physicalPulse(int n,const uint16_t* p) const{return p[n];}} zjMotorConfig,zjWizardBenchConfig;
+static bool zjWizardBench=false,zjWizardCalSlider=false;
 static bool zjMotorDriverReady=true,zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false,zjMotorInputTest=false;
 static std::string zjMotorToken,zjMotorOwner;
 ${apply}

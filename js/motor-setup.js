@@ -36,7 +36,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    if(!['KEEP','SLIDE','STATUS'].includes(action)||r.mode!==last?.mode||r.reason!==last?.reason||ms>=250||++samples%10===0)diagnostic('motor_ack',k,action,r,ms);
    // Any terminal ACK retires the token immediately, including SLIDE replies.
    // Late KEEP/STATUS replies must never re-enable a cancelled test in the UI.
-   if(run!==epoch||s?.token&&action!=='STOP'&&session!==s)return value;
+   if(run!==epoch||s?.token&&action!=='STOP'&&session!==s)throw Error('Motor operation cancelled.');
    if(action==='KEEP'&&session===s)s.keepAt=at;
    if(s&&session===s&&!activeModes.has(r.mode)){clearPumps();session=null;}
    return publish(value);
@@ -51,25 +51,29 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   stopping++;
   try{return await send('STOP',[],s)}catch(e){publish({...last,mode:'UNCONFIRMED',reason:e.message});throw e;}finally{stopping--;}
  }
- async function begin(owner='wizard',binding=null){
+ async function begin(owner='wizard',binding=null,wiring=null){
   if(session||starting||stopping)throw Error('Wait for STOP to finish before starting a new motor setup.');
   check(getKit(binding),true);starting=owner;const run=++epoch,k=getKit(binding);
   const initial={owner,binding,identity:identity(k),token:'',bootId:k.bootId||''};
   try{
    // STATUS reads the boot ID even when USB Kit discovery did not supply one.
-   const status=await send('STATUS',[],initial);
+   const status=await send(wiring?'WIZARD_STATUS':'STATUS',[],initial);
    if(run!==epoch)throw Error('Motor start cancelled.');
-   if(status.supported!==true)throw Error('Flash A2 FlightCore 1.6.0 or newer with motor setup support.');
+   if(status.supported!==true)throw Error('A2 motor setup is unavailable.');
+   if(wiring&&(status.wizardVersion!==1||status.bootId!==wiring.bootId||status.configRevision!==wiring.revision))throw Error('Wizard setup changed. Refresh the board before starting.');
    const guard=()=>{check(getKit(binding));if(run!==epoch||identity(getKit(binding))!==initial.identity)throw Error('Motor start cancelled.');};
    guard();
    const beginAt=now();
-   const r=await request(getKit(binding),{action:'BEGIN',session:'',a:'PROPS_REMOVED',b:'PINS_VERIFIED',c:status.timedBenchSupported===true?'PWM_50HZ_1000_2000_TIMED':'PWM_50HZ_1000_2000'},guard);
+   const action=wiring?'WIZARD_BEGIN':'BEGIN';
+   const profile=status.timedBenchSupported===true?'PWM_50HZ_1000_2000_TIMED':'PWM_50HZ_1000_2000';
+   const c=wiring?`${wiring.bootId}|${wiring.revision}|${wiring.mapping}`:profile;
+   const r=await request(getKit(binding),{action,session:'',a:'PROPS_REMOVED',b:'PINS_VERIFIED',c},guard);
    if(r.error)throw Error(r.error);
    const s={...initial,bootId:r.bootId,token:r.session,started:now(),keepAt:beginAt};
    if(!r.session||r.mode!=='READY'||r.kitId!==k.kitId||r.bootId!==status.bootId)throw Error('Motor setup was not acknowledged.');
    if(run!==epoch||identity(getKit(binding))!==initial.identity){try{await send('STOP',[],s)}catch{}throw Error('Motor start cancelled.');}
    const beginRtt=Math.max(0,now()-beginAt);
-   session=s;diagnostic('motor_ack',k,'BEGIN',r,beginRtt);const publicState=publish({...r,roundTripMs:beginRtt,receivedAt:now()});
+   session=s;diagnostic('motor_ack',k,action,r,beginRtt);const publicState=publish({...r,roundTripMs:beginRtt,receivedAt:now()});
    timer=setTimer(async()=>{
     if(busy||inFlight||session!==s)return;
     if(now()-s.started>120000){void stop().catch(()=>{});return;}
@@ -97,21 +101,23 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   }
   const r=await send(action,args,s);
   if(run!==epoch)throw Error('Motor operation cancelled.');
-  const expected={SLIDER:'SLIDER_TEST',SLIDE:'SLIDER_TEST',SINGLE:'SINGLE_TEST',ALL:'ALL_TEST',INPUT:'INPUT_TEST',CAL_HIGH:'CAL_HIGH',CAL_LOW:'CAL_LOW'}[action];
+  const expected={SLIDER:'SLIDER_TEST',CAL_SLIDER:'SLIDER_TEST',SLIDE:'SLIDER_TEST',SINGLE:'SINGLE_TEST',ALL:'ALL_TEST',INPUT:'INPUT_TEST',CAL_HIGH:'CAL_HIGH',CAL_LOW:'CAL_LOW'}[action];
   if(expected&&r.mode!==expected)throw Error(motorStopDescription(r));
   return r;
  }
- async function startSlider(mask,readPulse,owner='wizard',duration=30000){
+ async function startSlider(mask,readPulse,owner='wizard',duration=30000,calibration=false){
   if(last?.version<2||!last?.sliderDurationMaxMs)throw Error('Flash A2 FlightCore 1.7.0+ for live slider tests.');
-  await command('SLIDER',[mask,1000,duration],owner);
-  const s=session;let pending=false,seq=0;
+  await command(calibration?'CAL_SLIDER':'SLIDER',[mask,1000,duration],owner);
+  const s=session,lowAt=now();let pending=false,seq=0;
   const tick=async()=>{
    if(pending||session!==s)return;pending=true;
    try{
     // A busy SLIDE must not starve the separate 1.5 s session lease. Fold a
     // due KEEP into this single-flight pump before the next control update.
     if(now()-s.keepAt>=400){await send('KEEP',[],s);if(session!==s)return;}
-    const pulse=Number(readPulse());if(!Number.isInteger(pulse)||pulse<1000||pulse>2000)throw Error('Slider pulse must be 1000–2000 µs.');
+    const max=calibration?1500:2000;
+    const pulse=calibration&&now()-lowAt<500?1000:Number(readPulse());
+    if(!Number.isInteger(pulse)||pulse<1000||pulse>max)throw Error(`Slider pulse must be 1000–${max} µs.`);
     await command('SLIDE',[mask,pulse,++seq],owner);
    }catch(e){if(session===s){void stop(owner).catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
    finally{pending=false;}
@@ -129,7 +135,14 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   if(saved.escCalibrationSaved!==true)throw Error('ESC calibration save was not acknowledged.');
   return saved;
  }
- return {begin,command,startSlider,stop,confirmCalibration,status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
+ async function wizardCommand(action,args,bootId){
+  if(session||starting||stopping)throw Error('Verify outputs are off before changing Wizard settings.');
+  const k=getKit();
+  if(!bootId||last?.kitId!==k?.kitId||last?.bootId!==bootId)throw Error('Refresh the verified A2 before changing settings.');
+  ++epoch;
+  return send(action,args,{identity:identity(k),bootId,token:''});
+ }
+ return {begin,command,startSlider,stop,confirmCalibration,wizardCommand,wizardStatus:()=>send('WIZARD_STATUS'),status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
 }
 
 function selectedKit(binding){

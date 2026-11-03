@@ -42,7 +42,7 @@ const timingHealth=new Set(['UNAVAILABLE','STARTING','HEALTHY','LATE']);
 fields.push(...timingCounts,...timingRates,'controlHealth','controlActuating','imuValid','accelXG','accelYG','accelZG','androidUdpReceivedHz','androidUdpAppliedHz','udpCoalescedFrames');
 allowedEvents.add('timing_state');allowedEvents.add('timing_sample');
 const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
-const imuErrors=new Set(['NONE','I2C_ERROR','WHO_AM_I','CONFIG_MISMATCH','INVALID_SAMPLE','DATA_STALE','CALIBRATION_TIMEOUT']);
+const imuErrors=new Set(['NONE','I2C_ERROR','WHO_AM_I','CONFIG_MISMATCH','INVALID_SAMPLE','DATA_STALE','CALIBRATION_TIMEOUT','CALIBRATION_CANCELLED']);
 const imuFloatFields=['gyroRawX','gyroRawY','gyroRawZ','gyroBiasX','gyroBiasY','gyroBiasZ','gyroRateX','gyroRateY','gyroRateZ','gyroStddevX','gyroStddevY','gyroStddevZ'];
 const imuCountFields=['imuAttempt','imuSamples','imuTarget','imuValidTotal','imuDurationMs','imuStartedMs','imuRestarts','imuReadFailures','imuWriteFailures','imuLastI2cCode','imuWhoAmI','imuSampleSequence','imuSampleAgeMs','imuMaxGapUs','imuCalibrationMaxGapUs','imuMissedSamples','imuMaxReadUs','imuDiagnosticDrops','imuFailures','imuLastFailureMs','imuLastFailureAttempt'];
 fields.push('imuState','imuError','imuLastFailure','imuDataReady','imuConfigValid','gyroUnits',...imuFloatFields,...imuCountFields);

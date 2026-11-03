@@ -1,7 +1,7 @@
 name: Build and verify FlightCore A1/A2 AP/STA Firmware
 on:
   push:
-    branches: [fix/imu-diagnostic-freshness-20261103,feat/a2-timing-250hz-foundation,fix/wizard-single-toolbar-20261103, fix/radio-handover-ppm-arm-diagnostics-20261102, feat/ppm-yaw-arm-status-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, feat/a2-motor-setup-20261030, feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, feat/unified-input-status-20261026, feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
+    branches: [feat/a2-complete-wizard-20261104, fix/imu-diagnostic-freshness-20261103,feat/a2-timing-250hz-foundation,fix/wizard-single-toolbar-20261103, fix/radio-handover-ppm-arm-diagnostics-20261102, feat/ppm-yaw-arm-status-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, feat/a2-motor-setup-20261030, feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, feat/unified-input-status-20261026, feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/*.h'
@@ -103,7 +103,19 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add FlightCore_Firmware firmware-catalog.json firmware-latest.json app-version.json
+          outputs=(FlightCore_Firmware/*_APP.bin FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json FlightCore_Firmware/catalog.json
+            FlightCore_Firmware/latest.json firmware-catalog.json firmware-latest.json)
+          git add -- "${outputs[@]}" app-version.json
+          generated="$(git write-tree)"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git worktree add --detach "$RUNNER_TEMP/flightcore-publish" FETCH_HEAD
+          cd "$RUNNER_TEMP/flightcore-publish"
+          git restore --source="$generated" --staged --worktree -- "${outputs[@]}"
+          if git diff --quiet "$GITHUB_SHA" HEAD -- app-version.json; then
+            git restore --source="$generated" --staged --worktree -- app-version.json
+          fi
+          # Verify against the branch tip, including any source pushed during compilation.
+          python3 tools/verify_release.py
           git diff --cached --quiet || git commit -m "build: verified FlightCore $(cat VERSION.txt) APP and FACTORY images"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push origin "HEAD:${GITHUB_REF_NAME}"

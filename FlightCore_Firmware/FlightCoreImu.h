@@ -1,6 +1,9 @@
 #pragma once
 #include "FlightCoreGyroCalibration.h"
 #include "FlightCoreTiming.h"
+#include "FlightCoreAccelCalibration.h"
+
+enum class ZjImuAction : uint8_t { NONE, GYRO, CANCEL_GYRO, LEVEL, FACE, CLEAR_ACCEL };
 
 // Caller owns Wire and this state for the entire update. No printing, JSON,
 // flash, network, or actuation here. INT is not wired: DATA_RDY proves freshness;
@@ -17,11 +20,35 @@ float RateRoll=0,RatePitch=0,RateYaw=0;
 
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 ZjGyroCalibration zjGyroCalibration;
+ZjAccelModel accelModel;
+ZjAccelCapture accelCapture;
+float accelRawG[3]={};
+bool manualGyro=false,gyroPaused=false;
+uint32_t maintenanceSequence=0;
 bool gyroConfigured=false,gyroConfigValid=false,gyroWaitingFresh=false;
 uint8_t gyroWhoAmI=0,gyroLastI2cCode=0;
 uint32_t gyroReadFailures=0,gyroWriteFailures=0,gyroLastPollUs=0,gyroWaitStarted=0;
 uint32_t gyroLastNormalUs=0,gyroMaxGapUs=0,gyroMaxReadUs=0,gyroNextNormalUs=0;
 float gyroRaw[3]={};
+void imuAction(ZjImuAction action,uint8_t face,uint32_t now){
+ if(action==ZjImuAction::GYRO){
+  if(!gyroConfigured){gyroPaused=false;return;}
+  manualGyro=true;gyroPaused=false;gyroReady=false;sample.valid=false;
+  zjGyroCalibration.start(now);gyroLastPollUs=micros();gyroWaitingFresh=false;
+  if(accelCapture.running)accelCapture.fail("GYRO_RECALIBRATING");
+  gyroStatus("CALIBRATING");
+ }else if(action==ZjImuAction::CANCEL_GYRO){
+  manualGyro=false;gyroPaused=true;gyroReady=false;sample.valid=false;
+  zjGyroCalibration.fail("CALIBRATION_CANCELLED",now);
+  if(accelCapture.running)accelCapture.fail("GYRO_CANCELLED");
+  gyroStatus("CALIBRATION_FAILED");
+ }else if(action==ZjImuAction::CLEAR_ACCEL){
+  accelCapture=ZjAccelCapture{};
+ }else if(gyroReady&&sample.fresh(micros(),12000)){
+  const auto base=accelCapture.ready?accelCapture.result:accelModel;
+  accelCapture.start(now,face,action==ZjImuAction::LEVEL,base);
+ }else accelCapture.fail("IMU_NOT_READY");
+}
 #endif
 
 bool gyroWrite(uint8_t reg,uint8_t value){
@@ -82,7 +109,10 @@ bool gyroSignals(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  uint8_t burst[14];
  if(!gyroRead(0x3B,burst,14))return false; // coherent accel/temp/gyro user-register burst
- for(uint8_t i=0;i<3;i++)accelG[i]=float(int16_t((uint16_t(burst[i*2])<<8)|burst[i*2+1]))/4096.0f;
+ for(uint8_t i=0;i<3;i++){
+  accelRawG[i]=float(int16_t((uint16_t(burst[i*2])<<8)|burst[i*2+1]))/4096.0f;
+  accelG[i]=accelModel.correct(accelRawG[i],i);
+ }
  const int16_t x=int16_t((uint16_t(burst[8])<<8)|burst[9]);
  const int16_t y=int16_t((uint16_t(burst[10])<<8)|burst[11]);
  const int16_t z=int16_t((uint16_t(burst[12])<<8)|burst[13]);
@@ -104,6 +134,7 @@ bool gyroSignals(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 void gyroA2Fault(const char* reason,uint32_t now,bool sensor=true){
  gyroReady=false;gyroConfigured=false;gyroConfigValid=false;gyroWaitingFresh=false;sample.valid=false;++sample.errors;
+ manualGyro=false;accelCapture=ZjAccelCapture{};
  lastGyroProbe=now;
  if(sensor||!zjGyroCalibration.is("FAILED"))zjGyroCalibration.fail(reason,now,sensor);
  gyroStatus(sensor?"READ_ERROR":"CALIBRATION_FAILED");
@@ -111,6 +142,8 @@ void gyroA2Fault(const char* reason,uint32_t now,bool sensor=true){
 #endif
 void updateGyro(unsigned long now){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ if(gyroPaused)return;
+ accelCapture.tick(now);
  if(!gyroConfigured){
   if(uint32_t(now-lastGyroProbe)<2500)return;
   lastGyroProbe=now;zjGyroCalibration.error="I2C_ERROR";
@@ -146,6 +179,8 @@ void updateGyro(unsigned long now){
   return; // Never publish a calibration sample as corrected live telemetry.
  }
  const uint32_t acquiredUs=micros();
+ const float rates[]={RateRoll,RatePitch,RateYaw};
+ accelCapture.feed(accelRawG,rates);manualGyro=false;
  if(sample.valid){const uint32_t gap=acquiredUs-gyroLastNormalUs;if(gap>gyroMaxGapUs)gyroMaxGapUs=gap;}
  gyroLastNormalUs=acquiredUs;lastGyroSample=millis();++gyroSampleSeq;
  sample.accept(acquiredUs);sample.expectedHz=250;sampleRate.event(acquiredUs);
