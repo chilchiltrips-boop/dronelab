@@ -5,6 +5,7 @@ import {layouts,stepVisual,updateMotorDiagram,wizardVisual,updateImuDiagram} fro
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Motor Test','Report & Save'];
+ const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Motor Test','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
@@ -18,7 +19,7 @@ if(root){
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
  root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
- <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}"><span>${i+1}</span>${s}</button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
+ <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}" aria-label="${s}"><span class="a2-step-number">${i+1}</span><span class="a2-step-long">${s}</span><span class="a2-step-short">${shortSteps[i]}</span></button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
  <div class="a2-checks" role="group" aria-label="Output checks"><span class="a2-check-count">0 / 3 confirmed</span>${[['a2Props','Propellers removed'],['a2Pins','Wiring & power verified'],['a2Profile','50 Hz PWM · 1000–2000 µs ESC']].map(([id,label])=>`<label class="a2-check"><input type="checkbox" id="${id}">${label}</label>`).join('')}</div>
  <div class="a2-columns"><main class="a2-content">
  <section data-panel="0"><h3>Board connection</h3><div class="a2-identity"></div><div class="a2-actions"><button class="btn" data-action="detect">Refresh board</button><button class="btn ghost" data-action="connect">Open connection</button></div></section>
@@ -411,7 +412,14 @@ if(root){
   $('.a2-checks').hidden=![1,5,6,7].includes(step);
   $('.a2-step-count').textContent=`${step+1} / ${steps.length}`;
   render();
-  root.querySelector('[aria-current="step"]')?.scrollIntoView?.({block:'nearest',inline:'nearest'});
+  revealStep();
+ }
+ function revealStep(){
+  const nav=$('.a2-steps'),active=nav.querySelector('[aria-current="step"]');
+  if(!active)return;
+  const viewport=nav.getBoundingClientRect(),button=active.getBoundingClientRect();
+  if(button.left<viewport.left)nav.scrollLeft+=button.left-viewport.left;
+  else if(button.right>viewport.right)nav.scrollLeft+=button.right-viewport.right;
  }
  async function navigate(next,footer=false){
   if(working)return;
@@ -678,6 +686,7 @@ if(root){
    .finally(()=>{polling=false;});
  };
  setInterval(observe,100);
- new MutationObserver(observe).observe(document.getElementById('tab-setup'),{attributes:true,attributeFilter:['class']});
+ window.addEventListener('resize',revealStep);
+ new MutationObserver(()=>{observe();revealStep();}).observe(document.getElementById('tab-setup'),{attributes:true,attributeFilter:['class']});
  show(0);observe();
 }

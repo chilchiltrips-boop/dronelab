@@ -182,6 +182,11 @@ try{
  assert.equal(await pulse.inputValue(),'1150');
  await page.setViewportSize({width:390,height:844});
  assert.equal(await button('stop').isVisible(),true);
+ await page.waitForFunction(()=>{
+  const nav=document.querySelector('.a2-steps'),current=nav.querySelector('[aria-current="step"]');
+  const viewport=nav.getBoundingClientRect(),button=current.getBoundingClientRect();
+  return button.left>=viewport.left-1&&button.right<=viewport.right+1;
+ });
  const layout=await wizard.locator('.a2-columns').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length);
  assert.equal(layout,1);
  mkdirSync('test-output',{recursive:true});
