@@ -36,6 +36,11 @@ const motorCounts=['motorRemainingMs','sliderMask','sessionRemainingMs','command
 fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts);
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
+const timingCounts=['controlTargetHz','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
+const timingRates=['controlActualHz','imuActualHz','telemetryActualHz','imuFilterDelayMs'];
+const timingHealth=new Set(['UNAVAILABLE','STARTING','HEALTHY','LATE']);
+fields.push(...timingCounts,...timingRates,'controlHealth','controlActuating','imuValid','accelXG','accelYG','accelZG','androidUdpReceivedHz','androidUdpAppliedHz','udpCoalescedFrames');
+allowedEvents.add('timing_state');allowedEvents.add('timing_sample');
 const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
 const imuErrors=new Set(['NONE','I2C_ERROR','WHO_AM_I','CONFIG_MISMATCH','INVALID_SAMPLE','DATA_STALE','CALIBRATION_TIMEOUT']);
 const imuFloatFields=['gyroRawX','gyroRawY','gyroRawZ','gyroBiasX','gyroBiasY','gyroBiasZ','gyroRateX','gyroRateY','gyroRateZ','gyroStddevX','gyroStddevY','gyroStddevZ'];
@@ -56,6 +61,13 @@ function normalizeImu(value,expectedBoard=''){
   if(!Number.isSafeInteger(value[key])||value[key]<0||value[key]>0xffffffff)return null;
   out[key]=value[key];
  }
+ for(const key of [...timingCounts,...timingRates])if(value[key]!==undefined&&value[key]!==null){
+  const v=value[key];if(typeof v!=='number'||!Number.isFinite(v)||v<0||v>0xffffffff||timingCounts.includes(key)&&!Number.isSafeInteger(v))return null;
+  out[key]=v;
+ }
+ if(value.controlHealth!==undefined){if(!timingHealth.has(value.controlHealth))return null;out.controlHealth=value.controlHealth;}
+ for(const key of ['controlActuating','imuValid'])if(typeof value[key]==='boolean')out[key]=value[key];
+ if(value.accelG!==undefined){if(!Array.isArray(value.accelG)||value.accelG.length!==3||!value.accelG.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=8))return null;out.accelG=[...value.accelG];}
  if(value.sampleAgeMs!==undefined&&value.sampleAgeMs!==null){if(!Number.isSafeInteger(value.sampleAgeMs)||value.sampleAgeMs<0||value.sampleAgeMs>0xffffffff)return null;out.sampleAgeMs=value.sampleAgeMs;}
  if(out.enabled&&(out.target!==2000||!Number.isSafeInteger(out.samples)||out.samples>out.target))return null;
  for(const key of ['raw','bias','corrected','stddev'])if(value[key]!==undefined){
@@ -63,7 +75,7 @@ function normalizeImu(value,expectedBoard=''){
   out[key]=[...value[key]];
  }
  if(out.enabled&&out.state==='READY'&&(out.samples!==2000||!out.attempt||out.configValid!==true))return null;
- if(out.state!=='READY'||Number.isFinite(out.sampleAgeMs)&&out.sampleAgeMs>1000)out.dataReady=false;
+ if(out.imuValid===false||out.state!=='READY'||Number.isFinite(out.sampleAgeMs)&&out.sampleAgeMs>1000)out.dataReady=false;
  return out;
 }
 function imuLabel(value){
@@ -78,6 +90,15 @@ function parseImuLine(line,previous=null){
  const p=String(line||'').trim().split(',');
  if(p[1]!=='1'||p[2]!=='A2')return null;
  const number=i=>p[i]!==''&&Number.isFinite(Number(p[i]))?Number(p[i]):NaN;
+ if(p[0]==='ZJTIMING'&&p.length===20&&previous?.board==='A2'){
+  const keys=['controlActualHz','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlOverruns','controlHealth','imuActualHz','imuSampleAgeUs','imuErrors','telemetryConfiguredHz','telemetryActualHz','telemetryDrops'];
+  const data={...previous,controlTargetHz:250,controlActuating:false,imuTargetHz:250,escPwmHz:50};
+  for(let i=0;i<keys.length;i++){
+   if(keys[i]==='controlHealth')data[keys[i]]=p[i+3];
+   else {const v=number(i+3);if(v===-1&&['controlActualHz','imuActualHz','imuSampleAgeUs','telemetryActualHz'].includes(keys[i]))delete data[keys[i]];else data[keys[i]]=v;}
+  }
+  return normalizeImu(data);
+ }
  if(p[0]==='ZJIMU'&&p.length===18){
   const same=previous?.board==='A2'&&previous.attempt===number(3)&&!(number(5)<previous.samples&&['SETTLING','CALIBRATING'].includes(p[4]));
   return normalizeImu({...(same?previous:{}),version:1,board:'A2',enabled:true,attempt:number(3),state:p[4],samples:number(5),target:number(6),durationMs:number(7),restarts:number(8),bias:[number(9),number(10),number(11)],error:p[12],readFailures:number(13),writeFailures:number(14),whoAmI:number(15),configValid:p[16]==='1',dataReady:p[17]==='1'});
@@ -88,7 +109,7 @@ function parseImuLine(line,previous=null){
  }
  return null;
 }
-let lastImuBinding='',lastImu=null,lastImuAt=0,lastImuProgressAt=0;
+let lastImuBinding='',lastImu=null,lastImuAt=0,lastImuProgressAt=0,lastTimingAt=0;
 function observeImu(value,kit={}){
  if(!kit.connected||!kit.kitId)return null;
  const imu=normalizeImu(value,kit.board);if(!imu)return null;
@@ -96,6 +117,10 @@ function observeImu(value,kit={}){
  if(binding!==lastImuBinding){lastImuBinding=binding;lastImu=null;lastImuAt=0;lastImuProgressAt=0;}
  const data={transport:kit.transport,board:imu.board,version:kit.version,imuState:imu.state,imuError:imu.error||'NONE',imuLastFailure:imu.lastFailure,imuDataReady:imu.dataReady,imuConfigValid:imu.configValid,gyroUnits:'deg/s'};
  for(const [key,field] of Object.entries({attempt:'imuAttempt',samples:'imuSamples',target:'imuTarget',validTotal:'imuValidTotal',durationMs:'imuDurationMs',startedMs:'imuStartedMs',restarts:'imuRestarts',readFailures:'imuReadFailures',writeFailures:'imuWriteFailures',lastI2cCode:'imuLastI2cCode',whoAmI:'imuWhoAmI',sampleSequence:'imuSampleSequence',sampleAgeMs:'imuSampleAgeMs',maxGapUs:'imuMaxGapUs',calibrationMaxGapUs:'imuCalibrationMaxGapUs',missedSamples:'imuMissedSamples',maxReadUs:'imuMaxReadUs',diagnosticDrops:'imuDiagnosticDrops',failures:'imuFailures',lastFailureMs:'imuLastFailureMs',lastFailureAttempt:'imuLastFailureAttempt'}))data[field]=imu[key];
+ for(const key of [...timingCounts,...timingRates,'controlHealth','controlActuating','imuValid'])if(imu[key]!==undefined)data[key]=imu[key];
+ if(imu.accelG)imu.accelG.forEach((v,i)=>data['accel'+'XYZ'[i]+'G']=v);
+ if(lastImu&&imu.controlHealth!==lastImu.controlHealth&&imu.controlHealth)record('timing_state',data);
+ if(imu.controlTargetHz&&Date.now()-lastTimingAt>=2000){record('timing_sample',data);lastTimingAt=Date.now();}
  for(const [key,prefix] of [['raw','gyroRaw'],['bias','gyroBias'],['corrected','gyroRate'],['stddev','gyroStddev']])if(imu[key])imu[key].forEach((v,i)=>data[prefix+'XYZ'[i]]=v);
  const fresh=!lastImu||lastImu.attempt!==imu.attempt;
  if(fresh)record('imu_summary',data);
@@ -152,6 +177,11 @@ function clean(data){
   else if(key==='motorMode'){if(motorModes.has(v))result[key]=v;}
   else if(key==='motorReason'){if(motorReasons.has(v))result[key]=v;}
   else if(motorCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
+  else if(timingCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0&&v<=0xffffffff)result[key]=v;}
+  else if([...timingRates,'androidUdpReceivedHz','androidUdpAppliedHz','accelXG','accelYG','accelZG'].includes(key)){if(typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000)result[key]=Math.round(v*10000)/10000;}
+  else if(key==='udpCoalescedFrames'){if(Number.isSafeInteger(v)&&v>=0&&v<=0xffffffff)result[key]=v;}
+  else if(key==='controlHealth'){if(timingHealth.has(v))result[key]=v;}
+  else if(['controlActuating','imuValid'].includes(key)){if(typeof v==='boolean')result[key]=v;}
   else if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
   else if(imuCountFields.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
   else if(key==='imuState'){if(imuStates.has(v))result[key]=v;}
@@ -214,7 +244,7 @@ function paint(force=false){
  const s=summary(),label=p.querySelector('[data-diag-summary]');
  if(label)label.textContent=events.length+' events • '+s.inputs+' input samples • source '+s.lastSource+' • selected '+s.lastSelection+(s.lastSource==='PPM'?' • PPM #'+s.lastInputSeq+' • age '+s.lastInputAgeMs+' ms • losses '+s.ppmLosses:'')+' • '+s.ack+' sampled ACKs • '+s.nack+' NACKs • RX #'+s.lastRxSeq+' / APPLIED #'+s.lastAppliedSeq+' • '+s.loss+' errors/disarms • radio blocker '+s.handoverBlocker+' • max ACK '+s.maxRtt+' ms'+(s.maxNativeWait?' • max response wait '+s.maxNativeWait+' ms':'')+(s.maxNativeQueue?' • max queue '+s.maxNativeQueue+' ms':'');
  const imuView=p.querySelector('[data-diag-imu]');
- if(imuView){const e=[...events].reverse().find(e=>e.data.imuState),d=e?.data;imuView.textContent=d?'Last IMU: '+d.board+' • '+d.imuState+(d.imuTarget?' • '+d.imuSamples+'/'+d.imuTarget+' samples':'')+(Number.isFinite(d.imuDurationMs)?' • '+d.imuDurationMs+' ms':'')+(Number.isFinite(d.gyroBiasX)?' • bias '+[d.gyroBiasX,d.gyroBiasY,d.gyroBiasZ].join(' / ')+' deg/s':'')+' • read errors '+(d.imuReadFailures||0)+' • calibration failures '+(d.imuFailures||0)+(d.imuLastFailure&&d.imuLastFailure!=='NONE'?' • last '+d.imuLastFailure:'')+(d.imuError&&d.imuError!=='NONE'?' • '+d.imuError:''):'IMU diagnostics: connect a Kit';}
+ if(imuView){const e=[...events].reverse().find(e=>e.data.imuState),d=e?.data;imuView.textContent=d?'Last IMU: '+d.board+' • '+d.imuState+(d.imuTarget?' • '+d.imuSamples+'/'+d.imuTarget+' samples':'')+(Number.isFinite(d.imuDurationMs)?' • '+d.imuDurationMs+' ms':'')+(Number.isFinite(d.gyroBiasX)?' • bias '+[d.gyroBiasX,d.gyroBiasY,d.gyroBiasZ].join(' / ')+' deg/s':'')+(d.controlTargetHz?' • shadow '+(d.controlActualHz??'unknown')+'/'+d.controlTargetHz+' Hz • '+(d.controlHealth||'unknown')+' • missed '+(d.controlMissedTicks||0)+' • IMU '+(d.imuActualHz??'unknown')+' Hz • max tick '+(d.controlMaxExecutionUs??'unknown')+' us':'')+' • read errors '+(d.imuReadFailures||0)+' • calibration failures '+(d.imuFailures||0)+(d.imuLastFailure&&d.imuLastFailure!=='NONE'?' • last '+d.imuLastFailure:'')+(d.imuError&&d.imuError!=='NONE'?' • '+d.imuError:''):'IMU diagnostics: connect a Kit';}
  const view=p.querySelector('[data-diag-events]');
  if(view&&p.open)view.textContent=events.slice(-30).reverse().map(e=>new Date(e.at).toLocaleTimeString()+' '+e.event+' '+JSON.stringify(e.data)).join('\n')||'No diagnostic events yet. Connect Kit and reproduce ACK timeout.';
 }
@@ -252,9 +282,11 @@ function observeView(view,kit){
 function observeInput(rc={},kit={}){
  const binding=[kit.kitId,kit.bootId,kit.transport,kit.connectionGeneration].join('|');
  if(binding!==lastInputBinding){lastInputBinding=binding;lastInputState='';lastPpmPresent=undefined;lastPpmLosses=0;lastPath='';lastHandover='';}
+ const udp=kit.udp||{};
  const ppm=kit.ppm||{},h=kit.radioHandover||{},path=kit.rcAccess?.controlPath||'AUTO';
  const channels=Array.isArray(rc.channels)?rc.channels:Array.isArray(ppm.channels)?ppm.channels:[];
  const data={transport:kit.transport,source:rc.source,seq:rc.seq,accepted:rc.accepted,rejected:rc.rejected,
+  androidUdpReceivedHz:udp.androidUdpReceivedHz,androidUdpAppliedHz:udp.androidUdpAppliedHz,udpCoalescedFrames:udp.coalescedFrames,
   ageMs:rc.ageMs,rcOwned:rc.claimed===true,rcActive:rc.active===true,inputArmed:rc.inputArmed===true,
   inputValid:rc.inputValid,failsafe:rc.failsafe,throttle:rc.throttle,roll:rc.roll,pitch:rc.pitch,yaw:rc.yaw,
   selectedPath:path,activePath:rc.active?(rc.source==='PPM'?'PPM':rc.source==='WEB'?'WEB_STA':rc.source==='ANDROID'&&kit.transport==='ap'?'ANDROID_AP':'NONE'):'NONE',

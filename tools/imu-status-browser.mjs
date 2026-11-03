@@ -13,14 +13,14 @@ try{
  const transitions=[];
  for(const state of ['CALIBRATING','READY','FAILED','SENSOR_ERROR']){
   const result=await page.evaluate(state=>{
-   const ready=state==='READY',imu={version:1,board:'A2',enabled:true,state,attempt:1,samples:ready?2000:1000,target:2000,durationMs:2500,restarts:0,bias:ready?[1.25,-2.5,0.75]:[0,0,0],raw:[1.375,-2.75,1.125],corrected:[0.125,-0.25,0.375],error:state==='FAILED'?'CALIBRATION_TIMEOUT':state==='SENSOR_ERROR'?'I2C_ERROR':'NONE',readFailures:state==='SENSOR_ERROR'?1:0,writeFailures:0,configValid:state!=='SENSOR_ERROR',whoAmI:104,dataReady:ready,sampleSequence:ready?1:0,sampleAgeMs:ready?20:null};
+   const ready=state==='READY',imu={controlTargetHz:250,controlActualHz:247.5,controlMaxExecutionUs:38,controlMissedTicks:3,controlHealth:'HEALTHY',controlActuating:false,imuTargetHz:250,imuActualHz:249.2,imuSampleAgeUs:700,escPwmHz:50,telemetryConfiguredHz:20,telemetryActualHz:19.8,version:1,board:'A2',enabled:true,state,attempt:1,samples:ready?2000:1000,target:2000,durationMs:2500,restarts:0,bias:ready?[1.25,-2.5,0.75]:[0,0,0],raw:[1.375,-2.75,1.125],corrected:[0.125,-0.25,0.375],error:state==='FAILED'?'CALIBRATION_TIMEOUT':state==='SENSOR_ERROR'?'I2C_ERROR':'NONE',readFailures:state==='SENSOR_ERROR'?1:0,writeFailures:0,configValid:state!=='SENSOR_ERROR',whoAmI:104,dataReady:ready,sampleSequence:ready?1:0,sampleAgeMs:ready?20:null};
    const kit={connected:true,linkVerified:true,working:false,kitId:'PRIVATE-A2-FIXTURE',bootId:'PRIVATE-BOOT',kitCode:'123456',kitName:'A2 fixture',board:'ZFC-A2',version:'1.5.14',transport:'sta',physicalLink:'sta',connectionGeneration:1,owner:false,controlAuthorized:false,heartbeatAt:Date.now(),linkState:'connected',imu,imuObservedAt:Date.now(),rc:{source:'NONE',active:false,claimed:false},rcAccess:null};
    window.ZebjusKits.getState=()=>kit;
    window.ZebjusAckDiagnostics.observeImu(imu,kit);window.dispatchEvent(new CustomEvent('dronelab:kit-link'));
    return {label:document.getElementById('fwHealthImu').textContent,tone:document.getElementById('fwHealthImu').dataset.state,export:window.ZebjusAckDiagnostics.exportData('json')};
   },state);
   if(state==='CALIBRATING'){assert.match(result.label,/Calibrating 1000\/2000.*keep board still/);assert.equal(result.tone,'calibrating');assert.doesNotMatch(result.label,/NOT FOUND/);}
-  if(state==='READY'){assert.match(result.label,/READY.*calibrated/);assert.equal(result.tone,'live');assert.match(result.export,/1\.25/);}
+  if(state==='READY'){assert.match(result.label,/READY.*calibrated/);assert.equal(result.tone,'live');assert.match(result.export,/1\.25/);assert.ok(JSON.parse(result.export).events.some(e=>e.data.controlActualHz===247.5&&e.data.controlActuating===false));}
   if(state==='FAILED')assert.match(result.label,/Calibration failed/);
   if(state==='SENSOR_ERROR')assert.match(result.label,/Sensor error.*I2C_ERROR/);
   assert.doesNotMatch(result.export,/PRIVATE-A2-FIXTURE|PRIVATE-BOOT/);transitions.push({state,label:result.label,tone:result.tone});

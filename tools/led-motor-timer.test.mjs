@@ -19,6 +19,7 @@ test('production A2 LED and motor setup keep separate timer frequencies, resolut
  const code=`#include <cstdint>
 #include <cassert>
 #include <iostream>
+#include "FlightCoreEscProfile.h"
 enum ledc_timer_t {LEDC_TIMER_0,LEDC_TIMER_1,LEDC_TIMER_2,LEDC_TIMER_3};
 using ledc_channel_t=int;
 constexpr int LEDC_LOW_SPEED_MODE=0,LEDC_TIMER_14_BIT=14,LEDC_AUTO_CLK=0,ESP_OK=0,OUTPUT=1,HIGH=1;
@@ -53,5 +54,5 @@ int main(){
  std::cout<<"PASS independent production LED/ESC timer configuration"<<std::endl;
 }`;
  const dir=mkdtempSync(join(tmpdir(),'zj-led-motor-'));
- try{const file=join(dir,'timer.cpp'),bin=join(dir,'timer');writeFileSync(file,code);execFileSync('g++',['-std=c++17',file,'-o',bin],{stdio:'pipe',timeout:60000});assert.match(execFileSync(bin,{encoding:'utf8',timeout:10000}),/PASS independent production/);}finally{rmSync(dir,{recursive:true,force:true});}
+ try{const file=join(dir,'timer.cpp'),bin=join(dir,'timer');writeFileSync(file,code);execFileSync('g++',['-std=c++17','-IFlightCore_Firmware',file,'-o',bin],{stdio:'pipe',timeout:60000});assert.match(execFileSync(bin,{encoding:'utf8',timeout:10000}),/PASS independent production/);}finally{rmSync(dir,{recursive:true,force:true});}
 });

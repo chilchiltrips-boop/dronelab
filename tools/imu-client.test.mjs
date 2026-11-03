@@ -95,3 +95,23 @@ test('desktop Python reads 12/20-field frames and startup progress without doubl
  const code=`import runpy,sys,types\nsys.modules['serial']=types.SimpleNamespace()\nd=runpy.run_path('FlightCore_Firmware/PC_GYRO_SERIAL_EXAMPLE.py')['decode_gyro']\nraw='ZJTEL,1,A2,1,100,0x68,READY,0.12,-0.34,0.56,1,0'\nassert d(raw)['RateRoll']==0.12\nassert d(raw+',RC=NONE/IDLE,RCSEQ=0,T=1000,R=1500,P=1500,Y=1500,INPUT_ARMED=0,MOTORS=OFF')['RateYaw']==0.56\nassert d(raw.replace('0.12','NaN')) is None\nassert d('ZJIMU,1,A2,1,CALIBRATING,123,2000,400,0,0,0,0,NONE,0,0,104,1,0')['samples']==123\nassert d('ZJIMU,1,A2,1,READY,2000,2000,2500,0,1,-2,0.5,NONE,0,0,104,1,1') is None\nprint('PASS desktop gyro parser')\n`;
  const r=spawnSync('python3',['-c',code],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/PASS/);
 });
+
+test('timing diagnostics preserve unknown rates, USB compatibility and immediate unhealthy states',()=>{
+ const {d,advance}=diagnostics();
+ const timing={...ready,controlTargetHz:250,controlActualHz:247.5,controlIntervalUs:4010,controlJitterUs:10,controlMaxExecutionUs:38,controlMissedTicks:3,controlHealth:'HEALTHY',controlActuating:false,imuTargetHz:250,imuActualHz:249.2,imuSampleAgeUs:700,imuErrors:0,imuValid:true,accelG:[1,-2,0.5],escPwmHz:50,telemetryConfiguredHz:20,telemetryActualHz:19.8,telemetryDrops:2};
+ d.observeImu(timing,kit);advance(1);d.observeImu({...timing,controlHealth:'LATE',imuValid:false},kit);
+ const events=JSON.parse(d.exportData('json')).events;
+ assert.ok(events.some(e=>e.data.controlActualHz===247.5&&e.data.accelYG===-2&&e.data.controlActuating===false));
+ assert.ok(events.some(e=>e.event==='timing_state'&&e.data.controlHealth==='LATE'&&e.data.imuValid===false));
+ assert.match(d.exportData('csv'),/controlMaxExecutionUs/);
+ const parsed=d.parseImuLine('ZJTIMING,1,A2,247.50,4010,3990,4500,10,500,25,38,3,0,LATE,249.20,700,0,20,19.80,2',ready);
+ assert.equal(parsed.controlActualHz,247.5);assert.equal(parsed.imuSampleAgeUs,700);assert.equal(parsed.controlHealth,'LATE');assert.equal(parsed.controlActuating,false);
+ const unknown=d.parseImuLine('ZJTIMING,1,A2,-1,0,0,0,0,0,0,0,0,0,STARTING,-1,-1,0,20,-1,0',ready);
+ assert.equal(unknown.controlActualHz,undefined);assert.equal(unknown.imuActualHz,undefined);
+ assert.equal(d.parseImuLine('ZJTIMING,1,A2,250',ready),null);
+ assert.equal(d.normalizeImu({...timing,controlHealth:'SECRET-SSID'}),null);
+ assert.equal(d.normalizeImu({...timing,controlActualHz:NaN}),null);
+ assert.equal(d.normalizeImu({...timing,imuValid:false}).dataReady,false);
+ assert.equal(d.normalizeImu({...timing,accelG:[1,2,NaN]}),null);
+ assert.doesNotMatch(d.exportData('json'),/PRIVATE-KIT|PRIVATE-BOOT|SECRET/);
+});

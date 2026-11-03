@@ -2,6 +2,7 @@
 #include "FlightCoreA2MotorLayout.h"
 #include "FlightCoreMotorSafety.h"
 #include "FlightCoreMotorConfig.h"
+#include "FlightCoreEscProfile.h"
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <driver/ledc.h>
 #include <esp_timer.h>
@@ -70,7 +71,7 @@ static void zjMotorApply(){
  }
  if(zjMotorDriverReady){
   for(int n=0;n<4;n++){
-   const uint32_t duty=zjMotor.benchEnabled?uint32_t(zjMotorConfig.physicalPulse(n,zjMotor.pulses))*16384UL/20000UL:0;
+   const uint32_t duty=zjMotor.benchEnabled?ZJ_ESC_PROFILE.duty(zjMotorConfig.physicalPulse(n,zjMotor.pulses)):0;
    if(ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)!=ESP_OK||
       ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))!=ESP_OK)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
   }
@@ -251,7 +252,7 @@ static void zjMotorSetup(){
  zjMotorConfigValid=!saved.length()||zjMotorConfig.decode(saved.c_str());
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  ledc_timer_config_t timer={};timer.speed_mode=LEDC_LOW_SPEED_MODE;timer.duty_resolution=LEDC_TIMER_14_BIT;timer.timer_num=ZJ_MOTOR_TIMER;timer.freq_hz=50;timer.clk_cfg=LEDC_AUTO_CLK;
- bool ok=ledc_timer_config(&timer)==ESP_OK;
+ bool ok=ZJ_ESC_PROFILE.deployable()&&ledc_timer_config(&timer)==ESP_OK;
  for(int n=0;n<4;n++){
   ledc_channel_config_t channel={};channel.gpio_num=ZJ_MOTOR_PINS[n];channel.speed_mode=LEDC_LOW_SPEED_MODE;channel.channel=ledc_channel_t(n);channel.timer_sel=ZJ_MOTOR_TIMER;channel.duty=0;
   ok=(ledc_channel_config(&channel)==ESP_OK)&&ok;
