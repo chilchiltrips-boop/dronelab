@@ -8,7 +8,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.6";
+constexpr const char* FW_VERSION="1.7.7";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -297,6 +297,9 @@ static String zjImuStatus(){
 }
 static void emitImuDiagnostics(unsigned long now){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ // The independent acquisition task may have published after loop() captured
+ // its clock. Read time after the main-owned snapshot to avoid age underflow.
+ now=millis();
  static uint32_t last=0,lastErrorAt=0,lastErrorCount=0;static bool sample=false;
  if(uint32_t(now-last)<500)return;last=now;
  String line;

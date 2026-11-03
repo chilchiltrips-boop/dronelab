@@ -25,7 +25,22 @@ try{
   if(state==='SENSOR_ERROR')assert.match(result.label,/Sensor error.*I2C_ERROR/);
   assert.doesNotMatch(result.export,/PRIVATE-A2-FIXTURE|PRIVATE-BOOT/);transitions.push({state,label:result.label,tone:result.tone});
  }
+ // Actual parser -> verified-USB view wiring, using simulated serial input.
+ const usbTransitions=await page.evaluate(()=>{
+  const api=window.ZebjusAckDiagnostics;
+  const kit={connected:true,linkVerified:true,working:false,kitId:'PRIVATE-USB-FIXTURE',bootId:'PRIVATE-USB-BOOT',board:'ZFC-A2',transport:'usb',physicalLink:'usb',connectionGeneration:2,heartbeatAt:Date.now(),linkState:'connected',rc:{source:'NONE',active:false,claimed:false},imu:{version:1,board:'A2',enabled:true,state:'READY',attempt:1,samples:2000,target:2000,error:'NONE',configValid:true,dataReady:true,sampleSequence:1,sampleAgeMs:0}};
+  window.ZebjusKits.getState=()=>kit;
+  const timing=age=>'ZJTIMING,1,A2,250,4000,4000,4000,0,0,20,20,0,0,HEALTHY,250,'+age+',0,20,20,0';
+  return [timing(16000),timing(500),timing(-1),'ZJGYRO,STATUS,A2,MPU6050,0x68,READ_ERROR'].map(line=>{
+   kit.imu=api.parseImuLine(line,kit.imu);kit.imuObservedAt=Date.now();api.observeImu(kit.imu,kit);
+   window.dispatchEvent(new CustomEvent('dronelab:kit-link'));
+   return {ready:kit.imu.dataReady,label:document.getElementById('fwHealthImu').textContent,tone:document.getElementById('fwHealthImu').dataset.state};
+  });
+ });
+ assert.deepEqual(usbTransitions.map(x=>x.ready),[false,true,false,false]);
+ assert.deepEqual(usbTransitions.map(x=>x.tone),['lost','live','lost','lost']);
+ assert.match(usbTransitions[3].label,/Sensor error.*READ_ERROR/);
  assert.deepEqual(errors,[]);await page.screenshot({path:out+'/status.png',fullPage:true});
- writeFileSync(out+'/result.json',JSON.stringify({result:'PASS',transitions,errors},null,2));
+ writeFileSync(out+'/result.json',JSON.stringify({result:'PASS',transitions,usbTransitions,errors},null,2));
  console.log('PASS IMU actual WebApp: calibration progress, ready, failure, sensor error and private diagnostics export');
 }finally{await browser.close();}

@@ -115,6 +115,7 @@ void updateGyro(unsigned long now){
   if(uint32_t(now-lastGyroProbe)<2500)return;
   lastGyroProbe=now;zjGyroCalibration.error="I2C_ERROR";
   if(!beginGyro()){
+   sample.valid=false;++sample.errors;
    zjGyroCalibration.fail(zjGyroCalibration.error,now,true);gyroStatus("NOT_FOUND");return;
   }
   gyroConfigured=true;gyroReady=false;gyroWaitingFresh=false;
