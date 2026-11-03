@@ -466,7 +466,10 @@ void loop(){
   emitImuDiagnostics(now);
  zjNetworkLoop(now);
  zjRcLoop(now);
- zjPublishControlInput();
+ // Retain the selected UDP frame's receive time, not its later apply time.
+ uint32_t shadowInputAt=zjRcLast;
+ if(zjRcUdpOwned){portENTER_CRITICAL(&zjUdpMux);shadowInputAt=zjUdpLastAppliedReceivedAt;portEXIT_CRITICAL(&zjUdpMux);}
+ zjPublishControlInput(shadowInputAt);
  emitTimingDiagnostics(millis());
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;

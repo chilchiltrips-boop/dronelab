@@ -20,7 +20,7 @@ try{
    return {label:document.getElementById('fwHealthImu').textContent,tone:document.getElementById('fwHealthImu').dataset.state,export:window.ZebjusAckDiagnostics.exportData('json')};
   },state);
   if(state==='CALIBRATING'){assert.match(result.label,/Calibrating 1000\/2000.*keep board still/);assert.equal(result.tone,'calibrating');assert.doesNotMatch(result.label,/NOT FOUND/);}
-  if(state==='READY'){assert.match(result.label,/READY.*calibrated/);assert.equal(result.tone,'live');assert.match(result.export,/1\.25/);assert.match(result.export,/\"controlActualHz\":247.5/);assert.match(result.export,/\"controlActuating\":false/);}
+  if(state==='READY'){assert.match(result.label,/READY.*calibrated/);assert.equal(result.tone,'live');assert.match(result.export,/1\.25/);assert.ok(JSON.parse(result.export).events.some(e=>e.data.controlActualHz===247.5&&e.data.controlActuating===false));}
   if(state==='FAILED')assert.match(result.label,/Calibration failed/);
   if(state==='SENSOR_ERROR')assert.match(result.label,/Sensor error.*I2C_ERROR/);
   assert.doesNotMatch(result.export,/PRIVATE-A2-FIXTURE|PRIVATE-BOOT/);transitions.push({state,label:result.label,tone:result.tone});

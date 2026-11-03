@@ -69,9 +69,9 @@ static void zjControlRuntimeSetup(){
   // No fallback claims 250Hz. Existing bench authorization remains separate.
  }
 }
-static void zjPublishControlInput(){
- ZjControlInputSnapshot value;value.sequence=zjRcSeq;value.receivedMs=zjRcLast;value.observedUs=micros();
- value.valid=zjRcOwned&&zjRcHasFrame&&uint32_t(millis()-zjRcLast)<=ZJ_RC_DEADMAN_MS;
+static void zjPublishControlInput(uint32_t receivedMs){
+ ZjControlInputSnapshot value;value.sequence=zjRcSeq;value.receivedMs=receivedMs;value.observedUs=micros();
+ value.valid=zjRcOwned&&zjRcHasFrame&&uint32_t(millis()-receivedMs)<=ZJ_RC_DEADMAN_MS;
  value.throttle=zjRcThrottle;value.roll=zjRcRoll;value.pitch=zjRcPitch;value.yaw=zjRcYaw;
  value.source=zjRcSource=="PPM"?1:zjRcSource=="ANDROID"?2:zjRcSource=="WEB"?3:0;
  portENTER_CRITICAL(&zjTimingMux);zjControlInput=value;portEXIT_CRITICAL(&zjTimingMux);
@@ -84,5 +84,5 @@ static void zjReleaseI2c(){}
 static ZjControlScheduler zjReadControl(){return zjControl;}
 static ZjImuAcquisition zjReadImu(uint32_t now){zjImuDriver.updateGyro(now);return zjImuDriver;}
 static void zjControlRuntimeSetup(){zjImuDriver.lastGyroProbe=millis()-2500;}
-static void zjPublishControlInput(){}
+static void zjPublishControlInput(uint32_t receivedMs){}
 #endif

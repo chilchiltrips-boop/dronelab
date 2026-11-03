@@ -25,7 +25,7 @@ static bool zjUdpActive=false,zjUdpConfigured=false,zjUdpHasPending=false,zjUdpR
 static bool zjUdpAppliedArm=false,zjUdpTerminalReported=false;
 static uint8_t zjUdpKey[32]={},zjUdpToken[8]={},zjUdpOwner[4]={},zjUdpFeedbackVersion=1;
 static uint32_t zjUdpLastSeq=0,zjUdpLastRx=0,zjUdpFirstRx=0,zjUdpBoundAt=0,zjUdpReceived=0,zjUdpRejected=0;
-static uint32_t zjUdpLastAppliedSeq=0,zjUdpLastAppliedAt=0,zjUdpAppliedCount=0,zjUdpNotifiedApplied=0;
+static uint32_t zjUdpLastAppliedSeq=0,zjUdpLastAppliedAt=0,zjUdpLastAppliedReceivedAt=0,zjUdpAppliedCount=0,zjUdpNotifiedApplied=0;
 static uint32_t zjUdpFeedbackCounter=0,zjUdpFeedbackSalt=0,zjUdpLastNackAt=0;
 // The old Python controller sent 50 Hz with independent RX; retain encrypted feedback at bounded rate.
 #if defined(ZJ_UDP_HOST_IMMEDIATE_APPLIED_ACK)
@@ -78,7 +78,7 @@ static bool zjUdpBind(const String& signedKey,const String& token,const IPAddres
  for(int i=0;i<4;i++)zjUdpOwner[i]=peer[i];
  zjUdpReceiveRate.reset(micros());zjUdpApplyRate.reset(micros());zjUdpCoalesced=0;
  zjUdpLastSeq=zjUdpLastRx=zjUdpFirstRx=0;zjUdpBoundAt=now;zjUdpLifetime=1800000-age;
- zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpNotifiedApplied=0;
+ zjUdpReceived=zjUdpRejected=zjUdpAppliedCount=zjUdpLastAppliedSeq=zjUdpLastAppliedAt=zjUdpLastAppliedReceivedAt=zjUdpNotifiedApplied=0;
  zjUdpFeedbackCounter=0;zjUdpFeedbackSalt=esp_random();zjUdpFeedbackVersion=feedbackVersion;zjUdpOwnerPort=0;
  zjUdpLastAppliedNoticeAt=zjUdpLastRxNoticeAt=0;
  zjUdpNotifiedArm=zjUdpNotifiedRxArm=false;zjUdpMaxTxUs=zjUdpMaxRxToAckUs=0;
@@ -288,7 +288,7 @@ static void zjUdpLoop(uint32_t now){
   zjUdpStop(ZJ_UDP_INVALID_FRAME);zjRcRelease("UDP_FRAME_REJECTED");return;
  }
  portENTER_CRITICAL(&zjUdpMux);const bool current=generation==zjUdpGeneration&&zjUdpActive;
- if(current){zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis();zjUdpAppliedArm=zjRcInputArmed;++zjUdpAppliedCount;zjUdpApplyRate.event(micros());}
+ if(current){zjUdpLastAppliedSeq=seq;zjUdpLastAppliedAt=millis();zjUdpLastAppliedReceivedAt=receivedAt;zjUdpAppliedArm=zjRcInputArmed;++zjUdpAppliedCount;zjUdpApplyRate.event(micros());}
  const uint8_t stopped=zjUdpEndReason;portEXIT_CRITICAL(&zjUdpMux);
  if(!current){zjUdpStop(stopped);zjRcRelease(zjUdpReleaseReason(stopped));}
 }

@@ -78,7 +78,7 @@ static void feedbackTests(){
  assert(zjUdpHasPending&&zjRcSeq==1&&zjRcRejected==rejected);
  deliver(frame(3,true,1000,1800));feedback(1);zjUdpLoop(clockMs);assert(zjRcSeq==1);
  clockMs++;zjUdpLoop(clockMs);pump();applied=feedback(2);
- assert(zjUdpCoalesced==1);
+ assert(zjUdpCoalesced==1&&zjUdpLastAppliedReceivedAt==clockMs-1);
  assert(zjRcSeq==3&&zjRcRoll==1800&&zjUdpAppliedCount==2&&zjRcRejected==rejected);
  assert(((applied[8]<<8)|applied[9])==1&&((applied[10]<<8)|applied[11])==0);
  const uint32_t lastRx=zjUdpLastRx;
