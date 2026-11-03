@@ -71,3 +71,11 @@ Future flight PID integration must still add independently reviewed authorizatio
 
 - [MPU-6000/6050 register map, InvenSense/TDK](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf), CONFIG/DLPF, ranges, output registers, DATA_RDY.
 - [ESP32-C6 ESP Timer, ESP-IDF 5.5.2](https://docs.espressif.com/projects/esp-idf/en/v5.5.2/esp32c6/api-reference/system/esp_timer.html), task dispatch, short callbacks, notification and skipped-event policy.
+
+## Recorded software evidence (2026-11-03)
+
+- [A1/A2 exact-source rebuild and integrity checks](https://github.com/chilchiltrips-boop/dronelab/actions/runs/41591558300): PASS, source commit `741394f6ecc1bee6109513596a0a59419d0ad2d0`; generated image commit `ec49bffa847b7326a265f00ff9527acb6bdc49e8`.
+- [Timing/IMU, A2 setup/motor, authoritative status and simulator-startup browser integration](https://github.com/chilchiltrips-boop/dronelab/actions/runs/41591563968/job/125769240809): PASS, simulated Kit data only.
+- Local final suite: 670 tests total, 668 PASS and 2 existing skips. `npm run check`: PASS, 56 modules and 15/15 model assets.
+- Early PR source checks correctly rejected stale pre-rebuild images. A browser export assertion initially assumed compact JSON spacing; it now inspects the parsed event structure. No firmware-integrity gate or browser assertion was bypassed.
+- Physical rates, latency, jitter, noise, real motor/ESC behavior and flight stability: NOT_RUN. The new counters become measured device evidence only after running this firmware on real hardware.

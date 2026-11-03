@@ -111,6 +111,7 @@ test('timing diagnostics preserve unknown rates, USB compatibility and immediate
  assert.equal(d.parseImuLine('ZJTIMING,1,A2,250',ready),null);
  assert.equal(d.normalizeImu({...timing,controlHealth:'SECRET-SSID'}),null);
  assert.equal(d.normalizeImu({...timing,controlActualHz:NaN}),null);
+ assert.equal(d.normalizeImu({...timing,imuValid:false}).dataReady,false);
  assert.equal(d.normalizeImu({...timing,accelG:[1,2,NaN]}),null);
  assert.doesNotMatch(d.exportData('json'),/PRIVATE-KIT|PRIVATE-BOOT|SECRET/);
 });

@@ -75,7 +75,7 @@ function normalizeImu(value,expectedBoard=''){
   out[key]=[...value[key]];
  }
  if(out.enabled&&out.state==='READY'&&(out.samples!==2000||!out.attempt||out.configValid!==true))return null;
- if(out.state!=='READY'||Number.isFinite(out.sampleAgeMs)&&out.sampleAgeMs>1000)out.dataReady=false;
+ if(out.imuValid===false||out.state!=='READY'||Number.isFinite(out.sampleAgeMs)&&out.sampleAgeMs>1000)out.dataReady=false;
  return out;
 }
 function imuLabel(value){
