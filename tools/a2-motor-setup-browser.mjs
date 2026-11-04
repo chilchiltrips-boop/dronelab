@@ -15,7 +15,7 @@ try{
  const wizard=page.locator('#a2SetupRoot');
  await wizard.locator('[data-step="0"]').waitFor();
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
-  ['Board','Wiring','Inputs','IMU Calibration','Output Signal','Output Calibration','Report','ESC Calibration']);
+  ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
   const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.11'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
@@ -170,10 +170,11 @@ try{
  assert.equal(await wizard.locator('#a2ManualZ').inputValue(),'0.080');
  assert.equal(await fixture(()=>__wizard.writes),3,'Restore Saved never writes hardware');
  await step(4).click();
- await nav(1).click();assert.equal(await button('cal-slider').isDisabled(),true);
- assert.equal(await button('skip-output').isVisible(),true,'first setup can reach final ESC calibration before output tests');
- await button('skip-output').click();assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
- await nav(1).click();assert.equal(await button('auto-prepare').isDisabled(),true,'automatic calibration requires local procedure checks');
+ await nav(1).click();assert.equal(await wizard.locator('[data-panel="5"] h3').textContent(),'Automatic ESC Calibration');
+ assert.equal(await button('auto-prepare').isDisabled(),true,'automatic calibration requires local procedure checks');
+ await step(6).click();assert.equal(await button('cal-slider').isDisabled(),true,'output calibration cannot start before ESC confirmation');
+ assert.equal(await button('skip-output').isVisible(),false,'cannot skip output into Report before ESC calibration');
+ await step(5).click();
  assert.equal(await button('high').count(),0);assert.equal(await button('low').count(),0);
  await check('a2EscProps','a2PowerOff','a2ReadProcedure');
  await fixture(()=>{__wizard.dropPrepareAck=true;});
@@ -199,15 +200,17 @@ try{
  await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','PWM off verified');
  mkdirSync('test-output',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
  await check('a2Tones','a2EscDisconnected');await button('confirm-cal').click();
- await expectText('.a2-calibration-summary','Save this page');await expectSaved(7,false);
+ await expectText('.a2-calibration-summary','Save this page');await expectSaved(5,false);
  await fixture(()=>{__wizard.dropSaveAck=true;__wizard.failStatus=true;});
  await button('save-page').click();await expectText('.a2-message','Simulated lost Save acknowledgement');
- await expectSaved(7,false);
+ await expectSaved(5,false);
  assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true,'the board committed despite the lost response');
- await fixture(()=>{__wizard.failStatus=false;document.querySelector('[data-action="save-page"]').click();});await expectSaved(7);
+ await fixture(()=>{__wizard.failStatus=false;document.querySelector('[data-action="save-page"]').click();});await expectSaved(5);
  assert.equal(await fixture(()=>__wizard.writes),4,'retry reads the board before another write');
- assert.equal(await nav(1).isVisible(),false,'ESC calibration is the final Wizard page');
- await button('return-output').click();await expectText('.a2-cal-target','Motor 1 of 4');
+ assert.equal(await nav(1).isVisible(),true,'ESC calibration precedes Output Calibration');
+ await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
+ assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
+ assert.equal(await button('skip-output').isVisible(),true,'operator may skip optional output minimum measurement after ESC confirmation');
  assert.equal(await nav(1).isDisabled(),true);
  const pulse=wizard.locator('#a2CalPulse');
  assert.equal(await pulse.getAttribute('max'),'1500');assert.equal(await pulse.isDisabled(),true);
@@ -216,15 +219,15 @@ try{
   await pulse.fill(value);await expectText('.a2-cal-output','ACK '+value);
   await button('cal-slider').click();await expectText('.a2-cal-output','Pending save');
  };
- await capture('1087');await expectSaved(5,false);
+ await capture('1087');await expectSaved(6,false);
  assert.match(safetyPrompts.join('|'),/Remove all propellers, verify motor\/ESC wiring and power/,'motor activation must require explicit confirmation');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);
  await fixture(()=>{__wizard.failSave=true;});await button('save-page').click();
- await expectText('.a2-message','Simulated NVS failure');await expectSaved(5,false);
- await button('save-page').click();await expectSaved(5);
+ await expectText('.a2-message','Simulated NVS failure');await expectSaved(6,false);
+ await button('save-page').click();await expectSaved(6);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1087,0,0,0]);
  await nav(1).click();await expectText('.a2-cal-target','Motor 2 of 4');
- await nav(-1).click();await expectSaved(5);assert.equal(await pulse.inputValue(),'1087');
+ await nav(-1).click();await expectSaved(6);assert.equal(await pulse.inputValue(),'1087');
  await button('cal-slider').click();await expectText('.a2-cal-output','ACK 1000');
  await button('resume-cal').click();await expectText('.a2-cal-output','ACK 1087');
  await fixture(()=>{__wizard.holdPulse='1125';});await pulse.fill('1125');await page.waitForFunction(()=>!!__wizard.release);
@@ -233,26 +236,26 @@ try{
  for(const [motor,value] of [[2,'1090'],[3,'1105'],[4,'1110']]){
   await nav(1).click();await expectText('.a2-cal-target',`Motor ${motor} of 4`);await capture(value);
  }
- await nav(1).click();assert.equal(await wizard.locator('[data-panel="6"] h3').textContent(),'Setup report');
- assert.equal(await button('save-page').isVisible(),false);assert.equal(await nav(1).isVisible(),true);
+ await nav(1).click();assert.equal(await wizard.locator('[data-panel="7"] h3').textContent(),'Setup report');
+ assert.equal(await button('save-page').isVisible(),false);assert.equal(await nav(1).isVisible(),false,'Report must be the last step');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1087,1090,1105,1110]);
  assert.doesNotMatch(await wizard.locator('.a2-report').textContent(),/Pending|Motor test/i);
- await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(5);
+ await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(6);
  assert.equal(await pulse.inputValue(),'1110');
  await wizard.locator('#a2CalAll').check();assert.equal(await pulse.inputValue(),'1000');
  await capture('1150');
  const previous=await fixture(()=>[...__wizard.board.observedMinimumUs]);
  await fixture(()=>{__wizard.failSave=true;});await button('save-page').click();
- await expectText('.a2-message','Simulated NVS failure');assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),previous);await expectSaved(5,false);
+ await expectText('.a2-message','Simulated NVS failure');assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),previous);await expectSaved(6,false);
  await fixture(()=>{__wizard.dropSaveAck=true;});await nav(1).click();
- assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
+ assert.equal(await wizard.locator('[data-panel="7"]').isVisible(),true);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);
  const persisted=await fixture(()=>({...__wizard.board}));
  await page.reload();await wizard.locator('[data-step="0"]').waitFor();await page.evaluate(installFixture,{savedBoard:persisted,boot:'nextboot'});
  await button('detect').click();
- for(const index of [1,3,7,5]){await step(index).click();await expectSaved(index);}
+ for(const index of [1,3,5,6]){await step(index).click();await expectSaved(index);}
  assert.equal(await pulse.inputValue(),'1150');assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_BEGIN').length),0,'reload never restarts output');
- await wizard.locator('#a2CalAll').check();await expectSaved(5);
+ await wizard.locator('#a2CalAll').check();await expectSaved(6);
  await page.setViewportSize({width:390,height:844});
  await page.waitForFunction(()=>{
   const nav=document.querySelector('.a2-steps'),current=nav.querySelector('[aria-current="step"]');
@@ -260,17 +263,17 @@ try{
  });
  assert.equal(await button('save-page').isVisible(),true);assert.equal(await button('stop').isVisible(),true);
  mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-page-save-mobile.png',fullPage:true});
- await step(7).click();await expectSaved(7);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-mobile.png',fullPage:true});
- await step(6).click();await wizard.locator('[data-panel="6"] summary').click();
+ await step(5).click();await expectSaved(5);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-mobile.png',fullPage:true});
+ await step(7).click();await wizard.locator('[data-panel="7"] summary').click();
  await button('reset-selected').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
- await step(5).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(6).click();
+ await step(6).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(7).click();
  await button('reset-all').click();await expectText('.a2-report-state','Reset saved on board');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
  assert.equal(await wizard.locator('.a2-checks').count(),0,'reset does not restore the removed checklist');
  assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_SAVE')),[]);
  assert.deepEqual(errors,[]);
- await step(7).click();
- console.log('PASS simulated A2 automatic ESC power-cycle workflow, final page, operator-only confirmation, verified saves, output calibration, reset and mobile layout');
+ await step(7).click();assert.equal(await nav(1).isVisible(),false);
+ console.log('PASS simulated A2 ESC before output calibration and final report, automatic power-cycle, operator confirmation, verified saves, reset and mobile layout');
 }finally{await browser.close();}

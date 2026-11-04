@@ -4,9 +4,9 @@ import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
- const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','Output Calibration','Report','ESC Calibration'];
- const OUTPUT=5,REPORT=6,ESC=7;
- const shortSteps=['Board','Wiring','Inputs','IMU','Signal','Output Cal.','Report','ESC Cal.'];
+ const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
+ const ESC=5,OUTPUT=6,REPORT=7;
+ const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
@@ -97,21 +97,7 @@ if(root){
  <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
  <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Output Calibration limits the pulse to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
- <section data-panel="5"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(OUTPUT)}
- <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
- <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
- <p class="a2-output-prerequisite" role="status"></p><div class="a2-actions"><button class="btn ghost" data-action="skip-output" hidden>Continue to final ESC calibration</button></div>
- <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
- <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
- <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
- <p class="a2-cal-output a2-test-state" role="status"></p></section>
- <section data-panel="6"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
- <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
- <details class="a2-secondary-test"><summary>Reset setup</summary>
- <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
- <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC confirmation</option><option value="minimums">Motor starting pulses</option></select>
- <div class="a2-actions"><button class="btn ghost" data-action="reset-selected">Reset selected calibration</button><button class="btn ghost" data-action="reset-all">Reset all Wizard settings</button></div></details></section>
- <section data-panel="7"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3>${soundButton}</div>${pageStatus(ESC)}
+ <section data-panel="5"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3>${soundButton}</div>${pageStatus(ESC)}
  <p>APM / Pixhawk-style calibration on the next power-on. The A2 runs all four ESCs without a live app connection.</p>
  <p class="a2-calibration-summary" role="status"></p>
  <ol class="a2-cal-steps"><li data-cal-stage="prepare"><b>Prepare and save the request</b><span>Remove all propellers. Save page changes, verify the wiring, lower throttle and disarm. Preparing keeps PWM off and clears old ESC confirmation and starting pulses.</span></li><li data-cal-stage="power"><b>Power the entire aircraft off</b><span>Disconnect LiPo and USB. Wait until the A2 and ESCs are fully off. A software reboot or RESET button is not a substitute.</span></li><li data-cal-stage="sequence"><b>Reconnect LiPo only</b><span>The firmware sends HIGH 2000 µs for 5 seconds, then LOW 1000 µs for 5 seconds, then cuts PWM. Listen for the ESC’s own tones. Disconnect power immediately to abort while the app is offline.</span></li><li data-cal-stage="confirm"><b>Reconnect, verify and save</b><span>Wait at least 15 seconds after LiPo power-on and for the ESC success tones, then disconnect LiPo. Reconnect A2 by USB to read the stored result, or reconnect AP/STA after a normal power-on. Confirm the tones, then Save.</span></li></ol>
@@ -126,7 +112,21 @@ if(root){
  <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard from all four ESCs</label>
  <label class="a2-check"><input type="checkbox" id="a2EscDisconnected" disabled> LiPo disconnected after the sequence; no ESC output is running</label>
  <button class="btn ghost" data-action="confirm-cal" disabled>Confirm ESC success tones</button>
- <div class="a2-actions"><button class="btn ghost" data-action="return-output" hidden>Return to Output Calibration</button><button class="btn ghost" data-action="download">Download report</button></div></section>
+ <div class="a2-actions"><button class="btn ghost" data-action="return-output" hidden>Continue to Output Calibration</button></div></section>
+ <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(OUTPUT)}
+ <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
+ <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
+ <p class="a2-output-prerequisite" role="status"></p><div class="a2-actions"><button class="btn ghost" data-action="skip-output" hidden>Skip output calibration → Report</button></div>
+ <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
+ <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
+ <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
+ <p class="a2-cal-output a2-test-state" role="status"></p></section>
+ <section data-panel="7"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
+ <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
+ <details class="a2-secondary-test"><summary>Reset setup</summary>
+ <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
+ <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC confirmation</option><option value="minimums">Motor starting pulses</option></select>
+ <div class="a2-actions"><button class="btn ghost" data-action="reset-selected">Reset selected calibration</button><button class="btn ghost" data-action="reset-all">Reset all Wizard settings</button></div></details></section>
  </main><aside class="a2-visual" aria-label="Current setup step visualization"><h3 class="a2-visual-title"></h3><div class="a2-visual-scene"></div><div class="a2-pulses"></div></aside></div>
  <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn ghost" data-action="verify-save" hidden>Verify / retry save</button><button class="btn ghost" data-action="save-page" hidden>Save</button><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
  let soundEnabled=true;try{soundEnabled=localStorage.getItem('zebjus.setup.sound')!=='off';}catch{}
@@ -403,8 +403,8 @@ if(root){
   const busy=!!working||motorClient.busy;
   const disabled=!canStart()||!outputChecks()||busy;
   const prerequisite=!compatibleEsc();
-  $('.a2-output-prerequisite').textContent=prerequisite?'Complete ESC calibration on the final page first, then return here to find the starting pulses. Recalibrating ESC endpoints clears earlier starting pulses.':'';
-  $('[data-action="skip-output"]').hidden=!prerequisite;
+  $('.a2-output-prerequisite').textContent=prerequisite?'Complete Step 6 ESC Calibration and Save before measuring motor starting pulses. Recalibrating ESC endpoints clears earlier starting pulses.':'';
+  $('[data-action="skip-output"]').hidden=prerequisite||calibrationComplete();
   $('[data-action="skip-output"]').disabled=busy||!observedOff();
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
   const text=operationError||(!observedOff()&&!fresh?'Output state unconfirmed · verify STOP or reconnect.':outputOff(state)?'Outputs off':state?.mode||'Waiting for board');
@@ -531,13 +531,13 @@ if(root){
   saveButton.textContent=['save-page','save-next'].includes(working)?'Saving…':retry?'Verify save':'Save';
   $('[data-action="verify-save"]').hidden=!ambiguousSave||retry;
   $('[data-action="verify-save"]').disabled=!!working;
-  next.hidden=step===ESC;
-  next.textContent=step===REPORT?'Next · ESC Calibration':scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':'Next';
-  next.disabled=!!working||step===ESC||!(canAdvance()||canSaveScope(scope)||retry);
+  next.hidden=step===REPORT;
+  next.textContent=scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':step===ESC?'Next · Output Calibration':step===OUTPUT?'Next · Report':'Next';
+  next.disabled=!!working||step===REPORT||!(canAdvance()||canSaveScope(scope)||retry);
   $('#a2Layout').disabled=lock;
   root.querySelectorAll('[data-pin],[data-rotation]').forEach(input=>input.disabled=lock);
   renderPageSaves();
-  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,calibrationComplete()&&compatibleEsc()&&minimums.every(value=>value===null),visited.has(REPORT),pageSaved(ESC)];
+  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,pageSaved(ESC),calibrationComplete()&&compatibleEsc()&&minimums.every(value=>value===null),visited.has(REPORT)];
   root.querySelectorAll('[data-step]').forEach((button,i)=>{
    const done=visited.has(i)&&completed[i];
    button.dataset.completed=String(!!done);button.dataset.saved=String([1,3,ESC].includes(i)?pageSaved(i):i===OUTPUT&&completed[OUTPUT]);
@@ -846,7 +846,7 @@ if(root){
    render();return;
   }
   if(action){perform(action);return;}
-  if(b.dataset.nav==='1'&&step!==ESC&&pageScope()){perform('save-next');return;}
+  if(b.dataset.nav==='1'&&step!==REPORT&&pageScope()){perform('save-next');return;}
   if(b.dataset.step!==undefined||b.dataset.nav){
    const next=b.dataset.nav?step+Number(b.dataset.nav):Number(b.dataset.step);
    if(next!==step)void navigate(next,!!b.dataset.nav).catch(e=>message(e.message));
