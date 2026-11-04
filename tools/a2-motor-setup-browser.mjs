@@ -269,7 +269,9 @@ try{
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);
  const persisted=await fixture(()=>({...__wizard.board}));
  await page.reload();await wizard.locator('[data-step="0"]').waitFor();await page.evaluate(installFixture,{savedBoard:persisted,boot:'nextboot'});
- await button('detect').click();
+ // Reconnect polling reads the stored result and may already open ESC. Do not
+ // race that automatic navigation by clicking Refresh on the hidden Board page.
+ await expectSaved(5);
  for(const index of [1,3,5,6]){await step(index).click();await expectSaved(index);}
  assert.equal(await pulse.inputValue(),'1150');assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_BEGIN').length),0,'reload never restarts output');
  await wizard.locator('#a2CalAll').check();await expectSaved(6);
