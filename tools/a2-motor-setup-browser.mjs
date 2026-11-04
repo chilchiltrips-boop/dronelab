@@ -190,8 +190,10 @@ try{
  await button('reset-selected').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
+ await step(6).click();await check('a2Pins');await step(7).click();
  await button('reset-all').click();await expectText('.a2-report-state','Reset saved on board');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
+ assert.equal(await wizard.locator('#a2Pins').isChecked(),false,'reset wiring requires a fresh physical wiring confirmation');
  assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_SAVE')),[]);
  assert.deepEqual(errors,[]);
  console.log('PASS simulated A2 per-page Save · verified green ticks, partial firmware commits, lost responses, motor traversal, reload, reset and mobile layout');

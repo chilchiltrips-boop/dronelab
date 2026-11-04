@@ -535,7 +535,7 @@ if(root){
   if(intent.scope==='ACCEL'&&accelAction===intent.action)accelAction='KEEP';
   if(intent.scope==='ESC')escDraft=false;
   for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
-  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
+  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();$('#a2Pins').checked=false;minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
   if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;}
   if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
