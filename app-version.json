@@ -1,5 +1,5 @@
 {
-  "version": "1.33",
+  "version": "1.34",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -11,7 +11,7 @@
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
     "Aerion A2 eight-step Setup Wizard with IMU and output calibration, verified Save and scoped reset"
   ],
-  "buildCommit": "7cedc814a534",
-  "publishedAt": "2026-11-03T20:30:03.275662+00:00",
-  "buildNumber": 464
+  "buildCommit": "43219e0687cb",
+  "publishedAt": "2026-11-04T03:25:55.222049+00:00",
+  "buildNumber": 465
 }
