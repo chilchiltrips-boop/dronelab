@@ -64,6 +64,7 @@ static bool zjPersistWizard(ZjWizardConfig next,bool configurationChange=true){
  if((configurationChange&&zjWizardSaved.revision>=999999999)||!next.accel.valid())return false;
  next.revision=zjWizardSaved.revision+(configurationChange?1:0);
  char encoded[176];next.encode(encoded,sizeof(encoded));const String value(encoded);
+ const String previous=zjKitPrefs.getString("wizardSetup1","");
  const size_t written=zjKitPrefs.putString("wizardSetup1",value);
  const String stored=zjKitPrefs.getString("wizardSetup1","");
  if(stored==value){zjUseWizardRecord(next);return true;}
@@ -71,7 +72,7 @@ static bool zjPersistWizard(ZjWizardConfig next,bool configurationChange=true){
  // cannot confirm either record, block further actuation and writes.
  ZjWizardConfig actual;
  if(actual.decode(stored.c_str()))zjUseWizardRecord(actual);
- else zjWizardRecordVerified=!zjWizardSaved.revision&&written==0&&stored.isEmpty();
+ else zjWizardRecordVerified=!zjWizardSaved.revision&&written==0&&stored==previous;
  return false;
 }
 static const char* zjWizardCapturedAccel(const String& caller,const String& encoded,ZjAccelModel& model){

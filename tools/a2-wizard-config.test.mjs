@@ -162,6 +162,8 @@ int main(){
  assert(zjKitPrefs.getString("wifiOther","")=="preserved");
  zjKitPrefs.putString("wizardSetup1","corrupt");reboot();assert(!zjMotorConfigValid&&!applied.six);
  assert(has(page("RESET_ESC","CONFIRM_RESET"),"reset_all_setup_required"));
+ zjKitPrefs.failNextWrite=true;assert(has(page("RESET_ALL","CONFIRM_RESET"),"wizard_save_failed"));
+ assert(zjWizardRecordVerified&&!zjMotorConfigValid);
  assert(!has(page("RESET_ALL","CONFIRM_RESET"),"error"));reboot();assert(zjMotorConfigValid);
 }
 `;
