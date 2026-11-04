@@ -1,7 +1,7 @@
 import {motorClient,cancelMotorConfirmations} from './motor-setup.js';
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
-import {layouts,stepVisual,updateMotorDiagram,wizardVisual,updateImuDiagram} from './a2-setup-visuals.js';
+import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
@@ -15,6 +15,7 @@ if(root){
  let lastStateAt=0,historyAt=0,polling=false,working='',readError='',operationError='',nextPollAt=0,readFailures=0;
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
+ let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
  let visualStep=-1,visualMarkup='';
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
@@ -28,17 +29,39 @@ if(root){
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
  <p class="a2-wiring-validation" role="status"></p><p class="a2-save-state"></p></section>
  <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
- <section data-panel="3"><h3>IMU Calibration</h3>${pageStatus(3)}
- <p>Keep the controller stationary while the gyroscope collects 2000 fresh samples. Gyro bias is recalculated on boot.</p>
- <div class="a2-actions"><button class="btn" data-action="imu-gyro">Start gyro calibration</button><button class="btn ghost" data-action="imu-cancel">Cancel gyro</button><button class="btn ghost" data-action="imu-reset">Reset gyro state</button></div>
- <p class="a2-gyro-status" role="status"></p>
- <h4>Accelerometer</h4><p>Quick Level adds an inclination trim for the level pose. Full 6-Position fits an offset and scale for each axis.</p>
- <label for="a2Face">Upward axis</label><select id="a2Face">${axes.map((axis,i)=>`<option value="${i}" ${i===4?'selected':''}>${axis} up</option>`).join('')}</select>
- <label class="a2-check"><input type="checkbox" id="a2Still"> Board stationary in the requested pose</label>
- <div class="a2-actions"><button class="btn" data-action="imu-level">Quick Level (+Z up)</button><button class="btn" data-action="imu-face">Capture face</button><button class="btn ghost" data-action="imu-clear">Clear captures</button></div>
- <p class="a2-capture-status" role="status"></p>
- <details class="a2-input-details"><summary>Live IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
- <details class="a2-input-details"><summary>Capture tolerances</summary><p>128 fresh samples per pose. At most 3 °/s motion, 0.08 g sample spread per axis, and 0.28 g on cross axes. Gravity magnitude must be 0.75–1.30 g. Fit limits are ±0.25 g offset, 0.75–1.25 scale, and 0.20 g maximum axis residual.</p></details></section>
+ <section data-panel="3" class="a2-imu-page">
+ <div class="a2-imu-heading"><h3>IMU Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>${pageStatus(3)}
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Gyroscope zero-bias</strong><small>Automatic on boot · 2000 samples</small></div>
+  <progress class="a2-gyro-progress" max="2000" value="0" aria-label="Gyroscope calibration progress"></progress>
+  <p class="a2-gyro-status" role="status">Waiting for verified IMU</p>
+  <table class="a2-imu-table" aria-label="Gyroscope values in degrees per second"><thead><tr><th>Axis</th><th>Raw °/s</th><th>Bias °/s</th><th>Corrected °/s</th></tr></thead>
+   <tbody>${['X / Roll','Y / Pitch','Z / Yaw'].map((axis,i)=>`<tr><td>${axis}</td><td data-gyro-raw="${i}">—</td><td data-gyro-bias="${i}">—</td><td data-gyro-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
+  <label class="a2-check"><input type="checkbox" id="a2Still"> Board stationary for calibration / capture</label>
+  <div class="a2-actions"><button class="btn" data-action="imu-gyro">Start gyro calibration</button><button class="btn ghost" data-action="imu-cancel">Cancel</button><button class="btn ghost" data-action="imu-reset">Reset gyro</button></div>
+ </div>
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Accelerometer XYZ</strong><small>Manual offset · g</small></div>
+  <p class="a2-imu-manual-note">Enter the bias to SUBTRACT. Example: X = 0.030 means corrected X = calibrated X − 0.030 g. Each value: −0.250 to +0.250 g.</p>
+  <div class="a2-imu-offset-grid">
+   ${['X','Y','Z'].map((axis,i)=>`<label for="a2Manual${axis}">Acc${axis} offset (g)<input id="a2Manual${axis}" data-manual-axis="${i}" type="number" min="-0.250" max="0.250" step="0.001" inputmode="decimal" value="0.000"></label>`).join('')}
+  </div>
+  <p class="a2-imu-manual-warning" role="status"></p>
+  <table class="a2-imu-table" aria-label="Live accelerometer raw and corrected measurements in g"><thead><tr><th>Axis</th><th>Raw g</th><th>After saved fit g</th><th>Draft corrected g</th></tr></thead>
+  <tbody>${['X','Y','Z'].map((axis,i)=>`<tr><td>Acc${axis}</td><td data-accel-raw="${i}">—</td><td data-accel-fitted="${i}">—</td><td data-accel-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
+  <div class="a2-actions"><button class="btn ghost" data-action="imu-zero-manual">Zero manual offsets</button></div>
+  <p class="a2-imu-manual-note" data-imu-manual-status>Edited values are a preview until Save on this page is verified by the board.</p>
+ </div>
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Sensor calibration</strong><small>Quick Level / Full 6-position</small></div>
+  <div class="a2-imu-face-row"><label for="a2Face">Face up <select id="a2Face">${axes.map((axis,i)=>`<option value="${i}" ${i===4?'selected':''}>${axis} up</option>`).join('')}</select></label>
+   <div class="a2-actions"><button class="btn" data-action="imu-level">Quick Level (+Z)</button><button class="btn" data-action="imu-face">Capture face</button><button class="btn ghost" data-action="imu-clear">Clear captures</button></div>
+  </div>
+  <p class="a2-capture-status" role="status"></p>
+  <p class="a2-imu-manual-note">Quick Level provides inclination trim, not 3-axis scale calibration. Capture all six faces for the future Angle mode. Save a completed capture before editing manual offsets.</p>
+ </div>
+ <details class="a2-input-details"><summary>Advanced IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
+ <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
  <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Step 7 limits calibration to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
  <section data-panel="5"><div class="a2-panel-heading"><h3>ESC Calibration</h3>${soundButton}</div>${pageStatus(5)}
