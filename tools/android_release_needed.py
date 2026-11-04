@@ -17,7 +17,7 @@ APK_INPUTS = [
     'companion-network.js', 'android-native-bridge.js', 'companion-flight.js',
     'companion-menu.js', 'flight-input.js', 'pairing-core.js', 'pairing-code.js',
     'pairing-qr-ui.js', 'remote-rtc.js', 'remote-rtc-config.json',
-    'js/kit-auth.js', 'js/kit-network-policy.js', 'js/kit-ack-diagnostics.js',
+    'js/kit-auth.js', 'js/kit-network-policy.js', 'js/kit-ack-diagnostics.js', 'js/inline-dialogs.js',
     'firmware-catalog.json', 'vendor/crypto', 'vendor/qrgen.js',
     'vendor/jsqr.js', 'vendor/peerjs.min.js', 'vendor/peerjs.LICENSE',
 ]

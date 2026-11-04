@@ -197,6 +197,7 @@
   gap:5px!important;overflow:visible!important;border-radius:10px!important
 }
 #tab-python .python-project-bar .python-project-heading{max-width:112px!important;min-width:0!important;gap:4px!important}
+#tab-python .python-project-bar:has(>.aerion-inline-action){flex-wrap:wrap!important;height:auto!important;max-height:none!important}
 #tab-python .python-project-bar .python-project-heading small{display:none}
 #tab-python .python-project-bar .python-project-heading strong{max-width:95px!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 #tab-python .python-project-bar .python-toolbar-actions,

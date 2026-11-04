@@ -1,6 +1,11 @@
 (function(){
 'use strict';
-function confirmInLab(message){return window.AerionDialogs?.confirm(message)??Promise.resolve(confirm(message))}
+function confirmInLab(message){
+ const image=fw,port=serialPort,usb=loader,io=transport,client=school()?.client;
+ const binding=()=>JSON.stringify([usbSignature,usbBoardId,firmwareTargetMethod,$('#fwBoardProfile')?.value,$('#fwImageType')?.value,$('#fwEraseUsb')?.checked,school()?.getSelectedDevice?.()?.deviceId,school()?.getSelectedDevice?.()?.kitId]);
+ const target=binding();
+ return window.AerionDialogs?.confirm(message,{danger:true,confirmLabel:'Continue',guard:()=>fw===image&&serialPort===port&&loader===usb&&transport===io&&school()?.client===client&&binding()===target})??Promise.resolve(false);
+}
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';

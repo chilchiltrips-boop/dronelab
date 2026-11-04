@@ -276,11 +276,16 @@ function openConnection(){
  // Pairing is an observer of the existing Kit stream. Clear captured sticks
  // without releasing the independent physical session or its held throttle.
  if(!window.ZebjusNetwork?.hasControl?.())stopLocally();
- clearTouches();render();const d=$('mobileConnection');if(!d.open)d.showModal();$('flightSettings').setAttribute('aria-expanded','true')
+ clearTouches();render();const d=$('mobileConnection');
+ if(!d.open&&window.AerionDialogs){
+  d.prepend(document.querySelector('.flight-topbar'));
+  window.AerionDialogs.mount(d,{page:true,host:document.body});
+ }
+ $('flightSettings').setAttribute('aria-expanded',String(!!d.open))
 }
 function closeConnection(){
   window.ZebjusPairingStopCamera?.();
-  const dialog=$('mobileConnection');if(dialog?.open)dialog.close();
+  const dialog=$('mobileConnection');if(dialog?.open)dialog.close?.();
   $('flightSettings').setAttribute('aria-expanded','false');
   $('flightSettings').focus({preventScroll:true});
   // Android WebView can retain a text-selection range after a long press.
@@ -347,7 +352,7 @@ function bind(){
  $('flightConnect').onclick=openConnection;
  $('flightQuickScan').onclick=()=>{openConnection();$('scanOfferBtn').click()};
  $('flightResponse').onclick=()=>{const names=Object.keys(F.PRESETS);$('flightPreset').value=names[(names.indexOf(preset)+1)%names.length];$('flightPreset').dispatchEvent(new Event('change',{bubbles:true}))};
- $('mobileConnection').addEventListener('close',()=>{window.ZebjusPairingStopCamera?.();$('flightSettings').setAttribute('aria-expanded','false')});
+ $('mobileConnection').addEventListener('close',()=>{$('flightCockpit').prepend(document.querySelector('.flight-topbar'));window.ZebjusPairingStopCamera?.();$('flightSettings').setAttribute('aria-expanded','false')});
  $('flightTakeControl').onclick=()=>{peer?.requestControl();updateStatus('REQUESTED • GRANT MOBILE CONTROL ON WEB')};
  $('flightReleaseControl').onclick=()=>{doStop();peer?.releaseControl();render()};
  window.addEventListener('zebjus:diagnostic-control',event=>{diagnosticThrottle=1000;clearTouches();if(event.detail?.active===false&&directKit())updateStatus('KIT INPUT DISARMED • CHECK A2 OUTPUT STATE');render()});

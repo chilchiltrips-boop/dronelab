@@ -47,7 +47,7 @@ function openSettings(){
   const details=$('kitMobilePairDetails');if(details)details.open=true;
   return;
  }
- if(!dialog.open)dialog.showModal();
+ if(!dialog.open)window.AerionDialogs?.mount(dialog,{page:true,host:document.body});
 }
 function closeSettings(){
  stopCamera();
@@ -59,7 +59,7 @@ function closeSettings(){
   else window.ZebjusDevicesWorkspace?.open(view==='mobile'?'overview':view,{scroll:true});
   return;
  }
- $('connectionDialog').close();$('topPairMobileBtn').focus();
+ $('connectionDialog').close?.();$('topPairMobileBtn').focus();
 }
 function openStep(number){
  const s=host.status();

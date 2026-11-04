@@ -506,3 +506,10 @@ button{min-height:44px}
 .zj-ack-panel pre{white-space:pre-wrap;word-break:break-word;font-size:11px;line-height:1.4;max-height:200px;overflow:auto;padding:8px;background:#101c2b;color:#d8e7f8;border-radius:6px}
 
 .flight-options input[type="range"]{min-height:44px;max-width:100%;width:100%}.flight-options output{font-variant-numeric:tabular-nums;font-size:.8rem}
+
+.mobile-connection[hidden]{display:none!important}
+
+/* Keep the original STOP and transport controls reachable on the settings page. */
+.mobile-connection>.flight-topbar{position:sticky;top:0;flex:0 0 auto;min-height:50px}
+.mobile-connection>.flight-topbar button{min-height:44px}
+.mobile-connection>.flight-topbar .flight-stop{color:#fff5f5;background:#813746;border-color:#d78089}

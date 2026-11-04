@@ -1,0 +1,9 @@
+# On-page app actions
+
+Browser `alert`, `confirm`, `prompt` and HTML modal sheets are replaced with page content. Confirmations and text inputs appear beside the relevant controls. Passwords remain masked; input errors appear in the form. Cancel, Escape and leaving the page cancel the pending action. No action is automatically approved when the shared UI is unavailable.
+
+Motor, reset, enrollment, firmware and destructive file actions still require explicit confirmation. Pending hardware confirmations are bound to the selected Kit, boot, transport and USB generation; motor STOP also cancels them. Firmware image/USB target changes and project edits invalidate their pending confirmations. A2 Output Calibration uses one safety checkbox for the current visit, cleared on a page/context change, and rechecks it after a delayed Start acknowledgement. Checking it never starts an output. It is not a persisted board setting.
+
+Mobile and standalone simulator connection settings and the enlarged Python plot open as normal full pages. Back or Escape restores the controller. The original mobile STOP/transport header moves with the settings page and returns to the controller; the full-page Python plot retains a Stop Python action. Existing pairing, connection and STOP controls keep their behavior. Remembered-Kit Connect/Later appears inside the current page. Required browser/Android permission requests, system file pickers and downloads remain platform controls.
+
+Verification uses the browser fixtures in `tools/inline-actions-browser.mjs`, `tools/a2-motor-setup-browser.mjs` and the existing Python/mobile regressions. They cover cancellation, stale context, password validation, output readiness, saved pulse retention and returning from connection settings. These are simulated checks. Physical A2 PWM, tones and power-cycle bench verification have not been performed for this UI change. Firmware code is unchanged.

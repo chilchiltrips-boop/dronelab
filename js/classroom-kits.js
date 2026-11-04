@@ -907,11 +907,20 @@ async function refreshSavedNetworks(){
   throw Error('Selected Kit changed while reading saved Wi-Fi. Refresh the verified Kit again.');
  showSavedNetworks(data);
 }
+function confirmationBinding(){return JSON.stringify([state.kitId,state.bootId,state.transport,state.connectionGeneration,reconnectTicket,serial()?.generation?.(),state.connected]);}
+function confirmPage(message,options={}){
+ const binding=confirmationBinding(),guard=options.guard;
+ return root.AerionDialogs?.confirm(message,{...options,guard:()=>confirmationBinding()===binding&&(!guard||guard())})??Promise.resolve(false);
+}
+function promptPage(message,value='',options={}){
+ const binding=confirmationBinding(),guard=options.guard;
+ return root.AerionDialogs?.prompt(message,value,{...options,guard:()=>confirmationBinding()===binding&&(!guard||guard())})??Promise.resolve(null);
+}
 async function manageSavedNetwork(action){
  if(!linkFresh()||state.owner||state.rc?.claimed||state.working||wifiTesting)throw Error('Release control and finish Wi-Fi tests first');
  const ssid=$('kitSavedNetworks')?.value||'';
  if(!savedNetworks.some(k=>k.ssid===ssid))throw Error('Choose a saved router profile');
- if(action==='forget'&&!confirm('Forget saved Wi-Fi '+ssid+' on this Kit? The active connection remains until disconnect.'))return;
+ if(action==='forget'&&!await confirmPage('Forget saved Wi-Fi '+ssid+' on this Kit? The active connection remains until disconnect.',{danger:true,confirmLabel:'Forget router',guard:()=>linkFresh()&&!state.owner&&!state.rc?.claimed&&!wifiTesting&&$('kitSavedNetworks')?.value===ssid}))return;
  if(state.transport==='usb'){
   if(/[\r\n]/.test(ssid))throw Error('Use the AP setup page for router names containing line breaks');
   return usbWrite('ZJNET,'+(action==='use'?'USE,':'FORGET,')+ssid);
@@ -1078,18 +1087,21 @@ async function adminSave(){
  if(state.transport!=='usb'||!state.connected||state.owner)throw Error('USB admin access requires selected, unlocked physical kit');
  if(Date.now()>adminUnlockedUntil)throw Error('Unlock teacher admin using your 12+ character passphrase first');
  const name=$('kitAdminName')?.value.trim()||'',code=$('kitAdminCode')?.value.trim()||'',ap=$('kitAdminSsid')?.value.trim()||'',pass=$('kitAdminPass')?.value||'';
+ const binding=confirmationBinding(),inputValues=()=>JSON.stringify(['kitAdminName','kitAdminCode','kitAdminSsid','kitAdminPass'].map(id=>$(id)?.value||'')),snapshot=inputValues();
+ const current=()=>confirmationBinding()===binding&&inputValues()===snapshot&&Date.now()<=adminUnlockedUntil&&!state.owner;
  const validName=/^[A-Za-z0-9 _-]{3,31}$/,validAP=/^[A-Za-z0-9_-]{3,24}$/;
  if(name&&!validName.test(name)||code&&!codePattern.test(code)||ap&&!validAP.test(ap)||pass&&(pass.length<8||pass.length>63||/[^\x21-\x7E]|,/.test(pass)))throw Error('Invalid admin input. Kit name 3–31, code six digits, AP prefix 3–24, password 8–63 printable characters.');
  if(!name&&!code&&!ap&&!pass)throw Error('Enter one or more new values');
- if(code&&code!==state.kitCode&&!confirm('Teacher: verify no other kit uses '+code+'. This browser cannot guarantee global code uniqueness. Continue?'))return;
+ if(code&&code!==state.kitCode&&!await confirmPage('Teacher: verify no other kit uses '+code+'. This browser cannot guarantee global code uniqueness. Continue?',{guard:current}))return;
  const cmds=[];
  if(name&&name!==state.kitName)cmds.push('ZJADMIN,NAME,'+name);
  if(code&&code!==state.kitCode)cmds.push('ZJKIT,CODE,'+code);
  if(ap)cmds.push('ZJADMIN,APNAME,'+ap);
  if(pass)cmds.push('ZJADMIN,APPASS,'+pass);
  if(!cmds.length){audit('No admin changes needed');return}
- if(!confirm('Apply '+cmds.length+' USB-only settings to device '+state.kitId+'? Active AP clients may need to reconnect after restart.'))return;
+ if(!await confirmPage('Apply '+cmds.length+' USB-only settings to device '+state.kitId+'? Active AP clients may need to reconnect after restart.',{guard:current,confirmLabel:'Apply settings'}))return;
  for(const cmd of cmds){
+  if(!current())throw Error('USB target, admin input or unlock changed. Review the settings again.');
   const ack=waitSerial(/^ZJ(?:ADMIN|KIT),(?:ACK|ERR),/);
   await usbWrite(cmd);const response=await ack;
   if(response.includes(',ERR,'))throw Error('Device rejected admin setting: '+response);
@@ -1109,6 +1121,7 @@ async function adminSave(){
 async function adminReadApCredentials(){
  if(state.transport!=='usb'||!state.connected||state.owner||state.working||!linkFresh())throw Error('Connect a verified idle Kit via USB.');
  if(Date.now()>adminUnlockedUntil)throw Error('Unlock Teacher Admin before reading AP credentials.');
+ if(confirmationBinding()!==binding)return;
  hideAdminApCredentials();
  const expected=state.kitId;
  const reply=waitSerial(/^ZJADMIN,AP_CREDENTIALS,/,2600);
@@ -1126,8 +1139,9 @@ async function adminReadApCredentials(){
 async function adminResetAp(){
  if(state.transport!=='usb'||!state.connected||state.owner||state.working||!linkFresh())throw Error('Connect a verified idle Kit via USB.');
  if(Date.now()>adminUnlockedUntil)throw Error('Unlock Teacher Admin first.');
+ const binding=confirmationBinding();
  const question='Reset AP name to the current Kit Name and password to 12345678? Saved STA Wi-Fi, pairing and teacher passphrase remain.';
- if(!await (root.AerionDialogs?.confirm(question)??Promise.resolve(confirm(question))))return;
+ if(!await confirmPage(question,{danger:true,confirmLabel:'Reset AP defaults',guard:()=>Date.now()<=adminUnlockedUntil&&!state.owner}))return;
  hideAdminApCredentials();
  const expected=state.kitId;
  const reply=waitSerial(/^ZJADMIN,(?:ACK|ERR),(?:AP_RESET|ADMIN_LOCKED|CONTROLLER_ACTIVE)/,3000);
@@ -1145,8 +1159,9 @@ async function adminDanger(action){
  if(!state.connected||state.transport!=='usb'||state.owner)throw Error('Admin operation requires unlocked USB kit');
  if(Date.now()>adminUnlockedUntil)throw Error('Unlock teacher admin first');
  const cmd=action==='rotate'?'ZJADMIN,ROTATE_KEY,CONFIRM':'ZJADMIN,FACTORY_RESET,CONFIRM';
- const confirmation=prompt('DANGEROUS ADMIN OPERATION on '+state.kitId+'. Type the 6-digit Kit Code to confirm:');
- if(confirmation!==state.kitCode)return;
+ const target=state.kitId,code=state.kitCode,binding=confirmationBinding();
+ const confirmation=await promptPage('DANGEROUS ADMIN OPERATION on '+target+'. Type the 6-digit Kit Code to confirm:','',{label:'Kit Code',type:'password',inputMode:'numeric',required:true,maxLength:6,danger:true,confirmLabel:action==='rotate'?'Rotate key':'Factory reset',validate:value=>value===code?'':'Kit Code does not match the selected controller.',guard:()=>Date.now()<=adminUnlockedUntil&&!state.owner});
+ if(confirmation!==code||confirmationBinding()!==binding)return;
  const ackPromise=waitSerial(/^ZJADMIN,(?:ACK|ERR),/,3000);
  await usbWrite(cmd);
  const ack=await ackPromise;
@@ -1158,7 +1173,7 @@ async function adminAccess(action){
  if(!linkFresh()||state.transport!=='usb'||state.working||!['ENROLL','UNLOCK','LOCK'].includes(action))throw Error('Connect and verify the selected physical USB Kit first.');
  const pass=$('kitAdminSecret')?.value||'';
  if(action!=='LOCK'&&(pass.length<12||pass.length>64||/[,\r\n]/.test(pass)))throw Error('Teacher passphrase must be 12–64 characters without commas or line breaks');
- if(action==='ENROLL'&&!confirm('Teacher: enroll a new admin passphrase on this kit? Save it securely; it cannot be recovered from USB.'))return;
+ if(action==='ENROLL'&&!await confirmPage('Teacher: enroll a new admin passphrase on this kit? Save it securely; it cannot be recovered from USB.',{confirmLabel:'Enroll teacher',guard:()=>linkFresh()&&!state.owner&&$('kitAdminSecret')?.value===pass}))return;
  const response=waitSerial(/^ZJADMIN,(?:ACK|ERR),/,3300);
  // Password is written directly over physical USB, never stored in localStorage or UI logs.
  await usbWrite(action==='LOCK'?'ZJADMIN,LOCK':'ZJADMIN,'+action+','+pass);
@@ -1519,7 +1534,7 @@ async function offerRememberedConnection(){
    // Connect/Later approval before opening its authenticated read-only session.
    offeredConnections.add(signature);reconnectOffer={...kit};
    byId('kitReconnectName',kit.kitName);byId('kitReconnectIdentity',kit.kitId+' • '+kit.transport.toUpperCase());
-   const dialog=$('kitReconnectDialog');if(dialog){dialog.hidden=false;dialog.showModal?.();}
+   const dialog=$('kitReconnectDialog');if(dialog&&root.AerionDialogs)root.AerionDialogs.mount(dialog);
    root.dispatchEvent(new CustomEvent('dronelab:reconnect-offer',{detail:{kitId:kit.kitId,transport:kit.transport}}));
    audit('Remembered kit found • waiting for Connect permission • '+kit.kitId,'info');break;
   }

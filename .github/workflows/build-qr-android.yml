@@ -53,6 +53,7 @@ on:
       - 'js/kit-auth.js'
       - 'js/kit-network-policy.js'
       - 'js/kit-ack-diagnostics.js'
+      - 'js/inline-dialogs.js'
       - 'firmware-catalog.json'
       - 'vendor/crypto/**'
   # This entire path set is mirrored in the eight exact-SHA required workflows.
@@ -119,7 +120,7 @@ jobs:
           set -euo pipefail
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
           cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js remote-rtc.js remote-rtc-config.json mobile-android/app/src/main/assets/
-          cp js/kit-auth.js js/kit-network-policy.js js/kit-ack-diagnostics.js mobile-android/app/src/main/assets/js/
+          cp js/kit-auth.js js/kit-network-policy.js js/kit-ack-diagnostics.js js/inline-dialogs.js mobile-android/app/src/main/assets/js/
           cp control-path.css mobile-android/app/src/main/assets/
           cp js/control-path-policy.js js/control-path-ui.js js/kit-access-policy.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
@@ -132,6 +133,7 @@ jobs:
           test -s mobile-android/app/src/main/assets/companion-menu.js
           test -s mobile-android/app/src/main/assets/js/kit-network-policy.js
           test -s mobile-android/app/src/main/assets/js/kit-ack-diagnostics.js
+          test -s mobile-android/app/src/main/assets/js/inline-dialogs.js
           test -s mobile-android/app/src/main/assets/android-native-bridge.js
           test -s mobile-android/app/src/main/assets/companion-network.js
           test -s mobile-android/app/src/main/assets/firmware-catalog.json
@@ -429,7 +431,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/zebjus-release-output"
           cp mobile-apk/ZEBJUS_DroneLab_ANDROID_RELEASE.apk mobile-apk/SHA256SUMS.txt mobile-apk/ANDROID_RELEASE_META.txt "$RUNNER_TEMP/zebjus-release-output/"
           git fetch origin main
-          git diff --exit-code "${{ github.sha }}" origin/main -- control-path.css js/control-path-policy.js js/control-path-ui.js js/kit-access-policy.js mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py tools/write_android_release_metadata.py tools/native-flight-acceptance.sh tools/wait-release-checks.mjs tools/pid-shell-browser.mjs vendor/peerjs.min.js vendor/peerjs.LICENSE vendor/qrgen.js vendor/jsqr.js vendor/crypto js/kit-auth.js js/kit-network-policy.js js/kit-ack-diagnostics.js firmware-catalog.json .github/workflows/build-qr-android.yml
+          git diff --exit-code "${{ github.sha }}" origin/main -- control-path.css js/control-path-policy.js js/control-path-ui.js js/kit-access-policy.js mobile-android companion.html companion.css companion-network.js android-native-bridge.js companion.js companion-flight.js companion-menu.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js tools/verify_signed_android_release.py tools/write_android_release_metadata.py tools/native-flight-acceptance.sh tools/wait-release-checks.mjs tools/pid-shell-browser.mjs vendor/peerjs.min.js vendor/peerjs.LICENSE vendor/qrgen.js vendor/jsqr.js vendor/crypto js/kit-auth.js js/kit-network-policy.js js/kit-ack-diagnostics.js js/inline-dialogs.js firmware-catalog.json .github/workflows/build-qr-android.yml
           git checkout -B ci-signed-apk-release origin/main
           mkdir -p mobile-apk
           cp "$RUNNER_TEMP"/zebjus-release-output/* mobile-apk/

@@ -39,7 +39,8 @@ try{
      setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,samples:128,model:'0:1:0:0:0:1000:1000:1000:42:0:0'};},450);break;
     }
     case 'WIZARD_BEGIN':
-     f.run++;f.mapping=a.c;Object.assign(b,{mode:'READY',reason:'NONE'});extra={session:'fixture-token'};break;
+     f.run++;f.mapping=a.c;Object.assign(b,{mode:'READY',reason:'NONE'});extra={session:'fixture-token'};
+     if(f.holdBegin)await new Promise(resolve=>{f.releaseBegin=resolve;});break;
     case 'WIZARD_AUTO_ESC_PREPARE':{
      if(a.a!=='PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD'||a.c!==kit.bootId||Number(a.b)!==b.configRevision)throw Error('Prepare interlock');
      if(b.escCalibrationSaved||b.observedMinimumUs.some(Boolean))b.configRevision++;
@@ -185,8 +186,16 @@ try{
  assert.equal(await button('skip-output').isVisible(),false,'Output cannot be skipped to Report before ESC sequence');
  await step(5).click();
  assert.equal(await button('high').count(),0);assert.equal(await button('low').count(),0);
+ const prepareCount=await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_AUTO_ESC_PREPARE').length);
+ await button('auto-prepare').click();await page.locator('[data-inline-cancel]').click();
+ await page.waitForFunction(()=>!document.querySelector('[data-action="auto-prepare"]').disabled);
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_AUTO_ESC_PREPARE').length),prepareCount,'Cancel never stores a prepared attempt');
+ await button('auto-prepare').click();await page.locator('[data-inline-accept]').waitFor();
+ await button('stop').click();await page.locator('[data-inline-accept]').waitFor({state:'detached'});
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_AUTO_ESC_PREPARE').length),prepareCount,'header STOP cancels pending confirmation');
  await fixture(()=>{__wizard.dropPrepareAck=true;});
- await button('auto-prepare').click();await expectText('.a2-phase','Request stored');
+ await button('auto-prepare').click();
+ await page.locator('[data-inline-accept]').click();await expectText('.a2-phase','Request stored');
  assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','Prepare never emits PWM');
  assert.equal(await button('save-page').isVisible(),false,'ESC page has no manual Save requirement');
  assert.equal(await nav(1).isDisabled(),true,'cannot continue before cold-start result');
@@ -201,7 +210,7 @@ try{
  assert.equal(await button('auto-retry').isVisible(),false,'cancel failure cannot certify a result');
  assert.match(await button('auto-cancel').textContent(),/Retry cancelling/);
  await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
- await button('auto-prepare').click();
+ await button('auto-prepare').click();await page.locator('[data-inline-accept]').click();
  await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','HIGH · 2000 µs');
  await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
  await expectText('.a2-phase','LOW · 1000 µs');
@@ -227,6 +236,14 @@ try{
  }
  await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
  assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
+ const safety=wizard.locator('#a2OutputSafety'),startPromptCount=safetyPrompts.length;
+ assert.equal(await safety.isVisible(),true);assert.equal(await safety.isChecked(),false);
+ assert.equal(await button('cal-slider').isDisabled(),true,'Start requires the on-page safety confirmation');
+ const beginsBeforeSafety=await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_BEGIN').length);
+ await safety.check();
+ await page.waitForFunction(()=>!document.querySelector('[data-action="cal-slider"]').disabled);
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_BEGIN').length),beginsBeforeSafety,'checking safety never starts a session');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
  await fixture(()=>{delete __wizard.board.calibrationSlideKeepsSession;});
  await page.waitForFunction(()=>document.querySelector('.a2-output-prerequisite')?.textContent.includes('FlightCore 1.7.13+'));
  assert.equal(await button('cal-slider').isDisabled(),true,'old firmware cannot start the new calibration flow');
@@ -236,20 +253,42 @@ try{
  assert.equal(await nav(1).isDisabled(),true);
  const pulse=wizard.locator('#a2CalPulse');
  assert.equal(await pulse.getAttribute('max'),'1500');assert.equal(await pulse.isDisabled(),true);
+ const sliderStarts=await fixture(()=>__wizard.calls.filter(c=>c.action==='CAL_SLIDER').length);
+ await fixture(()=>{__wizard.holdBegin=true;});await button('cal-slider').click();
+ await page.waitForFunction(()=>typeof __wizard.releaseBegin==='function');
+ await page.evaluate(()=>document.getElementById('tab-setup').classList.remove('active'));
+ await page.waitForFunction(()=>!document.getElementById('a2OutputSafety').checked);
+ await page.evaluate(()=>document.getElementById('tab-setup').classList.add('active'));
+ await fixture(()=>{__wizard.holdBegin=false;__wizard.releaseBegin();});
+ await expectText('.a2-message','Confirm the on-page safety check');
+ await page.waitForFunction(()=>__wizard.board.mode==='DISABLED');
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='CAL_SLIDER').length),sliderStarts,'leaving the page during a delayed start revokes output permission');
+ assert.equal(await button('cal-slider').isDisabled(),true);
+ await safety.check();await page.waitForFunction(()=>!document.querySelector('[data-action="cal-slider"]').disabled);
  const capture=async value=>{
   await button('cal-slider').click();await expectText('.a2-cal-output','ACK 1000');
   await pulse.fill(value);await expectText('.a2-cal-output','ACK '+value);
   await button('cal-slider').click();await expectText('.a2-cal-output','Pending save');
  };
  await capture('1087');await expectSaved(6,false);
- assert.match(safetyPrompts.join('|'),/Remove all propellers, verify motor\/ESC wiring and power/,'motor activation must require explicit confirmation');
+ assert.equal(safetyPrompts.length,startPromptCount,'Output Calibration never opens a native browser confirmation');
+ assert.equal(await safety.isChecked(),true,'Stop keeps this visit’s safety confirmation');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);
  await fixture(()=>{__wizard.failSave=true;});await button('save-page').click();
  await expectText('.a2-message','Simulated NVS failure');await expectSaved(6,false);
  await button('save-page').click();await expectSaved(6);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1087,0,0,0]);
+ await page.screenshot({path:'test-output/a2-output-inline-safety-desktop.png',fullPage:true});
  await nav(1).click();await expectText('.a2-cal-target','Motor 2 of 4');
  await nav(-1).click();await expectSaved(6);assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await safety.isChecked(),true,'motor Back/Next retains the same page confirmation');
+ const startsBeforeReconnect=await fixture(()=>__wizard.calls.filter(c=>c.action==='CAL_SLIDER').length);
+ await fixture(()=>{__wizard.kit.connectionGeneration++;});
+ await page.waitForFunction(()=>!document.getElementById('a2OutputSafety').checked);await expectSaved(6);
+ assert.equal(await button('cal-slider').isDisabled(),true,'reconnect requires a fresh safety confirmation');
+ assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='CAL_SLIDER').length),startsBeforeReconnect,'reconnect never starts output');
+ await safety.check();await page.waitForFunction(()=>!document.querySelector('[data-action="cal-slider"]').disabled);
  await button('cal-slider').click();await expectText('.a2-cal-output','ACK 1000');
  await button('resume-cal').click();await expectText('.a2-cal-output','ACK 1087');
  await fixture(()=>{__wizard.holdPulse='1125';});await pulse.fill('1125');await page.waitForFunction(()=>!!__wizard.release);
@@ -264,6 +303,8 @@ try{
  assert.doesNotMatch(await wizard.locator('.a2-report').textContent(),/Pending|Motor test/i);
  await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(6);
  assert.equal(await pulse.inputValue(),'1110');
+ assert.equal(await safety.isChecked(),false,'returning from Report requires a new page confirmation');
+ await safety.check();
  await wizard.locator('#a2CalAll').check();assert.equal(await pulse.inputValue(),'1000');
  await capture('1150');
  const previous=await fixture(()=>[...__wizard.board.observedMinimumUs]);
@@ -272,6 +313,7 @@ try{
  await fixture(()=>{__wizard.dropSaveAck=true;});await nav(1).click();
  assert.equal(await wizard.locator('[data-panel="7"]').isVisible(),true);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);
+ assert.equal(safetyPrompts.length,startPromptCount,'individual and all-motor starts stay free of native dialogs');
  const persisted=await fixture(()=>({...__wizard.board}));
  await page.reload();await wizard.locator('[data-step="0"]').waitFor();await page.evaluate(installFixture,{savedBoard:persisted,boot:'nextboot'});
  // Reconnect polling reads the stored result and may already open ESC. Do not
@@ -279,6 +321,7 @@ try{
  await expectSaved(5);
  for(const index of [1,3,5,6]){await step(index).click();await expectSaved(index);}
  assert.equal(await pulse.inputValue(),'1150');assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_BEGIN').length),0,'reload never restarts output');
+ assert.equal(await safety.isChecked(),false,'the safety confirmation is never persisted or restored');
  await wizard.locator('#a2CalAll').check();await expectSaved(6);
  await page.setViewportSize({width:390,height:844});
  await page.waitForFunction(()=>{
@@ -287,16 +330,20 @@ try{
  });
  assert.equal(await button('save-page').isVisible(),true);assert.equal(await button('stop').isVisible(),true);
  mkdirSync('test-output',{recursive:true});await page.screenshot({path:'test-output/a2-page-save-mobile.png',fullPage:true});
+ const safetyBox=await wizard.locator('.a2-output-safety').boundingBox();
+ assert.ok(safetyBox.x>=0&&safetyBox.x+safetyBox.width<=390,'inline safety fits the mobile viewport');
+ await page.screenshot({path:'test-output/a2-output-inline-safety-mobile.png',fullPage:true});
  await step(5).click();await expectSaved(5);await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-mobile.png',fullPage:true});
  await step(7).click();await wizard.locator('[data-panel="7"] summary').click();
- await button('reset-selected').click();await expectText('.a2-report-state','Reset saved on board');
+ await button('reset-selected').click();await page.locator('[data-inline-accept]').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true);
  await step(6).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(7).click();
- await button('reset-all').click();await expectText('.a2-report-state','Reset saved on board');
+ await button('reset-all').click();await page.locator('[data-inline-accept]').click();await expectText('.a2-report-state','Reset saved on board');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
  assert.equal(await wizard.locator('.a2-checks').count(),0,'reset does not restore the removed checklist');
  assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_SAVE')),[]);
+ assert.deepEqual(safetyPrompts,[],'the complete Wizard uses no native browser dialogs');
  assert.deepEqual(errors,[]);
  await step(7).click();assert.equal(await nav(1).isVisible(),false);
  console.log('PASS simulated A2 one-click ESC prepare, cold-power auto result with no tone ticks, persisted sequence/STOP, output calibration, reset and final Report');

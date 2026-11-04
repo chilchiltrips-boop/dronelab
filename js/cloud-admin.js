@@ -85,28 +85,17 @@ async function loadStaff(){
   if(user.role==='admin'){
    const reset=document.createElement('button');reset.type='button';reset.className='btn ghost';reset.textContent='Reset Password';
    reset.addEventListener('click',()=>run(async()=>{
-    const next=await new Promise(resolve=>{
-     const dialog=document.createElement('dialog'),form=document.createElement('form');
-     form.method='dialog';
-     const label=document.createElement('label');label.textContent='New password for '+user.username+' (12+ characters)';
-     const field=document.createElement('input');field.type='password';field.required=true;field.minLength=12;field.maxLength=128;field.autocomplete='new-password';
-     label.append(field);
-     const row=document.createElement('div');row.className='kit-actions';
-     const cancel=document.createElement('button');cancel.type='submit';cancel.value='cancel';cancel.textContent='Cancel';cancel.className='btn ghost';
-     const save=document.createElement('button');save.type='submit';save.value='apply';save.textContent='Apply New Password';save.className='btn primary';
-     row.append(cancel,save);form.append(label,row);dialog.append(form);document.body.append(dialog);
-     dialog.addEventListener('close',()=>{const value=dialog.returnValue==='apply'?field.value:null;field.value='';dialog.remove();resolve(value)},{once:true});
-     dialog.showModal();field.focus();
-    });
-    if(next===null)return;
+    const actor=logged?.username+':'+logged?.role;
+    const next=await globalThis.AerionDialogs?.prompt('Reset password for '+user.username+' and revoke all their active sessions.','',{kitBound:false,label:'New password (12–128 characters)',type:'password',autocomplete:'new-password',required:true,minLength:12,maxLength:128,danger:true,confirmLabel:'Reset password',host:line.parentElement,guard:()=>actor===logged?.username+':'+logged?.role});
+    if(next==null)return;
     if(next.length<12||next.length>128)throw Error('Staff password must be 12–128 characters');
-    if(!confirm('Reset password and revoke all active sessions for '+user.username+'?'))return;
     await api('users/'+user.id+'/password','POST',{password:next});
     message('Password reset. All previous sessions for '+user.username+' revoked.','good');
    }));
    const remove=document.createElement('button');remove.type='button';remove.className='btn danger ghost';remove.textContent='Remove Access';
    remove.addEventListener('click',()=>run(async()=>{
-    if(!confirm('Permanently remove '+user.username+' and end their active sessions?'))return;
+    const actor=logged?.username+':'+logged?.role;
+    if(!await globalThis.AerionDialogs?.confirm('Permanently remove '+user.username+' and end their active sessions?',{kitBound:false,danger:true,confirmLabel:'Remove access',host:line.parentElement,guard:()=>actor===logged?.username+':'+logged?.role}))return;
     await api('users/'+user.id,'DELETE',{});await loadStaff();
     message(user.username+' access removed and sessions revoked.','good');
    }));

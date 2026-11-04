@@ -1180,10 +1180,11 @@ function bind(){
  action('kitI2cScan',async()=>{await command('ZJI2C,SCAN');show('I²C scan requested; refresh telemetry for device addresses','good')});
  action('kitLedOff',()=>toggleLed(true));
  action('kitOtaCancel',()=>{if(otaBusy){otaCancelRequested=true;show('Cancelling after the current signed write; checking Kit state before abort','warn');}});
- action('kitAppOta',()=>{
+ action('kitAppOta',async()=>{
   if(!online||!onKitLink||rcSession||otaBusy)throw Error('Connect and verify an idle Kit. Release diagnostic control before OTA.');
   if(!/^[a-fA-F0-9]{32}$/.test(el('kitOtaAdminKey')?.value.trim()||''))throw Error('Enter the USB-paired OWNER code to authorize encrypted APP OTA.');
-  if(!confirm('BENCH APP OTA ONLY. Propellers removed, ESC disconnected, Kit DISARMED, and saved Wi-Fi must be preserved. Continue?'))return;
+  const epoch=linkEpoch,target=verifiedKitId,ownerCode=el('kitOtaAdminKey')?.value;
+  if(!await window.AerionDialogs?.confirm('BENCH APP OTA ONLY. Propellers removed, ESC disconnected, Kit DISARMED, and saved Wi-Fi must be preserved. Continue?',{guard:()=>epoch===linkEpoch&&target===verifiedKitId&&ownerCode===el('kitOtaAdminKey')?.value&&online&&onKitLink&&!rcSession&&!otaBusy,confirmLabel:'Choose APP image'}))return;
   el('kitOtaFile')?.click();
  });
  el('kitOtaFile')?.addEventListener('change',event=>{
