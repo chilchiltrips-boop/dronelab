@@ -8,7 +8,8 @@ const browser=await chromium.launch(browserOptions);
 try{
  const page=await browser.newPage({viewport:{width:1366,height:900}}),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
- page.on('dialog',dialog=>dialog.accept());
+ const safetyPrompts=[];
+ page.on('dialog',dialog=>{safetyPrompts.push(dialog.message());void dialog.accept();});
  await configureContext(page.context());
  await page.goto('http://127.0.0.1:8765/#setup');
  const wizard=page.locator('#a2SetupRoot');
@@ -106,7 +107,8 @@ try{
  await wizard.locator('[data-pin="0"]').selectOption('D2');
  assert.equal(await nav(1).isDisabled(),true);
  await wizard.locator('[data-pin="2"]').selectOption('D0');
- await check('a2Props','a2Pins','a2Profile');
+ assert.equal(await wizard.locator('.a2-checks').count(),0,'global output checkbox bar is removed');
+ for(const id of ['a2Props','a2Pins','a2Profile'])assert.equal(await wizard.locator('#'+id).count(),0);
  await fixture(()=>{__wizard.failSave=true;});await button('save-page').click();
  await expectText('.a2-message','Simulated NVS failure');await expectSaved(1,false);
  assert.equal(await fixture(()=>__wizard.board.layout),'A2_QUAD_X');
@@ -121,7 +123,8 @@ try{
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="4"]').isVisible(),true);
  await fixture(()=>{if(__wizard.board.accelModel!=='0:1:0:0:0:1000:1000:1000:42:0:0')throw Error('IMU page not saved');});
  assert.equal(await fixture(()=>__wizard.writes),2);
- await nav(1).click();await check('a2EscProps','a2PowerOff','a2ReadProcedure');
+ await nav(1).click();assert.equal(await button('high').isDisabled(),true,'ESC calibration still requires procedure-specific safety checks');
+ await check('a2EscProps','a2PowerOff','a2ReadProcedure');
  await button('high').click();await expectText('.a2-phase','HIGH · 2000 µs');
  assert.match(await fixture(()=>__wizard.mapping),/P:2103:0101/);
  await button('low').click();await expectText('.a2-phase','PWM off. Confirm');
@@ -144,6 +147,7 @@ try{
   await button('cal-slider').click();await expectText('.a2-cal-output','Pending save');
  };
  await capture('1087');await expectSaved(6,false);
+ assert.match(safetyPrompts.join('|'),/Remove all propellers, verify motor\/ESC wiring and power/,'motor activation must require explicit confirmation');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);
  await fixture(()=>{__wizard.failSave=true;});await button('save-page').click();
  await expectText('.a2-message','Simulated NVS failure');await expectSaved(6,false);
@@ -190,11 +194,11 @@ try{
  await button('reset-selected').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
- await step(6).click();await check('a2Pins');await step(7).click();
+ await step(6).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(7).click();
  await button('reset-all').click();await expectText('.a2-report-state','Reset saved on board');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
- assert.equal(await wizard.locator('#a2Pins').isChecked(),false,'reset wiring requires a fresh physical wiring confirmation');
+ assert.equal(await wizard.locator('.a2-checks').count(),0,'reset does not restore the removed checklist');
  assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_SAVE')),[]);
  assert.deepEqual(errors,[]);
- console.log('PASS simulated A2 per-page Save · verified green ticks, partial firmware commits, lost responses, motor traversal, reload, reset and mobile layout');
+ console.log('PASS simulated A2 per-page Save · no global output tick bar, motor-start confirmation, ESC safety, persistence, reset and mobile layout');
 }finally{await browser.close();}
