@@ -9,6 +9,38 @@ if(root){
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
+ const manualAxis=['X','Y','Z'];
+ const modelParts=record=>{
+  const code=String(record||''),[base,manualSuffix]=code.split(':M:');
+  const v=base.split(':').map(Number),manual=manualSuffix?manualSuffix.split(':').map(Number):[0,0,0];
+  if(v.length!==11||!v.every(Number.isFinite)||manual.length!==3||!manual.every(Number.isSafeInteger))return null;
+  return {base,offset:v.slice(2,5).map(n=>n/1000),scale:v.slice(5,8).map(n=>n/1000),trim:v.slice(8,11).map(n=>n/1000),manual};
+ };
+ const manualSuffix=values=>values.some(Boolean)?':M:'+values.join(':'):'';
+ const correctedAcceleration=(raw,model,manual)=>Array.isArray(raw)&&model?raw.map((value,i)=>(value-model.offset[i])*model.scale[i]-manual[i]/1000):null;
+ function syncManualFields(record){
+  const model=modelParts(record);if(!model||manualEditing||manualLoadedModel===record)return;
+  manualOffsets=[...model.manual];manualLoadedModel=record;manualError='';
+  manualAxis.forEach((axis,i)=>{const field=$('#a2Manual'+axis);if(field)field.value=(manualOffsets[i]/1000).toFixed(3);});
+ }
+ function readManualFields(){
+  const vals=[];
+  for(const axis of manualAxis){
+   const field=$('#a2Manual'+axis),text=field?.value?.trim()??'',n=Number(text);
+   const valid=text!==''&&Number.isFinite(n)&&Math.abs(n)<=0.25&&Math.abs(n*1000-Math.round(n*1000))<1e-6;
+   if(field)field.setAttribute('aria-invalid',String(!valid));
+   if(!valid)return null;
+   vals.push(Math.round(n*1000));
+  }
+  return vals;
+ }
+ function updateManualDraft(){
+  manualEditing=true;
+  const vals=readManualFields(),savedManual=modelParts(saved?.accelModel)?.manual||[0,0,0];
+  manualError=vals?'':'Enter a valid number from −0.250 to +0.250 g with up to 3 decimals.';
+  if(vals){manualOffsets=vals;accelAction=vals.every((v,i)=>v===savedManual[i])?'KEEP':'MANUAL:'+vals.join(':');}
+  else accelAction='MANUAL_INVALID';
+ }
  const motors=[1,2,3,4];
  const visited=new Set([0]),history=[];
  let step=0,state=null,saved=null,draft=defaults(),minimums=[null,null,null,null],base=null,identity='',contextKit='';
@@ -151,6 +183,7 @@ if(root){
   calMotor=1;calAll=false;setCalPulse(1000);
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
+  manualOffsets=[0,0,0];manualEditing=false;manualLoadedModel='';manualError='';imuHistory=[];imuHistorySeq=0;
   conflict=false;saveState=readError=operationError='';ambiguousSave=null;
   visited.clear();visited.add(0);
   root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
@@ -179,7 +212,11 @@ if(root){
   state=s;lastStateAt=s.receivedAt||Date.now();
   if(s.mode!=='UNCONFIRMED')readError='';
   if(s.wizardVersion===1){
-   saved=s;
+   saved=s;syncManualFields(s.accelModel);
+   if(s.imu?.imuValid===true&&Number.isSafeInteger(s.imu.sampleSequence)&&s.imu.sampleSequence>0&&s.imu.sampleSequence!==imuHistorySeq&&
+    Array.isArray(s.imu.accelRawG)&&s.imu.accelRawG.length===3&&s.imu.accelRawG.every(Number.isFinite)){
+    imuHistorySeq=s.imu.sampleSequence;imuHistory.push([...s.imu.accelRawG]);if(imuHistory.length>45)imuHistory.shift();
+   }
    if(!base){
     base={bootId:s.bootId,revision:s.configRevision};draft=config(s);loadWiring();setCalPulse(currentResult());
    }else if(s.configRevision!==base.revision&&!ambiguousSave)conflict=true;
@@ -214,7 +251,7 @@ if(root){
   const selection=mask(calMotor,calAll);
   const selectedMask=['ALL_TEST','INPUT_TEST'].includes(safe.mode)?15:selection;
   const testing=['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(safe.mode);
-  const v=step>=3&&step<=5
+  const v=step===3?{title:'3D orientation & XYZ graph',html:imuCalibrationVisual()}:step>=4&&step<=5
    ?wizardVisual(step,{mode:safe.mode,escAttempt,powerOff:$('#a2PowerOff').checked})
    :stepVisual(step===7?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
   $('.a2-visual-title').textContent=v.title;
@@ -231,7 +268,12 @@ if(root){
    for(const marker of [throttle,sticks])marker.setAttribute('class',input.monitoring?'a2-stick-knob':'a2-off-dot');
    scene.querySelector('[data-input-history]').setAttribute('points',history.map((value,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(value-1000)*.08}`).join(' '));
   }
-  if(step===3)updateImuDiagram(scene,imuFresh()?saved.imu.accelG:null,Number($('#a2Face').value),saved?.capture?.mask||0);
+  if(step===3){
+   const model=modelParts(saved?.accelModel),fresh=imuFresh(),imu=saved?.imu||{};
+   const sample=fresh?correctedAcceleration(imu.accelRawG,model,manualOffsets):null;
+   const history=imuHistory.map(raw=>correctedAcceleration(raw,model,manualOffsets)).filter(Boolean);
+   updateImuCalibrationVisual(scene,sample,Number($('#a2Face').value),saved?.capture?.mask||0,history);
+  }
   if(step===1||motorStep)updateMotorDiagram(scene,draft,motorStep?safe.pulseUs:[],motorStep&&testing,{
    selectedMask:motorStep?selectedMask:0,preview:step===1,interactive:false,locked:!!working||motorClient.busy,
    results:motorStep?pulses().map((p,i)=>validPulse(p)?`${p} µs · ${minimums[i]?'DRAFT':'SAVED'}`:''):[]});
