@@ -153,6 +153,12 @@ try{
  await expectText('.a2-phase','LOW · 1000 µs');await expectText('.a2-phase','PWM off verified');
  assert.equal(await button('save-page').isDisabled(),true,'controller completion alone cannot create a saved ESC confirmation');
  assert.match(await wizard.locator('.a2-auto-result').textContent(),/Not confirmed/);
+ // Missing ESC tones must have an explicit discard/retry path, never a save.
+ assert.match(await button('auto-cancel').textContent(),/Discard unconfirmed/);
+ await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
+ assert.equal(await button('save-page').isDisabled(),true);
+ await check('a2EscProps','a2PowerOff','a2ReadProcedure');await button('auto-prepare').click();
+ await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','PWM off verified');
  mkdirSync('test-output',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
  await check('a2Tones','a2EscDisconnected');await button('confirm-cal').click();
  await expectText('.a2-calibration-summary','Save this page');await expectSaved(7,false);

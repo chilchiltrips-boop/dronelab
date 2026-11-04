@@ -283,7 +283,7 @@ if(root){
   $('.a2-phase').textContent=!kit().connected?'Connection unavailable · reconnect to read the stored calibration result.':!auto?'FlightCore 1.7.10+ required for automatic ESC calibration.':
    high?'HIGH · 2000 µs · automatic timed phase':low?'LOW · 1000 µs · automatic timed phase':
    pending?'PWM off. Disconnect LiPo AND USB, then reconnect LiPo only. Do not use software reboot or RESET.':
-   canConfirm?'PWM off verified. Confirm all four ESC success tones and LiPo disconnection, then Save.':
+   canConfirm?'PWM off verified. Confirm all four ESC success tones and LiPo disconnection, then Save. If tones were missing, discard this attempt and prepare again.':
    auto.reason!=='NONE'?`PWM off · ${auto.reason}. Prepare a new attempt after correcting the cause.`:
    auto.state==='CANCELLED'?'PWM off · prepared calibration cancelled.':compatibleEsc()?'PWM off · ESC calibration saved.':'PWM off · prepare the next power-on calibration.';
   $('.a2-auto-result').innerHTML=view('Read from the controller',[
@@ -299,7 +299,8 @@ if(root){
   start.textContent=compatibleEsc()?'Prepare recalibration':'Prepare automatic calibration';
   start.disabled=!ready||!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm||!!autoPrepareIntent||accelAction!=='KEEP'||!!captureRequest;
   const cancel=$('[data-action="auto-cancel"]');
-  cancel.hidden=!auto||!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD'].includes(auto.state);
+  cancel.hidden=!auto||!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD','SEQUENCE_COMPLETE'].includes(auto.state)||compatibleEsc();
+  cancel.textContent=auto?.state==='SEQUENCE_COMPLETE'?'Discard unconfirmed attempt':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
   cancel.disabled=!kit().connected||!!working;
   const retry=$('[data-action="auto-retry"]');retry.hidden=auto?.reason!=='STORAGE_ERROR'||auto?.state!=='RUNNING'||auto?.phase!=='OFF';retry.disabled=!ready||!!working;
   $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm||!!working;
