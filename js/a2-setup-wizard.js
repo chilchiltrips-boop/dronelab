@@ -285,33 +285,54 @@ if(root){
   return saved?.imu?.imuValid===true&&Date.now()-(saved.receivedAt||0)<1600;
  }
  function renderImu(){
-  const imu=saved?.imu||{},capture=saved?.capture||{};
+  const imu=saved?.imu||{},capture=saved?.capture||{},model=modelParts(saved?.accelModel);
   const gyroActive=imu.manualGyro||['SETTLING','CALIBRATING'].includes(imu.state);
   const ready=boardReady()&&observedOff()&&!working;
+  const fresh=imuFresh(),fmt=n=>Number.isFinite(n)?Number(n).toFixed(3):'—';
+  const xyz=v=>Array.isArray(v)?v.map(fmt).join(' / '):'—';
+  const put=(selector,value)=>{const el=$(selector);if(el&&el.textContent!==value)el.textContent=value;};
+  const raw=fresh&&Array.isArray(imu.accelRawG)&&imu.accelRawG.length===3?imu.accelRawG:null;
+  const fitted=raw&&model?correctedAcceleration(raw,model,[0,0,0]):null;
+  const preview=raw&&model?correctedAcceleration(raw,model,manualOffsets):null;
   $('[data-action="imu-gyro"]').textContent=imu.state==='READY'?'Recalibrate gyro':'Start gyro calibration';
   $('[data-action="imu-gyro"]').disabled=!ready||gyroActive||capture.running||!$('#a2Still').checked;
   $('[data-action="imu-cancel"]').disabled=!ready||!gyroActive;
   $('[data-action="imu-reset"]').disabled=!ready||gyroActive;
-  for(const a of ['imu-face','imu-level'])$(`[data-action="${a}"]`).disabled=!ready||!imuFresh()||!$('#a2Still').checked||capture.running||!!captureRequest;
+  for(const a of ['imu-face','imu-level'])$('[data-action="'+a+'"]').disabled=!ready||!fresh||!$('#a2Still').checked||capture.running||!!captureRequest||accelAction!=='KEEP';
   $('[data-action="imu-clear"]').disabled=!ready;
+  $('[data-action="imu-zero-manual"]').disabled=!!working||!model;
+  const progress=Math.max(0,Math.min(2000,Number(imu.samples)||0));
+  $('.a2-gyro-progress').value=progress;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
   $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Unsaved accelerometer settings':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`;
-  const model=(accelAction.startsWith('CAPTURED:')?accelAction.slice(9):saved?.accelModel||'').split(':').map(Number);
-  const fresh=imuFresh(),xyz=v=>Array.isArray(v)?v.map(p=>Number(p).toFixed(3)).join(' / '):'—';
-  const inclination=fresh&&imu.accelG?.length===3?imu.accelG.map((v,i)=>v-(saved.accelModel?.split(':')[8+i]||0)/1000):null;
+  for(let i=0;i<3;i++){
+   put('[data-gyro-raw="'+i+'"]',fresh?fmt(imu.raw?.[i]):'—');
+   put('[data-gyro-bias="'+i+'"]',fmt(imu.bias?.[i]));
+   put('[data-gyro-corrected="'+i+'"]',fresh?fmt(imu.corrected?.[i]):'—');
+   put('[data-accel-raw="'+i+'"]',raw?fmt(raw[i]):'—');
+   put('[data-accel-fitted="'+i+'"]',fitted?fmt(fitted[i]):'—');
+   put('[data-accel-corrected="'+i+'"]',preview?fmt(preview[i]):'—');
+  }
+  put('.a2-imu-manual-warning',manualError);
+  const pending=accelAction.startsWith('MANUAL:');
+  put('[data-imu-manual-status]',pending?'Draft only · Save to apply offsets on board; motor outputs remain OFF.':
+   accelAction==='MANUAL_INVALID'?'Invalid manual offset · Save is blocked.':
+   model?.manual.some(Boolean)?'Manual X/Y/Z offsets are saved on this board.':'Manual correction: 0.000 g · no additional subtraction.');
+  const tilt=preview?[Math.atan2(preview[1],preview[2])*180/Math.PI,Math.atan2(-preview[0],Math.hypot(preview[1],preview[2]))*180/Math.PI]:null;
   $('.a2-imu-values').textContent=[
    fresh?'Fresh XYZ':'Live sample stale or unavailable',
-   'Gyro raw / bias / corrected (°/s)',
+   'Gyroscope raw / bias / corrected (°/s)',
    `${fresh?xyz(imu.raw):'—'} | ${xyz(imu.bias)} | ${fresh?xyz(imu.corrected):'—'}`,
-   'Acceleration raw / corrected (g)',
-   `${fresh?xyz(imu.accelRawG):'—'} | ${fresh?xyz(imu.accelG):'—'}`,
-   `Offset · ${xyz(model.slice(2,5).map(n=>n/1000))} g · scale · ${xyz(model.slice(5,8).map(n=>n/1000))}`,
-   `Gravity · ${fresh&&imu.accelG?.length===3?Math.hypot(...imu.accelG).toFixed(3)+' g':'—'}`,
-   `Accelerometer Inclination · ${inclination?`${(Math.atan2(inclination[1],inclination[2])*180/Math.PI).toFixed(1)}° roll / ${(Math.atan2(-inclination[0],Math.hypot(inclination[1],inclination[2]))*180/Math.PI).toFixed(1)}° pitch`:'—'}`,
+   'Accelerometer raw / saved fit / manual preview (g)',
+   `${raw?xyz(raw):'—'} | ${fitted?xyz(fitted):'—'} | ${preview?xyz(preview):'—'}`,
+   `Saved six-position offset · ${model?xyz(model.offset):'—'} g · scale · ${model?xyz(model.scale):'—'}`,
+   `Manual offset draft · ${xyz(manualOffsets.map(v=>v/1000))} g`,
+   `Gravity magnitude · ${preview?Math.hypot(...preview).toFixed(3)+' g':'—'}`,
+   `Accelerometer inclination preview · ${tilt?tilt.map(v=>v.toFixed(1)+'°').join(' roll / '):'—'}`,
    `Gyro quality σ · ${xyz(imu.stddev)} °/s · restarts ${imu.restarts??'—'}`,
-   `Rate · ${imu.imuActualHz??'—'} / ${imu.imuTargetHz??'—'} Hz · board sample age ${imu.imuSampleAgeUs??'—'} µs`,
-   `Missed ${imu.imuMissedNormalSamples??'—'} · I²C reads ${imu.readFailures??'—'} failed · writes ${imu.writeFailures??'—'} failed`,
-   `DLPF ${imu.imuDlpFilter??'—'} · gyro ±${imu.gyroRangeDps??'—'} °/s · accelerometer ±${imu.accelRangeG??'—'} g`
+   `Rate · ${imu.imuActualHz??'—'} / ${imu.imuTargetHz??'—'} Hz · sample age ${imu.imuSampleAgeUs??'—'} µs`,
+   `Missed ${imu.imuMissedNormalSamples??'—'} · I²C read errors ${imu.readFailures??'—'} · write errors ${imu.writeFailures??'—'}`,
+   `DLPF ${imu.imuDlpFilter??'—'} · gyro ±${imu.gyroRangeDps??'—'} °/s · accel ±${imu.accelRangeG??'—'} g`
   ].join('\n');
  }
  function renderEsc(){
