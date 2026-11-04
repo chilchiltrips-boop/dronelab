@@ -51,6 +51,18 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   stopping++;
   try{return await send('STOP',captureCalibration?['CAPTURE_OUTPUT']:[],s)}catch(e){publish({...last,mode:'UNCONFIRMED',reason:e.message});throw e;}finally{stopping--;}
  }
+ async function leavePage(){
+  cancelMotorConfirmations();
+  const auto=last?.autoEsc;
+  // A saved power-on request and the board-owned timed sequence do not have
+  // an app lease. Leaving the page must not turn them into an emergency STOP.
+  // Keep STOP for owned/starting bench sessions and every uncertain state.
+  const independent=auto?.version===1&&(
+   auto.state==='AWAITING_POWER_CYCLE'&&last.mode==='DISABLED'&&auto.outputsOff===true||
+   auto.state==='RUNNING'&&(auto.phase==='HIGH'&&last.mode==='AUTO_CAL_HIGH'||auto.phase==='LOW'&&last.mode==='AUTO_CAL_LOW'));
+  if(!session&&!starting&&!stopping&&independent){++epoch;clearPumps();return last;}
+  return stop();
+ }
  async function begin(owner='wizard',binding=null,wiring=null){
   if(session||starting||stopping)throw Error('Wait for STOP to finish before starting a new motor setup.');
   check(getKit(binding),true);starting=owner;const run=++epoch,k=getKit(binding);
@@ -142,7 +154,7 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   ++epoch;
   return send(action,args,{identity:identity(k),bootId,token:''});
  }
- return {begin,command,startSlider,stop,confirmCalibration,wizardCommand,wizardStatus:()=>send('WIZARD_STATUS'),status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
+ return {begin,command,startSlider,stop,leavePage,confirmCalibration,wizardCommand,wizardStatus:()=>send('WIZARD_STATUS'),status:()=>send('STATUS'),get state(){return last;},get owner(){return session?.owner||null;},get active(){return !!session;},get busy(){return !!(session||starting||stopping);}};
 }
 
 function selectedKit(binding){
@@ -194,7 +206,7 @@ export function confirmMotor(message){
  });
 }
 if(typeof document!=='undefined'){
- document.addEventListener('visibilitychange',()=>{if(document.hidden)void motorClient.stop().catch(()=>{});});
- globalThis.addEventListener('pagehide',()=>{void motorClient.stop().catch(()=>{});});
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)void motorClient.leavePage().catch(()=>{});});
+ globalThis.addEventListener('pagehide',()=>{void motorClient.leavePage().catch(()=>{});});
  globalThis.ZebjusMotorSetup=motorClient;
 }

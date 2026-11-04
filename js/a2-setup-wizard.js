@@ -101,10 +101,10 @@ if(root){
  <p>Prepare once while connected. A2 completes HIGH → LOW → PWM OFF and stores the controller result during the next full power-on; no app connection is needed for the sequence.</p>
  <p class="a2-calibration-summary" role="status"></p>
  <ol class="a2-cal-steps">
-  <li data-cal-stage="prepare"><b>1. Prepare on the connected A2</b><span>Remove all propellers, check ESC wiring and keep throttle LOW / input DISARMED. Press Prepare and verify that the request is saved while PWM stays OFF.</span></li>
-  <li data-cal-stage="power"><b>2. Disconnect power completely</b><span>Disconnect the control connection, USB power AND LiPo battery. Wait until both A2 and ESCs have no power. Closing Wi-Fi alone or pressing RESET is not a cold power cycle.</span></li>
-  <li data-cal-stage="sequence"><b>3. Reconnect LiPo only</b><span>LiPo must power both the A2 (through its proper regulator) and the ESCs. The A2 outputs 2000 µs HIGH for 5 s, then 1000 µs LOW for 5 s, then PWM OFF. Keep all propellers removed and allow the sequence to finish uninterrupted.</span></li>
-  <li data-cal-stage="result"><b>4. Reconnect and read the result</b><span>The A2 stores the sequence result locally before AP/STA is ready. Reconnect via AP, STA or USB after it finishes; the Wizard reads the result automatically. Continue only when the stored controller sequence and PWM OFF are verified.</span></li>
+  <li data-cal-stage="prepare"><b>Prepare on the connected A2</b><span>Remove all propellers, check ESC wiring and keep throttle LOW / input DISARMED. Press Prepare and verify that the request is saved while PWM stays OFF.</span></li>
+  <li data-cal-stage="power"><b>Disconnect power completely</b><span>You may disconnect the control connection after the request is stored. Remove USB power, if connected, and disconnect LiPo until A2 and all ESCs are fully OFF. Wi-Fi disconnection or RESET alone is not a power cycle.</span></li>
+  <li data-cal-stage="sequence"><b>Reconnect LiPo only</b><span>LiPo must power both A2 through its regulator and the ESCs. A2 sends HIGH 2000 µs for 5 s, LOW 1000 µs for 5 s, then PWM OFF. Leave power connected until the result is stored. Remove power to abort while offline.</span></li>
+  <li data-cal-stage="result"><b>Read the stored result and continue</b><span>Reconnect via AP, STA or USB; the Wizard reads the A2 result automatically. The link may return before the sequence finishes. Wait for the stored result and PWM OFF, then select Next. No sound tick or separate ESC Save is needed.</span></li>
  </ol>
  <div class="a2-actions"><button class="btn" data-action="auto-prepare">Prepare automatic calibration</button><button class="btn ghost" data-action="auto-cancel" hidden>Cancel prepared calibration</button></div>
  <div class="a2-auto-phases" aria-label="Automatic ESC sequence"><span data-auto-phase="HIGH">HIGH · 2000 µs · 5 s</span><span data-auto-phase="LOW">LOW · 1000 µs · 5 s</span><span data-auto-phase="OFF">PWM OFF</span></div>
@@ -152,6 +152,7 @@ if(root){
  const activeEsc=()=>escDraft===true||escDraft===false&&wiringCompatible()&&saved?.escCalibrationSaved===true;
  const escCleared=()=>escDraft==='cleared';
  const compatibleEsc=()=>!escCleared()&&activeEsc();
+ const supportsAutoResult=()=>saved?.autoEsc?.version===1&&typeof saved.autoEsc.sequenceReady==='boolean';
  const autoSequenceReady=()=>!escCleared()&&wiringCompatible()&&saved?.autoEsc?.sequenceReady===true&&
   saved.autoEsc.state==='SEQUENCE_COMPLETE'&&saved.autoEsc.resultPersisted===true&&saved.autoEsc.compatible===true&&saved.autoEsc.outputsOff===true;
  const escReadyForOutput=()=>compatibleEsc()||autoSequenceReady();
@@ -160,7 +161,6 @@ if(root){
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
  const autoPending=()=>['AWAITING_POWER_CYCLE','RUNNING'].includes(saved?.autoEsc?.state)||['AUTO_CAL_HIGH','AUTO_CAL_LOW'].includes(state?.mode);
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending()&&!saved?.autoEsc?.cancelUnverified;
- const checkList=ids=>ids.every(id=>$(id).checked);
  // Trust the verified board profile, not three repeated UI checkbox proofs.
  const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
 
@@ -364,7 +364,7 @@ if(root){
   ].join('\n');
  }
  function renderEsc(){
-  const auto=saved?.autoEsc,ready=boardReady()&&auto?.version===1;
+  const auto=saved?.autoEsc,ready=boardReady()&&supportsAutoResult();
   const high=auto?.phase==='HIGH',low=auto?.phase==='LOW',pending=auto?.state==='AWAITING_POWER_CYCLE';
   const complete=autoSequenceReady(),legacy=compatibleEsc();
   $('.a2-calibration-summary').textContent=complete?'✓ Controller sequence stored · HIGH/LOW/OFF verified · ESC acceptance not measured':
@@ -373,10 +373,11 @@ if(root){
    auto?.state==='SEQUENCE_COMPLETE'?'Sequence recorded, but result/wiring/PWM OFF verification failed':
    auto?.state==='INCOMPLETE'?'Sequence interrupted · correction and retry required':'Not prepared';
   $('.a2-calibration-summary').dataset.saved=String(escReadyForOutput());
-  $('.a2-phase').textContent=!kit().connected?'Connection offline · A2 will finish and store the result without the WebApp. Reconnect to read it.':
+  $('.a2-phase').textContent=!kit().connected?'Connection offline · reconnect to read the stored A2 result.':
    !auto?'FlightCore with automatic ESC status required.':
    high?'HIGH · 2000 µs · timer running on A2':low?'LOW · 1000 µs · timer running on A2':
    auto.cancelUnverified?'Cancel storage failed. Do not power cycle until Cancel/readback succeeds.':
+   !supportsAutoResult()&&!legacy?'Update A2 to FlightCore 1.7.12+ for automatic stored results. Cancel any prepared request before updating.':
    pending?'Request stored · disconnect USB power and LiPo fully; reconnect LiPo only. A2 must have its own regulated battery power.':
    complete?'Controller sequence stored; PWM is OFF. ESC endpoints cannot be verified over PWM. Continue to Output Calibration.':
    legacy?'Existing operator-confirmed ESC record · PWM OFF. Continue to Output Calibration.':
@@ -791,6 +792,7 @@ if(root){
   if(name==='skip-output'){await navigate(REPORT,false,true);return;}
 
   if(name==='auto-prepare'){
+   if(!supportsAutoResult())throw Error('Update A2 to FlightCore 1.7.12+ for automatic stored results.');
    if(accelAction!=='KEEP'||captureRequest)throw Error('Save or restore the pending accelerometer changes before preparing a power cycle.');
    if(!canStart()||!wiringCompatible()||!outputChecks()||saved?.autoEsc?.version!==1)throw Error('Save wiring, disarm input and verify PWM OFF before preparing automatic ESC calibration.');
    if(!window.confirm('Propellers must be REMOVED. Confirm motor wiring, low throttle and DISARMED input. Prepare a one-use 2000→1000 µs ESC sequence for the next FULL power-on? Existing ESC records and motor starting pulses will be cleared. Disconnect USB power AND LiPo until the A2 is completely OFF, then reconnect LiPo only.'))return;

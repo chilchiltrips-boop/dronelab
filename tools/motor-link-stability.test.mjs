@@ -54,6 +54,31 @@ function motorHarness({send,now}={}){
  }});
  return {client,kit,timers,calls,state,events};
 }
+test('leaving the page preserves a stored automatic ESC request or timed phase on USB/AP/STA; explicit STOP still aborts',async()=>{
+ for(const transport of ['usb','ap','sta'])for(const phase of ['PENDING','HIGH','LOW']){
+  const h=motorHarness();h.kit.transport=transport;
+  Object.assign(h.state,{mode:phase==='PENDING'?'DISABLED':'AUTO_CAL_'+phase,
+   pulseUs:Array(4).fill(phase==='PENDING'?0:phase==='HIGH'?2000:1000),
+   autoEsc:{version:1,state:phase==='PENDING'?'AWAITING_POWER_CYCLE':'RUNNING',phase:phase==='PENDING'?'OFF':phase,outputsOff:phase==='PENDING'}});
+  await h.client.wizardStatus();const before=h.calls.length;
+  await h.client.leavePage();assert.equal(h.calls.length,before,transport+' '+phase+' does not send a lifecycle STOP');
+  assert.equal(h.client.active,false);assert.equal(h.timers.size,0);
+  await h.client.stop();assert.equal(h.calls.at(-1),'STOP');assert.equal(h.client.state.mode,'DISABLED');
+ }
+});
+test('leaving the page still stops owned bench output and unverified automatic states',async()=>{
+ const h=motorHarness();await h.client.begin();await h.client.startSlider(1,()=>1100);
+ await h.client.leavePage();assert.equal(h.calls.at(-1),'STOP');assert.equal(h.client.active,false);assert.equal(h.timers.size,0);
+ for(const state of [
+  {mode:'UNCONFIRMED',autoEsc:{version:1,state:'AWAITING_POWER_CYCLE',outputsOff:true}},
+  {mode:'DISABLED',autoEsc:{version:1,state:'AWAITING_POWER_CYCLE',outputsOff:false}},
+  {mode:'SLIDER_TEST',autoEsc:{version:1,state:'RUNNING',phase:'HIGH'}},
+  {mode:'AUTO_CAL_HIGH',autoEsc:{version:1,state:'RUNNING',phase:'LOW'}}
+ ]){
+  const uncertain=motorHarness();Object.assign(uncertain.state,state);await uncertain.client.status();
+  await uncertain.client.leavePage();assert.equal(uncertain.calls.at(-1),'STOP');
+ }
+});
 test('terminal SLIDE acknowledgment immediately clears all pumps and cannot report a successful start',async()=>{
  const h=motorHarness({send:async(a,state)=>a.action==='SLIDE'?{...state,mode:'DISABLED',reason:'CONTROL_LOST'}:null});
  await h.client.begin();await assert.rejects(h.client.startSlider(1,()=>1100),/750 ms/);
