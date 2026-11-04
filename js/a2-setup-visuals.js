@@ -114,3 +114,61 @@ export function updateImuDiagram(scene,accel,face,mask){
  scene.querySelector('[data-gravity]').setAttribute('d',accel?`M200 158l${accel[0]*43} ${-accel[1]*43}`:'M200 158');
  scene.querySelector('[data-gravity-label] text').textContent=accel?`Gravity · ${Math.hypot(...accel).toFixed(3)} g · Z ${accel[2].toFixed(3)} g`:'Fresh acceleration unavailable';
 }
+
+
+// Live accelerometer orientation preview. Acceleration gives pitch/roll with
+// gravity at rest; yaw is deliberately not fabricated. No canvas or hardware
+// output path, and no simulated sensor samples are mixed into this view.
+export function imuCalibrationVisual(){
+ return `<div class="a2-imu-viz-root">
+  <div class="a2-imu-orient-header"><span>Live sensor orientation</span><strong data-imu-orient-status>WAITING FOR IMU</strong></div>
+  <div class="a2-imu-stage" aria-label="3D MPU6050 inclination preview, accelerometer-only">
+   <div class="a2-imu-cube" data-imu-cube>
+    <div class="a2-imu-face a2-imu-face-front">MPU6050 <small>+X →</small></div>
+    <div class="a2-imu-face a2-imu-face-back">−Z</div>
+    <div class="a2-imu-face a2-imu-face-left">−X</div>
+    <div class="a2-imu-face a2-imu-face-right">+X</div>
+    <div class="a2-imu-face a2-imu-face-top">+Z / UP</div>
+    <div class="a2-imu-face a2-imu-face-bottom">−Z</div>
+   </div>
+  </div>
+  <div class="a2-imu-orient-stats"><span data-imu-tilt>Roll —° · Pitch —°</span><span data-imu-pose>Requested +Z up</span></div>
+  <div class="a2-imu-orient-faces" data-imu-faces>6-position: not started</div>
+  <div class="a2-imu-chart"><div class="a2-imu-chart-head"><strong>Accelerometer XYZ</strong><small>Corrected g · live history</small></div>
+   <svg viewBox="0 0 460 160" role="img" aria-label="Recent accelerometer X Y Z corrected acceleration in g">
+    <path d="M8 36H452 M8 80H452 M8 124H452" class="a2-imu-grid"/>
+    <text x="10" y="29" class="a2-imu-chart-label">+1g</text><text x="10" y="74" class="a2-imu-chart-label">0g</text><text x="10" y="117" class="a2-imu-chart-label">−1g</text>
+    <polyline data-imu-trace="0" class="a2-imu-trace a2-imu-trace-x" points=""/>
+    <polyline data-imu-trace="1" class="a2-imu-trace a2-imu-trace-y" points=""/>
+    <polyline data-imu-trace="2" class="a2-imu-trace a2-imu-trace-z" points=""/>
+   </svg>
+   <div class="a2-imu-legend"><span>X</span><span>Y</span><span>Z</span></div>
+  </div>
+  <small class="a2-imu-viz-note">3D tilt is accelerometer-only and stationary-gravity based. Yaw is not measured here; not a flight attitude solution.</small>
+ </div>`;
+}
+
+export function updateImuCalibrationVisual(scene,accel,face,mask,history=[]){
+ const axes=['+X','−X','+Y','−Y','+Z','−Z'];
+ const valid=Array.isArray(accel)&&accel.length===3&&accel.every(n=>Number.isFinite(n));
+ const status=scene.querySelector('[data-imu-orient-status]');
+ if(status)status.textContent=valid?'FRESH · ACCEL':'STALE / NO DATA';
+ const cube=scene.querySelector('[data-imu-cube]');
+ const tilt=scene.querySelector('[data-imu-tilt]');
+ if(valid){
+  const roll=Math.atan2(accel[1],accel[2])*180/Math.PI;
+  const pitch=Math.atan2(-accel[0],Math.hypot(accel[1],accel[2]))*180/Math.PI;
+  if(cube)cube.style.transform=`rotateX(${roll.toFixed(2)}deg) rotateY(${(-pitch).toFixed(2)}deg)`;
+  if(tilt)tilt.textContent=`Roll ${roll.toFixed(1)}° · Pitch ${pitch.toFixed(1)}°`;
+ }else if(tilt)tilt.textContent='Roll —° · Pitch —°';
+ const pose=scene.querySelector('[data-imu-pose]');if(pose)pose.textContent='Requested '+(axes[face]||'+Z')+' up';
+ const faces=scene.querySelector('[data-imu-faces]');if(faces)faces.textContent='Captured: '+(axes.filter((_,i)=>mask&(1<<i)).join(' · ')||'none');
+ for(let axis=0;axis<3;axis++){
+  const poly=scene.querySelector('[data-imu-trace="'+axis+'"]');if(!poly)continue;
+  const values=history.filter(value=>Array.isArray(value)&&Number.isFinite(value[axis]));
+  poly.setAttribute('points',values.map((value,i)=>{
+   const x=8+i*444/Math.max(1,values.length-1),y=80-Math.max(-1.6,Math.min(1.6,value[axis]))*44;
+   return x.toFixed(2)+','+y.toFixed(2);
+  }).join(' '));
+ }
+}
