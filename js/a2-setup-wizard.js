@@ -21,7 +21,6 @@ if(root){
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
  root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
  <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}" aria-label="${s}"><span class="a2-step-number">${i+1}</span><span class="a2-step-long">${s}</span><span class="a2-step-short">${shortSteps[i]}</span></button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
- <div class="a2-checks" role="group" aria-label="Output checks"><span class="a2-check-count">0 / 3 confirmed</span>${[['a2Props','Propellers removed'],['a2Pins','Wiring & power verified'],['a2Profile','50 Hz PWM · 1000–2000 µs ESC']].map(([id,label])=>`<label class="a2-check"><input type="checkbox" id="${id}">${label}</label>`).join('')}</div>
  <div class="a2-columns"><main class="a2-content">
  <section data-panel="0"><h3>Board connection</h3><div class="a2-identity"></div><div class="a2-actions"><button class="btn" data-action="detect">Refresh board</button><button class="btn ghost" data-action="connect">Open connection</button></div></section>
  <section data-panel="1"><h3>Frame &amp; wiring</h3>${pageStatus(1)}
@@ -47,7 +46,7 @@ if(root){
  <ol class="a2-cal-steps"><li data-cal-stage="power"><b>Remove all propellers</b><span>Disconnect the motor battery. Keep the A2 powered by USB.</span></li><li data-cal-stage="high"><b>Start with battery disconnected</b><span>After HIGH is acknowledged, connect the battery and listen for the calibration prompt.</span></li><li data-cal-stage="low"><b>Press Stop after the prompt</b><span>Wait for the ESC success tones and the PWM-off acknowledgement.</span></li><li data-cal-stage="tones"><b>Confirm and disconnect</b><span>Confirm the success tones, then disconnect the motor battery.</span></li></ol>
  <label class="a2-check"><input type="checkbox" id="a2EscProps"> All propellers removed</label>
  <label class="a2-check"><input type="checkbox" id="a2PowerOff"> Motor battery disconnected and A2 powered by USB</label>
- <label class="a2-check"><input type="checkbox" id="a2ReadProcedure"> I have read and understood the procedure</label>
+ <label class="a2-check"><input type="checkbox" id="a2ReadProcedure"> ESC wiring verified · HIGH/LOW procedure understood</label>
  <div class="a2-phase-scale"><span>Low / Off</span><meter aria-label="ESC calibration phase" min="0" max="2" value="0"></meter><span>High</span></div>
  <p class="a2-phase" role="status"></p>
  <div class="a2-actions"><button class="btn" data-action="high">Start</button><button class="btn" data-action="low" disabled>Stop</button><small>Sends LOW to complete ESC calibration</small></div>
@@ -99,8 +98,9 @@ if(root){
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid();
  const checkList=ids=>ids.every(id=>$(id).checked);
- const outputChecks=()=>checkList(['#a2Props','#a2Pins','#a2Profile']);
- const escChecks=()=>checkList(['#a2EscProps','#a2PowerOff','#a2ReadProcedure','#a2Pins','#a2Profile']);
+ // Trust the verified board profile, not three repeated UI checkbox proofs.
+ const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
+ const escChecks=()=>outputChecks()&&checkList(['#a2EscProps','#a2PowerOff','#a2ReadProcedure']);
  const mask=(motor,all)=>all?15:1<<(motor-1);
  const targetMotors=(motor,all)=>all?motors:[motor];
  const currentResult=()=>{
@@ -376,7 +376,6 @@ if(root){
   $('.a2-wiring-validation').textContent=wiringValid()?'':'Use each D0–D3 pin once.';
   $('.a2-wiring-validation').dataset.valid=String(wiringValid());
   $('.a2-save-state').textContent=wiringCompatible()?'Wiring saved on board':'Unsaved wiring · Save before output calibration';
-  $('.a2-check-count').textContent=['#a2Props','#a2Pins','#a2Profile'].filter(id=>$(id).checked).length+' / 3 confirmed';
   renderInputs();renderImu();renderEsc();renderOutputs();
   const signal=saved?.outputSignal;
   $('.a2-signal-status').innerHTML=view('Verified signal',[
@@ -425,7 +424,6 @@ if(root){
    b.setAttribute('aria-current',n===step?'step':'false');
    b.dataset.visited=String(visited.has(n));
   });
-  $('.a2-checks').hidden=![1,5,6].includes(step);
   $('.a2-step-count').textContent=`${step+1} / ${steps.length}`;
   render();
   revealStep();
@@ -453,7 +451,7 @@ if(root){
   show(Math.max(0,Math.min(steps.length-1,next)));
  }
  async function prepare(kind){
-  if(!canStart()||!wiringCompatible()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Save the wiring, verify outputs are off and confirm all safety checks.');
+  if(!canStart()||!wiringCompatible()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Save wiring, verify PWM is off and use the supported 50 Hz ESC profile. Complete the ESC procedure checks when calibrating ESCs.');
   await motorClient.begin('wizard',null,{...base,mapping:encode(draft)});
  }
  function ensureOperation(run){
@@ -481,6 +479,7 @@ if(root){
    cues.play('stop');return;
   }
   if(!wiringCompatible()||saved?.escCalibrationSaved!==true||escAttempt)throw Error('Save wiring and ESC calibration before starting output calibration.');
+  if(!window.confirm('Start '+(calAll?'all four motors':'motor M'+calMotor)+' at minimum pulse? Remove all propellers, verify motor/ESC wiring and power, and keep a physical power cutoff ready.'))return;
   const resume=currentResult();
   ensureOperation(runId);
   setCalPulse(1000);
@@ -535,7 +534,7 @@ if(root){
   if(intent.scope==='ACCEL'&&accelAction===intent.action)accelAction='KEEP';
   if(intent.scope==='ESC')escDraft=false;
   for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
-  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();$('#a2Pins').checked=false;minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
+  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
   if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;}
   if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
@@ -679,7 +678,7 @@ if(root){
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){
    draft=readWiring();minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
    escAttempt=false;saveState='';
-   $('#a2Pins').checked=false;setCalPulse(currentResult());
+   setCalPulse(currentResult());
   }else if(e.target.id==='a2CalPulse'&&activeRun){
    activeRun.ramp=0;activeRun.target=Number(e.target.value);setCalPulse(activeRun.target);
   }
