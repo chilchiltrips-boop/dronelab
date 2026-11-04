@@ -97,7 +97,7 @@ export function wizardVisual(step,{mode,autoEsc={}}){
  ${['HIGH','LOW','OFF'].map((p,i)=>`<rect x="${13+i*130}" y="187" width="120" height="94" rx="10" class="a2-esc ${phase===p?'a2-battery-current':''}"/>${text(73+i*130,216,p==='OFF'?'PWM OFF':p,'a2-svg-label')}${text(73+i*130,241,p==='HIGH'?'2000 µs':p==='LOW'?'1000 µs':'No pulses','a2-svg-small')}${text(73+i*130,265,p==='OFF'?'Read result':'5 seconds','a2-svg-small')}`).join('')}
  ${text(200,326,'M1 · M2 · M3 · M4','a2-svg-label')}
  ${text(200,356,'Controller sequence ≠ ESC acceptance','a2-svg-small')}
- ${text(200,387,'Confirm ESC tones → Save','a2-svg-small')}`)};
+ ${text(200,387,'Board stores result · reconnect to read','a2-svg-small')}`)};
 }
 
 export function updateImuDiagram(scene,accel,face,mask){
