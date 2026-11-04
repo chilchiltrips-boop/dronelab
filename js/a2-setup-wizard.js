@@ -1,19 +1,19 @@
-import {motorClient,confirmMotor,cancelMotorConfirmations,motorStopDescription} from './motor-setup.js';
+import {motorClient,cancelMotorConfirmations} from './motor-setup.js';
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,updateImuDiagram} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
- const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Motor Test','Report & Save'];
- const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Motor Test','Report'];
+ const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report & Save'];
+ const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
  const motors=[1,2,3,4];
- const visited=new Set([0]),history=[],testObservations=[];
+ const visited=new Set([0]),history=[];
  let step=0,state=null,saved=null,draft=defaults(),minimums=[null,null,null,null],base=null,identity='',contextKit='';
  let lastStateAt=0,historyAt=0,polling=false,working='',readError='',operationError='',nextPollAt=0,readFailures=0;
- let calMotor=1,calAll=false,testMotor=1,testAll=false,calTarget=1000,activeRun=null,operation=0;
+ let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,resetDraft=false,saveState='',ambiguousSave=null,conflict=false;
  let visualStep=-1,visualMarkup='';
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
@@ -60,15 +60,7 @@ if(root){
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
  <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
  <p class="a2-cal-output a2-test-state" role="status"></p></section>
- <section data-panel="7"><div class="a2-panel-heading"><h3>Motor Test</h3>${soundButton}</div>
- <div class="a2-output-selection"><div><label for="a2TestMotor">Motor selection</label><select id="a2TestMotor">${motors.map(n=>`<option value="${n}">M${n}</option>`).join('')}</select></div>
- <label>Pulse (µs)<input id="a2Pulse" type="number" min="1000" max="2000" step="1" value="1000"></label></div>
- <label class="a2-check"><input id="a2AllMotors" type="checkbox"> All motors</label><p class="a2-target-note"></p>
- ${slider('a2PulseSlider',2000)}
- <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="slider">Start motor test · 30 s</button></div><p class="a2-test-state a2-test-output" role="status"></p>
- <div class="a2-actions"><button class="btn ghost" data-action="observe-test">Record observed rotation</button></div>
- <details class="a2-secondary-test"><summary>Additional output tests</summary><div class="a2-actions"><button class="btn ghost" data-action="single">Pulse test · 800 ms</button><button class="btn ghost" data-action="input">Test selected input · all motors</button></div><small>Input test: 10 s, maximum 1200 µs. Start with low throttle and disarmed input.</small></details></section>
- <section data-panel="8"><h3>Report &amp; Save</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
+ <section data-panel="7"><h3>Report &amp; Save</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
  <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
  <details class="a2-secondary-test"><summary>Reset setup</summary>
  <p>Reset stages defaults for review. Save applies them. ESC endpoints remain stored in the ESCs.</p>
@@ -128,17 +120,12 @@ if(root){
   $('#a2CalPulse').value=pulse;
   $('#a2CalPulseValue').textContent=pulse+' µs';
  }
- function setTestPulse(pulse){
-  $('#a2Pulse').value=pulse;
-  $('#a2PulseSlider').value=pulse;
-  $('#a2PulseSliderValue').textContent=pulse+' µs';
- }
  function resetContext(){
   ++operation;
   state=saved=base=null;
   draft=defaults();minimums=[null,null,null,null];loadWiring();
-  calMotor=testMotor=1;calAll=testAll=false;setCalPulse(1000);setTestPulse(1000);
-  lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=testObservations.length=0;
+  calMotor=1;calAll=false;setCalPulse(1000);
+  lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
   resetDraft=conflict=false;saveState=readError=operationError='';ambiguousSave=null;
   visited.clear();visited.add(0);
@@ -180,7 +167,7 @@ if(root){
   if(old?.mode==='CAL_LOW'&&outputOff(s)&&s.reason==='CAL_FINISHED')cues.play('finished');
   if(escAttempt&&outputOff(s)&&s.reason!=='CAL_FINISHED'&&!s.escCalibrationPending)escAttempt=false;
   if(activeRun&&outputOff(s)&&s.reason!=='NONE'&&!working){
-   if(activeRun.kind==='cal')setCalPulse(currentResult());
+   setCalPulse(currentResult());
    activeRun=null;
   }
   if(ambiguousSave&&s.wizardVersion===1&&!working)checkSaveReadback(s);
@@ -199,13 +186,13 @@ if(root){
  function renderVisual(){
   const scene=$('.a2-visual-scene'),input=selectedInput();
   const safe=Date.now()-lastStateAt<2400?state||{}:{...state,mode:'UNCONFIRMED',pulseUs:[]};
-  const motorStep=step===6||step===7,cal=step===6;
-  const selection=cal?mask(calMotor,calAll):mask(testMotor,testAll);
+  const motorStep=step===6;
+  const selection=mask(calMotor,calAll);
   const selectedMask=['ALL_TEST','INPUT_TEST'].includes(safe.mode)?15:selection;
   const testing=['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(safe.mode);
   const v=step>=3&&step<=5
    ?wizardVisual(step,{mode:safe.mode,escAttempt,powerOff:$('#a2PowerOff').checked})
-   :stepVisual(step===8?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask});
+   :stepVisual(step===7?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
   $('.a2-visual-title').textContent=v.title;
   if(visualStep!==step||!motorStep&&step!==1&&step!==2&&visualMarkup!==v.html){
    scene.innerHTML=v.html;visualMarkup=v.html;
@@ -222,8 +209,8 @@ if(root){
   }
   if(step===3)updateImuDiagram(scene,imuFresh()?saved.imu.accelG:null,Number($('#a2Face').value),saved?.capture?.mask||0);
   if(step===1||motorStep)updateMotorDiagram(scene,draft,motorStep?safe.pulseUs:[],motorStep&&testing,{
-   selectedMask:motorStep?selectedMask:0,preview:step===1,locked:!!working||motorClient.busy,
-   results:cal?pulses().map((p,i)=>validPulse(p)?`${p} µs · ${minimums[i]?'DRAFT':'SAVED'}`:''):[]});
+   selectedMask:motorStep?selectedMask:0,preview:step===1,interactive:false,locked:!!working||motorClient.busy,
+   results:motorStep?pulses().map((p,i)=>validPulse(p)?`${p} µs · ${minimums[i]?'DRAFT':'SAVED'}`:''):[]});
   visualStep=step;
   $('.a2-pulses').hidden=!motorStep;
   $('.a2-pulses').textContent=safe.mode==='UNCONFIRMED'?'Output state unconfirmed':(safe.pulseUs||[]).map((p,i)=>`M${i+1} ${p?p+' µs':'OFF'}`).join(' · ');
@@ -283,7 +270,7 @@ if(root){
  function renderOutputs(){
   const fresh=Date.now()-lastStateAt<750;
   const running=state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard';
-  const calLive=running&&activeRun?.kind==='cal',testLive=running&&activeRun?.kind==='test';
+  const calLive=running&&!!activeRun;
   const busy=!!working||motorClient.busy;
   const disabled=!canStart()||!outputChecks()||busy;
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
@@ -304,19 +291,6 @@ if(root){
   resume.hidden=!calLive||!activeRun.ready||activeRun.resume===1000||activeRun.target!==1000;
   resume.disabled=!!working||!fresh;
   if(!resume.hidden)resume.textContent=`Resume ${activeRun.resume} µs`;
-  $('#a2AllMotors').checked=testAll;$('#a2AllMotors').disabled=busy;
-  $('#a2TestMotor').value=String(testMotor);$('#a2TestMotor').disabled=busy||testAll;
-  $('#a2PulseSlider').disabled=!testLive||!!working;
-  $('#a2Pulse').disabled=busy&&!testLive;
-  const test=$('[data-action="slider"]');
-  test.textContent=testLive?'Stop motor test':'Start motor test · 30 s';
-  test.disabled=!!working||(!testLive&&disabled);test.classList.toggle('danger',testLive);
-  const references=targetMotors(testMotor,testAll).map(n=>validPulse(pulses()[n-1])?`M${n} ${pulses()[n-1]} µs`:'').filter(Boolean);
-  $('.a2-target-note').textContent=(testAll?'M1–M4':`M${testMotor} · ${draft.layoutPins[testMotor-1]} · ${draft.rotations[testMotor-1]}`)+
-   (references.length?' · Starting pulse reference '+references.join(' / '):'');
-  for(const a of ['single','input'])$(`[data-action="${a}"]`).disabled=disabled;
-  $('[data-action="observe-test"]').disabled=busy&&!testLive||!activeRun||!fresh||outputOff(state);
-  $('.a2-test-output').textContent=!outputOff(state)&&fresh&&motorClient.owner==='wizard'?`${state.mode} · PWM ${state.pulseUs.join(' / ')} µs · ${time} s · ACK ${state.roundTripMs??'—'} ms`:operationError||`${text} · ${motorStopDescription(state)}`;
  }
  function reportRows(){
   const k=kit(),signal=saved?.outputSignal,values=pulses(),stored=saved?.observedMinimumUs||[];
@@ -330,7 +304,6 @@ if(root){
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
    ['ESC',escDraft===true?'Confirmed · Pending':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
-   ['Motor test',testObservations.length?`${testObservations.length} operator observation(s)`:'Incomplete'],
    ['Physical acceptance','Not verified by software']
   ];
  }
@@ -384,9 +357,9 @@ if(root){
   const lock=!!working||motorClient.busy;
   $('[data-nav="-1"]').disabled=step===0||!!working;
   const next=$('[data-nav="1"]');
-  next.textContent=step===8?'Save':'Next';
-  next.disabled=step===8?!!working||(!validSave()&&!ambiguousSave):!!working||!canAdvance();
-  const completed=[boardReady(),wiringValid(),visited.has(2),saved?.imu?.state==='READY',!!signal,compatibleEsc(),calibrationComplete(),testObservations.length>0,saveState==='Saved on board'];
+  next.textContent=step===7?'Save':'Next';
+  next.disabled=step===7?!!working||(!validSave()&&!ambiguousSave):!!working||!canAdvance();
+  const completed=[boardReady(),wiringValid(),visited.has(2),saved?.imu?.state==='READY',!!signal,compatibleEsc(),calibrationComplete(),saveState==='Saved on board'];
   root.querySelectorAll('[data-step]').forEach((button,i)=>{
    const done=visited.has(i)&&completed[i];
    button.dataset.completed=String(!!done);button.title=done?'Complete':'';
@@ -402,14 +375,13 @@ if(root){
  function show(next){
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
   if(step===6)setCalPulse(currentResult());
-  if(step===7)setTestPulse(1000);
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
   root.querySelectorAll('[data-step]').forEach(b=>{
    const n=Number(b.dataset.step);
    b.setAttribute('aria-current',n===step?'step':'false');
    b.dataset.visited=String(visited.has(n));
   });
-  $('.a2-checks').hidden=![1,5,6,7].includes(step);
+  $('.a2-checks').hidden=![1,5,6].includes(step);
   $('.a2-step-count').textContent=`${step+1} / ${steps.length}`;
   render();
   revealStep();
@@ -434,7 +406,7 @@ if(root){
   if(step===6&&footer&&!calAll&&(next>step&&calMotor<4||next<step&&calMotor>1)){
    calMotor+=Math.sign(next-step);setCalPulse(currentResult());render();return;
   }
-  show(Math.max(0,Math.min(8,next)));
+  show(Math.max(0,Math.min(steps.length-1,next)));
  }
  async function prepare(kind){
   if(!canStart()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Verify outputs are off, wiring is valid and all safety checks are confirmed.');
@@ -444,46 +416,40 @@ if(root){
   if(run!==operation||!live())throw Error('Wizard operation cancelled.');
  }
  function captureStable(run){
-  if(run?.kind!=='cal'||!run.ready||Date.now()-lastStateAt>=750||state.mode!=='SLIDER_TEST'||state.sliderMask!==run.mask)return 0;
+  if(!run?.ready||Date.now()-lastStateAt>=750||state.mode!=='SLIDER_TEST'||state.sliderMask!==run.mask)return 0;
   return run.motors.every(n=>state.pulseUs?.[n-1]===calTarget)&&validPulse(calTarget)?calTarget:0;
  }
- async function sliderAction(kind,runId){
-  const cal=kind==='cal';
-  if(activeRun?.kind===kind&&motorClient.owner==='wizard'&&state?.mode==='SLIDER_TEST'){
-   const run=activeRun,confirmed=cal?captureStable(run):0;
+ async function sliderAction(runId){
+  if(activeRun&&motorClient.owner==='wizard'&&state?.mode==='SLIDER_TEST'){
+   const run=activeRun,confirmed=captureStable(run);
    activeRun=null;
    const stopped=await motorClient.stop('wizard');
    ensureOperation(runId);
    if(!outputOff(stopped))throw Error('PWM state is unconfirmed.');
-   if(cal){
-    if(confirmed&&stopped.stoppedSlider===true&&stopped.stoppedMask===run.mask&&stopped.stoppedPulseUs===confirmed){
-     for(const n of run.motors)minimums[n-1]=confirmed;
-     saveState='';setCalPulse(confirmed);
-     message('Outputs off · Pending final save');
-    }else{
-     setCalPulse(currentResult());
-     throw Error('Outputs off. Repeat the attempt and wait for the displayed pulse acknowledgement before Stop.');
-    }
-   }else message('Motor test stopped · PWM off.');
+   if(confirmed&&stopped.stoppedSlider===true&&stopped.stoppedMask===run.mask&&stopped.stoppedPulseUs===confirmed){
+    for(const n of run.motors)minimums[n-1]=confirmed;
+    saveState='';setCalPulse(confirmed);
+    message('Outputs off · Pending final save');
+   }else{
+    setCalPulse(currentResult());
+    throw Error('Outputs off. Repeat the attempt and wait for the displayed pulse acknowledgement before Stop.');
+   }
    cues.play('stop');return;
   }
-  if(cal&&!compatibleEsc())throw Error('Complete ESC calibration before starting output calibration.');
-  const motor=cal?calMotor:testMotor,all=cal?calAll:testAll;
-  const resume=cal?currentResult():0;
-  if(!cal)await confirmMotor(`Run a 30-second slider test on ${all?'all four motors':'M'+motor}? Remove all propellers and secure the frame. The board starts at 1000 µs.`);
+  if(!compatibleEsc())throw Error('Complete ESC calibration before starting output calibration.');
+  const resume=currentResult();
   ensureOperation(runId);
-  if(cal)setCalPulse(1000);else setTestPulse(1000);
-  const run={kind,mask:mask(motor,all),motors:targetMotors(motor,all),resume,ready:false,target:1000,ramp:0,rampPulse:1000};
+  setCalPulse(1000);
+  const run={mask:mask(calMotor,calAll),motors:targetMotors(calMotor,calAll),resume,ready:false,target:1000,ramp:0,rampPulse:1000};
   activeRun=run;
-  await prepare(kind);ensureOperation(runId);
+  await prepare('cal');ensureOperation(runId);
   await motorClient.startSlider(run.mask,()=>{
    if(activeRun!==run)throw Error('Slider cancelled.');
-   if(!cal)return Number($('#a2Pulse').value);
    if(!run.ramp)return calTarget;
    const acknowledged=state?.pulseUs?.[run.motors[0]-1];
    if(Date.now()>=run.ramp&&acknowledged===run.rampPulse)run.rampPulse=Math.min(calTarget,run.rampPulse+15);
    return run.rampPulse;
-  },'wizard',30000,cal);
+  },'wizard',30000,true);
   ensureOperation(runId);
   run.ready=true;run.lowSince=Date.now();
   cues.play('start');message('Live · board acknowledged 1000 µs.');
@@ -537,7 +503,7 @@ if(root){
    if(escAttempt&&escDraft!==true)escAttempt=false;
    const stopped=await motorClient.stop();
    if(!outputOff(stopped))throw Error('PWM state unconfirmed after STOP.');
-   setCalPulse(currentResult());setTestPulse(1000);cues.play('stop');message('STOP acknowledged · PWM off.');return;
+   setCalPulse(currentResult());cues.play('stop');message('STOP acknowledged · PWM off.');return;
   }
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
   if(name==='detect'){
@@ -545,7 +511,7 @@ if(root){
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
   if(name==='download'){
-   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),testObservations,physicalAcceptance:'NOT_VERIFIED'};
+   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),physicalAcceptance:'NOT_VERIFIED'};
    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
    a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
   }
@@ -594,25 +560,12 @@ if(root){
    if(!ack.escConfirmationStaged)throw Error('ESC confirmation was not acknowledged.');
    escDraft=true;escAttempt=false;saveState='';message('Confirmed · pending final save');return;
   }
-  if(name==='cal-slider'||name==='slider'){await sliderAction(name==='cal-slider'?'cal':'test',run);return;}
+  if(name==='cal-slider'){await sliderAction(run);return;}
   if(name==='resume-cal'){
    const sliderRun=activeRun;
-   if(sliderRun?.kind!=='cal'||!sliderRun.ready||!validPulse(sliderRun.resume)||sliderRun.resume===1000||!state?.pulseUs?.some(p=>p===1000))throw Error('Start at minimum before resuming a recorded pulse.');
+   if(!sliderRun?.ready||!validPulse(sliderRun.resume)||sliderRun.resume===1000||!state?.pulseUs?.some(p=>p===1000))throw Error('Start at minimum before resuming a recorded pulse.');
    sliderRun.ramp=Math.max(Date.now(),sliderRun.lowSince+500);
    sliderRun.rampPulse=1000;sliderRun.target=sliderRun.resume;setCalPulse(sliderRun.resume);return;
-  }
-  if(name==='observe-test'){
-   testObservations.push({at:new Date().toISOString(),motors:activeRun.motors,acknowledgedUs:[...state.pulseUs],observation:'rotation observed'});
-   message('Operator observation recorded in the report.');return;
-  }
-  if(name==='single'||name==='input'){
-   const pulse=Number($('#a2Pulse').value);
-   if(name==='single'&&(!Number.isInteger(pulse)||pulse<1000||pulse>2000||pulse%10))throw Error('Enter a 1000–2000 µs value in steps of 10.');
-   await confirmMotor(name==='single'?`Pulse ${testAll?'all four motors':'M'+testMotor} for 800 ms at ${pulse} µs? Remove all propellers.`:'Run the selected-input test for 10 seconds on all four motors? Lower throttle and disarm input.');
-   ensureOperation(run);await prepare('test');ensureOperation(run);
-   activeRun={kind:'test',motors:targetMotors(testMotor,name==='input'||testAll)};
-   if(name==='single')await motorClient.command(testAll?'ALL':'SINGLE',[testMotor,pulse,800]);
-   else await motorClient.command('INPUT',['selected',10000,'CONFIRM_ALL_MOTORS']);
   }
  }
  function perform(name){
@@ -622,7 +575,7 @@ if(root){
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
    operationError=e.message;message(e.message);
-   if(['cal-slider','slider','single','input','high','low'].includes(name)){
+   if(['cal-slider','high','low'].includes(name)){
     activeRun=null;escAttempt=false;
     if(motorClient.owner==='wizard')await motorClient.stop('wizard').catch(()=>{});
     setCalPulse(currentResult());cues.play('error');
@@ -639,37 +592,28 @@ if(root){
    render();return;
   }
   if(action){perform(action);return;}
-  if(b.dataset.nav==='1'&&step===8){perform('save');return;}
+  if(b.dataset.nav==='1'&&step===7){perform('save');return;}
   if(b.dataset.step!==undefined||b.dataset.nav){
    const next=b.dataset.nav?step+Number(b.dataset.nav):Number(b.dataset.step);
    if(next!==step)void navigate(next,!!b.dataset.nav).catch(e=>message(e.message));
   }
  });
  root.addEventListener('input',e=>{
-  if(['a2CalAll','a2AllMotors','a2TestMotor'].includes(e.target.id))return;
+  if(e.target.id==='a2CalAll')return;
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){
    draft=readWiring();minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
    escAttempt=false;saveState='';
    $('#a2Pins').checked=false;setCalPulse(currentResult());
-  }else if(e.target.id==='a2CalPulse'&&activeRun?.kind==='cal'){
+  }else if(e.target.id==='a2CalPulse'&&activeRun){
    activeRun.ramp=0;activeRun.target=Number(e.target.value);setCalPulse(activeRun.target);
-  }else if(e.target.id==='a2Pulse'||e.target.id==='a2PulseSlider')setTestPulse(e.target.value);
+  }
   render();
  });
  root.addEventListener('change',e=>{
   if(e.target.id==='a2CalAll'&&!motorClient.busy){calAll=e.target.checked;setCalPulse(currentResult());}
-  if(e.target.id==='a2AllMotors'&&!motorClient.busy){testAll=e.target.checked;setTestPulse(1000);}
-  if(e.target.id==='a2TestMotor'&&!motorClient.busy){testMotor=Number(e.target.value);setTestPulse(1000);}
   if(e.target.id==='a2Face')$('#a2Still').checked=false;
   render();
  });
- const chooseDiagramMotor=e=>{
-  const motor=e.target.closest('[data-motor]');
-  if(step!==7||!motor||motorClient.busy||working||e.type==='keydown'&&!['Enter',' '].includes(e.key))return;
-  e.preventDefault();testMotor=Number(motor.dataset.motor);testAll=false;setTestPulse(1000);render();
- };
- $('.a2-visual-scene').addEventListener('click',chooseDiagramMotor);
- $('.a2-visual-scene').addEventListener('keydown',chooseDiagramMotor);
  window.addEventListener('zebjus:motor-state',e=>{if(live())receive(e.detail);});
  const observe=()=>{
   if(!live()){

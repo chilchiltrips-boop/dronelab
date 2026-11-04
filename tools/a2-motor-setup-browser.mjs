@@ -13,7 +13,9 @@ try{
  await page.goto('http://127.0.0.1:8765/#setup');
  const wizard=page.locator('#a2SetupRoot');
  await wizard.locator('[data-step="0"]').waitFor();
- assert.equal(await wizard.locator('[data-step]').count(),9);
+ assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
+  ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report & Save']);
+ assert.equal(await wizard.locator('[data-action=single],[data-action=input],[data-action=slider],[data-action=observe-test]').count(),0);
  await page.evaluate(()=>{
   const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:'testboot',connectionGeneration:1,board:'A2',version:'1.7.8'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
@@ -152,6 +154,35 @@ try{
  await fixture(()=>__wizard.release());
  assert.equal(await pulse.inputValue(),'1087');
  assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
+ // Individual Next crosses all four motors and enters Report directly.
+ for(const [motor,value] of [[2,'1090'],[3,'1105'],[4,'1110']]){
+  await nav(1).click();
+  await expectText('.a2-cal-target',`Motor ${motor} of 4`);
+  await button('cal-slider').click();
+  await expectText('.a2-cal-output','ACK 1000');
+  await pulse.fill(value);
+  await expectText('.a2-cal-output','ACK '+value);
+  await button('cal-slider').click();
+  await expectText('.a2-cal-output','Pending final save');
+ }
+ await nav(1).click();
+ assert.equal(await wizard.locator('[data-panel="7"] h3').textContent(),'Report & Save');
+ assert.equal(await nav(1).textContent(),'Save');
+ assert.equal(await wizard.locator('.a2-step-count').textContent(),'8 / 8');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
+ await nav(-1).click();
+ await expectText('.a2-cal-target','Motor 4 of 4');
+ assert.equal(await pulse.inputValue(),'1110');
+ for(const motor of [3,2,1]){
+  await nav(-1).click();
+  await expectText('.a2-cal-target',`Motor ${motor} of 4`);
+ }
+ assert.equal(await pulse.inputValue(),'1087');
+ await nav(-1).click();
+ assert.equal(await wizard.locator('[data-panel="5"]').isVisible(),true);
+ await nav(1).click();
+ assert.equal(await pulse.inputValue(),'1087');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED');
  await wizard.locator('#a2CalAll').check();
  assert.equal(await pulse.inputValue(),'1000','mixed motor results do not resume as a group');
  await button('cal-slider').click();
@@ -161,10 +192,8 @@ try{
  await button('cal-slider').click();
  await expectText('.a2-cal-output','Pending final save');
  await nav(1).click();
- assert.equal(await button('single').isVisible(),false,'secondary tests are collapsed on Motor Test');
- await wizard.locator('[data-panel="7"] summary').click();
- assert.equal(await button('single').isVisible(),true);
- await nav(1).click();
+ assert.equal(await wizard.locator('[data-panel="7"]').isVisible(),true,'group Next opens Report directly');
+ assert.doesNotMatch(await wizard.locator('.a2-report').textContent(),/Motor test/i);
  assert.equal(await nav(1).textContent(),'Save');
  await fixture(()=>{__wizard.failSave=true;});
  await nav(1).click();
@@ -176,7 +205,6 @@ try{
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);
  assert.match(await fixture(()=>__wizard.board.accelModel),/:42:0:0$/,'the older capture response cannot replace the requested result');
  assert.equal(await fixture(()=>__wizard.writes),1,'lost ACK is resolved by readback without another write');
- await nav(-1).click();
  await nav(-1).click();
  assert.equal(await wizard.locator('#a2CalAll').isChecked(),true);
  assert.equal(await pulse.inputValue(),'1150');
@@ -191,8 +219,8 @@ try{
  assert.equal(layout,1);
  mkdirSync('test-output',{recursive:true});
  await page.screenshot({path:'test-output/a2-output-calibration-mobile.png',fullPage:true});
- await step(8).click();
- await wizard.locator('[data-panel="8"] summary').click();
+ await step(7).click();
+ await wizard.locator('[data-panel="7"] summary').click();
  await button('reset-all').click();
  await expectText('.a2-report-state','Reset pending');
  assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
@@ -201,6 +229,7 @@ try{
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);
  assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
+ assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>['SLIDER','SINGLE','ALL','INPUT'].includes(c.action))),[]);
  assert.deepEqual(errors,[]);
- console.log('PASS simulated A2 Wizard · 9 steps, ESC phases, individual/group draft, safe resume, delayed ACK, Save readback, reset and mobile layout');
+ console.log('PASS simulated A2 Wizard · 8 steps, direct individual/group Report navigation, ESC phases, individual/group draft, safe resume, delayed ACK, Save readback, reset and mobile layout');
 }finally{await browser.close();}

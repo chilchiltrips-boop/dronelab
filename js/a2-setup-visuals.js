@@ -25,15 +25,15 @@ export function motorDiagram(config={},pulses=[],testing=false,{selectedMask=0,p
 }
 // Keep the same motors on screen while geometry, selection and ACKs change.
 // CSS moves the arms and motor groups together when X / + is selected.
-export function updateMotorDiagram(scene,config,pulses=[],testing=false,{selectedMask=0,preview=false,locked=false,results=[]}={}){
+export function updateMotorDiagram(scene,config,pulses=[],testing=false,{selectedMask=0,preview=false,locked=false,interactive=true,results=[]}={}){
  const {layout:l,pins,rotations}=frameValues(config),diagram=scene.querySelector('[data-frame-diagram]');
  if(!diagram)return;
- diagram.classList.toggle('configuration-preview',preview);diagram.setAttribute('role',preview?'img':'group');diagram.setAttribute('aria-label',l.name+' motor layout, top view');
+ diagram.classList.toggle('configuration-preview',preview);diagram.setAttribute('role',preview||!interactive?'img':'group');diagram.setAttribute('aria-label',l.name+' motor layout, top view');
  scene.querySelectorAll('[data-frame-arm]').forEach((arm,i)=>arm.style.cssText=armStyle(l.points[i]));
  scene.querySelectorAll('[data-motor]').forEach((motor,i)=>{
   const [x,y]=l.points[i],pulse=pulses[i]||0,selected=!!(selectedMask&(1<<i)),spin=testing&&pulse>1000;
   motor.style.transform=`translate(${x}px,${y}px)`;motor.classList.toggle('is-selected',selected);motor.classList.toggle('output-active',testing&&pulse>=1000);motor.classList.toggle('has-result',!!results[i]);
-  if(!preview){motor.setAttribute('role','button');motor.setAttribute('aria-pressed',String(selected));motor.setAttribute('aria-disabled',String(locked));motor.setAttribute('tabindex',locked?'-1':'0');motor.setAttribute('aria-label',`Select M${i+1}, ${l.positions[i]}, ${pins[i]}`);}
+  if(!preview&&interactive){motor.setAttribute('role','button');motor.setAttribute('aria-pressed',String(selected));motor.setAttribute('aria-disabled',String(locked));motor.setAttribute('tabindex',locked?'-1':'0');motor.setAttribute('aria-label',`Select M${i+1}, ${l.positions[i]}, ${pins[i]}`);}
   else for(const name of ['role','tabindex','aria-label','aria-pressed','aria-disabled'])motor.removeAttribute(name);
   const rotor=motor.querySelector('.a2-rotor');rotor.classList.toggle('spinning',spin);rotor.style.setProperty('--spin',Math.max(.12,1.5-(pulse-1000)/750)+'s');rotor.style.animationDirection=rotations[i]==='CCW'?'reverse':'normal';
   motor.querySelector('.a2-rotation-guide').style.animationDirection=rotations[i]==='CCW'?'reverse':'normal';motor.querySelector('.a2-rotation-shape').setAttribute('transform',`scale(${rotations[i]==='CCW'?-1:1} 1)`);
@@ -41,7 +41,7 @@ export function updateMotorDiagram(scene,config,pulses=[],testing=false,{selecte
  });
  scene.querySelector('.a2-frame-layout-label').textContent=l.name+' · TOP VIEW';
 }
-export function stepVisual(step,{kit={},state={},draft={},input={},history=[],calConfirmed=false,selectedMask=1}={}){
+export function stepVisual(step,{kit={},state={},draft={},input={},history=[],calConfirmed=false,selectedMask=1,interactive=true}={}){
  const linked=kit.connected===true;
  if(step===0)return {title:'Your flight controller',description:linked?'Verified connection details from the selected Kit.':'Connect the A2 to reveal its identity and capabilities.',html:svg('A2 controller connection diagram',`
  <rect x="85" y="83" width="230" height="240" rx="22" class="a2-board-outline"/>
@@ -62,7 +62,7 @@ export function stepVisual(step,{kit={},state={},draft={},input={},history=[],ca
  ${text(200,42,phase,'a2-svg-label')}<path d="${high||low?`M20 145H40V70h${high?20:10}V145h${high?180:190}V70h${high?20:10}V145H380`:'M20 145H380'}" class="a2-pwm ${high||low?'a2-pwm-live':''}"/>
  ${[0,1,2,3].map(i=>`<rect x="${30+i*91}" y="204" width="67" height="100" rx="10" class="a2-esc ${high||low?'a2-esc-live':''}"/>${text(63+i*91,247,'ESC '+(i+1),'a2-svg-small')}${text(63+i*91,278,high?'HIGH':low?'LOW':'OFF','a2-svg-small')}`).join('')}
  ${text(200,351,high||low?Math.ceil((state.remainingMs||0)/1000)+' s remaining':'Battery → HIGH → LOW → tones','a2-svg-small')}`)};}
- if(step===4)return {title:selectedMask===15?'All four motor outputs':'Motor '+(Math.log2(selectedMask)+1)+' · output check',description:'Choose a motor in the diagram. Only board-acknowledged test output animates; observe the real motor to confirm rotation.',html:motorDiagram(state,state.pulseUs,['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(state.mode),{selectedMask,interactive:true})};
+ if(step===4)return {title:selectedMask===15?'All four motor outputs':'Motor '+(Math.log2(selectedMask)+1)+' · output check',description:interactive?'Choose a motor in the diagram. Only board-acknowledged output animates; observe the real motor to confirm rotation.':'Use Back and Next to select each motor. Observe the real motor to confirm rotation.',html:motorDiagram(state,state.pulseUs,['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(state.mode),{selectedMask,interactive})};
  const mins=state.observedMinimumUs||[0,0,0,0];return {title:'Saved setup overview',description:'Board-saved settings and operator observations, ready to export.',html:svg('Saved minimum pulse summary',`
  <circle cx="200" cy="75" r="34" class="a2-chip"/><path d="m183 75 12 12 24-26" class="a2-front"/>
  ${mins.map((p,i)=>`${text(53,155+i*53,'M'+(i+1),'a2-svg-label')}<rect x="83" y="136" width="0" height="0"/><rect x="86" y="${138+i*53}" width="245" height="26" rx="5" class="a2-chart-track"/><rect x="86" y="${138+i*53}" width="${p?Math.max(4,(p-1000)*.245):0}" height="26" rx="5" class="a2-chart-fill"/>${text(208,157+i*53,p?p+' µs':'Not recorded','a2-svg-small')}`).join('')}${text(200,394,'OBSERVED MINIMUM · NOT MEASURED RPM','a2-svg-small')}`)};
