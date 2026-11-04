@@ -2,13 +2,14 @@
 #include <Wire.h>
 #include <string.h>
 #include <stdlib.h>
+#include <esp_system.h>
 #include "FlightCoreTiming.h"
 #include "FlightCoreEscProfile.h"
 static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.10";
+constexpr const char* FW_VERSION="1.7.11";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -440,18 +441,23 @@ void emitTelemetry(unsigned long now){
 void setup(){
  Serial.begin(115200);
  zjKitSetup();
- zjPpmSetup();
- selectI2cBus();
  pinMode(LED_PIN,OUTPUT);
  digitalWrite(LED_PIN,HIGH);
  ledAvailable=ledcAttachChannel(LED_PIN,5000,8,5);
  ledOff();
+ // Consume a verified one-use request and start PWM before network/sensor
+ // initialization can occupy the loop. The independent timer owns the phases.
+ zjMotorSetup();
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ zjAutoEscBoot(esp_reset_reason()==ESP_RST_POWERON);
+#endif
+ zjPpmSetup();
+ selectI2cBus();
  // No decorative startup banner.
  printFirmwareInfo();
  Serial.println("ZJTEL,ACK,RATE,20");
  Serial.println("ZJTEL,ACK,FORMAT,COMBINED");
  zjNetworkSetup();
- zjMotorSetup();
  zjControlRuntimeSetup();
  lastGyro=millis()-GYRO_PERIOD_MS;
  lastGyroProbe=millis()-2500;

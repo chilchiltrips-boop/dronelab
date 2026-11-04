@@ -68,7 +68,7 @@ export function stepVisual(step,{kit={},state={},draft={},input={},history=[],ca
  ${mins.map((p,i)=>`${text(53,155+i*53,'M'+(i+1),'a2-svg-label')}<rect x="83" y="136" width="0" height="0"/><rect x="86" y="${138+i*53}" width="245" height="26" rx="5" class="a2-chart-track"/><rect x="86" y="${138+i*53}" width="${p?Math.max(4,(p-1000)*.245):0}" height="26" rx="5" class="a2-chart-fill"/>${text(208,157+i*53,p?p+' µs':'Not recorded','a2-svg-small')}`).join('')}${text(200,394,'OBSERVED MINIMUM · NOT MEASURED RPM','a2-svg-small')}`)};
 }
 
-export function wizardVisual(step,{mode,escAttempt,powerOff}){
+export function wizardVisual(step,{mode,autoEsc={}}){
  if(step===3)return {title:'MPU6050 orientation and gravity',html:svg('A2 sensor axes, capture pose and acceleration',`
  <rect x="100" y="77" width="200" height="180" rx="20" class="a2-board-outline"/>
  <rect x="166" y="124" width="68" height="68" rx="11" class="a2-chip"/>
@@ -88,19 +88,16 @@ export function wizardVisual(step,{mode,escAttempt,powerOff}){
  <path d="M40 98v226m320-226v226" class="a2-grid-line"/>
  ${text(42,351,'0 ms','a2-svg-small')}${text(360,351,'20 ms','a2-svg-small')}
  ${text(200,389,'Illustration · no live output','a2-svg-small')}`)};
- const high=mode==='CAL_HIGH',low=mode==='CAL_LOW';
- const connect=high||low;
- const battery=(x,connected,highlight)=>`<g transform="translate(${x} 0)">
- <rect x="7" y="74" width="178" height="180" rx="14" class="a2-esc ${highlight?'a2-battery-current':''}"/>
- ${text(96,108,connected?'BATTERY CONNECTED':'BATTERY DISCONNECTED','a2-svg-small')}
- <path d="M18 177h48m${connected?60:71} 0h42" class="a2-wire"/>
- <rect x="54" y="155" width="48" height="44" rx="8" class="a2-chip"/>
- <rect x="${connected?100:119}" y="161" width="23" height="32" rx="5" class="a2-usb"/>
- ${text(96,227,highlight?(connected?'CONNECT / LISTEN':powerOff?'OPERATOR CONFIRMED':'DISCONNECT'):'REFERENCE','a2-svg-small')}</g>`;
- return {title:'Battery connection instructions',html:svg('Battery disconnected and connected illustrations',`
- ${battery(4,false,!connect)}${battery(200,true,connect)}
- ${text(200,303,high?'HIGH · 2000 µs':low?'LOW · 1000 µs':mode==='DISABLED'?'PWM OFF':'PWM STATE UNCONFIRMED','a2-svg-label')}
- ${text(200,342,high?'Connect the battery and wait for ESC tones':low?'Wait for success tones and PWM off':escAttempt?'Confirm tones, then disconnect':'Keep the controller powered by USB','a2-svg-small')}`)};
+ const phase=autoEsc.phase||'OFF',pending=autoEsc.state==='AWAITING_POWER_CYCLE';
+ return {title:'Automatic power-on ESC calibration',html:svg('One-use power-on calibration and independently timed HIGH LOW OFF sequence',`
+ ${text(200,36,'PREPARE → FULL POWER CYCLE','a2-svg-label')}
+ <rect x="105" y="61" width="190" height="75" rx="14" class="a2-chip"/>
+ ${text(200,90,pending?'REQUEST SAVED':'A2 FIRMWARE','a2-svg-label')}${text(200,113,'Runs without Wi-Fi / USB','a2-svg-small')}
+ <path d="M200 140v25m-8-8 8 8 8-8" class="a2-front"/>
+ ${['HIGH','LOW','OFF'].map((p,i)=>`<rect x="${13+i*130}" y="187" width="120" height="94" rx="10" class="a2-esc ${phase===p?'a2-battery-current':''}"/>${text(73+i*130,216,p==='OFF'?'PWM OFF':p,'a2-svg-label')}${text(73+i*130,241,p==='HIGH'?'2000 µs':p==='LOW'?'1000 µs':'No pulses','a2-svg-small')}${text(73+i*130,265,p==='OFF'?'Read result':'5 seconds','a2-svg-small')}`).join('')}
+ ${text(200,326,'M1 · M2 · M3 · M4','a2-svg-label')}
+ ${text(200,356,'Controller sequence ≠ ESC acceptance','a2-svg-small')}
+ ${text(200,387,'Confirm ESC tones → Save','a2-svg-small')}`)};
 }
 
 export function updateImuDiagram(scene,accel,face,mask){

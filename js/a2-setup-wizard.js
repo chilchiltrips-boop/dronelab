@@ -4,8 +4,9 @@ import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
- const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
- const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Report'];
+ const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','Output Calibration','Report','ESC Calibration'];
+ const OUTPUT=5,REPORT=6,ESC=7;
+ const shortSteps=['Board','Wiring','Inputs','IMU','Signal','Output Cal.','Report','ESC Cal.'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
@@ -48,7 +49,7 @@ if(root){
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
  let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
- let visualStep=-1,visualMarkup='';
+ let visualStep=-1,visualMarkup='',autoPrepareIntent=null,lastAutoAttempt='';
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
@@ -95,32 +96,37 @@ if(root){
  <details class="a2-input-details"><summary>Advanced IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
  <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
- <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Step 7 limits calibration to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
- <section data-panel="5"><div class="a2-panel-heading"><h3>ESC Calibration</h3>${soundButton}</div>${pageStatus(5)}
- <p class="a2-calibration-summary" role="status"></p><small class="a2-sound-note">App cues accompany board phases. Listen for the ESC’s own tones.</small>
- <ol class="a2-cal-steps"><li data-cal-stage="power"><b>Remove all propellers</b><span>Disconnect the motor battery. Keep the A2 powered by USB.</span></li><li data-cal-stage="high"><b>Start with battery disconnected</b><span>After HIGH is acknowledged, connect the battery and listen for the calibration prompt.</span></li><li data-cal-stage="low"><b>Press Stop after the prompt</b><span>Wait for the ESC success tones and the PWM-off acknowledgement.</span></li><li data-cal-stage="tones"><b>Confirm and disconnect</b><span>Confirm the success tones, then disconnect the motor battery.</span></li></ol>
- <label class="a2-check"><input type="checkbox" id="a2EscProps"> All propellers removed</label>
- <label class="a2-check"><input type="checkbox" id="a2PowerOff"> Motor battery disconnected and A2 powered by USB</label>
- <label class="a2-check"><input type="checkbox" id="a2ReadProcedure"> ESC wiring verified · HIGH/LOW procedure understood</label>
- <div class="a2-phase-scale"><span>Low / Off</span><meter aria-label="ESC calibration phase" min="0" max="2" value="0"></meter><span>High</span></div>
- <p class="a2-phase" role="status"></p>
- <div class="a2-actions"><button class="btn" data-action="high">Start</button><button class="btn" data-action="low" disabled>Stop</button><small>Sends LOW to complete ESC calibration</small></div>
- <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> ESC success tones heard</label>
- <label class="a2-check"><input type="checkbox" id="a2EscDisconnected" disabled> Motor battery disconnected after calibration</label>
- <button class="btn ghost" data-action="confirm-cal" disabled>Confirm calibration</button></section>
- <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(6)}
+ <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Output Calibration limits the pulse to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
+ <section data-panel="5"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(OUTPUT)}
  <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
  <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
+ <p class="a2-output-prerequisite" role="status"></p><div class="a2-actions"><button class="btn ghost" data-action="skip-output" hidden>Continue to final ESC calibration</button></div>
  <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
  <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
  <p class="a2-cal-output a2-test-state" role="status"></p></section>
- <section data-panel="7"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
+ <section data-panel="6"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
  <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
  <details class="a2-secondary-test"><summary>Reset setup</summary>
  <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
  <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC confirmation</option><option value="minimums">Motor starting pulses</option></select>
  <div class="a2-actions"><button class="btn ghost" data-action="reset-selected">Reset selected calibration</button><button class="btn ghost" data-action="reset-all">Reset all Wizard settings</button></div></details></section>
+ <section data-panel="7"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3>${soundButton}</div>${pageStatus(ESC)}
+ <p>APM / Pixhawk-style calibration on the next power-on. The A2 runs all four ESCs without a live app connection.</p>
+ <p class="a2-calibration-summary" role="status"></p>
+ <ol class="a2-cal-steps"><li data-cal-stage="prepare"><b>Prepare and save the request</b><span>Remove all propellers. Save page changes, verify the wiring, lower throttle and disarm. Preparing keeps PWM off and clears old ESC confirmation and starting pulses.</span></li><li data-cal-stage="power"><b>Power the entire aircraft off</b><span>Disconnect LiPo and USB. Wait until the A2 and ESCs are fully off. A software reboot or RESET button is not a substitute.</span></li><li data-cal-stage="sequence"><b>Reconnect LiPo only</b><span>The firmware sends HIGH 2000 µs for 5 seconds, then LOW 1000 µs for 5 seconds, then cuts PWM. Listen for the ESC’s own tones. Disconnect power immediately to abort while the app is offline.</span></li><li data-cal-stage="confirm"><b>Reconnect, verify and save</b><span>Wait at least 15 seconds after LiPo power-on and for the ESC success tones, then disconnect LiPo. Reconnect A2 by USB to read the stored result, or reconnect AP/STA after a normal power-on. Confirm the tones, then Save.</span></li></ol>
+ <label class="a2-check"><input type="checkbox" id="a2EscProps"> All propellers removed</label>
+ <label class="a2-check"><input type="checkbox" id="a2PowerOff"> I will disconnect LiPo and USB before reconnecting LiPo</label>
+ <label class="a2-check"><input type="checkbox" id="a2ReadProcedure"> Motor/ESC wiring verified and automatic procedure understood</label>
+ <div class="a2-actions"><button class="btn" data-action="auto-prepare">Prepare automatic calibration</button><button class="btn ghost" data-action="auto-cancel" hidden>Cancel prepared calibration</button></div>
+ <div class="a2-auto-phases" aria-label="Automatic ESC sequence"><span data-auto-phase="HIGH">HIGH · 2000 µs · 5 s</span><span data-auto-phase="LOW">LOW · 1000 µs · 5 s</span><span data-auto-phase="OFF">PWM off</span></div>
+ <p class="a2-phase" role="status"></p><div class="a2-auto-result" role="status"></div>
+ <p class="a2-sound-note">PWM ESCs do not report accepted endpoints. A completed controller sequence requires your success-tone confirmation. App sound cues are separate.</p>
+ <div class="a2-actions"><button class="btn ghost" data-action="auto-read">Read calibration result</button><button class="btn ghost" data-action="auto-retry" hidden>Retry storing controller result</button></div>
+ <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard from all four ESCs</label>
+ <label class="a2-check"><input type="checkbox" id="a2EscDisconnected" disabled> LiPo disconnected after the sequence; no ESC output is running</label>
+ <button class="btn ghost" data-action="confirm-cal" disabled>Confirm ESC success tones</button>
+ <div class="a2-actions"><button class="btn ghost" data-action="return-output" hidden>Return to Output Calibration</button><button class="btn ghost" data-action="download">Download report</button></div></section>
  </main><aside class="a2-visual" aria-label="Current setup step visualization"><h3 class="a2-visual-title"></h3><div class="a2-visual-scene"></div><div class="a2-pulses"></div></aside></div>
  <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn ghost" data-action="verify-save" hidden>Verify / retry save</button><button class="btn ghost" data-action="save-page" hidden>Save</button><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
  let soundEnabled=true;try{soundEnabled=localStorage.getItem('zebjus.setup.sound')!=='off';}catch{}
@@ -151,7 +157,8 @@ if(root){
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
- const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid();
+ const autoPending=()=>['AWAITING_POWER_CYCLE','RUNNING'].includes(saved?.autoEsc?.state)||['AUTO_CAL_HIGH','AUTO_CAL_LOW'].includes(state?.mode);
+ const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending()&&!saved?.autoEsc?.cancelUnverified;
  const checkList=ids=>ids.every(id=>$(id).checked);
  // Trust the verified board profile, not three repeated UI checkbox proofs.
  const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
@@ -184,7 +191,7 @@ if(root){
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
   manualOffsets=[0,0,0];manualEditing=false;manualLoadedModel='';manualError='';imuHistory=[];imuHistorySeq=0;
-  conflict=false;saveState=readError=operationError='';ambiguousSave=null;
+  conflict=false;saveState=readError=operationError='';ambiguousSave=null;autoPrepareIntent=null;lastAutoAttempt='';
   visited.clear();visited.add(0);
   root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
  }
@@ -204,6 +211,14 @@ if(root){
   }
   if(k.kitId)contextKit=k.kitId;
  }
+ function recoverAutoPrepare(board){
+  const intent=autoPrepareIntent;
+  if(!intent||board.wizardVersion!==1||board.bootId!==intent.bootId||board.configVerified===false||!board.configValid)return;
+  if(![intent.revision,intent.revision+1].includes(board.configRevision)||encode(config(board))!==intent.mapping||board.escCalibrationSaved||board.observedMinimumUs?.some(Boolean))return;
+  base={bootId:board.bootId,revision:board.configRevision};saved=board;conflict=false;
+  minimums=[null,null,null,null];escDraft='cleared';escAttempt=false;saveState='';
+  autoPrepareIntent=null;
+ }
  function receive(s){
   refreshIdentity();
   if(!s||s.kitId&&s.kitId!==kit().kitId)return;
@@ -219,8 +234,18 @@ if(root){
    }
    if(!base){
     base={bootId:s.bootId,revision:s.configRevision};draft=config(s);loadWiring();setCalPulse(currentResult());
-   }else if(s.configRevision!==base.revision&&!ambiguousSave)conflict=true;
-   if(step===6&&!activeRun&&!working)setCalPulse(currentResult());
+   }else if(s.configRevision!==base.revision&&!ambiguousSave&&!autoPrepareIntent)conflict=true;
+   recoverAutoPrepare(s);
+   const auto=s.autoEsc;
+   if(!working&&!s.escCalibrationSaved&&auto?.state!==old?.autoEsc?.state){
+    if(auto?.state==='SEQUENCE_COMPLETE')message('Controller sequence completed. Confirm the ESC success tones before Save.');
+    else if(auto?.state==='INCOMPLETE')message('Calibration incomplete · '+auto.reason+'. Prepare a new attempt.');
+   }
+   if(auto?.attemptId&&auto.attemptId!=='00000000'&&auto.attemptId!==lastAutoAttempt){
+    lastAutoAttempt=auto.attemptId;$('#a2Tones').checked=$('#a2EscDisconnected').checked=false;
+    if(['AWAITING_POWER_CYCLE','RUNNING','SEQUENCE_COMPLETE'].includes(auto.state)&&!s.escCalibrationSaved)show(ESC);
+   }
+   if(step===OUTPUT&&!activeRun&&!working)setCalPulse(currentResult());
    updateCapture(s.capture);
   }
   // The safety invalidation is visible in ordinary motor acknowledgements too.
@@ -247,13 +272,13 @@ if(root){
  function renderVisual(){
   const scene=$('.a2-visual-scene'),input=selectedInput();
   const safe=Date.now()-lastStateAt<2400?state||{}:{...state,mode:'UNCONFIRMED',pulseUs:[]};
-  const motorStep=step===6;
+  const motorStep=step===OUTPUT;
   const selection=mask(calMotor,calAll);
   const selectedMask=['ALL_TEST','INPUT_TEST'].includes(safe.mode)?15:selection;
   const testing=['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(safe.mode);
-  const v=step===3?{title:'3D orientation & XYZ graph',html:imuCalibrationVisual()}:step>=4&&step<=5
-   ?wizardVisual(step,{mode:safe.mode,escAttempt,powerOff:$('#a2PowerOff').checked})
-   :stepVisual(step===7?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
+  const v=step===3?{title:'3D orientation & XYZ graph',html:imuCalibrationVisual()}:step===4||step===ESC
+   ?wizardVisual(step,{mode:safe.mode,autoEsc:safe.autoEsc,escAttempt})
+   :stepVisual(step===REPORT?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
   $('.a2-visual-title').textContent=v.title;
   if(visualStep!==step||!motorStep&&step!==1&&step!==2&&visualMarkup!==v.html){
    scene.innerHTML=v.html;visualMarkup=v.html;
@@ -338,23 +363,38 @@ if(root){
   ].join('\n');
  }
  function renderEsc(){
-  const high=state?.mode==='CAL_HIGH',low=state?.mode==='CAL_LOW';
-  const canConfirm=escAttempt&&observedOff()&&state.escCalibrationPending===true&&!compatibleEsc();
-  $('.a2-calibration-summary').textContent=escDraft===true?'Confirmed · Save this page':compatibleEsc()?'Saved on board · same wiring':'Not calibrated';
+  const auto=saved?.autoEsc,ready=boardReady()&&auto?.version===1;
+  const high=auto?.phase==='HIGH',low=auto?.phase==='LOW',pending=auto?.state==='AWAITING_POWER_CYCLE';
+  const canConfirm=ready&&auto.state==='SEQUENCE_COMPLETE'&&auto.resultPersisted&&auto.compatible&&auto.outputsOff&&observedOff()&&!compatibleEsc();
+  $('.a2-calibration-summary').textContent=escDraft===true?'ESC tones confirmed · Save this page':compatibleEsc()?'✓ Saved on board · operator-confirmed ESC calibration':pending?'Request saved · awaiting full power cycle':auto?.state==='SEQUENCE_COMPLETE'?'Controller sequence completed · ESC success unconfirmed':auto?.state==='INCOMPLETE'?'Calibration incomplete':'Not calibrated';
   $('.a2-calibration-summary').dataset.saved=String(escDraft!==true&&compatibleEsc());
-  $('.a2-phase-scale meter').value=high?2:low?1:0;
-  $('.a2-phase').textContent=high?'HIGH · 2000 µs. Connect the motor battery and wait for the ESC calibration tones.'
-   :low?'LOW · 1000 µs. Wait for ESC success tones and PWM off.'
-   :canConfirm?'PWM off. Confirm the ESC success tones and disconnect the motor battery.'
-   :outputOff(state)?'PWM off · '+(state.reason==='CAL_TIMEOUT'?motorStopDescription(state):'ready for instruction')
-   :'PWM state unconfirmed';
-  root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===(high?'high':low?'low':canConfirm?'tones':'power')));
-  const start=$('[data-action="high"]');
-  start.textContent=compatibleEsc()?'Recalibrate':'Start';
-  start.disabled=!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm;
-  $('[data-action="low"]').disabled=!high||motorClient.owner!=='wizard'||!!working;
-  $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm;
+  $('.a2-phase').textContent=!kit().connected?'Connection unavailable · reconnect to read the stored calibration result.':!auto?'FlightCore 1.7.11+ required for automatic ESC calibration.':
+   high?'HIGH · 2000 µs · automatic timed phase':low?'LOW · 1000 µs · automatic timed phase':
+   auto.cancelUnverified?'Cancellation was not saved. Do not power cycle: retry Cancel and read back the board first.':
+   pending?'PWM off. Disconnect LiPo AND USB, then reconnect LiPo only. Do not use software reboot or RESET.':
+   canConfirm?'PWM off verified. Confirm all four ESC success tones and LiPo disconnection, then Save. If tones were missing, discard this attempt and prepare again.':
+   auto.reason!=='NONE'?`PWM off · ${auto.reason}. Prepare a new attempt after correcting the cause.`:
+   auto.state==='CANCELLED'?'PWM off · prepared calibration cancelled.':compatibleEsc()?'PWM off · ESC calibration saved.':'PWM off · prepare the next power-on calibration.';
+  $('.a2-auto-result').innerHTML=view('Read from the controller',[
+   ['Attempt',auto?.attemptId&&auto.attemptId!=='00000000'?auto.attemptId:'None'],
+   ['Sequence',auto?.state||'Firmware update required'],['Stored result',auto?.resultPersisted?'Verified on board':'No completed result'],
+   ['ESC acceptance',compatibleEsc()?'Operator confirmed · saved':escDraft===true?'Operator confirmed · pending Save':'Not confirmed · PWM has no ESC reply'],
+   ['Tone detection','Unavailable on this PWM connection']
+  ]);
+  root.querySelectorAll('[data-auto-phase]').forEach(node=>node.classList.toggle('current',node.dataset.autoPhase===auto?.phase));
+  const stage=pending?'power':high||low?'sequence':canConfirm||compatibleEsc()?'confirm':'prepare';
+  root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===stage));
+  const start=$('[data-action="auto-prepare"]');
+  start.textContent=compatibleEsc()?'Prepare recalibration':'Prepare automatic calibration';
+  start.disabled=!ready||!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm||!!autoPrepareIntent||accelAction!=='KEEP'||!!captureRequest;
+  const cancel=$('[data-action="auto-cancel"]');
+  cancel.hidden=!auto||!auto.cancelUnverified&&(!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD','SEQUENCE_COMPLETE'].includes(auto.state)||compatibleEsc());
+  cancel.textContent=auto?.cancelUnverified?'Retry cancelling':auto?.state==='SEQUENCE_COMPLETE'?'Discard unconfirmed attempt':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
+  cancel.disabled=!kit().connected||!!working;
+  const retry=$('[data-action="auto-retry"]');retry.hidden=auto?.resultRetryAllowed!==true;retry.disabled=!ready||!!working;
+  $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm||!!working;
   $('[data-action="confirm-cal"]').disabled=!canConfirm||!!working||!checkList(['#a2Tones','#a2EscDisconnected']);
+  const back=$('[data-action="return-output"]');back.hidden=!compatibleEsc()||calibrationComplete();back.disabled=!!working;
  }
  function renderOutputs(){
   const fresh=Date.now()-lastStateAt<750;
@@ -362,6 +402,10 @@ if(root){
   const calLive=running&&!!activeRun;
   const busy=!!working||motorClient.busy;
   const disabled=!canStart()||!outputChecks()||busy;
+  const prerequisite=!compatibleEsc();
+  $('.a2-output-prerequisite').textContent=prerequisite?'Complete ESC calibration on the final page first, then return here to find the starting pulses. Recalibrating ESC endpoints clears earlier starting pulses.':'';
+  $('[data-action="skip-output"]').hidden=!prerequisite;
+  $('[data-action="skip-output"]').disabled=busy||!observedOff();
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
   const text=operationError||(!observedOff()&&!fresh?'Output state unconfirmed · verify STOP or reconnect.':outputOff(state)?'Outputs off':state?.mode||'Waiting for board');
   $('#a2CalAll').checked=calAll;$('#a2CalAll').disabled=busy;
@@ -391,6 +435,8 @@ if(root){
    ['Inputs',`${selectedInput().source||'—'} · live observation`],
    ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?'board-saved':'draft pending'} · Manual X/Y/Z ${manualOffsets.map(n=>(n/1000).toFixed(3)).join(' / ')} g`],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
+   ['ESC controller attempt',`${saved?.autoEsc?.attemptId||'None'} · ${saved?.autoEsc?.state||'No automatic result'}`],
+   ['ESC confirmation source','Operator success-tone confirmation; PWM ESC acceptance cannot be read'],
    ['ESC',escDraft===true?'Confirmed · Pending save':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
    ['Physical acceptance','Not verified by software']
@@ -417,19 +463,19 @@ if(root){
  const calibrationComplete=()=>effectivePulses().every(validPulse);
  const validCurrent=()=>targetMotors(calMotor,calAll).every(n=>validPulse(pulses()[n-1]));
  const pageScope=()=>step===3?(accelAction.startsWith('MANUAL')?'ACCEL_MANUAL':'ACCEL'):
-  ({1:'WIRING',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
+  ({1:'WIRING',[ESC]:'ESC',[OUTPUT]:calAll?'ALL':'M'+calMotor})[step]||'';
  const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1')||!!modelParts(saved?.accelModel)?.manual.some(Boolean);
  function pageSaved(page){
   if(!boardReady()||!saved.configValid)return false;
   if(page===1)return saved.configRevision>0&&wiringCompatible();
   if(page===3)return accelAction==='KEEP'&&accelSaved();
-  if(page===5)return wiringCompatible()&&saved.escCalibrationSaved===true&&escDraft!=='cleared'&&!escAttempt;
-  if(page===6)return wiringCompatible()&&saved.escCalibrationSaved===true&&!activeRun&&
+  if(page===ESC)return wiringCompatible()&&saved.escCalibrationSaved===true&&escDraft!=='cleared'&&!escAttempt;
+  if(page===OUTPUT)return wiringCompatible()&&saved.escCalibrationSaved===true&&!activeRun&&
    targetMotors(calMotor,calAll).every(n=>minimums[n-1]===null&&validPulse(pulses()[n-1])&&pulses()[n-1]===saved.observedMinimumUs[n-1]);
   return false;
  }
  function canSaveScope(scope){
-  if(!scope||!boardReady()||!observedOff()||captureRequest||saved.capture?.running||saved.imu?.manualGyro)return false;
+  if(!scope||!boardReady()||!observedOff()||autoPending()||saved?.autoEsc?.cancelUnverified||autoPrepareIntent||captureRequest||saved.capture?.running||saved.imu?.manualGyro)return false;
   if(scope==='RESET_ALL')return true;
   if(!saved.configValid)return false;
   if(scope.startsWith('RESET_'))return true;
@@ -441,7 +487,7 @@ if(root){
   return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
  }
  function canAdvance(){
-  if([1,5,6].includes(step))return pageSaved(step);
+  if([1,ESC,OUTPUT].includes(step))return pageSaved(step);
   return step!==3||accelAction==='KEEP';
  }
  function renderPageSaves(){
@@ -476,7 +522,7 @@ if(root){
   ]);
   $('.a2-report').innerHTML=view('Wizard review',reportRows());
   $('.a2-report-state').textContent=conflict?'Board configuration changed. Refresh board to reload its verified setup.':saveState||'Board-saved setup summary. Return to a page to save any pending changes.';
-  const lock=!!working||motorClient.busy;
+  const lock=!!working||motorClient.busy||autoPending();
   $('[data-nav="-1"]').disabled=step===0||!!working;
   const scope=pageScope(),next=$('[data-nav="1"]'),saveButton=$('[data-action="save-page"]');
   const retry=!!ambiguousSave&&ambiguousSave.scope===scope;
@@ -485,16 +531,16 @@ if(root){
   saveButton.textContent=['save-page','save-next'].includes(working)?'Saving…':retry?'Verify save':'Save';
   $('[data-action="verify-save"]').hidden=!ambiguousSave||retry;
   $('[data-action="verify-save"]').disabled=!!working;
-  next.hidden=step===7;
-  next.textContent=scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':'Next';
-  next.disabled=!!working||step===7||!(canAdvance()||canSaveScope(scope)||retry);
+  next.hidden=step===ESC;
+  next.textContent=step===REPORT?'Next · ESC Calibration':scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':'Next';
+  next.disabled=!!working||step===ESC||!(canAdvance()||canSaveScope(scope)||retry);
   $('#a2Layout').disabled=lock;
   root.querySelectorAll('[data-pin],[data-rotation]').forEach(input=>input.disabled=lock);
   renderPageSaves();
-  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,pageSaved(5),calibrationComplete()&&wiringCompatible()&&minimums.every(value=>value===null),visited.has(7)];
+  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,calibrationComplete()&&compatibleEsc()&&minimums.every(value=>value===null),visited.has(REPORT),pageSaved(ESC)];
   root.querySelectorAll('[data-step]').forEach((button,i)=>{
    const done=visited.has(i)&&completed[i];
-   button.dataset.completed=String(!!done);button.dataset.saved=String([1,3,5].includes(i)?pageSaved(i):i===6&&completed[6]);
+   button.dataset.completed=String(!!done);button.dataset.saved=String([1,3,ESC].includes(i)?pageSaved(i):i===OUTPUT&&completed[OUTPUT]);
    button.querySelector('.a2-step-number').textContent=button.dataset.saved==='true'?'✓':String(i+1);button.title=button.dataset.saved==='true'?'Saved on board':done?'Complete':'';
   });
   for(const a of ['reset-selected','reset-all'])$(`[data-action="${a}"]`).disabled=!boardReady()||!observedOff()||lock||!!ambiguousSave;
@@ -507,7 +553,7 @@ if(root){
  }
  function show(next){
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
-  if(step===6)setCalPulse(currentResult());
+  if(step===OUTPUT)setCalPulse(currentResult());
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
   root.querySelectorAll('[data-step]').forEach(b=>{
    const n=Number(b.dataset.step);
@@ -535,7 +581,7 @@ if(root){
    if(!outputOff(await motorClient.stop('wizard')))throw Error('PWM state is unconfirmed.');
   }
   if(run!==operation)return;
-  if(step===6&&footer&&!calAll&&(next>step&&calMotor<4||next<step&&calMotor>1)){
+  if(step===OUTPUT&&footer&&!calAll&&(next>step&&calMotor<4||next<step&&calMotor>1)){
    calMotor+=Math.sign(next-step);setCalPulse(currentResult());render();return;
   }
   show(Math.max(0,Math.min(steps.length-1,next)));
@@ -606,7 +652,7 @@ if(root){
    intent.payload='CONFIRM_RESET';
    if(scope==='RESET_ALL'){Object.assign(expectedWiring,defaults());values.fill(0);intent.esc=false;intent.accel='0:0:0:0:0:1000:1000:1000:0:0:0';}
    if(scope==='RESET_ACCEL')intent.accel='0:0:0:0:0:1000:1000:1000:0:0:0';
-   if(scope==='RESET_ESC')intent.esc=false;
+   if(scope==='RESET_ESC'){intent.esc=false;values.fill(0);}
    if(scope==='RESET_OUTPUT')values.fill(0);
   }else{
    intent.motors=scope==='ALL'?motors:[Number(scope.slice(1))];
@@ -637,7 +683,7 @@ if(root){
   if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;
    manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
   if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
-  if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
+  if(intent.scope==='RESET_ESC'){escDraft=escAttempt=false;minimums=[null,null,null,null];}
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
   ambiguousSave=null;saveState=intent.scope.startsWith('RESET_')?'Reset saved on board':'Saved on board';conflict=false;operationError='';
   message('✓ '+saveState);cues.play('saved');return true;
@@ -673,18 +719,19 @@ if(root){
  async function act(name,run){
   if(name==='stop'){
    ++operation;activeRun=null;
-   if(escAttempt&&escDraft!==true)escAttempt=false;
+   if(!saved?.escCalibrationSaved){escDraft=false;escAttempt=false;$('#a2Tones').checked=$('#a2EscDisconnected').checked=false;}
    const stopped=await motorClient.stop();
    if(!outputOff(stopped))throw Error('PWM state unconfirmed after STOP.');
+   if(saved?.autoEsc?.version===1)await motorClient.wizardStatus();
    setCalPulse(currentResult());cues.play('stop');message('STOP acknowledged · PWM off.');return;
   }
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
-  if(name==='detect'){
+  if(name==='detect'||name==='auto-read'){
    if(conflict)resetContext();
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
   if(name==='download'){
-   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),physicalAcceptance:'NOT_VERIFIED'};
+   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,escConfirmationSource:compatibleEsc()?'OPERATOR':'NOT_CONFIRMED',physicalAcceptance:'NOT_VERIFIED'};
    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
    a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
   }
@@ -728,22 +775,44 @@ if(root){
    }
    $('#a2Still').checked=false;return;
   }
-  if(name==='high'){
-   if(compatibleEsc()&&!window.confirm('Recalibrate ESC endpoints? Starting HIGH clears the previous confirmation on the board.'))return;
-   await prepare('esc');ensureOperation(run);
-   escDraft='cleared';escAttempt=true;$('#a2Tones').checked=$('#a2EscDisconnected').checked=false;
-   await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED']);ensureOperation(run);
-   $('#a2PowerOff').checked=false;cues.play('high');message('HIGH acknowledged. Connect the motor battery.');return;
+  if(name==='skip-output'){await navigate(REPORT,false,true);return;}
+  if(name==='return-output'){await navigate(OUTPUT,false,true);return;}
+  if(name==='auto-prepare'){
+   if(accelAction!=='KEEP'||captureRequest)throw Error('Save or restore the pending accelerometer changes before preparing a power cycle.');
+   if(!canStart()||!wiringCompatible()||!escChecks()||saved?.autoEsc?.version!==1)throw Error('Save wiring, verify PWM off and complete the automatic ESC procedure checks.');
+   if(!window.confirm('Prepare automatic calibration for the next full power-on? Remove all propellers. Old ESC confirmation and all starting pulses will be cleared. Disconnect LiPo AND USB, then reconnect LiPo only.'))return;
+   const intent=autoPrepareIntent={...base,mapping:encode(draft)};
+   let failure='';
+   try{await motorClient.wizardCommand('WIZARD_AUTO_ESC_PREPARE',['PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD',intent.revision,intent.bootId],intent.bootId);}
+   catch(e){failure=e.message;}
+   try{
+    const board=await motorClient.wizardStatus();recoverAutoPrepare(board);ensureOperation(run);
+    if(board.autoEsc?.state==='AWAITING_POWER_CYCLE'&&board.autoEsc.compatible&&board.autoEsc.outputsOff&&board.autoEsc.reason==='NONE'&&!autoPrepareIntent){
+     $('#a2EscProps').checked=$('#a2PowerOff').checked=$('#a2ReadProcedure').checked=false;
+     $('#a2Tones').checked=$('#a2EscDisconnected').checked=false;
+     message('Request saved. Disconnect LiPo AND USB completely, then reconnect LiPo only.');return;
+    }
+    if(board.configRevision===intent.revision&&!autoPrepareIntent)autoPrepareIntent=null;
+    if(board.configRevision===intent.revision&&board.autoEsc?.state!=='AWAITING_POWER_CYCLE')autoPrepareIntent=null;
+   }catch(e){failure=failure||e.message;}
+   throw Error(failure||'Preparation unverified. Read calibration result before retrying or power cycling.');
   }
-  if(name==='low'){
-   await motorClient.command('CAL_LOW');ensureOperation(run);cues.play('low');message('LOW acknowledged. Wait for PWM off and ESC success tones.');return;
+  if(name==='auto-cancel'){
+   const ack=await motorClient.wizardCommand('WIZARD_AUTO_ESC_CANCEL',['CONFIRM_CANCEL','-',base.bootId],base.bootId);
+   ensureOperation(run);escDraft=false;escAttempt=false;autoPrepareIntent=null;
+   if(!['CANCELLED','INCOMPLETE'].includes(ack.autoEsc?.state))throw Error('Cancellation is unverified. Read the board before power cycling.');
+   message('Prepared calibration cancelled · PWM off.');return;
+  }
+  if(name==='auto-retry'){
+   await motorClient.wizardCommand('WIZARD_AUTO_ESC_RETRY',[parseInt(saved.autoEsc.attemptId,16),'-',base.bootId],base.bootId);ensureOperation(run);return;
   }
   if(name==='confirm-cal'){
-   if(!escAttempt||!observedOff()||!checkList(['#a2Tones','#a2EscDisconnected']))throw Error('Confirm ESC success tones and battery disconnection after PWM off.');
-   const ack=await motorClient.wizardCommand('WIZARD_ESC_CONFIRM',['TONES_CONFIRMED','BATTERY_DISCONNECTED',base.bootId],base.bootId);
+   const auto=saved?.autoEsc;
+   if(!auto?.resultPersisted||!auto.compatible||!observedOff()||!checkList(['#a2Tones','#a2EscDisconnected']))throw Error('Read a completed controller sequence and confirm all four ESC success tones and LiPo disconnection.');
+   const ack=await motorClient.wizardCommand('WIZARD_ESC_CONFIRM',['AUTO_TONES_CONFIRMED',auto.attemptId+':BATTERY_DISCONNECTED',base.bootId],base.bootId);
    ensureOperation(run);
    if(!ack.escConfirmationStaged)throw Error('ESC confirmation was not acknowledged.');
-   escDraft=true;escAttempt=false;saveState='';message('Confirmed · Save this page');return;
+   escDraft=true;escAttempt=false;saveState='';message('Operator-confirmed · press Save for a verified board record.');return;
   }
   if(name==='cal-slider'){await sliderAction(run);return;}
   if(name==='resume-cal'){
@@ -760,7 +829,7 @@ if(root){
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
    operationError=e.message;message(e.message);
-   if(['cal-slider','high','low'].includes(name)){
+   if(['cal-slider'].includes(name)){
     activeRun=null;escAttempt=false;
     if(motorClient.owner==='wizard')await motorClient.stop('wizard').catch(()=>{});
     setCalPulse(currentResult());cues.play('error');
@@ -777,7 +846,7 @@ if(root){
    render();return;
   }
   if(action){perform(action);return;}
-  if(b.dataset.nav==='1'&&step!==7&&pageScope()){perform('save-next');return;}
+  if(b.dataset.nav==='1'&&step!==ESC&&pageScope()){perform('save-next');return;}
   if(b.dataset.step!==undefined||b.dataset.nav){
    const next=b.dataset.nav?step+Number(b.dataset.nav):Number(b.dataset.step);
    if(next!==step)void navigate(next,!!b.dataset.nav).catch(e=>message(e.message));

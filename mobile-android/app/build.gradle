@@ -15,8 +15,8 @@ android {
     minSdk 26
     targetSdk 35
     // Every subsequent release MUST increment versionCode; versionName is display only.
-    versionCode 68
-    versionName '1.8.29-page-save'
+    versionCode 69
+    versionName '1.8.30-auto-esc'
   }
   testBuildType System.getenv('ZEBJUS_TEST_RELEASE') == '1' ? 'release' : 'debug'
   signingConfigs {
