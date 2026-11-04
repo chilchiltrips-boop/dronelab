@@ -5,6 +5,13 @@
 #include "FlightCoreEscProfile.h"
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 #include "FlightCoreWizardConfig.h"
+#include "FlightCoreAutoEsc.h"
+static ZjAutoEscRecord zjAutoEscRecord;
+static ZjAutoEscSequence zjAutoEscSequence;
+static bool zjAutoEscRecordVerified=true,zjAutoEscFinalized=true,zjAutoEscStorageError=false;
+static void zjAutoEscTick(uint32_t now);
+static void zjAutoEscLoop();
+static bool zjAutoEscCancel(bool discardResult=false);
 #endif
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 #include <driver/ledc.h>
@@ -18,13 +25,19 @@ static portMUX_TYPE zjMotorMux=portMUX_INITIALIZER_UNLOCKED;
 static volatile bool zjMotorWatchActive=false,zjMotorWatchTripped=false;
 static volatile uint32_t zjMotorServicedAt=0;
 static volatile uint32_t zjMotorWatchAt=0,zjMotorWatchLimit=100;
+static volatile bool zjMotorPwmOffAck=false;
 static volatile ZjMotorSafety::Reason zjMotorWatchReason=ZjMotorSafety::DEADLINE_MISSED;
 static esp_timer_handle_t zjMotorWatchTimer=nullptr;
 static void zjMotorWatch(void*){
  portENTER_CRITICAL(&zjMotorMux);
+ if(zjAutoEscSequence.active()){
+  zjAutoEscTick(millis());portEXIT_CRITICAL(&zjMotorMux);return;
+ }
  if(zjMotorWatchActive&&uint32_t(millis()-zjMotorWatchAt)>=zjMotorWatchLimit){
   zjMotorWatchTripped=true;zjMotorWatchActive=false;
-  for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
+  bool off=true;
+  for(int n=0;n<4;n++)off=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&off;
+  zjMotorPwmOffAck=off;
  }
  portEXIT_CRITICAL(&zjMotorMux);
 }
@@ -89,6 +102,7 @@ static void zjMotorLoadCalibration(){
 }
 static bool zjMotorSaveCalibration(bool saved){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ if(!saved&&!zjAutoEscCancel(true))return false;
  if(zjWizardSaved.revision){
   if(zjWizardSaved.esc==saved)return true;
   auto next=zjWizardSaved;next.esc=saved;return zjPersistWizard(next,saved);
@@ -102,7 +116,10 @@ static bool zjMotorSaveCalibration(bool saved){
 static bool zjMotorSaveConfig(const ZjMotorConfig& next){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  auto updated=zjWizardSaved;updated.motor=next;updated.esc=zjMotorCalibrationSaved;
- if(!zjSameMotorWiring(next,zjMotorConfig))updated.esc=false;
+ if(!zjSameMotorWiring(next,zjMotorConfig)){
+  if(!zjAutoEscCancel(true))return false;
+  updated.esc=false;
+ }
  return zjPersistWizard(updated);
 #endif
  char encoded[64];next.encode(encoded,sizeof(encoded));const String value(encoded);
@@ -115,6 +132,10 @@ static bool zjMotorDriverReady=false;
 static uint32_t zjMotorCommandSeq=0,zjMotorInputDuration=0;
 static ZjMotorInput zjMotorRtc;
 static const char* zjMotorMode(){
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ portENTER_CRITICAL(&zjMotorMux);const auto phase=zjAutoEscSequence.phase;portEXIT_CRITICAL(&zjMotorMux);
+ if(phase==ZjAutoEscSequence::HIGH_PHASE||phase==ZjAutoEscSequence::LOW_PHASE)return phase==ZjAutoEscSequence::HIGH_PHASE?"AUTO_CAL_HIGH":"AUTO_CAL_LOW";
+#endif
  static const char* names[]={"DISABLED","READY","INPUT_TEST","SINGLE_TEST","ALL_TEST","CAL_HIGH","CAL_LOW","FAULT","SLIDER_TEST"};
  return names[zjMotor.mode];
 }
@@ -123,6 +144,12 @@ static const char* zjMotorReason(){
  return names[zjMotor.reason];
 }
 static void zjMotorApply(){
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ portENTER_CRITICAL(&zjMotorMux);
+ const bool autoActive=zjAutoEscSequence.active();
+ portEXIT_CRITICAL(&zjMotorMux);
+ if(autoActive){zjMotorEnabled=zjMotorSessionActive=true;zjMotorArmed=zjMotorInputTest=false;return;}
+#endif
  const bool enabled=zjMotor.benchEnabled&&zjMotor.mode!=ZjMotorSafety::FAULT;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  portENTER_CRITICAL(&zjMotorMux);
@@ -131,13 +158,19 @@ static void zjMotorApply(){
   else zjMotor.disable(zjMotorWatchReason);
  }
  if(zjMotorDriverReady){
+  zjMotorPwmOffAck=false;
   for(int n=0;n<4;n++){
    const auto& wiring=zjWizardBench?zjWizardBenchConfig:zjMotorConfig;
    const uint32_t duty=zjMotor.benchEnabled?ZJ_ESC_PROFILE.duty(wiring.physicalPulse(n,zjMotor.pulses)):0;
    if(ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)!=ESP_OK||
       ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))!=ESP_OK)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
   }
-  if(!zjMotor.benchEnabled)for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
+  if(!zjMotor.benchEnabled){
+   bool off=true;
+   for(int n=0;n<4;n++)off=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&off;
+   zjMotorPwmOffAck=off;
+   if(!off)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
+  }
  }
  zjMotorServicedAt=millis();zjMotorWatchActive=zjMotor.benchEnabled;
  const bool timed=zjMotor.timedManual()||(zjMotor.timedBench&&zjMotor.mode==ZjMotorSafety::READY);
@@ -150,6 +183,9 @@ static void zjMotorApply(){
  zjMotorEnabled=zjMotorDriverReady&&zjMotor.benchEnabled;
  zjMotorArmed=zjMotorEnabled&&zjMotor.armed;
  zjMotorSessionActive=zjMotor.benchEnabled;
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ zjMotorSessionActive=zjMotorSessionActive||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING;
+#endif
  zjMotorInputTest=zjMotor.mode==ZjMotorSafety::INPUT_TEST;
  if(!zjMotor.benchEnabled){
   zjMotorToken="";zjMotorOwner="";
@@ -160,6 +196,7 @@ static void zjMotorApply(){
 }
 static void zjMotorStop(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ (void)zjAutoEscCancel();
  if(zjWizardEscOwner.length()&&!zjWizardEscConfirmed){zjMotorCalibrationPending=false;zjWizardEscOwner="";}
 #endif
  zjMotor.disable();zjMotorApply();
@@ -176,7 +213,120 @@ static ZjMotorInput zjMotorReadInput(){
  i.throttle=zjRcThrottle;i.yaw=zjRcYaw;i.sequence=zjRcSeq;i.receivedMs=zjRcLast;
  return i;
 }
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static void zjAutoEscWiring(char* out,size_t size){
+ auto wiring=zjMotorConfig;memset(wiring.minimumUs,0,sizeof(wiring.minimumUs));wiring.encode(out,size);
+}
+static bool zjAutoEscCompatible(){
+ char wiring[64];zjAutoEscWiring(wiring,sizeof(wiring));
+ return zjMotorConfigValid&&zjAutoEscRecordVerified&&zjKitId==zjAutoEscRecord.kit&&!strcmp(wiring,zjAutoEscRecord.wiring);
+}
+static bool zjAutoEscStore(const ZjAutoEscRecord& next){
+ char encoded[144];next.encode(encoded,sizeof(encoded));
+ zjKitPrefs.putString("escAuto1",encoded);
+ const String stored=zjKitPrefs.getString("escAuto1","");
+ if(stored==encoded){zjAutoEscRecord=next;zjAutoEscRecordVerified=true;zjAutoEscStorageError=false;return true;}
+ ZjAutoEscRecord actual;zjAutoEscRecordVerified=stored.isEmpty()||actual.decode(stored.c_str());
+ if(zjAutoEscRecordVerified)zjAutoEscRecord=actual;
+ zjAutoEscStorageError=true;return false;
+}
+static bool zjAutoEscOutputsOff(){
+ if(!zjMotorDriverReady)return false;
+ // ledc_stop disables the output but may retain the old duty register. A
+ // get_duty value is therefore not evidence of whether PWM is enabled.
+ portENTER_CRITICAL(&zjMotorMux);const bool off=zjMotorPwmOffAck;portEXIT_CRITICAL(&zjMotorMux);
+ return off;
+}
+// Called with zjMotorMux held, from the timer task or startup/STOP. No flash,
+// network, allocations, input claims or application sessions in this path.
+static void zjAutoEscWrite(){
+ const uint16_t pulse=zjAutoEscSequence.pulse();bool ok=true;
+ zjMotorPwmOffAck=false;
+ for(int n=0;n<4;n++){
+  if(!pulse)ok=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&ok;
+  else{
+   ok=(ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),ZJ_ESC_PROFILE.duty(pulse))==ESP_OK)&&ok;
+   ok=(ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))==ESP_OK)&&ok;
+  }
+ }
+ if(!ok){
+  zjAutoEscSequence.stop(ZjAutoEscRecord::DRIVER_ERROR);
+  for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
+ }
+ if(!pulse&&ok)zjMotorPwmOffAck=true;
+}
+static void zjAutoEscTick(uint32_t now){if(zjAutoEscSequence.update(now))zjAutoEscWrite();}
+static void zjAutoEscLoop(){
+ if(zjAutoEscFinalized)return;
+ portENTER_CRITICAL(&zjMotorMux);
+ const auto phase=zjAutoEscSequence.phase;const auto reason=zjAutoEscSequence.reason;
+ portEXIT_CRITICAL(&zjMotorMux);
+ if(phase==ZjAutoEscSequence::HIGH_PHASE||phase==ZjAutoEscSequence::LOW_PHASE)return;
+ // OFF must be verified before storing any successful controller result.
+ auto result=zjAutoEscRecord;
+ result.state=phase==ZjAutoEscSequence::DONE&&zjAutoEscOutputsOff()?ZjAutoEscRecord::COMPLETE:ZjAutoEscRecord::INTERRUPTED;
+ result.reason=result.state==ZjAutoEscRecord::COMPLETE?ZjAutoEscRecord::NONE:
+  reason==ZjAutoEscRecord::NONE?ZjAutoEscRecord::DRIVER_ERROR:reason;
+ zjAutoEscFinalized=true; // A failed result write needs an explicit retry.
+ (void)zjAutoEscStore(result);
+ zjMotorEnabled=zjMotorArmed=zjMotorSessionActive=false;
+}
+static bool zjAutoEscCancel(bool discardResult){
+ portENTER_CRITICAL(&zjMotorMux);
+ const bool running=zjAutoEscSequence.active();
+ if(running){zjAutoEscSequence.stop(ZjAutoEscRecord::STOPPED);zjAutoEscWrite();}
+ portEXIT_CRITICAL(&zjMotorMux);
+ if(running){zjAutoEscLoop();return !zjAutoEscStorageError;}
+ if(!zjAutoEscRecordVerified||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
+    (discardResult&&zjAutoEscRecord.state!=ZjAutoEscRecord::EMPTY&&zjAutoEscRecord.state!=ZjAutoEscRecord::CANCELLED)){
+  auto cancelled=zjAutoEscRecord;cancelled.state=ZjAutoEscRecord::CANCELLED;cancelled.reason=ZjAutoEscRecord::STOPPED;
+  if(!cancelled.attempt)cancelled.attempt=1;
+  if(!cancelled.kit[0])snprintf(cancelled.kit,sizeof(cancelled.kit),"%s",zjKitId.c_str());
+  if(!cancelled.wiring[0])zjAutoEscWiring(cancelled.wiring,sizeof(cancelled.wiring));
+  return zjAutoEscStore(cancelled);
+ }
+ return true;
+}
+static void zjAutoEscBoot(bool coldPowerOn){
+ if(zjAutoEscRecord.state!=ZjAutoEscRecord::PENDING&&zjAutoEscRecord.state!=ZjAutoEscRecord::RUNNING)return;
+ auto record=zjAutoEscRecord;
+ const bool requested=record.state==ZjAutoEscRecord::PENDING;
+ if(!requested||!coldPowerOn||!zjAutoEscCompatible()||!zjWizardRecordVerified||!zjMotorDriverReady||!zjAutoEscOutputsOff()){
+  record.state=ZjAutoEscRecord::INTERRUPTED;
+  record.reason=!requested?ZjAutoEscRecord::RESET_DURING_SEQUENCE:!coldPowerOn?ZjAutoEscRecord::COLD_POWER_ON_REQUIRED:
+   !zjAutoEscCompatible()?ZjAutoEscRecord::SETUP_CHANGED:ZjAutoEscRecord::DRIVER_ERROR;
+  (void)zjAutoEscStore(record);return;
+ }
+ // Consume and read back BEFORE the first HIGH. RUNNING never starts again
+ // after reset, brownout, watchdog or power failure, even if saving failed.
+ record.state=ZjAutoEscRecord::RUNNING;record.reason=ZjAutoEscRecord::NONE;
+ if(!zjAutoEscStore(record))return;
+ zjAutoEscFinalized=false;
+ portENTER_CRITICAL(&zjMotorMux);
+ zjMotorWatchActive=false;zjAutoEscSequence.begin(millis());zjAutoEscWrite();
+ const bool active=zjAutoEscSequence.active();
+ portEXIT_CRITICAL(&zjMotorMux);
+ zjMotorEnabled=zjMotorSessionActive=active;
+}
+static String zjAutoEscStatus(){
+ portENTER_CRITICAL(&zjMotorMux);
+ const auto sequence=zjAutoEscSequence;
+ portEXIT_CRITICAL(&zjMotorMux);
+ const bool compatible=zjAutoEscCompatible(),off=!sequence.active()&&zjAutoEscOutputsOff();
+ char id[9];snprintf(id,sizeof(id),"%08lX",static_cast<unsigned long>(zjAutoEscRecord.attempt));
+ return String("{\"version\":1,\"attemptId\":")+zjJson(id)+",\"state\":"+zjJson(zjAutoEscRecordVerified?ZjAutoEscRecord::stateName(zjAutoEscRecord.state):"INVALID_RECORD")+
+  ",\"phase\":"+zjJson(sequence.phase==ZjAutoEscSequence::HIGH_PHASE?"HIGH":sequence.phase==ZjAutoEscSequence::LOW_PHASE?"LOW":"OFF")+
+  ",\"reason\":"+zjJson(zjAutoEscStorageError?"STORAGE_ERROR":ZjAutoEscRecord::reasonName(zjAutoEscRecord.reason))+
+  ",\"compatible\":"+(compatible?"true":"false")+",\"outputsOff\":"+(off?"true":"false")+
+  ",\"resultPersisted\":"+(!zjAutoEscStorageError&&zjAutoEscRecordVerified&&zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE?"true":"false")+
+  ",\"toneDetectionSupported\":false,\"offVerification\":\"LEDC_STOP_ACK\",\"confirmationSource\":\"OPERATOR\",\"highMs\":5000,\"lowMs\":5000,\"pulseUs\":"+String(sequence.pulse())+
+  ",\"remainingMs\":"+String(sequence.remaining(millis()))+",\"confirmed\":"+(compatible&&zjMotorCalibrationSaved?"true":"false")+"}";
+}
+#endif
 static void zjMotorLoop(){
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ zjAutoEscLoop();
+#endif
  const uint32_t now=millis();
  const bool wasCalibrationLow=zjMotor.mode==ZjMotorSafety::CAL_LOW;
  if(zjMotor.benchEnabled){
@@ -210,7 +360,14 @@ static String zjMotorStatus(){
  else out+="["+String(zjRcRoll)+","+String(zjRcPitch)+","+String(input.throttle)+","+String(input.yaw)+","+String(zjRcCh5)+","+String(zjRcCh6)+",null,null]";
  out+=",\"ppm\":"+zjPpmStatus()+",\"benchPolicy\":"+zjJson(zjMotor.timedBench?"TIMED_MANUAL":"LIVE_LEASE")+
   ",\"keepaliveRequired\":"+(zjMotor.timedManual()?String("false"):String("true"))+",\"pulseUs\":[";
- for(int n=0;n<4;n++){if(n)out+=',';out+=String(zjMotorEnabled?zjMotor.pulses[n]:0);}
+ for(int n=0;n<4;n++){
+  if(n)out+=',';
+  uint16_t pulse=zjMotorEnabled?zjMotor.pulses[n]:0;
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  portENTER_CRITICAL(&zjMotorMux);if(zjAutoEscSequence.active())pulse=zjAutoEscSequence.pulse();portEXIT_CRITICAL(&zjMotorMux);
+#endif
+  out+=String(pulse);
+ }
  out+="],\"layoutPins\":[";
  for(int n=0;n<4;n++){if(n)out+=',';out+=zjJson(String("D")+String(zjMotorConfig.pins[n]));}
  out+="],\"rotations\":[";
@@ -232,6 +389,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
  zjWizardSaved.accel.encode(saved,sizeof(saved));
  const auto imu=zjReadImu(millis());imu.accelCapture.result.encode(candidate,sizeof(candidate));
  return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
+  ",\"autoEsc\":"+zjAutoEscStatus()+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
@@ -252,6 +410,11 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  if(action=="STOP"){
   if(!authorized&&!(token==zjMotorToken&&caller==zjMotorOwner&&token.length()))return error("authorization_required");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+  if(!zjMotorCalibrationSaved&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
+   zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING||zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE)){
+   (void)zjAutoEscCancel(true);
+   zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
+  }
   const bool stoppedSlider=zjWizardCalSlider&&zjMotor.mode==ZjMotorSafety::SLIDER_TEST&&
    token.length()&&token==zjMotorToken&&caller==zjMotorOwner;
   const uint8_t stoppedMask=zjMotor.sliderMask;
@@ -276,9 +439,53 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #endif
   return zjMotorStatus();
  }
- if(!zjMotorDriverReady)return error("a2_motor_driver_required");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  if(action=="WIZARD_STATUS")return zjWizardStatus();
+ // Result inspection and cancellation must remain available after a driver
+ // initialization failure. Neither command can enable PWM.
+ if(!zjMotorDriverReady&&action!="WIZARD_AUTO_ESC_CANCEL")return error("a2_motor_driver_required");
+ const bool autoBusy=!zjAutoEscFinalized||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING;
+ if(autoBusy&&action!="WIZARD_AUTO_ESC_PREPARE"&&action!="WIZARD_AUTO_ESC_CANCEL"&&action!="WIZARD_AUTO_ESC_RETRY")return error("automatic_esc_calibration_pending_or_running");
+ if(action=="WIZARD_AUTO_ESC_PREPARE"||action=="WIZARD_AUTO_ESC_CANCEL"||action=="WIZARD_AUTO_ESC_RETRY"){
+  if(!authorized)return error("authorization_required");
+  if(c!=zjBootId)return error("wizard_board_restarted");
+  if(action=="WIZARD_AUTO_ESC_CANCEL"){
+   if(a!="CONFIRM_CANCEL")return error("confirm_automatic_calibration_cancel");
+   if(!zjAutoEscCancel(true))return error("automatic_calibration_cancel_save_failed");
+   zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
+   return zjWizardStatus();
+  }
+  if(action=="WIZARD_AUTO_ESC_RETRY"){
+   if(a!=String(zjAutoEscRecord.attempt)||zjAutoEscSequence.phase!=ZjAutoEscSequence::DONE||!zjAutoEscOutputsOff())return error("completed_auto_sequence_required");
+   zjAutoEscFinalized=false;zjAutoEscLoop();
+   if(zjAutoEscStorageError)return error("automatic_calibration_result_save_failed");
+   return zjWizardStatus();
+  }
+  portENTER_CRITICAL(&zjMotorMux);const bool autoActive=zjAutoEscSequence.active();portEXIT_CRITICAL(&zjMotorMux);
+  if(autoActive||zjMotor.benchEnabled||zjMotorEnabled||zjAccessBusy()||zjMaintenanceActive||
+   zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe()||zjImuMaintenanceBusy())return error("stop_maintenance_lower_throttle_and_disarm_input");
+  long revision=0;
+  if(!parseNumber(b.c_str(),0,999999999,revision)||uint32_t(revision)!=zjWizardSaved.revision)return error("wizard_configuration_changed");
+  if(a!="PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD")return error("confirm_props_wiring_and_power_cycle");
+  if(!zjRecoverWizardReadback()||!zjMotorConfigValid||!zjAutoEscRecordVerified||!zjAutoEscOutputsOff())return error("verified_setup_and_pwm_off_required");
+  if(zjAutoEscRecord.state==ZjAutoEscRecord::PENDING&&zjAutoEscCompatible()&&!zjAutoEscStorageError)return zjWizardStatus();
+  // Invalidate old confirmation AND starting pulses before authorizing HIGH.
+  // Re-learning endpoints changes the meaning of earlier minimum-pulse tests.
+  auto next=zjWizardSaved;next.motor=zjMotorConfig;next.esc=false;
+  memset(next.motor.minimumUs,0,sizeof(next.motor.minimumUs));
+  bool invalidate=!next.revision||zjMotorCalibrationSaved;
+  for(auto pulse:zjMotorConfig.minimumUs)invalidate=invalidate||pulse!=0;
+  if(invalidate&&!zjPersistWizard(next))return error("esc_invalidation_save_failed");
+  ZjAutoEscRecord request;request.state=ZjAutoEscRecord::PENDING;
+  request.attempt=esp_random();if(!request.attempt||request.attempt==zjAutoEscRecord.attempt)request.attempt=zjAutoEscRecord.attempt+1;
+  if(!request.attempt)request.attempt=1;
+  snprintf(request.kit,sizeof(request.kit),"%s",zjKitId.c_str());zjAutoEscWiring(request.wiring,sizeof(request.wiring));
+  if(!zjAutoEscStore(request))return error("automatic_calibration_prepare_save_failed_read_back_before_retry");
+  portENTER_CRITICAL(&zjMotorMux);zjAutoEscSequence=ZjAutoEscSequence{};portEXIT_CRITICAL(&zjMotorMux);zjAutoEscFinalized=true;
+  zjMotorCalibrationPending=zjWizardEscConfirmed=false;zjWizardEscOwner="";
+  memset(zjWizardCapturedMinimum,0,sizeof(zjWizardCapturedMinimum));zjWizardCaptureOwner="";
+  ++zjMotorCommandSeq;return zjWizardStatus();
+ }
  if(action=="WIZARD_IMU"||action=="WIZARD_SAVE"||action=="WIZARD_SAVE_PAGE"||action=="WIZARD_ESC_CONFIRM"){
   if(!authorized)return error("authorization_required");
   if(zjMotor.benchEnabled||zjMotorEnabled||zjAccessBusy()||zjMaintenanceActive||
@@ -304,6 +511,13 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
    return zjWizardStatus(sequence);
   }
   if(action=="WIZARD_ESC_CONFIRM"){
+   if(a=="AUTO_TONES_CONFIRMED"){
+    char attempt[9];snprintf(attempt,sizeof(attempt),"%08lX",static_cast<unsigned long>(zjAutoEscRecord.attempt));
+    if(c!=zjBootId||b!=String(attempt)+":BATTERY_DISCONNECTED"||!zjAutoEscCompatible()||zjAutoEscStorageError||
+     zjAutoEscRecord.state!=ZjAutoEscRecord::COMPLETE||!zjAutoEscOutputsOff())return error("complete_auto_sequence_and_confirm_esc_success_tones");
+    zjWizardEscOwner=caller;zjWizardEscConfig=zjMotorConfig;zjMotorCalibrationPending=true;
+    zjWizardEscConfirmed=true;return zjWizardStatus();
+   }
    if(c!=zjBootId||a!="TONES_CONFIRMED"||b!="BATTERY_DISCONNECTED"||
     !zjMotorCalibrationPending||caller!=zjWizardEscOwner)return error("complete_low_and_confirm_esc_success_tones");
    zjWizardEscConfirmed=true;return zjWizardStatus();
@@ -350,14 +564,15 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
     if(a!="CONFIRM_RESET")return error("confirm_wizard_reset");
     if(scope=="RESET_ALL"){next.motor=ZjMotorConfig{};next.accel=ZjAccelModel{};next.esc=false;}
     if(scope=="RESET_ACCEL")next.accel=ZjAccelModel{};
-    if(scope=="RESET_ESC")next.esc=false;
+    if(scope=="RESET_ESC"){next.esc=false;memset(next.motor.minimumUs,0,sizeof(next.motor.minimumUs));}
     if(scope=="RESET_OUTPUT")memset(next.motor.minimumUs,0,sizeof(next.motor.minimumUs));
     clearEscProof=scope=="RESET_ALL"||scope=="RESET_ESC";
     clearAccelCapture=scope=="RESET_ALL"||scope=="RESET_ACCEL";
-    clearOutputCapture=scope=="RESET_ALL"||scope=="RESET_OUTPUT";
+    clearOutputCapture=scope=="RESET_ALL"||scope=="RESET_OUTPUT"||scope=="RESET_ESC";
    }else return error("unsupported_wizard_save_scope");
    char before[176],after[176];
    zjWizardSaved.encode(before,sizeof(before));next.encode(after,sizeof(after));
+   if(clearEscProof&&scope!="ESC"&&!zjAutoEscCancel(true))return error("automatic_calibration_cancel_save_failed");
    if((!zjWizardSaved.revision||strcmp(before,after))&&!zjPersistWizard(next))return error("wizard_save_failed");
    if(clearEscProof){zjMotorCalibrationPending=false;zjWizardEscConfirmed=false;zjWizardEscOwner="";}
    if(clearAccelCapture)zjQueueImuAction(ZjImuAction::CLEAR_ACCEL,0);
@@ -387,12 +602,14 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
    const char* failure=zjWizardCapturedAccel(caller,accel.substring(9),next.accel);
    if(failure)return error(failure);
   }else if(accel!="KEEP")return error("invalid_accelerometer_action");
+  if((reset||!compatible)&&!zjAutoEscCancel(true))return error("automatic_calibration_cancel_save_failed");
   if(!zjPersistWizard(next))return error("wizard_save_failed");
   zjMotorCalibrationPending=false;zjWizardEscConfirmed=false;zjWizardEscOwner="";++zjMotorCommandSeq;
   if(accel!="KEEP")zjQueueImuAction(ZjImuAction::CLEAR_ACCEL,0);
   return zjWizardStatus();
  }
 #endif
+ if(!zjMotorDriverReady)return error("a2_motor_driver_required");
  if(action=="CAL_CONFIRM"){
   if(!authorized)return error("authorization_required");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -533,6 +750,9 @@ static void zjMotorSetup(){
  const String saved=zjKitPrefs.getString("motorConfig2","");
  zjMotorConfigValid=!saved.length()||zjMotorConfig.decode(saved.c_str());
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ zjAutoEscSequence=ZjAutoEscSequence{};zjAutoEscFinalized=true;zjAutoEscStorageError=false;zjAutoEscRecord=ZjAutoEscRecord{};
+ const String autoRecord=zjKitPrefs.getString("escAuto1","");
+ zjAutoEscRecordVerified=autoRecord.isEmpty()||zjAutoEscRecord.decode(autoRecord.c_str());
  const String wizard=zjKitPrefs.getString("wizardSetup1","");
  zjWizardCaptureOwner="";memset(zjWizardCapturedMinimum,0,sizeof(zjWizardCapturedMinimum));
  zjWizardRecordVerified=true;
@@ -551,6 +771,7 @@ static void zjMotorSetup(){
  ok=(esp_timer_create(&args,&zjMotorWatchTimer)==ESP_OK)&&ok;
  if(ok)ok=esp_timer_start_periodic(zjMotorWatchTimer,5000)==ESP_OK;
  zjMotorDriverReady=ok;
+ zjMotorPwmOffAck=ok;
  if(!ok){for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);}
 #endif
  zjHttp.on("/api/motor",HTTP_POST,[](){

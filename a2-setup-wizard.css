@@ -130,7 +130,7 @@
 .a2-frame-motor.is-selected .a2-node-caption{stroke:#4c958b}
 .a2-frame-motor.output-active .a2-motor-pulse{fill:#83ebc7}
 .a2-frame-motor:focus-visible{outline:none}.a2-frame-motor:focus-visible .a2-motor-circle{stroke:#f0c37c;stroke-width:3}
-#a2SetupRoot[data-step="6"] .a2-frame-motor:not(.is-selected):not(.output-active){opacity:.48}
+#a2SetupRoot[data-step="5"] .a2-frame-motor:not(.is-selected):not(.output-active){opacity:.48}
 .a2-message{font-size:11px;line-height:1.5;margin:9px 0 0;color:#7ee1c7;overflow-wrap:anywhere}.a2-message:empty{display:none}
 .a2-footer{display:flex;align-items:center;gap:10px;margin:12px 0 4px;flex-wrap:wrap}
 .a2-step-count{font:11px ui-monospace,monospace;color:#698a9f}
@@ -152,7 +152,7 @@
  .a2-cal-steps b{font-size:13px}.a2-cal-steps span{font-size:12px}
  .a2-slider{padding:15px 17px}.a2-slider output{font-size:26px}
  .a2-content .btn,.a2-output-extras .btn{min-height:40px;font-size:13px}
- .a2-visual{position:relative;min-height:0}.a2-visual-scene{position:absolute;inset:52px 18px 18px;width:auto;height:auto;max-width:none;margin:0}.a2-pulses{position:absolute;left:12px;right:12px;bottom:10px;margin:0}#a2SetupRoot[data-step="6"] .a2-visual-scene{bottom:42px}}
+ .a2-visual{position:relative;min-height:0}.a2-visual-scene{position:absolute;inset:52px 18px 18px;width:auto;height:auto;max-width:none;margin:0}.a2-pulses{position:absolute;left:12px;right:12px;bottom:10px;margin:0}#a2SetupRoot[data-step="5"] .a2-visual-scene{bottom:42px}}
 @keyframes a2-spin{to{transform:rotate(360deg)}}@keyframes a2-led{50%{opacity:.5}}
 @media(prefers-reduced-motion:reduce){.a2-rotor.spinning,.a2-live-dot,.a2-esc-live,.configuration-preview .a2-rotation-guide{animation:none}.a2-channel-track i,.a2-frame-arm,.a2-frame-motor,.a2-motor-halo{transition:none}}
 @media(max-width:1000px){.a2-setup-page{padding:12px}.a2-content,.a2-visual{padding:14px}.a2-steps button{font-size:11px;gap:5px}.a2-cal-steps{grid-template-columns:1fr}.a2-output-selection{grid-template-columns:minmax(0,1fr) 90px;gap:8px}.a2-motor-selection>div{flex-wrap:wrap;gap:5px}.a2-motor-selection .btn{margin-left:0}.a2-minimum-heading{display:block}.a2-minima{margin-top:10px}.a2-minimum-controls .btn:last-child{margin-left:0}}
@@ -185,3 +185,5 @@
 .a2-page-save{padding:8px 11px;border:1px solid #765e39;border-radius:7px;background:#2b271c;color:#f1ce91!important}
 .a2-page-save[data-saved=true]{border-color:#3c9d78;background:#10382d;color:#83ebba!important}
 .a2-steps [data-saved=true] .a2-step-number{background:#56d3a0;color:#062c21;font-weight:750}
+
+.a2-auto-phases{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0}.a2-auto-phases span{padding:8px 10px;border:1px solid #345365;border-radius:7px;color:#a4bfcd;font-size:12px}.a2-auto-phases .current{background:#113d36;border-color:#63dec2;color:#a9f5df}.a2-auto-result{margin:12px 0}.a2-auto-result dl{display:grid;gap:6px;margin:0}.a2-auto-result dl>div{display:grid;grid-template-columns:115px minmax(0,1fr);gap:8px}.a2-auto-result dt{color:#88a5b7}.a2-auto-result dd{margin:0;overflow-wrap:anywhere}.a2-output-prerequisite:not(:empty){padding:10px;border:1px solid #8b7134;border-radius:8px;color:#ead39d!important}@media(max-width:760px){#a2SetupRoot[data-step="7"] .a2-cal-steps{grid-template-columns:1fr}.a2-auto-phases span{flex:1;min-width:85px}.a2-auto-result dl>div{grid-template-columns:92px minmax(0,1fr)}}

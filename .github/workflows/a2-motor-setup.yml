@@ -1,7 +1,7 @@
 name: A2 Motor Setup Browser
 on:
   push:
-    branches: [feat/a2-complete-wizard-20261104, fix/wizard-single-toolbar-20261103, fix/compact-wizard-motor-next-20261103, feat/guided-motor-workflow-20261102, fix/setup-input-monitor-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
+    branches: [feat/a2-auto-esc-20261104, feat/a2-complete-wizard-20261104, fix/wizard-single-toolbar-20261103, fix/compact-wizard-motor-next-20261103, feat/guided-motor-workflow-20261102, fix/setup-input-monitor-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
     paths:
       - 'js/input-monitor.js'
       - 'js/motor-setup.js'

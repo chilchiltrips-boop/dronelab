@@ -9,7 +9,7 @@
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
     "FlightCore 1.7.9 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
-    "Aerion A2 eight-step Setup Wizard with per-page Save and Save & Next, verified green ticks and scoped reset"
+    "Aerion A2 final-step automatic power-on ESC calibration with one-use requests, stored sequence results, operator tone confirmation and verified per-page saves"
   ],
   "buildCommit": "322044a648ca",
   "publishedAt": "2026-11-04T06:01:13.881749+00:00",

@@ -10,7 +10,7 @@ test('production A2 LED and motor setup keep separate timer frequencies, resolut
  const motor=readFileSync(new URL('../FlightCore_Firmware/FlightCoreMotor.h',import.meta.url),'utf8');
  const between=(src,start,end)=>{const a=src.indexOf(start),b=src.indexOf(end,a+start.length);assert.ok(a>=0&&b>a);return src.slice(a,b);};
  const ledGlobals=between(sketch,'constexpr unsigned long LED_LEASE_MS=','void printFirmwareInfo()');
- const ledSetup=between(sketch,' pinMode(LED_PIN,OUTPUT);',' // No decorative startup banner.');
+ const ledSetup=between(sketch,' pinMode(LED_PIN,OUTPUT);',' // Consume a verified one-use request');
  const motorTimer=/static constexpr ledc_timer_t ZJ_MOTOR_TIMER=[^;]+;/.exec(motor)?.[0];assert.ok(motorTimer);
  const motorSetup=between(motor,' ledc_timer_config_t timer={};',' esp_timer_create_args_t args={};');
  // The Arduino double models the pinned 3.3.12 allocator: the first attached
