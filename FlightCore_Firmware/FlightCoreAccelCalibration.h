@@ -9,13 +9,15 @@
 // deterministic and keep the serial command record small.
 struct ZjAccelModel {
  bool six=false, level=false;
- int16_t offset[3]={}, scale[3]={1000,1000,1000}, trim[3]={};
+ // Manual trim is an additional operator-entered bias in 0.001 g.
+ // Keep it independent of the fitted six-position offset and scale.
+ int16_t offset[3]={}, scale[3]={1000,1000,1000}, trim[3]={}, manualOffset[3]={};
  float correct(float raw, int axis) const {
-  return (raw-offset[axis]/1000.0f)*scale[axis]/1000.0f;
+  return (raw-offset[axis]/1000.0f)*scale[axis]/1000.0f-manualOffset[axis]/1000.0f;
  }
  bool valid() const {
   for(int i=0;i<3;i++){
-   if(abs(offset[i])>250||scale[i]<750||scale[i]>1250||abs(trim[i])>300)return false;
+   if(abs(offset[i])>250||scale[i]<750||scale[i]>1250||abs(trim[i])>300||abs(manualOffset[i])>250)return false;
    if(!six&&(offset[i]||scale[i]!=1000))return false;
    if(!level&&trim[i])return false;
   }
@@ -24,16 +26,31 @@ struct ZjAccelModel {
  void encode(char* out,size_t size) const {
   snprintf(out,size,"%d:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d",six,level,
    offset[0],offset[1],offset[2],scale[0],scale[1],scale[2],trim[0],trim[1],trim[2]);
+  // Preserve canonical legacy NVS records for zero manual offsets.
+  if((manualOffset[0]||manualOffset[1]||manualOffset[2])&&size>strlen(out)){
+   const size_t used=strlen(out);
+   snprintf(out+used,size-used,":M:%d:%d:%d",manualOffset[0],manualOffset[1],manualOffset[2]);
+  }
  }
  bool decode(const char* raw){
+  if(!raw)return false;
+  const char* suffix=strstr(raw,":M:");
+  char legacy[80];const char* encoded=raw;
+  int manual[3]={};
+  if(suffix){
+   const size_t len=size_t(suffix-raw);
+   char tail=0;
+   if(!len||len>=sizeof(legacy)||sscanf(suffix,":M:%5d:%5d:%5d%c",&manual[0],&manual[1],&manual[2],&tail)!=3)return false;
+   memcpy(legacy,raw,len);legacy[len]=0;encoded=legacy;
+  }
   int sixFlag=0,levelFlag=0,v[9]={};char tail=0;
-  if(sscanf(raw,"%1d:%1d:%5d:%5d:%5d:%5d:%5d:%5d:%5d:%5d:%5d%c",
+  if(sscanf(encoded,"%1d:%1d:%5d:%5d:%5d:%5d:%5d:%5d:%5d:%5d:%5d%c",
    &sixFlag,&levelFlag,&v[0],&v[1],&v[2],&v[3],&v[4],&v[5],&v[6],&v[7],&v[8],&tail)!=11||
    (sixFlag!=0&&sixFlag!=1)||(levelFlag!=0&&levelFlag!=1))return false;
   ZjAccelModel next;next.six=sixFlag;next.level=levelFlag;
   for(int i=0;i<3;i++){
    if(abs(v[i])>250||v[i+3]<750||v[i+3]>1250||abs(v[i+6])>300)return false;
-   next.offset[i]=v[i];next.scale[i]=v[i+3];next.trim[i]=v[i+6];
+   next.offset[i]=v[i];next.scale[i]=v[i+3];next.trim[i]=v[i+6];next.manualOffset[i]=manual[i];
   }
   char canonical[80];next.encode(canonical,sizeof(canonical));
   if(!next.valid()||strcmp(raw,canonical))return false;
