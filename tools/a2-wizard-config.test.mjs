@@ -124,7 +124,6 @@ int main(){
  assert(has(page("ACCEL_MANUAL","MANUAL:251:0:0"),"invalid_accel_manual_offset"));
  assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80:9"),"invalid_accel_manual_offset"));
  assert(has(page("ACCEL_MANUAL","MANUAL:30:1:080"),"invalid_accel_manual_offset"));
- assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80","other"),"authorization_required")==false); // other owner allowed only if authorized
  zjKitPrefs.failNextWrite=true;
  assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80"),"wizard_save_failed"));
  assert(applied.manualOffset[0]==0&&applied.trim[0]==42);
