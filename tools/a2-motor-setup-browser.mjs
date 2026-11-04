@@ -147,6 +147,13 @@ try{
  await button('save-page').click();await expectSaved(3);
  assert.equal(await fixture(()=>__wizard.board.accelModel),'0:1:0:0:0:1000:1000:1000:42:0:0:M:30:-10:80');
  assert.equal(await fixture(()=>__wizard.writes),3);
+ await button('imu-zero-manual').click();await expectSaved(3,false);
+ assert.equal(await wizard.locator('#a2ManualX').inputValue(),'0.000');
+ await button('imu-restore-manual').click();await expectSaved(3);
+ assert.equal(await wizard.locator('#a2ManualX').inputValue(),'0.030');
+ assert.equal(await wizard.locator('#a2ManualY').inputValue(),'-0.010');
+ assert.equal(await wizard.locator('#a2ManualZ').inputValue(),'0.080');
+ assert.equal(await fixture(()=>__wizard.writes),3,'Restore Saved never writes hardware');
  await step(4).click();
  await nav(1).click();assert.equal(await button('high').isDisabled(),true,'ESC calibration still requires procedure-specific safety checks');
  await check('a2EscProps','a2PowerOff','a2ReadProcedure');
