@@ -237,6 +237,14 @@ static bool zjAutoEscOutputsOff(){
  portENTER_CRITICAL(&zjMotorMux);const bool off=zjMotorPwmOffAck;portEXIT_CRITICAL(&zjMotorMux);
  return off;
 }
+// Controller-side proof only: the one-use HIGH/LOW/OFF sequence completed,
+// was stored in NVS, still belongs to this board/wiring and has PWM OFF.
+// This cannot prove any individual ESC accepted its throttle endpoints.
+static bool zjAutoEscSequenceReady(){
+ portENTER_CRITICAL(&zjMotorMux);const bool running=zjAutoEscSequence.active();portEXIT_CRITICAL(&zjMotorMux);
+ return !running&&zjWizardRecordVerified&&zjAutoEscRecordVerified&&!zjAutoEscStorageError&&
+  zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&zjAutoEscCompatible()&&zjAutoEscOutputsOff();
+}
 // Called with zjMotorMux held, from the timer task or startup/STOP. No flash,
 // network, allocations, input claims or application sessions in this path.
 static void zjAutoEscWrite(){
@@ -328,7 +336,9 @@ static String zjAutoEscStatus(){
   ",\"compatible\":"+(compatible?"true":"false")+",\"outputsOff\":"+(off?"true":"false")+
   ",\"cancelUnverified\":"+(cancelUnverified?"true":"false")+",\"resultRetryAllowed\":"+(retryAllowed?"true":"false")+
   ",\"resultPersisted\":"+(!zjAutoEscStorageError&&zjAutoEscRecordVerified&&zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE?"true":"false")+
-  ",\"toneDetectionSupported\":false,\"offVerification\":\"LEDC_STOP_ACK\",\"confirmationSource\":\"OPERATOR\",\"highMs\":5000,\"lowMs\":5000,\"pulseUs\":"+String(sequence.pulse())+
+  ",\"sequenceReady\":"+(zjAutoEscSequenceReady()?"true":"false")+
+  ",\"toneDetectionSupported\":false,\"escAcceptanceVerified\":false,\"offVerification\":\"LEDC_STOP_ACK\",\"confirmationSource\":"+zjJson(zjMotorCalibrationSaved?"OPERATOR":zjAutoEscSequenceReady()?"CONTROLLER_SEQUENCE_ONLY":"NONE")+
+  ",\"highMs\":5000,\"lowMs\":5000,\"pulseUs\":"+String(sequence.pulse())+
   ",\"remainingMs\":"+String(sequence.remaining(millis()))+",\"confirmed\":"+(compatible&&zjMotorCalibrationSaved?"true":"false")+"}";
 }
 #endif
@@ -419,11 +429,14 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  if(action=="STOP"){
   if(!authorized&&!(token==zjMotorToken&&caller==zjMotorOwner&&token.length()))return error("authorization_required");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+  // STOP cancels a pending/running sequence, but must NOT erase a verified
+  // controller COMPLETE record after reboot. Otherwise every motor-test STOP
+  // would make the no-tone wizard flow unusable.
   if(!zjMotorCalibrationSaved&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
-   zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING||zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE)){
+   zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING)){
    (void)zjAutoEscCancel(true);
-   zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
   }
+  zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
   const bool stoppedSlider=zjWizardCalSlider&&zjMotor.mode==ZjMotorSafety::SLIDER_TEST&&
    token.length()&&token==zjMotorToken&&caller==zjMotorOwner;
   const uint8_t stoppedMask=zjMotor.sliderMask;
@@ -573,7 +586,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
    }else if(scope=="ALL"||(scope.length()==2&&scope[0]=='M'&&scope[1]>='1'&&scope[1]<='4')){
     long pulse=0;
     if(!parseNumber(a.c_str(),1000,1500,pulse))return error("wizard_calibration_pulse_out_of_range");
-    if(!next.esc)return error("save_esc_calibration_first");
+    if(!next.esc&&!zjAutoEscSequenceReady())return error("verified_auto_esc_sequence_required");
     const uint8_t selected=scope=="ALL"?15:1U<<(scope[1]-'1');
     for(int i=0;i<4;i++)if(selected&(1U<<i)){
      if(next.motor.minimumUs[i]!=pulse&&
@@ -711,6 +724,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(action=="CAL_SLIDER"){
    if(!zjWizardBench||zjMotor.mode!=ZjMotorSafety::READY)return error("wizard_calibration_session_required");
+   if(!zjMotorCalibrationSaved&&!zjAutoEscSequenceReady())return error("verified_auto_esc_sequence_required");
    zjMotor.timedBench=false;
   }
 #endif
