@@ -369,6 +369,9 @@ static String zjMotorStatus(){
   ",\"mode\":"+zjJson(zjMotorMode())+",\"reason\":"+zjJson(zjMotorReason())+","+zjMotorFlags()+
   ",\"layout\":"+zjJson(zjMotorConfig.layout())+",\"configValid\":"+(zjMotorConfigValid?"true":"false")+
   ",\"calibrationSaveSupported\":"+(zjMotorDriverReady?"true":"false")+",\"escCalibrationSaved\":"+(zjMotorCalibrationSaved?"true":"false")+",\"escCalibrationPending\":"+(zjMotorCalibrationPending?"true":"false")+
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  ",\"calibrationSlideKeepsSession\":true"+
+#endif
   ",\"profile\":\"PWM_50HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":2000,\"maxInputPulseUs\":1200,\"sliderDurationMaxMs\":30000,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
   ",\"selectedInput\":"+zjJson(zjRcControlPath)+",\"inputSource\":"+zjJson(rtc?(input.valid?String("ANDROID_WEBRTC"):String("NONE")):zjRcSource)+
   ",\"inputAgeMs\":"+(input.valid?String(uint32_t(millis()-input.receivedMs)):String("null"))+
@@ -728,15 +731,16 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(action=="CAL_SLIDER"){
    if(!zjWizardBench||zjMotor.mode!=ZjMotorSafety::READY)return error("wizard_calibration_session_required");
-   // Keep the legacy authenticated, time-limited bench session intact.
-   // New no-tone Wizard navigation and minimum-pulse saves remain guarded by
-   // the verified, persisted automatic controller sequence result.
-   zjMotor.timedBench=false;
+   // Validate the existing READY lease before changing its policy. A valid
+   // calibration start receives a fresh live lease at the minimum pulse.
   }
 #endif
   ok=zjMotor.startSlider(now,n,d);
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
-  if(ok)zjWizardCalSlider=action=="CAL_SLIDER";
+  if(ok){
+   zjWizardCalSlider=action=="CAL_SLIDER";
+   if(zjWizardCalSlider)zjMotor.timedBench=false;
+  }
 #endif
  }else if(action=="SLIDE"){
   if(!parseNumber(a.c_str(),1,15,n)||n!=zjMotor.sliderMask||!parseNumber(b.c_str(),1000,2000,p)||!parseNumber(c.c_str(),1,2147483647L,d))return error("invalid_slider_pulse_selection_or_sequence");
@@ -745,6 +749,11 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   if(zjWizardCalSlider&&p>1000&&uint32_t(now-zjMotor.modeAt)<500)return error("establish_calibration_low_first");
 #endif
   ok=zjMotor.slide(now,p,d);
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  // Only a valid, fresh, owned calibration update renews the session lease.
+  // KEEP still cannot refresh the independent 750 ms slider deadline.
+  if(ok&&zjWizardCalSlider)zjMotor.keep(now);
+#endif
  }else if(action=="SINGLE"||action=="ALL"){
   if(!parseNumber(a.c_str(),1,4,n)||!parseNumber(b.c_str(),1000,2000,p)||!parseNumber(c.c_str(),1,2000,d)||(p-1000)%10)return error("invalid_motor_pulse_or_duration");
   ok=action=="SINGLE"?zjMotor.startSingle(now,n,(p-1000)/10,d):zjMotor.startAll(now,(p-1000)/10,d);

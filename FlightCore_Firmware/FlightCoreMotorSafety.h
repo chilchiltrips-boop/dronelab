@@ -79,7 +79,7 @@ struct ZjMotorSafety {
  }
  bool startSlider(uint32_t now,uint8_t mask,uint32_t duration){
   if(mode!=READY||leaseExpired(now)||!mask||mask>15||!duration||duration>SLIDER_MAX_MS)return false;
-  mode=SLIDER_TEST;modeAt=sliderAt=now;sliderMask=mask;sliderSequence=0;sliderDuration=duration;
+  mode=SLIDER_TEST;sessionAt=modeAt=sliderAt=now;sliderMask=mask;sliderSequence=0;sliderDuration=duration;
   armed=false;reason=NONE;minimum();return true;
  }
  bool slide(uint32_t now,uint16_t pulse,uint32_t sequence){

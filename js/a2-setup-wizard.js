@@ -156,6 +156,7 @@ if(root){
  const autoSequenceReady=()=>!escCleared()&&wiringCompatible()&&saved?.autoEsc?.sequenceReady===true&&
   saved.autoEsc.state==='SEQUENCE_COMPLETE'&&saved.autoEsc.resultPersisted===true&&saved.autoEsc.compatible===true&&saved.autoEsc.outputsOff===true;
  const escReadyForOutput=()=>compatibleEsc()||autoSequenceReady();
+ const outputCalibrationSupported=()=>saved?.calibrationSlideKeepsSession===true;
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
@@ -411,9 +412,10 @@ if(root){
   const running=state?.mode==='SLIDER_TEST'&&motorClient.owner==='wizard';
   const calLive=running&&!!activeRun;
   const busy=!!working||motorClient.busy;
-  const disabled=!canStart()||!outputChecks()||busy;
+  const disabled=!canStart()||!outputChecks()||!outputCalibrationSupported()||busy;
   const prerequisite=!escReadyForOutput();
-  $('.a2-output-prerequisite').textContent=prerequisite?'Complete and verify the stored Step 6 controller ESC sequence before measuring motor starting pulses. Recalibration clears earlier starting pulses.':'';
+  $('.a2-output-prerequisite').textContent=!outputCalibrationSupported()?'Update A2 to FlightCore 1.7.13+ before starting Output Calibration.':
+   prerequisite?'Complete and verify the stored Step 6 controller ESC sequence before measuring motor starting pulses. Recalibration clears earlier starting pulses.':'';
   $('[data-action="skip-output"]').hidden=prerequisite||calibrationComplete();
   $('[data-action="skip-output"]').disabled=busy||!observedOff();
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
@@ -626,6 +628,7 @@ if(root){
    }
    cues.play('stop');return;
   }
+  if(!outputCalibrationSupported())throw Error('Update A2 to FlightCore 1.7.13+ before starting Output Calibration.');
   if(!wiringCompatible()||!escReadyForOutput()||escAttempt)throw Error('Verify the saved controller ESC sequence and wiring before starting output calibration.');
   if(!window.confirm('Start '+(calAll?'all four motors':'motor M'+calMotor)+' at minimum pulse? Remove all propellers, verify motor/ESC wiring and power, and keep a physical power cutoff ready.'))return;
   const resume=currentResult();
