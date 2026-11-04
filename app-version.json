@@ -1,5 +1,5 @@
 {
-  "version": "1.36",
+  "version": "1.37",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -9,9 +9,9 @@
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
     "FlightCore 1.7.10 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
-    "Aerion A2 final-step automatic ESC calibration with durable power-cycle requests, result readback, cancellation recovery and verified operator-confirmed saves"
+    "Aerion A2 IMU XYZ calibration and final-step automatic ESC calibration with durable power-cycle requests, stored results and verified operator-confirmed page saves"
   ],
-  "buildCommit": "322044a648ca",
-  "publishedAt": "2026-11-04T06:01:13.881749+00:00",
-  "buildNumber": 467
+  "buildCommit": "e01d33d00bd8",
+  "publishedAt": "2026-11-04T08:36:40.118353+00:00",
+  "buildNumber": 468
 }

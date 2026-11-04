@@ -34,11 +34,11 @@ int main(){
  assert(has(cmd("WIZARD_AUTO_ESC_PREPARE","-","0",zjBootId,false),"authorization_required"));
  assert(has(cmd("WIZARD_AUTO_ESC_PREPARE","-","0",zjBootId),"confirm_props"));
  assert(has(cmd("WIZARD_AUTO_ESC_PREPARE","PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD","0","otherboot"),"restarted"));
- auto initial=zjWizardSaved;initial.esc=true;for(auto& pulse:initial.motor.minimumUs)pulse=1087;
+ auto initial=zjWizardSaved;initial.esc=true;initial.accel.manualOffset[0]=30;for(auto& pulse:initial.motor.minimumUs)pulse=1087;
  assert(zjPersistWizard(initial));const auto revision=zjWizardSaved.revision;
  assert(!has(prepare(),"error"));off();assert(zjMotorSessionActive);
  assert(zjAutoEscRecord.state==ZjAutoEscRecord::PENDING&&!zjMotorCalibrationSaved);
- assert(zjWizardSaved.revision==revision+1);for(auto p:zjMotorConfig.minimumUs)assert(!p);
+ assert(zjWizardSaved.revision==revision+1&&zjWizardSaved.accel.manualOffset[0]==30);for(auto p:zjMotorConfig.minimumUs)assert(!p);
  const auto writes=zjKitPrefs.writes;assert(!has(prepare(),"error"));assert(zjKitPrefs.writes==writes);off();
  assert(has(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000_TIMED"),"automatic_esc_calibration_pending"));
  assert(has(page("WIRING","X:0123:0101:0:0:0:0"),"automatic_esc_calibration_pending"));
@@ -49,7 +49,7 @@ int main(){
  assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));
  assert(!has(prepare(),"error"));
  // Software/watchdog resets must not turn a prepared request into HIGH.
- boot(false);off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::INTERRUPTED);
+ boot(false);off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::INTERRUPTED&&applied.manualOffset[0]==30);
  assert(zjAutoEscRecord.reason==ZjAutoEscRecord::COLD_POWER_ON_REQUIRED);
  assert(!has(prepare(),"error"));boot();
  assert(zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING&&zjAutoEscSequence.active());

@@ -1,6 +1,6 @@
 # A2 automatic power-on ESC calibration
 
-FlightCore 1.7.10 adds an APM/Pixhawk-style, one-use power-on request to the
+FlightCore 1.7.11 adds an APM/Pixhawk-style, one-use power-on request to the
 existing authenticated USB/AP/STA Wizard API. The Wizard order is Board,
 Wiring, Inputs, IMU Calibration, Output Signal, Output Calibration, Report,
 ESC Calibration. Each editable page retains its own verified Save operation.

@@ -90,6 +90,23 @@ int main(){
  assert(has(page("ACCEL","CAPTURED:0:1:0:0:0:1000:1000:1000:43:0:0"),"capture_changed"));
  assert(!has(page("ACCEL","CAPTURED:0:1:0:0:0:1000:1000:1000:42:0:0"),"error"));
  assert(applied.trim[0]==42&&zjMotorConfig.plus&&!zjMotorCalibrationSaved&&!zjMotorConfig.minimumUs[0]);
+ // Additional manual delta is independent of the captured level/6-position fit.
+ assert(has(page("ACCEL_MANUAL","MANUAL:251:0:0"),"invalid_accel_manual_offset"));
+ assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80:9"),"invalid_accel_manual_offset"));
+ assert(has(page("ACCEL_MANUAL","MANUAL:30:1:080"),"invalid_accel_manual_offset"));
+ zjKitPrefs.failNextWrite=true;
+ assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80"),"wizard_save_failed"));
+ assert(applied.manualOffset[0]==0&&applied.trim[0]==42);
+ assert(!has(page("ACCEL_MANUAL","MANUAL:30:-10:80"),"error"));
+ assert(applied.manualOffset[0]==30&&applied.manualOffset[1]==-10&&applied.manualOffset[2]==80);
+ assert(fabs(applied.correct(0.1f,0)-0.07f)<1e-4f);
+ assert(!has(page("ACCEL_MANUAL","MANUAL:30:-10:80"),"error"));
+ assert(strstr(zjKitPrefs.getString("wizardSetup1","").c_str(),":M:30:-10:80")!=nullptr);
+ reboot();assert(applied.trim[0]==42&&applied.manualOffset[0]==30&&applied.manualOffset[1]==-10&&applied.manualOffset[2]==80);
+ assert(has(page("ACCEL_MANUAL","MANUAL:30:-10:80:9"),"invalid_accel_manual_offset"));
+ assert(!has(page("ACCEL_MANUAL","MANUAL:0:0:0"),"error"));
+ assert(applied.manualOffset[0]==0&&applied.trim[0]==42);
+ assert(strstr(zjKitPrefs.getString("wizardSetup1","").c_str(),":M:")==nullptr); // legacy record remains canonical
  assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
  beginCurrent();cmd("CAL_HIGH","POWER_DISCONNECTED");cmd("STOP");
  assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
