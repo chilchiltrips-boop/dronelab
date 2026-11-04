@@ -17,6 +17,9 @@ on:
       - 'python-lab-worker.js'
       - 'js/python-lab.js'
       - 'tools/a2-motor-setup-browser.mjs'
+      - 'tools/a2-auto-esc.test.mjs'
+      - 'FlightCore_Firmware/FlightCoreAutoEsc.h'
+      - 'FlightCore_Firmware/FlightCoreMotor.h'
       - '.github/workflows/a2-motor-setup.yml'
   workflow_dispatch:
 permissions:

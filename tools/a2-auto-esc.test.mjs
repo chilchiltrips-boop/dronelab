@@ -90,7 +90,9 @@ int main(){
  assert(!has(prepare(),"error"));boot();tick(5000);tick(5000);off();
  zjKitPrefs.failNextWrite=true;zjMotorLoop();assert(zjAutoEscStorageError&&!zjMotorCalibrationSaved);
  assert(has(cmd("WIZARD_STATUS"),"\"resultPersisted\":false"));
+ assert(has(cmd("WIZARD_STATUS"),"\"resultRetryAllowed\":true"));
  assert(!has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"error"));
+ assert(has(cmd("WIZARD_STATUS"),"\"resultRetryAllowed\":false"));
  off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&!zjMotorCalibrationSaved);
  // Header STOP after OFF discards an unconfirmed result instead of staging it.
  cmd("STOP");assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED);off();
