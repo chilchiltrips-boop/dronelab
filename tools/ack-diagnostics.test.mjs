@@ -13,6 +13,27 @@ test('motor diagnostics retain stop reasons and pulse ACKs without tokens or uns
  const exported=b.api.exportData('csv');for(const secret of ['PRIVATE_TOKEN','PRIVATE_DEVICE','PRIVATE_MODE','PRIVATE_ERROR'])assert.ok(!exported.includes(secret));
  assert.equal(b.api.reasonClass(Object.assign(Error('original Kit heartbeat is delayed; authenticated re-verification is required'),{code:'KIT_DELAYED'})),'TIMEOUT');
 });
+test('Wizard diagnostics retain typed calibration, board-save and queue evidence without request secrets',()=>{
+ const b=bench('web');
+ for(const action of ['CAL_SLIDER','WIZARD_BEGIN','WIZARD_STATUS','WIZARD_SAVE_PAGE','WIZARD_AUTO_ESC_PREPARE','WIZARD_AUTO_ESC_CANCEL','WIZARD_AUTO_ESC_RETRY']){
+  b.api.record('motor_ack',{motorAction:action,motorMode:'DISABLED',motorReason:'NONE',queueMs:251,responseWaitMs:917,
+   savedMinimumM1:1087,savedMinimumM2:0,savedMinimumM3:0,savedMinimumM4:0,stoppedSlider:true,stoppedMask:1,stoppedPulseUs:1087,
+   configRevision:7,configVerified:true,calibrationSlideKeepsSession:true,wizardSaveScope:'M1',
+   autoEscState:'SEQUENCE_COMPLETE',autoEscPhase:'OFF',autoEscReason:'NONE',autoEscResultPersisted:true,autoEscSequenceReady:true,
+   autoEscCompatible:true,autoEscOutputsOff:true,autoEscResultSource:'CONTROLLER_SEQUENCE_ONLY',escCalibrationSaved:false,escAcceptanceVerified:false,
+   session:'PRIVATE_TOKEN',kitId:'PRIVATE_KIT',bootId:'PRIVATE_BOOT',payload:'PRIVATE_PAYLOAD',attemptId:'PRIVATE_ATTEMPT'});
+  const data=b.events().at(-1).data;
+  assert.equal(data.motorAction,action);assert.equal(data.savedMinimumM1,1087);assert.equal(data.savedMinimumM2,0);
+  assert.equal(data.stoppedPulseUs,1087);assert.equal(data.configVerified,true);assert.equal(data.escCalibrationSaved,false);
+  assert.equal(data.autoEscState,'SEQUENCE_COMPLETE');assert.equal(data.autoEscResultPersisted,true);assert.equal(data.escAcceptanceVerified,false);
+  assert.equal(data.queueMs,251);assert.equal(data.responseWaitMs,917);
+ }
+ b.api.record('motor_error',{wizardSaveScope:'PRIVATE_SCOPE',autoEscState:'PRIVATE_STATE',autoEscReason:'PRIVATE_REASON',
+  autoEscResultSource:'PRIVATE_SOURCE',savedMinimumM1:2500,autoEscOutputsOff:'PRIVATE_VALUE'});
+ assert.deepEqual(b.events().at(-1).data,{});
+ for(const format of ['csv','json'])for(const secret of ['PRIVATE_TOKEN','PRIVATE_KIT','PRIVATE_BOOT','PRIVATE_PAYLOAD','PRIVATE_ATTEMPT','PRIVATE_SCOPE','PRIVATE_STATE','PRIVATE_REASON','PRIVATE_SOURCE','PRIVATE_VALUE'])
+  assert.equal(b.api.exportData(format).includes(secret),false,format+' excludes '+secret);
+});
 test('input diagnostics retain channels, source selection, PPM loss/recovery and profile ACK without identifiers',()=>{
  const b=bench('web'),rc={source:'PPM',active:true,inputValid:true,inputArmed:false,claimed:true,seq:10,ageMs:25,throttle:1000,roll:1500,pitch:1500,yaw:1500,channels:[1501,1502,1000,1504,1000,1506,1507,1508]};
  const kit={kitId:'private-id',bootId:'private-boot',transport:'sta',rcAccess:{controlPath:'PPM'},ppm:{present:true,ageMs:12,seq:20,losses:0,faults:2}};
@@ -183,7 +204,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 70\s*versionName '1\.8\.31-auto-esc-result'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 71\s*versionName '1\.8\.32-output-calibration'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{

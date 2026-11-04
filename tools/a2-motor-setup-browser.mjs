@@ -17,10 +17,10 @@ try{
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
   ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.12'};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.13'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
   const f=window.__wizard={kit,calls:[],writes:0,run:0,imuSequence:3,candidates:{},
-   board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
+   board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,calibrationSlideKeepsSession:true,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
     imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
     ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false}}
   };
@@ -178,7 +178,7 @@ try{
  await fixture(()=>{delete __wizard.board.autoEsc.sequenceReady;__wizard.kit.version='1.7.11';});
  await button('auto-read').click();await expectText('.a2-phase','FlightCore 1.7.12+');
  assert.equal(await button('auto-prepare').isDisabled(),true,'old automatic API needs a firmware upgrade before a no-tone attempt');
- await fixture(()=>{__wizard.board.autoEsc.sequenceReady=false;__wizard.kit.version='1.7.12';});
+ await fixture(()=>{__wizard.board.autoEsc.sequenceReady=false;__wizard.kit.version='1.7.13';});
  await button('auto-read').click();
  assert.equal(await button('auto-prepare').isDisabled(),false,'one guarded Prepare action is available');
  await step(6).click();assert.equal(await button('cal-slider').isDisabled(),true,'motor test blocked until stored ESC controller result');
@@ -227,6 +227,11 @@ try{
  }
  await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
  assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
+ await fixture(()=>{delete __wizard.board.calibrationSlideKeepsSession;});
+ await page.waitForFunction(()=>document.querySelector('.a2-output-prerequisite')?.textContent.includes('FlightCore 1.7.13+'));
+ assert.equal(await button('cal-slider').isDisabled(),true,'old firmware cannot start the new calibration flow');
+ await fixture(()=>{__wizard.board.calibrationSlideKeepsSession=true;});
+ await page.waitForFunction(()=>!document.querySelector('[data-action="cal-slider"]').disabled);
  assert.equal(await button('skip-output').isVisible(),true,'optional minimum output measurement may be skipped after stored sequence');
  assert.equal(await nav(1).isDisabled(),true);
  const pulse=wizard.locator('#a2CalPulse');

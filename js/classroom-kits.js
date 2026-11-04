@@ -452,8 +452,19 @@ function wifiDirect(ip,key,route,method='GET',args={},guard=null){
  const ticket=reconnectTicket,slot=expected||ip;
  if(requestScheduler){
   const emergency=route==='/api/motor'&&args.action==='STOP'||['/api/rc/stop','/api/rc/release'].includes(route);
-  const control=route==='/api/motor'&&args.action!=='STATUS';
-  return requestScheduler.schedule(slot,()=>wifiDirectRequest(ip,key,route,method,args,expected,guard),{
+  const control=route==='/api/motor'&&!['STATUS','WIZARD_STATUS'].includes(args.action);
+  const queuedAt=Date.now();
+  return requestScheduler.schedule(slot,async()=>{
+   const dispatchedAt=Date.now(),queueMs=Math.max(0,dispatchedAt-queuedAt);
+   try{
+    const reply=await wifiDirectRequest(ip,key,route,method,args,expected,guard);
+    if(!reply||typeof reply!=='object')return reply;
+    return Object.defineProperty({...reply},'__requestTiming',{value:{queueMs,responseWaitMs:Math.max(0,Date.now()-dispatchedAt)}});
+   }catch(error){
+    if(error&&typeof error==='object')try{Object.assign(error,{queueMs,responseWaitMs:Math.max(0,Date.now()-dispatchedAt)});}catch{}
+    throw error;
+   }
+  },{
    priority:emergency?100:control?80:route==='/api/rc/preview'?70:method==='POST'&&route!=='/api/motor'?60:route==='/api/motor'?40:10,
    maxQueueMs:route==='/api/motor'&&['SLIDE','KEEP','RTC'].includes(args.action)?250:Infinity,
    guard:()=>{if(ticket!==reconnectTicket)throw Error('Selected kit changed before the queued request');guard?.();}
@@ -513,7 +524,7 @@ async function deviceRequest(route,method='GET',args={},guard=null){
  const started=diagnosticClock();
  try{
   guard?.();
-  const motorStatus=route==='/api/motor'&&method==='POST'&&args.action==='STATUS';
+  const motorStatus=route==='/api/motor'&&method==='POST'&&['STATUS','WIZARD_STATUS'].includes(args.action);
   if(method!=='GET'&&!motorStatus){
    // Writes invalidate completed cache entries, not authenticated GETs already
    // in flight. Cancelling those reads manufactured polling/link failures.
@@ -523,15 +534,17 @@ async function deviceRequest(route,method='GET',args={},guard=null){
   // Never coalesce authorization, identity changes or argument-dependent reads.
   if(!readScheduler||!motorStatus&&(!['/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status'].includes(route)||Object.keys(args||{}).length))
    return await deviceRequestCore(route,method,args,guard);
-  const key=reconnectTicket+'|'+state.kitId+'|'+state.transport+'|'+route;
+  const key=reconnectTicket+'|'+state.kitId+'|'+state.transport+'|'+route+'|'+(motorStatus?args.action:'');
   return await readScheduler.read(key,async()=>{
    const reply=await deviceRequestCore(route,method,args,guard);
-   return {...reply,__observedAt:Date.now()};
+   const observed={...reply,__observedAt:Date.now()};
+   if(reply.__requestTiming)Object.defineProperty(observed,'__requestTiming',{value:reply.__requestTiming});
+   return observed;
   },0); // Never cache a completed RC snapshot: STOP/failsafe must be visible immediately.
  }
  catch(error){
   trace('request_error',{route,transport:state.transport,reason:classify(error),
-   roundTripMs:Math.round(diagnosticClock()-started),outcome:'fail'});
+   roundTripMs:Math.round(diagnosticClock()-started),queueMs:error?.queueMs,responseWaitMs:error?.responseWaitMs,outcome:'fail'});
   throw error;
  }
 }

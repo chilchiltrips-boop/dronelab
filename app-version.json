@@ -9,7 +9,8 @@
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
     "FlightCore 1.7.12 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
-    "Aerion A2 IMU XYZ calibration, automatic stored ESC controller result without tone ticks, Output Calibration and final Report; saved requests survive leaving the page"
+    "Aerion A2 IMU XYZ calibration, automatic stored ESC controller result without tone ticks, Output Calibration and final Report; saved requests survive leaving the page",
+    "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing"
   ],
   "buildCommit": "8748ebe17369",
   "publishedAt": "2026-11-04T12:29:44.440217+00:00",

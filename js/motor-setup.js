@@ -19,7 +19,23 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
  const check=(k,readOrStop=false)=>{if(!(k?.connected||readOrStop&&k?.linkVerified===true)||!/^ZFC-A2-/.test(k?.kitId||'')||!['usb','ap','sta'].includes(k?.transport))throw Error('Connect a verified A2 using USB, AP or STA. Android Relay is read-only.');};
  const publish=s=>{const {session:privateToken,...safe}=s;last=safe;onState(safe);return safe;};
  function clearPumps(){clearTimer(timer);timer=null;clearTimer(rtcTimer);rtcTimer=null;clearTimer(sliderTimer);sliderTimer=null;}
- function diagnostic(event,k,action,r={},ms=0){record(event,{route:'/api/motor',transport:k.transport,motorAction:action,motorMode:r.mode,motorReason:r.reason,motorPolicy:r.benchPolicy,motorRemainingMs:r.remainingMs,ppmCaptureBackend:r.ppm?.captureBackend,ppmCaptureHz:r.ppm?.captureHz,ppmCaptureErrors:r.ppm?.captureErrors,ppmPresent:r.ppm?.present,ppmAgeMs:r.ppm?.ageMs,ppmSeq:r.ppm?.seq,ppmLosses:r.ppm?.losses,ppmFaults:r.ppm?.faults,sliderMask:r.sliderMask,sessionRemainingMs:r.sessionRemainingMs,commandSequence:r.commandSequence,roundTripMs:ms,pulseM1:r.pulseUs?.[0],pulseM2:r.pulseUs?.[1],pulseM3:r.pulseUs?.[2],pulseM4:r.pulseUs?.[3]});}
+ function diagnostic(event,k,action,r={},ms=0,args=[]){
+  const auto=r.autoEsc||{};
+  record(event,{route:'/api/motor',transport:k.transport,motorAction:action,motorMode:r.mode,motorReason:r.reason,motorPolicy:r.benchPolicy,
+   motorRemainingMs:r.remainingMs,ppmCaptureBackend:r.ppm?.captureBackend,ppmCaptureHz:r.ppm?.captureHz,ppmCaptureErrors:r.ppm?.captureErrors,
+   ppmPresent:r.ppm?.present,ppmAgeMs:r.ppm?.ageMs,ppmSeq:r.ppm?.seq,ppmLosses:r.ppm?.losses,ppmFaults:r.ppm?.faults,
+   sliderMask:r.sliderMask,sessionRemainingMs:r.sessionRemainingMs,commandSequence:r.commandSequence,roundTripMs:ms,
+   queueMs:r.__requestTiming?.queueMs,responseWaitMs:r.__requestTiming?.responseWaitMs,
+   pulseM1:r.pulseUs?.[0],pulseM2:r.pulseUs?.[1],pulseM3:r.pulseUs?.[2],pulseM4:r.pulseUs?.[3],
+   savedMinimumM1:r.observedMinimumUs?.[0],savedMinimumM2:r.observedMinimumUs?.[1],savedMinimumM3:r.observedMinimumUs?.[2],savedMinimumM4:r.observedMinimumUs?.[3],
+   stoppedSlider:r.stoppedSlider,stoppedMask:r.stoppedMask,stoppedPulseUs:r.stoppedPulseUs,configRevision:r.configRevision,configVerified:r.configVerified,
+   calibrationSlideKeepsSession:r.calibrationSlideKeepsSession,escCalibrationSaved:r.escCalibrationSaved,
+   wizardSaveScope:action==='WIZARD_SAVE_PAGE'?String(args[2]||'').split(':').at(-1):undefined,
+   autoEscState:auto.state,autoEscPhase:auto.phase,autoEscReason:auto.reason,autoEscResultPersisted:auto.resultPersisted,
+   autoEscSequenceReady:auto.sequenceReady,autoEscCompatible:auto.compatible,autoEscOutputsOff:auto.outputsOff,
+   autoEscPulseUs:auto.pulseUs,autoEscRemainingMs:auto.remainingMs,autoEscHighMs:auto.highMs,autoEscLowMs:auto.lowMs,
+   autoEscResultSource:auto.confirmationSource,escAcceptanceVerified:auto.escAcceptanceVerified,toneDetectionSupported:auto.toneDetectionSupported});
+ }
  async function send(action,args=[],s=session){
   const k=getKit(s?.binding),run=epoch,at=now(),readOrStop=action==='STATUS'||action==='STOP';
   const guard=()=>{
@@ -33,14 +49,14 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    if(r?.error)throw Error(r.error);
    if(r?.kitId!==k.kitId||identity(getKit(s?.binding))!==identity(k)||s?.bootId&&s.bootId!==r.bootId)throw Error('Motor reply identity changed.');
    const ms=Math.max(0,now()-at),value={...r,roundTripMs:ms,receivedAt:now()};
-   if(!['KEEP','SLIDE','STATUS'].includes(action)||r.mode!==last?.mode||r.reason!==last?.reason||ms>=250||++samples%10===0)diagnostic('motor_ack',k,action,r,ms);
+   if(!['KEEP','SLIDE','STATUS'].includes(action)||r.mode!==last?.mode||r.reason!==last?.reason||ms>=250||++samples%10===0)diagnostic('motor_ack',k,action,r,ms,args);
    // Any terminal ACK retires the token immediately, including SLIDE replies.
    // Late KEEP/STATUS replies must never re-enable a cancelled test in the UI.
    if(run!==epoch||s?.token&&action!=='STOP'&&session!==s)throw Error('Motor operation cancelled.');
-   if(action==='KEEP'&&session===s)s.keepAt=at;
+   if(session===s&&(action==='KEEP'||action==='SLIDE'&&s.slideKeepsSession))s.keepAt=at;
    if(s&&session===s&&!activeModes.has(r.mode)){clearPumps();session=null;}
    return publish(value);
-  }catch(e){diagnostic('motor_error',k,action,{reason:globalThis.ZebjusAckDiagnostics?.reasonClass?.(e)},Math.max(0,now()-at));throw e;}
+  }catch(e){diagnostic('motor_error',k,action,{reason:globalThis.ZebjusAckDiagnostics?.reasonClass?.(e),__requestTiming:{queueMs:e?.queueMs,responseWaitMs:e?.responseWaitMs}},Math.max(0,now()-at),args);throw e;}
   finally{inFlight--;}
  }
  async function stop(owner,{captureCalibration=false}={}){
@@ -87,12 +103,13 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    const beginRtt=Math.max(0,now()-beginAt);
    session=s;diagnostic('motor_ack',k,action,r,beginRtt);const publicState=publish({...r,roundTripMs:beginRtt,receivedAt:now()});
    timer=setTimer(async()=>{
-    if(busy||inFlight||session!==s)return;
+    if(session!==s)return;
     if(now()-s.started>120000){void stop().catch(()=>{});return;}
-    busy=true;
-    try{await send('KEEP',[],s);}
+    if(s.sliderPump||busy||inFlight)return;
+    busy=true;const pending=s.keepPending=send('KEEP',[],s);
+    try{await pending;}
     catch(e){if(session===s){void stop().catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
-    finally{busy=false;}
+    finally{if(s.keepPending===pending)s.keepPending=null;busy=false;}
    },400);
    return publicState;
   }finally{if(run===epoch)starting=false;}
@@ -119,24 +136,40 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
  }
  async function startSlider(mask,readPulse,owner='wizard',duration=30000,calibration=false){
   if(last?.version<2||!last?.sliderDurationMaxMs)throw Error('Flash A2 FlightCore 1.7.0+ for live slider tests.');
-  await command(calibration?'CAL_SLIDER':'SLIDER',[mask,1000,duration],owner);
-  const s=session,lowAt=now();let pending=false,seq=0;
-  const tick=async()=>{
-   if(pending||session!==s)return;pending=true;
-   try{
-    // A busy SLIDE must not starve the separate 1.5 s session lease. Fold a
-    // due KEEP into this single-flight pump before the next control update.
-    if(now()-s.keepAt>=400){await send('KEEP',[],s);if(session!==s)return;}
-    const max=calibration?1500:2000;
-    const pulse=calibration&&now()-lowAt<500?1000:Number(readPulse());
-    if(!Number.isInteger(pulse)||pulse<1000||pulse>max)throw Error(`Slider pulse must be 1000–${max} µs.`);
-    await command('SLIDE',[mask,pulse,++seq],owner);
-   }catch(e){if(session===s){void stop(owner).catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
-   finally{pending=false;}
-  };
-  sliderTimer=setTimer(tick,150);await tick();
-  if(session!==s||last?.mode!=='SLIDER_TEST')throw Error(motorStopDescription(last));
-  return last;
+  const s=session,run=epoch;
+  if(!s||s.owner!==owner)throw Error('Start your motor setup session first.');
+  if(s.sliderPump)throw Error('A slider operation is already running.');
+  // Claim KEEP scheduling before awaiting anything. A heartbeat already sent
+  // may finish; a second pump must never queue another KEEP behind it.
+  s.sliderPump=true;
+  try{
+   if(s.keepPending)await s.keepPending;
+   if(session!==s||run!==epoch)throw Error('Motor start cancelled.');
+   await command(calibration?'CAL_SLIDER':'SLIDER',[mask,1000,duration],owner);
+   s.slideKeepsSession=calibration&&last?.calibrationSlideKeepsSession===true;
+   const lowAt=now();let pending=false,seq=0;
+   const tick=async()=>{
+    if(pending||session!==s)return;pending=true;const started=now();
+    try{
+     const max=calibration?1500:2000;
+     const pulse=calibration&&now()-lowAt<500?1000:Number(readPulse());
+     if(!Number.isInteger(pulse)||pulse<1000||pulse>max)throw Error(`Slider pulse must be 1000–${max} µs.`);
+     // Refresh the tighter slider deadline first, including the first 1000 us
+     // update. New firmware renews the calibration lease with this same ACK.
+     await command('SLIDE',[mask,pulse,++seq],owner);
+     if(session===s&&!s.slideKeepsSession&&now()-s.keepAt>=400)await send('KEEP',[],s);
+    }catch(e){if(session===s){void stop(owner).catch(()=>{});publish({...last,mode:'UNCONFIRMED',reason:e.message});}}
+    finally{
+     pending=false;
+     // A slow ACK has already used the 150 ms cadence. Send the latest value
+     // after it, rather than losing another whole interval to timer alignment.
+     if(session===s&&now()-started>=150)queueMicrotask(()=>{void tick();});
+    }
+   };
+   sliderTimer=setTimer(tick,150);await tick();
+   if(session!==s||last?.mode!=='SLIDER_TEST')throw Error(motorStopDescription(last));
+   return last;
+  }catch(e){if(session===s)s.sliderPump=false;throw e;}
  }
  async function confirmCalibration(binding=null){
   if(session||starting||stopping)throw Error('Stop outputs before saving ESC calibration.');

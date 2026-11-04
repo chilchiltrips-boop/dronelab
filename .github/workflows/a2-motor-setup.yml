@@ -1,7 +1,7 @@
 name: A2 Motor Setup Browser
 on:
   push:
-    branches: [fix/a2-esc-guidance-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-complete-wizard-20261104, fix/wizard-single-toolbar-20261103, fix/compact-wizard-motor-next-20261103, feat/guided-motor-workflow-20261102, fix/setup-input-monitor-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
+    branches: [fix/a2-output-calibration-stability-20261104, fix/a2-esc-guidance-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-complete-wizard-20261104, fix/wizard-single-toolbar-20261103, fix/compact-wizard-motor-next-20261103, feat/guided-motor-workflow-20261102, fix/setup-input-monitor-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
     paths:
       - 'js/input-monitor.js'
       - 'js/motor-setup.js'
@@ -18,6 +18,11 @@ on:
       - 'js/python-lab.js'
       - 'tools/a2-motor-setup-browser.mjs'
       - 'tools/a2-auto-esc.test.mjs'
+      - 'tools/a2-output-calibration-stability.test.mjs'
+      - 'tools/motor-link-stability.test.mjs'
+      - 'tools/ack-diagnostics.test.mjs'
+      - 'js/kit-ack-diagnostics.js'
+      - 'FlightCore_Firmware/build-report.json'
       - 'app-version.json'
       - 'FlightCore_Firmware/FlightCoreAutoEsc.h'
       - 'FlightCore_Firmware/FlightCoreMotor.h'

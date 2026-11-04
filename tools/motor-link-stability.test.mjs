@@ -40,7 +40,7 @@ test('a queued control update expires before transmission rather than renewing a
  let at=1000,sent=false;const queue=dataApi().createRequestScheduler({now:()=>at}),hold=deferred();
  const first=queue.schedule('kit',()=>hold.promise);await turn();
  const update=queue.schedule('kit',()=>{sent=true;},{priority:80,maxQueueMs:250});
- const rejected=assert.rejects(update,e=>e.code==='REQUEST_QUEUE_STALE');at+=251;hold.resolve();await first;await rejected;assert.equal(sent,false);
+ const rejected=assert.rejects(update,e=>e.code==='REQUEST_QUEUE_STALE'&&e.queueMs===251);at+=251;hold.resolve();await first;await rejected;assert.equal(sent,false);
 });
 function motorHarness({send,now}={}){
  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',bootId:'b1',transport:'usb',generation:1};
@@ -49,7 +49,7 @@ function motorHarness({send,now}={}){
  const client=createMotorClient({getKit:()=>kit,...(now?{now}:{}),setTimer:(fn,ms)=>(timers.set(ms,fn),ms),clearTimer:id=>timers.delete(id),record:(...entry)=>events.push(entry),request:async(k,a,guard)=>{
   guard?.();calls.push(a.action);
   const special=await send?.(a,state,guard);if(special)return special;
-  if(a.action==='SLIDER')state.mode='SLIDER_TEST';if(a.action==='STOP'){state.mode='DISABLED';state.reason='USER_STOP';}
+  if(['SLIDER','CAL_SLIDER'].includes(a.action))state.mode='SLIDER_TEST';if(a.action==='STOP'){state.mode='DISABLED';state.reason='USER_STOP';}
   return {...state,session:a.action==='BEGIN'?'token':undefined};
  }});
  return {client,kit,timers,calls,state,events};
@@ -110,10 +110,66 @@ test('low-rate motor KEEP never queues behind a motor request already in flight'
  assert.equal(h.calls.filter(action=>action==='KEEP').length,0);
  hold.resolve({...h.state});await slide;await h.client.stop();
 });
-test('a busy slider pump services the session lease before sending another control update',async()=>{
+test('legacy slider fallback refreshes control before its separate session lease',async()=>{
  let at=1000;const h=motorHarness({now:()=>at});await h.client.begin();await h.client.startSlider(1,()=>1100);
  at+=500;const before=h.calls.length;await h.timers.get(150)();
- assert.deepEqual(h.calls.slice(before),['KEEP','SLIDE']);await h.client.stop();
+ assert.deepEqual(h.calls.slice(before),['SLIDE','KEEP']);await h.client.stop();
+});
+test('slider startup drains an existing heartbeat and owns every later KEEP',async()=>{
+ let at=1000;const hold=deferred();let wait=true;
+ const h=motorHarness({now:()=>at,send:async a=>wait&&a.action==='KEEP'?hold.promise:null});
+ h.state.calibrationSlideKeepsSession=true;
+ await h.client.begin();at+=500;
+ const keep=h.timers.get(400)();await turn();
+ const starting=h.client.startSlider(1,()=>1000,'wizard',30000,true);await turn();
+ await h.timers.get(400)();
+ assert.equal(h.calls.filter(a=>a==='KEEP').length,1);
+ assert.equal(h.calls.includes('CAL_SLIDER'),false,'wait for the already-sent heartbeat');
+ wait=false;hold.resolve({...h.state});await keep;await starting;
+ at+=500;const before=h.calls.length;await h.timers.get(400)();await h.timers.get(150)();
+ assert.deepEqual(h.calls.slice(before),['SLIDE']);await h.client.stop();
+});
+test('a fallback heartbeat in the slider pump cannot overlap another slider or KEEP',async()=>{
+ let at=1000;const hold=deferred();let delay=false;
+ const h=motorHarness({now:()=>at,send:async a=>delay&&a.action==='KEEP'?hold.promise:null});
+ await h.client.begin();await h.client.startSlider(1,()=>1000);at+=500;delay=true;
+ const update=h.timers.get(150)();await turn();const before=h.calls.length;
+ await h.timers.get(400)();await h.timers.get(150)();
+ assert.equal(h.calls.length,before);assert.equal(h.calls.at(-1),'KEEP');
+ delay=false;hold.resolve({...h.state});await update;await h.client.stop();
+});
+test('slow BEGIN and CAL_SLIDER acknowledgements do not put KEEP before the first minimum pulse',async()=>{
+ for(const renewal of [false,true]){
+  let at=1000;const h=motorHarness({now:()=>at,send:async a=>{
+   if(a.action==='BEGIN')at+=556;if(a.action==='CAL_SLIDER')at+=273;
+  }});h.state.calibrationSlideKeepsSession=renewal;
+  await h.client.begin();await h.client.startSlider(1,()=>1500,'wizard',30000,true);
+  assert.deepEqual(h.calls.slice(0,4),['STATUS','BEGIN','CAL_SLIDER','SLIDE']);
+  assert.equal(h.calls.filter(a=>a==='KEEP').length,renewal?0:1);await h.client.stop();
+ }
+});
+test('a 600 ms slider ACK immediately sends the latest target with one request in flight; STOP cancels catch-up',async()=>{
+ let at=1000,desired=1000,delay=false,active=0,maximum=0;const held=[],pulses=[];
+ const h=motorHarness({now:()=>at,send:async(a,state)=>{
+  if(a.action!=='SLIDE'||!delay)return;
+  pulses.push(Number(a.b));maximum=Math.max(maximum,++active);
+  return await new Promise(resolve=>held.push(()=>{active--;resolve({...state});}));
+ }});h.state.calibrationSlideKeepsSession=true;
+ await h.client.begin();await h.client.startSlider(1,()=>desired,'wizard',30000,true);
+ delay=true;desired=1100;at+=600;const update=h.timers.get(150)();await turn();
+ desired=1200;await h.timers.get(400)();await h.timers.get(150)();assert.equal(held.length,1);
+ at+=600;held[0]();await update;await turn();
+ assert.deepEqual(pulses,[1100,1200]);assert.equal(maximum,1);
+ assert.equal(h.calls.filter(a=>a==='KEEP').length,0);
+ await h.client.stop();const before=h.calls.length;held[1]();await turn();
+ assert.equal(h.calls.length,before);assert.equal(h.client.state.mode,'DISABLED');assert.equal(h.timers.size,0);
+});
+test('STOP while startup waits for KEEP cannot deliver CAL_SLIDER after the delayed acknowledgement',async()=>{
+ let at=1000;const hold=deferred();const h=motorHarness({now:()=>at,send:async a=>a.action==='KEEP'?hold.promise:null});
+ await h.client.begin();at+=500;const keep=h.timers.get(400)();await turn();
+ const starting=h.client.startSlider(1,()=>1000,'wizard',30000,true);
+ const rejected=assert.rejects(starting,/cancelled/);await h.client.stop();hold.resolve({...h.state});await keep;await rejected;
+ assert.equal(h.calls.includes('CAL_SLIDER'),false);assert.equal(h.client.state.mode,'DISABLED');assert.equal(h.timers.size,0);
 });
 test('input sample age advances between packets and lost input never becomes a neutral live frame',()=>{
  const frame={selectedInput:'AUTO',inputSource:'PPM',inputValid:true,inputAgeMs:20,channels:[1530,1450,1100,1700,1000,1500,1600,1700]};
@@ -136,7 +192,8 @@ async function networkHarness(){
  const elements={kitCodeInput:{value:''},kitTransport:{value:'ap'},kitIpInput:{value:''},kitKeyInput:{value:''}};
  const window={addEventListener(){},dispatchEvent(){},ZebjusKitPairingStore:{fromSession:()=>'',restore:async()=>''},ZebjusKitAuth:{http:()=>({}),openLocal:async()=>({expiresAt:at+1800000,request:async(route,method,args)=>{
   calls.push({route,method,args});if(fail)throw Error('network timed out');
-  return route==='/api/motor'?{kitId,bootId:replyBoot,supported:true,mode:'DISABLED',reason:'USER_STOP',motorsDisabled:true,motorsArmed:false}:status;
+  return route==='/api/motor'?{kitId,bootId:replyBoot,supported:true,mode:'DISABLED',reason:'USER_STOP',motorsDisabled:true,motorsArmed:false,
+   ...(args?.action==='WIZARD_STATUS'?{wizardVersion:1,configRevision:3,configVerified:true}:{})}:status;
  }})}};
  const context={window,Date:Clock,document:{readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null},localStorage:{getItem:()=>null,setItem(){},removeItem(){}},fetch:async()=>({ok:true,json:async()=>({kitId,kitCode,board:'ZFC-A2',simpleConnection:true})}),setTimeout,clearTimeout,AbortController,URLSearchParams,console,CustomEvent:class{}};
  vm.createContext(context);vm.runInContext(read('js/kit-data-interface.js'),context);window.ZebjusKitData=context.ZebjusKitData;
@@ -169,4 +226,24 @@ test('motor STATUS requests coalesce and failed verification never restores fres
  await Promise.all([h.api.requestBound(h.binding,'/api/motor','POST',{action:'STATUS'}),h.api.requestBound(h.binding,'/api/motor','POST',{action:'STATUS'})]);
  assert.equal(h.calls.length,before+1);h.advance(7000);h.fail();
  await assert.rejects(h.api.requestBound(h.binding,'/api/motor','POST',{action:'STATUS'}),/timed out/);assert.equal(h.api.getState().connected,false);
+});
+test('WIZARD_STATUS coalesces separately from STATUS, retains dispatch timing and never reuses a completed read',async()=>{
+ const h=await networkHarness(),before=h.calls.length;
+ const [one,two,basic]=await Promise.all([
+  h.api.requestBound(h.binding,'/api/motor','POST',{action:'WIZARD_STATUS'}),
+  h.api.requestBound(h.binding,'/api/motor','POST',{action:'WIZARD_STATUS'}),
+  h.api.requestBound(h.binding,'/api/motor','POST',{action:'STATUS'})
+ ]);
+ assert.equal(h.calls.length,before+2);assert.equal(one.wizardVersion,1);assert.equal(two.configRevision,3);assert.equal(basic.wizardVersion,undefined);
+ assert.equal(one.__requestTiming.queueMs,0);assert.equal(one.__requestTiming.responseWaitMs,0);
+ assert.equal(Object.keys(one).includes('__requestTiming'),false,'timing stays outside the firmware payload');
+ await h.api.requestBound(h.binding,'/api/motor','POST',{action:'WIZARD_STATUS'});assert.equal(h.calls.length,before+3);
+});
+test('read-only Wizard status has monitoring priority while calibration and STOP retain control priority',()=>{
+ const source=read('js/classroom-kits.js'),start=source.indexOf('function wifiDirect('),end=source.indexOf('async function wifiDirectRequest(',start);
+ const priorities=[];const context={state:{kitId:'ZFC-A2-012345ABCDEF'},reconnectTicket:1,Date,
+  requestScheduler:{schedule:(key,run,options)=>{priorities.push(options.priority);return Promise.resolve({});}}};
+ vm.createContext(context);vm.runInContext(source.slice(start,end),context);
+ for(const action of ['STATUS','WIZARD_STATUS','CAL_SLIDER','SLIDE','STOP'])context.wifiDirect('kit-host','secret','/api/motor','POST',{action});
+ assert.deepEqual(priorities,[40,40,80,80,100]);
 });

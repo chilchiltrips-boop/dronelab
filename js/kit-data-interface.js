@@ -25,7 +25,8 @@
    slot.running=true;
    Promise.resolve().then(()=>{
     job.guard?.();
-    if(now()-job.at>job.maxQueueMs){const e=Error('Control request waited too long in the Kit queue; test stopped.');e.code='REQUEST_QUEUE_STALE';throw e;}
+    const queueMs=Math.max(0,now()-job.at);
+    if(queueMs>job.maxQueueMs){const e=Error('Control request waited too long in the Kit queue; test stopped.');e.code='REQUEST_QUEUE_STALE';e.queueMs=queueMs;throw e;}
     return job.run();
    }).then(job.resolve,job.reject).finally(()=>{slot.running=false;pump(key,slot)});
   }

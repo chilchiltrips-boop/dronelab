@@ -27,13 +27,25 @@ const handoverBlockers=new Set(['NONE','KIT_LINK_UNVERIFIED','FIRMWARE_UNSUPPORT
 const handoverRejects=new Set(['NONE','invalid_mode','handover_busy','stop_motor_setup_first',
  'maintenance_active','release_current_controller_first','lower_throttle_and_disarm',
  'save_sta_credentials_first','invalid_sta_input','input_profile_changed','input_profile_save_failed']);
-const motorActions=new Set(['STATUS','STOP','BEGIN','KEEP','RTC','LAYOUT','MINIMUM','SLIDER','SLIDE','SINGLE','ALL','INPUT','CAL_HIGH','CAL_LOW']);
-const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TEST','CAL_HIGH','CAL_LOW','FAULT','SLIDER_TEST']);
+const motorActions=new Set(['STATUS','STOP','BEGIN','KEEP','RTC','LAYOUT','MINIMUM','SLIDER','CAL_SLIDER','SLIDE','SINGLE','ALL','INPUT','CAL_HIGH','CAL_LOW',
+ 'WIZARD_STATUS','WIZARD_BEGIN','WIZARD_IMU','WIZARD_SAVE','WIZARD_SAVE_PAGE','WIZARD_ESC_CONFIRM','WIZARD_AUTO_ESC_PREPARE','WIZARD_AUTO_ESC_CANCEL','WIZARD_AUTO_ESC_RETRY']);
+const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TEST','CAL_HIGH','CAL_LOW','AUTO_CAL_HIGH','AUTO_CAL_LOW','FAULT','SLIDER_TEST','UNCONFIRMED']);
 const motorReasons=new Set(['NONE','USER_STOP','SESSION_EXPIRED','INPUT_LOST','INPUT_CHANGED','ARM_REQUIRED','THROTTLE_HIGH','SWITCH_REQUIRED','TEST_FINISHED','CAL_TIMEOUT','CAL_FINISHED','OUTPUT_ERROR','DEADLINE_MISSED','CONFIG_ERROR','CONTROL_LOST',...reasons]);
 const ppmCaptureCounts=['ppmCaptureHz','ppmCaptureErrors'];
 fields.push('ppmCaptureBackend',...ppmCaptureCounts);
-const motorCounts=['motorRemainingMs','sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4'];
-fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts);
+const motorCounts=['motorRemainingMs','sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4',
+ 'stoppedMask','configRevision','autoEscRemainingMs','autoEscHighMs','autoEscLowMs'];
+const motorResultPulses=['savedMinimumM1','savedMinimumM2','savedMinimumM3','savedMinimumM4','stoppedPulseUs','autoEscPulseUs'];
+const motorResultFlags=['stoppedSlider','configVerified','calibrationSlideKeepsSession','escCalibrationSaved','autoEscResultPersisted',
+ 'autoEscSequenceReady','autoEscCompatible','autoEscOutputsOff','escAcceptanceVerified','toneDetectionSupported'];
+const motorResultEnums={
+ wizardSaveScope:new Set(['WIRING','ACCEL','ACCEL_MANUAL','ESC','ALL','M1','M2','M3','M4','RESET_ACCEL','RESET_ESC','RESET_OUTPUT','RESET_ALL']),
+ autoEscState:new Set(['NONE','AWAITING_POWER_CYCLE','RUNNING','SEQUENCE_COMPLETE','INCOMPLETE','CANCELLED','INVALID_RECORD']),
+ autoEscPhase:new Set(['HIGH','LOW','OFF']),
+ autoEscReason:new Set(['NONE','STOPPED','RESET_DURING_SEQUENCE','COLD_POWER_ON_REQUIRED','SETUP_CHANGED','DRIVER_ERROR','DEADLINE_MISSED','STORAGE_ERROR']),
+ autoEscResultSource:new Set(['NONE','OPERATOR','CONTROLLER_SEQUENCE_ONLY'])
+};
+fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts,...motorResultPulses,...motorResultFlags,...Object.keys(motorResultEnums));
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
 const timingCounts=['controlTargetHz','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
@@ -192,6 +204,9 @@ function clean(data){
   else if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
   else if(key==='motorMode'){if(motorModes.has(v))result[key]=v;}
   else if(key==='motorReason'){if(motorReasons.has(v))result[key]=v;}
+  else if(motorResultPulses.includes(key)){if(Number.isSafeInteger(v)&&v>=0&&v<=2000)result[key]=v;}
+  else if(motorResultFlags.includes(key)){if(typeof v==='boolean')result[key]=v;}
+  else if(motorResultEnums[key]){if(motorResultEnums[key].has(v))result[key]=v;}
   else if(motorCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
   else if(timingCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0&&v<=0xffffffff)result[key]=v;}
   else if([...timingRates,'androidUdpReceivedHz','androidUdpAppliedHz','accelXG','accelYG','accelZG'].includes(key)){if(typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000)result[key]=Math.round(v*10000)/10000;}

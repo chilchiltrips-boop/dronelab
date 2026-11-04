@@ -47,6 +47,11 @@ connection is required. The UI requires the 1.7.12 `sequenceReady` capability
 before preparing this flow; an older board displays upgrade guidance. Existing
 compatible operator-confirmed records remain usable without recalibration.
 
+The subsequent Output Calibration step requires FlightCore 1.7.13 or later
+with the `calibrationSlideKeepsSession` capability. See
+[Output Calibration command timing](a2-output-calibration-stability.md) for
+the slider/session flow and diagnostic fields.
+
 ## What can be read
 
 `WIZARD_STATUS.autoEsc` reports API version, attempt ID, persisted state,
