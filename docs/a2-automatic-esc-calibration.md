@@ -64,6 +64,9 @@ endpoints stored inside the ESCs themselves.
   Failed result storage never sets ESC confirmation. An explicit OFF-only retry
   is available while that completed sequence remains in RAM. A reboot before
   result persistence leaves the attempt incomplete.
+- Cancel retires the RAM retry proof immediately. If cancellation storage
+  fails, the UI blocks another Start and says not to power cycle until Cancel
+  is retried and read back. A result retry cannot restore a cancelled attempt.
 - Save verifies authorization, kit boot, revision, attempt, compatible wiring,
   operator confirmation and outputs off. Lost responses are resolved by board
   readback before another write. Normal saved boots have no automatic output.

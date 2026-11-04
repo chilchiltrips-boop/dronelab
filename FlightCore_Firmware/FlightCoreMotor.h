@@ -274,7 +274,7 @@ static void zjAutoEscLoop(){
 static bool zjAutoEscCancel(bool discardResult){
  portENTER_CRITICAL(&zjMotorMux);
  const bool running=zjAutoEscSequence.active();
- if(running||(discardResult&&zjAutoEscSequence.phase==ZjAutoEscSequence::DONE)){
+ if(running||(discardResult&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state!=ZjAutoEscRecord::EMPTY))){
   // Retire the RAM retry proof even when persisting cancellation fails.
   zjAutoEscSequence.stop(ZjAutoEscRecord::STOPPED);zjAutoEscWrite();
  }
@@ -319,11 +319,14 @@ static String zjAutoEscStatus(){
  const auto sequence=zjAutoEscSequence;
  portEXIT_CRITICAL(&zjMotorMux);
  const bool compatible=zjAutoEscCompatible(),off=!sequence.active()&&zjAutoEscOutputsOff();
+ const bool cancelUnverified=zjAutoEscStorageError&&sequence.phase==ZjAutoEscSequence::FAILED&&sequence.reason==ZjAutoEscRecord::STOPPED;
+ const bool retryAllowed=zjAutoEscStorageError&&zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING&&sequence.phase==ZjAutoEscSequence::DONE&&compatible&&off;
  char id[9];snprintf(id,sizeof(id),"%08lX",static_cast<unsigned long>(zjAutoEscRecord.attempt));
  return String("{\"version\":1,\"attemptId\":")+zjJson(id)+",\"state\":"+zjJson(zjAutoEscRecordVerified?ZjAutoEscRecord::stateName(zjAutoEscRecord.state):"INVALID_RECORD")+
   ",\"phase\":"+zjJson(sequence.phase==ZjAutoEscSequence::HIGH_PHASE?"HIGH":sequence.phase==ZjAutoEscSequence::LOW_PHASE?"LOW":"OFF")+
   ",\"reason\":"+zjJson(zjAutoEscStorageError?"STORAGE_ERROR":ZjAutoEscRecord::reasonName(zjAutoEscRecord.reason))+
   ",\"compatible\":"+(compatible?"true":"false")+",\"outputsOff\":"+(off?"true":"false")+
+  ",\"cancelUnverified\":"+(cancelUnverified?"true":"false")+",\"resultRetryAllowed\":"+(retryAllowed?"true":"false")+
   ",\"resultPersisted\":"+(!zjAutoEscStorageError&&zjAutoEscRecordVerified&&zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE?"true":"false")+
   ",\"toneDetectionSupported\":false,\"offVerification\":\"LEDC_STOP_ACK\",\"confirmationSource\":\"OPERATOR\",\"highMs\":5000,\"lowMs\":5000,\"pulseUs\":"+String(sequence.pulse())+
   ",\"remainingMs\":"+String(sequence.remaining(millis()))+",\"confirmed\":"+(compatible&&zjMotorCalibrationSaved?"true":"false")+"}";

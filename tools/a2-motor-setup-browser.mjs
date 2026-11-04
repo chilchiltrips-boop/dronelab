@@ -49,7 +49,8 @@ try{
      break;
     }
     case 'WIZARD_AUTO_ESC_CANCEL':
-     b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',outputsOff:true,resultPersisted:false};b.escConfirmationStaged=false;stop();break;
+     if(f.failCancel){f.failCancel=false;b.autoEsc={...b.autoEsc,cancelUnverified:true,resultRetryAllowed:false,reason:'STORAGE_ERROR'};throw Error('Simulated cancellation save failure');}
+     b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',outputsOff:true,resultPersisted:false,cancelUnverified:false,reason:'NONE'};b.escConfirmationStaged=false;stop();break;
     case 'WIZARD_ESC_CONFIRM':
      if(a.a!=='AUTO_TONES_CONFIRMED'||a.b!==b.autoEsc.attemptId+':BATTERY_DISCONNECTED'||b.autoEsc.state!=='SEQUENCE_COMPLETE'||!b.autoEsc.resultPersisted)throw Error('ESC incomplete');
      b.escConfirmationStaged=true;break;
@@ -147,6 +148,11 @@ try{
  await button('auto-prepare').click();await expectText('.a2-phase','Disconnect LiPo AND USB');
  assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','preparing never emits PWM');
  assert.equal(await button('save-page').isDisabled(),true);
+ await fixture(()=>{__wizard.failCancel=true;});await button('auto-cancel').click();
+ await expectText('.a2-phase','Do not power cycle');
+ assert.equal(await button('auto-prepare').isDisabled(),true);
+ assert.equal(await button('auto-retry').isVisible(),false,'a failed cancellation is not a retryable successful result');
+ assert.match(await button('auto-cancel').textContent(),/Retry cancelling/);
  await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
  await check('a2EscProps','a2PowerOff','a2ReadProcedure');await button('auto-prepare').click();
  await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','HIGH · 2000 µs');

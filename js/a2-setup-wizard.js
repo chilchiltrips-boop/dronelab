@@ -103,7 +103,7 @@ if(root){
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
  const autoPending=()=>['AWAITING_POWER_CYCLE','RUNNING'].includes(saved?.autoEsc?.state)||['AUTO_CAL_HIGH','AUTO_CAL_LOW'].includes(state?.mode);
- const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending();
+ const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending()&&!saved?.autoEsc?.cancelUnverified;
  const checkList=ids=>ids.every(id=>$(id).checked);
  // Trust the verified board profile, not three repeated UI checkbox proofs.
  const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
@@ -282,6 +282,7 @@ if(root){
   $('.a2-calibration-summary').dataset.saved=String(escDraft!==true&&compatibleEsc());
   $('.a2-phase').textContent=!kit().connected?'Connection unavailable · reconnect to read the stored calibration result.':!auto?'FlightCore 1.7.10+ required for automatic ESC calibration.':
    high?'HIGH · 2000 µs · automatic timed phase':low?'LOW · 1000 µs · automatic timed phase':
+   auto.cancelUnverified?'Cancellation was not saved. Do not power cycle: retry Cancel and read back the board first.':
    pending?'PWM off. Disconnect LiPo AND USB, then reconnect LiPo only. Do not use software reboot or RESET.':
    canConfirm?'PWM off verified. Confirm all four ESC success tones and LiPo disconnection, then Save. If tones were missing, discard this attempt and prepare again.':
    auto.reason!=='NONE'?`PWM off · ${auto.reason}. Prepare a new attempt after correcting the cause.`:
@@ -299,10 +300,10 @@ if(root){
   start.textContent=compatibleEsc()?'Prepare recalibration':'Prepare automatic calibration';
   start.disabled=!ready||!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm||!!autoPrepareIntent||accelAction!=='KEEP'||!!captureRequest;
   const cancel=$('[data-action="auto-cancel"]');
-  cancel.hidden=!auto||!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD','SEQUENCE_COMPLETE'].includes(auto.state)||compatibleEsc();
-  cancel.textContent=auto?.state==='SEQUENCE_COMPLETE'?'Discard unconfirmed attempt':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
+  cancel.hidden=!auto||!auto.cancelUnverified&&(!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD','SEQUENCE_COMPLETE'].includes(auto.state)||compatibleEsc());
+  cancel.textContent=auto?.cancelUnverified?'Retry cancelling':auto?.state==='SEQUENCE_COMPLETE'?'Discard unconfirmed attempt':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
   cancel.disabled=!kit().connected||!!working;
-  const retry=$('[data-action="auto-retry"]');retry.hidden=auto?.reason!=='STORAGE_ERROR'||auto?.state!=='RUNNING'||auto?.phase!=='OFF';retry.disabled=!ready||!!working;
+  const retry=$('[data-action="auto-retry"]');retry.hidden=auto?.resultRetryAllowed!==true;retry.disabled=!ready||!!working;
   $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm||!!working;
   $('[data-action="confirm-cal"]').disabled=!canConfirm||!!working||!checkList(['#a2Tones','#a2EscDisconnected']);
   const back=$('[data-action="return-output"]');back.hidden=!compatibleEsc()||calibrationComplete();back.disabled=!!working;
@@ -385,7 +386,7 @@ if(root){
   return false;
  }
  function canSaveScope(scope){
-  if(!scope||!boardReady()||!observedOff()||autoPending()||autoPrepareIntent||captureRequest||saved.capture?.running||saved.imu?.manualGyro)return false;
+  if(!scope||!boardReady()||!observedOff()||autoPending()||saved?.autoEsc?.cancelUnverified||autoPrepareIntent||captureRequest||saved.capture?.running||saved.imu?.manualGyro)return false;
   if(scope==='RESET_ALL')return true;
   if(!saved.configValid)return false;
   if(scope.startsWith('RESET_'))return true;

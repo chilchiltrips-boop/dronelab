@@ -42,6 +42,12 @@ int main(){
  const auto writes=zjKitPrefs.writes;assert(!has(prepare(),"error"));assert(zjKitPrefs.writes==writes);off();
  assert(has(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000_TIMED"),"automatic_esc_calibration_pending"));
  assert(has(page("WIRING","X:0123:0101:0:0:0:0"),"automatic_esc_calibration_pending"));
+ zjKitPrefs.failNextWrite=true;
+ assert(has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"cancel_save_failed"));
+ assert(zjAutoEscRecord.state==ZjAutoEscRecord::PENDING);
+ assert(has(cmd("WIZARD_STATUS"),"\"cancelUnverified\":true"));off();
+ assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));
+ assert(!has(prepare(),"error"));
  // Software/watchdog resets must not turn a prepared request into HIGH.
  boot(false);off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::INTERRUPTED);
  assert(zjAutoEscRecord.reason==ZjAutoEscRecord::COLD_POWER_ON_REQUIRED);
@@ -95,6 +101,8 @@ int main(){
  zjKitPrefs.failNextWrite=true;zjMotorLoop();assert(zjAutoEscStorageError);
  zjKitPrefs.failNextWrite=true;
  assert(has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"cancel_save_failed"));off();
+ assert(has(cmd("WIZARD_STATUS"),"\"cancelUnverified\":true"));
+ assert(has(cmd("WIZARD_STATUS"),"\"resultRetryAllowed\":false"));
  assert(has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"completed_auto_sequence_required"));
  assert(!zjMotorCalibrationSaved&&!zjWizardEscConfirmed);
  assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));
