@@ -123,7 +123,7 @@ if(root){
  <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
  <details class="a2-secondary-test"><summary>Reset setup</summary>
  <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
- <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC confirmation</option><option value="minimums">Motor starting pulses</option></select>
+ <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC controller calibration result</option><option value="minimums">Motor starting pulses</option></select>
  <div class="a2-actions"><button class="btn ghost" data-action="reset-selected">Reset selected calibration</button><button class="btn ghost" data-action="reset-all">Reset all Wizard settings</button></div></details></section>
  </main><aside class="a2-visual" aria-label="Current setup step visualization"><h3 class="a2-visual-title"></h3><div class="a2-visual-scene"></div><div class="a2-pulses"></div></aside></div>
  <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn ghost" data-action="verify-save" hidden>Verify / retry save</button><button class="btn ghost" data-action="save-page" hidden>Save</button><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
@@ -149,7 +149,7 @@ if(root){
  const wiringCompatible=()=>!!saved?.configValid&&sameWiring(draft,config(saved));
  const pulses=()=>minimums.map((p,i)=>p??(wiringCompatible()?saved.observedMinimumUs?.[i]||0:0));
  const effectivePulses=()=>pulses().map(p=>validPulse(p)?p:0);
- const activeEsc=()=>escDraft===true||escDraft===false&&wiringCompatible()&&saved.escCalibrationSaved===true;
+ const activeEsc=()=>escDraft===true||escDraft===false&&wiringCompatible()&&saved?.escCalibrationSaved===true;
  const escCleared=()=>escDraft==='cleared';
  const compatibleEsc=()=>!escCleared()&&activeEsc();
  const autoSequenceReady=()=>!escCleared()&&wiringCompatible()&&saved?.autoEsc?.sequenceReady===true&&
@@ -445,8 +445,9 @@ if(root){
    ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?'board-saved':'draft pending'} · Manual X/Y/Z ${manualOffsets.map(n=>(n/1000).toFixed(3)).join(' / ')} g`],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
    ['ESC controller attempt',`${saved?.autoEsc?.attemptId||'None'} · ${saved?.autoEsc?.state||'No automatic result'}`],
-   ['ESC confirmation source','Operator success-tone confirmation; PWM ESC acceptance cannot be read'],
-   ['ESC',escDraft===true?'Confirmed · Pending save':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
+   ['ESC result source',compatibleEsc()?'Legacy operator confirmation':autoSequenceReady()?'Stored controller HIGH/LOW/OFF sequence':'No verified controller sequence'],
+   ['ESC acceptance','Not directly measurable through standard PWM ESC wiring'],
+   ['ESC',autoSequenceReady()?'Controller sequence stored · ESC endpoint acceptance unverified':compatibleEsc()?'Legacy confirmation saved':escCleared()?'Cleared · pending reset':'Not completed'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
    ['Physical acceptance','Not verified by software']
   ];
@@ -741,7 +742,9 @@ if(root){
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
   if(name==='download'){
-   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,escConfirmationSource:compatibleEsc()?'OPERATOR':'NOT_CONFIRMED',physicalAcceptance:'NOT_VERIFIED'};
+   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,
+    escResultSource:compatibleEsc()?'LEGACY_OPERATOR':autoSequenceReady()?'CONTROLLER_SEQUENCE_ONLY':'NOT_VERIFIED',
+    escAcceptanceVerified:false,physicalAcceptance:'NOT_VERIFIED'};
    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
    a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
   }
