@@ -730,7 +730,7 @@ if(root){
  async function act(name,run){
   if(name==='stop'){
    ++operation;activeRun=null;
-   if(!saved?.escCalibrationSaved){escDraft=false;escAttempt=false;$('#a2Tones').checked=$('#a2EscDisconnected').checked=false;}
+   if(!saved?.escCalibrationSaved){escDraft=false;escAttempt=false;}
    const stopped=await motorClient.stop();
    if(!outputOff(stopped))throw Error('PWM state unconfirmed after STOP.');
    if(saved?.autoEsc?.version===1)await motorClient.wizardStatus();
@@ -789,11 +789,11 @@ if(root){
    $('#a2Still').checked=false;return;
   }
   if(name==='skip-output'){await navigate(REPORT,false,true);return;}
-  if(name==='return-output'){await navigate(OUTPUT,false,true);return;}
+
   if(name==='auto-prepare'){
    if(accelAction!=='KEEP'||captureRequest)throw Error('Save or restore the pending accelerometer changes before preparing a power cycle.');
-   if(!canStart()||!wiringCompatible()||!escChecks()||saved?.autoEsc?.version!==1)throw Error('Save wiring, verify PWM off and complete the automatic ESC procedure checks.');
-   if(!window.confirm('Prepare automatic calibration for the next full power-on? Remove all propellers. Old ESC confirmation and all starting pulses will be cleared. Disconnect LiPo AND USB, then reconnect LiPo only.'))return;
+   if(!canStart()||!wiringCompatible()||!outputChecks()||saved?.autoEsc?.version!==1)throw Error('Save wiring, disarm input and verify PWM OFF before preparing automatic ESC calibration.');
+   if(!window.confirm('Propellers must be REMOVED. Confirm motor wiring, low throttle and DISARMED input. Prepare a one-use 2000→1000 µs ESC sequence for the next FULL power-on? Existing ESC records and motor starting pulses will be cleared. Disconnect USB power AND LiPo until the A2 is completely OFF, then reconnect LiPo only.'))return;
    const intent=autoPrepareIntent={...base,mapping:encode(draft)};
    let failure='';
    try{await motorClient.wizardCommand('WIZARD_AUTO_ESC_PREPARE',['PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD',intent.revision,intent.bootId],intent.bootId);}
@@ -801,9 +801,7 @@ if(root){
    try{
     const board=await motorClient.wizardStatus();recoverAutoPrepare(board);ensureOperation(run);
     if(board.autoEsc?.state==='AWAITING_POWER_CYCLE'&&board.autoEsc.compatible&&board.autoEsc.outputsOff&&board.autoEsc.reason==='NONE'&&!autoPrepareIntent){
-     $('#a2EscProps').checked=$('#a2PowerOff').checked=$('#a2ReadProcedure').checked=false;
-     $('#a2Tones').checked=$('#a2EscDisconnected').checked=false;
-     message('Request saved. Disconnect LiPo AND USB completely, then reconnect LiPo only.');return;
+     message('Request stored on A2. Disconnect USB power and LiPo completely. Reconnect LiPo only after all power is OFF.');return;
     }
     if(board.configRevision===intent.revision&&!autoPrepareIntent)autoPrepareIntent=null;
     if(board.configRevision===intent.revision&&board.autoEsc?.state!=='AWAITING_POWER_CYCLE')autoPrepareIntent=null;
@@ -818,14 +816,6 @@ if(root){
   }
   if(name==='auto-retry'){
    await motorClient.wizardCommand('WIZARD_AUTO_ESC_RETRY',[parseInt(saved.autoEsc.attemptId,16),'-',base.bootId],base.bootId);ensureOperation(run);return;
-  }
-  if(name==='confirm-cal'){
-   const auto=saved?.autoEsc;
-   if(!auto?.resultPersisted||!auto.compatible||!observedOff()||!checkList(['#a2Tones','#a2EscDisconnected']))throw Error('Read a completed controller sequence and confirm all four ESC success tones and LiPo disconnection.');
-   const ack=await motorClient.wizardCommand('WIZARD_ESC_CONFIRM',['AUTO_TONES_CONFIRMED',auto.attemptId+':BATTERY_DISCONNECTED',base.bootId],base.bootId);
-   ensureOperation(run);
-   if(!ack.escConfirmationStaged)throw Error('ESC confirmation was not acknowledged.');
-   escDraft=true;escAttempt=false;saveState='';message('Operator-confirmed · press Save for a verified board record.');return;
   }
   if(name==='cal-slider'){await sliderAction(run);return;}
   if(name==='resume-cal'){
