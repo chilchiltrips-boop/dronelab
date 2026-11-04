@@ -314,7 +314,7 @@ if(root){
    put('[data-accel-fitted="'+i+'"]',fitted?fmt(fitted[i]):'—');
    put('[data-accel-corrected="'+i+'"]',preview?fmt(preview[i]):'—');
   }
-  put('.a2-imu-manual-warning',manualError);
+  put('.a2-imu-manual-warning',manualError||(saved&&saved.accelManualVersion!==1?'Manual offset Save requires FlightCore 1.7.10+ firmware.':''));
   const pending=accelAction.startsWith('MANUAL:');
   put('[data-imu-manual-status]',pending?'Draft only · Save to apply offsets on board; motor outputs remain OFF.':
    accelAction==='MANUAL_INVALID'?'Invalid manual offset · Save is blocked.':
@@ -434,7 +434,7 @@ if(root){
   if(scope.startsWith('RESET_'))return true;
   if(scope==='WIRING')return wiringValid();
   if(scope==='ACCEL')return accelAction.startsWith('CAPTURED:')&&saved.capture?.ready&&'CAPTURED:'+saved.capture.model===accelAction;
-  if(scope==='ACCEL_MANUAL')return !manualError&&accelAction.startsWith('MANUAL:')&&!!modelParts(saved.accelModel);
+  if(scope==='ACCEL_MANUAL')return saved.accelManualVersion===1&&!manualError&&accelAction.startsWith('MANUAL:')&&!!modelParts(saved.accelModel);
   if(scope==='ESC')return wiringCompatible()&&escDraft===true;
   const selected=scope==='ALL'?motors:[Number(scope.slice(1))];
   return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
