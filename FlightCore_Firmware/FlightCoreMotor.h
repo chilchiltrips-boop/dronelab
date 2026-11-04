@@ -432,11 +432,15 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   // STOP cancels a pending/running sequence, but must NOT erase a verified
   // controller COMPLETE record after reboot. Otherwise every motor-test STOP
   // would make the no-tone wizard flow unusable.
-  if(!zjMotorCalibrationSaved&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
-   zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING)){
-   (void)zjAutoEscCancel(true);
+  const bool autoPendingCancel=!zjMotorCalibrationSaved&&(!zjAutoEscRecordVerified||
+   zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING);
+  const bool autoCompleteUnconfirmed=!zjMotorCalibrationSaved&&zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE;
+  if(autoPendingCancel)(void)zjAutoEscCancel(true);
+  // Clear automatic-sequence staging but leave the independent legacy bench
+  // calibration's pending operator proof untouched, as before.
+  if(autoPendingCancel||autoCompleteUnconfirmed){
+   zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
   }
-  zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
   const bool stoppedSlider=zjWizardCalSlider&&zjMotor.mode==ZjMotorSafety::SLIDER_TEST&&
    token.length()&&token==zjMotorToken&&caller==zjMotorOwner;
   const uint8_t stoppedMask=zjMotor.sliderMask;
