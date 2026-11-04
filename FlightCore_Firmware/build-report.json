@@ -1,7 +1,7 @@
 {
   "version": "1.7.9",
-  "builtAt": "2026-11-04T05:05:27Z",
-  "sourceCommit": "c54c431b701c8483e17716264a088042b4b8a3aa",
+  "builtAt": "2026-11-04T05:14:45Z",
+  "sourceCommit": "2ca81bfcc69429198cc24dd38a059035ffa75da0",
   "sourceSha256": {
     "FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino": "4510de339db2cc30535a075c842fdc279cb7619e6fdb8a709201219f2b71b50b",
     "FlightCore_Firmware/partitions.csv": "9e7b229d246ae9af2aaf963ebdd4d3fa00473e722b45009e93ef6898cafef9a2",
@@ -15,7 +15,7 @@
     "FlightCore_Firmware/FlightCoreGyroCalibration.h": "4686de3cbf167f5f4b6d5922dffc7d6a45f69db7f642aa3cfd7d2e2ceac9a3a5",
     "FlightCore_Firmware/FlightCoreHandover.h": "625da3cfa1a7585de543a831ca035df8b73cfbe7c06c3bd3baedd4bac7a99da5",
     "FlightCore_Firmware/FlightCoreImu.h": "a63bb275e61d2ae56bf96438825c2f6260126c24561e7d542d2edfb399f459cf",
-    "FlightCore_Firmware/FlightCoreMotor.h": "4579ed308c5ab9ca91c30218cd7ea296d91ec0ea4914a8c892e7700f7646724c",
+    "FlightCore_Firmware/FlightCoreMotor.h": "a3f1729e53de769d670380533f13534565d55b9fbe2b1e0e14d0c8833493f748",
     "FlightCore_Firmware/FlightCoreMotorConfig.h": "9216eabb7bc34bfbee3071904836883dbf0066be068a29714d1dcea5a686fdf1",
     "FlightCore_Firmware/FlightCoreMotorSafety.h": "c5edb22b9c5b3eb2a131d2e6df0f94931d95f1a88cdebe0c1ff2085f1daa0ec8",
     "FlightCore_Firmware/FlightCoreMotorStatus.h": "47bfa77236d636f95ba6c6cf23de4872da4d3ed9c6960773aef7c840cbdefc6d",
@@ -61,13 +61,13 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-04T05:06:30Z"
+      "compiledAt": "2026-11-04T05:17:01Z"
     },
     {
       "boardId": "ZFC-A2",
       "fqbn": "esp32:esp32:XIAO_ESP32C6",
       "chipId": 13,
-      "appBytes": 1296464,
+      "appBytes": 1296544,
       "otaSlots": [
         {
           "address": 65536,
@@ -88,7 +88,7 @@
         "factory bootloader at 0x0",
         "factory/APP identical"
       ],
-      "compiledAt": "2026-11-04T05:07:14Z"
+      "compiledAt": "2026-11-04T05:17:53Z"
     }
   ]
 }
