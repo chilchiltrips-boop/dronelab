@@ -1,5 +1,5 @@
 {
-  "version": "1.40",
+  "version": "1.41",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -12,7 +12,7 @@
     "Aerion A2 IMU XYZ calibration, automatic stored ESC controller result without tone ticks, Output Calibration and final Report; saved requests survive leaving the page",
     "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing"
   ],
-  "buildCommit": "8748ebe17369",
-  "publishedAt": "2026-11-04T12:29:44.440217+00:00",
-  "buildNumber": 472
+  "buildCommit": "8621aee31eea",
+  "publishedAt": "2026-11-04T17:55:04.537049+00:00",
+  "buildNumber": 473
 }
