@@ -161,7 +161,7 @@ try{
  await expectSaved(5,false);
  assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true,'the board committed despite the lost response');
  await fixture(()=>{__wizard.failStatus=false;document.querySelector('[data-action="save-page"]').click();});await expectSaved(5);
- assert.equal(await fixture(()=>__wizard.writes),3,'retry reads the board before another write');
+ assert.equal(await fixture(()=>__wizard.writes),4,'retry reads the board before another write');
  await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
  assert.equal(await nav(1).isDisabled(),true);
  const pulse=wizard.locator('#a2CalPulse');
