@@ -301,6 +301,7 @@ if(root){
   for(const a of ['imu-face','imu-level'])$('[data-action="'+a+'"]').disabled=!ready||!fresh||!$('#a2Still').checked||capture.running||!!captureRequest||accelAction!=='KEEP';
   $('[data-action="imu-clear"]').disabled=!ready;
   $('[data-action="imu-zero-manual"]').disabled=!!working||!model;
+  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=!!working||!!ambiguousSave);
   const progress=Math.max(0,Math.min(2000,Number(imu.samples)||0));
   $('.a2-gyro-progress').value=progress;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
@@ -387,7 +388,7 @@ if(root){
    ['Frame',`${layouts[draft.layout].name} · ${wiringCompatible()?'Saved on board':'Pending'}`],
    ...motors.map((n,i)=>[`M${n} wiring`,`${draft.layoutPins[i]} · ${draft.rotations[i]}${wiringCompatible()?'':` · pending (board ${saved?.layoutPins?.[i]||'—'} · ${saved?.rotations?.[i]||'—'})`}`]),
    ['Inputs',`${selectedInput().source||'—'} · live observation`],
-   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?saved?.accelModel?.startsWith('0:0:')?'identity':'saved model':'captured model pending'}`],
+   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?'board-saved':'draft pending'} · Manual X/Y/Z ${manualOffsets.map(n=>(n/1000).toFixed(3)).join(' / ')} g`],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
    ['ESC',escDraft===true?'Confirmed · Pending save':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
@@ -414,8 +415,9 @@ if(root){
  }
  const calibrationComplete=()=>effectivePulses().every(validPulse);
  const validCurrent=()=>targetMotors(calMotor,calAll).every(n=>validPulse(pulses()[n-1]));
- const pageScope=()=>({1:'WIRING',3:'ACCEL',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
- const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1');
+ const pageScope=()=>step===3?(accelAction.startsWith('MANUAL')?'ACCEL_MANUAL':'ACCEL'):
+  ({1:'WIRING',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
+ const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1')||!!modelParts(saved?.accelModel)?.manual.some(Boolean);
  function pageSaved(page){
   if(!boardReady()||!saved.configValid)return false;
   if(page===1)return saved.configRevision>0&&wiringCompatible();
@@ -432,6 +434,7 @@ if(root){
   if(scope.startsWith('RESET_'))return true;
   if(scope==='WIRING')return wiringValid();
   if(scope==='ACCEL')return accelAction.startsWith('CAPTURED:')&&saved.capture?.ready&&'CAPTURED:'+saved.capture.model===accelAction;
+  if(scope==='ACCEL_MANUAL')return !manualError&&accelAction.startsWith('MANUAL:')&&!!modelParts(saved.accelModel);
   if(scope==='ESC')return wiringCompatible()&&escDraft===true;
   const selected=scope==='ALL'?motors:[Number(scope.slice(1))];
   return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
@@ -445,7 +448,7 @@ if(root){
    const page=Number(node.dataset.savePage),verified=pageSaved(page);
    node.dataset.saved=String(verified);
    node.textContent=ambiguousSave?.page===page?saveState||'Checking the board before retry':verified?'✓ Saved on board':
-    !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values to save. Gyro calibration is kept in runtime memory.':'Unsaved · use Save on this page';
+    !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values or enter manual offsets to save. Gyro bias is runtime-only.':'Unsaved · use Save on this page';
   });
  }
  function render(){
@@ -592,6 +595,10 @@ if(root){
    Object.assign(expectedWiring,config(draft));
   }else if(scope==='ACCEL'){
    intent.payload=accelAction;intent.accel=accelAction.slice(9);
+  }else if(scope==='ACCEL_MANUAL'){
+   const model=modelParts(saved.accelModel);
+   intent.payload=accelAction;
+   intent.accel=model.base+manualSuffix(manualOffsets);
   }else if(scope==='ESC'){
    intent.payload='TONES_CONFIRMED';intent.esc=true;
   }else if(scope.startsWith('RESET_')){
@@ -617,11 +624,18 @@ if(root){
   }
   base={bootId:board.bootId,revision:board.configRevision};saved=board;
   if(intent.scope==='WIRING'&&sameWiring(draft,intent.draft)){draft=config(board);loadWiring();}
-  if(intent.scope==='ACCEL'&&accelAction===intent.action)accelAction='KEEP';
+  if(['ACCEL','ACCEL_MANUAL'].includes(intent.scope)&&accelAction===intent.action)accelAction='KEEP';
+  if(intent.scope==='ACCEL_MANUAL'){
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
+  }
+  if(intent.scope==='ACCEL'){
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
+  }
   if(intent.scope==='ESC')escDraft=false;
   for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
-  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
-  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;}
+  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
+  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
   if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
   ambiguousSave=null;saveState=intent.scope.startsWith('RESET_')?'Reset saved on board':'Saved on board';conflict=false;operationError='';
@@ -686,6 +700,10 @@ if(root){
    if(!canSaveScope(scope))throw Error('Verify the board and outputs before resetting setup.');
    if(!window.confirm(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`))return;
    await save(scope);return;
+  }
+  if(name==='imu-zero-manual'){
+   for(const axis of manualAxis)$('#a2Manual'+axis).value='0.000';
+   updateManualDraft();message('Zero manual offsets staged. Save this page to apply to the board.');return;
   }
   if(name.startsWith('imu-')){
    const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO','imu-level':'LEVEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL'};
@@ -761,6 +779,7 @@ if(root){
  });
  root.addEventListener('input',e=>{
   if(e.target.id==='a2CalAll')return;
+  if(e.target.matches('[data-manual-axis]')){updateManualDraft();render();return;}
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){
    draft=readWiring();minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
    escAttempt=false;saveState='';
