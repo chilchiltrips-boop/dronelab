@@ -73,3 +73,10 @@ output, capture/save readback and restoration after a simulated boot.
 propellers removed, including individual/group output, interruption and saved
 results after a real power cycle. Host/browser checks do not measure PWM
 waveforms, motor rotation or ESC endpoint acceptance.
+
+The [FlightCore 1.7.13 build](https://github.com/chilchiltrips-boop/dronelab/actions/runs/41871988832)
+compiled both board profiles and verified all four APP/FACTORY images against
+the source manifest. The A1 compile timestamp is `2026-11-04T16:54:41Z`; A2 is
+`2026-11-04T16:55:17Z`. The 685-check suite passed with 683 passes and two
+existing skips, and the A2 browser flow passed over HTTP with simulated
+transport. These results do not change the physical verification status above.
