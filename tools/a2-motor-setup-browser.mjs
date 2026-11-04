@@ -21,7 +21,7 @@ try{
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
   const f=window.__wizard={kit,calls:[],writes:0,run:0,imuSequence:3,candidates:{},
    board:{wizardVersion:1,pageSaveVersion:1,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
-    imu:{state:'READY',imuValid:true,accelG:[0,0,1],accelRawG:[0,0,1],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000},
+    imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
     ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false}}
   };
   const stop=(reason='USER_STOP')=>Object.assign(f.board,{mode:'DISABLED',reason,pulseUs:[0,0,0,0]});
@@ -69,6 +69,11 @@ try{
      }else if(scope==='ACCEL'){
       if(!b.capture.ready||a.a!=='CAPTURED:'+b.capture.model)throw Error('Capture mismatch');
       b.accelModel=b.capture.model;b.capture.ready=false;
+     }else if(scope==='ACCEL_MANUAL'){
+      const m=/^MANUAL:(-?\d+):(-?\d+):(-?\d+)$/.exec(a.a);
+      if(!m||m.slice(1).some(v=>Math.abs(Number(v))>250))throw Error('Manual offset invalid');
+      const parts=m.slice(1).map(Number);
+      b.accelModel=b.accelModel.split(':M:')[0]+(parts.some(Boolean)?':M:'+parts.join(':'):'');
      }else if(scope==='ESC'){
       if(!b.escConfirmationStaged)throw Error('ESC incomplete');
       b.escCalibrationSaved=true;b.escCalibrationPending=b.escConfirmationStaged=false;
@@ -123,6 +128,26 @@ try{
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="4"]').isVisible(),true);
  await fixture(()=>{if(__wizard.board.accelModel!=='0:1:0:0:0:1000:1000:1000:42:0:0')throw Error('IMU page not saved');});
  assert.equal(await fixture(()=>__wizard.writes),2);
+ await step(3).click();
+ await page.waitForFunction(()=>document.querySelector('[data-imu-orient-status]')?.textContent.includes('FRESH'));
+ assert.equal(await wizard.locator('[data-gyro-corrected="0"]').textContent(),'0.000');
+ assert.equal(await wizard.locator('[data-accel-raw="0"]').textContent(),'0.120');
+ assert.equal(await wizard.locator('[data-imu-cube]').count(),1,'three-dimensional IMU view exists');
+ assert.equal(await wizard.locator('[data-imu-trace="0"]').count(),1,'X corrected accelerometer trace exists');
+ await wizard.locator('#a2ManualX').fill('0.030');
+ await wizard.locator('#a2ManualY').fill('-0.010');
+ await wizard.locator('#a2ManualZ').fill('0.080');
+ await expectText('[data-accel-corrected="0"]','0.090');
+ await expectText('[data-accel-corrected="1"]','0.000');
+ await expectText('[data-accel-corrected="2"]','1.000');
+ assert.equal(await expectSaved(3,false),undefined);
+ await wizard.locator('#a2ManualX').fill('0.251');
+ assert.equal(await button('save-page').isDisabled(),true,'invalid manual offset must block saves');
+ await wizard.locator('#a2ManualX').fill('0.030');
+ await button('save-page').click();await expectSaved(3);
+ assert.equal(await fixture(()=>__wizard.board.accelModel),'0:1:0:0:0:1000:1000:1000:42:0:0:M:30:-10:80');
+ assert.equal(await fixture(()=>__wizard.writes),3);
+ await step(4).click();
  await nav(1).click();assert.equal(await button('high').isDisabled(),true,'ESC calibration still requires procedure-specific safety checks');
  await check('a2EscProps','a2PowerOff','a2ReadProcedure');
  await button('high').click();await expectText('.a2-phase','HIGH · 2000 µs');
