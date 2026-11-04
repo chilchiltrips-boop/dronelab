@@ -231,7 +231,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
  char saved[80],candidate[80];
  zjWizardSaved.accel.encode(saved,sizeof(saved));
  const auto imu=zjReadImu(millis());imu.accelCapture.result.encode(candidate,sizeof(candidate));
- return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
+ return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"accelManualVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
