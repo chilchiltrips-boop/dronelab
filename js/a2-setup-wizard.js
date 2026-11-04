@@ -81,7 +81,7 @@ if(root){
   <p class="a2-imu-manual-warning" role="status"></p>
   <table class="a2-imu-table" aria-label="Live accelerometer raw and corrected measurements in g"><thead><tr><th>Axis</th><th>Raw g</th><th>After saved fit g</th><th>Draft corrected g</th></tr></thead>
   <tbody>${['X','Y','Z'].map((axis,i)=>`<tr><td>Acc${axis}</td><td data-accel-raw="${i}">—</td><td data-accel-fitted="${i}">—</td><td data-accel-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
-  <div class="a2-actions"><button class="btn ghost" data-action="imu-zero-manual">Zero manual offsets</button></div>
+  <div class="a2-actions"><button class="btn ghost" data-action="imu-zero-manual">Zero manual offsets</button><button class="btn ghost" data-action="imu-restore-manual">Restore saved</button></div>
   <p class="a2-imu-manual-note" data-imu-manual-status>Edited values are a preview until Save on this page is verified by the board.</p>
  </div>
  <div class="a2-imu-card">
@@ -300,8 +300,9 @@ if(root){
   $('[data-action="imu-reset"]').disabled=!ready||gyroActive;
   for(const a of ['imu-face','imu-level'])$('[data-action="'+a+'"]').disabled=!ready||!fresh||!$('#a2Still').checked||capture.running||!!captureRequest||accelAction!=='KEEP';
   $('[data-action="imu-clear"]').disabled=!ready;
-  $('[data-action="imu-zero-manual"]').disabled=!!working||!model;
-  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=!!working||!!ambiguousSave);
+  $('[data-action="imu-zero-manual"]').disabled=!!working||!model||accelAction.startsWith('CAPTURED:');
+  $('[data-action="imu-restore-manual"]').disabled=!!working||!manualEditing;
+  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=!!working||!!ambiguousSave||accelAction.startsWith('CAPTURED:'));
   const progress=Math.max(0,Math.min(2000,Number(imu.samples)||0));
   $('.a2-gyro-progress').value=progress;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
@@ -700,6 +701,11 @@ if(root){
    if(!canSaveScope(scope))throw Error('Verify the board and outputs before resetting setup.');
    if(!window.confirm(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`))return;
    await save(scope);return;
+  }
+  if(name==='imu-restore-manual'){
+   if(accelAction.startsWith('CAPTURED:'))return;
+   manualEditing=false;manualLoadedModel='';manualError='';accelAction='KEEP';syncManualFields(saved?.accelModel);
+   message('Restored board-saved manual offsets. No firmware write.');return;
   }
   if(name==='imu-zero-manual'){
    for(const axis of manualAxis)$('#a2Manual'+axis).value='0.000';
