@@ -184,3 +184,7 @@
  .a2-step-long{display:none}
  .a2-step-short{display:inline}
 }
+
+.a2-page-save{padding:8px 11px;border:1px solid #765e39;border-radius:7px;background:#2b271c;color:#f1ce91!important}
+.a2-page-save[data-saved=true]{border-color:#3c9d78;background:#10382d;color:#83ebba!important}
+.a2-steps [data-saved=true] .a2-step-number{background:#56d3a0;color:#062c21;font-weight:750}

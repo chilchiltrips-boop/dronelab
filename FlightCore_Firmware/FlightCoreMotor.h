@@ -42,6 +42,9 @@ static ZjMotorConfig zjWizardBenchConfig,zjWizardEscConfig;
 static bool zjWizardBench=false,zjWizardCalSlider=false;
 static bool zjWizardEscConfirmed=false,zjWizardRecordVerified=true;
 static String zjWizardEscOwner,zjWizardImuOwner;
+static String zjWizardCaptureOwner;
+static ZjMotorConfig zjWizardCaptureConfig;
+static uint16_t zjWizardCapturedMinimum[4]={};
 static bool zjSameMotorWiring(const ZjMotorConfig& a,const ZjMotorConfig& b){
  return a.plus==b.plus&&!memcmp(a.pins,b.pins,sizeof(a.pins))&&!memcmp(a.rotation,b.rotation,sizeof(a.rotation));
 }
@@ -70,6 +73,13 @@ static bool zjPersistWizard(ZjWizardConfig next,bool configurationChange=true){
  if(actual.decode(stored.c_str()))zjUseWizardRecord(actual);
  else zjWizardRecordVerified=!zjWizardSaved.revision&&written==0&&stored.isEmpty();
  return false;
+}
+static const char* zjWizardCapturedAccel(const String& caller,const String& encoded,ZjAccelModel& model){
+ const auto imu=zjReadImu(millis());
+ if(caller!=zjWizardImuOwner||!imu.accelCapture.ready)return "accelerometer_capture_required";
+ char captured[80];imu.accelCapture.result.encode(captured,sizeof(captured));
+ if(encoded!=captured)return "accelerometer_capture_changed";
+ model=imu.accelCapture.result;return nullptr;
 }
 #endif
 static void zjMotorLoadCalibration(){
@@ -220,7 +230,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
  char saved[80],candidate[80];
  zjWizardSaved.accel.encode(saved,sizeof(saved));
  const auto imu=zjReadImu(millis());imu.accelCapture.result.encode(candidate,sizeof(candidate));
- return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
+ return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
@@ -246,10 +256,18 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   const uint8_t stoppedMask=zjMotor.sliderMask;
   uint16_t stoppedPulse=0;
   if(stoppedSlider)for(int i=0;i<4;i++)if(stoppedMask&(1U<<i)){stoppedPulse=zjMotor.pulses[i];break;}
+  const auto stoppedConfig=zjWizardBenchConfig;
 #endif
   zjMotorStop();
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(stoppedSlider){
+   if(a=="CAPTURE_OUTPUT"){
+    if(zjWizardCaptureOwner!=caller||!zjSameMotorWiring(stoppedConfig,zjWizardCaptureConfig)){
+     memset(zjWizardCapturedMinimum,0,sizeof(zjWizardCapturedMinimum));
+    }
+    zjWizardCaptureOwner=caller;zjWizardCaptureConfig=stoppedConfig;
+    for(int i=0;i<4;i++)if(stoppedMask&(1U<<i))zjWizardCapturedMinimum[i]=stoppedPulse;
+   }
    const String status=zjMotorStatus();
    return status.substring(0,status.length()-1)+",\"stoppedSlider\":true,\"stoppedMask\":"+String(stoppedMask)+
     ",\"stoppedPulseUs\":"+String(stoppedPulse)+"}";
@@ -260,7 +278,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  if(!zjMotorDriverReady)return error("a2_motor_driver_required");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  if(action=="WIZARD_STATUS")return zjWizardStatus();
- if(action=="WIZARD_IMU"||action=="WIZARD_SAVE"||action=="WIZARD_ESC_CONFIRM"){
+ if(action=="WIZARD_IMU"||action=="WIZARD_SAVE"||action=="WIZARD_SAVE_PAGE"||action=="WIZARD_ESC_CONFIRM"){
   if(!authorized)return error("authorization_required");
   if(zjMotor.benchEnabled||zjMotorEnabled||zjAccessBusy()||zjMaintenanceActive||
    zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return error("stop_maintenance_lower_throttle_and_disarm_input");
@@ -291,6 +309,60 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   }
   if(zjImuMaintenanceBusy())return error("imu_calibration_busy");
   if(!zjRecoverWizardReadback())return error("wizard_readback_required");
+  if(action=="WIZARD_SAVE_PAGE"){
+   const int sep=c.indexOf(':');
+   if(sep<0||c.substring(0,sep)!=zjBootId)return error("wizard_board_restarted");
+   const String scope=c.substring(sep+1);
+   long revision=0;
+   if(!parseNumber(b.c_str(),0,999999999,revision)||uint32_t(revision)!=zjWizardSaved.revision)return error("wizard_configuration_changed");
+   if(!zjMotorConfigValid&&scope!="RESET_ALL")return error("reset_all_setup_required");
+   ZjWizardConfig next=zjWizardSaved;next.motor=zjMotorConfig;next.esc=zjMotorCalibrationSaved;
+   bool clearEscProof=false,clearAccelCapture=false,clearOutputCapture=false;
+   if(scope=="WIRING"){
+    ZjMotorConfig wiring;
+    if(!wiring.decode(a.c_str()))return error("invalid_wizard_wiring");
+    for(uint16_t pulse:wiring.minimumUs)if(pulse)return error("wiring_save_must_exclude_minimum_pulses");
+    if(!zjSameMotorWiring(wiring,zjMotorConfig)){
+     next.motor=wiring;next.esc=false;clearEscProof=clearOutputCapture=true;
+    }
+   }else if(scope=="ACCEL"){
+    if(!a.startsWith("CAPTURED:"))return error("accelerometer_capture_required");
+    const char* failure=zjWizardCapturedAccel(caller,a.substring(9),next.accel);
+    if(failure)return error(failure);
+    clearAccelCapture=true;
+   }else if(scope=="ESC"){
+    if(a!="TONES_CONFIRMED"||(!next.esc&&
+     !(zjWizardEscConfirmed&&caller==zjWizardEscOwner&&zjSameMotorWiring(zjMotorConfig,zjWizardEscConfig))))return error("confirm_esc_calibration_first");
+    next.esc=true;clearEscProof=true;
+   }else if(scope=="ALL"||(scope.length()==2&&scope[0]=='M'&&scope[1]>='1'&&scope[1]<='4')){
+    long pulse=0;
+    if(!parseNumber(a.c_str(),1000,1500,pulse))return error("wizard_calibration_pulse_out_of_range");
+    if(!next.esc)return error("save_esc_calibration_first");
+    const uint8_t selected=scope=="ALL"?15:1U<<(scope[1]-'1');
+    for(int i=0;i<4;i++)if(selected&(1U<<i)){
+     if(next.motor.minimumUs[i]!=pulse&&
+      !(caller==zjWizardCaptureOwner&&zjSameMotorWiring(zjMotorConfig,zjWizardCaptureConfig)&&
+       zjWizardCapturedMinimum[i]==pulse))return error("confirmed_output_capture_required");
+     next.motor.minimumUs[i]=uint16_t(pulse);
+    }
+   }else if(scope=="RESET_ALL"||scope=="RESET_ACCEL"||scope=="RESET_ESC"||scope=="RESET_OUTPUT"){
+    if(a!="CONFIRM_RESET")return error("confirm_wizard_reset");
+    if(scope=="RESET_ALL"){next.motor=ZjMotorConfig{};next.accel=ZjAccelModel{};next.esc=false;}
+    if(scope=="RESET_ACCEL")next.accel=ZjAccelModel{};
+    if(scope=="RESET_ESC")next.esc=false;
+    if(scope=="RESET_OUTPUT")memset(next.motor.minimumUs,0,sizeof(next.motor.minimumUs));
+    clearEscProof=scope=="RESET_ALL"||scope=="RESET_ESC";
+    clearAccelCapture=scope=="RESET_ALL"||scope=="RESET_ACCEL";
+    clearOutputCapture=scope=="RESET_ALL"||scope=="RESET_OUTPUT";
+   }else return error("unsupported_wizard_save_scope");
+   char before[176],after[176];
+   zjWizardSaved.encode(before,sizeof(before));next.encode(after,sizeof(after));
+   if((!zjWizardSaved.revision||strcmp(before,after))&&!zjPersistWizard(next))return error("wizard_save_failed");
+   if(clearEscProof){zjMotorCalibrationPending=false;zjWizardEscConfirmed=false;zjWizardEscOwner="";}
+   if(clearAccelCapture)zjQueueImuAction(ZjImuAction::CLEAR_ACCEL,0);
+   if(clearOutputCapture){memset(zjWizardCapturedMinimum,0,sizeof(zjWizardCapturedMinimum));zjWizardCaptureOwner="";}
+   ++zjMotorCommandSeq;return zjWizardStatus();
+  }
   const int sep=c.indexOf(':'),nextSep=sep<0?-1:c.indexOf(':',sep+1);
   if(sep<0||nextSep<0||c.substring(0,sep)!=zjBootId)return error("wizard_board_restarted");
   const String esc=c.substring(sep+1,nextSep),accel=c.substring(nextSep+1);
@@ -311,11 +383,8 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
    !(zjWizardEscConfirmed&&caller==zjWizardEscOwner&&zjSameMotorWiring(next.motor,zjWizardEscConfig)))return error("confirm_esc_calibration_first");
   if(accel=="RESET")next.accel=ZjAccelModel{};
   else if(accel.startsWith("CAPTURED:")){
-   const auto imu=zjReadImu(millis());
-   if(caller!=zjWizardImuOwner||!imu.accelCapture.ready)return error("accelerometer_capture_required");
-   next.accel=imu.accelCapture.result;
-   char captured[80];next.accel.encode(captured,sizeof(captured));
-   if(accel.substring(9)!=captured)return error("accelerometer_capture_changed");
+   const char* failure=zjWizardCapturedAccel(caller,accel.substring(9),next.accel);
+   if(failure)return error(failure);
   }else if(accel!="KEEP")return error("invalid_accelerometer_action");
   if(!zjPersistWizard(next))return error("wizard_save_failed");
   zjMotorCalibrationPending=false;zjWizardEscConfirmed=false;zjWizardEscOwner="";++zjMotorCommandSeq;
@@ -464,6 +533,7 @@ static void zjMotorSetup(){
  zjMotorConfigValid=!saved.length()||zjMotorConfig.decode(saved.c_str());
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  const String wizard=zjKitPrefs.getString("wizardSetup1","");
+ zjWizardCaptureOwner="";memset(zjWizardCapturedMinimum,0,sizeof(zjWizardCapturedMinimum));
  zjWizardRecordVerified=true;
  if(wizard.length()){
   zjMotorConfigValid=zjWizardSaved.decode(wizard.c_str());
