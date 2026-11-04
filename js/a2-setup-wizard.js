@@ -1,7 +1,7 @@
 import {motorClient,cancelMotorConfirmations} from './motor-setup.js';
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
-import {layouts,stepVisual,updateMotorDiagram,wizardVisual,updateImuDiagram} from './a2-setup-visuals.js';
+import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
@@ -9,12 +9,45 @@ if(root){
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
+ const manualAxis=['X','Y','Z'];
+ const modelParts=record=>{
+  const code=String(record||''),[base,manualSuffix]=code.split(':M:');
+  const v=base.split(':').map(Number),manual=manualSuffix?manualSuffix.split(':').map(Number):[0,0,0];
+  if(v.length!==11||!v.every(Number.isFinite)||manual.length!==3||!manual.every(Number.isSafeInteger))return null;
+  return {base,offset:v.slice(2,5).map(n=>n/1000),scale:v.slice(5,8).map(n=>n/1000),trim:v.slice(8,11).map(n=>n/1000),manual};
+ };
+ const manualSuffix=values=>values.some(Boolean)?':M:'+values.join(':'):'';
+ const correctedAcceleration=(raw,model,manual)=>Array.isArray(raw)&&model?raw.map((value,i)=>(value-model.offset[i])*model.scale[i]-manual[i]/1000):null;
+ function syncManualFields(record){
+  const model=modelParts(record);if(!model||manualEditing||manualLoadedModel===record)return;
+  manualOffsets=[...model.manual];manualLoadedModel=record;manualError='';
+  manualAxis.forEach((axis,i)=>{const field=$('#a2Manual'+axis);if(field)field.value=(manualOffsets[i]/1000).toFixed(3);});
+ }
+ function readManualFields(){
+  const vals=[];
+  for(const axis of manualAxis){
+   const field=$('#a2Manual'+axis),text=field?.value?.trim()??'',n=Number(text);
+   const valid=text!==''&&Number.isFinite(n)&&Math.abs(n)<=0.25&&Math.abs(n*1000-Math.round(n*1000))<1e-6;
+   if(field)field.setAttribute('aria-invalid',String(!valid));
+   if(!valid)return null;
+   vals.push(Math.round(n*1000));
+  }
+  return vals;
+ }
+ function updateManualDraft(){
+  manualEditing=true;
+  const vals=readManualFields(),savedManual=modelParts(saved?.accelModel)?.manual||[0,0,0];
+  manualError=vals?'':'Enter a valid number from −0.250 to +0.250 g with up to 3 decimals.';
+  if(vals){manualOffsets=vals;accelAction=vals.every((v,i)=>v===savedManual[i])?'KEEP':'MANUAL:'+vals.join(':');}
+  else accelAction='MANUAL_INVALID';
+ }
  const motors=[1,2,3,4];
  const visited=new Set([0]),history=[];
  let step=0,state=null,saved=null,draft=defaults(),minimums=[null,null,null,null],base=null,identity='',contextKit='';
  let lastStateAt=0,historyAt=0,polling=false,working='',readError='',operationError='',nextPollAt=0,readFailures=0;
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
+ let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
  let visualStep=-1,visualMarkup='';
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
@@ -28,17 +61,39 @@ if(root){
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
  <p class="a2-wiring-validation" role="status"></p><p class="a2-save-state"></p></section>
  <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
- <section data-panel="3"><h3>IMU Calibration</h3>${pageStatus(3)}
- <p>Keep the controller stationary while the gyroscope collects 2000 fresh samples. Gyro bias is recalculated on boot.</p>
- <div class="a2-actions"><button class="btn" data-action="imu-gyro">Start gyro calibration</button><button class="btn ghost" data-action="imu-cancel">Cancel gyro</button><button class="btn ghost" data-action="imu-reset">Reset gyro state</button></div>
- <p class="a2-gyro-status" role="status"></p>
- <h4>Accelerometer</h4><p>Quick Level adds an inclination trim for the level pose. Full 6-Position fits an offset and scale for each axis.</p>
- <label for="a2Face">Upward axis</label><select id="a2Face">${axes.map((axis,i)=>`<option value="${i}" ${i===4?'selected':''}>${axis} up</option>`).join('')}</select>
- <label class="a2-check"><input type="checkbox" id="a2Still"> Board stationary in the requested pose</label>
- <div class="a2-actions"><button class="btn" data-action="imu-level">Quick Level (+Z up)</button><button class="btn" data-action="imu-face">Capture face</button><button class="btn ghost" data-action="imu-clear">Clear captures</button></div>
- <p class="a2-capture-status" role="status"></p>
- <details class="a2-input-details"><summary>Live IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
- <details class="a2-input-details"><summary>Capture tolerances</summary><p>128 fresh samples per pose. At most 3 °/s motion, 0.08 g sample spread per axis, and 0.28 g on cross axes. Gravity magnitude must be 0.75–1.30 g. Fit limits are ±0.25 g offset, 0.75–1.25 scale, and 0.20 g maximum axis residual.</p></details></section>
+ <section data-panel="3" class="a2-imu-page">
+ <div class="a2-imu-heading"><h3>IMU Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>${pageStatus(3)}
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Gyroscope zero-bias</strong><small>Automatic on boot · 2000 samples</small></div>
+  <progress class="a2-gyro-progress" max="2000" value="0" aria-label="Gyroscope calibration progress"></progress>
+  <p class="a2-gyro-status" role="status">Waiting for verified IMU</p>
+  <table class="a2-imu-table" aria-label="Gyroscope values in degrees per second"><thead><tr><th>Axis</th><th>Raw °/s</th><th>Bias °/s</th><th>Corrected °/s</th></tr></thead>
+   <tbody>${['X / Roll','Y / Pitch','Z / Yaw'].map((axis,i)=>`<tr><td>${axis}</td><td data-gyro-raw="${i}">—</td><td data-gyro-bias="${i}">—</td><td data-gyro-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
+  <label class="a2-check"><input type="checkbox" id="a2Still"> Board stationary for calibration / capture</label>
+  <div class="a2-actions"><button class="btn" data-action="imu-gyro">Start gyro calibration</button><button class="btn ghost" data-action="imu-cancel">Cancel</button><button class="btn ghost" data-action="imu-reset">Reset gyro</button></div>
+ </div>
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Accelerometer XYZ</strong><small>Manual offset · g</small></div>
+  <p class="a2-imu-manual-note">Enter the bias to SUBTRACT. Example: X = 0.030 means corrected X = calibrated X − 0.030 g. Each value: −0.250 to +0.250 g.</p>
+  <div class="a2-imu-offset-grid">
+   ${['X','Y','Z'].map((axis,i)=>`<label for="a2Manual${axis}">Acc${axis} offset (g)<input id="a2Manual${axis}" data-manual-axis="${i}" type="number" min="-0.250" max="0.250" step="0.001" inputmode="decimal" value="0.000"></label>`).join('')}
+  </div>
+  <p class="a2-imu-manual-warning" role="status"></p>
+  <table class="a2-imu-table" aria-label="Live accelerometer raw and corrected measurements in g"><thead><tr><th>Axis</th><th>Raw g</th><th>After saved fit g</th><th>Draft corrected g</th></tr></thead>
+  <tbody>${['X','Y','Z'].map((axis,i)=>`<tr><td>Acc${axis}</td><td data-accel-raw="${i}">—</td><td data-accel-fitted="${i}">—</td><td data-accel-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
+  <div class="a2-actions"><button class="btn ghost" data-action="imu-zero-manual">Zero manual offsets</button><button class="btn ghost" data-action="imu-restore-manual">Restore saved</button></div>
+  <p class="a2-imu-manual-note" data-imu-manual-status>Edited values are a preview until Save on this page is verified by the board.</p>
+ </div>
+ <div class="a2-imu-card">
+  <div class="a2-imu-card-head"><strong>Sensor calibration</strong><small>Quick Level / Full 6-position</small></div>
+  <div class="a2-imu-face-row"><label for="a2Face">Face up <select id="a2Face">${axes.map((axis,i)=>`<option value="${i}" ${i===4?'selected':''}>${axis} up</option>`).join('')}</select></label>
+   <div class="a2-actions"><button class="btn" data-action="imu-level">Quick Level (+Z)</button><button class="btn" data-action="imu-face">Capture face</button><button class="btn ghost" data-action="imu-clear">Clear captures</button></div>
+  </div>
+  <p class="a2-capture-status" role="status"></p>
+  <p class="a2-imu-manual-note">Quick Level provides inclination trim, not 3-axis scale calibration. Capture all six faces for the future Angle mode. Save a completed capture before editing manual offsets.</p>
+ </div>
+ <details class="a2-input-details"><summary>Advanced IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
+ <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
  <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Step 7 limits calibration to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
  <section data-panel="5"><div class="a2-panel-heading"><h3>ESC Calibration</h3>${soundButton}</div>${pageStatus(5)}
@@ -128,6 +183,7 @@ if(root){
   calMotor=1;calAll=false;setCalPulse(1000);
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
+  manualOffsets=[0,0,0];manualEditing=false;manualLoadedModel='';manualError='';imuHistory=[];imuHistorySeq=0;
   conflict=false;saveState=readError=operationError='';ambiguousSave=null;
   visited.clear();visited.add(0);
   root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
@@ -156,7 +212,11 @@ if(root){
   state=s;lastStateAt=s.receivedAt||Date.now();
   if(s.mode!=='UNCONFIRMED')readError='';
   if(s.wizardVersion===1){
-   saved=s;
+   saved=s;syncManualFields(s.accelModel);
+   if(s.imu?.imuValid===true&&Number.isSafeInteger(s.imu.sampleSequence)&&s.imu.sampleSequence>0&&s.imu.sampleSequence!==imuHistorySeq&&
+    Array.isArray(s.imu.accelRawG)&&s.imu.accelRawG.length===3&&s.imu.accelRawG.every(Number.isFinite)){
+    imuHistorySeq=s.imu.sampleSequence;imuHistory.push([...s.imu.accelRawG]);if(imuHistory.length>45)imuHistory.shift();
+   }
    if(!base){
     base={bootId:s.bootId,revision:s.configRevision};draft=config(s);loadWiring();setCalPulse(currentResult());
    }else if(s.configRevision!==base.revision&&!ambiguousSave)conflict=true;
@@ -191,7 +251,7 @@ if(root){
   const selection=mask(calMotor,calAll);
   const selectedMask=['ALL_TEST','INPUT_TEST'].includes(safe.mode)?15:selection;
   const testing=['SLIDER_TEST','SINGLE_TEST','ALL_TEST','INPUT_TEST'].includes(safe.mode);
-  const v=step>=3&&step<=5
+  const v=step===3?{title:'3D orientation & XYZ graph',html:imuCalibrationVisual()}:step>=4&&step<=5
    ?wizardVisual(step,{mode:safe.mode,escAttempt,powerOff:$('#a2PowerOff').checked})
    :stepVisual(step===7?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
   $('.a2-visual-title').textContent=v.title;
@@ -208,7 +268,12 @@ if(root){
    for(const marker of [throttle,sticks])marker.setAttribute('class',input.monitoring?'a2-stick-knob':'a2-off-dot');
    scene.querySelector('[data-input-history]').setAttribute('points',history.map((value,i)=>`${28+i*344/Math.max(1,history.length-1)},${340-(value-1000)*.08}`).join(' '));
   }
-  if(step===3)updateImuDiagram(scene,imuFresh()?saved.imu.accelG:null,Number($('#a2Face').value),saved?.capture?.mask||0);
+  if(step===3){
+   const model=modelParts(saved?.accelModel),fresh=imuFresh(),imu=saved?.imu||{};
+   const sample=fresh?correctedAcceleration(imu.accelRawG,model,manualOffsets):null;
+   const history=imuHistory.map(raw=>correctedAcceleration(raw,model,manualOffsets)).filter(Boolean);
+   updateImuCalibrationVisual(scene,sample,Number($('#a2Face').value),saved?.capture?.mask||0,history);
+  }
   if(step===1||motorStep)updateMotorDiagram(scene,draft,motorStep?safe.pulseUs:[],motorStep&&testing,{
    selectedMask:motorStep?selectedMask:0,preview:step===1,interactive:false,locked:!!working||motorClient.busy,
    results:motorStep?pulses().map((p,i)=>validPulse(p)?`${p} µs · ${minimums[i]?'DRAFT':'SAVED'}`:''):[]});
@@ -220,33 +285,56 @@ if(root){
   return saved?.imu?.imuValid===true&&Date.now()-(saved.receivedAt||0)<1600;
  }
  function renderImu(){
-  const imu=saved?.imu||{},capture=saved?.capture||{};
+  const imu=saved?.imu||{},capture=saved?.capture||{},model=modelParts(saved?.accelModel);
   const gyroActive=imu.manualGyro||['SETTLING','CALIBRATING'].includes(imu.state);
   const ready=boardReady()&&observedOff()&&!working;
+  const fresh=imuFresh(),fmt=n=>Number.isFinite(n)?Number(n).toFixed(3):'—';
+  const xyz=v=>Array.isArray(v)?v.map(fmt).join(' / '):'—';
+  const put=(selector,value)=>{const el=$(selector);if(el&&el.textContent!==value)el.textContent=value;};
+  const raw=fresh&&Array.isArray(imu.accelRawG)&&imu.accelRawG.length===3?imu.accelRawG:null;
+  const fitted=raw&&model?correctedAcceleration(raw,model,[0,0,0]):null;
+  const preview=raw&&model?correctedAcceleration(raw,model,manualOffsets):null;
   $('[data-action="imu-gyro"]').textContent=imu.state==='READY'?'Recalibrate gyro':'Start gyro calibration';
   $('[data-action="imu-gyro"]').disabled=!ready||gyroActive||capture.running||!$('#a2Still').checked;
   $('[data-action="imu-cancel"]').disabled=!ready||!gyroActive;
   $('[data-action="imu-reset"]').disabled=!ready||gyroActive;
-  for(const a of ['imu-face','imu-level'])$(`[data-action="${a}"]`).disabled=!ready||!imuFresh()||!$('#a2Still').checked||capture.running||!!captureRequest;
+  for(const a of ['imu-face','imu-level'])$('[data-action="'+a+'"]').disabled=!ready||!fresh||!$('#a2Still').checked||capture.running||!!captureRequest||accelAction!=='KEEP';
   $('[data-action="imu-clear"]').disabled=!ready;
+  $('[data-action="imu-zero-manual"]').disabled=!!working||!model||accelAction.startsWith('CAPTURED:');
+  $('[data-action="imu-restore-manual"]').disabled=!!working||!manualEditing;
+  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=!!working||!!ambiguousSave||accelAction.startsWith('CAPTURED:'));
+  const progress=Math.max(0,Math.min(2000,Number(imu.samples)||0));
+  $('.a2-gyro-progress').value=progress;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
   $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Unsaved accelerometer settings':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`;
-  const model=(accelAction.startsWith('CAPTURED:')?accelAction.slice(9):saved?.accelModel||'').split(':').map(Number);
-  const fresh=imuFresh(),xyz=v=>Array.isArray(v)?v.map(p=>Number(p).toFixed(3)).join(' / '):'—';
-  const inclination=fresh&&imu.accelG?.length===3?imu.accelG.map((v,i)=>v-(saved.accelModel?.split(':')[8+i]||0)/1000):null;
+  for(let i=0;i<3;i++){
+   put('[data-gyro-raw="'+i+'"]',fresh?fmt(imu.raw?.[i]):'—');
+   put('[data-gyro-bias="'+i+'"]',fmt(imu.bias?.[i]));
+   put('[data-gyro-corrected="'+i+'"]',fresh?fmt(imu.corrected?.[i]):'—');
+   put('[data-accel-raw="'+i+'"]',raw?fmt(raw[i]):'—');
+   put('[data-accel-fitted="'+i+'"]',fitted?fmt(fitted[i]):'—');
+   put('[data-accel-corrected="'+i+'"]',preview?fmt(preview[i]):'—');
+  }
+  put('.a2-imu-manual-warning',manualError||(saved&&saved.accelManualVersion!==1?'Manual offset Save requires FlightCore 1.7.10+ firmware.':''));
+  const pending=accelAction.startsWith('MANUAL:');
+  put('[data-imu-manual-status]',pending?'Draft only · Save to apply offsets on board; motor outputs remain OFF.':
+   accelAction==='MANUAL_INVALID'?'Invalid manual offset · Save is blocked.':
+   model?.manual.some(Boolean)?'Manual X/Y/Z offsets are saved on this board.':'Manual correction: 0.000 g · no additional subtraction.');
+  const tilt=preview?[Math.atan2(preview[1],preview[2])*180/Math.PI,Math.atan2(-preview[0],Math.hypot(preview[1],preview[2]))*180/Math.PI]:null;
   $('.a2-imu-values').textContent=[
    fresh?'Fresh XYZ':'Live sample stale or unavailable',
-   'Gyro raw / bias / corrected (°/s)',
+   'Gyroscope raw / bias / corrected (°/s)',
    `${fresh?xyz(imu.raw):'—'} | ${xyz(imu.bias)} | ${fresh?xyz(imu.corrected):'—'}`,
-   'Acceleration raw / corrected (g)',
-   `${fresh?xyz(imu.accelRawG):'—'} | ${fresh?xyz(imu.accelG):'—'}`,
-   `Offset · ${xyz(model.slice(2,5).map(n=>n/1000))} g · scale · ${xyz(model.slice(5,8).map(n=>n/1000))}`,
-   `Gravity · ${fresh&&imu.accelG?.length===3?Math.hypot(...imu.accelG).toFixed(3)+' g':'—'}`,
-   `Accelerometer Inclination · ${inclination?`${(Math.atan2(inclination[1],inclination[2])*180/Math.PI).toFixed(1)}° roll / ${(Math.atan2(-inclination[0],Math.hypot(inclination[1],inclination[2]))*180/Math.PI).toFixed(1)}° pitch`:'—'}`,
+   'Accelerometer raw / saved fit / manual preview (g)',
+   `${raw?xyz(raw):'—'} | ${fitted?xyz(fitted):'—'} | ${preview?xyz(preview):'—'}`,
+   `Saved six-position offset · ${model?xyz(model.offset):'—'} g · scale · ${model?xyz(model.scale):'—'}`,
+   `Manual offset draft · ${xyz(manualOffsets.map(v=>v/1000))} g`,
+   `Gravity magnitude · ${preview?Math.hypot(...preview).toFixed(3)+' g':'—'}`,
+   `Accelerometer inclination preview · ${tilt?tilt.map(v=>v.toFixed(1)+'°').join(' roll / '):'—'}`,
    `Gyro quality σ · ${xyz(imu.stddev)} °/s · restarts ${imu.restarts??'—'}`,
-   `Rate · ${imu.imuActualHz??'—'} / ${imu.imuTargetHz??'—'} Hz · board sample age ${imu.imuSampleAgeUs??'—'} µs`,
-   `Missed ${imu.imuMissedNormalSamples??'—'} · I²C reads ${imu.readFailures??'—'} failed · writes ${imu.writeFailures??'—'} failed`,
-   `DLPF ${imu.imuDlpFilter??'—'} · gyro ±${imu.gyroRangeDps??'—'} °/s · accelerometer ±${imu.accelRangeG??'—'} g`
+   `Rate · ${imu.imuActualHz??'—'} / ${imu.imuTargetHz??'—'} Hz · sample age ${imu.imuSampleAgeUs??'—'} µs`,
+   `Missed ${imu.imuMissedNormalSamples??'—'} · I²C read errors ${imu.readFailures??'—'} · write errors ${imu.writeFailures??'—'}`,
+   `DLPF ${imu.imuDlpFilter??'—'} · gyro ±${imu.gyroRangeDps??'—'} °/s · accel ±${imu.accelRangeG??'—'} g`
   ].join('\n');
  }
  function renderEsc(){
@@ -301,7 +389,7 @@ if(root){
    ['Frame',`${layouts[draft.layout].name} · ${wiringCompatible()?'Saved on board':'Pending'}`],
    ...motors.map((n,i)=>[`M${n} wiring`,`${draft.layoutPins[i]} · ${draft.rotations[i]}${wiringCompatible()?'':` · pending (board ${saved?.layoutPins?.[i]||'—'} · ${saved?.rotations?.[i]||'—'})`}`]),
    ['Inputs',`${selectedInput().source||'—'} · live observation`],
-   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?saved?.accelModel?.startsWith('0:0:')?'identity':'saved model':'captured model pending'}`],
+   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?'board-saved':'draft pending'} · Manual X/Y/Z ${manualOffsets.map(n=>(n/1000).toFixed(3)).join(' / ')} g`],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
    ['ESC',escDraft===true?'Confirmed · Pending save':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
@@ -328,8 +416,9 @@ if(root){
  }
  const calibrationComplete=()=>effectivePulses().every(validPulse);
  const validCurrent=()=>targetMotors(calMotor,calAll).every(n=>validPulse(pulses()[n-1]));
- const pageScope=()=>({1:'WIRING',3:'ACCEL',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
- const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1');
+ const pageScope=()=>step===3?(accelAction.startsWith('MANUAL')?'ACCEL_MANUAL':'ACCEL'):
+  ({1:'WIRING',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
+ const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1')||!!modelParts(saved?.accelModel)?.manual.some(Boolean);
  function pageSaved(page){
   if(!boardReady()||!saved.configValid)return false;
   if(page===1)return saved.configRevision>0&&wiringCompatible();
@@ -346,6 +435,7 @@ if(root){
   if(scope.startsWith('RESET_'))return true;
   if(scope==='WIRING')return wiringValid();
   if(scope==='ACCEL')return accelAction.startsWith('CAPTURED:')&&saved.capture?.ready&&'CAPTURED:'+saved.capture.model===accelAction;
+  if(scope==='ACCEL_MANUAL')return saved.accelManualVersion===1&&!manualError&&accelAction.startsWith('MANUAL:')&&!!modelParts(saved.accelModel);
   if(scope==='ESC')return wiringCompatible()&&escDraft===true;
   const selected=scope==='ALL'?motors:[Number(scope.slice(1))];
   return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
@@ -359,7 +449,7 @@ if(root){
    const page=Number(node.dataset.savePage),verified=pageSaved(page);
    node.dataset.saved=String(verified);
    node.textContent=ambiguousSave?.page===page?saveState||'Checking the board before retry':verified?'✓ Saved on board':
-    !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values to save. Gyro calibration is kept in runtime memory.':'Unsaved · use Save on this page';
+    !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values or enter manual offsets to save. Gyro bias is runtime-only.':'Unsaved · use Save on this page';
   });
  }
  function render(){
@@ -506,6 +596,10 @@ if(root){
    Object.assign(expectedWiring,config(draft));
   }else if(scope==='ACCEL'){
    intent.payload=accelAction;intent.accel=accelAction.slice(9);
+  }else if(scope==='ACCEL_MANUAL'){
+   const model=modelParts(saved.accelModel);
+   intent.payload=accelAction;
+   intent.accel=model.base+manualSuffix(manualOffsets);
   }else if(scope==='ESC'){
    intent.payload='TONES_CONFIRMED';intent.esc=true;
   }else if(scope.startsWith('RESET_')){
@@ -531,11 +625,18 @@ if(root){
   }
   base={bootId:board.bootId,revision:board.configRevision};saved=board;
   if(intent.scope==='WIRING'&&sameWiring(draft,intent.draft)){draft=config(board);loadWiring();}
-  if(intent.scope==='ACCEL'&&accelAction===intent.action)accelAction='KEEP';
+  if(['ACCEL','ACCEL_MANUAL'].includes(intent.scope)&&accelAction===intent.action)accelAction='KEEP';
+  if(intent.scope==='ACCEL_MANUAL'){
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
+  }
+  if(intent.scope==='ACCEL'){
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
+  }
   if(intent.scope==='ESC')escDraft=false;
   for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
-  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
-  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;}
+  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;
+   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
+  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
   if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
   ambiguousSave=null;saveState=intent.scope.startsWith('RESET_')?'Reset saved on board':'Saved on board';conflict=false;operationError='';
@@ -600,6 +701,15 @@ if(root){
    if(!canSaveScope(scope))throw Error('Verify the board and outputs before resetting setup.');
    if(!window.confirm(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`))return;
    await save(scope);return;
+  }
+  if(name==='imu-restore-manual'){
+   if(accelAction.startsWith('CAPTURED:'))return;
+   manualEditing=false;manualLoadedModel='';manualError='';accelAction='KEEP';syncManualFields(saved?.accelModel);
+   message('Restored board-saved manual offsets. No firmware write.');return;
+  }
+  if(name==='imu-zero-manual'){
+   for(const axis of manualAxis)$('#a2Manual'+axis).value='0.000';
+   updateManualDraft();message('Zero manual offsets staged. Save this page to apply to the board.');return;
   }
   if(name.startsWith('imu-')){
    const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO','imu-level':'LEVEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL'};
@@ -675,6 +785,7 @@ if(root){
  });
  root.addEventListener('input',e=>{
   if(e.target.id==='a2CalAll')return;
+  if(e.target.matches('[data-manual-axis]')){updateManualDraft();render();return;}
   if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){
    draft=readWiring();minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
    escAttempt=false;saveState='';

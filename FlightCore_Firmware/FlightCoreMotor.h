@@ -231,7 +231,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
  char saved[80],candidate[80];
  zjWizardSaved.accel.encode(saved,sizeof(saved));
  const auto imu=zjReadImu(millis());imu.accelCapture.result.encode(candidate,sizeof(candidate));
- return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
+ return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"accelManualVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
@@ -331,6 +331,17 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
     const char* failure=zjWizardCapturedAccel(caller,a.substring(9),next.accel);
     if(failure)return error(failure);
     clearAccelCapture=true;
+   }else if(scope=="ACCEL_MANUAL"){
+    // Only adjust the manual delta; leave any fitted six-position model intact.
+    // Values are signed milli-g (-250..+250), not raw LSB or untrusted floats.
+    long offsetX=0,offsetY=0,offsetZ=0;char extra=0;
+    if(sscanf(a.c_str(),"MANUAL:%5ld:%5ld:%5ld%c",&offsetX,&offsetY,&offsetZ,&extra)!=3||
+     offsetX < -250||offsetX > 250||offsetY < -250||offsetY > 250||offsetZ < -250||offsetZ > 250)return error("invalid_accel_manual_offset");
+    char canonical[52];snprintf(canonical,sizeof(canonical),"MANUAL:%ld:%ld:%ld",offsetX,offsetY,offsetZ);
+    if(a!=canonical)return error("invalid_accel_manual_offset");
+    next.accel.manualOffset[0]=int16_t(offsetX);
+    next.accel.manualOffset[1]=int16_t(offsetY);
+    next.accel.manualOffset[2]=int16_t(offsetZ);
    }else if(scope=="ESC"){
     if(a!="TONES_CONFIRMED"||(!next.esc&&
      !(zjWizardEscConfirmed&&caller==zjWizardEscOwner&&zjSameMotorWiring(zjMotorConfig,zjWizardEscConfig))))return error("confirm_esc_calibration_first");
