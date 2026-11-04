@@ -88,6 +88,8 @@ int main(){
  off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&!zjMotorCalibrationSaved);
  // Header STOP after OFF discards an unconfirmed result instead of staging it.
  cmd("STOP");assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED);off();
+ assert(has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"completed_auto_sequence_required"));
+ assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED&&!zjWizardEscConfirmed);
  assert(!has(prepare(),"error"));
  zjKitPrefs.failNextWrite=true;boot();off();assert(!zjAutoEscSequence.active()); // consume readback failed
  assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));boot();off();

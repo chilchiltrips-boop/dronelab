@@ -276,6 +276,9 @@ static bool zjAutoEscCancel(bool discardResult){
  const bool running=zjAutoEscSequence.active();
  if(running){zjAutoEscSequence.stop(ZjAutoEscRecord::STOPPED);zjAutoEscWrite();}
  portEXIT_CRITICAL(&zjMotorMux);
+ if(running||(discardResult&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state!=ZjAutoEscRecord::EMPTY))){
+  zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
+ }
  if(running){zjAutoEscLoop();return !zjAutoEscStorageError;}
  if(!zjAutoEscRecordVerified||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
     (discardResult&&zjAutoEscRecord.state!=ZjAutoEscRecord::EMPTY&&zjAutoEscRecord.state!=ZjAutoEscRecord::CANCELLED)){
@@ -456,7 +459,8 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
    return zjWizardStatus();
   }
   if(action=="WIZARD_AUTO_ESC_RETRY"){
-   if(a!=String(zjAutoEscRecord.attempt)||zjAutoEscSequence.phase!=ZjAutoEscSequence::DONE||!zjAutoEscOutputsOff())return error("completed_auto_sequence_required");
+   if(!zjAutoEscStorageError||zjAutoEscRecord.state!=ZjAutoEscRecord::RUNNING||!zjAutoEscCompatible()||
+    a!=String(zjAutoEscRecord.attempt)||zjAutoEscSequence.phase!=ZjAutoEscSequence::DONE||!zjAutoEscOutputsOff())return error("completed_auto_sequence_required");
    zjAutoEscFinalized=false;zjAutoEscLoop();
    if(zjAutoEscStorageError)return error("automatic_calibration_result_save_failed");
    return zjWizardStatus();
