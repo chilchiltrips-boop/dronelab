@@ -17,7 +17,7 @@ try{
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
   ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.11'};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.12'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
   const f=window.__wizard={kit,calls:[],writes:0,run:0,imuSequence:3,candidates:{},
    board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
@@ -175,6 +175,11 @@ try{
  for(const id of ['a2EscProps','a2PowerOff','a2ReadProcedure','a2Tones','a2EscDisconnected'])
   assert.equal(await wizard.locator('#'+id).count(),0,'ESC page does not require checkbox '+id);
  assert.equal(await button('confirm-cal').count(),0,'no ESC-tone confirmation action');
+ await fixture(()=>{delete __wizard.board.autoEsc.sequenceReady;__wizard.kit.version='1.7.11';});
+ await button('auto-read').click();await expectText('.a2-phase','FlightCore 1.7.12+');
+ assert.equal(await button('auto-prepare').isDisabled(),true,'old automatic API needs a firmware upgrade before a no-tone attempt');
+ await fixture(()=>{__wizard.board.autoEsc.sequenceReady=false;__wizard.kit.version='1.7.12';});
+ await button('auto-read').click();
  assert.equal(await button('auto-prepare').isDisabled(),false,'one guarded Prepare action is available');
  await step(6).click();assert.equal(await button('cal-slider').isDisabled(),true,'motor test blocked until stored ESC controller result');
  assert.equal(await button('skip-output').isVisible(),false,'Output cannot be skipped to Report before ESC sequence');
@@ -185,6 +190,11 @@ try{
  assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','Prepare never emits PWM');
  assert.equal(await button('save-page').isVisible(),false,'ESC page has no manual Save requirement');
  assert.equal(await nav(1).isDisabled(),true,'cannot continue before cold-start result');
+ const pendingStops=await fixture(()=>__wizard.calls.filter(c=>c.action==='STOP').length);
+ await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
+ await button('auto-read').click();
+ assert.equal(await fixture(()=>__wizard.board.autoEsc.state),'AWAITING_POWER_CYCLE','leaving the page keeps the saved request');
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='STOP').length),pendingStops);
  await fixture(()=>{__wizard.failCancel=true;});await button('auto-cancel').click();
  await expectText('.a2-phase','Do not power cycle');
  assert.equal(await button('auto-prepare').isDisabled(),true);
@@ -193,6 +203,7 @@ try{
  await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
  await button('auto-prepare').click();
  await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','HIGH · 2000 µs');
+ await page.evaluate(()=>window.dispatchEvent(new Event('pagehide')));
  await expectText('.a2-phase','LOW · 1000 µs');
  await expectText('.a2-phase','Controller sequence stored');
  await expectSaved(5);
@@ -209,6 +220,11 @@ try{
  await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
  await button('stop').click();await expectSaved(5);
  assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true,'normal STOP preserves the verified stored result');
+ for(const transport of ['ap','sta']){
+  await page.evaluate(transport=>{__wizard.kit.transport=transport;__wizard.kit.connectionGeneration++;},transport);
+  await button('auto-read').click();await expectSaved(5);
+  assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','reconnecting never starts output');
+ }
  await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
  assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
  assert.equal(await button('skip-output').isVisible(),true,'optional minimum output measurement may be skipped after stored sequence');

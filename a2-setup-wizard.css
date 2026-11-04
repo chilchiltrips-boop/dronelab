@@ -186,7 +186,14 @@
 .a2-page-save[data-saved=true]{border-color:#3c9d78;background:#10382d;color:#83ebba!important}
 .a2-steps [data-saved=true] .a2-step-number{background:#56d3a0;color:#062c21;font-weight:750}
 
-.a2-auto-phases{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0}.a2-auto-phases span{padding:8px 10px;border:1px solid #345365;border-radius:7px;color:#a4bfcd;font-size:12px}.a2-auto-phases .current{background:#113d36;border-color:#63dec2;color:#a9f5df}.a2-auto-result{margin:12px 0}.a2-auto-result dl{display:grid;gap:6px;margin:0}.a2-auto-result dl>div{display:grid;grid-template-columns:115px minmax(0,1fr);gap:8px}.a2-auto-result dt{color:#88a5b7}.a2-auto-result dd{margin:0;overflow-wrap:anywhere}.a2-output-prerequisite:not(:empty){padding:10px;border:1px solid #8b7134;border-radius:8px;color:#ead39d!important}@media(max-width:760px){#a2SetupRoot[data-step="7"] .a2-cal-steps{grid-template-columns:1fr}.a2-auto-phases span{flex:1;min-width:85px}.a2-auto-result dl>div{grid-template-columns:92px minmax(0,1fr)}}
+.a2-auto-phases{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0}.a2-auto-phases span{padding:8px 10px;border:1px solid #345365;border-radius:7px;color:#a4bfcd;font-size:12px}.a2-auto-phases .current{background:#113d36;border-color:#63dec2;color:#a9f5df}.a2-auto-result{margin:12px 0}.a2-auto-result dl{display:grid;gap:6px;margin:0}.a2-auto-result dl>div{display:grid;grid-template-columns:115px minmax(0,1fr);gap:8px}.a2-auto-result dt{color:#88a5b7}.a2-auto-result dd{margin:0;overflow-wrap:anywhere}.a2-output-prerequisite:not(:empty){padding:10px;border:1px solid #8b7134;border-radius:8px;color:#ead39d!important}@media(max-width:760px){#a2SetupRoot[data-step="5"] .a2-cal-steps{grid-template-columns:1fr}.a2-auto-phases span{flex:1;min-width:85px}.a2-auto-result dl>div{grid-template-columns:92px minmax(0,1fr)}}
+/* ESC instructions and controls take priority over the supporting illustration. */
+#a2SetupRoot[data-step="5"] .a2-columns{grid-template-columns:minmax(0,1fr) minmax(260px,28%);align-items:start}
+#a2SetupRoot[data-step="5"] .a2-visual{min-height:0;padding:14px}
+#a2SetupRoot[data-step="5"] .a2-visual h3{font-size:15px;line-height:1.35;margin-bottom:8px}
+#a2SetupRoot[data-step="5"] .a2-visual-scene{position:static;inset:auto;width:100%;height:auto;aspect-ratio:400/410;max-width:320px;margin:0 auto}
+@media(min-width:761px) and (max-width:1000px){#a2SetupRoot[data-step="5"] .a2-columns{grid-template-columns:minmax(0,1fr) 240px}}
+@media(max-width:760px){#a2SetupRoot[data-step="5"] .a2-columns{grid-template-columns:minmax(0,1fr)}#a2SetupRoot[data-step="5"] .a2-visual{width:min(100%,320px);justify-self:center}}
 /* Step 4: compact IMU calibration workstation. Controls are always keyboard-accessible. */
 #a2SetupRoot[data-step="3"] .a2-columns{align-items:start}
 #a2SetupRoot[data-step="3"] .a2-content{min-height:0}
