@@ -140,7 +140,7 @@ try{
  await expectText('[data-accel-corrected="0"]','0.090');
  await expectText('[data-accel-corrected="1"]','0.000');
  await expectText('[data-accel-corrected="2"]','1.000');
- assert.equal(await expectSaved(3,false),undefined);
+ await expectSaved(3,false);
  await wizard.locator('#a2ManualX').fill('0.251');
  assert.equal(await button('save-page').isDisabled(),true,'invalid manual offset must block saves');
  await wizard.locator('#a2ManualX').fill('0.030');
