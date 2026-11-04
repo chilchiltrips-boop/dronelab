@@ -1,5 +1,5 @@
 {
-  "version": "1.37",
+  "version": "1.38",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -11,7 +11,7 @@
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
     "Aerion A2 IMU XYZ calibration plus final-step automatic ESC calibration, verified sequence readback, cancellation recovery and operator-confirmed saves"
   ],
-  "buildCommit": "e01d33d00bd8",
-  "publishedAt": "2026-11-04T08:36:40.118353+00:00",
-  "buildNumber": 468
+  "buildCommit": "830b37bcf2fa",
+  "publishedAt": "2026-11-04T08:59:59.262945+00:00",
+  "buildNumber": 469
 }
