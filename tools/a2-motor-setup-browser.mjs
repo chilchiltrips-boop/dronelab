@@ -198,6 +198,8 @@ try{
  await expectSaved(5);
  assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true);
  assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false,'do not fabricate ESC endpoint confirmation');
+ assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_ESC_CONFIRM')),[],
+  'no tone-confirmation command is needed or sent for the automatic controller sequence');
  assert.match(await wizard.locator('.a2-auto-result').textContent(),/Acceptance not measured/);
  assert.equal(await button('confirm-cal').count(),0);
  assert.equal(await button('save-page').isVisible(),false);
