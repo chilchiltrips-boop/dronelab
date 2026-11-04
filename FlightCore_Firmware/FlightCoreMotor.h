@@ -724,7 +724,10 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(action=="CAL_SLIDER"){
    if(!zjWizardBench||zjMotor.mode!=ZjMotorSafety::READY)return error("wizard_calibration_session_required");
-   if(!zjMotorCalibrationSaved&&!zjAutoEscSequenceReady())return error("verified_auto_esc_sequence_required");
+   // Preserve the older authorized operator-staged calibration session too.
+   // The new no-tone flow uses only the verified persisted controller result.
+   const bool legacyStaged=zjWizardEscConfirmed&&caller==zjWizardEscOwner&&zjSameMotorWiring(zjMotorConfig,zjWizardEscConfig);
+   if(!zjMotorCalibrationSaved&&!zjAutoEscSequenceReady()&&!legacyStaged)return error("verified_auto_esc_sequence_required");
    zjMotor.timedBench=false;
   }
 #endif
