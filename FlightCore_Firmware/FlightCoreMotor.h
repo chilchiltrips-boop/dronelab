@@ -274,7 +274,10 @@ static void zjAutoEscLoop(){
 static bool zjAutoEscCancel(bool discardResult){
  portENTER_CRITICAL(&zjMotorMux);
  const bool running=zjAutoEscSequence.active();
- if(running){zjAutoEscSequence.stop(ZjAutoEscRecord::STOPPED);zjAutoEscWrite();}
+ if(running||(discardResult&&zjAutoEscSequence.phase==ZjAutoEscSequence::DONE)){
+  // Retire the RAM retry proof even when persisting cancellation fails.
+  zjAutoEscSequence.stop(ZjAutoEscRecord::STOPPED);zjAutoEscWrite();
+ }
  portEXIT_CRITICAL(&zjMotorMux);
  if(running||(discardResult&&(!zjAutoEscRecordVerified||zjAutoEscRecord.state!=ZjAutoEscRecord::EMPTY))){
   zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";

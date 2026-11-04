@@ -90,6 +90,14 @@ int main(){
  cmd("STOP");assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED);off();
  assert(has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"completed_auto_sequence_required"));
  assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED&&!zjWizardEscConfirmed);
+ // A failed cancellation write must still retire the in-RAM retry proof.
+ assert(!has(prepare(),"error"));boot();tick(5000);tick(5000);
+ zjKitPrefs.failNextWrite=true;zjMotorLoop();assert(zjAutoEscStorageError);
+ zjKitPrefs.failNextWrite=true;
+ assert(has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"cancel_save_failed"));off();
+ assert(has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"completed_auto_sequence_required"));
+ assert(!zjMotorCalibrationSaved&&!zjWizardEscConfirmed);
+ assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));
  assert(!has(prepare(),"error"));
  zjKitPrefs.failNextWrite=true;boot();off();assert(!zjAutoEscSequence.active()); // consume readback failed
  assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));boot();off();
