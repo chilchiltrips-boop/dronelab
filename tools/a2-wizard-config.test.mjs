@@ -5,7 +5,7 @@ import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 
-test('actual A2 Wizard command handler stages and atomically verifies setup across simulated boots',()=>{
+test('actual A2 Wizard verifies full and per-page setup saves across simulated boots',()=>{
  const dir=mkdtempSync(join(tmpdir(),'a2-wizard-'));
  try{
   mkdirSync(join(dir,'driver'));mkdirSync(join(dir,'freertos'));
@@ -49,6 +49,15 @@ static void begin(const char* config){
  token="";assert(!has(cmd("WIZARD_BEGIN","PROPS_REMOVED","PINS_VERIFIED",config),"error"));
  token=zjMotorToken;assert(token.length()>0);
  for(auto d:duty)assert(!d);
+}
+static String page(const char* scope,const char* payload,const char* owner="USB"){
+ return zjMotorCommand("WIZARD_SAVE_PAGE",owner,"",payload,String(zjWizardSaved.revision),zjBootId+":"+scope,true);
+}
+static void beginCurrent(){
+ auto wiring=zjMotorConfig;memset(wiring.minimumUs,0,sizeof(wiring.minimumUs));
+ char encoded[64];wiring.encode(encoded,sizeof(encoded));
+ const String binding=zjBootId+"|"+String(zjWizardSaved.revision)+"|"+encoded;
+ begin(binding.c_str());
 }
 static void reboot(){
  zjMotorStop();zjWizardSaved=ZjWizardConfig{};zjMotorConfig=ZjMotorConfig{};
@@ -101,7 +110,61 @@ int main(){
  assert(zjKitPrefs.getString("wifiOther","")=="preserved");
  assert(!has(cmd("WIZARD_IMU","GYRO","4","boot-1"),"error")&&queued==ZjImuAction::GYRO);
  assert(has(cmd("WIZARD_IMU","FACE","4","previous-boot"),"wizard_board_restarted"));
+ // A page save migrates and preserves every other saved section.
+ assert(has(cmd("WIZARD_SAVE_PAGE","P:2103:0101:0:0:0:0","2","boot-1:WIRING","USB",false),"authorization_required"));
+ assert(!has(page("WIRING","P:2103:0101:0:0:0:0"),"error"));
+ assert(zjMotorConfig.plus&&zjMotorConfig.pins[0]==2&&!zjMotorCalibrationSaved&&!zjMotorConfig.minimumUs[0]);
+ assert(has(cmd("WIZARD_SAVE_PAGE","P:2103:0101:0:0:0:0","2","boot-1:WIRING"),"configuration_changed"));
+ assert(has(page("WIRING","P:2103:0101:1087:0:0:0"),"exclude_minimum"));
+ imu.accelCapture.ready=true;imu.accelCapture.result.level=true;imu.accelCapture.result.trim[0]=42;zjWizardImuOwner="USB";
+ assert(has(page("ACCEL","CAPTURED:0:1:0:0:0:1000:1000:1000:43:0:0"),"capture_changed"));
+ assert(!has(page("ACCEL","CAPTURED:0:1:0:0:0:1000:1000:1000:42:0:0"),"error"));
+ assert(applied.trim[0]==42&&zjMotorConfig.plus&&!zjMotorCalibrationSaved&&!zjMotorConfig.minimumUs[0]);
+ assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
+ beginCurrent();cmd("CAL_HIGH","POWER_DISCONNECTED");cmd("STOP");
+ assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
+ beginCurrent();cmd("CAL_HIGH","POWER_DISCONNECTED");cmd("CAL_LOW");
+ for(int i=0;i<8;i++){clockMs+=400;cmd("KEEP");}
+ cmd("WIZARD_ESC_CONFIRM","TONES_CONFIRMED","BATTERY_DISCONNECTED","boot-1");
+ zjKitPrefs.failNextWrite=true;assert(has(page("ESC","TONES_CONFIRMED"),"save_failed"));
+ assert(!zjMotorCalibrationSaved&&zjWizardEscConfirmed&&!zjMotorEnabled);
+ assert(!has(page("ESC","TONES_CONFIRMED"),"error"));
+ assert(zjMotorCalibrationSaved&&applied.trim[0]==42&&!zjMotorConfig.minimumUs[1]);
+ assert(has(page("M1","1087"),"confirmed_output_capture_required"));
+ beginCurrent();cmd("CAL_SLIDER","1","1000","30000");clockMs+=501;cmd("SLIDE","1","1087","1");
+ assert(has(cmd("STOP","CAPTURE_OUTPUT"),"stoppedPulseUs"));
+ assert(has(page("M2","1087"),"confirmed_output_capture_required"));
+ assert(has(page("M1","1501"),"pulse_out_of_range"));
+ zjKitPrefs.failNextWrite=true;assert(has(page("M1","1087"),"save_failed"));
+ assert(!zjMotorConfig.minimumUs[0]&&!zjMotorEnabled);
+ assert(!has(page("M1","1087"),"error"));
+ assert(zjMotorConfig.minimumUs[0]==1087&&!zjMotorConfig.minimumUs[1]&&zjMotorCalibrationSaved&&applied.trim[0]==42);
+ reboot();assert(zjMotorConfig.minimumUs[0]==1087&&applied.trim[0]==42&&zjMotorCalibrationSaved);
+ assert(has(page("M2","1100"),"confirmed_output_capture_required"));
+ beginCurrent();cmd("CAL_SLIDER","15","1000","30000");clockMs+=501;cmd("SLIDE","15","1200","1");cmd("STOP");
+ assert(has(page("ALL","1200"),"confirmed_output_capture_required"));
+ beginCurrent();cmd("CAL_SLIDER","15","1000","30000");clockMs+=501;cmd("SLIDE","15","1200","1");cmd("STOP","CAPTURE_OUTPUT");
+ zjKitPrefs.failNextWrite=true;assert(has(page("ALL","1200"),"save_failed"));
+ assert(zjMotorConfig.minimumUs[0]==1087&&!zjMotorConfig.minimumUs[1]&&!zjMotorConfig.minimumUs[2]&&!zjMotorConfig.minimumUs[3]);
+ assert(!has(page("ALL","1200"),"error"));reboot();
+ for(auto pulse:zjMotorConfig.minimumUs)assert(pulse==1200);
+ beginCurrent();cmd("CAL_SLIDER","15","1000","30000");clockMs+=501;cmd("SLIDE","15","1300","1");cmd("STOP");
+ assert(has(page("ALL","1300"),"confirmed_output_capture_required"));
+ assert(!has(page("RESET_ACCEL","CONFIRM_RESET"),"error"));assert(!applied.level&&zjMotorCalibrationSaved&&zjMotorConfig.minimumUs[0]==1200);
+ assert(!has(page("RESET_ESC","CONFIRM_RESET"),"error"));assert(!zjMotorCalibrationSaved&&zjMotorConfig.minimumUs[0]==1200);
+ assert(!has(page("RESET_OUTPUT","CONFIRM_RESET"),"error"));assert(!zjMotorConfig.minimumUs[0]&&zjMotorConfig.plus);
+ assert(has(page("RESET_ALL","-"),"confirm_wizard_reset"));
+ assert(has(page("UNKNOWN","-"),"unsupported_wizard_save_scope"));
+ assert(!has(page("RESET_ALL","CONFIRM_RESET"),"error"));reboot();
+ const unsigned defaultsWrites=zjKitPrefs.writes;
+ assert(!has(page("RESET_ALL","CONFIRM_RESET"),"error")&&zjKitPrefs.writes==defaultsWrites);
+ assert(!zjMotorConfig.plus&&!zjMotorCalibrationSaved&&!applied.level&&!zjMotorConfig.minimumUs[0]&&!zjMotorEnabled);
+ assert(zjKitPrefs.getString("wifiOther","")=="preserved");
  zjKitPrefs.putString("wizardSetup1","corrupt");reboot();assert(!zjMotorConfigValid&&!applied.six);
+ assert(has(page("RESET_ESC","CONFIRM_RESET"),"reset_all_setup_required"));
+ zjKitPrefs.failNextWrite=true;assert(has(page("RESET_ALL","CONFIRM_RESET"),"wizard_save_failed"));
+ assert(zjWizardRecordVerified&&!zjMotorConfigValid);
+ assert(!has(page("RESET_ALL","CONFIRM_RESET"),"error"));reboot();assert(zjMotorConfigValid);
 }
 `;
   const cpp=join(dir,'wizard.cpp'),bin=join(dir,'wizard');writeFileSync(cpp,code);

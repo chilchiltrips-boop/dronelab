@@ -7,9 +7,9 @@
     "Header switch changes the physical kit Wi-Fi mode before rediscovery",
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
-    "FlightCore 1.7.8 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
+    "FlightCore 1.7.9 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
-    "Aerion A2 eight-step Setup Wizard with IMU and output calibration, verified Save and scoped reset"
+    "Aerion A2 eight-step Setup Wizard with per-page Save and Save & Next, verified green ticks and scoped reset"
   ],
   "buildCommit": "43219e0687cb",
   "publishedAt": "2026-11-04T03:25:55.222049+00:00",

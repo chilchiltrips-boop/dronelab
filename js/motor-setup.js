@@ -43,13 +43,13 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
   }catch(e){diagnostic('motor_error',k,action,{reason:globalThis.ZebjusAckDiagnostics?.reasonClass?.(e)},Math.max(0,now()-at));throw e;}
   finally{inFlight--;}
  }
- async function stop(owner){
+ async function stop(owner,{captureCalibration=false}={}){
   if(owner&&session?.owner!==owner&&starting!==owner)return;
   cancelMotorConfirmations();
   ++epoch;starting=false;clearPumps();
   const s=session;session=null;
   stopping++;
-  try{return await send('STOP',[],s)}catch(e){publish({...last,mode:'UNCONFIRMED',reason:e.message});throw e;}finally{stopping--;}
+  try{return await send('STOP',captureCalibration?['CAPTURE_OUTPUT']:[],s)}catch(e){publish({...last,mode:'UNCONFIRMED',reason:e.message});throw e;}finally{stopping--;}
  }
  async function begin(owner='wizard',binding=null,wiring=null){
   if(session||starting||stopping)throw Error('Wait for STOP to finish before starting a new motor setup.');

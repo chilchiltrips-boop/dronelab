@@ -4,7 +4,7 @@ import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,updateImuDiagram} from './a2-setup-visuals.js';
 const root=document.getElementById('a2SetupRoot');
 if(root){
- const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report & Save'];
+ const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
  const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
@@ -14,21 +14,22 @@ if(root){
  let step=0,state=null,saved=null,draft=defaults(),minimums=[null,null,null,null],base=null,identity='',contextKit='';
  let lastStateAt=0,historyAt=0,polling=false,working='',readError='',operationError='',nextPollAt=0,readFailures=0;
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
- let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,resetDraft=false,saveState='',ambiguousSave=null,conflict=false;
+ let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
  let visualStep=-1,visualMarkup='';
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
+ const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
  root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
  <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}" aria-label="${s}"><span class="a2-step-number">${i+1}</span><span class="a2-step-long">${s}</span><span class="a2-step-short">${shortSteps[i]}</span></button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
  <div class="a2-checks" role="group" aria-label="Output checks"><span class="a2-check-count">0 / 3 confirmed</span>${[['a2Props','Propellers removed'],['a2Pins','Wiring & power verified'],['a2Profile','50 Hz PWM · 1000–2000 µs ESC']].map(([id,label])=>`<label class="a2-check"><input type="checkbox" id="${id}">${label}</label>`).join('')}</div>
  <div class="a2-columns"><main class="a2-content">
  <section data-panel="0"><h3>Board connection</h3><div class="a2-identity"></div><div class="a2-actions"><button class="btn" data-action="detect">Refresh board</button><button class="btn ghost" data-action="connect">Open connection</button></div></section>
- <section data-panel="1"><h3>Frame &amp; wiring</h3>
+ <section data-panel="1"><h3>Frame &amp; wiring</h3>${pageStatus(1)}
  <label class="a2-layout-field">Frame layout<select id="a2Layout"><option value="A2_QUAD_X">Quad X</option><option value="A2_QUAD_PLUS">Quad +</option></select></label>
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
  <p class="a2-wiring-validation" role="status"></p><p class="a2-save-state"></p></section>
  <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
- <section data-panel="3"><h3>IMU Calibration</h3>
+ <section data-panel="3"><h3>IMU Calibration</h3>${pageStatus(3)}
  <p>Keep the controller stationary while the gyroscope collects 2000 fresh samples. Gyro bias is recalculated on boot.</p>
  <div class="a2-actions"><button class="btn" data-action="imu-gyro">Start gyro calibration</button><button class="btn ghost" data-action="imu-cancel">Cancel gyro</button><button class="btn ghost" data-action="imu-reset">Reset gyro state</button></div>
  <p class="a2-gyro-status" role="status"></p>
@@ -41,7 +42,7 @@ if(root){
  <details class="a2-input-details"><summary>Capture tolerances</summary><p>128 fresh samples per pose. At most 3 °/s motion, 0.08 g sample spread per axis, and 0.28 g on cross axes. Gravity magnitude must be 0.75–1.30 g. Fit limits are ±0.25 g offset, 0.75–1.25 scale, and 0.20 g maximum axis residual.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
  <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Step 7 limits calibration to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
- <section data-panel="5"><div class="a2-panel-heading"><h3>ESC Calibration</h3>${soundButton}</div>
+ <section data-panel="5"><div class="a2-panel-heading"><h3>ESC Calibration</h3>${soundButton}</div>${pageStatus(5)}
  <p class="a2-calibration-summary" role="status"></p><small class="a2-sound-note">App cues accompany board phases. Listen for the ESC’s own tones.</small>
  <ol class="a2-cal-steps"><li data-cal-stage="power"><b>Remove all propellers</b><span>Disconnect the motor battery. Keep the A2 powered by USB.</span></li><li data-cal-stage="high"><b>Start with battery disconnected</b><span>After HIGH is acknowledged, connect the battery and listen for the calibration prompt.</span></li><li data-cal-stage="low"><b>Press Stop after the prompt</b><span>Wait for the ESC success tones and the PWM-off acknowledgement.</span></li><li data-cal-stage="tones"><b>Confirm and disconnect</b><span>Confirm the success tones, then disconnect the motor battery.</span></li></ol>
  <label class="a2-check"><input type="checkbox" id="a2EscProps"> All propellers removed</label>
@@ -53,21 +54,21 @@ if(root){
  <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> ESC success tones heard</label>
  <label class="a2-check"><input type="checkbox" id="a2EscDisconnected" disabled> Motor battery disconnected after calibration</label>
  <button class="btn ghost" data-action="confirm-cal" disabled>Confirm calibration</button></section>
- <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>
- <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record that value for final Save.</p>
+ <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(6)}
+ <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
  <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
  <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
  <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
  <p class="a2-cal-output a2-test-state" role="status"></p></section>
- <section data-panel="7"><h3>Report &amp; Save</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
+ <section data-panel="7"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
  <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
  <details class="a2-secondary-test"><summary>Reset setup</summary>
- <p>Reset stages defaults for review. Save applies them. ESC endpoints remain stored in the ESCs.</p>
+ <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
  <label for="a2ResetScope">Calibration to clear</label><select id="a2ResetScope"><option value="accel">Accelerometer</option><option value="esc">ESC confirmation</option><option value="minimums">Motor starting pulses</option></select>
  <div class="a2-actions"><button class="btn ghost" data-action="reset-selected">Reset selected calibration</button><button class="btn ghost" data-action="reset-all">Reset all Wizard settings</button></div></details></section>
  </main><aside class="a2-visual" aria-label="Current setup step visualization"><h3 class="a2-visual-title"></h3><div class="a2-visual-scene"></div><div class="a2-pulses"></div></aside></div>
- <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
+ <p class="a2-message" role="status" aria-live="polite"></p><footer class="a2-footer"><button class="btn ghost" data-nav="-1">Back</button><span class="a2-step-count"></span><button class="btn ghost" data-action="verify-save" hidden>Verify / retry save</button><button class="btn ghost" data-action="save-page" hidden>Save</button><button class="btn" data-nav="1">Next</button><details class="a2-diagnostics-box"><summary>Firmware diagnostics</summary><pre class="a2-diagnostics">No firmware response.</pre></details></footer>`;
  let soundEnabled=true;try{soundEnabled=localStorage.getItem('zebjus.setup.sound')!=='off';}catch{}
  const cues=createSetupCues({enabled:soundEnabled});
  document.addEventListener('visibilitychange',()=>{if(document.hidden)cues.stop();});
@@ -95,7 +96,7 @@ if(root){
  const compatibleEsc=()=>!escCleared()&&activeEsc();
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
- const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict;
+ const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid();
  const checkList=ids=>ids.every(id=>$(id).checked);
  const outputChecks=()=>checkList(['#a2Props','#a2Pins','#a2Profile']);
@@ -127,7 +128,7 @@ if(root){
   calMotor=1;calAll=false;setCalPulse(1000);
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
-  resetDraft=conflict=false;saveState=readError=operationError='';ambiguousSave=null;
+  conflict=false;saveState=readError=operationError='';ambiguousSave=null;
   visited.clear();visited.add(0);
   root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
  }
@@ -229,7 +230,7 @@ if(root){
   for(const a of ['imu-face','imu-level'])$(`[data-action="${a}"]`).disabled=!ready||!imuFresh()||!$('#a2Still').checked||capture.running||!!captureRequest;
   $('[data-action="imu-clear"]').disabled=!ready;
   $('.a2-gyro-status').textContent=`${imu.state||'Waiting for verified IMU'} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`;
-  $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Draft correction pending Save':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`;
+  $('.a2-capture-status').textContent=`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Unsaved accelerometer settings':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`;
   const model=(accelAction.startsWith('CAPTURED:')?accelAction.slice(9):saved?.accelModel||'').split(':').map(Number);
   const fresh=imuFresh(),xyz=v=>Array.isArray(v)?v.map(p=>Number(p).toFixed(3)).join(' / '):'—';
   const inclination=fresh&&imu.accelG?.length===3?imu.accelG.map((v,i)=>v-(saved.accelModel?.split(':')[8+i]||0)/1000):null;
@@ -251,7 +252,7 @@ if(root){
  function renderEsc(){
   const high=state?.mode==='CAL_HIGH',low=state?.mode==='CAL_LOW';
   const canConfirm=escAttempt&&observedOff()&&state.escCalibrationPending===true&&!compatibleEsc();
-  $('.a2-calibration-summary').textContent=escDraft===true?'Confirmed · pending final save':compatibleEsc()?'Saved on board · same wiring':'Not calibrated';
+  $('.a2-calibration-summary').textContent=escDraft===true?'Confirmed · Save this page':compatibleEsc()?'Saved on board · same wiring':'Not calibrated';
   $('.a2-calibration-summary').dataset.saved=String(escDraft!==true&&compatibleEsc());
   $('.a2-phase-scale meter').value=high?2:low?1:0;
   $('.a2-phase').textContent=high?'HIGH · 2000 µs. Connect the motor battery and wait for the ESC calibration tones.'
@@ -262,7 +263,7 @@ if(root){
   root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===(high?'high':low?'low':canConfirm?'tones':'power')));
   const start=$('[data-action="high"]');
   start.textContent=compatibleEsc()?'Recalibrate':'Start';
-  start.disabled=!canStart()||!escChecks()||!!working||canConfirm;
+  start.disabled=!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm;
   $('[data-action="low"]').disabled=!high||motorClient.owner!=='wizard'||!!working;
   $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm;
   $('[data-action="confirm-cal"]').disabled=!canConfirm||!!working||!checkList(['#a2Tones','#a2EscDisconnected']);
@@ -284,9 +285,9 @@ if(root){
   const pending=targetMotors(calMotor,calAll).some(n=>validPulse(minimums[n-1]));
   $('.a2-cal-target').textContent=calAll?'M1–M4 · Wait for all four motors to spin steadily. Stop replaces all four draft values.':`Motor ${calMotor} of 4 · ${layouts[draft.layout].positions[calMotor-1]} · ${draft.layoutPins[calMotor-1]} · ${draft.rotations[calMotor-1]}`;
   const overRange=targetMotors(calMotor,calAll).filter(n=>pulses()[n-1]>1500);
-  $('.a2-cal-result').textContent=overRange.length?overRange.map(n=>`M${n} · ${pulses()[n-1]} µs saved · recalibration required`).join(' · '):pending?'Pending final save':recorded?'Saved on board':'No compatible pulse recorded';
+  $('.a2-cal-result').textContent=overRange.length?overRange.map(n=>`M${n} · ${pulses()[n-1]} µs saved · recalibration required`).join(' · '):pending?'Pending save':recorded?'Saved on board':'No compatible pulse recorded';
   const ack=activeRun?.motors.map(n=>state?.pulseUs?.[n-1])||[];
-  $('.a2-cal-output').textContent=calLive&&fresh?`Live · ACK ${ack[0]??'—'} µs · ${time} s`:outputOff(state)&&pending&&!operationError?'Outputs off · Pending final save':text;
+  $('.a2-cal-output').textContent=calLive&&fresh?`Live · ACK ${ack[0]??'—'} µs · ${time} s`:outputOff(state)&&pending&&!operationError?'Outputs off · Pending save':text;
   const resume=$('[data-action="resume-cal"]');
   resume.hidden=!calLive||!activeRun.ready||activeRun.resume===1000||activeRun.target!==1000;
   resume.disabled=!!working||!fresh;
@@ -300,9 +301,9 @@ if(root){
    ['Frame',`${layouts[draft.layout].name} · ${wiringCompatible()?'Saved on board':'Pending'}`],
    ...motors.map((n,i)=>[`M${n} wiring`,`${draft.layoutPins[i]} · ${draft.rotations[i]}${wiringCompatible()?'':` · pending (board ${saved?.layoutPins?.[i]||'—'} · ${saved?.rotations?.[i]||'—'})`}`]),
    ['Inputs',`${selectedInput().source||'—'} · live observation`],
-   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?saved?.accelModel?.startsWith('0:0:')?'identity':'saved model':accelAction==='RESET'?'identity pending':'captured model pending'}`],
+   ['IMU',`Gyro ${saved?.imu?.state||'unknown'} · runtime only · Accelerometer ${accelAction==='KEEP'?saved?.accelModel?.startsWith('0:0:')?'identity':'saved model':'captured model pending'}`],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
-   ['ESC',escDraft===true?'Confirmed · Pending':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
+   ['ESC',escDraft===true?'Confirmed · Pending save':compatibleEsc()?'Saved on board':escCleared()?'Not calibrated · Pending reset':'Not calibrated'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
    ['Physical acceptance','Not verified by software']
   ];
@@ -327,8 +328,40 @@ if(root){
  }
  const calibrationComplete=()=>effectivePulses().every(validPulse);
  const validCurrent=()=>targetMotors(calMotor,calAll).every(n=>validPulse(pulses()[n-1]));
- const validSave=()=>boardReady()&&observedOff()&&wiringValid()&&(resetDraft||compatibleEsc()&&calibrationComplete());
- const canAdvance=()=>step===1?wiringValid():step===5?compatibleEsc():step===6?validCurrent():true;
+ const pageScope=()=>({1:'WIRING',3:'ACCEL',5:'ESC',6:calAll?'ALL':'M'+calMotor})[step]||'';
+ const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1');
+ function pageSaved(page){
+  if(!boardReady()||!saved.configValid)return false;
+  if(page===1)return saved.configRevision>0&&wiringCompatible();
+  if(page===3)return accelAction==='KEEP'&&accelSaved();
+  if(page===5)return wiringCompatible()&&saved.escCalibrationSaved===true&&escDraft!=='cleared'&&!escAttempt;
+  if(page===6)return wiringCompatible()&&saved.escCalibrationSaved===true&&!activeRun&&
+   targetMotors(calMotor,calAll).every(n=>minimums[n-1]===null&&validPulse(pulses()[n-1])&&pulses()[n-1]===saved.observedMinimumUs[n-1]);
+  return false;
+ }
+ function canSaveScope(scope){
+  if(!scope||!boardReady()||!observedOff()||captureRequest||saved.capture?.running||saved.imu?.manualGyro)return false;
+  if(scope==='RESET_ALL')return true;
+  if(!saved.configValid)return false;
+  if(scope.startsWith('RESET_'))return true;
+  if(scope==='WIRING')return wiringValid();
+  if(scope==='ACCEL')return accelAction.startsWith('CAPTURED:')&&saved.capture?.ready&&'CAPTURED:'+saved.capture.model===accelAction;
+  if(scope==='ESC')return wiringCompatible()&&escDraft===true;
+  const selected=scope==='ALL'?motors:[Number(scope.slice(1))];
+  return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
+ }
+ function canAdvance(){
+  if([1,5,6].includes(step))return pageSaved(step);
+  return step!==3||accelAction==='KEEP';
+ }
+ function renderPageSaves(){
+  root.querySelectorAll('[data-save-page]').forEach(node=>{
+   const page=Number(node.dataset.savePage),verified=pageSaved(page);
+   node.dataset.saved=String(verified);
+   node.textContent=ambiguousSave?.page===page?saveState||'Checking the board before retry':verified?'✓ Saved on board':
+    !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values to save. Gyro calibration is kept in runtime memory.':'Unsaved · use Save on this page';
+  });
+ }
  function render(){
   refreshIdentity();
   const k=kit(),m=state||{};
@@ -336,13 +369,13 @@ if(root){
   $('.a2-status').title=$('.a2-status').textContent;
   $('.a2-identity').innerHTML=view('Verified board',[
    ['Board',k.board||'Not detected'],['Kit',k.kitId||'—'],['Firmware',k.version||'—'],['Connection',k.connected?k.transport?.toUpperCase():'OFFLINE'],
-   ['Wizard API',saved?.wizardVersion===1?'Supported':k.connected?'FlightCore 1.7.8+ required':'Waiting for verified A2'],
+   ['Wizard API',saved?.pageSaveVersion===1?'Supported · page saves':k.connected?'FlightCore 1.7.9+ required for page saves':'Waiting for verified A2'],
    ['USB Teacher',k.transport==='usb'?(k.adminUnlocked?'UNLOCKED':'Unlock in Devices & Firmware'):'—']
   ]);
   layouts[draft.layout].positions.forEach((p,i)=>$('[data-position="'+i+'"]').textContent=p);
   $('.a2-wiring-validation').textContent=wiringValid()?'':'Use each D0–D3 pin once.';
   $('.a2-wiring-validation').dataset.valid=String(wiringValid());
-  $('.a2-save-state').textContent=wiringCompatible()?'Wiring saved on board':'Wiring draft · applied temporarily in authorized Wizard sessions';
+  $('.a2-save-state').textContent=wiringCompatible()?'Wiring saved on board':'Unsaved wiring · Save before output calibration';
   $('.a2-check-count').textContent=['#a2Props','#a2Pins','#a2Profile'].filter(id=>$(id).checked).length+' / 3 confirmed';
   renderInputs();renderImu();renderEsc();renderOutputs();
   const signal=saved?.outputSignal;
@@ -353,16 +386,27 @@ if(root){
    ['Alternate profile compatibility','Physical validation pending']
   ]);
   $('.a2-report').innerHTML=view('Wizard review',reportRows());
-  $('.a2-report-state').textContent=conflict?'Board configuration changed. Refresh board to reload its verified setup.':saveState||'Review saved and pending setup values.';
+  $('.a2-report-state').textContent=conflict?'Board configuration changed. Refresh board to reload its verified setup.':saveState||'Board-saved setup summary. Return to a page to save any pending changes.';
   const lock=!!working||motorClient.busy;
   $('[data-nav="-1"]').disabled=step===0||!!working;
-  const next=$('[data-nav="1"]');
-  next.textContent=step===7?'Save':'Next';
-  next.disabled=step===7?!!working||(!validSave()&&!ambiguousSave):!!working||!canAdvance();
-  const completed=[boardReady(),wiringValid(),visited.has(2),saved?.imu?.state==='READY',!!signal,compatibleEsc(),calibrationComplete(),saveState==='Saved on board'];
+  const scope=pageScope(),next=$('[data-nav="1"]'),saveButton=$('[data-action="save-page"]');
+  const retry=!!ambiguousSave&&ambiguousSave.scope===scope;
+  saveButton.hidden=!scope;
+  saveButton.disabled=!!working||(!retry&&(!canSaveScope(scope)||pageSaved(step)));
+  saveButton.textContent=['save-page','save-next'].includes(working)?'Saving…':retry?'Verify save':'Save';
+  $('[data-action="verify-save"]').hidden=!ambiguousSave||retry;
+  $('[data-action="verify-save"]').disabled=!!working;
+  next.hidden=step===7;
+  next.textContent=scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':'Next';
+  next.disabled=!!working||step===7||!(canAdvance()||canSaveScope(scope)||retry);
+  $('#a2Layout').disabled=lock;
+  root.querySelectorAll('[data-pin],[data-rotation]').forEach(input=>input.disabled=lock);
+  renderPageSaves();
+  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,pageSaved(5),calibrationComplete()&&wiringCompatible()&&minimums.every(value=>value===null),visited.has(7)];
   root.querySelectorAll('[data-step]').forEach((button,i)=>{
    const done=visited.has(i)&&completed[i];
-   button.dataset.completed=String(!!done);button.title=done?'Complete':'';
+   button.dataset.completed=String(!!done);button.dataset.saved=String([1,3,5].includes(i)?pageSaved(i):i===6&&completed[6]);
+   button.querySelector('.a2-step-number').textContent=button.dataset.saved==='true'?'✓':String(i+1);button.title=button.dataset.saved==='true'?'Saved on board':done?'Complete':'';
   });
   for(const a of ['reset-selected','reset-all'])$(`[data-action="${a}"]`).disabled=!boardReady()||!observedOff()||lock||!!ambiguousSave;
   for(const button of root.querySelectorAll('[data-action="sound"]')){
@@ -393,8 +437,8 @@ if(root){
   if(button.left<viewport.left)nav.scrollLeft+=button.left-viewport.left;
   else if(button.right>viewport.right)nav.scrollLeft+=button.right-viewport.right;
  }
- async function navigate(next,footer=false){
-  if(working)return;
+ async function navigate(next,footer=false,afterSave=false){
+  if(working&&!afterSave)return;
   if(footer&&next>step&&!canAdvance())return;
   const run=++operation;
   cancelMotorConfirmations();
@@ -409,7 +453,7 @@ if(root){
   show(Math.max(0,Math.min(steps.length-1,next)));
  }
  async function prepare(kind){
-  if(!canStart()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Verify outputs are off, wiring is valid and all safety checks are confirmed.');
+  if(!canStart()||!wiringCompatible()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Save the wiring, verify outputs are off and confirm all safety checks.');
   await motorClient.begin('wizard',null,{...base,mapping:encode(draft)});
  }
  function ensureOperation(run){
@@ -423,20 +467,20 @@ if(root){
   if(activeRun&&motorClient.owner==='wizard'&&state?.mode==='SLIDER_TEST'){
    const run=activeRun,confirmed=captureStable(run);
    activeRun=null;
-   const stopped=await motorClient.stop('wizard');
+   const stopped=await motorClient.stop('wizard',{captureCalibration:true});
    ensureOperation(runId);
    if(!outputOff(stopped))throw Error('PWM state is unconfirmed.');
    if(confirmed&&stopped.stoppedSlider===true&&stopped.stoppedMask===run.mask&&stopped.stoppedPulseUs===confirmed){
     for(const n of run.motors)minimums[n-1]=confirmed;
     saveState='';setCalPulse(confirmed);
-    message('Outputs off · Pending final save');
+    message('Outputs off · Pending save');
    }else{
     setCalPulse(currentResult());
     throw Error('Outputs off. Repeat the attempt and wait for the displayed pulse acknowledgement before Stop.');
    }
    cues.play('stop');return;
   }
-  if(!compatibleEsc())throw Error('Complete ESC calibration before starting output calibration.');
+  if(!wiringCompatible()||saved?.escCalibrationSaved!==true||escAttempt)throw Error('Save wiring and ESC calibration before starting output calibration.');
   const resume=currentResult();
   ensureOperation(runId);
   setCalPulse(1000);
@@ -454,47 +498,76 @@ if(root){
   run.ready=true;run.lowSince=Date.now();
   cues.play('start');message('Live · board acknowledged 1000 µs.');
  }
- function snapshotSave(){
-  const accel=accelAction==='KEEP'?saved.accelModel:accelAction==='RESET'?'0:0:0:0:0:1000:1000:1000:0:0:0':accelAction.slice(9);
-  return {...base,mapping:encode(draft,resetDraft?pulses():effectivePulses()),esc:compatibleEsc(),accel,action:accelAction,reset:resetDraft};
+ function snapshotSave(scope){
+  const expectedWiring=config(saved),values=[...saved.observedMinimumUs];
+  const intent={...base,scope,page:step,mapping:'',esc:saved.escCalibrationSaved,accel:saved.accelModel,payload:'',draft:config(draft),action:accelAction,motors:[]};
+  if(scope==='WIRING'){
+   intent.payload=encode(draft);
+   if(!wiringCompatible()){values.fill(0);intent.esc=false;}
+   Object.assign(expectedWiring,config(draft));
+  }else if(scope==='ACCEL'){
+   intent.payload=accelAction;intent.accel=accelAction.slice(9);
+  }else if(scope==='ESC'){
+   intent.payload='TONES_CONFIRMED';intent.esc=true;
+  }else if(scope.startsWith('RESET_')){
+   intent.payload='CONFIRM_RESET';
+   if(scope==='RESET_ALL'){Object.assign(expectedWiring,defaults());values.fill(0);intent.esc=false;intent.accel='0:0:0:0:0:1000:1000:1000:0:0:0';}
+   if(scope==='RESET_ACCEL')intent.accel='0:0:0:0:0:1000:1000:1000:0:0:0';
+   if(scope==='RESET_ESC')intent.esc=false;
+   if(scope==='RESET_OUTPUT')values.fill(0);
+  }else{
+   intent.motors=scope==='ALL'?motors:[Number(scope.slice(1))];
+   intent.pulse=pulses()[intent.motors[0]-1];intent.payload=String(intent.pulse);
+   for(const motor of intent.motors)values[motor-1]=intent.pulse;
+  }
+  intent.mapping=encode(expectedWiring,values);return intent;
  }
  function checkSaveReadback(board){
   const intent=ambiguousSave;
   if(!intent||!outputOff(board)||board.configVerified===false)return false;
-  if(board.bootId!==intent.bootId||board.configRevision!==intent.revision+1||!board.configValid||
+  if(board.bootId!==intent.bootId||![intent.revision,intent.revision+1].includes(board.configRevision)||!board.configValid||
    encode(config(board),board.observedMinimumUs)!==intent.mapping||board.escCalibrationSaved!==intent.esc||board.accelModel!==intent.accel){
    if(board.configRevision!==intent.revision)conflict=true;
    return false;
   }
-  base={bootId:board.bootId,revision:board.configRevision};saved=board;draft=config(board);
-  minimums=[null,null,null,null];escDraft=false;accelAction='KEEP';resetDraft=false;
-  ambiguousSave=null;saveState='Saved on board';conflict=false;
-  loadWiring();message(saveState);cues.play('saved');return true;
+  base={bootId:board.bootId,revision:board.configRevision};saved=board;
+  if(intent.scope==='WIRING'&&sameWiring(draft,intent.draft)){draft=config(board);loadWiring();}
+  if(intent.scope==='ACCEL'&&accelAction===intent.action)accelAction='KEEP';
+  if(intent.scope==='ESC')escDraft=false;
+  for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
+  if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();$('#a2Pins').checked=false;minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;}
+  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;}
+  if(intent.scope==='RESET_ESC')escDraft=escAttempt=false;
+  if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
+  ambiguousSave=null;saveState=intent.scope.startsWith('RESET_')?'Reset saved on board':'Saved on board';conflict=false;operationError='';
+  message('✓ '+saveState);cues.play('saved');return true;
  }
- async function save(){
+ async function save(scope){
   if(ambiguousSave){
    const pending=ambiguousSave,readback=await motorClient.wizardStatus();
-   if(checkSaveReadback(readback))return;
-   if(ambiguousSave!==pending||readback.configVerified===false||readback.configRevision!==pending.revision)throw Error('Board state changed or readback is unverified.');
-   ambiguousSave=null;
+   if(checkSaveReadback(readback)){
+    if(pending.scope===scope)return;
+   }else{
+    if(ambiguousSave!==pending||readback.configVerified===false||readback.configRevision!==pending.revision)throw Error('Board state changed or readback is unverified.');
+    ambiguousSave=null;
+   }
   }
-  if(!validSave())throw Error('Complete calibration or stage a reset and verify outputs are off.');
-  const intent=snapshotSave();
-  ambiguousSave=intent;saveState='Saving setup · verifying readback';
+  if(scope===pageScope()&&pageSaved(step))return;
+  if(!canSaveScope(scope))throw Error('Complete this page and verify PWM is off before saving.');
+  const intent=snapshotSave(scope);
+  ambiguousSave=intent;saveState='Saving this page · verifying board readback';
+  render();
   let error='';
   try{
-   await motorClient.wizardCommand('WIZARD_SAVE',[intent.mapping,intent.revision,`${intent.bootId}:${intent.esc?1:0}${intent.reset?'R':''}:${intent.action}`],intent.bootId);
+   await motorClient.wizardCommand('WIZARD_SAVE_PAGE',[intent.payload,intent.revision,`${intent.bootId}:${intent.scope}`],intent.bootId);
   }catch(e){error=e.message;}
   try{
    const readback=await motorClient.wizardStatus();
    if(checkSaveReadback(readback))return;
    if(readback.configVerified!==false&&readback.configRevision===intent.revision){
-    ambiguousSave=null;
-    saveState='Save incomplete · verified previous board setup. Draft retained.';
-   }else saveState='Save incomplete · readback differs from the requested setup.';
-  }catch{
-   saveState='Save unverified · read back the board before retrying.';
-  }
+    ambiguousSave=null;saveState='Save failed · previous board settings verified. Page draft retained.';
+   }else saveState='Save unverified · board readback differs from this page.';
+  }catch{saveState='Save unverified · read back the board before retrying.';}
   throw Error(error||saveState);
  }
  async function act(name,run){
@@ -515,16 +588,19 @@ if(root){
    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
    a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
   }
-  if(name==='save'){await save();return;}
+  if(name==='save-page'||name==='save-next'){
+   const scope=pageScope();
+   if(scope&&(canSaveScope(scope)||ambiguousSave))await save(scope);
+   if(name==='save-next')await navigate(step+1,true,true);
+   return;
+  }
+  if(name==='verify-save'){if(ambiguousSave)await save(ambiguousSave.scope);return;}
   if(name.startsWith('reset-')){
-   const scope=name==='reset-all'?'all':$('#a2ResetScope').value;
-   if(!observedOff()||!boardReady())throw Error('Verify the board and outputs before staging a reset.');
-   if(!window.confirm(`Stage reset for ${scope==='all'?'all Wizard settings':scope}? Final Save applies it to the board.`))return;
-   if(scope==='all'){draft=defaults();loadWiring();}
-   if(scope==='all'||scope==='accel')accelAction='RESET';
-   if(scope==='all'||scope==='esc'){escDraft='cleared';escAttempt=false;}
-   if(scope==='all'||scope==='minimums')minimums=[0,0,0,0];
-   resetDraft=true;saveState='Reset pending · Save applies it to the board.';return;
+   const selected=name==='reset-all'?'all':$('#a2ResetScope').value;
+   const scope={all:'RESET_ALL',accel:'RESET_ACCEL',esc:'RESET_ESC',minimums:'RESET_OUTPUT'}[selected];
+   if(!canSaveScope(scope))throw Error('Verify the board and outputs before resetting setup.');
+   if(!window.confirm(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`))return;
+   await save(scope);return;
   }
   if(name.startsWith('imu-')){
    const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO','imu-level':'LEVEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL'};
@@ -558,7 +634,7 @@ if(root){
    const ack=await motorClient.wizardCommand('WIZARD_ESC_CONFIRM',['TONES_CONFIRMED','BATTERY_DISCONNECTED',base.bootId],base.bootId);
    ensureOperation(run);
    if(!ack.escConfirmationStaged)throw Error('ESC confirmation was not acknowledged.');
-   escDraft=true;escAttempt=false;saveState='';message('Confirmed · pending final save');return;
+   escDraft=true;escAttempt=false;saveState='';message('Confirmed · Save this page');return;
   }
   if(name==='cal-slider'){await sliderAction(run);return;}
   if(name==='resume-cal'){
@@ -592,7 +668,7 @@ if(root){
    render();return;
   }
   if(action){perform(action);return;}
-  if(b.dataset.nav==='1'&&step===7){perform('save');return;}
+  if(b.dataset.nav==='1'&&step!==7&&pageScope()){perform('save-next');return;}
   if(b.dataset.step!==undefined||b.dataset.nav){
    const next=b.dataset.nav?step+Number(b.dataset.nav):Number(b.dataset.step);
    if(next!==step)void navigate(next,!!b.dataset.nav).catch(e=>message(e.message));
