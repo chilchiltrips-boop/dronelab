@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {a2MotorFixture} from './a2-motor-host-fixture.mjs';
 
-test('actual A2 automatic ESC commands consume once, run independently, persist results and require operator confirmation',()=>{
+test('A2 cold-start ESC sequence persists without tone check, supports bounded output calibration, and retains legacy operator confirmation',()=>{
  const dir=mkdtempSync(join(tmpdir(),'a2-auto-esc-'));
  try{
   const code=a2MotorFixture(dir)+String.raw`
@@ -60,12 +60,22 @@ int main(){
  assert(zjAutoEscSequence.phase==ZjAutoEscSequence::LOW_PHASE);for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1000));
  tick(5000);off();assert(zjAutoEscSequence.phase==ZjAutoEscSequence::DONE);
  zjMotorLoop();assert(zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&!zjMotorCalibrationSaved);
+ assert(zjAutoEscSequenceReady());assert(has(cmd("WIZARD_STATUS"),"\"sequenceReady\":true"));
+ assert(has(cmd("WIZARD_STATUS"),"\"confirmationSource\":\"CONTROLLER_SEQUENCE_ONLY\""));
  assert(has(cmd("WIZARD_STATUS"),"\"toneDetectionSupported\":false"));
+ // A completed controller sequence permits a captured minimum pulse to be
+ // stored without pretending that any ESC reported accepting its endpoints.
+ assert(has(page("M1","1087"),"confirmed_output_capture_required"));
+ zjWizardCaptureOwner="USB";zjWizardCaptureConfig=zjMotorConfig;zjWizardCapturedMinimum[0]=1087;
+ assert(!has(page("M1","1087"),"error"));assert(zjWizardSaved.motor.minimumUs[0]==1087);
+ boot();off();assert(zjAutoEscSequenceReady()&&!zjMotorCalibrationSaved);
+ assert(zjWizardSaved.motor.minimumUs[0]==1087);
  assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
  assert(has(cmd("WIZARD_ESC_CONFIRM","AUTO_TONES_CONFIRMED","WRONG:BATTERY_DISCONNECTED",zjBootId),"complete_auto"));
  assert(!has(cmd("WIZARD_ESC_CONFIRM","AUTO_TONES_CONFIRMED",attempt()+":BATTERY_DISCONNECTED",zjBootId),"error"));
  assert(has(page("ESC","TONES_CONFIRMED","other-authorized-session"),"confirm_esc"));
- cmd("STOP");off();assert(!zjWizardEscConfirmed&&zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED);
+ cmd("STOP");off();assert(!zjWizardEscConfirmed&&zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE);
+ assert(zjAutoEscSequenceReady()); // STOP cannot erase a verified result.
  assert(has(page("ESC","TONES_CONFIRMED"),"confirm_esc"));
  assert(!has(prepare(),"error"));boot();complete();
  assert(!has(cmd("WIZARD_ESC_CONFIRM","AUTO_TONES_CONFIRMED",attempt()+":BATTERY_DISCONNECTED",zjBootId),"error"));
@@ -94,10 +104,12 @@ int main(){
  assert(!has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"error"));
  assert(has(cmd("WIZARD_STATUS"),"\"resultRetryAllowed\":false"));
  off();assert(zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&!zjMotorCalibrationSaved);
- // Header STOP after OFF discards an unconfirmed result instead of staging it.
- cmd("STOP");assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED);off();
+ // Header STOP after OFF retains verified NVS result. Explicit Cancel clears it.
+ cmd("STOP");assert(zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE);off();assert(zjAutoEscSequenceReady());
+ assert(!has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"error"));
+ assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED&&!zjAutoEscSequenceReady());
  assert(has(cmd("WIZARD_AUTO_ESC_RETRY",String(zjAutoEscRecord.attempt),"-",zjBootId),"completed_auto_sequence_required"));
- assert(zjAutoEscRecord.state==ZjAutoEscRecord::CANCELLED&&!zjWizardEscConfirmed);
+ assert(!zjWizardEscConfirmed);
  // A failed cancellation write must still retire the in-RAM retry proof.
  assert(!has(prepare(),"error"));boot();tick(5000);tick(5000);
  zjKitPrefs.failNextWrite=true;zjMotorLoop();assert(zjAutoEscStorageError);

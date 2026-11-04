@@ -20,7 +20,7 @@ try{
   const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.11'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
   const f=window.__wizard={kit,calls:[],writes:0,run:0,imuSequence:3,candidates:{},
-   board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,toneDetectionSupported:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
+   board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
     imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
     ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false}}
   };
@@ -44,17 +44,18 @@ try{
      if(a.a!=='PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD'||a.c!==kit.bootId||Number(a.b)!==b.configRevision)throw Error('Prepare interlock');
      if(b.escCalibrationSaved||b.observedMinimumUs.some(Boolean))b.configRevision++;
      Object.assign(b,{escCalibrationSaved:false,escConfirmationStaged:false,observedMinimumUs:[0,0,0,0]});
-     b.autoEsc={version:1,state:'AWAITING_POWER_CYCLE',phase:'OFF',attemptId:'00000ABC',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,toneDetectionSupported:false};
+     b.autoEsc={version:1,state:'AWAITING_POWER_CYCLE',phase:'OFF',attemptId:'00000ABC',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false};
      if(f.dropPrepareAck){f.dropPrepareAck=false;throw Error('Simulated lost preparation acknowledgement');}
      break;
     }
     case 'WIZARD_AUTO_ESC_CANCEL':
      if(f.failCancel){f.failCancel=false;b.autoEsc={...b.autoEsc,cancelUnverified:true,resultRetryAllowed:false,reason:'STORAGE_ERROR'};throw Error('Simulated cancellation save failure');}
-     b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',outputsOff:true,resultPersisted:false,cancelUnverified:false,reason:'NONE'};b.escConfirmationStaged=false;stop();break;
+     b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',outputsOff:true,resultPersisted:false,sequenceReady:false,cancelUnverified:false,reason:'NONE'};b.escConfirmationStaged=false;stop();break;
     case 'WIZARD_ESC_CONFIRM':
      if(a.a!=='AUTO_TONES_CONFIRMED'||a.b!==b.autoEsc.attemptId+':BATTERY_DISCONNECTED'||b.autoEsc.state!=='SEQUENCE_COMPLETE'||!b.autoEsc.resultPersisted)throw Error('ESC incomplete');
      b.escConfirmationStaged=true;break;
     case 'CAL_SLIDER':
+     if(!b.escCalibrationSaved&&!b.autoEsc.sequenceReady)throw Error('Stored ESC controller sequence required');
      Object.assign(b,{mode:'SLIDER_TEST',sliderMask:Number(a.a),remainingMs:30000,pulseUs:[0,1,2,3].map(i=>Number(a.a)&(1<<i)?1000:0)});break;
     case 'SLIDE':
      if(Number(a.b)>1500)throw Error('Calibration cap');
@@ -65,7 +66,7 @@ try{
       extra={stoppedSlider:true,stoppedMask:b.sliderMask,stoppedPulseUs:b.pulseUs.find(Boolean)};
       if(a.a==='CAPTURE_OUTPUT')for(let i=0;i<4;i++)if(b.sliderMask&(1<<i))f.candidates[i]=b.pulseUs[i];
      }
-     f.run++;if(!b.escConfirmationStaged)b.escCalibrationPending=false;if(!b.escCalibrationSaved&&['RUNNING','AWAITING_POWER_CYCLE','SEQUENCE_COMPLETE'].includes(b.autoEsc.state))b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',resultPersisted:false,outputsOff:true};stop();break;
+     f.run++;if(!b.escConfirmationStaged)b.escCalibrationPending=false;if(!b.escCalibrationSaved&&['RUNNING','AWAITING_POWER_CYCLE'].includes(b.autoEsc.state))b.autoEsc={...b.autoEsc,state:'CANCELLED',phase:'OFF',resultPersisted:false,sequenceReady:false,outputsOff:true};stop();break;
     case 'WIZARD_SAVE_PAGE':{
      const scope=a.c.split(':')[1];
      if(b.mode!=='DISABLED'||Number(a.b)!==b.configRevision||!a.c.startsWith(kit.bootId+':'))throw Error('Save interlock');
@@ -85,12 +86,12 @@ try{
       b.escCalibrationSaved=true;b.escCalibrationPending=b.escConfirmationStaged=false;
      }else if(scope==='ALL'||/^M[1-4]$/.test(scope)){
       const selected=scope==='ALL'?[0,1,2,3]:[Number(scope.slice(1))-1],pulse=Number(a.a);
-      if(!b.escCalibrationSaved||pulse<1000||pulse>1500||selected.some(i=>f.candidates[i]!==pulse&&b.observedMinimumUs[i]!==pulse))throw Error('Confirmed pulse required');
+      if((!b.escCalibrationSaved&&!b.autoEsc.sequenceReady)||pulse<1000||pulse>1500||selected.some(i=>f.candidates[i]!==pulse&&b.observedMinimumUs[i]!==pulse))throw Error('Stored ESC controller sequence and captured pulse required');
       b.observedMinimumUs=[...b.observedMinimumUs];for(const i of selected)b.observedMinimumUs[i]=pulse;
      }else if(scope.startsWith('RESET_')){
       if(a.a!=='CONFIRM_RESET')throw Error('Confirm reset');
       if(scope==='RESET_ACCEL'||scope==='RESET_ALL')b.accelModel=identityModel;
-      if(scope==='RESET_ESC'||scope==='RESET_ALL'){b.escCalibrationSaved=false;b.autoEsc={...b.autoEsc,state:'CANCELLED',resultPersisted:false};}
+      if(scope==='RESET_ESC'||scope==='RESET_ALL'){b.escCalibrationSaved=false;b.autoEsc={...b.autoEsc,state:'CANCELLED',resultPersisted:false,sequenceReady:false};}
       if(['RESET_OUTPUT','RESET_ALL','RESET_ESC'].includes(scope))b.observedMinimumUs=[0,0,0,0];
       if(scope==='RESET_ALL')setWiring('X:0123:0101');
      }else throw Error('Unsupported scope');
@@ -108,7 +109,7 @@ try{
    const publish=()=>window.dispatchEvent(new CustomEvent('zebjus:motor-state',{detail:{...b,receivedAt:Date.now(),motorsDisabled:b.mode==='DISABLED'}}));
    b.mode='AUTO_CAL_HIGH';b.pulseUs=[2000,2000,2000,2000];b.autoEsc={...b.autoEsc,state:'RUNNING',phase:'HIGH',outputsOff:false};publish();
    setTimeout(()=>{b.mode='AUTO_CAL_LOW';b.pulseUs=[1000,1000,1000,1000];b.autoEsc.phase='LOW';publish();},2000);
-   setTimeout(()=>{stop('CAL_FINISHED');b.autoEsc={...b.autoEsc,state:'SEQUENCE_COMPLETE',phase:'OFF',outputsOff:true,resultPersisted:true};publish();},4000);
+   setTimeout(()=>{stop('CAL_FINISHED');b.autoEsc={...b.autoEsc,state:'SEQUENCE_COMPLETE',phase:'OFF',outputsOff:true,resultPersisted:true,sequenceReady:true,confirmationSource:'CONTROLLER_SEQUENCE_ONLY'};publish();},4000);
   };
 
  };
@@ -171,46 +172,46 @@ try{
  assert.equal(await fixture(()=>__wizard.writes),3,'Restore Saved never writes hardware');
  await step(4).click();
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="5"] h3').textContent(),'Automatic ESC Calibration');
- assert.equal(await button('auto-prepare').isDisabled(),true,'automatic calibration requires local procedure checks');
- await step(6).click();assert.equal(await button('cal-slider').isDisabled(),true,'output calibration cannot start before ESC confirmation');
- assert.equal(await button('skip-output').isVisible(),false,'cannot skip output into Report before ESC calibration');
+ for(const id of ['a2EscProps','a2PowerOff','a2ReadProcedure','a2Tones','a2EscDisconnected'])
+  assert.equal(await wizard.locator('#'+id).count(),0,'ESC page does not require checkbox '+id);
+ assert.equal(await button('confirm-cal').count(),0,'no ESC-tone confirmation action');
+ assert.equal(await button('auto-prepare').isDisabled(),false,'one guarded Prepare action is available');
+ await step(6).click();assert.equal(await button('cal-slider').isDisabled(),true,'motor test blocked until stored ESC controller result');
+ assert.equal(await button('skip-output').isVisible(),false,'Output cannot be skipped to Report before ESC sequence');
  await step(5).click();
  assert.equal(await button('high').count(),0);assert.equal(await button('low').count(),0);
- await check('a2EscProps','a2PowerOff','a2ReadProcedure');
  await fixture(()=>{__wizard.dropPrepareAck=true;});
- await button('auto-prepare').click();await expectText('.a2-phase','Disconnect LiPo AND USB');
- assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','preparing never emits PWM');
- assert.equal(await button('save-page').isDisabled(),true);
+ await button('auto-prepare').click();await expectText('.a2-phase','Request stored');
+ assert.equal(await fixture(()=>__wizard.board.mode),'DISABLED','Prepare never emits PWM');
+ assert.equal(await button('save-page').isVisible(),false,'ESC page has no manual Save requirement');
+ assert.equal(await nav(1).isDisabled(),true,'cannot continue before cold-start result');
  await fixture(()=>{__wizard.failCancel=true;});await button('auto-cancel').click();
  await expectText('.a2-phase','Do not power cycle');
  assert.equal(await button('auto-prepare').isDisabled(),true);
- assert.equal(await button('auto-retry').isVisible(),false,'a failed cancellation is not a retryable successful result');
+ assert.equal(await button('auto-retry').isVisible(),false,'cancel failure cannot certify a result');
  assert.match(await button('auto-cancel').textContent(),/Retry cancelling/);
  await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
- await check('a2EscProps','a2PowerOff','a2ReadProcedure');await button('auto-prepare').click();
+ await button('auto-prepare').click();
  await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','HIGH · 2000 µs');
- await expectText('.a2-phase','LOW · 1000 µs');await expectText('.a2-phase','PWM off verified');
- assert.equal(await button('save-page').isDisabled(),true,'controller completion alone cannot create a saved ESC confirmation');
- assert.match(await wizard.locator('.a2-auto-result').textContent(),/Not confirmed/);
- // Missing ESC tones must have an explicit discard/retry path, never a save.
- assert.match(await button('auto-cancel').textContent(),/Discard unconfirmed/);
- await button('auto-cancel').click();await expectText('.a2-phase','cancelled');
- assert.equal(await button('save-page').isDisabled(),true);
- await check('a2EscProps','a2PowerOff','a2ReadProcedure');await button('auto-prepare').click();
- await fixture(()=>__wizard.powerCycle());await expectText('.a2-phase','PWM off verified');
- mkdirSync('test-output',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
- await check('a2Tones','a2EscDisconnected');await button('confirm-cal').click();
- await expectText('.a2-calibration-summary','Save this page');await expectSaved(5,false);
- await fixture(()=>{__wizard.dropSaveAck=true;__wizard.failStatus=true;});
- await button('save-page').click();await expectText('.a2-message','Simulated lost Save acknowledgement');
- await expectSaved(5,false);
- assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true,'the board committed despite the lost response');
- await fixture(()=>{__wizard.failStatus=false;document.querySelector('[data-action="save-page"]').click();});await expectSaved(5);
- assert.equal(await fixture(()=>__wizard.writes),4,'retry reads the board before another write');
- assert.equal(await nav(1).isVisible(),true,'ESC calibration precedes Output Calibration');
+ await expectText('.a2-phase','LOW · 1000 µs');
+ await expectText('.a2-phase','Controller sequence stored');
+ await expectSaved(5);
+ assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true);
+ assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false,'do not fabricate ESC endpoint confirmation');
+ assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_ESC_CONFIRM')),[],
+  'no tone-confirmation command is needed or sent for the automatic controller sequence');
+ assert.match(await wizard.locator('.a2-auto-result').textContent(),/Acceptance not measured/);
+ assert.equal(await button('confirm-cal').count(),0);
+ assert.equal(await button('save-page').isVisible(),false);
+ assert.equal(await fixture(()=>__wizard.writes),3,'automatic controller result requires no app-side ESC Save');
+ assert.equal(await nav(1).isDisabled(),false,'stored controller result allows next stage');
+ mkdirSync('test-output',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));
+ await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
+ await button('stop').click();await expectSaved(5);
+ assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true,'normal STOP preserves the verified stored result');
  await nav(1).click();await expectText('.a2-cal-target','Motor 1 of 4');
  assert.equal(await wizard.locator('[data-panel="6"]').isVisible(),true);
- assert.equal(await button('skip-output').isVisible(),true,'operator may skip optional output minimum measurement after ESC confirmation');
+ assert.equal(await button('skip-output').isVisible(),true,'optional minimum output measurement may be skipped after stored sequence');
  assert.equal(await nav(1).isDisabled(),true);
  const pulse=wizard.locator('#a2CalPulse');
  assert.equal(await pulse.getAttribute('max'),'1500');assert.equal(await pulse.isDisabled(),true);
@@ -267,7 +268,7 @@ try{
  await step(7).click();await wizard.locator('[data-panel="7"] summary').click();
  await button('reset-selected').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
- assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),true);
+ assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true);
  await step(6).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(7).click();
  await button('reset-all').click();await expectText('.a2-report-state','Reset saved on board');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[0,0,0,0]);assert.equal(await fixture(()=>__wizard.board.escCalibrationSaved),false);
@@ -275,5 +276,5 @@ try{
  assert.deepEqual(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_SAVE')),[]);
  assert.deepEqual(errors,[]);
  await step(7).click();assert.equal(await nav(1).isVisible(),false);
- console.log('PASS simulated A2 ESC before output calibration and final report, automatic power-cycle, operator confirmation, verified saves, reset and mobile layout');
+ console.log('PASS simulated A2 one-click ESC prepare, cold-power auto result with no tone ticks, persisted sequence/STOP, output calibration, reset and final Report');
 }finally{await browser.close();}
