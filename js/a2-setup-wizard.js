@@ -97,22 +97,20 @@ if(root){
  <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
  <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Output Calibration limits the pulse to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
- <section data-panel="5"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3>${soundButton}</div>${pageStatus(ESC)}
- <p>APM / Pixhawk-style calibration on the next power-on. The A2 runs all four ESCs without a live app connection.</p>
+ <section data-panel="5"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3></div>${pageStatus(ESC)}
+ <p>Prepare once while connected. A2 completes HIGH → LOW → PWM OFF and stores the controller result during the next full power-on; no app connection is needed for the sequence.</p>
  <p class="a2-calibration-summary" role="status"></p>
- <ol class="a2-cal-steps"><li data-cal-stage="prepare"><b>Prepare and save the request</b><span>Remove all propellers. Save page changes, verify the wiring, lower throttle and disarm. Preparing keeps PWM off and clears old ESC confirmation and starting pulses.</span></li><li data-cal-stage="power"><b>Power the entire aircraft off</b><span>Disconnect LiPo and USB. Wait until the A2 and ESCs are fully off. A software reboot or RESET button is not a substitute.</span></li><li data-cal-stage="sequence"><b>Reconnect LiPo only</b><span>The firmware sends HIGH 2000 µs for 5 seconds, then LOW 1000 µs for 5 seconds, then cuts PWM. Listen for the ESC’s own tones. Disconnect power immediately to abort while the app is offline.</span></li><li data-cal-stage="confirm"><b>Reconnect, verify and save</b><span>Wait at least 15 seconds after LiPo power-on and for the ESC success tones, then disconnect LiPo. Reconnect A2 by USB to read the stored result, or reconnect AP/STA after a normal power-on. Confirm the tones, then Save.</span></li></ol>
- <label class="a2-check"><input type="checkbox" id="a2EscProps"> All propellers removed</label>
- <label class="a2-check"><input type="checkbox" id="a2PowerOff"> I will disconnect LiPo and USB before reconnecting LiPo</label>
- <label class="a2-check"><input type="checkbox" id="a2ReadProcedure"> Motor/ESC wiring verified and automatic procedure understood</label>
+ <ol class="a2-cal-steps">
+  <li data-cal-stage="prepare"><b>1. Prepare on the connected A2</b><span>Remove all propellers, check ESC wiring and keep throttle LOW / input DISARMED. Press Prepare and verify that the request is saved while PWM stays OFF.</span></li>
+  <li data-cal-stage="power"><b>2. Disconnect power completely</b><span>Disconnect the control connection, USB power AND LiPo battery. Wait until both A2 and ESCs have no power. Closing Wi-Fi alone or pressing RESET is not a cold power cycle.</span></li>
+  <li data-cal-stage="sequence"><b>3. Reconnect LiPo only</b><span>LiPo must power both the A2 (through its proper regulator) and the ESCs. The A2 outputs 2000 µs HIGH for 5 s, then 1000 µs LOW for 5 s, then PWM OFF. Keep all propellers removed and allow the sequence to finish uninterrupted.</span></li>
+  <li data-cal-stage="result"><b>4. Reconnect and read the result</b><span>The A2 stores the sequence result locally before AP/STA is ready. Reconnect via AP, STA or USB after it finishes; the Wizard reads the result automatically. Continue only when the stored controller sequence and PWM OFF are verified.</span></li>
+ </ol>
  <div class="a2-actions"><button class="btn" data-action="auto-prepare">Prepare automatic calibration</button><button class="btn ghost" data-action="auto-cancel" hidden>Cancel prepared calibration</button></div>
- <div class="a2-auto-phases" aria-label="Automatic ESC sequence"><span data-auto-phase="HIGH">HIGH · 2000 µs · 5 s</span><span data-auto-phase="LOW">LOW · 1000 µs · 5 s</span><span data-auto-phase="OFF">PWM off</span></div>
+ <div class="a2-auto-phases" aria-label="Automatic ESC sequence"><span data-auto-phase="HIGH">HIGH · 2000 µs · 5 s</span><span data-auto-phase="LOW">LOW · 1000 µs · 5 s</span><span data-auto-phase="OFF">PWM OFF</span></div>
  <p class="a2-phase" role="status"></p><div class="a2-auto-result" role="status"></div>
- <p class="a2-sound-note">PWM ESCs do not report accepted endpoints. A completed controller sequence requires your success-tone confirmation. App sound cues are separate.</p>
- <div class="a2-actions"><button class="btn ghost" data-action="auto-read">Read calibration result</button><button class="btn ghost" data-action="auto-retry" hidden>Retry storing controller result</button></div>
- <label class="a2-check"><input type="checkbox" id="a2Tones" disabled> Success tones heard from all four ESCs</label>
- <label class="a2-check"><input type="checkbox" id="a2EscDisconnected" disabled> LiPo disconnected after the sequence; no ESC output is running</label>
- <button class="btn ghost" data-action="confirm-cal" disabled>Confirm ESC success tones</button>
- <div class="a2-actions"><button class="btn ghost" data-action="return-output" hidden>Continue to Output Calibration</button></div></section>
+ <p class="a2-sound-note">Result = controller HIGH/LOW/OFF sequence completed and stored, not proof that ESCs accepted their endpoints. PWM ESCs have no return channel. Check each motor's behavior later in Output Calibration with propellers removed.</p>
+ <div class="a2-actions"><button class="btn ghost" data-action="auto-read">Read stored result</button><button class="btn ghost" data-action="auto-retry" hidden>Retry storing controller result</button></div></section>
  <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(OUTPUT)}
  <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
  <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
@@ -154,6 +152,9 @@ if(root){
  const activeEsc=()=>escDraft===true||escDraft===false&&wiringCompatible()&&saved.escCalibrationSaved===true;
  const escCleared=()=>escDraft==='cleared';
  const compatibleEsc=()=>!escCleared()&&activeEsc();
+ const autoSequenceReady=()=>!escCleared()&&wiringCompatible()&&saved?.autoEsc?.sequenceReady===true&&
+  saved.autoEsc.state==='SEQUENCE_COMPLETE'&&saved.autoEsc.resultPersisted===true&&saved.autoEsc.compatible===true&&saved.autoEsc.outputsOff===true;
+ const escReadyForOutput=()=>compatibleEsc()||autoSequenceReady();
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
  const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
@@ -162,7 +163,7 @@ if(root){
  const checkList=ids=>ids.every(id=>$(id).checked);
  // Trust the verified board profile, not three repeated UI checkbox proofs.
  const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
- const escChecks=()=>outputChecks()&&checkList(['#a2EscProps','#a2PowerOff','#a2ReadProcedure']);
+
  const mask=(motor,all)=>all?15:1<<(motor-1);
  const targetMotors=(motor,all)=>all?motors:[motor];
  const currentResult=()=>{
@@ -238,11 +239,11 @@ if(root){
    recoverAutoPrepare(s);
    const auto=s.autoEsc;
    if(!working&&!s.escCalibrationSaved&&auto?.state!==old?.autoEsc?.state){
-    if(auto?.state==='SEQUENCE_COMPLETE')message('Controller sequence completed. Confirm the ESC success tones before Save.');
+    if(auto?.state==='SEQUENCE_COMPLETE')message('Controller sequence stored on A2. ESC acceptance is not directly verified.');
     else if(auto?.state==='INCOMPLETE')message('Calibration incomplete · '+auto.reason+'. Prepare a new attempt.');
    }
    if(auto?.attemptId&&auto.attemptId!=='00000000'&&auto.attemptId!==lastAutoAttempt){
-    lastAutoAttempt=auto.attemptId;$('#a2Tones').checked=$('#a2EscDisconnected').checked=false;
+    lastAutoAttempt=auto.attemptId;
     if(['AWAITING_POWER_CYCLE','RUNNING','SEQUENCE_COMPLETE'].includes(auto.state)&&!s.escCalibrationSaved)show(ESC);
    }
    if(step===OUTPUT&&!activeRun&&!working)setCalPulse(currentResult());
@@ -365,36 +366,44 @@ if(root){
  function renderEsc(){
   const auto=saved?.autoEsc,ready=boardReady()&&auto?.version===1;
   const high=auto?.phase==='HIGH',low=auto?.phase==='LOW',pending=auto?.state==='AWAITING_POWER_CYCLE';
-  const canConfirm=ready&&auto.state==='SEQUENCE_COMPLETE'&&auto.resultPersisted&&auto.compatible&&auto.outputsOff&&observedOff()&&!compatibleEsc();
-  $('.a2-calibration-summary').textContent=escDraft===true?'ESC tones confirmed · Save this page':compatibleEsc()?'✓ Saved on board · operator-confirmed ESC calibration':pending?'Request saved · awaiting full power cycle':auto?.state==='SEQUENCE_COMPLETE'?'Controller sequence completed · ESC success unconfirmed':auto?.state==='INCOMPLETE'?'Calibration incomplete':'Not calibrated';
-  $('.a2-calibration-summary').dataset.saved=String(escDraft!==true&&compatibleEsc());
-  $('.a2-phase').textContent=!kit().connected?'Connection unavailable · reconnect to read the stored calibration result.':!auto?'FlightCore 1.7.11+ required for automatic ESC calibration.':
-   high?'HIGH · 2000 µs · automatic timed phase':low?'LOW · 1000 µs · automatic timed phase':
-   auto.cancelUnverified?'Cancellation was not saved. Do not power cycle: retry Cancel and read back the board first.':
-   pending?'PWM off. Disconnect LiPo AND USB, then reconnect LiPo only. Do not use software reboot or RESET.':
-   canConfirm?'PWM off verified. Confirm all four ESC success tones and LiPo disconnection, then Save. If tones were missing, discard this attempt and prepare again.':
-   auto.reason!=='NONE'?`PWM off · ${auto.reason}. Prepare a new attempt after correcting the cause.`:
-   auto.state==='CANCELLED'?'PWM off · prepared calibration cancelled.':compatibleEsc()?'PWM off · ESC calibration saved.':'PWM off · prepare the next power-on calibration.';
-  $('.a2-auto-result').innerHTML=view('Read from the controller',[
+  const complete=autoSequenceReady(),legacy=compatibleEsc();
+  $('.a2-calibration-summary').textContent=complete?'✓ Controller sequence stored · HIGH/LOW/OFF verified · ESC acceptance not measured':
+   legacy?'✓ Existing operator-confirmed ESC record':
+   pending?'Request stored on A2 · awaiting complete power-off / cold power-on':
+   auto?.state==='SEQUENCE_COMPLETE'?'Sequence recorded, but result/wiring/PWM OFF verification failed':
+   auto?.state==='INCOMPLETE'?'Sequence interrupted · correction and retry required':'Not prepared';
+  $('.a2-calibration-summary').dataset.saved=String(escReadyForOutput());
+  $('.a2-phase').textContent=!kit().connected?'Connection offline · A2 will finish and store the result without the WebApp. Reconnect to read it.':
+   !auto?'FlightCore with automatic ESC status required.':
+   high?'HIGH · 2000 µs · timer running on A2':low?'LOW · 1000 µs · timer running on A2':
+   auto.cancelUnverified?'Cancel storage failed. Do not power cycle until Cancel/readback succeeds.':
+   pending?'Request stored · disconnect USB power and LiPo fully; reconnect LiPo only. A2 must have its own regulated battery power.':
+   complete?'Controller sequence stored; PWM is OFF. ESC endpoints cannot be verified over PWM. Continue to Output Calibration.':
+   legacy?'Existing operator-confirmed ESC record · PWM OFF. Continue to Output Calibration.':
+   auto.reason&&auto.reason!=='NONE'?'PWM OFF · '+auto.reason+'. Correct the problem, then prepare again.':
+   auto.state==='SEQUENCE_COMPLETE'?'Result not verified. Read the board or retry saving the controller result.':
+   auto.state==='CANCELLED'?'Request cancelled; PWM OFF.':'PWM OFF · prepare the next cold power-on calibration.';
+  $('.a2-auto-result').innerHTML=view('Board-stored calibration result',[
    ['Attempt',auto?.attemptId&&auto.attemptId!=='00000000'?auto.attemptId:'None'],
-   ['Sequence',auto?.state||'Firmware update required'],['Stored result',auto?.resultPersisted?'Verified on board':'No completed result'],
-   ['ESC acceptance',compatibleEsc()?'Operator confirmed · saved':escDraft===true?'Operator confirmed · pending Save':'Not confirmed · PWM has no ESC reply'],
-   ['Tone detection','Unavailable on this PWM connection']
+   ['Sequence',auto?.state||'No firmware report'],
+   ['NVS result',auto?.resultPersisted?'Recorded':'No verified completed result'],
+   ['Output safety',auto?.outputsOff?'PWM OFF verified':'Not verified'],
+   ['ESC endpoints','Acceptance not measured · no telemetry from PWM ESC'],
+   ['Continue',escReadyForOutput()?'Available · Output Calibration':'Blocked until controller result verified']
   ]);
   root.querySelectorAll('[data-auto-phase]').forEach(node=>node.classList.toggle('current',node.dataset.autoPhase===auto?.phase));
-  const stage=pending?'power':high||low?'sequence':canConfirm||compatibleEsc()?'confirm':'prepare';
+  const stage=pending?'power':high||low?'sequence':complete||legacy?'result':'prepare';
   root.querySelectorAll('[data-cal-stage]').forEach(li=>li.classList.toggle('current',li.dataset.calStage===stage));
   const start=$('[data-action="auto-prepare"]');
-  start.textContent=compatibleEsc()?'Prepare recalibration':'Prepare automatic calibration';
-  start.disabled=!ready||!canStart()||!wiringCompatible()||!escChecks()||!!working||canConfirm||!!autoPrepareIntent||accelAction!=='KEEP'||!!captureRequest;
+  start.textContent=escReadyForOutput()?'Prepare recalibration':'Prepare automatic calibration';
+  start.disabled=!ready||!canStart()||!wiringCompatible()||!outputChecks()||!!working||
+   pending||high||low||!!autoPrepareIntent||accelAction!=='KEEP'||!!captureRequest;
   const cancel=$('[data-action="auto-cancel"]');
-  cancel.hidden=!auto||!auto.cancelUnverified&&(!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD','SEQUENCE_COMPLETE'].includes(auto.state)||compatibleEsc());
-  cancel.textContent=auto?.cancelUnverified?'Retry cancelling':auto?.state==='SEQUENCE_COMPLETE'?'Discard unconfirmed attempt':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
+  cancel.hidden=!auto||(!auto.cancelUnverified&&!['AWAITING_POWER_CYCLE','RUNNING','INVALID_RECORD'].includes(auto.state));
+  cancel.textContent=auto?.cancelUnverified?'Retry cancelling':auto?.state==='RUNNING'?'Abort calibration':'Cancel prepared calibration';
   cancel.disabled=!kit().connected||!!working;
-  const retry=$('[data-action="auto-retry"]');retry.hidden=auto?.resultRetryAllowed!==true;retry.disabled=!ready||!!working;
-  $('#a2Tones').disabled=$('#a2EscDisconnected').disabled=!canConfirm||!!working;
-  $('[data-action="confirm-cal"]').disabled=!canConfirm||!!working||!checkList(['#a2Tones','#a2EscDisconnected']);
-  const back=$('[data-action="return-output"]');back.hidden=!compatibleEsc()||calibrationComplete();back.disabled=!!working;
+  const retry=$('[data-action="auto-retry"]');
+  retry.hidden=auto?.resultRetryAllowed!==true;retry.disabled=!ready||!!working;
  }
  function renderOutputs(){
   const fresh=Date.now()-lastStateAt<750;
@@ -402,8 +411,8 @@ if(root){
   const calLive=running&&!!activeRun;
   const busy=!!working||motorClient.busy;
   const disabled=!canStart()||!outputChecks()||busy;
-  const prerequisite=!compatibleEsc();
-  $('.a2-output-prerequisite').textContent=prerequisite?'Complete Step 6 ESC Calibration and Save before measuring motor starting pulses. Recalibrating ESC endpoints clears earlier starting pulses.':'';
+  const prerequisite=!escReadyForOutput();
+  $('.a2-output-prerequisite').textContent=prerequisite?'Complete and verify the stored Step 6 controller ESC sequence before measuring motor starting pulses. Recalibration clears earlier starting pulses.':'';
   $('[data-action="skip-output"]').hidden=prerequisite||calibrationComplete();
   $('[data-action="skip-output"]').disabled=busy||!observedOff();
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
@@ -412,7 +421,7 @@ if(root){
   $('#a2CalPulse').disabled=!calLive||!!working;
   const cal=$('[data-action="cal-slider"]');
   cal.textContent=working==='cal-slider'?(calLive?'Stopping…':'Starting…'):calLive?'Stop':'Start';
-  cal.disabled=!!working||(!calLive&&(disabled||!compatibleEsc()));cal.classList.toggle('danger',calLive);
+  cal.disabled=!!working||(!calLive&&(disabled||!escReadyForOutput()));cal.classList.toggle('danger',calLive);
   const value=pulses()[calMotor-1],recorded=calAll?targetMotors(calMotor,true).every(n=>validPulse(pulses()[n-1])):validPulse(value);
   const pending=targetMotors(calMotor,calAll).some(n=>validPulse(minimums[n-1]));
   $('.a2-cal-target').textContent=calAll?'M1–M4 · Wait for all four motors to spin steadily. Stop replaces all four draft values.':`Motor ${calMotor} of 4 · ${layouts[draft.layout].positions[calMotor-1]} · ${draft.layoutPins[calMotor-1]} · ${draft.rotations[calMotor-1]}`;
@@ -463,14 +472,14 @@ if(root){
  const calibrationComplete=()=>effectivePulses().every(validPulse);
  const validCurrent=()=>targetMotors(calMotor,calAll).every(n=>validPulse(pulses()[n-1]));
  const pageScope=()=>step===3?(accelAction.startsWith('MANUAL')?'ACCEL_MANUAL':'ACCEL'):
-  ({1:'WIRING',[ESC]:'ESC',[OUTPUT]:calAll?'ALL':'M'+calMotor})[step]||'';
+  ({1:'WIRING',[OUTPUT]:calAll?'ALL':'M'+calMotor})[step]||'';
  const accelSaved=()=>saved?.accelModel?.split(':').slice(0,2).some(value=>value==='1')||!!modelParts(saved?.accelModel)?.manual.some(Boolean);
  function pageSaved(page){
   if(!boardReady()||!saved.configValid)return false;
   if(page===1)return saved.configRevision>0&&wiringCompatible();
   if(page===3)return accelAction==='KEEP'&&accelSaved();
-  if(page===ESC)return wiringCompatible()&&saved.escCalibrationSaved===true&&escDraft!=='cleared'&&!escAttempt;
-  if(page===OUTPUT)return wiringCompatible()&&saved.escCalibrationSaved===true&&!activeRun&&
+  if(page===ESC)return wiringCompatible()&&escReadyForOutput()&&!escAttempt;
+  if(page===OUTPUT)return wiringCompatible()&&escReadyForOutput()&&!activeRun&&
    targetMotors(calMotor,calAll).every(n=>minimums[n-1]===null&&validPulse(pulses()[n-1])&&pulses()[n-1]===saved.observedMinimumUs[n-1]);
   return false;
  }
@@ -482,9 +491,9 @@ if(root){
   if(scope==='WIRING')return wiringValid();
   if(scope==='ACCEL')return accelAction.startsWith('CAPTURED:')&&saved.capture?.ready&&'CAPTURED:'+saved.capture.model===accelAction;
   if(scope==='ACCEL_MANUAL')return saved.accelManualVersion===1&&!manualError&&accelAction.startsWith('MANUAL:')&&!!modelParts(saved.accelModel);
-  if(scope==='ESC')return wiringCompatible()&&escDraft===true;
+
   const selected=scope==='ALL'?motors:[Number(scope.slice(1))];
-  return wiringCompatible()&&saved.escCalibrationSaved===true&&selected.every(n=>validPulse(pulses()[n-1]));
+  return wiringCompatible()&&escReadyForOutput()&&selected.every(n=>validPulse(pulses()[n-1]));
  }
  function canAdvance(){
   if([1,ESC,OUTPUT].includes(step))return pageSaved(step);
@@ -494,7 +503,8 @@ if(root){
   root.querySelectorAll('[data-save-page]').forEach(node=>{
    const page=Number(node.dataset.savePage),verified=pageSaved(page);
    node.dataset.saved=String(verified);
-   node.textContent=ambiguousSave?.page===page?saveState||'Checking the board before retry':verified?'✓ Saved on board':
+   node.textContent=page===ESC?(verified?(autoSequenceReady()?'✓ Controller HIGH/LOW/OFF result stored on board':'✓ Legacy ESC confirmation saved'):'ESC controller sequence not yet verified'):
+    ambiguousSave?.page===page?saveState||'Checking the board before retry':verified?'✓ Saved on board':
     !boardReady()?'Connect A2 with page-save firmware':page===3&&accelAction==='KEEP'?'Capture accelerometer values or enter manual offsets to save. Gyro bias is runtime-only.':'Unsaved · use Save on this page';
   });
  }
@@ -537,7 +547,7 @@ if(root){
   $('#a2Layout').disabled=lock;
   root.querySelectorAll('[data-pin],[data-rotation]').forEach(input=>input.disabled=lock);
   renderPageSaves();
-  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,pageSaved(ESC),calibrationComplete()&&compatibleEsc()&&minimums.every(value=>value===null),visited.has(REPORT)];
+  const completed=[boardReady(),pageSaved(1),visited.has(2),pageSaved(3),!!signal,pageSaved(ESC),calibrationComplete()&&escReadyForOutput()&&minimums.every(value=>value===null),visited.has(REPORT)];
   root.querySelectorAll('[data-step]').forEach((button,i)=>{
    const done=visited.has(i)&&completed[i];
    button.dataset.completed=String(!!done);button.dataset.saved=String([1,3,ESC].includes(i)?pageSaved(i):i===OUTPUT&&completed[OUTPUT]);
@@ -587,7 +597,7 @@ if(root){
   show(Math.max(0,Math.min(steps.length-1,next)));
  }
  async function prepare(kind){
-  if(!canStart()||!wiringCompatible()||!(kind==='esc'?escChecks():outputChecks()))throw Error('Save wiring, verify PWM is off and use the supported 50 Hz ESC profile. Complete the ESC procedure checks when calibrating ESCs.');
+  if(!canStart()||!wiringCompatible()||!outputChecks())throw Error('Save wiring, verify PWM OFF and use the supported 50 Hz ESC profile.');
   await motorClient.begin('wizard',null,{...base,mapping:encode(draft)});
  }
  function ensureOperation(run){
@@ -614,7 +624,7 @@ if(root){
    }
    cues.play('stop');return;
   }
-  if(!wiringCompatible()||saved?.escCalibrationSaved!==true||escAttempt)throw Error('Save wiring and ESC calibration before starting output calibration.');
+  if(!wiringCompatible()||!escReadyForOutput()||escAttempt)throw Error('Verify the saved controller ESC sequence and wiring before starting output calibration.');
   if(!window.confirm('Start '+(calAll?'all four motors':'motor M'+calMotor)+' at minimum pulse? Remove all propellers, verify motor/ESC wiring and power, and keep a physical power cutoff ready.'))return;
   const resume=currentResult();
   ensureOperation(runId);
