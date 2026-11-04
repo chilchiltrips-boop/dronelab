@@ -1,5 +1,5 @@
 {
-  "version": "1.35",
+  "version": "1.36",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -11,7 +11,7 @@
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
     "Aerion A2 eight-step Setup Wizard with per-page Save and Save & Next, verified green ticks and scoped reset"
   ],
-  "buildCommit": "96851953b7dd",
-  "publishedAt": "2026-11-04T05:25:51.439844+00:00",
-  "buildNumber": 466
+  "buildCommit": "322044a648ca",
+  "publishedAt": "2026-11-04T06:01:13.881749+00:00",
+  "buildNumber": 467
 }
