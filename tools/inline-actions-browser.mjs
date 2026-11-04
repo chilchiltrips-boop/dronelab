@@ -111,6 +111,11 @@ try{
  assert.equal(await page.locator('#flightBack').isVisible(),true);
  assert.equal(await page.locator('#flightStop').isVisible(),true,'original STOP remains on the full-page settings view');
  assert.equal(await page.locator('#flightStop').count(),1,'STOP is moved, not duplicated');
+ const transportParts=await page.locator('#flightNetworkSwitch').evaluate(node=>{
+  const [ap,track,sta]=[...node.children].map(child=>child.getBoundingClientRect());
+  return {apRight:ap.right,trackLeft:track.left,trackRight:track.right,staLeft:sta.left,trackWidth:track.width};
+ });
+ assert.ok(transportParts.apRight<=transportParts.trackLeft&&transportParts.trackRight<=transportParts.staLeft&&transportParts.trackWidth>=24,'moved AP/STA labels and toggle must not overlap');
  const bounds=await connection.boundingBox();assert.ok(bounds.x>=0&&bounds.width<=390&&bounds.height>=843);
  mkdirSync('test-output',{recursive:true});
  await page.screenshot({path:'test-output/inline-mobile-connection.png',fullPage:true});
