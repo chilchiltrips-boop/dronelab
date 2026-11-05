@@ -114,6 +114,8 @@ jobs:
             FlightCore_Firmware/*_APP.bin
             FlightCore_Firmware/*_FACTORY.bin
             FlightCore_Firmware/build-report.json
+            FlightCore_Firmware/catalog.json
+            FlightCore_Firmware/latest.json
           if-no-files-found: error
       - name: Commit verified firmware images and SHA-256 metadata
         if: github.ref == 'refs/heads/main' && steps.firmware_integrity.outputs.rebuild == 'true' && steps.firmware_integrity.outputs.publish == 'true'

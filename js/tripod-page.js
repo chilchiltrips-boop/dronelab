@@ -367,7 +367,8 @@ function initKitPid(host){
   const authorized=kit.transport==='usb'?kit.adminUnlocked:kit.controlAuthorized;
   const writable=valid&&authorized&&!busy&&!kit.working&&!kit.networkBusy&&!kit.otaInProgress&&kit.motorsArmed!==true&&kit.motorsDisabled!==false;
   const match=profileMatches();
-  $('tpPidTarget').textContent=connected?'PID SOURCE · FC · '+(kit.kitName||kit.kitId)+' · '+String(kit.transport||'').toUpperCase():'PID SOURCE · SIMULATOR';
+  const identity=kit.kitName&&kit.kitName!==kit.kitId?kit.kitName+' · '+kit.kitId:kit.kitId;
+  $('tpPidTarget').textContent=connected?'PID SOURCE · FC · '+identity+' · '+String(kit.transport||'').toUpperCase():'PID SOURCE · SIMULATOR';
   read.hidden=save.hidden=!connected;
   read.disabled=busy||!supported(kit);
   apply.textContent=connected?'Apply Live to FC':'Apply to Simulator';

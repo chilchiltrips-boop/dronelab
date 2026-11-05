@@ -62,6 +62,7 @@ try{
   window.dispatchEvent(new Event('dronelab:kit-link'));
  },{banks:PID_BANKS,profiles:PID_PROFILES});
  await status.filter({hasText:'revision 1'}).waitFor();
+ await frame.locator('#tpPidTarget').filter({hasText:'A2 fixture · ZFC-A2-012345ABCDEF · STA'}).waitFor();
  assert.equal(await gain('rateRoll').inputValue(),'1.8');
  assert.equal(await gain('angleRoll').inputValue(),'3.25');
  assert.equal(await read.isVisible(),true);
