@@ -6,7 +6,11 @@ on:
       - 'FlightCore_Firmware/bench-release-policy.json'
       - 'firmware-updater.js'
       - 'index.html'
+      - 'lab.html'
       - 'sw.js'
+      - 'tools/firmware-compile-time.test.mjs'
+      - 'tools/offline-cache.test.mjs'
+      - 'tools/connectivity-state-regression.test.mjs'
       - 'tools/bench-firmware-browser.mjs'
       - 'tools/verify_release.py'
       - '.github/workflows/publish-flightcore-bench.yml'
@@ -51,6 +55,10 @@ jobs:
             unzip -q "$archive" -d "$destination"
           fi
           python3 tools/verify_release.py --bench "$destination"
+      - name: Verify complete WebApp and firmware regression contracts
+        run: |
+          npm test
+          npm run check
       - name: Test the real bench images through Firmware Center
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
