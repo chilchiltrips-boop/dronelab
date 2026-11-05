@@ -79,6 +79,11 @@ def verify_build(build, board, version):
 
 
 def sync_catalog_version(catalog,version):
+    policy_path=OUT/'bench-release-policy.json'
+    if policy_path.exists():
+        policy=json.loads(policy_path.read_text())
+        if policy.get('candidateVersion')==version:
+            catalog.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN')
     catalog['version']=version
     for board in catalog.get('boards',[]):
         board.setdefault('latest',{})['version']=version
@@ -89,7 +94,10 @@ def write_metadata(catalog,version,built_at):
     catalog['builtAt']=built_at
     data=json.dumps(catalog,indent=2)+'\n'
     CAT.write_text(data); (ROOT/'firmware-catalog.json').write_text(data)
-    sub={'schema':2,'product':'ZEBJUS_FLIGHTCORE','version':version,'builtAt':built_at,'catalog':'catalog.json','note':'Board-aware firmware catalog. Build automation marks each verified package available after compilation.'}
+    bench=catalog.get('releaseScope')=='BENCH_DIAGNOSTIC'
+    note='BENCH DIAGNOSTIC ONLY; physical flight output disabled and acceptance pending.' if bench else 'Board-aware firmware catalog. Build automation marks each verified package available after compilation.'
+    sub={'schema':2,'product':'ZEBJUS_FLIGHTCORE','version':version,'builtAt':built_at,'catalog':'catalog.json','note':note}
+    if bench: sub.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN')
     top={**sub,'catalog':'firmware-catalog.json'}
     (OUT/'latest.json').write_text(json.dumps(sub,indent=2)+'\n')
     (ROOT/'firmware-latest.json').write_text(json.dumps(top,indent=2)+'\n')
