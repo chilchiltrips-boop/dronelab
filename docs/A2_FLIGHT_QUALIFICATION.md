@@ -2,6 +2,8 @@
 
 Current versions come from [WebApp metadata](../app-version.json), the [published firmware catalog](../firmware-catalog.json), the [candidate firmware version](../VERSION.txt) and [Android APK metadata](../mobile-apk/ANDROID_RELEASE_META.txt). The firmware publication hold pins the existing A1/A2 package while CI compiles and uploads candidate APP and Factory images. The candidate is intended for controlled bench qualification. Production promotion requires the candidate’s strict acceptance evidence and review.
 
+For bench testing, open **Devices & Firmware → Firmware Flash**, select **A2** and choose **Load 1.7.16 Bench**. On an enrolled kit with the dual-OTA layout, use the APP image and authorized Wi-Fi OTA to retain settings. Use the FACTORY image over USB for first installation or recovery. After flashing, check that **Running FW** reports 1.7.16 and the loaded build time. The bench catalog identifies the exact compiled artifact and marks physical flight output locked.
+
 ## Receiver and recovery
 
 | Input | Route | Physical ownership eligibility |

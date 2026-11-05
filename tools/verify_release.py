@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """Validate board-aware I2C scanner + LED release metadata and binaries."""
 from pathlib import Path
-import hashlib,json,struct
+import argparse,hashlib,json,struct,subprocess
 from firmware_compile_time import check_compiled_at
 ROOT=Path(__file__).resolve().parents[1]
-CAT=json.loads((ROOT/'firmware-catalog.json').read_text())
-LATEST=json.loads((ROOT/'firmware-latest.json').read_text())
-OUT=ROOT/'FlightCore_Firmware'
+SOURCE=ROOT/'FlightCore_Firmware'
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--bench',type=Path,help='Verify the approved bench package against the current compiled source')
+bench=parser.parse_args().bench
+OUT=bench or SOURCE
+catalog_path=OUT/'catalog.json' if bench else ROOT/'firmware-catalog.json'
+CAT=json.loads(catalog_path.read_text())
+LATEST=json.loads((OUT/'latest.json' if bench else ROOT/'firmware-latest.json').read_text())
 assert CAT['schema']==2 and CAT['product']=='ZEBJUS_FLIGHTCORE'
 assert LATEST['version']==CAT['version']
 source_version=(ROOT/'VERSION.txt').read_text().strip()
 if CAT.get('releaseScope')=='BENCH_DIAGNOSTIC':
  assert CAT.get('flightOutputQualified') is False and CAT.get('physicalAcceptance')=='NOT_RUN', 'Bench release must never claim flight qualification'
  assert LATEST.get('releaseScope')=='BENCH_DIAGNOSTIC' and LATEST.get('flightOutputQualified') is False, 'Latest firmware metadata must show bench status'
-hold_path=OUT/'publication-hold.json'
+hold_path=SOURCE/'publication-hold.json'
 held=CAT['version']!=source_version
+if bench:
+ policy=json.loads((SOURCE/'bench-release-policy.json').read_text())
+ assert not held and CAT['version']==policy['candidateVersion'], 'Bench package is for a different firmware source version'
+ for metadata in (CAT,LATEST):
+  assert metadata.get('releaseScope')=='BENCH_DIAGNOSTIC' and metadata.get('flightOutputQualified') is False and metadata.get('physicalAcceptance')=='NOT_RUN', 'Bench qualification metadata is invalid'
 if held:
  hold=json.loads(hold_path.read_text()) if hold_path.exists() else {}
  assert hold.get('schema')==1 and hold.get('candidateVersion')==source_version and hold.get('publishedVersion')==CAT['version'], 'Source/catalog version mismatch: rebuild both profiles'
@@ -23,11 +33,20 @@ assert json.loads((OUT/'catalog.json').read_text())==CAT
 assert len(CAT['boards'])==2
 assert [b['name'] for b in CAT['boards']]==['ZEBJUS AERION A1','ZEBJUS AERION A2']
 assert CAT['boards'][0]['build']['fqbn']=='esp32:esp32:esp32c3:CDCOnBoot=cdc'
-sketch=(OUT/'I2C_ADDRESS_SCANNER.ino').read_text()
+sketch=(SOURCE/'I2C_ADDRESS_SCANNER.ino').read_text()
 assert f'FW_VERSION="{source_version}"' in sketch, 'Sketch/catalog version mismatch'
 report=json.loads((OUT/'build-report.json').read_text())
 assert report['version']==CAT['version'], 'Build report/catalog version mismatch'
 assert report.get('sourceCommit') and report.get('sourceSha256'), 'Compile provenance required; rebuild both profiles'
+if bench:
+ approved=policy['benchArtifact']
+ assert report['sourceCommit']==approved['sourceCommit'], 'Wrong source commit for the approved bench artifact'
+ assert hashlib.sha256(catalog_path.read_bytes()).hexdigest()==approved['catalogSha256'], 'Bench catalog differs from the approved artifact'
+ assert hashlib.sha256((OUT/'build-report.json').read_bytes()).hexdigest()==approved['reportSha256'], 'Bench report differs from the approved artifact'
+ assert report['hardwareFlashingTested'] is False and {b['boardId'] for b in report['boards']}=={'ZFC-A1','ZFC-A2'}
+ compiled={str(p.relative_to(ROOT)) for p in [SOURCE/'I2C_ADDRESS_SCANNER.ino',SOURCE/'partitions.csv',*SOURCE.glob('*.h')]}
+ assert set(report['sourceSha256'])==compiled, 'Bench report has an incomplete compiled source set'
+ subprocess.run(['git','merge-base','--is-ancestor',report['sourceCommit'],'HEAD'],cwd=ROOT,check=True)
 if held:
  assert report['sourceCommit']==hold['publishedSourceCommit'] and hashlib.sha256((OUT/'build-report.json').read_bytes()).hexdigest()==hold['publishedBuildReportSha256'], 'Held release report differs from pinned production provenance'
  print(f"Publication hold: verifying published {CAT['version']}; current source is candidate {source_version}")
@@ -49,6 +68,8 @@ def slots(b):
 for board in CAT['boards']:
  assert board['id'] in ('ZFC-A1','ZFC-A2')
  a=board['latest']['app'];f=board['latest']['factory']
+ if bench:
+  assert board['latest']['version']==CAT['version'] and a['available'] and f['available'], 'Missing approved bench images'
  if not (a['available'] and f['available']):
   assert not a['available'] and not f['available']
   assert not a['size'] and not f['size']

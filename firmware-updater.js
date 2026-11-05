@@ -9,21 +9,24 @@ function confirmInLab(message){
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
+const BENCH_VERSION='1.7.16',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
+let benchCatalog=null,releaseTrack='published';
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
 let lastVerifiedRuntime=null,lastVerifiedAt=0,liveDiagnostic=null;
 let diagnosticSample=null,diagnosticAt=0,diagnosticError='',diagnosticRenderedSeq=null,diagnosticTimer=null;
 let telRxSeq=null,telMissed=0,telLastAt=0,telDeviceDrops=0,telRateActual=0;
-let usbFlashPhase='idle',usbFlashBoardId='',usbVerifiedPortInfo=null;
+let usbFlashPhase='idle',usbFlashExpected=null,usbVerifiedPortInfo=null;
 let firmwareTargetMethod='wifi'; // Switching mode NEVER writes the controller.
 let preparingConnectedFirmware=false,preparedConnectedFirmwareKey='';
 async function prepareConnectedFirmware(){
  const kit=globalThis.ZebjusKits?.getState?.();
  if(busy||preparingConnectedFirmware||firmwareTargetMethod!=='wifi'||!kit?.connected||!['sta','ap'].includes(kit.transport)||!kit.kitId||!kit.board)return;
  await loadCatalog();
+ if(busy||preparingConnectedFirmware)return;
  const preferred=globalThis.ZebjusKitNetworkPolicy?.otaTarget({method:'wifi',kit,usbBoard:expectedUsbBoard(),manualBoard:$('#fwBoardProfile')?.value,defaultBoard:catalog?.defaultBoardId});
   if(preferred?.kitId!==kit.kitId||preferred?.boardId!==kit.board)return;
-  const board=boardById(kit.board),pkg=board?.latest?.app;
+  const pkg=releaseForBoard(kit.board)?.app;
  if(!pkg?.available||!pkg.sha256)return;
  const expected=kit.kitId+'|'+kit.board+'|'+pkg.sha256;
  if(preparedConnectedFirmwareKey===expected&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase())return;
@@ -140,6 +143,7 @@ function syncFirmwareControls(){
  const hint=$('#fwUpgradeModeHelp');
  if(hint)hint.textContent=factory?'USB FACTORY overwrites flash partitions and can erase saved Wi-Fi/pairing even without the Erase checkbox. Prefer APP OTA to preserve settings.':'APP upgrade mode. Wi-Fi/pairing is preserved when partitions are compatible. STA/AP OTA requires an authorized idle kit.';
  const check=$('#fwCheckKitBtn');if(check)check.disabled=busy;
+ const bench=$('#fwLoadBenchBtn');if(bench){bench.disabled=busy;bench.setAttribute('aria-pressed',String(releaseTrack==='bench'));}
  for(const id of ['#fwTargetWifiTab','#fwTargetUsbTab']){const tab=$(id);if(tab)tab.disabled=busy;}
 }
 function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
@@ -147,6 +151,9 @@ async function sha256(bytes){const hashes=await import('./js/firmware-hashes.js'
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
 function boardById(id){return catalog?.boards?.find(b=>b.id===id)||null}
+function releaseForBoard(id,track=releaseTrack){
+ return (track==='bench'?benchCatalog?.boards.find(b=>b.id===id):boardById(id))?.latest;
+}
 function mapHardwareSignature(raw){const s=String(raw||'').toUpperCase();if(/\bUNKNOWN\b/.test(s))return'';const chips=Array.from(s.matchAll(/\bESP32[-_\s]*(C6(?:FH[48])?|[A-Z]\d+)\b/g),m=>'ESP32'+m[1].replace(/FH[48]$/,''));for(const b of catalog?.boards||[])for(const match of b.usbMatch||[]){const alias=String(match).toUpperCase(),compact=alias.replace(/[-_\s]+/g,'');if(compact.startsWith('ESP32')?chips.includes(compact):s.includes(alias))return b.id}return''}
 function boardName(id){return boardById(id)?.name||id||'Unknown board'}
 function cleanHardwareText(v){return String(v||'').replace(/ESP32[- ]?C[36]/ig,'controller').replace(/ESP32C[36]/ig,'controller').replace(/ESP-ROM[^\n]*/ig,'FlightCore bootloader').replace(/Espressif/ig,'ZEBJUS controller')}
@@ -179,19 +186,37 @@ async function loadCatalog(){
  if(sel){for(const b of catalog.boards||[]){if(!sel.querySelector(`option[value="${b.id}"]`)){const o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)}}}
  return catalog;
 }
+async function loadBenchCatalog(){
+ if(benchCatalog)return;
+ const response=await fetch(`${BENCH_BASE}/catalog.json`,{cache:'no-store'});
+ if(!response.ok)throw Error('FlightCore '+BENCH_VERSION+' bench package is unavailable');
+ const data=await response.json();
+ if(data?.schema!==2||data.product!=='ZEBJUS_FLIGHTCORE'||data.version!==BENCH_VERSION||
+    data.releaseScope!=='BENCH_DIAGNOSTIC'||data.flightOutputQualified!==false||data.physicalAcceptance!=='NOT_RUN'||
+    !Array.isArray(data.boards)||data.boards.length!==2||!['ZFC-A1','ZFC-A2'].every(id=>{
+     const release=data.boards.find(b=>b?.id===id)?.latest;
+     return release?.version===BENCH_VERSION&&['app','factory'].every(type=>{
+      const pkg=release[type];
+      return pkg?.available===true&&pkg.file===`ZEBJUS_FLIGHTCORE_${id.slice(4)}_${type.toUpperCase()}.bin`&&
+       !pkg.url&&/^[a-f0-9]{64}$/.test(pkg.sha256||'')&&Number.isInteger(pkg.size)&&pkg.size>=32768&&pkg.compiledAt;
+     });
+    }))throw Error('Invalid FlightCore bench catalog');
+ benchCatalog=data;
+}
 async function fetchBundledFirmware(file,version){
- const paths=[`${BASE}/${file}?v=${encodeURIComponent(version||VERSION)}`,`./${file}?v=${encodeURIComponent(version||VERSION)}`];
+ const paths=releaseTrack==='bench'?[`${BENCH_BASE}/${file}?v=${encodeURIComponent(version)}`]:
+  [`${BASE}/${file}?v=${encodeURIComponent(version||VERSION)}`,`./${file}?v=${encodeURIComponent(version||VERSION)}`];
  let last='';
  for(const src of paths){try{const r=await fetch(src,{cache:'no-store'});if(r.ok)return{response:r,src};last=`HTTP ${r.status}`}catch(e){last=e?.message||String(e)}}
  throw new Error(`Firmware package file is not present (${last||'not found'}).`);
 }
 async function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function cacheKey(boardId,type){return`${boardId||'unknown'}:${type||'app'}`}
-async function cacheFirmware(){if(!fw)return;try{const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({...fw,bytes:fw.bytes.buffer},cacheKey(fw.boardId,fw.type));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(e){log('Could not cache firmware: '+e.message)}}
+function cacheKey(boardId,type,track=releaseTrack){return`${track==='bench'?BENCH_VERSION+':':''}${boardId||'unknown'}:${type||'app'}`}
+async function cacheFirmware(){if(!fw)return;try{const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({...fw,bytes:fw.bytes.buffer},cacheKey(fw.boardId,fw.type,fw.track));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(e){log('Could not cache firmware: '+e.message)}}
 async function loadCached(boardId,type='app'){try{const db=await openDb(),v=await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readonly'),r=tx.objectStore(STORE).get(cacheKey(boardId,type));r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();if(v?.bytes){
- const board=boardById(boardId),pkg=board?.latest?.[type],bytes=new Uint8Array(v.bytes),hash=await sha256(bytes);
+ const release=releaseForBoard(boardId),pkg=release?.[type],bytes=new Uint8Array(v.bytes),hash=await sha256(bytes);
  if(!pkg?.available||!pkg.sha256||bytes.length!==pkg.size||hash.toLowerCase()!==String(pkg.sha256).toLowerCase()){log('Ignored older or mismatched cached firmware for '+boardName(boardId)+' ('+type+').');return false;}
- await setFirmware(bytes,pkg.file,{type,version:board.latest.version,boardId,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,cache:false,source:'Verified browser cache'});return true
+ await setFirmware(bytes,pkg.file,{type,version:release.version,boardId,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,cache:false,source:'Verified browser cache'});return true
 }}catch{}return false}
 async function clearCached(){try{const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch{}fw=null;renderFirmware();log('Cached firmware cleared.')}
 async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))bytes=new Uint8Array(bytes);const type=opt.type||inferType(name),boardId=opt.boardId||await targetBoardId(false);const imageInfo=validateEspImage(bytes,boardId,type),{inspectImage,imageBuildStamp,imageBuildTimeIso,imageSketchBuildStamp}=await import('./js/firmware-image.js?v=compile-time-verified-20261017');inspectImage(bytes,type,boardById(boardId),catalog);
@@ -205,11 +230,11 @@ async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))
   }else if(!Number.isFinite(built)||compiled<built-15*60*1000||compiled>built+12*60*60*1000)
    throw Error('Firmware compile date does not match the release build date. Old cached firmware may be selected; reload. Nothing flashed.');
  }
- const hash=await sha256(bytes);fw={bytes,name,type,version:opt.version||inferVersion(name),builtAt:opt.builtAt||'',compiledAt,compiledIso,buildId:opt.buildId||'',boardId,hash,imageInfo,source:opt.source||'Imported file'};renderFirmware();if(opt.cache!==false)await cacheFirmware();log(`Firmware verified: ${name} • ${boardName(boardId)} • chip ${imageInfo.chipId??'--'} • ${prettyBytes(bytes.length)} • ${type}`)}
+ const hash=await sha256(bytes);fw={bytes,name,type,version:opt.version||inferVersion(name),builtAt:opt.builtAt||'',compiledAt,compiledIso,buildId:opt.buildId||'',boardId,hash,imageInfo,track:releaseTrack,source:opt.source||'Imported file'};renderFirmware();if(opt.cache!==false)await cacheFirmware();log(`Firmware verified: ${name} • ${boardName(boardId)} • chip ${imageInfo.chipId??'--'} • ${prettyBytes(bytes.length)} • ${type}`)}
 function renderFirmware(){const has=!!fw;textTitle('#fwFileName',has?fw.name:'No firmware loaded');text('#fwFileVersion',has?fw.version:'--');textTitle('#fwBuildTime',has?(fw.compiledAt?formatBuildTime(fw.compiledAt):'Not reported in firmware image'):'--');
  const stampEl=$('#fwBuildTime');if(stampEl)stampEl.title=has?
   'UTC compile timestamp embedded in verified .bin: '+(fw.compiledIso||'unavailable')+' • Catalog build start: '+(fw.builtAt||'not reported'):
-  'Select a firmware file to read its embedded compile date';textTitle('#fwBuildId',has?(fw.buildId||'Imported / custom'):'--');text('#fwFileSize',has?prettyBytes(fw.bytes.length):'--');textTitle('#fwFileHash',has?(fw.hash?fw.hash.slice(0,18)+'…':'Unavailable'):'--');badge('#fwSourceBadge',has?'LOADED':'NO FILE',has?'good':'');const t=$('#fwImageType');if(t&&has)t.value=fw.type;const erase=$('#fwEraseUsb');if(erase){erase.disabled=(t?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}syncFirmwareControls()}
+  'Select a firmware file to read its embedded compile date';textTitle('#fwBuildId',has?(fw.buildId||'Imported / custom'):'--');text('#fwFileSize',has?prettyBytes(fw.bytes.length):'--');textTitle('#fwFileHash',has?(fw.hash?fw.hash.slice(0,18)+'…':'Unavailable'):'--');badge('#fwSourceBadge',has?(fw.track==='bench'?'BENCH LOADED':'LOADED'):'NO FILE',has?(fw.track==='bench'?'warn':'good'):'');const t=$('#fwImageType');if(t&&has)t.value=fw.type;const erase=$('#fwEraseUsb');if(erase){erase.disabled=(t?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}syncFirmwareControls()}
 async function onlineBoardInfo(){
  const kit=globalThis.ZebjusKits?.getState?.();
  if(kit?.connected&&['sta','ap'].includes(kit.transport)&&boardById(kit.board)){
@@ -235,28 +260,76 @@ async function targetBoardId(updateUi=true){
  if(!id){id=catalog.defaultBoardId;source='Default profile'}
  if(updateUi){
   text('#fwDetectedBoard',boardName(id));text('#fwBoardSource',source);
-  const p=boardById(id)?.latest?.[$('#fwImageType')?.value||'app'];
-  text('#fwPackageState',p?.available?`Bundled ${boardById(id).latest.version}`:'Build not bundled');
+  const release=releaseForBoard(id),pkg=release?.[$('#fwImageType')?.value||'app'];
+  text('#fwPackageState',pkg?.available?`${releaseTrack==='bench'?'Bench':'Bundled'} ${release.version}`:'Build not bundled');
  }
  return id;
 }
-async function autoLoad(){
+async function autoLoad(track=releaseTrack){
+ if(busy)return;
+ releaseTrack=track;
  setBusy(true);
- if(usbFlashPhase==='idle'){resetStages();stage('Prepare','active');progress(0,'Checking firmware package • no flash started');}let id='',type='app';try{id=await targetBoardId(true);type=$('#fwImageType')?.value||'app';const b=boardById(id),pkg=b?.latest?.[type];if(pkg?.available&&pkg.file){if(await loadCached(id,type)){text('#fwSourceMessage',`Verified ${boardName(id)} ${type.toUpperCase()} restored without redownloading.`);text('#fwPackageState',`CACHED • ${b.latest.version}`);markPackagePrepared('Matching firmware available from verified cache');return;}const fetched=pkg.url?{response:await fetch(pkg.url,{cache:'no-store'}),src:pkg.url}:await fetchBundledFirmware(pkg.file,b.latest.version||VERSION),r=fetched.response;if(!r.ok)throw new Error('The catalog points to a firmware file that is not present.');const bytes=new Uint8Array(await r.arrayBuffer()),hash=await sha256(bytes);if(!/^[a-f0-9]{64}$/i.test(pkg.sha256||'')||bytes.length!==pkg.size||hash.toLowerCase()!==String(pkg.sha256).toLowerCase())throw new Error('Bundled firmware size or checksum mismatch.');await setFirmware(bytes,pkg.file,{type,version:b.latest.version,builtAt:pkg.builtAt||b.latest.builtAt,compiledAt:pkg.compiledAt||b.latest.compiledAt,buildId:pkg.buildId||'',boardId:id,source:'Bundled latest'});text('#fwSourceMessage',`Latest ${boardName(id)} firmware loaded automatically.`);text('#fwPackageState',`READY • ${b.latest.version}`);markPackagePrepared('Firmware '+b.latest.version+' loaded');return}if(await loadCached(id,type)){text('#fwSourceMessage',`No bundled build is present for ${boardName(id)}; restored the matching firmware cached in this browser.`);text('#fwPackageState','CACHED BUILD');markPackagePrepared('Cached firmware verified');return}fw=null;renderFirmware();text('#fwSourceMessage',`Board selected: ${boardName(id)}. The compiled package has not been published yet. If this is a fresh GitHub upload, wait for Build FlightCore Firmware in Actions to finish and refresh; otherwise import a matching .bin.`);text('#fwPackageState','BUILD PENDING');progress(0,'Firmware unavailable • nothing flashed');stage('Prepare','error');log(`No bundled binary for ${boardName(id)}.`)}catch(e){if(id&&await loadCached(id,type)){text('#fwSourceMessage',`Loaded matching ${boardName(id)} firmware from this browser for offline/AP use.`);text('#fwPackageState','CACHED BUILD');markPackagePrepared('Cached firmware verified')}else{fw=null;renderFirmware();const reason=String(e?.message||e);log('Auto load '+(id||'unknown')+' '+type+' failed: '+reason);text('#fwPackageState','LOAD FAILED');text('#fwSourceMessage','Unable to load the '+type.toUpperCase()+' firmware for '+(boardName(id)||'selected board')+': '+reason+' — check your connection, then click Auto Load Latest again.');progress(0,'Firmware load failed • nothing flashed');stage('Prepare','error')}}finally{setBusy(false)}}
+ try{await loadFirmwarePackage()}finally{setBusy(false)}
+}
+async function loadFirmwarePackage(){
+ fw=null;renderFirmware();
+ if(usbFlashPhase==='idle'){resetStages();stage('Prepare','active');progress(0,'Checking firmware package • no flash started');}
+ let id='',type=$('#fwImageType')?.value||'app';
+ const bench=releaseTrack==='bench';
+ try{
+  if(bench)await loadBenchCatalog();
+  id=await targetBoardId(true);
+  const release=releaseForBoard(id),pkg=release?.[type];
+  if(!pkg?.available||!pkg.file)throw Error('The selected board image has not been published');
+  const cached=await loadCached(id,type);
+  if(!cached){
+   const response=pkg.url?await fetch(pkg.url,{cache:'no-store'}):(await fetchBundledFirmware(pkg.file,release.version)).response;
+   if(!response.ok)throw Error('The catalog points to a firmware file that is not present');
+   const bytes=new Uint8Array(await response.arrayBuffer()),hash=await sha256(bytes);
+   if(!/^[a-f0-9]{64}$/i.test(pkg.sha256||'')||bytes.length!==pkg.size||hash.toLowerCase()!==pkg.sha256.toLowerCase())
+    throw Error('Bundled firmware size or checksum mismatch');
+   await setFirmware(bytes,pkg.file,{type,version:release.version,builtAt:pkg.builtAt||release.builtAt,
+    compiledAt:pkg.compiledAt||release.compiledAt,buildId:pkg.buildId||'',boardId:id,source:bench?'Bench diagnostic':'Bundled latest'});
+  }
+  text('#fwSourceMessage',`${boardName(id)} ${type.toUpperCase()} ${release.version} verified${cached?' from cache':''}.${bench?' Bench diagnostics only. Flight outputs locked.':''}`);
+  text('#fwPackageState',`${bench?'BENCH':cached?'CACHED':'READY'} • ${release.version}`);
+  markPackagePrepared('Firmware '+release.version+' loaded');
+ }catch(e){
+  const reason=String(e?.message||e);
+  log('Auto load '+(id||'unknown')+' '+type+' failed: '+reason);
+  text('#fwPackageState','LOAD FAILED');
+  text('#fwSourceMessage','Unable to load '+(bench?BENCH_VERSION+' bench firmware':'the published firmware')+' — '+reason+'.');
+  progress(0,'Firmware load failed • nothing flashed');stage('Prepare','error');
+ }
+}
 async function importFile(file){
- if(!file)return;if(!/\.bin$/i.test(file.name))throw new Error('Select a compiled .bin firmware file.');
- await loadCatalog();const bytes=new Uint8Array(await file.arrayBuffer()),{imageType}=await import('./js/firmware-image.js'),type=imageType(bytes);
- const chip=bytes[12]|bytes[13]<<8,detected=catalog.boards.find(b=>(b.imageChipIds||[]).includes(chip));
- if(!detected)throw Error('Unsupported image chip. Choose an A1 or A2 FlightCore .bin.');
- const chosen=$('#fwBoardProfile')?.value||'auto',connected=expectedUsbBoard()||globalThis.ZebjusKits?.getState?.().board;
- if(chosen!=='auto'&&chosen!==detected.id||connected&&connected!==detected.id)throw Error('Imported firmware does not match the selected or connected board.');
- const id=detected.id,release=detected.latest?.[type];
- if(!release?.available||!release.sha256||release.size!==bytes.length)throw Error('Only a complete matching published FlightCore release is supported.');
- const hash=await sha256(bytes);
- if(hash.toLowerCase()!==release.sha256.toLowerCase())throw Error('Imported .bin does not match the official FlightCore image for '+boardName(id)+'. No other firmware can be installed from this page.');
- if(chosen==='auto'&&!connected&&$('#fwBoardProfile'))$('#fwBoardProfile').value=id;
- await setFirmware(bytes,file.name,{boardId:id,type,version:detected.latest.version,builtAt:release.builtAt,compiledAt:release.compiledAt,buildId:release.buildId,source:'Verified FlightCore import'});
- await targetBoardId(true);text('#fwSourceMessage',`Verified official FlightCore image imported for ${boardName(id)}.`);text('#fwPackageState','VERIFIED IMPORT');markPackagePrepared('Imported firmware verified');
+ if(!file||busy)return;
+ if(!/\.bin$/i.test(file.name))throw Error('Select a compiled .bin firmware file.');
+ setBusy(true);fw=null;renderFirmware();
+ try{
+  await loadCatalog();const bytes=new Uint8Array(await file.arrayBuffer()),{imageType}=await import('./js/firmware-image.js'),type=imageType(bytes);
+  const chip=bytes[12]|bytes[13]<<8,detected=catalog.boards.find(b=>(b.imageChipIds||[]).includes(chip));
+  if(!detected)throw Error('Unsupported image chip. Choose an A1 or A2 FlightCore .bin.');
+  const chosen=$('#fwBoardProfile')?.value||'auto',connected=expectedUsbBoard()||globalThis.ZebjusKits?.getState?.().board;
+  if(chosen!=='auto'&&chosen!==detected.id||connected&&connected!==detected.id)throw Error('Imported firmware does not match the selected or connected board.');
+  const id=detected.id,hash=await sha256(bytes);
+  const matches=pkg=>pkg?.available&&pkg.size===bytes.length&&pkg.sha256?.toLowerCase()===hash.toLowerCase();
+  let track='published',release=detected.latest;
+  if(!matches(release?.[type])){
+   await loadBenchCatalog().catch(()=>{});
+   track='bench';release=releaseForBoard(id,track);
+  }
+  const pkg=release?.[type];
+  if(!matches(pkg))throw Error('Imported .bin does not match a verified FlightCore package for '+boardName(id)+'.');
+  if(chosen==='auto'&&!connected&&$('#fwBoardProfile'))$('#fwBoardProfile').value=id;
+  releaseTrack=track;
+  await setFirmware(bytes,file.name,{boardId:id,type,version:release.version,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,source:'Verified FlightCore import'});
+  await targetBoardId(true);text('#fwSourceMessage',`Verified FlightCore ${release.version} image imported for ${boardName(id)}.${track==='bench'?' Bench diagnostics only. Flight outputs locked.':''}`);
+  text('#fwPackageState','VERIFIED IMPORT');markPackagePrepared('Imported firmware verified');
+ }catch(error){
+  text('#fwPackageState','IMPORT REJECTED');text('#fwSourceMessage',error.message);
+  throw error;
+ }finally{setBusy(false)}
 }
 function kitStatus(){
  const schoolApi=school(),d=schoolApi?.getSelectedDevice?.(),kit=globalThis.ZebjusKits?.getState?.(),wifiOnline=!!d?.online||!!kit?.connected&&['sta','ap'].includes(kit.transport);
@@ -316,7 +389,7 @@ async function flashNetworkApp(){
  const gate=networkFlashReadiness();
  if(!gate.ready){log(gate.message);badge('#fwOverallBadge','NETWORK OTA BLOCKED','warn');return}
  const kit=window.ZebjusKits.getState();
- const ok=await confirmInLab('Flash verified '+fw.name+' over '+kit.transport.toUpperCase()+
+ const ok=await confirmInLab('Flash verified '+fw.name+' v'+fw.version+' over '+kit.transport.toUpperCase()+
   ' to '+kit.kitName+' ('+kit.kitId+')?\n\nAPP image only. OTA is unsigned bench firmware; propellers and ESC power disconnected. Never disconnect power during update. Continue?');
  if(!ok)return;
  setBusy(true);resetStages();stage('Prepare','done');stage('Flash','active');
@@ -425,7 +498,7 @@ function usbConnectFailureGuidance(port,error){
 async function connectUsb(){
  if(busy)return;
  if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}
- usbFlashPhase='idle';usbFlashBoardId='';resetStages();progress(0,'Connecting USB • no flash started');
+ usbFlashPhase='idle';usbFlashExpected=null;resetStages();progress(0,'Connecting USB • no flash started');
  setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
  let port=null;
  try{
@@ -482,8 +555,7 @@ async function connectUsb(){
   await targetBoardId(true);
   log('USB bootloader connected: '+usbSignature+'; running firmware version cannot be read from ROM. Open Serial Port after leaving download mode.');
   kitStatus();
-  if($('#fwImageType')){$('#fwImageType').value='factory';fw=null;renderFirmware();log('USB firmware setup: FACTORY first-flash image. Existing flash settings will be replaced.')}
-  await autoLoad();
+  await loadFirmwarePackage(); // Preserve the selected APP or FACTORY image type.
   kitStatus();
  }catch(e){
   await disconnectUsb(false);
@@ -502,7 +574,7 @@ async function usbFlash(){
  const readiness=usbFlashReadiness();if(!readiness.ready)return log('USB flash blocked: '+readiness.message);
  if(!fw||!loader)return;
  stopPostFlashWatch();
- const type=fw.type,target=fw.boardId||await targetBoardId(false),expectedVersion=fw.version;
+ const type=fw.type,target=fw.boardId||await targetBoardId(false);
  if(usbBoardId&&target!==usbBoardId)return log(`Blocked: firmware is for ${boardName(target)}, USB controller is ${boardName(usbBoardId)}.`);
  const erase=!!$('#fwEraseUsb')?.checked;if(erase&&type!=='factory')return log('Erase is blocked for application-only images because it would remove the bootloader/partition table.');
  const bp=boardById(target);if(!bp)return log('Selected board profile is not available.');
@@ -511,9 +583,9 @@ async function usbFlash(){
  setBusy(true);
  try{
  if(type==='app'){const {inspectUsbLayout}=await import('./js/firmware-image.js');inspectUsbLayout(new Uint8Array(await loader.readFlash(0,4096)),new Uint8Array(await loader.readFlash(0x8000,4096)),bp);log('Matching bootloader and dual application partitions verified.')}
- if(!await confirmInLab(`Flash firmware over USB?\n${fw.name}\nBoard: ${boardName(target)}\nOffset: ${type==='factory'?'0x0 (factory)':'0x10000 (application)'}${type==='factory'?'\nExisting flash configuration will be replaced.':''}\n\nContinue?`)){setBusy(false);return}
+ if(!await confirmInLab(`Flash firmware over USB?\n${fw.name} v${fw.version}${fw.track==='bench'?' (bench diagnostics)':''}\nBoard: ${boardName(target)}\nOffset: ${type==='factory'?'0x0 (factory)':'0x10000 (application)'}${type==='factory'?'\nExisting flash configuration will be replaced.':''}\n\nContinue?`)){setBusy(false);return}
  }catch(error){log('Blocked before erase/write: '+error.message);setBusy(false);return}
- usbFlashPhase='flashing';usbFlashBoardId=target;
+ usbFlashPhase='flashing';usbFlashExpected={boardId:target,version:fw.version,buildStamp:fw.compiledAt};
  resetStages();stage('Prepare','done');stage('Flash','active');progress(2,'Preparing USB flash…');badge('#fwOverallBadge','FLASHING','warn');let written=false;
  try{
   if(erase){progress(4,'Erasing flash…');await loader.eraseFlash()}
@@ -527,10 +599,10 @@ async function usbFlash(){
   }
   progress(94,'Reset requested • opening live USB Serial Monitor');log('FlightCore firmware image written and transfer MD5 checked.');stage('Reboot','done');monitorPendingScan=true;monitorBootText='';await disconnectUsb(false);stage('Reconnect','active');
   await sleep(350);
-  try{await openSerialMonitor({allowPrompt:false});if(monitorPendingScan){progress(96,'Serial opened • waiting for firmware output');badge('#fwOverallBadge','WAITING FOR SERIAL OUTPUT','warn')}else{progress(100,'Firmware running • serial output received');badge('#fwOverallBadge','SCANNER OUTPUT VERIFIED','good')}}
-  catch(error){monitorPendingScan=false;progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);log('Use Open Serial Port to select the device, or press its RESET button if it is still in bootloader mode.')}
+  try{await openSerialMonitor({allowPrompt:false});if(usbFlashPhase==='written'){progress(96,'Serial opened • waiting for firmware identity');badge('#fwOverallBadge','WAITING FOR SERIAL OUTPUT','warn')}}
+  catch(error){progress(96,'Firmware written • click Serial Monitor to verify output');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn');log('Auto Serial Monitor unavailable: '+error.message);log('Use Open Serial Port to select the device, or press its RESET button if it is still in bootloader mode.')}
  }catch(e){
-  if(written){usbFlashPhase='written';log('USB bytes written but reset/Serial confirmation pending: '+e.message);monitorPendingScan=false;await disconnectUsb(false);progress(96,'Written • open Serial Monitor to verify boot');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn')}
+  if(written){usbFlashPhase='written';log('USB bytes written but reset/Serial confirmation pending: '+e.message);monitorPendingScan=true;monitorBootText='';await disconnectUsb(false);progress(96,'Written • open Serial Monitor to verify boot');badge('#fwOverallBadge','FLASHED • SERIAL CHECK PENDING','warn')}
   else{usbFlashPhase='idle';stage('Flash','error');badge('#fwOverallBadge','FAILED','danger');progress(0,'USB flash failed');log('USB flash failed: '+e.message);await disconnectUsb(false);log('Reconnect USB at 115200 before retrying. Use BOOT + RESET if the kit remains in download mode.')}
  }finally{setBusy(false)}
 }
@@ -688,7 +760,17 @@ function appendSerialOutput(value){
  pushSerialLines(value);
  // Random boot bytes are not scanner confirmation. This build has no board/version banner.
  if(monitorPendingScan)monitorBootText=(monitorBootText+value).slice(-8192);
- if(monitorPendingScan&&usbRuntimeInfo&&!usbRomDownload&&(/ZJSCAN,|Scanning I2C bus\.\.\./.test(monitorBootText))&&(!usbFlashBoardId||usbRuntimeInfo.boardId===usbFlashBoardId)){
+ if(monitorPendingScan&&usbRuntimeInfo&&!usbRomDownload&&/ZJSCAN,|Scanning I2C bus\.\.\./.test(monitorBootText)){
+  const expected=usbFlashExpected;
+  if(expected&&(usbRuntimeInfo.boardId!==expected.boardId||usbRuntimeInfo.version!==expected.version||
+    expected.buildStamp&&usbRuntimeInfo.buildStamp!==expected.buildStamp)){
+   if(usbFlashPhase!=='boot-mismatch'){
+    usbFlashPhase='boot-mismatch';
+    const message=`USB running ${usbRuntimeInfo.boardId} v${usbRuntimeInfo.version} • expected ${expected.boardId} v${expected.version} and matching build time`;
+    progress(96,message);badge('#fwOverallBadge','USB BOOT MISMATCH','warn');log(message+'. For an existing dual-OTA setup, use authorized APP OTA to select the new slot.');
+   }
+   return;
+  }
   monitorPendingScan=false;usbFlashPhase='verified';stage('Reconnect','done');progress(100,'Firmware '+usbRuntimeInfo.version+' verified from live USB telemetry');
   badge('#fwOverallBadge','FIRMWARE RUNNING • VERIFIED','good');
   log('Live USB firmware identity verified: '+usbRuntimeInfo.boardId+' v'+usbRuntimeInfo.version+'.');
@@ -951,7 +1033,7 @@ async function reconnectKit(){
  try{const ok=await kit.reconnect();if(!ok||!kit.getState().connected)throw Error('Kit not reachable yet. Rescan on the same Wi-Fi.');stage('Reconnect','done');progress(100,'Same Kit verified online');badge('#fwOverallBadge','ONLINE','good');await refreshKit()}
  catch(e){badge('#fwOverallBadge','OFFLINE','warn');log('Reconnect: '+e.message)}
 }
-function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
+function downloadFirmware(){if(!fw){log('Load or import a matching .bin first.');return}const url=URL.createObjectURL(new Blob([fw.bytes],{type:'application/octet-stream'})),a=document.createElement('a');a.href=url;a.download=fw.track==='bench'?fw.name.replace(/\.bin$/i,`_v${fw.version}_BENCH.bin`):fw.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);log('Downloaded '+fw.name+'. Scanner APP requires matching partitions; use FACTORY for first USB flash.')}
 async function selectUpgradeMode(factory){
  if(busy)return;
  const kind=factory?'factory':'app',select=$('#fwImageType');
@@ -987,7 +1069,7 @@ function bind(){
   });
  }
  setFirmwareTargetMethod('wifi');
- window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',autoLoad);$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});$('#fwBoardProfile')?.addEventListener('change',async()=>{fw=null;renderFirmware();await autoLoad()});const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+ window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad());const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}const k=globalThis.ZebjusKits?.getState?.();if(k?.connected&&['sta','ap'].includes(k.transport))await prepareConnectedFirmware();else{if(firmwareTargetMethod==='wifi'&&$('#fwImageType'))$('#fwImageType').value='app';await autoLoad()}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();
