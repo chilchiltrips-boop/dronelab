@@ -11,7 +11,7 @@ const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 const BENCH_VERSION='1.7.16',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
-let benchCatalog=null,releaseTrack='published';
+let benchCatalog=null,releaseTrack='published',releaseChoice='latest'; // A2 defaults to verified bench; explicit published rollback remains available.
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
 let lastVerifiedRuntime=null,lastVerifiedAt=0,liveDiagnostic=null;
 let diagnosticSample=null,diagnosticAt=0,diagnosticError='',diagnosticRenderedSeq=null,diagnosticTimer=null;
@@ -26,7 +26,9 @@ async function prepareConnectedFirmware(){
  if(busy||preparingConnectedFirmware)return;
  const preferred=globalThis.ZebjusKitNetworkPolicy?.otaTarget({method:'wifi',kit,usbBoard:expectedUsbBoard(),manualBoard:$('#fwBoardProfile')?.value,defaultBoard:catalog?.defaultBoardId});
   if(preferred?.kitId!==kit.kitId||preferred?.boardId!==kit.board)return;
-  const pkg=releaseForBoard(kit.board)?.app;
+  const track=releaseChoice==='latest'?(kit.board==='ZFC-A2'?'bench':'published'):releaseChoice;
+ if(track==='bench')await loadBenchCatalog();
+ const pkg=releaseForBoard(kit.board,track)?.app;
  if(!pkg?.available||!pkg.sha256)return;
  const expected=kit.kitId+'|'+kit.board+'|'+pkg.sha256;
  if(preparedConnectedFirmwareKey===expected&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase())return;
@@ -39,7 +41,7 @@ async function prepareConnectedFirmware(){
  preparingConnectedFirmware=true;
  try{
   fw=null;renderFirmware();
-  await autoLoad(); // verified download only; connecting a kit never flashes it
+  await autoLoad(releaseChoice); // verified download only; connecting a kit never flashes it
   if(fw?.type==='app'&&fw.boardId===kit.board&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase())preparedConnectedFirmwareKey=expected;
  }finally{preparingConnectedFirmware=false}
 }
@@ -143,7 +145,8 @@ function syncFirmwareControls(){
  const hint=$('#fwUpgradeModeHelp');
  if(hint)hint.textContent=factory?'USB FACTORY overwrites flash partitions and can erase saved Wi-Fi/pairing even without the Erase checkbox. Prefer APP OTA to preserve settings.':'APP upgrade mode. Wi-Fi/pairing is preserved when partitions are compatible. STA/AP OTA requires an authorized idle kit.';
  const check=$('#fwCheckKitBtn');if(check)check.disabled=busy;
- const bench=$('#fwLoadBenchBtn');if(bench){bench.disabled=busy;bench.setAttribute('aria-pressed',String(releaseTrack==='bench'));}
+ const bench=$('#fwLoadBenchBtn');if(bench){bench.disabled=busy;bench.setAttribute('aria-pressed',String(releaseChoice==='bench'));}
+ const published=$('#fwLoadPublishedBtn');if(published){published.disabled=busy;published.setAttribute('aria-pressed',String(releaseChoice==='published'));}
  for(const id of ['#fwTargetWifiTab','#fwTargetUsbTab']){const tab=$(id);if(tab)tab.disabled=busy;}
 }
 function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
@@ -184,6 +187,8 @@ async function loadCatalog(){
  }
  const sel=$('#fwBoardProfile');
  if(sel){for(const b of catalog.boards||[]){if(!sel.querySelector(`option[value="${b.id}"]`)){const o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)}}}
+ const publishedButton=$('#fwLoadPublishedBtn');
+ if(publishedButton)publishedButton.textContent='Load Published '+catalog.version;
  return catalog;
 }
 async function loadBenchCatalog(){
@@ -265,11 +270,21 @@ async function targetBoardId(updateUi=true){
  }
  return id;
 }
-async function autoLoad(track=releaseTrack){
+async function autoLoad(choice=releaseChoice){
  if(busy)return;
- releaseTrack=track;
  setBusy(true);
- try{await loadFirmwarePackage()}finally{setBusy(false)}
+ try{
+  releaseChoice=choice;
+  if(choice==='latest'){
+   // Auto Load Latest resolves the verified board before choosing a package.
+   // A2 uses the newer versioned 1.7.16 BENCH image; A1 retains published 1.7.15.
+   // Nothing is flashed by this selection.
+   const id=await targetBoardId(false);
+   releaseTrack=id==='ZFC-A2'?'bench':'published';
+  }else if(choice==='bench'||choice==='published')releaseTrack=choice;
+  else throw Error('Unknown firmware release selection');
+  await loadFirmwarePackage();
+ }finally{setBusy(false)}
 }
 async function loadFirmwarePackage(){
  fw=null;renderFirmware();
@@ -322,7 +337,7 @@ async function importFile(file){
   const pkg=release?.[type];
   if(!matches(pkg))throw Error('Imported .bin does not match a verified FlightCore package for '+boardName(id)+'.');
   if(chosen==='auto'&&!connected&&$('#fwBoardProfile'))$('#fwBoardProfile').value=id;
-  releaseTrack=track;
+  releaseTrack=track;releaseChoice=track;
   await setFirmware(bytes,file.name,{boardId:id,type,version:release.version,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,source:'Verified FlightCore import'});
   await targetBoardId(true);text('#fwSourceMessage',`Verified FlightCore ${release.version} image imported for ${boardName(id)}.${track==='bench'?' Bench diagnostics only. Flight outputs locked.':''}`);
   text('#fwPackageState','VERIFIED IMPORT');markPackagePrepared('Imported firmware verified');
@@ -1069,7 +1084,7 @@ function bind(){
   });
  }
  setFirmwareTargetMethod('wifi');
- window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad());const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+ window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('latest'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwLoadPublishedBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad('latest'));const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}const k=globalThis.ZebjusKits?.getState?.();if(k?.connected&&['sta','ap'].includes(k.transport))await prepareConnectedFirmware();else{if(firmwareTargetMethod==='wifi'&&$('#fwImageType'))$('#fwImageType').value='app';await autoLoad()}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();

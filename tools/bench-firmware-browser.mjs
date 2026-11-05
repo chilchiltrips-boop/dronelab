@@ -19,8 +19,18 @@ const showing=async (id,label)=>field(id).filter({hasText:label}).waitFor({state
 try{
  await page.goto('http://127.0.0.1:8765/index.html#firmware',{waitUntil:'domcontentloaded'});
  await page.locator('[data-dw-view="firmware"]').click();
- await field('fwBoardProfile').selectOption('ZFC-A2');
+ // Default to A1 published package until an A2 board is selected.
  await showing('fwFileVersion',published.version);
+ await field('fwBoardProfile').selectOption('ZFC-A2');
+ await showing('fwFileVersion',version);
+ await showing('fwBuildId',release.app.buildId);
+ await showing('fwSourceMessage','Flight outputs locked');
+ await field('fwLoadPublishedBtn').click();
+ await showing('fwFileVersion',published.version);
+ await showing('fwSourceBadge','LOADED');
+ await field('fwAutoLoadBtn').click();
+ await showing('fwBuildId',release.app.buildId);
+ await showing('fwFileVersion',version);
  await field('fwLoadBenchBtn').click();
  await showing('fwBuildId',release.app.buildId);
  await showing('fwSourceBadge','BENCH LOADED');
@@ -43,8 +53,20 @@ try{
  await field('fwImageType').selectOption('app');
  await showing('fwBuildId',release.app.buildId);
  await field('fwAutoLoadBtn').click();
+ await showing('fwFileVersion',version);
+ await showing('fwBuildId',release.app.buildId);
+ // Explicit stable rollback must survive a connected-kit discovery event.
+ await field('fwLoadPublishedBtn').click();
+ await showing('fwFileVersion',published.version);
+ await page.evaluate(()=>window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true}})));
  await showing('fwFileVersion',published.version);
  await page.evaluate(()=>{window.ZebjusKits.getState=window.restoreBenchKit;});
+ // Re-select the offline A2 board: without a connected Kit, Auto detection
+ // intentionally falls back to the published A1 default rather than guessing.
+ await field('fwBoardProfile').selectOption('ZFC-A2');
+ await showing('fwFileVersion',version);
+ await field('fwAutoLoadBtn').click();
+ await showing('fwFileVersion',version);
  await field('fwFileInput').setInputFiles(`${folder}/${release.app.file}`);
  await showing('fwPackageState','VERIFIED IMPORT');
  await showing('fwBuildId',release.app.buildId);
@@ -61,5 +83,5 @@ try{
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  assert.deepEqual(writes,[]);
  assert.deepEqual(errors,[]);
- console.log('PASS verified bench APP/FACTORY, version switching, import, Wi-Fi APP readiness and corrupted image rejection');
+ console.log('PASS A2 defaults to verified 1.7.16 bench, A1 published fallback, explicit 1.7.15 rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection');
 }finally{await browser.close();}
