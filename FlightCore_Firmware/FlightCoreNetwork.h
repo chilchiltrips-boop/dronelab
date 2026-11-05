@@ -103,6 +103,7 @@ static void zjReply(int status,const String& body){
 }
 #include "FlightCoreHandover.h"
 #include "FlightCoreWifiPolicy.h"
+#include "FlightCorePidApi.h"
 static const char* zjClientTransport();
 static String zjMdnsKitHostname();
 static String zjStatus(){
@@ -188,6 +189,7 @@ static void zjSetupHttp(){
  const char* headers[]={"X-ZJ-Key","Origin","Access-Control-Request-Private-Network","X-ZJ-Device","X-ZJ-Session","X-ZJ-Seq","X-ZJ-Proof"};zjHttp.collectHeaders(headers,7); // raw-key header is collected only to reject it
  zjSetupEnrollmentHttp();
  zjSetupSecureOtaHttp();
+ zjSetupPidHttp();
  zjHttp.on("/",HTTP_GET,[](){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send_P(200,"text/html",ZJ_SETUP_PORTAL);});
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
@@ -491,6 +493,7 @@ static void zjNetUsbStatus(){
  Serial.print("ZJNET,SAVED,");Serial.println(zjProfilesStatus());
 }
 static bool zjNetSerialCommand(char* line){
+ if(zjPidSerialCommand(line))return true;
  if(zjHandoverPending&&!strncmp(line,"ZJNET,",6)&&strcmp(line,"ZJNET,GET")){Serial.println("ZJNET,ERR,RADIO_HANDOVER_PENDING");return true;}
  if(!strncmp(line,"ZJMODE,",7)){
   char* save=nullptr;char* action=strtok_r(line+7,",",&save);
@@ -568,11 +571,40 @@ static bool zjNetSerialCommand(char* line){
  }
  return false;
 }
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static bool zjAutoEscOutputsOff();
+#endif
+static void zjPpmFallbackLoop(uint32_t now){
+ if(!zjPpmFallbackPending)return;
+ if(zjPpmSignalFresh(now)||zjRcControlPath!="PPM"||WiFi.getMode()!=WIFI_STA){
+  zjPpmFallbackPending=false;return;
+ }
+ if(uint32_t(now-zjPpmFallbackAt)<350)return;
+ bool outputsOff=!zjMotorEnabled&&!zjMotorArmed&&!zjMotorSessionActive;
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ outputsOff=outputsOff&&zjAutoEscOutputsOff();
+#endif
+ if(!outputsOff||zjHandoverPending||zjPendingMode.length()||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||
+    zjOtaRebootAt||zjUsbScanning||zjMaintenanceActive||zjRcOwned){
+  if(uint32_t(now-zjPpmFallbackAt)>=5000){
+   zjPpmFallbackPending=false;zjHandoverLastReject="PPM_FALLBACK_BUSY";
+  }
+  return;
+ }
+ zjPpmFallbackPending=false;
+ // Runtime recovery keeps the saved STA profile. An explicit later STA
+ // transition still uses the last selected STA input, with a fresh claim.
+ zjHandoverPreviousMode=zjMode;zjLastStaInput="PPM";zjMode="ap";
+ zjHandoverTargetInput="ANDROID_AP";zjHandoverError="";zjHandoverLastReject="NONE";
+ zjRcControlPath="ANDROID_AP";zjRcSelection="ANDROID";
+ zjRcPaused=true;zjRcHandoverPaused=true;zjHandoverPending=true;zjHandoverState="PREPARED";
+ zjScheduleMode("ap");
+}
 static void zjNetworkLoop(uint32_t now){
  // Service due input before/between management work, not only after HTTP.
  zjUdpLoop(millis());zjAuthResetRequest();zjRpcLoop();zjUdpLoop(millis());
  zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
- zjWifiPolicyLoop(now);now=millis();
+ zjPpmFallbackLoop(now);zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
  zjPpmLoop(now);
  zjRcLoop(now);

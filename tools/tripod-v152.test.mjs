@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSimulator,startSimulator,stepSimulator,setFlightMode,setPID,disturb,startTuningPulse,resetIntegrators} from '../js/tripod-physics.js';
+import {createSimulator,startSimulator,stepSimulator,setFlightMode,setPID,disturb,startTuningPulse,resetIntegrators,DEFAULT_PID} from '../js/tripod-physics.js';
 import {simulateResponse} from '../js/tripod-experiments.js';
 import {MOTOR_LAYOUT} from '../js/tripod-assembly-model.js';
 const compare=(bank,gain,a,b,mode)=>simulateResponse({bank,gain,values:[a,b],mode,axis:'roll',duration:gain==='i'?5:6});
@@ -9,12 +9,13 @@ test('Assembly model preserves physical F450 four-motor order and CW/CCW',()=>{
  assert.deepEqual(MOTOR_LAYOUT.map(m=>m.spin),[1,-1,1,-1]);
 });
 test('different Rate P gains create actual transient and overshoot differences',()=>{
- const r=compare('rateRoll','p',.3,2.8,'acro');
+ const r=simulateResponse({basePID:{...DEFAULT_PID,rateRoll:{...DEFAULT_PID.rateRoll,i:0}},
+  bank:'rateRoll',gain:'p',values:[.3,2.8],mode:'acro'});
  assert.ok(r.results[1].metrics.peakRate>r.results[0].metrics.peakRate+10);
  assert.ok(r.results[1].metrics.reversals!==r.results[0].metrics.reversals);
 });
 test('I gain corrects more of the same persistent body torque, not acting like P',()=>{
- const r=compare('rateRoll','i',1,35,'acro');
+ const r=compare('rateRoll','i',1,4,'acro');
  assert.equal(r.scenario,'bias');
  assert.ok(r.results[1].metrics.lateError<r.results[0].metrics.lateError*.85,
  'I gain had no steady bias correction '+JSON.stringify(r.results.map(x=>x.metrics)));

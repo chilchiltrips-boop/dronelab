@@ -36,7 +36,7 @@ test('PPM arbitration uses throttle-low and 2-second yaw gestures, never CH5 or 
 test('physical USB administrator may calibrate PPM channels or remap roll/pitch/throttle/yaw/CH5 auxiliary',()=>{
  const s=read('FlightCore_Firmware/FlightCorePpm.h');
  for(const token of ['ZJPPM,GET','ZJPPM,CAL,','ZJPPM,MAP,','zjAdminAuthorized()','zjRcOwned',
-  'getUShort','putUShort','putString("ppmMap"','ppm1'])if(token==='ppm1')continue;else assert.ok(s.includes(token),token);
+  'getUShort','zjPpmSaveConfig','putString("ppmConfig"','ZJPPM,ERR,STORAGE_FAILED'])assert.ok(s.includes(token),token);
  assert.match(s,/m-l<120\|\|h-m<120/);
  assert.match(s,/used\[ch-1\]/);
  assert.match(s,/return uint16_t\(1500L\+/);

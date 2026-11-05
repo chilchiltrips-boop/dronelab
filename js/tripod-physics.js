@@ -1,3 +1,4 @@
+import {RATE_DEFAULTS,stepRatePid} from './rate-pid.js';
 /* F450 tripod educational dynamics. 250 Hz deterministic, physical motor thrust and
  * three-axis rigid-body rotational equations. No hardware/browser dependencies.
  * Teaching approximation: no aerodynamic measurement-based calibration claimed.
@@ -9,10 +10,10 @@ const DEG=180/Math.PI;
 const wrap=a=>((a+180)%360+360)%360-180;
 const clone=x=>JSON.parse(JSON.stringify(x));
 export const DEFAULT_PID={
- rateRoll:{p:.9,i:15,d:.03},ratePitch:{p:.9,i:15,d:.03},rateYaw:{p:3,i:15,d:0},
+ ...RATE_DEFAULTS,
  angleRoll:{p:3,i:0,d:0},anglePitch:{p:3,i:0,d:0}
 };
-export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:.12,gyroNoise:.07,noiseSeed:7919};
+export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:0.04,gyroNoise:.07,noiseSeed:7919};
 // SI-unit educational estimates, not measured aircraft calibration.
 export const PLANT=Object.freeze({mass:1.12,g:9.81,maxRPM:8500,kT:11/(8500*Math.PI/30)**2,kQ:.020*11/(8500*Math.PI/30)**2,idle:.08,spring:100,damper:14,travel:.12});
 export const MOTOR_GEOMETRY=[
@@ -69,10 +70,10 @@ export function setPID(s,bank,params){
 function applyPID(s,bank,params){
  const m=s.memory[bank],outer=bank==='angleRoll'||bank==='anglePitch';
  // Bumpless gain change where possible: preserve old output by adapting integral state.
- const previous=m.output,nextI=outer?params.i:params.i*.012;
- const sum=nextI>0?(previous-params.p*m.error+params.d*m.derivative)/nextI:0;
+ const previous=m.output,nextI=outer?params.i:1;
+ const sum=params.i>0?(previous-params.p*m.error+params.d*m.derivative)/nextI:0;
  s.pid[bank]={p:params.p,i:params.i,d:params.d};
- if(s.running&&m.ready&&Number.isFinite(sum))m.sum=clamp(sum,outer?-45:-110,outer?45:110);
+ if(s.running&&m.ready&&Number.isFinite(sum))m.sum=clamp(sum,outer?-45:-400,outer?45:400);
  // Preserve derivative measurement history; changing D must not introduce a kick.
  return true;
 }
@@ -82,19 +83,16 @@ export function startTuningPulse(s,axis='roll',amplitude=14){
  if(!s.running||s.throttle<1250||!['roll','pitch','yaw'].includes(axis))return false;
  s.pulse={axis,start:s.time,until:s.time+.56,amplitude:clamp(amplitude,3,25)};resetMetrics(s);return true;
 }
-function computePID(s,bank,target,actual,outer=false){
+function computeAnglePid(s,bank,target,actual){
  const m=s.memory[bank],g=s.pid[bank],error=target-actual;
- const rate=m.ready?(actual-m.last)/STEP:0,memoryTime=outer?.10:.032;
- m.derivative+=(rate-m.derivative)*(1-Math.exp(-STEP/memoryTime));
- const p=g.p*error,d=outer?-g.d*m.derivative:-g.d*m.derivative;
- let proposed=clamp(m.sum+error*STEP,outer?-45:-110,outer?45:110);
- const factor=outer?1:.012,maxOut=outer?220:450;
- const proposedOut=p+g.i*proposed*factor+d;
- const axis=bank.endsWith('Roll')?0:bank.endsWith('Pitch')?1:2;
- if((Math.abs(proposedOut)>maxOut&&Math.sign(proposedOut)===Math.sign(error))||(!outer&&Math.abs(s.mixResidual[axis])>.05&&Math.sign(s.mixResidual[axis])===Math.sign(error)))proposed=m.sum;
- m.sum=proposed;m.last=actual;m.ready=true;
- m.p=p;m.i=g.i*m.sum*factor;m.d=d;m.error=error;m.target=target;m.actual=actual;
- m.output=clamp(p+m.i+d,-maxOut,maxOut);m.saturated=Math.abs(proposedOut)>maxOut;
+ const rate=m.ready?(actual-m.last)/STEP:0;
+ m.derivative+=(rate-m.derivative)*(1-Math.exp(-STEP/.10));
+ const p=g.p*error,d=-g.d*m.derivative;
+ let proposed=clamp(m.sum+error*STEP,-45,45);
+ const proposedOut=p+g.i*proposed+d;
+ if(Math.abs(proposedOut)>220&&Math.sign(proposedOut)===Math.sign(error))proposed=m.sum;
+ Object.assign(m,{sum:proposed,last:actual,ready:true,p,i:g.i*proposed,d,error,target,actual,
+  output:clamp(p+g.i*proposed+d,-220,220),saturated:Math.abs(proposedOut)>220});
  return m.output;
 }
 export function motorMix(base,r,p,y){return [base-r-p-y,base+r-p+y,base+r+p-y,base-r+p+y]}
@@ -126,8 +124,8 @@ export function stepSimulator(s){
  const bankR='rateRoll',bankP='ratePitch',bankY='rateYaw';
  s.targetRoll=s.trimRoll+s.cmdRoll*26+(s.mode==='angle'?anglePulse('roll'):0);
  s.targetPitch=s.trimPitch+s.cmdPitch*26+(s.mode==='angle'?anglePulse('pitch'):0);
- s.targetRollRate=s.mode==='acro'?s.cmdRoll*220+ratePulse('roll'):computePID(s,'angleRoll',s.targetRoll,s.roll,true);
- s.targetPitchRate=s.mode==='acro'?s.cmdPitch*220+ratePulse('pitch'):computePID(s,'anglePitch',s.targetPitch,s.pitch,true);
+ s.targetRollRate=s.mode==='acro'?s.cmdRoll*220+ratePulse('roll'):computeAnglePid(s,'angleRoll',s.targetRoll,s.roll);
+ s.targetPitchRate=s.mode==='acro'?s.cmdPitch*220+ratePulse('pitch'):computeAnglePid(s,'anglePitch',s.targetPitch,s.pitch);
  s.targetYawRate=s.cmdYaw*180+ratePulse('yaw');
  const gyroAlpha=1-Math.exp(-dt/.02);
  s.gyroRoll+=(s.rollRate-s.gyroRoll)*gyroAlpha;
@@ -135,7 +133,10 @@ export function stepSimulator(s){
  s.gyroYaw+=(s.yawRate-s.gyroYaw)*gyroAlpha;
  const noise=clamp(e.gyroNoise??.07,0,2)+e.wind*.001,clock=s.time*89.17+(e.noiseSeed??7919)*.001;
  const rateOutput=(bank,axis,target,actual)=>{
-  const output=computePID(s,bank,target,actual),transition=s.modeTransition;
+  const idx=axis==='roll'?0:axis==='pitch'?1:2;
+  const result=stepRatePid(s.memory[bank],s.pid[bank],target,actual,dt,s.mixResidual[idx]);
+  if(!result)s.memory[bank]=newPID();
+  const output=result?.output||0,transition=s.modeTransition;
   // Engage the new controller immediately and blend its torque for 120 ms.
   // Repeated switches start from the last applied torque, never zero RPM.
   const blend=transition?clamp((s.time-transition.at)/.12,0,1):1;
@@ -148,7 +149,7 @@ export function stepSimulator(s){
  s.anglePID.roll=s.memory.angleRoll.output;s.anglePID.pitch=s.memory.anglePitch.output;
  s.ratePID.roll=uR;s.ratePID.pitch=uP;s.ratePID.yaw=uY;
  const base=enabled?100*(PLANT.idle+(1-PLANT.idle)*clamp((s.throttle-1000)/1000,0,1)):0;
- const r=clamp(uR*.052,-38,38),pMix=clamp(uP*.052,-38,38),y=clamp(uY*.035,-30,30);
+ const r=clamp(uR*0.052,-38,38),pMix=clamp(uP*0.052,-38,38),y=clamp(uY*.035,-30,30);
  const mix=motorMix(base,r,pMix,y);
  const alpha=1-Math.exp(-dt/clamp(e.lag,.04,.30)),battery=clamp(e.batteryV/12.6,.65,1);
  for(let i=0;i<4;i++){
@@ -164,7 +165,7 @@ export function stepSimulator(s){
  // Torque from real individual motor forces at X-frame arm coordinates.
  let [tZ,tX,tY]=thrustTorque(s.motorThrust);
  const [a,b,c,d]=s.motorCommands;
- s.mixResidual=[uR-(-a+b+c-d)/(4*.052),uP-(-a-b+c+d)/(4*.052),uY-(-a+b-c+d)/(4*.035)];
+ s.mixResidual=[uR-(-a+b+c-d)/(4*0.052),uP-(-a-b+c+d)/(4*0.052),uY-(-a+b-c+d)/(4*.035)];
  const roll=s.rollRate/DEG,pitch=s.pitchRate/DEG,yaw=s.yawRate/DEG;
  const Ixx=.045*(1+e.payloadG/900),Iyy=.085*(1+e.payloadG/850),Izz=.048*(1+e.payloadG/900);
  // ω×Iω cross-coupling for axes X=pitch, Y=yaw, Z=roll.
@@ -175,7 +176,7 @@ export function stepSimulator(s){
  tX+=biasX+wind*.060*Math.cos(.87*s.time);
  tZ+=biasZ+wind*.060*Math.sin(1.17*s.time);
  tY+=wind*.016*Math.cos(1.51*s.time);
- const pitchAccel=(tX-crossX-.022*pitch)/Ixx,rollAccel=(tZ-crossZ-.022*roll)/Izz,yawAccel=(tY-crossY-.028*yaw)/Iyy;
+ const pitchAccel=(tX-crossX-0.12*pitch)/Ixx,rollAccel=(tZ-crossZ-0.12*roll)/Izz,yawAccel=(tY-crossY-.028*yaw)/Iyy;
  s.pitchRate=clamp(s.pitchRate+pitchAccel*DEG*dt,-720,720);
  s.rollRate=clamp(s.rollRate+rollAccel*DEG*dt,-720,720);
  s.yawRate=clamp(s.yawRate+yawAccel*DEG*dt,-720,720);

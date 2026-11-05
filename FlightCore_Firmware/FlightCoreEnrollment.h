@@ -40,11 +40,11 @@ static String zjArg(const String& name){
 static bool zjLocalDiagnosticRoute(){
  const String path=zjHttp.uri();const bool get=zjHttp.method()==HTTP_GET;
  const bool ap=String(zjClientTransport())=="AP";
- if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot"||path=="/api/ppm/status")||
+ if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot"||path=="/api/ppm/status"||path=="/api/pid/settings"||path=="/api/pid/status")||
    (ap&&(path=="/api/wifi/scan"||path=="/api/wifi/saved"));
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/motor"||path=="/api/command"||path=="/api/rc/access"||path=="/api/rc/claim"||path=="/api/rc/preview"||
-   path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/flight/mode"||path=="/api/auth/close")||
+   path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/flight/mode"||path=="/api/pid/settings"||path=="/api/pid/reset"||path=="/api/auth/close")||
    (path=="/api/wifi/test"||path=="/api/wifi/mode"||path=="/api/wifi/use"||path=="/api/wifi/forget"||path=="/api/kit/name"||path=="/api/kit/name/reset");
 }
 static bool zjSessionAuthenticated(){

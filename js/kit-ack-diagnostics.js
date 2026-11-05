@@ -15,7 +15,7 @@ const fields=['ackRequired','requestedInputArmed','sentSeq','route','transport',
  'inputArmed','apActive','staConnected','connected','httpStatus','frameGapMs',
    'feedbackVersion','ackKind','nackReason','feedbackHealth','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedKnown','appliedAckCount','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','managementProtocol','udpActive','udpReceived','udpRejected',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
- 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','targetInput','lastStaInput','handoverState','handoverError','handoverBlocker','handoverLastReject','ppmThrottleUs','handMotorDisabled','diagnosticArmReleased'];
+ 'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','requestQueueDepth','oldestQueuedRequestMs','cancelledStaleRequests','connectionGeneration','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','lastObservedPath','targetInput','lastStaInput','handoverState','handoverError','handoverBlocker','handoverLastReject','ppmThrottleUs','handMotorDisabled','diagnosticArmReleased'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
  '/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status','/api/motor','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
@@ -48,10 +48,10 @@ const motorResultEnums={
 fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts,...motorResultPulses,...motorResultFlags,...Object.keys(motorResultEnums));
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
-const timingCounts=['controlTargetHz','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
+const timingCounts=['controlTargetHz','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','controlMaxIntervalAtUs','ratePidComputeMaxUs','ratePidShadowRevision','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
 const timingRates=['controlActualHz','imuActualHz','telemetryActualHz','imuFilterDelayMs'];
 const timingHealth=new Set(['UNAVAILABLE','STARTING','HEALTHY','LATE']);
-fields.push(...timingCounts,...timingRates,'controlHealth','controlActuating','imuValid','accelXG','accelYG','accelZG','androidUdpReceivedHz','androidUdpAppliedHz','udpCoalescedFrames');
+fields.push(...timingCounts,...timingRates,'controlHealth','controlMaxIntervalPhase','ratePidShadowState','ratePidShadowSaturated','controlActuating','imuValid','accelXG','accelYG','accelZG','androidUdpReceivedHz','androidUdpAppliedHz','udpCoalescedFrames');
 allowedEvents.add('timing_state');allowedEvents.add('timing_sample');
 const imuStates=new Set(['STARTING','SETTLING','CALIBRATING','READY','FAILED','SENSOR_ERROR','NOT_FOUND','READ_ERROR']);
 const imuErrors=new Set(['NONE','I2C_ERROR','WHO_AM_I','CONFIG_MISMATCH','INVALID_SAMPLE','DATA_STALE','CALIBRATION_TIMEOUT','CALIBRATION_CANCELLED']);
@@ -78,7 +78,7 @@ function normalizeImu(value,expectedBoard=''){
   out[key]=v;
  }
  if(value.controlHealth!==undefined){if(!timingHealth.has(value.controlHealth))return null;out.controlHealth=value.controlHealth;}
- for(const key of ['controlActuating','imuValid'])if(typeof value[key]==='boolean')out[key]=value[key];
+ for(const key of ['controlActuating','imuValid','ratePidShadowSaturated'])if(typeof value[key]==='boolean')out[key]=value[key];
  if(value.accelG!==undefined){if(!Array.isArray(value.accelG)||value.accelG.length!==3||!value.accelG.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=8))return null;out.accelG=[...value.accelG];}
  if(value.sampleAgeMs!==undefined&&value.sampleAgeMs!==null){if(!Number.isSafeInteger(value.sampleAgeMs)||value.sampleAgeMs<0||value.sampleAgeMs>0xffffffff)return null;out.sampleAgeMs=value.sampleAgeMs;}
  if(out.enabled&&(out.target!==2000||!Number.isSafeInteger(out.samples)||out.samples>out.target))return null;
@@ -145,7 +145,7 @@ function observeImu(value,kit={}){
  if(binding!==lastImuBinding){lastImuBinding=binding;lastImu=null;lastImuAt=0;lastImuProgressAt=0;}
  const data={transport:kit.transport,board:imu.board,version:kit.version,imuState:imu.state,imuError:imu.error||'NONE',imuLastFailure:imu.lastFailure,imuDataReady:imu.dataReady,imuConfigValid:imu.configValid,gyroUnits:'deg/s'};
  for(const [key,field] of Object.entries({attempt:'imuAttempt',samples:'imuSamples',target:'imuTarget',validTotal:'imuValidTotal',durationMs:'imuDurationMs',startedMs:'imuStartedMs',restarts:'imuRestarts',readFailures:'imuReadFailures',writeFailures:'imuWriteFailures',lastI2cCode:'imuLastI2cCode',whoAmI:'imuWhoAmI',sampleSequence:'imuSampleSequence',sampleAgeMs:'imuSampleAgeMs',maxGapUs:'imuMaxGapUs',calibrationMaxGapUs:'imuCalibrationMaxGapUs',missedSamples:'imuMissedSamples',maxReadUs:'imuMaxReadUs',diagnosticDrops:'imuDiagnosticDrops',failures:'imuFailures',lastFailureMs:'imuLastFailureMs',lastFailureAttempt:'imuLastFailureAttempt'}))data[field]=imu[key];
- for(const key of [...timingCounts,...timingRates,'controlHealth','controlActuating','imuValid'])if(imu[key]!==undefined)data[key]=imu[key];
+ for(const key of [...timingCounts,...timingRates,'controlHealth','controlMaxIntervalPhase','ratePidShadowState','ratePidShadowSaturated','controlActuating','imuValid'])if(imu[key]!==undefined)data[key]=imu[key];
  if(imu.accelG)imu.accelG.forEach((v,i)=>data['accel'+'XYZ'[i]+'G']=v);
  if(lastImu&&imu.controlHealth!==lastImu.controlHealth&&imu.controlHealth)record('timing_state',data);
  if(imu.controlTargetHz&&Date.now()-lastTimingAt>=2000){record('timing_sample',data);lastTimingAt=Date.now();}
@@ -212,7 +212,9 @@ function clean(data){
   else if([...timingRates,'androidUdpReceivedHz','androidUdpAppliedHz','accelXG','accelYG','accelZG'].includes(key)){if(typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000)result[key]=Math.round(v*10000)/10000;}
   else if(key==='udpCoalescedFrames'){if(Number.isSafeInteger(v)&&v>=0&&v<=0xffffffff)result[key]=v;}
   else if(key==='controlHealth'){if(timingHealth.has(v))result[key]=v;}
-  else if(['controlActuating','imuValid'].includes(key)){if(typeof v==='boolean')result[key]=v;}
+  else if(key==='controlMaxIntervalPhase'&&['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC'].includes(v))result[key]=v;
+  else if(key==='ratePidShadowState'&&['DISARMED','READY','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID'].includes(v))result[key]=v;
+  else if(['controlActuating','imuValid','ratePidShadowSaturated'].includes(key)){if(typeof v==='boolean')result[key]=v;}
   else if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
   else if(imuCountFields.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
   else if(key==='imuState'){if(imuStates.has(v))result[key]=v;}
@@ -234,7 +236,7 @@ function clean(data){
   else if(key==='managementProtocol'){if(['ZJM1','HTTP','USB'].includes(v))result.managementProtocol=v;}
   else if(key==='source'){if(['ANDROID','WEB','PPM','USB','NONE'].includes(v))result.source=v;}
   else if(key==='mode'){if(['ap','sta','auto'].includes(v))result.mode=v;}
-  else if(['selectedPath','activePath','targetInput','lastStaInput'].includes(key)){if(['AUTO','PPM','WEB_STA','ANDROID_AP','ANDROID_WEBRTC','NONE'].includes(v))result[key]=v;}
+  else if(['selectedPath','activePath','lastObservedPath','targetInput','lastStaInput'].includes(key)){if(['AUTO','PPM','WEB_STA','ANDROID_AP','ANDROID_WEBRTC','NONE'].includes(v))result[key]=v;}
   else if(key==='handoverError'){if(['','CONTROLS_CHANGED','AP_START_FAILED','STA_UNAVAILABLE'].includes(v))result[key]=v;}
   else if(key==='handoverState'){if(['IDLE','PREPARED','SWITCHING','WAITING_CONTROLLER','FAILED'].includes(v))result[key]=v;}
   else if(key==='board'){if(['ZFC-A1','ZFC-A2','A1','A2'].includes(v))result.board=v;}
@@ -307,7 +309,8 @@ function observeView(view,kit){
  const key=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport,view.active,view.paused,view.connection].join('|');
  if(key===lastView)return;lastView=key;
  record('input_freshness',{transport:kit.transport,connected:kit.connected===true,selectedPath:kit.rcAccess?.controlPath,
-  activePath:view.active||'NONE',rcActive:!!view.active,telemetryAgeMs:view.telemetryAgeMs,
+  activePath:view.active||'NONE',lastObservedPath:view.lastObservedPath||'NONE',rcActive:!!view.active,telemetryAgeMs:view.telemetryAgeMs,
+  connectionGeneration:kit.connectionGeneration,...kit.requestQueue,
   observationAgeMs:Number.isFinite(kit.rcAt)?Math.max(0,Date.now()-kit.rcAt):undefined});
 }
 function observeInput(rc={},kit={}){

@@ -34,6 +34,73 @@ static uint32_t zjPpmConsumedFrames=0,zjPpmCoalescedFrames=0;
 static uint8_t zjPpmSafeFrames=0;
 static bool zjPpmInputAvailable=false,zjPpmReportedLost=false;
 static ZjPpmArmGesture zjPpmArm;
+static bool zjPpmFallbackPending=false;
+static uint32_t zjPpmFallbackAt=0;
+
+struct ZjPpmConfig {
+ uint16_t minimum[8],middle[8],maximum[8];
+ uint8_t map[5];
+};
+static bool zjPpmCalibrationValid(long lo,long mid,long hi){
+ return lo>=850&&lo<=1400&&mid>lo+100&&mid<hi-100&&hi<=2150;
+}
+static bool zjPpmDecodeMap(const String& raw,uint8_t (&map)[5]){
+ if(raw.length()!=5)return false;
+ uint8_t used=0;
+ for(unsigned i=0;i<5;i++){
+  const int index=raw[i]-'1';
+  if(index<0||index>=8||(used&(1u<<index)))return false;
+  map[i]=uint8_t(index);used|=1u<<index;
+ }
+ return true;
+}
+static void zjPpmApplyConfig(const ZjPpmConfig& config){
+ memcpy(zjPpmMin,config.minimum,sizeof(zjPpmMin));
+ memcpy(zjPpmMid,config.middle,sizeof(zjPpmMid));
+ memcpy(zjPpmMax,config.maximum,sizeof(zjPpmMax));
+ memcpy(zjPpmMap,config.map,sizeof(zjPpmMap));
+}
+static ZjPpmConfig zjPpmCurrentConfig(){
+ ZjPpmConfig config;
+ memcpy(config.minimum,zjPpmMin,sizeof(zjPpmMin));memcpy(config.middle,zjPpmMid,sizeof(zjPpmMid));
+ memcpy(config.maximum,zjPpmMax,sizeof(zjPpmMax));memcpy(config.map,zjPpmMap,sizeof(zjPpmMap));
+ return config;
+}
+static bool zjPpmDecodeConfig(const String& record,ZjPpmConfig& config){
+ if(record.length()!=104||record.substring(0,2)!="1|"||record[7]!='|'||
+    !zjPpmDecodeMap(record.substring(2,7),config.map))return false;
+ unsigned offset=8;
+ for(unsigned i=0;i<8;i++){
+  uint16_t* fields[]={&config.minimum[i],&config.middle[i],&config.maximum[i]};
+  for(auto* field:fields){
+   unsigned value=0;
+   for(unsigned digit=0;digit<4;digit++,offset++){
+    if(record[offset]<'0'||record[offset]>'9')return false;
+    value=value*10+unsigned(record[offset]-'0');
+   }
+   *field=value;
+  }
+  if(!zjPpmCalibrationValid(config.minimum[i],config.middle[i],config.maximum[i]))return false;
+ }
+ return true;
+}
+static bool zjPpmSaveConfig(const ZjPpmConfig& config){
+ // NVS commits the complete value atomically. Legacy keys are read-only
+ // migration input and never override a verified v1 record.
+ String record="1|";
+ for(auto ch:config.map)record+=char('1'+ch);
+ record+='|';
+ char fields[13];
+ for(unsigned i=0;i<8;i++){
+  snprintf(fields,sizeof(fields),"%04u%04u%04u",unsigned(config.minimum[i])%10000,unsigned(config.middle[i])%10000,unsigned(config.maximum[i])%10000);
+  record+=fields;
+ }
+ if(zjKitPrefs.putString("ppmConfig",record)!=record.length())return false;
+ ZjPpmConfig checked;
+ const String stored=zjKitPrefs.getString("ppmConfig","");
+ if(stored!=record||!zjPpmDecodeConfig(stored,checked))return false;
+ zjPpmApplyConfig(checked);return true;
+}
 
 // Caller holds the mailbox lock (ISR or receiver task). Keep physical arrival
 // continuity even when an HTTP handler temporarily occupies the Arduino loop.
@@ -114,17 +181,15 @@ static void zjPpmSetup(){
   const int lo=zjKitPrefs.getUShort(("ppm"+index+"lo").c_str(),1000);
   const int mid=zjKitPrefs.getUShort(("ppm"+index+"mid").c_str(),1500);
   const int hi=zjKitPrefs.getUShort(("ppm"+index+"hi").c_str(),2000);
-  const bool valid=lo>=850&&lo<=1400&&mid>lo+100&&mid<hi-100&&hi<=2150;
+  const bool valid=zjPpmCalibrationValid(lo,mid,hi);
   zjPpmMin[i]=valid?lo:1000;zjPpmMid[i]=valid?mid:1500;zjPpmMax[i]=valid?hi:2000;
  }
- const String stored=zjKitPrefs.getString("ppmMap","");
- if(stored.length()==5){
-  bool valid=true;
-  for(uint8_t i=0;i<5;i++){uint8_t ch=uint8_t(stored[i]-'1');if(stored[i]<'1'||stored[i]>'8'){valid=false;break;}
-   for(uint8_t j=0;j<i;j++)if(zjPpmMap[j]==ch){valid=false;break;}
-   zjPpmMap[i]=ch;
-  }
-  if(!valid){for(uint8_t i=0;i<5;i++)zjPpmMap[i]=i;}
+ ZjPpmConfig record;
+ if(zjPpmDecodeConfig(zjKitPrefs.getString("ppmConfig",""),record))zjPpmApplyConfig(record);
+ else{
+  uint8_t map[5];
+  const bool valid=zjPpmDecodeMap(zjKitPrefs.getString("ppmMap",""),map);
+  for(unsigned i=0;i<5;i++)zjPpmMap[i]=valid?map[i]:i;
  }
  pinMode(ZJ_PPM_PIN,INPUT_PULLDOWN); // receiver must drive a proper 3.3V signal
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -198,7 +263,10 @@ static void zjPpmLoop(uint32_t now){
  if(zjPpmInputAvailable&&(captureGap||(!zjPpmSignalFresh(now)&&!continuous))){
   zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
   zjPpmArm.reset();
-  if(zjRcOwned&&zjRcSource=="PPM")zjRcRelease("PPM_SIGNAL_LOST");
+  if(zjRcOwned&&zjRcSource=="PPM"){
+   if(zjRcControlPath=="PPM"){zjPpmFallbackPending=true;zjPpmFallbackAt=now;}
+   zjRcRelease("PPM_SIGNAL_LOST");
+  }
  }
  if(newFrame&&uint32_t(now-receivedAt)>ZJ_PPM_LOST_MS)newFrame=false;
  if(newFrame){
@@ -267,11 +335,9 @@ static bool zjPpmSerialCommand(char* line){
    !parseNumber(mid,1050,1900,m)||!parseNumber(hi,1600,2150,h)||
    m-l<120||h-m<120){Serial.println("ZJPPM,ERR,CAL_RANGE");return true;}
   const uint8_t idx=uint8_t(c-1);
-  zjPpmMin[idx]=l;zjPpmMid[idx]=m;zjPpmMax[idx]=h;
-  const String n=String(c);
-  zjKitPrefs.putUShort(("ppm"+n+"lo").c_str(),l);
-  zjKitPrefs.putUShort(("ppm"+n+"mid").c_str(),m);
-  zjKitPrefs.putUShort(("ppm"+n+"hi").c_str(),h);
+  auto candidate=zjPpmCurrentConfig();
+  candidate.minimum[idx]=l;candidate.middle[idx]=m;candidate.maximum[idx]=h;
+  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,ERR,STORAGE_FAILED");return true;}
   Serial.printf("ZJPPM,ACK,CAL,%ld\n",c);return true;
  }
  if(!strncmp(line,"ZJPPM,MAP,",10)){
@@ -285,8 +351,9 @@ static bool zjPpmSerialCommand(char* line){
    channels[i]=uint8_t(ch-1);used[ch-1]=true;
    if(comma)rest=comma+1;
   }
-  String stored="";for(uint8_t i=0;i<5;i++){zjPpmMap[i]=channels[i];stored+=char('1'+channels[i]);}
-  zjKitPrefs.putString("ppmMap",stored);
+  auto candidate=zjPpmCurrentConfig();
+  memcpy(candidate.map,channels,sizeof(channels));
+  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,ERR,STORAGE_FAILED");return true;}
   Serial.println("ZJPPM,ACK,MAP");return true;
  }
  return false;

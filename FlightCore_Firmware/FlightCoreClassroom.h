@@ -3,6 +3,7 @@
 // An identifying six-digit code is NOT a password or an authorization secret.
 #include <Preferences.h>
 #include "FlightCoreMotorStatus.h"
+#include "FlightCorePidSettings.h"
 #include <mbedtls/sha256.h>
 
 static Preferences zjKitPrefs;
@@ -84,6 +85,7 @@ static void zjKitSetup(){
  zjKitId=String(FC_BOARD)+"-"+id;
  zjKitName=FC_LABEL;
  zjKitPrefs.begin("zj-classroom",false);
+ if(zjPidSupported())zjPidLoad(zjKitPrefs);
  zjKitName=zjKitPrefs.getString("name","");
  zjKitAutoName=zjKitPrefs.getString("autoName","")=="1"||zjKitName.isEmpty()||zjKitName==FC_LABEL;
  if(zjKitName.length()<3||zjKitName.length()>31){zjKitName="zebjus_drone_1";zjKitAutoName=true;}
@@ -279,7 +281,7 @@ static bool zjAdminSerialCommand(char* line){
  }
  if(!strcmp(line,"ZJADMIN,FACTORY_RESET,CONFIRM")){
   Preferences net;net.begin("zj-network",false);net.clear();net.end();
-  zjKitPrefs.clear();zjRcRelease("FACTORY_RESET");
+  zjKitPrefs.clear();zjPidSettings=ZjPidSettings{};zjRcRelease("FACTORY_RESET");
   Serial.println("ZJADMIN,ACK,FACTORY_RESET,RESTART_BOARD_TO_APPLY");return true;
  }
  Serial.println("ZJADMIN,ERR,UNSUPPORTED_COMMAND");return true;

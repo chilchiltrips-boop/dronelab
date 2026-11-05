@@ -84,6 +84,18 @@ int main(){
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
  frame(1000);frame(1000);frame(1000);
  assert(zjRcOwned&&zjRcSource=="ANDROID"&&!zjRcInputArmed);
+ zjRcRelease("TEST");
+ zjKitPrefs.putUShort("ppm1lo",910);
+ zjKitPrefs.putString("ppmMap","21345");
+ zjPpmSetup();
+ assert(zjPpmMin[0]==910&&zjPpmMap[0]==1);
+ auto config=zjPpmCurrentConfig();
+ config.minimum[0]=950;config.map[0]=0;config.map[1]=1;
+ zjKitPrefs.failNextWrite=true;
+ assert(!zjPpmSaveConfig(config)&&zjPpmMin[0]==910&&zjPpmMap[0]==1);
+ assert(zjPpmSaveConfig(config));
+ zjPpmSetup();
+ assert(zjPpmMin[0]==950&&zjPpmMap[0]==0&&zjPpmMap[1]==1);
  std::cout<<"PASS production PPM receiver: CH5-free yaw ARM/DISARM, throttle gate, motor isolation, capture loss, owner arbitration"<<std::endl;
  return 0;
 }

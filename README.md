@@ -1,23 +1,27 @@
 # ZEBJUS DroneLab
 
-## Current releases and verification (20 October 2026)
+## Current releases and verification
 
 | Component | Published source metadata | Hardware/deployment status |
 | --- | --- | --- |
-| WebApp | 1.8.0 series (live build in `app-version.json`) | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
-| FlightCore A1 (ESP32-C3) | **1.5.5**, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
-| FlightCore A2 (XIAO ESP32-C6) | **1.5.5**, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
-| Android signed companion | Gradle candidate **1.8.7-rx-applied-feedback**, versionCode **45**; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
+| WebApp | Live build in `app-version.json` | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
+| FlightCore A1 (ESP32-C3) | Version in `firmware-catalog.json`, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| FlightCore A2 (XIAO ESP32-C6) | Version in `firmware-catalog.json`, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
+| Android signed companion | Gradle candidate in `mobile-android/app/build.gradle`; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
 | WebRTC pairing | Local QR/peer simulator pairing uses host/STUN candidates; Kit controls remain local AP/STA/USB | **TURN relay and internet-based physical Kit control intentionally out of scope** |
 | Central Admin | `admin-server.cjs` HTTP API source | Must be deployed behind external HTTPS reverse proxy with private storage |
 
 **Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed UDP management or browser-compatible HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
 
-**No flight motors are controlled by FlightCore 1.5.5.** Diagnostic INPUT ARM differs from MOTOR ARM (motors stay disabled). A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
+**A2 Rate PID is available for settings and diagnostic computation.** Diagnostic INPUT ARM and the existing bench MOTOR ARM remain separate. A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
 
 **Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and the [optional Central Admin hosting guide](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). TURN and internet-based physical Kit control are excluded from the project.
 
 The 1.5.5 / 1.8.7 release separates authenticated RX and APPLIED feedback, retains early input until the next 20 ms apply tick, and reports receive/apply ages and reason-based NACKs. The 350 ms watchdogs, exclusive owner, independent UDP receiver and latest-frame-only sender remain enforced. See [protocol, regressions and upgrade notes](docs/UDP_RX_APPLIED_1_5_5.md).
+
+## A2 Rate PID
+
+The existing PID Tuning panel and Python Lab share the verified A2 settings. Use USB teacher admin or an authorized direct AP/STA Kit connection for saves. Read the FC revision before editing or saving. A successful save requires a separate readback of all nine gains. See [Rate PID settings and timing](docs/A2_RATE_PID.md).
 
 ## UDP management and IMU
 

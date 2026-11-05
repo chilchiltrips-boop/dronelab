@@ -1,16 +1,27 @@
 #pragma once
 #include "FlightCoreTiming.h"
+#include "FlightCoreRatePid.h"
 static ZjImuAcquisition zjImuDriver;
 static ZjControlScheduler zjControl;
 static ZjControlInputSnapshot zjControlInput,zjControlConsumedInput;
 static ZjSampleStamp zjControlConsumedImu;
 static bool zjControlRuntimeReady=false;
+struct ZjRateShadowResult {
+ uint32_t revision=0,computeMaxUs=0;
+ const char* maxIntervalPhase="STARTUP";
+ const char* reason="DISARMED";
+ ZjRateMix mix;
+};
+static ZjRateShadowResult zjRateShadow;
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
 #include <esp_timer.h>
 #include <freertos/semphr.h>
 static SemaphoreHandle_t zjI2cMutex=nullptr;
 static portMUX_TYPE zjTimingMux=portMUX_INITIALIZER_UNLOCKED;
 static ZjImuAcquisition zjImuMailbox;
+static ZjRateGains zjShadowGains[3];
+static uint32_t zjShadowRevision=0,zjShadowReleasedAt=0;
+static bool zjShadowRequested=false;
 static ZjAccelModel zjSavedAccelModel;
 static ZjImuAction zjPendingImuAction=ZjImuAction::NONE;
 static uint8_t zjPendingImuFace=0;
@@ -65,19 +76,67 @@ static void zjImuTask(void*){
 }
 static void zjControlTask(void*){
  ZjControlScheduler control;control.start(micros());
+ ZjRatePidState pid[3]={};
+ ZjRateShadowResult previous;
+ uint32_t lastRelease=0;
+ uint8_t lastSource=0;
  for(;;){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+  const auto previousWorst=control.maxIntervalUs;
   if(!control.begin(micros()))continue;
-  // Reusing observations never advances their sequence or freshness. This
-  // shadow tick has no command path and cannot grant motor authorization.
+  ZjRateGains gains[3];
+  float rates[3];
+  bool requested,imuReady;
+  uint32_t release;
+  ZjRateShadowResult next;
   portENTER_CRITICAL(&zjTimingMux);
-  zjControlConsumedImu=zjImuMailbox.sample;zjControlConsumedInput=zjControlInput;
-  zjControlConsumedImu.valid=zjControlConsumedImu.fresh(micros(),12000);
-  zjControlConsumedInput.valid=zjControlConsumedInput.valid&&uint32_t(millis()-zjControlConsumedInput.receivedMs)<=(zjControlConsumedInput.source==1?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS);
+  zjControlConsumedImu=zjImuMailbox.sample;
+  zjControlConsumedInput=zjControlInput;
+  rates[0]=zjImuMailbox.RateRoll;rates[1]=zjImuMailbox.RatePitch;rates[2]=zjImuMailbox.RateYaw;
+  imuReady=zjImuMailbox.gyroReady;
+  for(unsigned i=0;i<3;i++)gains[i]=zjShadowGains[i];
+  requested=zjShadowRequested;release=zjShadowReleasedAt;next.revision=zjShadowRevision;
   portEXIT_CRITICAL(&zjTimingMux);
+  const auto& input=zjControlConsumedInput;
+  const bool fresh=input.valid&&uint32_t(millis()-input.receivedMs)<=(input.source==1?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS);
+  const bool imuFresh=imuReady&&zjControlConsumedImu.fresh(micros(),12000);
+  next.maxIntervalPhase=previous.maxIntervalPhase;
+  next.computeMaxUs=previous.computeMaxUs;
+  if(control.maxIntervalUs>previousWorst)next.maxIntervalPhase=control.ticks<=250?"STARTUP":
+   !imuReady?"IMU_CALIBRATION":requested?"RC_DIAGNOSTIC":"DISARMED";
+  if(requested){
+   if(!fresh)next.reason="INPUT_STALE";
+   else if(!imuFresh)next.reason="IMU_STALE";
+   else if(control.intervalUs<1000||control.intervalUs>8000)next.reason="TIMING_FAULT";
+   else{
+    if(lastRelease!=release||lastSource!=input.source||previous.revision!=next.revision){
+     for(auto& axis:pid)axis={};
+     previous.mix={};
+    }
+    const uint32_t computeStarted=micros();
+    const uint16_t commands[]={input.roll,input.pitch,input.yaw};
+    ZjRatePidResult correction[3];
+    bool valid=true;
+    for(unsigned i=0;i<3;i++){
+     correction[i]=zjStepRatePid(pid[i],gains[i],zjRateStick(commands[i]),rates[i],
+                                 control.intervalUs*.000001f,previous.mix.residual[i]);
+     valid=valid&&correction[i].valid;
+    }
+    if(valid){
+     next.reason="READY";
+     next.mix=zjRateMixQuadX(input.throttle,correction[0].output,correction[1].output,correction[2].output);
+    }else next.reason="PID_INVALID";
+    next.computeMaxUs=std::max(next.computeMaxUs,uint32_t(micros()-computeStarted));
+   }
+  }
+  if(!next.mix.pulse[0])for(auto& axis:pid)axis={};
+  lastRelease=release;lastSource=input.source;previous=next;
   control.finish(micros());
-  portENTER_CRITICAL(&zjTimingMux);zjControl=control;portEXIT_CRITICAL(&zjTimingMux);
+  portENTER_CRITICAL(&zjTimingMux);zjControl=control;zjRateShadow=next;portEXIT_CRITICAL(&zjTimingMux);
  }
+}
+static ZjRateShadowResult zjReadRateShadow(){
+ portENTER_CRITICAL(&zjTimingMux);auto result=zjRateShadow;portEXIT_CRITICAL(&zjTimingMux);return result;
 }
 static ZjControlScheduler zjReadControl(){
  portENTER_CRITICAL(&zjTimingMux);auto value=zjControl;portEXIT_CRITICAL(&zjTimingMux);return value;
@@ -110,13 +169,20 @@ static void zjPublishControlInput(uint32_t receivedMs){
  value.valid=zjRcOwned&&zjRcHasFrame&&uint32_t(millis()-receivedMs)<=ZJ_RC_DEADMAN_MS;
  value.throttle=zjRcThrottle;value.roll=zjRcRoll;value.pitch=zjRcPitch;value.yaw=zjRcYaw;
  value.source=zjRcSource=="PPM"?1:zjRcSource=="ANDROID"?2:zjRcSource=="WEB"?3:0;
- portENTER_CRITICAL(&zjTimingMux);zjControlInput=value;portEXIT_CRITICAL(&zjTimingMux);
+ const bool requested=zjFlightMode=="acro"&&zjRcInputArmed&&!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed;
+ const ZjRateGains gains[]={zjPidSettings.axis(0),zjPidSettings.axis(1),zjPidSettings.axis(2)};
+ portENTER_CRITICAL(&zjTimingMux);
+ zjControlInput=value;zjShadowRequested=requested;zjShadowRevision=zjPidSettings.revision;zjShadowReleasedAt=zjRcLastReleaseAt;
+ for(unsigned i=0;i<3;i++)zjShadowGains[i]=gains[i];
+ portEXIT_CRITICAL(&zjTimingMux);
 }
 #else
 // A1 retains its main-loop sensor service. Host fixtures use the real driver
 // synchronously and exercise the scheduler arithmetic with a simulated clock.
 static bool zjTryI2c(){return true;}
 static void zjReleaseI2c(){}
+static bool zjImuMaintenanceBusy(){return false;}
+static ZjRateShadowResult zjReadRateShadow(){return zjRateShadow;}
 static ZjControlScheduler zjReadControl(){return zjControl;}
 static ZjImuAcquisition zjReadImu(uint32_t now){zjImuDriver.updateGyro(now);return zjImuDriver;}
 static void zjControlRuntimeSetup(){zjImuDriver.lastGyroProbe=millis()-2500;}

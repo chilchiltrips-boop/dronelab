@@ -39,7 +39,7 @@ test('Remote WebRTC simulator inputs never claim physical Kit ownership; local c
  assert.ok(pairing.includes('Remote Phase 1 is simulator-only'));
  assert.ok(host.includes('hardwareInput(){'));
  assert.ok(pid.includes('hardwareInput:()=>'));
- assert.doesNotMatch(pid,/ZebjusKits/,'Simulator must never call physical Kit APIs');
+ assert.doesNotMatch(pid,/\.(?:claim|sendFrame|stopMotors|ingestAndroid)\(|\/api\/(?:motor|rc)\//,'Simulator input must stay isolated from Kit actuation');
  assert.ok(pid.includes('hardwareInput:()=>null'));
 });
 test('Network/session changes cannot silently reassign firmware control',()=>{

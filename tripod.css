@@ -300,3 +300,7 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 
 .tp-connection-dialog[hidden]{display:none!important}
 .tp-connection-dialog.aerion-inline-action{max-height:none;overflow:visible}
+
+#tpPidKitActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#tpPidKitStatus{flex:1 1 230px;overflow-wrap:anywhere}
+#tpPidTarget{max-width:70%;white-space:normal;overflow-wrap:anywhere;text-align:right}

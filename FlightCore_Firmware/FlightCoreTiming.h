@@ -35,6 +35,7 @@ struct ZjControlScheduler {
  static constexpr uint32_t TARGET_HZ=250,PERIOD_US=4000;
  uint32_t nextDueUs=0,lastTickUs=0,lastSuccessfulUs=0,ticks=0;
  uint32_t intervalUs=0,minIntervalUs=0,maxIntervalUs=0,jitterUs=0,maxJitterUs=0;
+ uint32_t maxIntervalAtUs=0;
  uint32_t executionUs=0,maxExecutionUs=0,missedTicks=0,deadlineMisses=0,overruns=0;
  bool started=false;
  ZjRateCounter rate;
@@ -45,7 +46,7 @@ struct ZjControlScheduler {
   const uint32_t late=now-nextDueUs,skipped=late/PERIOD_US;
   missedTicks+=skipped;deadlineMisses+=skipped;nextDueUs+=(skipped+1)*PERIOD_US;
   jitterUs=late;if(late>maxJitterUs)maxJitterUs=late;
-  if(ticks){intervalUs=now-lastTickUs;if(!minIntervalUs||intervalUs<minIntervalUs)minIntervalUs=intervalUs;if(intervalUs>maxIntervalUs)maxIntervalUs=intervalUs;}
+  if(ticks){intervalUs=now-lastTickUs;if(!minIntervalUs||intervalUs<minIntervalUs)minIntervalUs=intervalUs;if(intervalUs>maxIntervalUs){maxIntervalUs=intervalUs;maxIntervalAtUs=now;}}
   lastTickUs=now;++ticks;rate.event(now);return true;
  }
  void finish(uint32_t now){
