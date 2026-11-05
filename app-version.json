@@ -1,5 +1,5 @@
 {
-  "version": "1.43",
+  "version": "1.44",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -13,7 +13,7 @@
     "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing",
     "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check"
   ],
-  "buildCommit": "b78b953e5979",
-  "publishedAt": "2026-11-05T07:44:27.560877+00:00",
-  "buildNumber": 475
+  "buildCommit": "49517cdafb4f",
+  "publishedAt": "2026-11-05T09:05:38.925447+00:00",
+  "buildNumber": 476
 }
