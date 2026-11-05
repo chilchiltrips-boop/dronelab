@@ -1,11 +1,25 @@
 name: A2 Motor Setup Browser
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'js/a2-setup-wizard.js'
+      - 'js/flightcore-pid-client.js'
+      - 'js/pid-profiles.js'
+      - 'js/tripod-page.js'
+      - 'tripod.html'
+      - 'tripod.css'
+      - 'tools/a2-rate-pid-browser.mjs'
+      - '.github/workflows/a2-motor-setup.yml'
   push:
     branches: [fix/a2-output-calibration-stability-20261104, fix/a2-esc-guidance-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-complete-wizard-20261104, fix/wizard-single-toolbar-20261103, fix/compact-wizard-motor-next-20261103, feat/guided-motor-workflow-20261102, fix/setup-input-monitor-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, main, feat/a2-motor-setup-20261030]
     paths:
       - 'js/input-monitor.js'
       - 'js/motor-setup.js'
       - 'js/a2-setup-wizard.js'
+      - 'js/flightcore-pid-client.js'
+      - 'js/pid-profiles.js'
+      - 'tools/a2-rate-pid-browser.mjs'
       - 'js/setup-cues.js'
       - 'sw.js'
       - 'js/a2-setup-visuals.js'
@@ -47,6 +61,7 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/a2-http.log 2>&1 &
           for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
           node tools/a2-motor-setup-browser.mjs
+          node tools/a2-rate-pid-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

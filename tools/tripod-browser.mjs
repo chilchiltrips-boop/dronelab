@@ -55,15 +55,14 @@ try{
  await page.mouse.down();await page.waitForTimeout(150);await page.mouse.up();
  await until(()=>document.querySelector('#tpRightReadout')?.textContent.includes('R 0.00'));
  if(await page.locator('#tpPidMatrix .tp-pid-bank').count()!==5)throw Error('Expected exactly five PID banks');
- if(!(await page.locator('#tpAnglePidSection').isHidden()))throw Error('ACRO must hide Roll/Pitch outer PIDs');
+ if(await page.locator('#tpAnglePidSection').isHidden())throw Error('Outer bank must remain editable in ACRO');
  if(await page.locator('[data-pid-bank="angleYaw"]').count())throw Error('No Yaw angle PID is allowed');
  await page.locator('[data-pid-bank="rateYaw"] [data-gain="p"]').fill('3.75');
- await page.locator('[data-pid-bank="rateYaw"] button').click();
- if(!(await text('tpStatus')).includes('rateYaw'))throw Error('ANGLE Yaw rate PID did not apply');
- await page.locator('#tpPidAxis').selectOption('roll');await page.locator('#tpPidLoop').selectOption('rate');
+ await page.locator('#tpApplyPid').click();
+ if(!(await text('tpPidKitStatus')).includes('Applied to Simulator'))throw Error('Yaw rate PID did not apply');
  const throttleBefore=await text('tpThrottleReadout');
- await page.locator('#tpPidP').fill('1.25');await page.locator('#tpApplyPid').click();
- if(!(await text('tpStatus')).includes('PID APPLIED LIVE'))throw Error('Live Apply failed');
+ await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').fill('1.25');await page.locator('#tpApplyPid').click();
+ if(!(await text('tpPidKitStatus')).includes('Applied to Simulator'))throw Error('Live Apply failed');
  if(await text('tpThrottleReadout')!==throttleBefore)throw Error('Live Apply reset virtual throttle');
  if(!(await page.locator('#tpStop').isEnabled()))throw Error('Live Apply disarmed motors');
  await page.locator('body').click({position:{x:30,y:170}});
@@ -73,19 +72,14 @@ try{
  await until(()=>document.querySelector('#tpStatus')?.textContent.includes('PID TEST'));
  await page.waitForTimeout(700);
  if(Number.parseFloat(await text('tpPeakRate'))<.01)throw Error('PID pulse failed to move physical model');
- await page.locator('#tpPreset').selectOption('highP');
- await until(()=>document.querySelector('#tpStatus')?.textContent.includes('PRESET APPLIED LIVE'));
- await page.locator('#tpTestResponse').click();
- await until(()=>document.querySelector('#tpStatus')?.textContent.includes('PID TEST'));
- await page.locator('#tpAbGain').selectOption('p');
- await page.locator('#tpAbLow').fill('.3');await page.locator('#tpAbHigh').fill('2.8');
- await page.locator('#tpCompare').click();
- await until(()=>document.querySelector('#tpCompareResult')?.textContent.includes('Peak rate'),15000);
+ if(await page.locator('#tpPidAxis,#tpPidLoop,#tpPreset,.tp-ab-compare').count())throw Error('Remove duplicate tuning controls');
  await page.locator('#tpChartAxis').selectOption('pidTerms');
  await page.locator('#tpPauseGraph').click();
  if(await text('tpPauseGraph')!=='Resume Graph')throw Error('Pause graph failed');
  await page.locator('#tpPauseGraph').click();
+ await page.locator('.tp-tools-menu > summary').click();
  await page.locator('#tpResetIntegrators').click();
+ await page.locator('.tp-tools-menu > summary').click();
  if(!(await text('tpStatus')).includes('INTEGRATORS RESET'))throw Error('PID reset failed');
  await page.locator('#tpCameraView').selectOption('follow');
  await page.locator('.tp-sound-menu > summary').click();
@@ -96,13 +90,13 @@ try{
  if(await page.locator('#tpSound').getAttribute('aria-pressed')!=='true')throw Error('Unmute failed');
  await page.locator('.tp-sound-menu > summary').click();
  await page.locator('#tpMode').selectOption('acro');
- if(!(await page.locator('#tpAnglePidSection').isHidden()))throw Error('ACRO must hide outer Angle PID');
+ if(await page.locator('#tpAnglePidSection').isHidden())throw Error('Outer Angle bank should remain visible in ACRO');
  await page.locator('[data-pid-bank="ratePitch"] [data-gain="p"]').fill('1.3');
- await page.locator('[data-pid-bank="ratePitch"] button').click();
+ await page.locator('#tpApplyPid').click();
  await page.locator('#tpMode').selectOption('angle');
  if(await page.locator('#tpAnglePidSection').isHidden())throw Error('ANGLE outer PID missing');
  if(Number(await page.locator('[data-pid-bank="ratePitch"] [data-gain="p"]').inputValue())!==1.3)throw Error('Rate PID must be shared across modes');
- await page.locator('#tpPidLoop').selectOption('angle');await page.locator('.tp-tools-menu > summary').click();await page.locator('#tpCalibrate').click();
+ await page.locator('.tp-tools-menu > summary').click();await page.locator('#tpCalibrate').click();
  await page.locator('.tp-tools-menu > summary').click();
  await page.locator('#tpWind').fill('20');await page.locator('#tpWind').dispatchEvent('input');
  if(await text('tpWindOut')!=='20%')throw Error('Environment slider failed');
@@ -122,7 +116,7 @@ try{
   await page.setViewportSize({width,height});
   const m=await page.evaluate(()=>{
    const r=s=>{const x=document.querySelector(s)?.getBoundingClientRect();return x&&{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}};
-   return {scroll:document.documentElement.scrollWidth,view:r('.tp-view-panel'),sticks:r('.tp-sticks'),vertical:r('.tp-vertical'),pid:r('.tp-pid-panel'),telemetry:r('.tp-telemetry'),env:r('.tp-env-panel'),ab:r('.tp-ab-compare'),rate:r('#tpRatePidSection'),angle:r('#tpAnglePidSection'),left:r('#tpLeftPad'),right:r('#tpRightPad')}
+   return {scroll:document.documentElement.scrollWidth,view:r('.tp-view-panel'),sticks:r('.tp-sticks'),vertical:r('.tp-vertical'),pid:r('.tp-pid-panel'),telemetry:r('.tp-telemetry'),env:r('.tp-env-panel'),rate:r('#tpRatePidSection'),angle:r('#tpAnglePidSection'),left:r('#tpLeftPad'),right:r('#tpRightPad')}
   });
   if(m.scroll>width+2){
    const offenders=await page.evaluate(()=>[...document.body.querySelectorAll('*')]
@@ -131,16 +125,16 @@ try{
     .sort((a,b)=>b.right-a.right).slice(0,24));
    throw Error('Responsive PID page overflow '+JSON.stringify({width,m,offenders}));
   }
-  const {view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right}=m;
-  if([view,sticks,vertical,pid,telemetry,env,ab,rate,angle,left,right].some(x=>!x||x.width<50))throw Error('PID section clipped or missing '+JSON.stringify({width,m}));
+  const {view,sticks,vertical,pid,telemetry,env,rate,angle,left,right}=m;
+  if([view,sticks,vertical,pid,telemetry,env,rate,angle,left,right].some(x=>!x||x.width<50))throw Error('PID section clipped or missing '+JSON.stringify({width,m}));
   if(width>1050){
    if(Math.abs(view.top-sticks.top)>8||pid.top<view.bottom-8||pid.top<vertical.bottom-8||
      pid.left>view.left+5||pid.right<sticks.right-5||telemetry.top<pid.bottom-8||
-     Math.abs(telemetry.top-env.top)>8||ab.top<env.bottom-8||ab.left<telemetry.right-8)
+     Math.abs(telemetry.top-env.top)>8)
     throw Error('Desktop PID workbench misplaced '+JSON.stringify({width,m}));
   }else{
    if(sticks.top<view.bottom-8||vertical.top<sticks.bottom-8||pid.top<vertical.bottom-8||
-     telemetry.top<pid.bottom-8||env.top<telemetry.bottom-8||ab.top<env.bottom-8)
+     telemetry.top<pid.bottom-8||env.top<telemetry.bottom-8)
     throw Error('Mobile sections overlap '+JSON.stringify({width,m}));
   }
   if(angle.width<width*.20||rate.width<width*.20)throw Error('PID editor compressed '+JSON.stringify({width,m}));
@@ -148,11 +142,11 @@ try{
  }
  await page.setViewportSize({width:1440,height:900});
  await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').fill('1.15');
- await page.locator('[data-pid-bank="rateRoll"] button').click();
- if(!(await text('tpStatus')).includes('PID APPLIED LIVE'))throw Error('Reflow broke PID Apply');
- await page.locator('#tpAbGain').selectOption('i');
- if(await page.locator('#tpAbGain').inputValue()!=='i')throw Error('Reflow broke A/B');
+ await page.locator('#tpApplyPid').click();
+ if(!(await text('tpPidKitStatus')).includes('Applied to Simulator'))throw Error('Reflow broke PID Apply');
+ await page.locator('#tpPidDefaults').click();
+ if(Number(await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').inputValue())!==1.4)throw Error('Restore Defaults failed');
  if(errors.length)throw Error('Page errors: '+errors.join(' | '));
- console.log('PASS V1.5.2 Tripod: Assembly GLBs, ACRO/ANGLE, live Apply, A/B, PID pulse, camera follow, audio, mobile and safe Stop');
+ console.log('PASS V1.5.2 Tripod: Assembly GLBs, ACRO/ANGLE, live Apply, Restore Defaults, PID pulse, camera follow, audio, mobile and safe Stop');
 }catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/flight-training-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}
 finally{await browser.close()}

@@ -69,7 +69,7 @@ try{
    // Mode and live PID edits remain virtual while physical PPM owns the Kit.
    await sim.locator('#tpMode').selectOption('acro');
    await sim.getByRole('spinbutton',{name:'RATE Roll P',exact:true}).fill('1.15');
-   await sim.getByRole('button',{name:'Apply RATE Roll PID',exact:true}).click();
+   await sim.getByRole('button',{name:'Apply to Simulator',exact:true}).click();
    await page.waitForFunction(()=>{
     const c=window.ZebjusTraining.diagnostics().physics.controllers.rateRoll;
     return Math.abs(c.error)>.01&&Math.abs(c.p-1.15*c.error)<.0001;

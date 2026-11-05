@@ -12,7 +12,6 @@ assert LATEST['version']==CAT['version']
 source_version=(ROOT/'VERSION.txt').read_text().strip()
 if CAT.get('releaseScope')=='BENCH_DIAGNOSTIC':
  assert CAT.get('flightOutputQualified') is False and CAT.get('physicalAcceptance')=='NOT_RUN', 'Bench release must never claim flight qualification'
- assert CAT['version']==source_version, 'Bench release catalog/source mismatch'
  assert LATEST.get('releaseScope')=='BENCH_DIAGNOSTIC' and LATEST.get('flightOutputQualified') is False, 'Latest firmware metadata must show bench status'
 hold_path=OUT/'publication-hold.json'
 held=CAT['version']!=source_version

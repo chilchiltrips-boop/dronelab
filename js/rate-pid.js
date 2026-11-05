@@ -1,9 +1,8 @@
 // Shared Rate PID contract: deg/s in, microsecond correction out, seconds dt.
 // See the matching firmware implementation in FlightCoreRatePid.h.
-export const RATE_BANKS=['rateRoll','ratePitch','rateYaw'];
-export const RATE_DEFAULTS={
- rateRoll:{p:1.4,i:18,d:.035},ratePitch:{p:1.4,i:18,d:.035},rateYaw:{p:3,i:20,d:0}
-};
+import {DEFAULT_PID_PROFILE,PID_BANKS} from './pid-profiles.js';
+export const RATE_BANKS=PID_BANKS.slice(0,3);
+export const RATE_DEFAULTS=Object.fromEntries(RATE_BANKS.map(bank=>[bank,DEFAULT_PID_PROFILE.gains[bank]]));
 export const validRateGain=value=>Number.isFinite(value)&&value>=0&&value<=100;
 const clip=(value,lo,hi)=>Math.max(lo,Math.min(hi,value));
 

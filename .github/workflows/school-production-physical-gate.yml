@@ -28,8 +28,10 @@ jobs:
           npm run check
           npm run verify:firmware
       - name: Reject unwitnessed physical acceptance
+        env:
+          ZJ_ACCEPTANCE_OPERATOR_KEYS: ${{ secrets.ZJ_ACCEPTANCE_OPERATOR_KEYS }}
         run: |
           npm run verify:acceptance:strict
       - name: Record verification boundary
         run: |
-          echo 'Strict evidence is metadata validation only. Independent real A1/A2 and handset observations are still required.'
+          echo 'Signed physical evidence requires independent real A1/A2 and handset observations.'

@@ -1,3 +1,5 @@
+import {createPidClient} from './flightcore-pid-client.js';
+import {getPidProfile,PID_PROFILES} from './pid-profiles.js';
 import {motorClient,cancelMotorConfirmations,confirmMotor} from './motor-setup.js';
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
@@ -49,7 +51,7 @@ if(root){
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
  let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
- let visualStep=-1,visualMarkup='',autoPrepareIntent=null,lastAutoAttempt='';
+ let visualStep=-1,visualMarkup='',autoPrepareIntent=null,lastAutoAttempt='',loadedPid=null;
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
@@ -60,7 +62,14 @@ if(root){
  <section data-panel="1"><h3>Frame &amp; wiring</h3>${pageStatus(1)}
  <label class="a2-layout-field">Frame layout<select id="a2Layout"><option value="A2_QUAD_X">Quad X</option><option value="A2_QUAD_PLUS">Quad +</option></select></label>
  <div class="a2-table-wrap"><table class="a2-wiring"><thead><tr><th>Motor / position</th><th>Signal pin</th><th>Direction</th></tr></thead><tbody>${[1,2,3,4].map((m,i)=>`<tr><td><b>M${m}</b><small data-position="${i}"></small></td><td><select data-pin="${i}" aria-label="M${m} signal pin">${[0,1,2,3].map(n=>`<option value="D${n}" ${n===i?'selected':''}>D${n}</option>`).join('')}</select></td><td><select data-rotation="${i}" aria-label="M${m} expected rotation"><option ${i%2===0?'selected':''}>CW</option><option ${i%2?'selected':''}>CCW</option></select></td></tr>`).join('')}</tbody></table></div>
- <p class="a2-wiring-validation" role="status"></p><p class="a2-save-state"></p></section>
+ <p class="a2-wiring-validation" role="status"></p><p class="a2-save-state"></p>
+ <div class="a2-imu-card a2-pid-profile">
+  <label class="a2-layout-field" for="a2PidProfile">Default PID drone profile
+   <select id="a2PidProfile">${PID_PROFILES.map(profile=>`<option value="${profile.id}">${profile.label}</option>`).join('')}</select>
+  </label>
+  <div class="a2-actions"><button class="btn" data-action="load-pid-profile" type="button">Load &amp; Save PID Profile</button></div>
+  <p class="a2-pid-status" role="status">Provisional Rate and Angle gains · bench tuning.</p>
+ </div></section>
  <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
  <section data-panel="3" class="a2-imu-page">
  <div class="a2-imu-heading"><h3>IMU Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>${pageStatus(3)}
@@ -178,6 +187,7 @@ if(root){
  }
  function loadWiring(){
   $('#a2Layout').value=draft.layout;
+  $('#a2PidProfile').value=PID_PROFILES.find(profile=>profile.layout===draft.layout).id;
   draft.layoutPins.forEach((p,i)=>$('[data-pin="'+i+'"]').value=p);
   draft.rotations.forEach((r,i)=>$('[data-rotation="'+i+'"]').value=r);
  }
@@ -189,7 +199,7 @@ if(root){
  function resetContext(){
   ++operation;
   state=saved=base=null;
-  draft=defaults();minimums=[null,null,null,null];loadWiring();
+  draft=defaults();minimums=[null,null,null,null];loadedPid=null;loadWiring();
   calMotor=1;calAll=false;setCalPulse(1000);
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
   activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
@@ -551,6 +561,19 @@ if(root){
   next.hidden=step===REPORT;
   next.textContent=scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':step===ESC?'Next · Output Calibration':step===OUTPUT?'Next · Report':'Next';
   next.disabled=!!working||step===REPORT||!(canAdvance()||canSaveScope(scope)||retry);
+  const pidProfile=getPidProfile($('#a2PidProfile').value);
+  const [major,minor,patch]=String(k.version||'').split('.').map(Number);
+  const profileFirmware=!k.version||major>1||major===1&&(minor>7||minor===7&&patch>=16);
+  const profileWiring=wiringCompatible()&&saved.layout===pidProfile?.layout;
+  const profileAuthorized=k.transport==='usb'?k.adminUnlocked:k.controlAuthorized;
+  $('#a2PidProfile').disabled=lock;
+  $('[data-action="load-pid-profile"]').disabled=lock||!boardReady()||!observedOff()||!profileFirmware||!profileWiring||!profileAuthorized;
+  $('.a2-pid-status').textContent=working==='load-pid-profile'?'Saving and verifying PID on FC…':
+   !k.connected?'Connect an A2 Kit to load a profile.':!profileFirmware?'Profiles require FlightCore 1.7.16 or newer.':
+   !profileWiring?'Save the matching frame wiring above first.':!boardReady()?'Refresh the A2 to verify the saved wiring.':
+   !profileAuthorized?'Authorize this Kit to save PID.':!observedOff()||autoPending()?'Verify PWM off and wait for setup operations to finish.':
+   loadedPid?.active.profile===pidProfile?.id?'Saved on FC · revision '+loadedPid.revision+' · available in PID Tuning':
+   'Provisional Rate and Angle gains · bench tuning.';
   $('#a2Layout').disabled=lock;
   root.querySelectorAll('[data-pin],[data-rotation]').forEach(input=>input.disabled=lock);
   renderPageSaves();
@@ -748,6 +771,18 @@ if(root){
    if(saved?.autoEsc?.version===1)await motorClient.wizardStatus();
    setCalPulse(currentResult());cues.play('stop');message('STOP acknowledged · PWM off.');return;
   }
+  if(name==='load-pid-profile'){
+   const profile=getPidProfile($('#a2PidProfile').value);
+   if(!profile||!observedOff())throw Error('Verify the A2 and confirm PWM off before loading PID.');
+   const guard=()=>{
+    if(run!==operation||!live()||step!==1||!wiringCompatible()||saved.layout!==profile.layout||!outputOff(state)||motorClient.busy)
+     throw Error('PID profile requires verified matching wiring and disabled motor outputs.');
+   };
+   const client=createPidClient({getState:kit,pidExchange:(...args)=>window.ZebjusKits.pidExchange(...args)},window,guard);
+   guard();const before=await client.read();
+   loadedPid=await client.reset(undefined,profile.id,before);
+   message(profile.label+' · Rate and Angle gains saved and verified on FC.');return;
+  }
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
   if(name==='detect'||name==='auto-read'){
    if(conflict)resetContext();
@@ -873,8 +908,11 @@ if(root){
  root.addEventListener('input',e=>{
   if(e.target.id==='a2CalAll')return;
   if(e.target.matches('[data-manual-axis]')){updateManualDraft();render();return;}
-  if(e.target.matches('#a2Layout,[data-pin],[data-rotation]')){
-   draft=readWiring();minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
+  if(e.target.matches('#a2Layout,#a2PidProfile,[data-pin],[data-rotation]')){
+   if(e.target.id==='a2PidProfile')$('#a2Layout').value=getPidProfile(e.target.value).layout;
+   draft=readWiring();
+   $('#a2PidProfile').value=PID_PROFILES.find(profile=>profile.layout===draft.layout).id;
+   loadedPid=null;minimums=[null,null,null,null];if(escDraft===true)escDraft=false;
    escAttempt=false;saveState='';
    setCalPulse(currentResult());
   }else if(e.target.id==='a2CalPulse'&&activeRun){

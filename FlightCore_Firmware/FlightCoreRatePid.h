@@ -56,3 +56,45 @@ inline float zjRateStick(uint16_t pulse){
  const float offset=zjRateClamp(pulse,1000,2000)-1500;
  return std::fabs(offset)<=15?0:offset*.15f;
 }
+
+struct ZjAnglePidState {float sum=0,angle=0,derivative=0;bool ready=false;};
+
+// Angle outer loop matches the educational simulator's gain units and limits.
+inline float zjStepAnglePid(ZjAnglePidState& state,const ZjRateGains& gains,float target,float measured,float dt){
+ const float error=target-measured;
+ const float rate=state.ready?(measured-state.angle)/dt:0;
+ state.derivative+=(rate-state.derivative)*(1-std::exp(-dt/.1f));
+ const float p=gains.p*error,d=-gains.d*state.derivative;
+ const float candidate=zjRateClamp(state.sum+error*dt,-45,45);
+ const float proposed=p+gains.i*candidate+d;
+ if(!((proposed>220&&error>0)||(proposed<-220&&error<0)))state.sum=candidate;
+ state.angle=measured;state.ready=true;
+ return zjRateClamp(p+gains.i*state.sum+d,-220,220);
+}
+
+// Bench estimate from the calibrated gravity vector. Suppress it when tilted
+// beyond the valid upright envelope or when acceleration is inconsistent with g.
+inline bool zjBenchAngles(float x,float y,float z,float (&angles)[2]){
+ const float norm=x*x+y*y+z*z;
+ if(!std::isfinite(norm)||norm<.64f||norm>1.44f||z<.5f)return false;
+ constexpr float deg=180.0f/3.14159265358979323846f;
+ angles[0]=std::atan2(y,z)*deg;
+ angles[1]=std::atan2(-x,std::sqrt(y*y+z*z))*deg;
+ return true;
+}
+
+// Quad + M1..M4: front, right, rear, left. Diagnostic mixer only.
+inline ZjRateMix zjRateMixQuadPlus(float throttle,float roll,float pitch,float yaw){
+ const float requested[]={throttle-pitch-yaw,throttle+roll+yaw,throttle+pitch-yaw,throttle-roll+yaw};
+ ZjRateMix mix;
+ float removed[4];
+ for(unsigned i=0;i<4;i++){
+  mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
+  removed[i]=requested[i]-mix.pulse[i];
+  mix.saturated|=removed[i]!=0;
+ }
+ mix.residual[0]=(removed[1]-removed[3])*.5f;
+ mix.residual[1]=(removed[2]-removed[0])*.5f;
+ mix.residual[2]=(-removed[0]+removed[1]-removed[2]+removed[3])*.25f;
+ return mix;
+}

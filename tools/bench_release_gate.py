@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
-"""Fail closed: 1.7.15 can be published only as non-actuating bench firmware."""
+"""Verify bench-only build candidates and the one-time 1.7.15 publication."""
 import argparse,json,re
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 fw=root/'FlightCore_Firmware'
-def validate(compiled=False):
+def validate(compiled=False, publish_source=False):
     policy=json.loads((fw/'bench-release-policy.json').read_text())
     version=(root/'VERSION.txt').read_text().strip()
     flight=(fw/'FlightCoreFlightOutput.h').read_text()
     scheduler=(fw/'FlightCoreControlRuntime.h').read_text()
     ino=(fw/'I2C_ADDRESS_SCANNER.ino').read_text()
-    assert policy['schema']==1 and policy['candidateVersion']==version=='1.7.15'
+    assert policy['schema']==1 and policy['candidateVersion']==version
     assert policy['releaseScope']=='BENCH_DIAGNOSTIC'
     assert policy['flightOutputQualified'] is False and policy['physicalAcceptance']=='NOT_RUN'
     assert re.search(r'ZJ_FLIGHT_HARDWARE_QUALIFIED\s*=\s*false\s*;',flight), 'Physical flight output must remain disabled'
     assert not re.search(r'\b(?:ledcWrite|analogWrite)\s*\(',scheduler), 'PID scheduler cannot directly drive motors'
     assert 'controlActuating' in ino and any('controlActuating' in line and 'false' in line for line in ino.splitlines())
     assert f'FW_VERSION="{version}"' in ino
-    held=fw/'publication-hold.json'
-    if held.exists():
-        hold=json.loads(held.read_text())
-        assert hold['publishedVersion']=='1.7.14' and hold['candidateVersion']==version
+    hold_path=fw/'publication-hold.json'
+    hold=json.loads(hold_path.read_text()) if hold_path.exists() else None
+    if hold:
+        assert hold['candidateVersion']==version and hold['publishedVersion']!=version
+    if publish_source and not (version=='1.7.15' and hold and hold['publishedVersion']=='1.7.14'):
+        print(f'Publication remains held for FlightCore {version}')
+        return False
     if compiled:
         catalog=json.loads((fw/'catalog.json').read_text())
         latest=json.loads((fw/'latest.json').read_text())
@@ -31,11 +34,13 @@ def validate(compiled=False):
             assert item.get('flightOutputQualified') is False and item.get('physicalAcceptance')=='NOT_RUN'
         assert report['hardwareFlashingTested'] is False
         assert {b['boardId'] for b in report['boards']}=={'ZFC-A1','ZFC-A2'}
-    print('PASS: 1.7.15 bench-only publication checks; flight motor actuation disabled')
+    print(f'PASS: {version} bench-only checks; flight motor actuation disabled')
+    return True
 if __name__=='__main__':
     ap=argparse.ArgumentParser()
     g=ap.add_mutually_exclusive_group(required=True)
     g.add_argument('--source',action='store_true')
     g.add_argument('--compiled',action='store_true')
+    g.add_argument('--publish-source',action='store_true')
     args=ap.parse_args()
-    validate(args.compiled)
+    raise SystemExit(0 if validate(args.compiled,args.publish_source) else 1)

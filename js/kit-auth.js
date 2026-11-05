@@ -15,14 +15,17 @@ const diagnosticKey=(secret,id)=>mac(secret,'diagnostic|'+id).slice(0,32);
 function decoded(r){let d;try{d=JSON.parse(r.text)}catch{const e=Error('Invalid FlightCore JSON response. Update firmware to 1.5.0 or newer, then reconnect.');e.code='invalid_device_json';throw e}
  if(r.status<200||r.status>=300){const e=Error(d.error||'HTTP '+r.status);e.status=r.status;throw e}return d;
 }
-async function open(transport,deviceId,credential,kind='diagnostic'){
+async function open(transport,deviceId,credential,kind='diagnostic',signal){
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId)||!['setup','diagnostic','admin'].includes(kind))throw Error('Invalid enrollment identity or scope');
  let client;try{client=root.sessionStorage?.getItem('zebjus.auth.client:'+deviceId)}catch{}
  if(!/^[a-f0-9]{32}$/.test(client||'')){client=hex(root.crypto.getRandomValues(new Uint8Array(16)));try{root.sessionStorage?.setItem('zebjus.auth.client:'+deviceId,client)}catch{}}
- const c=decoded(await transport('/api/auth/challenge','POST',{kind,client},{}));
+ const c=decoded(await transport('/api/auth/challenge','POST',{kind,client},{},signal));
  if(c.kitId!==deviceId||!/^[a-f0-9]{32}$/.test(c.nonce)||!/^[a-f0-9]{32}$/.test(c.bootId))throw Error('Device ID mismatch in enrollment');
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  const msg=['enroll',deviceId,c.bootId,c.nonce,kind,client].join('|');
- const r=decoded(await transport('/api/auth/enroll','POST',{deviceId,nonce:c.nonce,proof:mac(credential,msg)},{}));
+ const r=decoded(await transport('/api/auth/enroll','POST',{deviceId,nonce:c.nonce,proof:mac(credential,msg)},{},signal));
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(r.kitId!==deviceId||!/^[a-f0-9]{32}$/.test(r.session))throw Error('Enrollment identity mismatch');
  const key=mac(credential,'session|'+msg+'|'+r.session);
  if(!equal(mac(key,'server|'+msg),r.proof))throw Error('Controller identity proof failed');
@@ -56,7 +59,8 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  * ephemeral signed session. This is NOT manufacturer identity authentication,
  * an OWNER session, or permission to flash firmware. STA scope is observer-only.
  * All subsequent commands still use signed counters and AES-GCM. */
-async function local(transport,deviceId,requiredScope='ap_diagnostics'){
+async function local(transport,deviceId,requiredScope='ap_diagnostics',signal){
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(deviceId))throw Error('Invalid FlightCore Device ID');
  if(!['ap_diagnostics','sta_observer'].includes(requiredScope))throw Error('Invalid local Wi-Fi scope');
  // Reuse a nonsecret random client identifier across app restarts so the
@@ -66,7 +70,8 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
   client=hex(root.crypto.getRandomValues(new Uint8Array(16)));
   try{root.localStorage?.setItem('zebjus.auth.local-client:'+deviceId,client)}catch{}
  }
- const r=decoded(await transport('/api/auth/local','POST',{deviceId,client},{}));
+ const r=decoded(await transport('/api/auth/local','POST',{deviceId,client},{},signal));
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(r.kitId!==deviceId||r.scope!==requiredScope||
     !/^[a-f0-9]{32}$/.test(r.bootId||'')||!/^[a-f0-9]{32}$/.test(r.session||'')||
     !/^[a-f0-9]{64}$/.test(r.key||''))throw Error('Local Wi-Fi session identity/scope invalid');
@@ -108,6 +113,7 @@ function http(host){return async(route,method='GET',args={},headers={},signal)=>
  // signed session across this transport; never retry a failed UDP write in HTTP.
  if(root.ZebjusKitUdp&&await root.ZebjusKitUdp.available())
   return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers,signal);
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
  const timeoutMs=root.ZebjusKitNetworkPolicy?.requestTimeout(route,method,host.includes('192.168.4.1')?'ap':'sta')||(firmwareWrite?20000:4200);
  const control=new AbortController();let timedOut=false;

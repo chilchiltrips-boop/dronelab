@@ -2,6 +2,8 @@
 
 Published firmware version and checksums come from `firmware-catalog.json`. `npm run verify:firmware` verifies both profiles, APP/Factory sizes, chip IDs, SHA-256, the 0x10000/0x1f0000 application slots and byte-identical APP contents. Runtime identity and build time are available over `ZJINFO` or signed status.
 
+`node tools/sync-pid-profiles.mjs --check` verifies the generated Aerof450 firmware defaults. The A2 Motor Setup Browser workflow tests the Wizard and the shared Rate/Angle editor using a simulated transport. The candidate build workflow attaches verified A1/A2 artifacts while `publication-hold.json` pins the published firmware. The strict production acceptance gate requires operator-signed physical evidence for the exact tested build. See [A2 flight qualification](docs/A2_FLIGHT_QUALIFICATION.md).
+
 Run the source and published-image checks. The publication hold pins the existing firmware catalog while the candidate builds are uploaded separately for qualification.
 
 ```sh

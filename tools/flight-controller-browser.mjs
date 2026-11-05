@@ -37,7 +37,7 @@ try{
  evidence.heldThrottle=hardware.channels[0];
  const count=await phone.evaluate(()=>window.__apManagement.filter(route=>route!=='/api/status').length);
  await web.locator('#tpMode').selectOption('acro');
- await web.locator('#tpPidP').fill('1.1');await web.locator('#tpApplyPid').click();
+ await web.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').fill('1.1');await web.locator('#tpApplyPid').click();
  assert.equal(await phone.locator('#flightMode').inputValue(),'angle','Web simulator mode leaked to Android');
  const before=await web.evaluate(()=>window.ZebjusTraining.snapshot().throttle);
  await web.evaluate(()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'w',bubbles:true})));

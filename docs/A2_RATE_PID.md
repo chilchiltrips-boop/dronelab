@@ -1,23 +1,37 @@
-# A2 Rate PID settings and timing
+# A2 PID settings and Aerof450 profiles
 
-The existing PID Tuning page uses the same Rate Roll, Pitch and Yaw gain units as A2 FlightCore and Python Lab. P scales angular-rate error in deg/s, I integrates that error in seconds and D filters the derivative of measured rate. Outputs are microsecond corrections with a ±400 µs limit. The simulator applies these corrections to its educational tripod model. Its motor lag and rotational damping are virtual model parameters.
+Setup Wizard → Frame & wiring offers **Aerof450 · Quad X** and **Aerof450 · Quad +**. Choose the layout for the board wiring. After the wiring has been saved and verified, **Load & Save PID Profile** stores all five PID banks in FlightCore and activates them in RAM. PID Tuning reads the verified profile and revision from the same Kit.
 
-| Axis | P | I | D |
-|---|---:|---:|---:|
-| Roll | 1.4 | 18 | 0.035 |
-| Pitch | 1.4 | 18 | 0.035 |
-| Yaw | 3 | 20 | 0 |
+Both profiles start with these provisional gains. Replace each profile's values in [pid-profiles.js](../js/pid-profiles.js) after physical qualification, then regenerate the firmware header with `node tools/sync-pid-profiles.mjs`.
 
-These defaults are experimental. The A2 250 Hz scheduler computes diagnostic Rate PID and Quad X mix in Acro with fresh, calibrated gyro data and diagnostic RC ARM. Invalid timing, sensor loss, disarm and source changes clear controller history. The computed mix has no motor-output connection. Angle attitude control and physical flight activation require separate hardware validation. The existing 50 Hz ESC driver, bench sessions, one-use ESC calibration and watchdog retain their own authorization.
+| Loop | Axis | P | I | D |
+| --- | --- | ---: | ---: | ---: |
+| Rate | Roll | 1.4 | 18 | 0.035 |
+| Rate | Pitch | 1.4 | 18 | 0.035 |
+| Rate | Yaw | 3 | 20 | 0 |
+| Angle | Roll | 3 | 0 | 0 |
+| Angle | Pitch | 3 | 0 | 0 |
+
+The simulator and A2 use matching gain units. Rate PID uses angular-rate error in degrees per second and returns a correction bounded to ±400 µs. The outer Angle PID uses angle error in degrees and returns a rate setpoint bounded to ±220 °/s. The FC diagnostic mixer uses the selected frame geometry. The simulator models its educational F450 tripod and virtual dynamics.
+
+## Using PID Tuning
+
+- With a verified A2 connection, **Read PID from FC** loads the current active values into both editor sections. **Apply Live to FC** verifies a volatile RAM preview while disarmed. **Save to FC** persists both loops and reads back the saved revision. **Restore Defaults** uses the profile for the verified wiring.
+- FlightCore 1.7.16 or newer supports both loops and RAM preview. FlightCore 1.7.14 and 1.7.15 retain Rate read, save and reset in the editor.
+- With the Kit disconnected, **Apply to Simulator** and **Restore Defaults** operate on the simulator. Connecting to the FC reads its authoritative values. Disconnecting brings back the separate simulator values.
+- Python Lab's existing A2 Rate PID example can read and save the nine Rate gains. On the dual-loop API, Rate-only saves retain the saved Angle gains. Passing both Angle banks saves all 15 values together.
+
+A2 preview is for disarmed bench diagnostics. The Angle estimate requires a saved IMU level calibration and a valid upright gravity vector. The 250 Hz scheduler computes the Rate and Angle diagnostic response and mixer. Flight actuation remains gated off. See [A2 flight qualification](A2_FLIGHT_QUALIFICATION.md).
 
 ## Settings exchange
 
-On direct AP/STA, use signed GET /api/pid/settings or GET /api/pid/status, and encrypted POST /api/pid/settings or POST /api/pid/reset. STA observer sessions can read. Writes require authorized control and an idle, disarmed Kit. Release another network controller's claim before saving. USB uses ZJPID,GET,kitId,requestId and ZJPID,SET,kitId,requestId,bootId,expectedRevision,gains or ZJPID,RESET,kitId,requestId,bootId,expectedRevision. USB writes require an unlocked teacher admin session.
+| Operation | Signed AP/STA | USB |
+| --- | --- | --- |
+| Read | GET `/api/pid/settings` | `ZJPID,GET,kitId,requestId` |
+| Save | POST `/api/pid/settings` | `ZJPID,SET,kitId,requestId,bootId,expectedRevision,expectedGeneration,profile,gains` |
+| Live preview | POST `/api/pid/apply` | `ZJPID,APPLY,kitId,requestId,bootId,expectedRevision,expectedGeneration,profile,gains` |
+| Defaults | POST `/api/pid/reset` | `ZJPID,RESET,kitId,requestId,bootId,expectedRevision,expectedGeneration,profile` |
 
-Gains are nine pipe-separated integer thousandths in Roll P/I/D, Pitch P/I/D, Yaw P/I/D order. The 0–100 bounds and three decimals apply to all nine. Replies identify the schema, Kit, boot, revision, request and saved values. Revision zero exposes defaults. A committed versioned record has an integrity checksum and is verified before the active NVS slot is published. Factory reset clears it. APP OTA retains compatible records.
+Writes require authorized network control or USB teacher admin, disabled motor outputs and matching saved frame geometry. Schema 2 encodes 15 pipe-separated integer thousandths in Rate Roll, Rate Pitch, Rate Yaw, Angle Roll and Angle Pitch P/I/D order. Readback distinguishes the saved revision from the active RAM generation and identifies the request.
 
-In Python Lab, select **A2 Rate PID settings** to open the runnable example. The browser and Python use the same persistence and readback checks. After a reconnect or Python save, the editor reads the authoritative revision and preserves any simulator draft until you choose to reload or save.
-
-## Hardware acceptance
-
-Record operator, device ID, firmware version, the exact APP SHA-256, the build report's source commit, the repo-relative evidence file, and its SHA-256. The user reported ESC calibration and motor response in a bench test on 5 November. Formal release cases require measurements tied to the tested release artifact. Verify the PWM waveform and physical OFF, M1–M4 mapping, input loss and STOP, interrupted ESC calibration, settings after reboot and timing under measured load. Use a propeller-free fixture for bench verification.
+Each save stages and verifies a slot before updating the marker that identifies the committed revision and its backup. The boot loader can recover the verified previous slot if the active slot is corrupt. Readable schema-1 settings migrate on save while retaining legacy values for APP rollback. Corrupt legacy records without verifiable commit provenance report a storage fault. RAM preview is cleared on reboot. Factory reset clears both storage schemas. APP OTA retains compatible records.

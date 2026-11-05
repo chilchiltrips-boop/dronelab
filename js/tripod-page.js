@@ -1,14 +1,14 @@
-import {createPidClient,encodeRateGains,PID_CHANGED} from './flightcore-pid-client.js';
+import {createPidClient,encodePidGains,pidFirmwareSupported,PID_CHANGED} from './flightcore-pid-client.js';
 import {RATE_BANKS} from './rate-pid.js';
+import {getPidProfile,PID_BANKS} from './pid-profiles.js';
 import * as THREE from '../three.module.min.js';
 import {loadGLB} from '../glb-loader.js';
 import {createTripodAudio} from './tripod-audio.js';
 import {loadAssemblyTripod} from './tripod-assembly-model.js';
 import {createSimulatorInput,sharedInputStore} from './simulator-input.js';
-import {simulateResponse} from './tripod-experiments.js';
 import {createSimulator,clamp,degToRad,startSimulator,stopSimulator,resetSimulator,setFlightMode,calibrateLevel,disturb,setPID,releaseInputs,advanceSimulator,getSnapshot,DEFAULT_PID,MOTOR_GEOMETRY,PLANT,startTuningPulse,resetIntegrators} from './tripod-physics.js';
 const $=id=>document.getElementById(id),s=createSimulator(),history=[],pressed=new Set(),pointers=new Map(),inputCancels=[];
-let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedAxis='roll',graphPaused=false,embeddedVisible=true,booted=false;
+let visual=null,stageDrag=null,raf=0,lastFrame=0,lastUI=0,lastChart=0,lastAudio=0,soundOn=true,volume=.25,selectedPidBank='rateRoll',graphPaused=false,embeddedVisible=true,booted=false;
 const audioEngine=createTripodAudio(status=>{
  const el=$('tpAudioStatus');if(el)el.textContent=status;
  const alert=$('tpAudioAlert');
@@ -245,7 +245,7 @@ function syncActions(){
  $('tpSourceState').textContent=remote?sourceLabel+' '+transportLabel+' · '+(input.fresh?(s.running?'LIVE · RUNNING':'LIVE · READY'):input.held?'STALE · VIRTUAL RUN HELD':'STALE'):'WebApp · '+(s.running?'RUNNING':'READY');
  $('tpInputStatus').textContent=remote?(input.fresh?(input.origin==='kit'?'VERIFIED KIT RC • ':'PAIRED ANDROID • ')+input.transport.toUpperCase()+' • '+(input.kitId||'NO KIT')+' • '+Math.round(input.ageMs)+' ms • '+(input.rateHz?Math.round(input.rateHz)+' Hz':'— Hz')+' • SIM ONLY':input.held?'MIRROR STALE • HOLDING LAST VALID VIRTUAL INPUT • NO KIT COMMAND':state.activeSource==='ppm'?'Waiting for accepted PPM over verified USB / AP / STA':input.paired&&!input.supported?'Android app update required':'Waiting for verified USB/AP Kit RC or paired WebRTC input'):'WEBAPP • Keyboard / joysticks';
  const c=input?.channels;$('tpInputValues').textContent=c?'T '+c.throttle+' • R '+c.roll+' • P '+c.pitch+' • Y '+c.yaw+' µs'+(Number.isInteger(input.aux?.ch5)?' • CH5 '+input.aux.ch5:'')+(Number.isInteger(input.aux?.ch6)?' • CH6 '+input.aux.ch6:''):'T '+Math.round(s.throttle)+' • R '+Math.round(1500+s.cmdRoll*500)+' • P '+Math.round(1500+s.cmdPitch*500)+' • Y '+Math.round(1500+s.cmdYaw*500)+' µs';
- if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();coach();
+ if(lastMode!==s.mode){lastMode=s.mode;updatePidEditor();
   $('tpLastMode').textContent='SIM '+s.mode.toUpperCase()+(state.followedMode?(input?.origin==='kit'?' • KIT':' • ANDROID'):'');
   $('tpLastMode').title=state.followedMode?'Following '+state.followedMode.source+' • virtual mode applied immediately':'WebApp virtual mode';}
  if(lastRunning!==s.running){
@@ -332,120 +332,142 @@ function keyHandler(e,down){
  inputAxes();
 }
 function pidBank(){
- let loop=$('tpPidLoop').value,axis=$('tpPidAxis').value;
- if(s.mode==='acro'||axis==='yaw'){loop='rate';$('tpPidLoop').value='rate'}
- return (loop==='angle'?'angle':'rate')+axis[0].toUpperCase()+axis.slice(1);
+ return s.mode==='acro'?selectedPidBank.replace(/^angle/,'rate'):selectedPidBank;
 }
-function syncPIDMatrix(bank=null,values=null){
- for(const row of $('tpPidMatrix').querySelectorAll('[data-pid-bank]')){
-  const key=row.dataset.pidBank,p=bank===key&&values?values:s.pendingPID[key]||s.pid[key];
-  for(const gain of ['p','i','d'])row.querySelector('[data-gain="'+gain+'"]').value=p[gain];
- }
- $('tpAnglePidSection').hidden=s.mode==='acro';
- $('tpPidTopology').textContent=s.mode==='acro'
-  ?'ACRO / RATE • Rate Roll/Pitch/Yaw PID only • No Angle PID'
-  :'ANGLE / CASCADE • Angle Roll/Pitch → Rate Roll/Pitch/Yaw • Yaw Rate only';
+function pidAxis(){
+ return pidBank().replace(/^(angle|rate)/,'').toLowerCase();
 }
 function initKitPid(host){
  const kitApi={getState:()=>host.ZebjusKits?.getState?.(),pidExchange:(...args)=>host.ZebjusKits.pidExchange(...args)};
- const client=createPidClient(kitApi,host);
- const status=$('tpPidKitStatus'),read=$('tpPidReadFC'),save=$('tpPidSaveFC'),reload=$('tpPidReloadFC');
- const currentGains=()=>Object.fromEntries(RATE_BANKS.map(bank=>[bank,s.pendingPID[bank]||s.pid[bank]]));
- const rows=[...$('tpPidMatrix').querySelectorAll('[data-pid-bank]')].filter(row=>RATE_BANKS.includes(row.dataset.pidBank));
- let verified=null,reference=encodeRateGains(currentGains()),busy=false,message='',operation=0;
- const state=()=>kitApi?.getState?.();
- const bound=kit=>kit&&verified&&verified.kitId===kit.kitId&&
-  (!kit.bootId||verified.bootId===kit.bootId)&&verified.connectionGeneration===kit.connectionGeneration;
- const draft=()=>{
-  try{return encodeRateGains(currentGains())!==reference}catch{return true}
- };
+ const pidOrigin=Symbol();
+ const client=createPidClient(kitApi,host,undefined,pidOrigin);
+ const status=$('tpPidKitStatus'),read=$('tpPidReadFC'),apply=$('tpApplyPid'),save=$('tpPidSaveFC'),restore=$('tpPidDefaults');
+ const rows=[...$('tpPidMatrix').querySelectorAll('[data-pid-bank]')];
+ const fields=rows.flatMap(row=>[...row.querySelectorAll('input')]);
+ const gainsFromEditor=(banks)=>Object.fromEntries(rows.filter(row=>banks.includes(row.dataset.pidBank)).map(row=>[
+  row.dataset.pidBank,Object.fromEntries([...row.querySelectorAll('input')].map(input=>[input.dataset.gain,input.value.trim()?Number(input.value):NaN]))
+ ]));
+ let simGains=DEFAULT_PID,simDraft=null,verified=null,busy=false,refreshPending=false,message='',operation=0,binding='';
+ const kitState=()=>kitApi.getState()||{};
+ const supported=kit=>kit.connected&&kit.board==='ZFC-A2'&&['usb','ap','sta'].includes(kit.transport)&&pidFirmwareSupported(kit.version);
+ const link=kit=>supported(kit)?[kit.kitId,kit.transport,kit.bootId,kit.connectionGeneration].join('|'):'';
+ const supportsBoth=()=>verified?.schemaVersion===2;
+ const profileMatches=()=>!supportsBoth()||getPidProfile(verified.active.profile)?.layout===verified.wiredLayout;
+ const banks=()=>binding&&!supportsBoth()?RATE_BANKS:PID_BANKS;
+ function useGains(gains){
+  for(const row of rows){
+   const bank=row.dataset.pidBank,values=gains[bank];
+   if(!values)continue;
+   setPID(s,bank,values);
+   for(const input of row.querySelectorAll('input'))input.value=values[input.dataset.gain];
+  }
+ }
  function render(){
-  const kit=state(),supported=kit?.connected&&kit.board==='ZFC-A2'&&['usb','ap','sta'].includes(kit.transport);
-  const valid=supported&&bound(kit);
-  const authorized=kit?.transport==='usb'?kit.adminUnlocked:kit?.controlAuthorized;
-  $('tpPidTarget').textContent=supported?(kit.kitName||kit.kitId)+' · '+kit.transport.toUpperCase()+' · '+kit.kitId:
-   kit?.connected?'FC PID UNSUPPORTED':'SIMULATOR ONLY';
-  read.disabled=busy||!supported;
-  save.disabled=busy||!valid||!authorized||kit.working||kit.networkBusy||kit.otaInProgress||kit.motorsArmed===true||kit.motorsDisabled===false;
-  reload.disabled=busy||!valid;
-  const label=valid?'FC PID SUPPORTED · revision '+verified.revision+' · '+
-   (draft()?'UNSAVED · Reload Saved to use FC values':verified.persisted?'SAVED':'DEFAULTS'):supported?'Read the selected FC to verify support.':'Connect a verified A2 Kit.';
-  status.textContent=message?label+' · '+message:label;
+  const kit=kitState(),connected=!!binding,valid=!!verified&&link(kit)===binding;
+  const authorized=kit.transport==='usb'?kit.adminUnlocked:kit.controlAuthorized;
+  const writable=valid&&authorized&&!busy&&!kit.working&&!kit.networkBusy&&!kit.otaInProgress&&kit.motorsArmed!==true&&kit.motorsDisabled!==false;
+  const match=profileMatches();
+  const identity=kit.kitName&&kit.kitName!==kit.kitId?kit.kitName+' · '+kit.kitId:kit.kitId;
+  $('tpPidTarget').textContent=connected?'PID SOURCE · FC · '+identity+' · '+String(kit.transport||'').toUpperCase():'PID SOURCE · SIMULATOR';
+  read.hidden=save.hidden=!connected;
+  read.disabled=busy||!supported(kit);
+  apply.textContent=connected?'Apply Live to FC':'Apply to Simulator';
+  apply.disabled=busy||(connected&&(!writable||!supportsBoth()||!match));
+  save.disabled=!writable||!match;
+  restore.disabled=connected?(!writable||supportsBoth()&&!verified.wiredLayout):busy;
+  for(const row of rows)for(const field of row.querySelectorAll('input'))
+   field.disabled=busy||connected&&(!valid||!banks().includes(row.dataset.pidBank));
+  $('tpPidAngleHint').textContent=valid&&!supportsBoth()?'Angle PID on FC requires FlightCore 1.7.16 or newer.':
+   valid?'Bench Angle preview uses the saved IMU level calibration.':'Yaw always uses Rate PID.';
+  const profile=getPidProfile(verified?.active?.profile)?.label;
+  const diagnostic=verified?.preview?{
+   BENCH_PREVIEW:'IMU diagnostic running',ANGLE_LEVEL_REQUIRED:'Saved upright IMU level calibration required',
+   IMU_STALE:'Waiting for a fresh calibrated IMU sample',TIMING_FAULT:'Control timing fault',PID_INVALID:'Invalid controller result'
+  }[verified.diagnosticState]:'';
+  const base=connected?valid?
+   [profile||'FC Rate PID','revision '+verified.revision,verified.preview?'Live RAM preview · unsaved':
+    verified.storageState==='RECOVERED'?'Recovered saved backup':verified.persisted?'Stored on FC':'Defaults',diagnostic,
+    !match?'Load a matching profile in Setup Wizard':!authorized?'Read-only · authorize this Kit':''].filter(Boolean).join(' · '):
+   supported(kit)?'Read the selected FC to verify PID settings.':'PID settings require a verified A2 Kit over USB, AP or STA.':
+   'Simulator gains · Rate and Angle'+(kit.connected?' · FC PID unavailable on this Kit or transport':'');
+  status.textContent=message?base+' · '+message:base;
  }
- function apply(record){
-  for(const bank of RATE_BANKS)setPID(s,bank,record[bank]);
-  reference=encodeRateGains(record);
-  updatePidEditor();coach();
+ function accept(record){
+  verified=record;
+  useGains({...simGains,...record.active});
  }
- async function fetchSaved(){
-  const kit=state();
-  if(!kit?.connected||kit.board!=='ZFC-A2'||!['usb','ap','sta'].includes(kit.transport)){render();return;}
-  const id=++operation;busy=true;message='Reading FC…';render();
+ async function perform(task,pending,success){
+  const id=++operation;busy=true;message=pending;render();
   try{
-   const reply=await client.read();
+   const result=await task();
    if(id!==operation)return;
-   const dirty=draft();
-   verified={...reply,connectionGeneration:kit.connectionGeneration};
-   reference=encodeRateGains(reply);
-   if(!dirty)apply(reply);
-   message='';
-  }catch(error){if(id===operation){verified=null;message=String(error.message||error);}}
-  finally{if(id===operation){busy=false;render();}}
+   accept(result);message=typeof success==='function'?success(result):success;
+  }catch(error){if(id===operation)message=String(error.message||error);}
+  finally{
+   if(id===operation){
+    busy=false;render();
+    if(refreshPending){refreshPending=false;void fetchSettings();}
+   }
+  }
  }
- read.onclick=()=>void fetchSaved();
- reload.onclick=()=>{if(bound(state())){apply(verified);message='FC settings loaded into Simulator';render();}};
- save.onclick=async()=>{
-  if(!bound(state()))return;
-  const id=++operation;busy=true;message='Saving and verifying…';render();
-  try{
-   const gains=Object.fromEntries(rows.map(row=>[row.dataset.pidBank,Object.fromEntries(['p','i','d'].map(term=>{
-    const input=row.querySelector('[data-gain="'+term+'"]');
-    return [term,input.value.trim()?Number(input.value):NaN];
-   }))]));
-   const result=await client.save(gains,verified.revision,undefined,verified);
-   if(id!==operation)return;
-   verified={...result,connectionGeneration:verified.connectionGeneration};
-   apply(result);message='SAVED TO A2 FC';
-  }catch(error){if(id===operation)message='SAVE FAILED · '+(error.message||error);}
-  finally{if(id===operation){busy=false;render();}}
+ function fetchSettings(){
+  if(busy||!supported(kitState()))return;
+  verified=null;
+  return perform(()=>client.read(),'Reading FC…','');
+ }
+ function refreshConnection(){
+  const next=link(kitState());
+  if(next===binding){render();return;}
+  if(!binding)simDraft=fields.map(field=>field.value);
+  binding=next;++operation;busy=false;refreshPending=false;message='';verified=null;
+  if(!binding){
+   useGains(simGains);
+   if(simDraft)fields.forEach((field,i)=>field.value=simDraft[i]);
+  }else{
+   useGains(simGains);
+   for(const field of fields)field.value='';
+  }
+  render();void fetchSettings();
+ }
+ read.onclick=()=>void fetchSettings();
+ apply.onclick=()=>{
+  if(binding){
+   if(verified)void perform(()=>client.apply(gainsFromEditor(PID_BANKS),verified),'Applying to FC RAM…','Live bench tuning applied · motor outputs inhibited');
+   return;
+  }
+  const draft=gainsFromEditor(PID_BANKS);
+  try{encodePidGains(draft);simGains=draft;useGains(draft);message='Applied to Simulator';}
+  catch(error){message=error.message;}
+  render();
  };
- for(const row of rows)row.addEventListener('input',()=>{
-  const bank=row.dataset.pidBank;
-  const gains=Object.fromEntries(['p','i','d'].map(term=>{
-   const input=row.querySelector('[data-gain="'+term+'"]');
-   return [term,input.value.trim()?Number(input.value):NaN];
-  }));
-  setPID(s,bank,gains);message='';render();
+ save.onclick=()=>{
+  if(verified)void perform(()=>client.save(gainsFromEditor(banks()),verified.revision,undefined,verified),'Saving and verifying FC…','Saved to FC and verified');
+ };
+ restore.onclick=()=>{
+  if(binding){
+   if(verified)void perform(()=>client.reset(undefined,undefined,verified),'Restoring FC defaults…','Defaults saved to FC and verified');
+   return;
+  }
+  simGains=DEFAULT_PID;useGains(simGains);message='Simulator defaults restored';render();
+ };
+ for(const row of rows){
+  row.addEventListener('focusin',()=>{selectedPidBank=row.dataset.pidBank;});
+  row.addEventListener('input',()=>{message=binding?'Unsaved edits · apply or save when ready':'Edited gains · apply when ready';render();});
+ }
+ host.addEventListener('dronelab:kit-link',refreshConnection);
+ host.addEventListener('dronelab:kit-access',refreshConnection);
+ host.addEventListener(PID_CHANGED,event=>{
+  if(event.detail===pidOrigin)return;
+  if(busy)refreshPending=true;else void fetchSettings();
  });
- $('tpPidMatrix').addEventListener('click',render);
- host.addEventListener('dronelab:kit-link',()=>{
-  ++operation;busy=false;message='';verified=null;void fetchSaved();
- });
- host.addEventListener('dronelab:kit-access',render);
- host.addEventListener(PID_CHANGED,()=>{if(!busy)void fetchSaved();});
- setInterval(render,750);
- void fetchSaved();
+ useGains(simGains);refreshConnection();
 }
 function updatePidEditor(){
- $('tpPidLoop').querySelector('option[value=angle]').disabled=s.mode==='acro'||$('tpPidAxis').value==='yaw';
- const bank=pidBank(),p=s.pendingPID[bank]||s.pid[bank];if(!p)return;
- for(const k of ['p','i','d'])$('tpPid'+k.toUpperCase()).value=p[k];
  $('tpReadoutMode').textContent=s.mode==='acro'?'ACRO • RATE':'ANGLE • LEVEL';
- $('tpMode').value=s.mode;syncPIDMatrix();
-}
-function coach(){
- const bank=pidBank(),p=s.pid[bank];if(!p)return;
- let msg='Stable baseline. Increase P gradually, then add I to correct persistent offset. Add D sparingly to damp overshoot.';
- if(p.p<.55)msg='LOW P: correction may be weak and slow. Watch how far actual response lags target.';
- else if(p.p>2.1&&bank!=='rateYaw')msg='HIGH P: watch for aggressive correction and possible oscillation.';
- else if(p.i<4&&bank.startsWith('rate'))msg='LOW I: a persistent bias may not be corrected fully.';
- else if(p.i>25)msg='HIGH I: sustained errors can build overshoot and slower recovery.';
- else if(p.d>.12)msg='HIGH D: strong differentiation may amplify fast changes.';
- else if(p.d===0&&bank!=='rateYaw')msg='LOW D: observe overshoot and add damping gradually if needed.';
- $('tpCoach').textContent=msg+' Observe live P / I / D terms; this is a teaching heuristic, not a hardware recommendation.';
+ $('tpMode').value=s.mode;
 }
 function triggerTuningResponse(){
- const axis=$('tpPidAxis').value;
+ const axis=pidAxis();
  if(!startTuningPulse(s,axis,14))return false;
  $('tpChartAxis').value=axis;history.length=0;setStatus('PID TEST • '+axis.toUpperCase()+' TARGET PULSE');
  return true;
@@ -467,7 +489,7 @@ function updateControls(){
  $('tpMode').onchange=e=>{
   if(setFlightMode(s,e.target.value)){
    const el=$('tpLastMode');if(el){el.textContent='SIM '+s.mode.toUpperCase()+' APPLIED';el.title=s.running?'Mode applied • Run continues':'Mode applied while stopped';}
-   updatePidEditor();coach();syncActions();drawUI();
+   updatePidEditor();syncActions();drawUI();
   }
  };
  $('tpRun').onclick=start;$('tpStop').onclick=stop;
@@ -504,63 +526,12 @@ function updateControls(){
  };audioEngine.setVolume(volume);
  $('tpSoundPreset').onchange=e=>{audioEngine.setProfile(e.target.value);saveAudio()};
  audioEngine.setProfile($('tpSoundPreset').value);
- $('tpPidAxis').onchange=()=>{updatePidEditor();coach()};$('tpPidLoop').onchange=()=>{updatePidEditor();coach()};
- for(const row of $('tpPidMatrix').querySelectorAll('[data-pid-bank]')){
-  row.querySelector('button').onclick=()=>{
-   const bank=row.dataset.pidBank,values={};
-   for(const gain of ['p','i','d']){
-    const input=row.querySelector('[data-gain="'+gain+'"]'),value=Number(input.value);
-    if(!input.value.trim()||!Number.isFinite(value)||value<0||value>100){
-     setStatus('INVALID '+bank+' '+gain.toUpperCase()+' • ENTER 0–100');input.focus();return;
-    }
-    values[gain]=value;
-   }
-   if(!setPID(s,bank,values)){setStatus('INVALID PID • '+bank);return}
-   $('tpPidAxis').value=bank.endsWith('Roll')?'roll':bank.endsWith('Pitch')?'pitch':'yaw';
-   $('tpPidLoop').value=bank.startsWith('angle')?'angle':'rate';
-   for(const gain of ['p','i','d'])$('tpPid'+gain.toUpperCase()).value=values[gain];
-   syncPIDMatrix(bank,values);coach();setStatus('PID APPLIED LIVE • '+bank+' • '+(s.mode==='angle'?'CASCADE':'RATE')+' MODE');
-  };
- }
- $('tpApplyPid').onclick=()=>{const values={p:Number($('tpPidP').value),i:Number($('tpPidI').value),d:Number($('tpPidD').value)};
-  const valid=['p','i','d'].every(k=>$('tpPid'+k.toUpperCase()).value.trim()!==''&&Number.isFinite(values[k]));
-  if(!valid||!setPID(s,pidBank(),values)){setStatus('INVALID PID VALUES • 0–100');return}
-  syncPIDMatrix(pidBank(),values);coach();setStatus('PID APPLIED LIVE • '+pidBank()+' • TEST RESPONSE WHEN READY');};
- $('tpPreset').onchange=e=>{const mode=e.target.value;if(!mode)return;const bank=pidBank(),base={...DEFAULT_PID[bank]},values={...base};
-  if(mode==='custom')return;
-  if(mode==='lowP')values.p=base.p*.35;if(mode==='highP')values.p=base.p*2.8;
-  if(mode==='lowI')values.i=base.i*.2;if(mode==='highI')values.i=base.i*2.4;
-  if(mode==='lowD')values.d=0;if(mode==='highD')values.d=base.d?base.d*3.5:.11;
-  setPID(s,bank,values);updatePidEditor();syncPIDMatrix(bank,values);coach();e.target.value='';
-  setStatus('PRESET APPLIED LIVE • '+bank+' • SELECT TEST RESPONSE');
- };
  const envPairs=[['Battery','batteryV',v=>readable(v,1)+' V'],['Payload','payloadG',v=>v+' g'],['CGX','cgX',v=>v+' mm'],['CGY','cgY',v=>v+' mm'],['Wind','wind',v=>v+'%'],['Lag','lag',v=>readable(v,2)+' s'],['Noise','gyroNoise',v=>readable(v,2)+' °/s']];
  for(const [id,key,format] of envPairs)$( 'tp'+id).oninput=e=>{s.environment[key]=Number(e.target.value);$('tp'+id+'Out').textContent=format(e.target.value)};
  $('tpChartAxis').onchange=()=>{history.length=0;drawUI()};
  $('tpPauseGraph').onclick=e=>{graphPaused=!graphPaused;e.target.textContent=graphPaused?'Resume Graph':'Pause Graph'};
  $('tpClearGraph').onclick=()=>{history.length=0;drawChart()};
  $('tpResetIntegrators').onclick=()=>{resetIntegrators(s);setStatus('PID INTEGRATORS RESET • MOTORS STILL '+(s.running?'ON':'OFF'))};
- $('tpAbGain').onchange=()=>{const gain=$('tpAbGain').value,base=s.pid[pidBank()][gain];
-  $('tpAbLow').value=Number((base*.4).toFixed(3));$('tpAbHigh').value=Number((base===0?.15:base*2.8).toFixed(3));
- };
- $('tpCompare').onclick=()=>{
-  try{
-   const bank=pidBank(),gain=$('tpAbGain').value,a=Number($('tpAbLow').value),b=Number($('tpAbHigh').value);
-   const axis=$('tpPidAxis').value,study=simulateResponse({basePID:s.pid,bank,gain,values:[a,b],mode:s.mode,axis,environment:s.environment,duration:gain==='i'?5:6});
-   drawComparison(study);
-   const [A,B]=study.results;
-   $('tpCompareResult').textContent='A '+gain.toUpperCase()+'='+a+' vs B '+gain.toUpperCase()+'='+b+
-     ' • RMS '+readable(A.metrics.rms,2)+' / '+readable(B.metrics.rms,2)+
-     ' • Peak rate '+readable(A.metrics.peakRate,1)+' / '+readable(B.metrics.peakRate,1)+'°/s'+
-     ' • Late error '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+
-     ' • Rise '+(A.metrics.riseTime==null?'N/A':readable(A.metrics.riseTime,2)+'s')+' / '+(B.metrics.riseTime==null?'N/A':readable(B.metrics.riseTime,2)+'s')+
-     ' • Settle '+(A.metrics.settlingTime==null?'N/A':readable(A.metrics.settlingTime,2)+'s')+' / '+(B.metrics.settlingTime==null?'N/A':readable(B.metrics.settlingTime,2)+'s')+
-     ' • Overshoot '+readable(A.metrics.overshootPct,0)+'% / '+readable(B.metrics.overshootPct,0)+'%'+
-     ' • Motor activity '+readable(A.metrics.motorActivity,2)+' / '+readable(B.metrics.motorActivity,2)+
-     ' • Bias '+readable(A.metrics.lateError,2)+' / '+readable(B.metrics.lateError,2)+' • Saturation '+readable(A.metrics.saturationSeconds,2)+' / '+readable(B.metrics.saturationSeconds,2)+'s • Peak z '+readable(A.metrics.verticalPeak*100,1)+' / '+readable(B.metrics.verticalPeak*100,1)+'cm • Same throttle/initial state/disturbance; no change to live gains.';
-  }catch(error){$('tpCompareResult').textContent='Comparison error: '+error.message}
- };
- $('tpAbGain').onchange();
  $('tpTestResponse').onclick=()=>{if(!triggerTuningResponse())setStatus('RUN AND RAISE THROTTLE ABOVE 1250 µs FOR PID TEST')};
  $('tpCameraView').onchange=e=>visual?.setView?.(e.target.value);
  bindStick('tpLeftPad','left');bindStick('tpRightPad','right');bindCamera();
@@ -570,10 +541,10 @@ function updateControls(){
  document.addEventListener('visibilitychange',()=>{if(document.hidden)releaseAll(true)});
  window.addEventListener('pagehide',()=>{stop();cancelAnimationFrame(raf);audioStop();visual?.dispose?.()});
  $('tpStop').addEventListener('pointerdown',e=>{e.preventDefault();stop()});
- updatePidEditor();coach();syncActions();
+ updatePidEditor();syncActions();
 }
 function sampleChart(){
- const axis=$('tpPidAxis').value,bank=pidBank(),m=s.memory[bank],r={};
+ const m=s.memory[pidBank()],r={};
  for(const name of ['roll','pitch','yaw']){
   const c=name[0].toUpperCase()+name.slice(1);
   r[name]={target:s['target'+c],actual:s[name]};
@@ -607,14 +578,6 @@ function drawChart(){
  else traces=[{values:history.map(h=>h.error[0]),color:colors[3]}];
  drawMultiLine($('tpChart'),traces);
 }
-function drawComparison(comparison){
- const colors=['#56d5e7','#ffad89'],plots=comparison.results.map((r,i)=>({
-  color:colors[i],values:r.samples.map(s=>s.actual)
- }));
- const reference=comparison.results[0].samples.map(s=>s.target);
- plots.unshift({color:'#4a8d8a',values:reference});
- drawMultiLine($('tpCompareChart'),plots);
-}
 function drawUI(){
  syncActions();renderStickKnobs();
  const v=getSnapshot(s),angular=s.mode==='acro',axis=$('tpChartAxis').value,axisC=axis[0].toUpperCase()+axis.slice(1);
@@ -633,9 +596,6 @@ function drawUI(){
  const target=(axis==='yaw'||isRate)?v['target'+c+'Rate']:v['target'+c];
  const actual=isRate?v[baseAxis+'Rate']:v[baseAxis],unit=isRate?'°/s':'°';
  $('tpTargetLabel').textContent='Target '+axis+' '+readable(Number(target)||0)+unit;$('tpActualLabel').textContent='Actual '+axis+' '+readable(Number(actual)||0)+unit;
- const selected=pidBank(),live=s.memory[selected];
- for(const [id,key] of [['tpPidError','error'],['tpPidPTerm','p'],['tpPidITerm','i'],['tpPidDTerm','d'],['tpPidOutput','output']])$(id).textContent=readable(live[key],2);
- $('tpPidTargetActual').textContent='Target '+readable(live.target,1)+(selected.startsWith('angle')&&!selected.startsWith('angleRate')?'°':'°/s')+' • Actual '+readable(live.actual,1);
  $('tpTrackingError').textContent=readable(v.metrics.rmsError,1)+(s.mode==='angle'?'°':'°/s');
  $('tpPeakRate').textContent=readable(v.metrics.peakRate,0)+'°/s';
  $('tpMotorSpread').textContent=readable(v.metrics.motorSpread,1)+'%';
@@ -644,7 +604,7 @@ function drawUI(){
   const el=$('tpMotor'+i);el.classList.toggle('active-motor',v.motors[i-1]>8);
   el.querySelector('.tp-motor-detail').textContent=readable(v.motorRPM[i-1],0)+' / '+readable(v.motorRequestedRPM[i-1],0)+' RPM • '+readable(v.motorThrust[i-1],2)+' N';
  }
- const axisForPID=$('tpPidAxis').value,cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
+ const axisForPID=pidAxis(),cAxis=axisForPID[0].toUpperCase()+axisForPID.slice(1);
  const outer=s.memory['angle'+cAxis],inner=s.memory['rate'+cAxis];
  $('tpOuterLoop').textContent=outer&&s.mode==='angle'?'Angle '+readable(outer.target)+'° → '+readable(outer.output)+'°/s':axisForPID==='yaw'?'YAW • RATE ONLY':'ACRO • outer loop bypassed';
  $('tpOuterTerms').textContent=outer&&s.mode==='angle'?'P '+readable(outer.p)+' • I '+readable(outer.i)+' • D '+readable(outer.d):axisForPID==='yaw'?'No yaw angle PID':'Pure angular-rate target';
