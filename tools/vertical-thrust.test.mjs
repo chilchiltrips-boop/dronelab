@@ -3,7 +3,7 @@ import {createSimulator,stepSimulator,startSimulator,stopSimulator,setFlightMode
 function bench(throttle=1500,env={}){const s=createSimulator();s.environment={...s.environment,batteryV:12.6,...env};for(const bank of Object.keys(s.pid))setPID(s,bank,{p:0,i:0,d:0});setFlightMode(s,'acro');startSimulator(s);s.throttle=throttle;return s}
 const advance=(s,t)=>{for(let n=0;n<Math.round(t/STEP);n++)stepSimulator(s);return s};
 test('actual motor shaft RPM follows exact first order lag, bounded monotonic, independently of requested RPM',()=>{
- const s=bench(1500);const target=PLANT.maxRPM*(PLANT.idle+(1-PLANT.idle)*.5);let previous=0;
+ const s=bench(1500,{lag:.12});const target=PLANT.maxRPM*(PLANT.idle+(1-PLANT.idle)*.5);let previous=0;
  for(let n=1;n<=30;n++){stepSimulator(s);assert.ok(s.motorRPM[0]>=previous);assert.ok(s.motorRPM[0]<target);previous=s.motorRPM[0];assert.ok(Math.abs(s.motorRPM[0]-target*(1-Math.exp(-n*STEP/s.environment.lag)))<1e-8)}
  assert.ok(Math.abs(s.motorRPM[0]/target-(1-Math.exp(-1)))<1e-10);
  assert.equal(s.motorRequestedRPM[0],target);
@@ -38,5 +38,5 @@ test('mixer signs equal cross-product torque: roll +X up, pitch +Z down, yaw opp
 test('vertical state agrees at 30/60/120Hz rendering and extreme tuning remains finite at rig stops',()=>{
  const states=[30,60,120].map(fps=>{const s=bench(1700);for(let n=0;n<fps*3;n++)advanceSimulator(s,1/fps);return [s.vertical.z,s.vertical.velocity,s.motorRPM[0]]});
  for(const a of states)for(let n=0;n<a.length;n++)assert.ok(Math.abs(a[n]-states[0][n])<1e-7);
- const s=bench(1900);setPID(s,'rateRoll',{p:100,i:100,d:100});s.cmdRoll=1;advance(s,8);s.cmdRoll=-1;advance(s,8);assert.ok(Number.isFinite(s.rollRate));assert.ok(Math.abs(s.memory.rateRoll.sum)<=110);assert.ok(s.motorCommands.every(n=>n>=8&&n<=100));
+ const s=bench(1900);setPID(s,'rateRoll',{p:100,i:100,d:100});s.cmdRoll=1;advance(s,8);s.cmdRoll=-1;advance(s,8);assert.ok(Number.isFinite(s.rollRate));assert.ok(Math.abs(s.memory.rateRoll.sum)<=400);assert.ok(s.motorCommands.every(n=>n>=8&&n<=100));
 });

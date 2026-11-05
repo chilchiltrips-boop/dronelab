@@ -63,7 +63,9 @@
    busy=pending||kit.working===true||kit.networkBusy===true||kit.otaInProgress===true,
    observedAge=Number.isFinite(kit.rcAt)&&kit.rcAt>0?Math.max(0,now-kit.rcAt):Infinity,
    ageKnown=Number.isFinite(rc.ageMs)&&rc.ageMs>=0,
-   currentRc=connected&&rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&
+   ppmLost=kit.ppm?.present===false&&Number.isFinite(kit.ppmObservedAt)&&kit.ppmObservedAt>0&&
+    now>=kit.ppmObservedAt&&now-kit.ppmObservedAt<=3500&&kit.ppmObservedAt>=(kit.rcAt||0),
+   currentRc=connected&&!(rc.source==='PPM'&&ppmLost)&&rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&
     Number.isSafeInteger(rc.seq)&&rc.seq>0&&observedAge<=900&&
     (ageKnown?rc.ageMs+observedAge<=400:kit.transport==='usb'&&observedAge<=400),
    kitActive=currentRc?(rc.source==='PPM'?'PPM':rc.source==='WEB'?'WEB_STA':rc.source==='ANDROID'&&mode==='ap'?'ANDROID_AP':null):null,
@@ -90,8 +92,10 @@
   const telemetryAgeMs=Number.isFinite(kit.heartbeatAt)&&kit.heartbeatAt>0?Math.max(0,now-kit.heartbeatAt):null;
   const telemetryLabel=connected?(kit.linkState==='delayed'?'Telemetry delayed':telemetryAgeMs===null?'Telemetry age unknown':'Telemetry '+(telemetryAgeMs<3500?'fresh':(telemetryAgeMs/1000).toFixed(1)+' s ago')):'Telemetry offline';
   const switching=access?.handoverPaused===true;
-  const rcState=switching?(kit.radioHandover?.state==='FAILED'?'RC handover failed':'RC switching'):paused?'RC Paused':active?actual.label:selected==='PPM'&&kit.ppm?.present===false?'PPM Signal Lost':selected==='ANDROID_AP'&&kit.radioHandover?.state==='WAITING_CONTROLLER'?'Waiting for Android':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
-  return {paths:options,selected,active,mode,capable,paused,safe,busy,authorized,telemetryAgeMs,telemetryLabel,
+  const lastObservedPath=connected&&!paused&&!currentRc&&!ppmLost&&rc.source==='PPM'&&rc.active===true&&
+   rc.inputValid!==false&&rc.failsafe!==true&&observedAge<=3500?'PPM':null;
+  const rcState=switching?(kit.radioHandover?.state==='FAILED'?'RC handover failed':'RC switching'):paused?'RC Paused':active?actual.label:selected==='PPM'&&ppmLost?'PPM Signal Lost':lastObservedPath?'PPM RX/TX · observation delayed':selected==='ANDROID_AP'&&kit.radioHandover?.state==='WAITING_CONTROLLER'?'Waiting for Android':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
+  return {paths:options,selected,active,lastObservedPath,mode,capable,paused,safe,busy,authorized,telemetryAgeMs,telemetryLabel,
    selectedLabel:item?.label||(capable&&access.controlPath==='AUTO'?'Auto':access?.selection&&access.selection!=='AUTO'?'Legacy '+access.selection:'Not selected'),activeLabel:rcState,
    target:actual?.target||item?.target||'Kit',
    connection:connected?(kit.linkState==='delayed'?'Response delayed':mode?mode.toUpperCase()+' Connected':String(kit.transport||'').toUpperCase()+' Connected'):kit.linkVerified?'Reconnecting':'Offline',

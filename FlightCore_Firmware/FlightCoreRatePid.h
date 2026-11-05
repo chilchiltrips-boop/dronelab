@@ -1,0 +1,58 @@
+#pragma once
+#include <algorithm>
+#include <cmath>
+
+struct ZjRateGains {float p=0,i=0,d=0;};
+struct ZjRatePidState {float integral=0,error=0,rate=0,derivative=0;bool ready=false;};
+struct ZjRatePidResult {float output=0,p=0,i=0,d=0;bool valid=false,saturated=false;};
+
+inline float zjRateClamp(float x,float lo,float hi){return std::max(lo,std::min(hi,x));}
+inline bool zjRateGainValid(float value){return std::isfinite(value)&&value>=0&&value<=100;}
+
+inline ZjRatePidResult zjStepRatePid(ZjRatePidState& state,const ZjRateGains& gains,
+                                    float target,float actual,float dt,float mixerResidual=0){
+ const float error=target-actual;
+ if(!std::isfinite(dt)||dt<.001f||dt>.008f||!std::isfinite(error)||!std::isfinite(mixerResidual)||
+    !zjRateGainValid(gains.p)||!zjRateGainValid(gains.i)||!zjRateGainValid(gains.d)){
+  state={};return {};
+ }
+ const float raw=state.ready?(actual-state.rate)/dt:0;
+ const float derivative=state.derivative+dt/(.030f+dt)*(raw-state.derivative);
+ const float p=gains.p*error,d=-gains.d*derivative;
+ const float candidate=zjRateClamp(state.integral+gains.i*(error+(state.ready?state.error:error))*dt*.5f,-400,400);
+ const float proposed=p+candidate+d;
+ if(!std::isfinite(proposed)||!std::isfinite(derivative)){state={};return {};}
+ const bool blocked=(proposed>400&&error>0)||(proposed<-400&&error<0)||
+  (mixerResidual>.05f&&error>0)||(mixerResidual<-.05f&&error<0);
+ const float integral=blocked?state.integral:candidate;
+ const float total=p+integral+d;
+ state={integral,error,actual,derivative,true};
+ return {zjRateClamp(total,-400,400),p,integral,d,true,std::fabs(proposed)>400||std::fabs(total)>400};
+}
+
+struct ZjRateMix {
+ float pulse[4]={};
+ float residual[3]={};
+ bool saturated=false;
+};
+
+// Quad X M1..M4: front left, front right, back right, back left.
+inline ZjRateMix zjRateMixQuadX(float throttle,float roll,float pitch,float yaw){
+ const float requested[]={throttle-roll-pitch-yaw,throttle+roll-pitch+yaw,
+                          throttle+roll+pitch-yaw,throttle-roll+pitch+yaw};
+ ZjRateMix mix;
+ float removed[4];
+ for(unsigned i=0;i<4;i++){
+  mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
+  removed[i]=requested[i]-mix.pulse[i];
+  mix.saturated|=removed[i]!=0;
+ }
+ mix.residual[0]=(-removed[0]+removed[1]+removed[2]-removed[3])*.25f;
+ mix.residual[1]=(-removed[0]-removed[1]+removed[2]+removed[3])*.25f;
+ mix.residual[2]=(-removed[0]+removed[1]-removed[2]+removed[3])*.25f;
+ return mix;
+}
+inline float zjRateStick(uint16_t pulse){
+ const float offset=zjRateClamp(pulse,1000,2000)-1500;
+ return std::fabs(offset)<=15?0:offset*.15f;
+}

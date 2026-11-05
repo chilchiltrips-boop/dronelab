@@ -61,3 +61,17 @@ test('cached, unknown-age or invalid RC cannot be advertised active by the share
  assert.equal(policy.describe({kit:usb,now}).paths.some(p=>p.selectable),false);
  assert.match(policy.describe({kit:usb,now}).paths[2].reason,/Unlock teacher/);
 });
+
+
+test('delayed PPM observations retain the source label while fresh receiver loss wins',()=>{
+ const now=5000;
+ const delayed={...kit,rcAt:now-600,heartbeatAt:now,ppmObservedAt:now-600};
+ const view=policy.describe({kit:delayed,now});
+ assert.equal(view.active,null);
+ assert.equal(view.lastObservedPath,'PPM');
+ assert.match(view.activeLabel,/observation delayed/);
+ const lost=policy.describe({kit:{...delayed,rcAt:now-50,ppmObservedAt:now,ppm:{present:false}},now});
+ assert.equal(lost.active,null);
+ assert.equal(lost.lastObservedPath,null);
+ assert.equal(lost.activeLabel,'PPM Signal Lost');
+});

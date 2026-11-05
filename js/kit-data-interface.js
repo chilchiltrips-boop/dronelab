@@ -17,29 +17,53 @@
  // Keep signed requests ordered, but let motor control and STOP pass queued
  // monitoring reads. A request already sent is never interrupted or replayed.
  function createRequestScheduler({now=()=>Date.now(),limit=32}={}){
-  const slots=new Map();
+  const slots=new Map();let cancelled=0;
+  const stale=message=>Object.assign(Error(message),{code:'REQUEST_QUEUE_STALE'});
   function pump(key,slot){
    if(slot.running)return;
    const job=slot.jobs.shift();
    if(!job){if(slots.get(key)===slot)slots.delete(key);return;}
-   slot.running=true;
+   slot.running=job;
    Promise.resolve().then(()=>{
     job.guard?.();
+    if(job.controller?.signal.aborted)throw job.controller.signal.reason||stale('Kit observation cancelled');
     const queueMs=Math.max(0,now()-job.at);
-    if(queueMs>job.maxQueueMs){const e=Error('Control request waited too long in the Kit queue; test stopped.');e.code='REQUEST_QUEUE_STALE';e.queueMs=queueMs;throw e;}
-    return job.run();
-   }).then(job.resolve,job.reject).finally(()=>{slot.running=false;pump(key,slot)});
+    if(queueMs>job.maxQueueMs){cancelled++;throw Object.assign(stale('Kit request expired in the queue'),{queueMs});}
+    return job.run(job.controller?.signal);
+   }).then(job.resolve,job.reject).finally(()=>{slot.running=null;pump(key,slot)});
   }
-  function schedule(key,run,{priority=0,maxQueueMs=Infinity,guard}={}){
-   let slot=slots.get(key);if(!slot){slot={running:false,jobs:[]};slots.set(key,slot)}
-   if(slot.jobs.length>=limit)return Promise.reject(Error('Kit request queue full'));
+  function schedule(key,run,{priority=0,maxQueueMs=Infinity,guard,generation,read=false}={}){
+   let slot=slots.get(key);if(!slot){slot={running:null,jobs:[]};slots.set(key,slot)}
+   if(slot.jobs.length>=limit){
+    const last=slot.jobs.at(-1);
+    if(priority<100||last.priority>=priority)return Promise.reject(Error('Kit request queue full'));
+    slot.jobs.pop();cancelled++;last.reject(stale('Safety request replaced queued work'));
+   }
    return new Promise((resolve,reject)=>{
-    slot.jobs.push({run,resolve,reject,priority,maxQueueMs,guard,at:now()});
+    slot.jobs.push({run,resolve,reject,priority,maxQueueMs,guard,generation,controller:read?new AbortController():null,at:now()});
     slot.jobs.sort((a,b)=>b.priority-a.priority);
     pump(key,slot);
    });
   }
-  return {schedule};
+  function retire(generation){
+   for(const slot of slots.values()){
+    const pending=[];
+    for(const job of slot.jobs){
+     if(job.generation===generation)pending.push(job);
+     else {cancelled++;job.reject(stale('Kit connection changed before dispatch'));}
+    }
+    slot.jobs=pending;
+    if(slot.running?.generation!==generation&&slot.running?.controller&&!slot.running.controller.signal.aborted){
+     cancelled++;slot.running.controller.abort(stale('Kit connection changed during observation'));
+    }
+   }
+  }
+  function metrics(){
+   let depth=0,oldest=0;
+   for(const slot of slots.values())for(const job of slot.jobs){depth++;oldest=Math.max(oldest,now()-job.at);}
+   return {requestQueueDepth:depth,oldestQueuedRequestMs:oldest,cancelledStaleRequests:cancelled};
+  }
+  return {schedule,retire,metrics};
  }
  // Single-flight diagnostic GETs; no control or mutation request may be queued here.
  function createReadScheduler({now=()=>Date.now(),limit=16}={}){
@@ -89,7 +113,7 @@
    (p.transport==='usb'?(p.fresh===true||p.lastPacketAt>0&&at-p.lastPacketAt<=900):p.fresh===true)&&
    (p.transport!=='android-relay'||p.permitted===true));
   const motor=operation.startsWith('motor_');
-  const write=motor||['led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation);
+  const write=motor||['pid_save','pid_reset','led','i2c_scan','wifi_scan','wifi_test_save'].includes(operation);
   const compatible=p=>{
    if(motor)return p.transport!=='android-relay'&&(p.transport==='usb'||kit.controlAuthorized===true);
    if(['wifi_scan','wifi_test_save'].includes(operation))return ['ap','sta'].includes(p.transport)&&kit.setupAuthorized===true&&!kit.owner&&!kit.rc?.claimed;

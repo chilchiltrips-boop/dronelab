@@ -9,7 +9,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.13";
+constexpr const char* FW_VERSION="1.7.14";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -253,7 +253,7 @@ static String zjImuVector(const float values[3]){
 }
 static uint32_t gyroDiagnosticDrops=0;
 static String zjControlTimingStatus(){
- const auto c=zjReadControl();const uint32_t now=micros();
+ const auto c=zjReadControl();const auto shadow=zjReadRateShadow();const uint32_t now=micros();
  const char* health=!zjControlRuntimeReady?"UNAVAILABLE":!c.ticks?"STARTING":c.healthy(now)?"HEALTHY":"LATE";
  return String("\"controlTargetHz\":250,\"controlActuating\":false,\"controlHealth\":\"")+health+"\",\"controlActualHz\":"+
   (c.rate.known?String(c.rate.actual(now),2):String("null"))+",\"controlIntervalUs\":"+String(c.intervalUs)+
@@ -261,7 +261,10 @@ static String zjControlTimingStatus(){
   ",\"controlJitterUs\":"+String(c.jitterUs)+",\"controlMaxJitterUs\":"+String(c.maxJitterUs)+
   ",\"controlExecutionUs\":"+String(c.executionUs)+",\"controlMaxExecutionUs\":"+String(c.maxExecutionUs)+
   ",\"controlMissedTicks\":"+String(c.missedTicks)+",\"controlDeadlineMisses\":"+String(c.deadlineMisses)+",\"controlOverruns\":"+String(c.overruns)+
-  ",\"controlLastTickUs\":"+(c.ticks?String(c.lastSuccessfulUs):String("null"));
+  ",\"controlLastTickUs\":"+(c.ticks?String(c.lastSuccessfulUs):String("null"))+
+  ",\"controlMaxIntervalPhase\":\""+shadow.maxIntervalPhase+"\",\"ratePidComputeMaxUs\":"+String(shadow.computeMaxUs)+
+  ",\"controlMaxIntervalAtUs\":"+String(c.maxIntervalAtUs)+",\"ratePidShadowState\":\""+shadow.reason+
+  "\",\"ratePidShadowRevision\":"+String(shadow.revision)+",\"ratePidShadowSaturated\":"+(shadow.mix.saturated?"true":"false");
 }
 static String zjImuStatus(){
  updateGyro(millis());

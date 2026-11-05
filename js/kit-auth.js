@@ -29,8 +29,9 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  let seq=0,tail=Promise.resolve();const created=Date.now();
  const api={deviceId,created,setupUntil:created+(Number(r.setupExpiresMs)||0),expiresAt:created+Math.min(Number(r.expiresMs)||0,1800000),
    udpKey:claim=>{if(!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("Invalid UDP claim");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
-  request(route,method='GET',args={}){
+  request(route,method='GET',args={},{signal}={}){
    const run=async()=>{
+    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Session expired; reconnect this kit.');
     const counter=String(++seq);let payload='';
     if(method==='POST'){
@@ -39,7 +40,7 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
      payload=hex(iv)+hex(cipher);
     }
     const msg=[method,route,deviceId,c.bootId,r.session,counter,payload].join('|');
-    const result=await transport(route,method,method==='POST'?{payload}:{},{'X-ZJ-Device':deviceId,'X-ZJ-Session':r.session,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,msg)});
+    const result=await transport(route,method,method==='POST'?{payload}:{},{'X-ZJ-Device':deviceId,'X-ZJ-Session':r.session,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,msg)},signal);
     if(!equal(mac(key,['response',counter,result.status,result.text].join('|')),result.proof)){
      const e=Error('Session expired or unsigned device response; reconnect the verified kit.');e.status=401;throw e;
     }
@@ -73,8 +74,9 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
  let seq=0,tail=Promise.resolve();
  const api={deviceId,local:true,scope:r.scope,expiresAt:Date.now()+Math.min(Math.max(Number(r.expiresMs)||0,0),1800000),
    udpKey:claim=>{if(r.scope!=="ap_diagnostics"||!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("UDP session not authorized");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
-  request(route,method='GET',args={}){
+  request(route,method='GET',args={},{signal}={}){
    const run=async()=>{
+    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Local session expired; reconnect Kit Wi-Fi.');
     // Never allow local credentials to become an OTA/admin authority.
     if(route.startsWith('/api/firmware/')||route.startsWith('/api/reboot'))
@@ -87,7 +89,7 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
     }
     const message=[method,route,deviceId,bootId,r.session,counter,payload].join('|');
     const result=await transport(route,method,method==='POST'?{payload}:{},
-     {'X-ZJ-Device':deviceId,'X-ZJ-Session':r.session,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,message)});
+     {'X-ZJ-Device':deviceId,'X-ZJ-Session':r.session,'X-ZJ-Seq':counter,'X-ZJ-Proof':mac(key,message)},signal);
     if(!equal(mac(key,['response',counter,result.status,result.text].join('|')),result.proof)){
      const error=Error('Unsigned or mismatched local Kit response; disconnect and verify Wi-Fi again');
      error.status=401;throw error;
@@ -99,15 +101,18 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
  };
  return api;
 }
-function http(host){return async(route,method='GET',args={},headers={})=>{
+function http(host){return async(route,method='GET',args={},headers={},signal)=>{
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
  // Hosted browser raw UDP uses the exact-origin loopback bridge. Preserve the
  // signed session across this transport; never retry a failed UDP write in HTTP.
  if(root.ZebjusKitUdp&&await root.ZebjusKitUdp.available())
-  return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers);
+  return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers,signal);
  const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
  const timeoutMs=root.ZebjusKitNetworkPolicy?.requestTimeout(route,method,host.includes('192.168.4.1')?'ap':'sta')||(firmwareWrite?20000:4200);
  const control=new AbortController();let timedOut=false;
+ const cancel=()=>control.abort(signal.reason);
+ signal?.addEventListener('abort',cancel,{once:true});
  const timer=setTimeout(()=>{timedOut=true;control.abort()},timeoutMs);
  try{
   const response=await fetch(host+route,{method,mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',targetAddressSpace:'local',signal:control.signal,
@@ -116,7 +121,7 @@ function http(host){return async(route,method='GET',args={},headers={})=>{
  }catch(e){
   if(timedOut)throw Error((firmwareWrite?'Encrypted OTA request':'Kit request')+' timed out at '+route+' after '+(timeoutMs/1000)+'s. Verify kit reachability before retrying.');
   throw e;
- }finally{clearTimeout(timer)}
+ }finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel)}
 };}
 root.ZebjusKitAuth={label,diagnosticKey,open,local,http,mac};
 })(globalThis);

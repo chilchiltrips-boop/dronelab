@@ -1,3 +1,5 @@
+import {createPidClient,encodeRateGains,PID_CHANGED} from './flightcore-pid-client.js';
+import {RATE_BANKS} from './rate-pid.js';
 import * as THREE from '../three.module.min.js';
 import {loadGLB} from '../glb-loader.js';
 import {createTripodAudio} from './tripod-audio.js';
@@ -344,6 +346,86 @@ function syncPIDMatrix(bank=null,values=null){
   ?'ACRO / RATE • Rate Roll/Pitch/Yaw PID only • No Angle PID'
   :'ANGLE / CASCADE • Angle Roll/Pitch → Rate Roll/Pitch/Yaw • Yaw Rate only';
 }
+function initKitPid(host){
+ const kitApi={getState:()=>host.ZebjusKits?.getState?.(),pidExchange:(...args)=>host.ZebjusKits.pidExchange(...args)};
+ const client=createPidClient(kitApi,host);
+ const status=$('tpPidKitStatus'),read=$('tpPidReadFC'),save=$('tpPidSaveFC'),reload=$('tpPidReloadFC');
+ const currentGains=()=>Object.fromEntries(RATE_BANKS.map(bank=>[bank,s.pendingPID[bank]||s.pid[bank]]));
+ const rows=[...$('tpPidMatrix').querySelectorAll('[data-pid-bank]')].filter(row=>RATE_BANKS.includes(row.dataset.pidBank));
+ let verified=null,reference=encodeRateGains(currentGains()),busy=false,message='',operation=0;
+ const state=()=>kitApi?.getState?.();
+ const bound=kit=>kit&&verified&&verified.kitId===kit.kitId&&
+  (!kit.bootId||verified.bootId===kit.bootId)&&verified.connectionGeneration===kit.connectionGeneration;
+ const draft=()=>{
+  try{return encodeRateGains(currentGains())!==reference}catch{return true}
+ };
+ function render(){
+  const kit=state(),supported=kit?.connected&&kit.board==='ZFC-A2'&&['usb','ap','sta'].includes(kit.transport);
+  const valid=supported&&bound(kit);
+  const authorized=kit?.transport==='usb'?kit.adminUnlocked:kit?.controlAuthorized;
+  $('tpPidTarget').textContent=supported?(kit.kitName||kit.kitId)+' · '+kit.transport.toUpperCase()+' · '+kit.kitId:
+   kit?.connected?'FC PID UNSUPPORTED':'SIMULATOR ONLY';
+  read.disabled=busy||!supported;
+  save.disabled=busy||!valid||!authorized||kit.working||kit.networkBusy||kit.otaInProgress||kit.motorsArmed===true||kit.motorsDisabled===false;
+  reload.disabled=busy||!valid;
+  const label=valid?'FC PID SUPPORTED · revision '+verified.revision+' · '+
+   (draft()?'UNSAVED · Reload Saved to use FC values':verified.persisted?'SAVED':'DEFAULTS'):supported?'Read the selected FC to verify support.':'Connect a verified A2 Kit.';
+  status.textContent=message?label+' · '+message:label;
+ }
+ function apply(record){
+  for(const bank of RATE_BANKS)setPID(s,bank,record[bank]);
+  reference=encodeRateGains(record);
+  updatePidEditor();coach();
+ }
+ async function fetchSaved(){
+  const kit=state();
+  if(!kit?.connected||kit.board!=='ZFC-A2'||!['usb','ap','sta'].includes(kit.transport)){render();return;}
+  const id=++operation;busy=true;message='Reading FC…';render();
+  try{
+   const reply=await client.read();
+   if(id!==operation)return;
+   const dirty=draft();
+   verified={...reply,connectionGeneration:kit.connectionGeneration};
+   reference=encodeRateGains(reply);
+   if(!dirty)apply(reply);
+   message='';
+  }catch(error){if(id===operation){verified=null;message=String(error.message||error);}}
+  finally{if(id===operation){busy=false;render();}}
+ }
+ read.onclick=()=>void fetchSaved();
+ reload.onclick=()=>{if(bound(state())){apply(verified);message='FC settings loaded into Simulator';render();}};
+ save.onclick=async()=>{
+  if(!bound(state()))return;
+  const id=++operation;busy=true;message='Saving and verifying…';render();
+  try{
+   const gains=Object.fromEntries(rows.map(row=>[row.dataset.pidBank,Object.fromEntries(['p','i','d'].map(term=>{
+    const input=row.querySelector('[data-gain="'+term+'"]');
+    return [term,input.value.trim()?Number(input.value):NaN];
+   }))]));
+   const result=await client.save(gains,verified.revision,undefined,verified);
+   if(id!==operation)return;
+   verified={...result,connectionGeneration:verified.connectionGeneration};
+   apply(result);message='SAVED TO A2 FC';
+  }catch(error){if(id===operation)message='SAVE FAILED · '+(error.message||error);}
+  finally{if(id===operation){busy=false;render();}}
+ };
+ for(const row of rows)row.addEventListener('input',()=>{
+  const bank=row.dataset.pidBank;
+  const gains=Object.fromEntries(['p','i','d'].map(term=>{
+   const input=row.querySelector('[data-gain="'+term+'"]');
+   return [term,input.value.trim()?Number(input.value):NaN];
+  }));
+  setPID(s,bank,gains);message='';render();
+ });
+ $('tpPidMatrix').addEventListener('click',render);
+ host.addEventListener('dronelab:kit-link',()=>{
+  ++operation;busy=false;message='';verified=null;void fetchSaved();
+ });
+ host.addEventListener('dronelab:kit-access',render);
+ host.addEventListener(PID_CHANGED,()=>{if(!busy)void fetchSaved();});
+ setInterval(render,750);
+ void fetchSaved();
+}
 function updatePidEditor(){
  $('tpPidLoop').querySelector('option[value=angle]').disabled=s.mode==='acro'||$('tpPidAxis').value==='yaw';
  const bank=pidBank(),p=s.pendingPID[bank]||s.pid[bank];if(!p)return;
@@ -400,6 +482,7 @@ function updateControls(){
  };
  controlRoot.addEventListener('dronelab:control-path',e=>applyControlPath(e.detail?.path));
  applyControlPath(controlRoot.ZebjusControlUI?.snapshot?.()?.selected);
+ initKitPid(controlRoot);
  $('tpCalibrate').onclick=()=>{calibrateLevel(s);setStatus('LEVEL TRIM SAVED (VIRTUAL)')};
  $('tpTilt').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',String(on));e.currentTarget.textContent='Tilt: '+(on?'On':'Off');$('tpSceneTip').textContent=on?'Drag 3D drone to disturb Roll/Pitch':'Drag to orbit • Scroll to zoom'};
  try{const pref=JSON.parse(localStorage.getItem('zebjus.tripod.audio.v1')||'null');if(pref){if(Number.isFinite(pref.volume))volume=clamp(pref.volume,0,1);if(['quiet','normal','detailed'].includes(pref.profile))$('tpSoundPreset').value=pref.profile;if(pref.muted){soundOn=audioEngine.toggle()}}}catch{}

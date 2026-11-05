@@ -14,6 +14,6 @@ test('filtered high D amplifies measured seeded gyro-noise motor jitter, without
  assert.deepEqual(noiseBench(.16,.07),high);
 });
 test('mechanical roll stop is reported and cannot manufacture a PID settling metric',()=>{
- const r=simulateResponse({gain:'i',values:[0,0],bank:'rateRoll',mode:'acro',scenario:'combined',duration:8}).results[0];
+ const r=simulateResponse({basePID:{...DEFAULT_PID,rateRoll:{...DEFAULT_PID.rateRoll,p:.4}},gain:'i',values:[0,0],bank:'rateRoll',mode:'acro',scenario:'combined',duration:8}).results[0];
  assert.equal(r.metrics.limitContact,true);assert.equal(r.metrics.settlingTime,null);assert.equal(Math.abs(r.metrics.finalAngle),45);
 });

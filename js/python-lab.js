@@ -1,9 +1,11 @@
+import {createPidClient} from './flightcore-pid-client.js';
 import {motorClient,confirmMotor} from './motor-setup.js';
 import {createI2CBridge,createGyroBridge,parseNetworkGyroTelemetry,readNetworkGyro} from './usb-i2c-bridge.js?v=gyro-sta-20261014';
 import {createPythonIDEShell} from './python-ide-workspace.js?v=compact-run-20261011';
 import {createPythonLedSession} from './python-led-session.js';
 const $=id=>document.getElementById(id),SOURCE='./',KEY='dronelab-python-project-v1',LAYOUT_KEY='dronelab-python-layout-v2';
 const EXAMPLES={"joystick":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\n# Values below come from the ESP32 receiver, not WebRTC or frontend sticks.\n# Android owns input; this browser reads the verified Kit connection.\nwhile True:\n    rc = await drone.read_joystick()\n    print(rc[\"source\"], \"T\", rc[\"throttle\"], \"R\", rc[\"roll\"], \"P\", rc[\"pitch\"], \"Y\", rc[\"yaw\"], \"frame\", rc[\"seq\"], \"age\", rc[\"age_ms\"], \"valid\", rc[\"input_valid\"])\n    await asyncio.sleep(0.1)\n","wifi_scan":"from zebjus_simple import Drone\n\ndrone = Drone()\nnetworks = await drone.wifi_scan()\nfor router in networks:\n    print(router[\"ssid\"], router[\"rssi\"], \"dBm\", \"Secure\" if router[\"secure\"] else \"Open\")\nprint(\"Found\", len(networks), \"2.4 GHz networks\")\n","wifi_save":"from zebjus_simple import Drone\n\ndrone = Drone()\n# Keep credentials private: this file is autosaved in your browser.\nssid = \"REPLACE_WITH_2_4GHZ_WIFI\"\npassword = \"REPLACE_WITH_WIFI_PASSWORD\"\nresult = await drone.wifi_test_save(ssid, password)\nprint(result)\nif result[\"saved\"]:\n    print(\"Wi-Fi saved in FlightCore NVS; reconnect and Take Control.\")\nelse:\n    print(\"Not saved/verified. Check status via USB before retry.\")\n","scanner":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"I2C scanner • Stop to finish\")\nwhile True:\n    i2c_scan_result = drone.i2c_scan()\n    if i2c_scan_result:\n        print(\"My I2C addresses =\", i2c_scan_result[\"addresses\"])\n        print(\"Device count =\", i2c_scan_result[\"total\"])\n    time.sleep(5)\n","custom":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nwhile True:\n    result = drone.i2c_scan()\n    if result:\n        print(\"Devices:\", result[\"addresses\"])\n    time.sleep(5)\n","basic":"import time\n\nprint(\"Hello from ZEBJUS Python Lab!\")\ntotal = 0\nfor count in range(1, 6):\n    total += count\n    print(\"Step\", count, \"sum =\", total)\n    time.sleep(0.1)\nprint(\"Finished! Total =\", total)\n","plot":"import matplotlib.pyplot as plt\n\nvoltage = [3.5, 3.6, 3.7, 3.8, 3.9, 4.0]\ncurrent = [0.2, 0.5, 1.0, 1.6, 1.2, 0.8]\nplt.plot(voltage, current, marker=\"o\", label=\"Current (A)\")\nplt.xlabel(\"Voltage (V)\")\nplt.ylabel(\"Current (A)\")\nplt.title(\"ZEBJUS Python Lab\")\nplt.grid(True)\nplt.legend()\nplt.show()\n","led":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\nprint(\"LED blink • Stop to finish\")\nwhile True:\n    drone.led(1)\n    time.sleep(1)\n    drone.led(0)\n    time.sleep(1)\n","fade":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_fade(1200)\nwhile True:\n    time.sleep(1)\n","warning":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_warning()\nwhile True:\n    time.sleep(1)\n","safe":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_safe()\nwhile True:\n    time.sleep(1)\n","sos":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_sos()\nwhile True:\n    time.sleep(1)\n","pattern":"from zebjus_simple import Drone\nimport time\n\ndrone = Drone()\ndrone.led_pattern([(100,150),(0,150),(100,150),(0,900)])\nwhile True:\n    time.sleep(1)\n","gyro":"from zebjus_simple import Drone\nimport asyncio\n\ndrone = Drone()\nprint(\"Gyroscope reader • A1 LSM6DS3 / A2 MPU6050\")\nprint(\"Units: degrees/second (not tilt angles)\")\nidentified = False\n\nwhile True:\n    gyro = await drone.read_gyro(timeout=10000 if not identified else 3000)\n    RateRoll = gyro[\"RateRoll\"]\n    RatePitch = gyro[\"RatePitch\"]\n    RateYaw = gyro[\"RateYaw\"]\n\n    if not identified:\n        print(\"Board:\", gyro[\"board\"], \"| Sensor:\", gyro[\"sensor\"],\n              \"| I2C address:\", gyro[\"address\"])\n        print(\"Other I2C devices can be viewed with drone.i2c_scan()\")\n        identified = True\n\n    print(f\"RateRoll={RateRoll:+8.2f}  RatePitch={RatePitch:+8.2f}  RateYaw={RateYaw:+8.2f} deg/s\")\n    await asyncio.sleep(0.1)  # Print at ~10 Hz; gyro is sampled at 50 Hz\n"};
+EXAMPLES.rate_pid="from zebjus_simple import Drone\n\ndrone = Drone()\ncurrent = await drone.pid_read()\nprint(\"Kit\", current[\"kitId\"], \"revision\", current[\"revision\"])\ngains = {\n    \"rateRoll\": {\"p\": 1.4, \"i\": 18, \"d\": 0.035},\n    \"ratePitch\": {\"p\": 1.4, \"i\": 18, \"d\": 0.035},\n    \"rateYaw\": {\"p\": 3, \"i\": 20, \"d\": 0},\n}\nsaved = await drone.pid_save(gains, expected_revision=current[\"revision\"])\nprint(\"Saved revision\", saved[\"revision\"])\nprint(\"Verified FC PID\", await drone.pid_read())\n";
 Object.assign(EXAMPLES,{"motor_layout": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.set_layout(\"A2_QUAD_X\"))\n", "esc_calibration": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.calibrate_esc())\n", "motor_test": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.test_motor(motor=1, pulse_us=1050, duration_ms=800))\n", "motor_input": "from zebjus_simple import Drone\n\ndrone = Drone()\nasync with await drone.motor_setup() as setup:\n    print(await setup.test_input(source=\"selected\", duration_ms=10000))\n"});
 const bridge=createI2CBridge({acceptEvent:e=>{
  const transport=e?.detail?.transport||'usb';
@@ -397,9 +399,19 @@ async function pythonMotorOperation(operation,a,w){
 async function onRpc(w,m){
  try{
   if(worker!==w)return;
-  bindPythonOperation(m.method);
+  const binding=bindPythonOperation(m.method);
   let result;
-  if(m.method.startsWith('motor_')){
+  if(m.method.startsWith('pid_')){
+   const pid=createPidClient(window.ZebjusKits,window,()=>{
+    if(worker!==w)throw Error('Python run ended');
+    validatePythonSession();
+   });
+   if(m.method==='pid_read')result=await pid.read(binding.transport);
+   else if(m.method==='pid_save')result=await pid.save(m.args?.gains,m.args?.expectedRevision,binding.transport);
+   else if(m.method==='pid_reset')result=await pid.reset(binding.transport);
+   else throw Error('Unknown FlightCore PID operation');
+   validatePythonSession();
+  }else if(m.method.startsWith('motor_')){
    result=await pythonMotorOperation(m.method.slice(6),m.args||{},w);
   }else if(m.method==='read_joystick'){
    selectedPythonKit(); // Same verified AP / STA / USB / Android Relay reader.
@@ -606,6 +618,9 @@ function addCompletions(M){
      led_sos:['led_sos()','SOS Morse pattern'],
      led_pattern:['led_pattern([(100,150),(0,900)])','Custom brightness/duration sequence'],
      led_stop:['led_stop()','Switch LED off and end effect'],
+     pid_read:['pid_read()','Read verified A2 Rate PID settings'],
+     pid_save:['pid_save(gains, expected_revision=revision)','Verify and persist all nine A2 Rate PID gains'],
+     pid_reset_defaults:['pid_reset_defaults()','Save the experimental A2 Rate PID defaults'],
      motor_setup:['motor_setup()','Async A2 setup session: use async with await drone.motor_setup()'],
      motor_status:['motor_status()','Read authoritative motor status'],
      read_joystick:['read_joystick()','Read identity-verified ESP32 receive state over STA without claiming control'],
@@ -804,7 +819,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=async e=>{const selected=e.target.value;if(!selected)return;if(!await applyExample(selected)){e.target.value='';return;}pythonTargetIntent=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(selected)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
+ $('pythonQuickHardware').onchange=async e=>{const selected=e.target.value;if(!selected)return;if(!await applyExample(selected)){e.target.value='';return;}pythonTargetIntent=['rate_pid','joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(selected)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',()=>{pythonTargetIntent=$('pythonTarget').value==='python'?'isolated':'manual';usbStatus()});$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);

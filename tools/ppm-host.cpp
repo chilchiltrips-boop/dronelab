@@ -47,6 +47,19 @@ static void arm(){
 }
 int main(){
  clockMs=1000;zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjPpmSetup();
+ zjKitPrefs.putUShort("ppm1lo",910);
+ zjKitPrefs.putString("ppmMap","21345");
+ zjPpmSetup();
+ assert(zjPpmMin[0]==910&&zjPpmMap[0]==1);
+ auto config=zjPpmCurrentConfig();
+ config.minimum[0]=950;config.map[0]=0;config.map[1]=1;
+ zjKitPrefs.failNextWrite=true;
+ assert(!zjPpmSaveConfig(config)&&zjPpmMin[0]==910&&zjPpmMap[0]==1);
+ assert(zjPpmSaveConfig(config));
+ zjPpmSetup();
+ assert(zjPpmMin[0]==950&&zjPpmMap[0]==0&&zjPpmMap[1]==1);
+ zjKitPrefs.remove("ppmConfig");zjKitPrefs.remove("ppm1lo");zjKitPrefs.remove("ppmMap");
+ zjPpmSetup();
  acquire();
  // Neither CH5=2000 nor high-throttle yaw-right arms diagnostics.
  hold(2000,1200);assert(!zjRcInputArmed);

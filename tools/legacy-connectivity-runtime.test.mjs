@@ -146,7 +146,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  }};
  for(const file of ['control-path-policy.js','kit-access-policy.js']){const ctx={};vm.runInNewContext(readFileSync(new URL('../js/'+file,import.meta.url),'utf8'),ctx);Object.assign(window,ctx);}
  const smartPolicy={};vm.runInNewContext(readFileSync(new URL('../js/smart-kit-policy.js',import.meta.url),'utf8'),smartPolicy);window.ZebjusSmartKitPolicy=smartPolicy.ZebjusSmartKitPolicy;
- const shared={};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
+ const shared={AbortController};vm.runInNewContext(readFileSync(new URL('../js/kit-data-interface.js',import.meta.url),'utf8'),shared);window.ZebjusKitData=shared.ZebjusKitData;
  const fetch=async(url,opts={})=>{
   const u=new URL(url);requests.push({host:u.hostname,headers:opts.headers,route:u.pathname});
   if(u.pathname==='/api/identify'){
