@@ -349,13 +349,13 @@ static void zjSetupHttp(){
   const String inputArm=zjArg("inputArmed");
   if(inputArm.length()&&inputArm!="true"&&inputArm!="false"){zjReply(400,"{\"error\":\"invalid_input_arm\"}");return;}
   long seq=0,t=0,r=0,p=0,y=0,ch5=1000,ch6=1000;
-  const String response=zjArg("responseMode");
+  const String response=zjArg("responseMode"),aux1=zjArg("ch5"),aux2=zjArg("ch6");
   if(!parseNumber(zjArg("seq").c_str(),1,2147483647L,seq)||!parseNumber(zjArg("throttle").c_str(),1000,2000,t)||
      !parseNumber(zjArg("roll").c_str(),1000,2000,r)||!parseNumber(zjArg("pitch").c_str(),1000,2000,p)||!parseNumber(zjArg("yaw").c_str(),1000,2000,y)||
-     (zjArg("ch5").length()&&!parseNumber(zjArg("ch5").c_str(),1000,2000,ch5))||
-     (zjArg("ch6").length()&&!parseNumber(zjArg("ch6").c_str(),1000,2000,ch6))||
+     (aux1.length()&&!parseNumber(aux1.c_str(),1000,2000,ch5))||
+     (aux2.length()&&!parseNumber(aux2.c_str(),1000,2000,ch6))||
      (response.length()&&response!="Slow"&&response!="Medium"&&response!="Fast")||
-     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.peerIP(),inputArm=="true",int(ch5),int(ch6))){
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),zjArg("source"),zjArg("session"),true,zjHttp.peerIP(),inputArm=="true",int(ch5),int(ch6),(aux1.length()?0x10:0)|(aux2.length()?0x20:0))){
    zjReply(423,"{\"error\":\"rc_not_owned_or_invalid_frame\"}");return;
   }
   zjRcResponse=response.length()?response:String("Medium");
@@ -574,24 +574,38 @@ static bool zjNetSerialCommand(char* line){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static bool zjAutoEscOutputsOff();
 #endif
-static void zjPpmFallbackLoop(uint32_t now){
- if(!zjPpmFallbackPending)return;
- if(zjPpmSignalFresh(now)||zjRcControlPath!="PPM"||WiFi.getMode()!=WIFI_STA){
-  zjPpmFallbackPending=false;return;
- }
- if(uint32_t(now-zjPpmFallbackAt)<350)return;
- bool outputsOff=!zjMotorEnabled&&!zjMotorArmed&&!zjMotorSessionActive;
+#include "FlightCorePpmFallback.h"
+static bool zjPpmFallbackSwitching=false;
+static bool zjPpmFallbackOutputsOff(){
+ bool off=!zjMotorEnabled&&!zjMotorArmed&&!zjMotorSessionActive;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
- outputsOff=outputsOff&&zjAutoEscOutputsOff();
+ off=off&&zjAutoEscOutputsOff();
 #endif
- if(!outputsOff||zjHandoverPending||zjPendingMode.length()||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||
-    zjOtaRebootAt||zjUsbScanning||zjMaintenanceActive||zjRcOwned){
-  if(uint32_t(now-zjPpmFallbackAt)>=5000){
-   zjPpmFallbackPending=false;zjHandoverLastReject="PPM_FALLBACK_BUSY";
+ return off;
+}
+static void zjPpmFallbackLoop(uint32_t now){
+ if(zjPpmFallbackSwitching){
+  if(zjHandoverPending&&!zjPpmFallbackOutputsOff()){
+   zjPendingMode="";zjMode=zjHandoverPreviousMode;
+   zjRadioHandoverFailed("OUTPUT_OFF_UNVERIFIED");
   }
+  if(!zjHandoverPending)zjPpmFallbackSwitching=false;
+ }
+ if(!zjPpmFallbackPending)return;
+ const bool off=zjPpmFallbackOutputsOff();
+ const bool busy=zjHandoverPending||zjPendingMode.length()||zjNetTesting||zjOtaAuthorized||
+  zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning||zjMaintenanceActive||zjRcOwned;
+ const auto decision=zjDecidePpmFallback(now-zjPpmFallbackAt,zjPpmSignalFresh(now),
+  zjRcControlPath=="PPM"&&WiFi.getMode()==WIFI_STA,off,busy);
+ if(decision==ZjPpmFallbackDecision::WAIT)return;
+ zjPpmFallbackPending=false;
+ if(decision==ZjPpmFallbackDecision::CANCEL)return;
+ if(decision==ZjPpmFallbackDecision::BLOCKED){
+  zjHandoverLastReject=off?"PPM_FALLBACK_BUSY":"OUTPUT_OFF_UNVERIFIED";
+  if(!zjHandoverPending){zjHandoverState="FAILED";zjHandoverError=zjHandoverLastReject;}
   return;
  }
- zjPpmFallbackPending=false;
+ zjPpmFallbackSwitching=true;
  // Runtime recovery keeps the saved STA profile. An explicit later STA
  // transition still uses the last selected STA input, with a fresh claim.
  zjHandoverPreviousMode=zjMode;zjLastStaInput="PPM";zjMode="ap";

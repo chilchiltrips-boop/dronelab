@@ -2,17 +2,22 @@
 
 Published firmware version and checksums come from `firmware-catalog.json`. `npm run verify:firmware` verifies both profiles, APP/Factory sizes, chip IDs, SHA-256, the 0x10000/0x1f0000 application slots and byte-identical APP contents. Runtime identity and build time are available over `ZJINFO` or signed status.
 
-Run:
+Run the source and published-image checks. The publication hold pins the existing firmware catalog while the candidate builds are uploaded separately for qualification.
 
 ```sh
 npm run check
 npm test
 npm run verify:firmware
+npm run verify:acceptance
+npm run verify:acceptance:strict  # physical evidence required
 # With test-only Playwright installed and an HTTP server on 127.0.0.1:8765:
 node tools/qr-pairing-browser.mjs
 node tools/audit-browser.mjs
 node tools/controls-browser.mjs
 node tools/python-browser-smoke.mjs
+node tools/a2-rate-pid-browser.mjs
+node tools/a2-motor-setup-browser.mjs
+node tools/live-inputs-layout-browser.mjs
 node tools/offline-browser.mjs
 ```
 

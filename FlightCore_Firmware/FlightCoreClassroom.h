@@ -3,6 +3,7 @@
 // An identifying six-digit code is NOT a password or an authorization secret.
 #include <Preferences.h>
 #include "FlightCoreMotorStatus.h"
+#include "FlightCoreReceiverSnapshot.h"
 #include "FlightCorePidSettings.h"
 #include <mbedtls/sha256.h>
 
@@ -45,7 +46,9 @@ static bool zjRcSourceAllowed(const String& source){
 static bool zjRcUdpOwned=false;
 // Signed diagnostic status contains only a release reason, never owner tokens.
 static String zjRcLastReleaseReason="NONE";
-static uint32_t zjRcLastReleaseAt=0;
+static uint32_t zjRcLastReleaseAt=0,zjRcGeneration=0,zjRcReceivedAt=0;
+static uint8_t zjRcAuxMask=0;
+static uint16_t zjRcPpmChannels[8]={};
 static uint32_t zjRcLeaseAt=0,zjRcLast=0,zjRcSeq=0,zjRcLastLog=0,zjRcAccepted=0,zjRcRejected=0;
 static int zjRcThrottle=1000,zjRcRoll=1500,zjRcPitch=1500,zjRcYaw=1500;
 static int zjRcCh5=1000,zjRcCh6=1000;
@@ -110,9 +113,10 @@ static String zjRcNewSession(){
 }
 static void zjRcNeutral(){
  zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
- zjRcCh5=zjRcCh6=1000;zjApplyPendingFlightMode();
+ zjRcCh5=zjRcCh6=1000;zjRcAuxMask=0;zjRcReceivedAt=0;zjApplyPendingFlightMode();
 }
 static void zjRcRelease(const char* reason){
+ ++zjRcGeneration;zjFlightRevoke(reason);
  if(zjMotorInputTest)zjMotorEmergencyStop();
  const bool had=zjRcOwned;
  if(had){zjRcLastReleaseReason=reason;zjRcLastReleaseAt=millis();}
@@ -133,7 +137,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if(Serial.availableForWrite()>75){Serial.print("ZJRC,CLAIM,");Serial.print(transport);Serial.print(',');Serial.println(source);}
  return true;
 }
-static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false,int ch5=1000,int ch6=1000){
+static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false,int ch5=1000,int ch6=1000,uint8_t auxMask=0,uint32_t receivedAt=0){
  const uint32_t now=millis();
  // A late packet must never re-arm a timed-out input session. The user must
  // press ARM again, which obtains a fresh ownership token at low throttle.
@@ -145,9 +149,10 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
     ch5<1000||ch5>2000||ch6<1000||ch6>2000||(inputArmed&&!zjRcInputArmed&&t>1050)){
   ++zjRcRejected;return false;
  }
+ if(zjRcInputArmed&&!inputArmed)zjFlightRevoke("INPUT_DISARMED");
  zjRcInputArmed=inputArmed;zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
- zjRcCh5=ch5;zjRcCh6=ch6;zjApplyPendingFlightMode();
- zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcHasFrame=true;++zjRcAccepted;
+ zjRcCh5=ch5;zjRcCh6=ch6;zjRcAuxMask=auxMask;zjApplyPendingFlightMode();
+ zjRcSeq=seq;zjRcLeaseAt=now;zjRcLast=now;zjRcReceivedAt=receivedAt?receivedAt:now;zjRcHasFrame=true;++zjRcAccepted;
  // RAW mode logs separate RC packets for legacy tools; COMBINED includes RC in ZJTEL.
  // Maximum 10 RAW diagnostic frames/s; sensors and Wi-Fi service take priority.
  if(zjTelemetryRaw&&now-zjRcLastLog>=ZJ_RC_LOG_MS&&Serial.availableForWrite()>100){
@@ -166,6 +171,37 @@ static void zjRcLoop(uint32_t now){
  }
  if(zjRcOwned&&int32_t(now-zjRcLeaseAt)>=0&&uint32_t(now-zjRcLeaseAt)>ZJ_RC_LEASE_MS)zjRcRelease("LEASE_TIMEOUT");
 }
+static FlightReceiverSnapshot zjRcReceiver(){
+ FlightReceiverSnapshot frame;
+ frame.generation=zjRcGeneration;frame.accepted=zjRcAccepted;
+ frame.selected=zjRcOwned&&zjRcSourceAllowed(zjRcSource);
+ frame.valid=frame.selected&&zjRcHasFrame;
+ if(!frame.valid)return frame;
+ frame.sequence=zjRcSeq;frame.receivedAtMs=zjRcReceivedAt;frame.inputArmed=zjRcInputArmed;
+ frame.source=zjRcSource=="PPM"?ZjReceiverSource::PPM:zjRcSource=="ANDROID"?ZjReceiverSource::ANDROID:ZjReceiverSource::WEB;
+ if(frame.source==ZjReceiverSource::PPM){
+  memcpy(frame.channels,zjRcPpmChannels,sizeof(frame.channels));frame.availableMask=0xff;
+ }else{
+  frame.channels[0]=zjRcRoll;frame.channels[1]=zjRcPitch;
+  frame.channels[2]=zjRcThrottle;frame.channels[3]=zjRcYaw;
+  frame.channels[4]=zjRcCh5;frame.channels[5]=zjRcCh6;
+  frame.availableMask=0x0f|(zjRcAuxMask&0x30);
+ }
+ return frame;
+}
+static String zjRcReceiverJson(const FlightReceiverSnapshot& frame){
+ String json=String("{\"sourceId\":")+String(unsigned(frame.source))+",\"sequence\":"+String(frame.sequence)+
+  ",\"receivedAtMs\":"+String(frame.receivedAtMs)+",\"accepted\":"+String(frame.accepted)+
+  ",\"generation\":"+String(frame.generation)+",\"availableMask\":"+String(frame.availableMask)+
+  ",\"valid\":"+(frame.valid?"true":"false")+",\"selected\":"+(frame.selected?"true":"false")+
+  ",\"inputArmed\":"+(frame.inputArmed?"true":"false")+",\"channels\":[";
+ for(unsigned n=0;n<8;n++){
+  if(n)json+=',';
+  if(frame.availableMask&(1u<<n))json+=String(frame.channels[n]);
+  else json+="null";
+ }
+ return json+"]}";
+}
 static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
@@ -175,7 +211,7 @@ static String zjRcState(){
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+
   ",\"yaw\":"+String(zjRcYaw)+",\"accepted\":"+String(zjRcAccepted)+
-  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+" ,\"channels\":"+zjPpmRcChannelsJson()+"}";
+  ",\"rejected\":"+String(zjRcRejected)+",\"lastReleaseReason\":"+String("\"")+zjRcLastReleaseReason+"\""+",\"lastReleaseAtMs\":"+String(zjRcLastReleaseAt)+",\"inputArmed\":"+(zjRcInputArmed?"true":"false")+" ,\"channels\":"+zjPpmRcChannelsJson()+",\"receiver\":"+zjRcReceiverJson(zjRcReceiver())+"}";
 }
 // USB physical possession is required to provision a classroom kit.
 // The 6-digit code is public identification; credentials are never echoed.
@@ -323,7 +359,7 @@ static bool zjRcSerialCommand(char* line){
      !parseNumber(rText,1000,2000,r)||!parseNumber(pText,1000,2000,p)||
      !parseNumber(yText,1000,2000,y)||(ch5Text&&!parseNumber(ch5Text,1000,2000,ch5))||
      (ch6Text&&!parseNumber(ch6Text,1000,2000,ch6))||bool(ch5Text)!=bool(ch6Text)||
-     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),source,"",false,IPAddress(),false,int(ch5),int(ch6)))
+     !zjRcFrame(uint32_t(seq),int(t),int(r),int(p),int(y),source,"",false,IPAddress(),false,int(ch5),int(ch6),ch5Text?0x30:0))
    Serial.println("ZJRC,ERR,FRAME_REJECTED");
   return true;
  }

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "publishedVersion": "1.7.14",
+  "publishedSourceCommit": "0fac19251dd482e7e0c5197bd0908fc8e8c60a97",
+  "publishedBuildReportSha256": "1cda1ad32b1737501a684b8a5ba757821ec042c9b72057f6dffd0860e4d9bd8b",
+  "candidateVersion": "1.7.15",
+  "reason": "Physical acceptance pending"
+}

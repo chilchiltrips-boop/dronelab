@@ -1,5 +1,7 @@
 #include "../FlightCore_Firmware/FlightCoreTiming.h"
 #include "../FlightCore_Firmware/FlightCoreEscProfile.h"
+#include "../FlightCore_Firmware/FlightCoreFlightOutput.h"
+#include "../FlightCore_Firmware/FlightCorePpmFallback.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -21,6 +23,34 @@ int main(){
  assert(!c.healthy(24501));assert(c.begin(24501));c.finish(24520);
  assert(c.missedTicks==3&&c.jitterUs==501&&c.maxJitterUs==12000);
  assert(!c.begin(24521));assert(c.ticks==3);
+ // An isolated 120.6 ms interval drops ticks and revokes a mocked flight owner.
+ c.start(0);assert(c.begin(4000));c.finish(4020);
+ ZjFlightConditions flight;
+ flight.input.source=ZjReceiverSource::PPM;
+ flight.input.availableMask=0xff;flight.input.valid=flight.input.selected=flight.input.inputArmed=true;
+ flight.input.sequence=1;flight.input.generation=1;flight.input.receivedAtMs=1;
+ flight.nowMs=2;flight.inputDeadlineMs=150;
+ flight.acro=flight.imuFresh=flight.timingHealthy=flight.outputOffAck=true;
+ ZjFlightOutputGate gate;
+ assert(!gate.arm(flight,ZJ_FLIGHT_HARDWARE_QUALIFIED,true));
+ assert(!gate.arm(flight,true,false)&&gate.reason==ZjFlightFault::EXPLICIT_ARM_REQUIRED);
+ flight.benchActive=true;assert(!gate.arm(flight,true,true));
+ flight.benchActive=false;assert(gate.arm(flight,true,true)&&gate.permit(flight,true));
+ assert(c.begin(124600)&&c.intervalUs==120600&&c.missedTicks==29);
+ flight.timingHealthy=false;
+ assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::DEADLINE_MISSED);
+ assert(gate.state==ZjFlightState::FAILSAFE);
+ flight.timingHealthy=true;assert(!gate.permit(flight,true));
+ assert(gate.arm(flight,true,true));
+ ++flight.input.generation;assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::SOURCE_CHANGED);
+ assert(gate.arm(flight,true,true));flight.imuFresh=false;
+ assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::IMU_STALE);
+ assert(zjDecidePpmFallback(349,false,true,true,false)==ZjPpmFallbackDecision::WAIT);
+ assert(zjDecidePpmFallback(349,true,true,true,false)==ZjPpmFallbackDecision::CANCEL);
+ assert(zjDecidePpmFallback(350,false,true,true,false)==ZjPpmFallbackDecision::START_AP);
+ assert(zjDecidePpmFallback(4999,false,true,false,false)==ZjPpmFallbackDecision::WAIT);
+ assert(zjDecidePpmFallback(5000,false,true,false,false)==ZjPpmFallbackDecision::BLOCKED);
+ assert(zjDecidePpmFallback(5000,false,false,true,false)==ZjPpmFallbackDecision::CANCEL);
  // Unsigned microsecond rollover is crossed by scheduler, sensors and rates.
  const uint32_t at=0xfffff000U;c.start(at);
  for(uint32_t i=1;i<=500;i++){assert(c.begin(uint32_t(at+i*4000)));c.finish(uint32_t(at+i*4000+10));}

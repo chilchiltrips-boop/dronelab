@@ -21,7 +21,7 @@ The 1.5.5 / 1.8.7 release separates authenticated RX and APPLIED feedback, retai
 
 ## A2 Rate PID
 
-The existing PID Tuning panel and Python Lab share the verified A2 settings. Use USB teacher admin or an authorized direct AP/STA Kit connection for saves. Read the FC revision before editing or saving. A successful save requires a separate readback of all nine gains. See [Rate PID settings and timing](docs/A2_RATE_PID.md).
+The existing PID Tuning panel and Python Lab share the verified A2 settings. Use USB teacher admin or an authorized direct AP/STA Kit connection for saves. Read the FC revision before editing or saving. A successful save requires a separate readback of all nine gains. See [Rate PID settings and timing](docs/A2_RATE_PID.md). The [A2 qualification checklist](docs/A2_FLIGHT_QUALIFICATION.md) tracks firmware candidates, release hold, receiver monitoring and propeller-free verification.
 
 ## UDP management and IMU
 
@@ -82,7 +82,7 @@ For first installation use the matching board-specific Factory image at `0x0`; A
 
 Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, handset installation, USB flashes and campus Wi-Fi require device verification.
 
-Android updates preserve `in.zebjus.dronelab.companion` and the pinned signing certificate. The Android source candidate is **1.7.16-release-gate**, versionCode **32**, while the published APK's actual version must be read from `mobile-apk/ANDROID_RELEASE_META.txt` and `SHA256SUMS.txt` before testing or installing. Promotion must pass signed APK identity, versionCode monotonicity, native emulator gates and separate real-phone acceptance. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the six mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
+Android updates preserve `in.zebjus.dronelab.companion` and the pinned signing certificate. The Android source version and versionCode are in `mobile-android/app/build.gradle`. Check `mobile-apk/ANDROID_RELEASE_META.txt` and `SHA256SUMS.txt` for the installed package candidate or published APK. Promotion must pass signed APK identity, versionCode monotonicity, native emulator gates and separate real-phone acceptance. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the six mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
 
 ## Historical Python Lab toolbar work (WebApp 1.4.6)
 

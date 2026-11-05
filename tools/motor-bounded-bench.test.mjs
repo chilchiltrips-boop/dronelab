@@ -22,7 +22,8 @@ static void zjAutoEscTick(uint32_t){assert(false);}
 using portMUX_TYPE=int;using esp_timer_handle_t=void*;using ledc_channel_t=int;
 #define portMUX_INITIALIZER_UNLOCKED 0
 static void portENTER_CRITICAL(int*){}static void portEXIT_CRITICAL(int*){}
-static uint32_t clockMs=0;static uint32_t millis(){return clockMs;}
+static uint32_t clockMs=0,zjMotorUpdateMaxUs=0;static uint32_t millis(){return clockMs;}
+static uint32_t micros(){return clockMs*1000;}
 constexpr int LEDC_LOW_SPEED_MODE=0,ESP_OK=0;
 static uint32_t duties[4];
 static int ledc_stop(int,int channel,int){duties[channel]=0;return 0;}

@@ -1,3 +1,24 @@
+const receiverSources=['NONE','PPM','ANDROID','WEB'];
+const uint32=n=>Number.isInteger(n)&&n>=0&&n<=0xffffffff;
+export const isOlderReceiverCounter=(value,previous)=>uint32(value)&&uint32(previous)&&((value-previous)|0)<0;
+
+export function parseReceiverSnapshot(rc){
+ const frame=rc?.receiver;
+ if(!frame||receiverSources[frame.sourceId]===undefined||
+   !['sequence','receivedAtMs','accepted','generation'].every(key=>uint32(frame[key]))||
+   !Number.isInteger(frame.availableMask)||frame.availableMask<0||frame.availableMask>255||
+   !['valid','selected','inputArmed'].every(key=>typeof frame[key]==='boolean')||
+   !Array.isArray(frame.channels)||frame.channels.length!==8||
+   !frame.channels.every((v,i)=>frame.availableMask&(1<<i)?Number.isInteger(v)&&v>=1000&&v<=2000:v===null))return null;
+ if(frame.accepted!==rc.accepted)return null;
+ if(frame.valid){
+  if(!frame.selected||receiverSources[frame.sourceId]!==rc.source||frame.sequence!==rc.seq||
+    (frame.availableMask&15)!==15||frame.channels[0]!==rc.roll||frame.channels[1]!==rc.pitch||
+    frame.channels[2]!==rc.throttle||frame.channels[3]!==rc.yaw)return null;
+ }else if(frame.sourceId!==0||frame.availableMask!==0||frame.inputArmed)return null;
+ return frame;
+}
+
 // Read-only display observations. These limits never authorize motor output
 // or renew the firmware/RC/simulator input freshness deadlines.
 export const PPM_OBSERVATION_MS=3500;
@@ -48,6 +69,7 @@ export function setupMonitorSample(state,observedAt,kit={},at=Date.now()){
   source:physical?'PPM · receiver monitor':strict.source,
   observationAgeMs:elapsed,captureHz:known?receiver.ppm.captureHz:null,
   receiver:known?receiver.ppm:null,receiverObservedAt:known?receiver.at:0,
+  monitorDelayed:reported&&elapsed>=1000,
   receiverHealth:describePpmMonitorHealth({...kit,ppm:known?receiver.ppm:null,ppmObservedAt:known?receiver.at:0},
    {source:ppmSelected?'PPM':s.inputSource,state:'stale'},{now:at,monitorOnly:true})};
 }

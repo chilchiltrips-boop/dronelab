@@ -29,6 +29,16 @@ static uint32_t micros(){return clockMs*1000UL;}
 #endif
 static uint32_t esp_random(){return ++randomValue;}
 struct {uint64_t getEfuseMac(){return 0x123456abcdefULL;}} ESP;
-struct {int availableForWrite(){return 512;}template<class... T>void print(T...){}template<class... T>void println(T...){}template<class... T>void printf(T...){} } Serial;
+struct {
+ bool capture=false;std::string output;
+ int availableForWrite(){return 512;}
+ template<class T>void print(const T& value){if(capture)output+=String(value).c_str();}
+ void println(){if(capture)output+='\n';}
+ template<class T>void println(const T& value){print(value);println();}
+ template<class... T>void printf(const char* format,T... values){
+  if(!capture)return;
+  char buffer[512];std::snprintf(buffer,sizeof(buffer),format,values...);output+=buffer;
+ }
+} Serial;
 const char* FC_BOARD="ZFC-A1",*FC_LABEL="TEST KIT";
 static bool parseNumber(const char* s,long lo,long hi,long& n){if(!s||!*s)return false;char* end;n=strtol(s,&end,10);return !*end&&n>=lo&&n<=hi;}

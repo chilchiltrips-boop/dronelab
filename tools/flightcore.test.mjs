@@ -15,7 +15,7 @@ test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
  assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','ZJSCAN,','scanAddress<127','Wire.endTransmission()','if(!scanRequested)return;','scanAddresses[scanCount++]'])assert.ok(sketch.includes(token),token);
- for(const token of ['AsyncWebServer','ESPAsyncWebServer','motor','FlightControl'])assert.ok(!sketch.includes(token),token);
+ for(const token of ['AsyncWebServer','ESPAsyncWebServer','ledc_set_duty','ledc_update_duty','FlightControl'])assert.ok(!sketch.includes(token),token);
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
 });
 test('Board-specific gyro never replaces the I2C scanner or LED protocol',()=>{

@@ -93,6 +93,21 @@ test('fresh owner resets are accepted; delayed snapshots from the previous owner
  const p=packet();const d=normalizeAcceptedInput(p.kit,{kitId,at:Date.now(),rc:{...rc,ownerId:'new-owner',accepted:901}});
  assert.equal(d.ownerId,'new-owner');
 });
+test('confirmed receiver loss outranks a delayed old-owner frame; a fresh generation recovers',()=>{
+ const active={...rc,source:'PPM',active:true,seq:2,accepted:15};
+ active.receiver={sourceId:1,sequence:2,receivedAtMs:1000,accepted:15,generation:3,
+  availableMask:15,valid:true,selected:true,inputArmed:false,
+  channels:[active.roll,active.pitch,active.throttle,active.yaw,null,null,null,null]};
+ const loss={...active,source:'NONE',active:false,receiver:{...active.receiver,sourceId:0,sequence:0,
+  receivedAtMs:0,generation:4,availableMask:0,valid:false,selected:false,channels:Array(8).fill(null)}};
+ assert.equal(isOlderAcceptedInput(loss,active),true);
+ assert.equal(isOlderAcceptedInput(active,loss),false);
+ const recovery={...active,seq:1,accepted:16,receiver:{...active.receiver,sequence:1,generation:4,accepted:16,receivedAtMs:1250}};
+ assert.equal(isOlderAcceptedInput(loss,recovery),false);
+ const view=normalizeAcceptedInput(packet().kit,{kitId,at:Date.now(),rc:recovery});
+ assert.deepEqual(view.receiverChannels.slice(4),[null,null,null,null]);
+});
+
 test('rapid re-arm and compact USB sequence resets never lock the simulator onto an old owner',()=>{
  const store=createInputStore(),s=createSimulator(),input=createSimulatorInput(s,store);const p=packet(900);
  p.input.ownerId='old-owner';p.input.accepted=900;assert.equal(store.acceptKit(p),true);input.start();

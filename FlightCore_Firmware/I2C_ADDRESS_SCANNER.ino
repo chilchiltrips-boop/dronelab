@@ -9,7 +9,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.14";
+constexpr const char* FW_VERSION="1.7.15";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -263,6 +263,14 @@ static String zjControlTimingStatus(){
   ",\"controlMissedTicks\":"+String(c.missedTicks)+",\"controlDeadlineMisses\":"+String(c.deadlineMisses)+",\"controlOverruns\":"+String(c.overruns)+
   ",\"controlLastTickUs\":"+(c.ticks?String(c.lastSuccessfulUs):String("null"))+
   ",\"controlMaxIntervalPhase\":\""+shadow.maxIntervalPhase+"\",\"ratePidComputeMaxUs\":"+String(shadow.computeMaxUs)+
+  ",\"controlMeasuredHz\":"+(c.rate.known?String(c.rate.actual(now),2):String("null"))+
+  ",\"controlDtUs\":"+String(c.intervalUs)+",\"controlMaxDtUs\":"+String(c.maxIntervalUs)+
+  ",\"controlStartupMaxDtUs\":"+String(shadow.phaseMaxUs[0])+",\"controlCalibrationMaxDtUs\":"+String(shadow.phaseMaxUs[1])+
+  ",\"controlDisarmedMaxDtUs\":"+String(shadow.phaseMaxUs[2])+",\"controlDiagnosticMaxDtUs\":"+String(shadow.phaseMaxUs[3])+
+  ",\"imuReadMaxUs\":"+String(shadow.imuReadMaxUs)+",\"pidComputeMaxUs\":"+String(shadow.computeMaxUs)+
+  ",\"motorUpdateMaxUs\":"+String(zjMotorUpdateMaxUs)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
+  ",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
+  ",\"flightDeadlineFault\":"+(shadow.deadlineFault?"true":"false")+
   ",\"controlMaxIntervalAtUs\":"+String(c.maxIntervalAtUs)+",\"ratePidShadowState\":\""+shadow.reason+
   "\",\"ratePidShadowRevision\":"+String(shadow.revision)+",\"ratePidShadowSaturated\":"+(shadow.mix.saturated?"true":"false");
 }
@@ -479,10 +487,7 @@ void loop(){
   emitImuDiagnostics(now);
  zjNetworkLoop(now);
  zjRcLoop(now);
- // Retain the selected UDP frame's receive time, not its later apply time.
- uint32_t shadowInputAt=zjRcLast;
- if(zjRcUdpOwned){portENTER_CRITICAL(&zjUdpMux);shadowInputAt=zjUdpLastAppliedReceivedAt;portEXIT_CRITICAL(&zjUdpMux);}
- zjPublishControlInput(shadowInputAt);
+ zjPublishControlInput();
  emitTimingDiagnostics(millis());
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;

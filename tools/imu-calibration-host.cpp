@@ -1,6 +1,7 @@
 #define ZJ_SHIM_EXTERNAL_MICROS
 #define ZJ_TIMING_SYNCHRONOUS_TEST
 #include "host-stubs/ArduinoShim.h"
+#include "../FlightCore_Firmware/FlightCoreMotorStatus.h"
 #include <cassert>
 #include <cmath>
 #include <array>

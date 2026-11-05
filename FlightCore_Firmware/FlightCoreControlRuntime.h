@@ -1,13 +1,16 @@
 #pragma once
 #include "FlightCoreTiming.h"
 #include "FlightCoreRatePid.h"
+#include "FlightCoreFlightOutput.h"
 static ZjImuAcquisition zjImuDriver;
 static ZjControlScheduler zjControl;
-static ZjControlInputSnapshot zjControlInput,zjControlConsumedInput;
-static ZjSampleStamp zjControlConsumedImu;
+static FlightReceiverSnapshot zjControlInput;
+
 static bool zjControlRuntimeReady=false;
 struct ZjRateShadowResult {
- uint32_t revision=0,computeMaxUs=0;
+ uint32_t revision=0,computeMaxUs=0,imuReadMaxUs=0,imuSampleAgeUs=0;
+ uint32_t phaseMaxUs[4]={};
+ bool deadlineFault=false,outputAuthorized=false;
  const char* maxIntervalPhase="STARTUP";
  const char* reason="DISARMED";
  ZjRateMix mix;
@@ -20,7 +23,8 @@ static SemaphoreHandle_t zjI2cMutex=nullptr;
 static portMUX_TYPE zjTimingMux=portMUX_INITIALIZER_UNLOCKED;
 static ZjImuAcquisition zjImuMailbox;
 static ZjRateGains zjShadowGains[3];
-static uint32_t zjShadowRevision=0,zjShadowReleasedAt=0;
+static uint32_t zjShadowRevision=0,zjFlightRevokeEpoch=0;
+static ZjFlightOutputGate zjFlightOutputGate;
 static bool zjShadowRequested=false;
 static ZjAccelModel zjSavedAccelModel;
 static ZjImuAction zjPendingImuAction=ZjImuAction::NONE;
@@ -74,47 +78,63 @@ static void zjImuTask(void*){
   portEXIT_CRITICAL(&zjTimingMux);
  }
 }
+static void zjControlRevoke(const char* reason){
+ portENTER_CRITICAL(&zjTimingMux);
+ ++zjFlightRevokeEpoch;
+ zjFlightOutputGate.revoke(!strcmp(reason,"EMERGENCY_STOP")?ZjFlightFault::EMERGENCY_STOP:ZjFlightFault::SOURCE_CHANGED);
+ zjControlInput={};zjShadowRequested=false;
+ portEXIT_CRITICAL(&zjTimingMux);
+}
 static void zjControlTask(void*){
- ZjControlScheduler control;control.start(micros());
+ const uint32_t started=micros();
+ ZjControlScheduler control;control.start(started);
  ZjRatePidState pid[3]={};
  ZjRateShadowResult previous;
- uint32_t lastRelease=0;
- uint8_t lastSource=0;
+ uint32_t lastEpoch=0,lastGeneration=0;
+ ZjReceiverSource lastSource=ZjReceiverSource::NONE;
  for(;;){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
-  const auto previousWorst=control.maxIntervalUs;
+  const auto previousWorst=control.maxIntervalUs,previousMissed=control.missedTicks;
   if(!control.begin(micros()))continue;
   ZjRateGains gains[3];
   float rates[3];
   bool requested,imuReady;
-  uint32_t release;
+  uint32_t epoch;
   ZjRateShadowResult next;
+  ZjSampleStamp imuSample;
+  ZjFlightConditions conditions;
   portENTER_CRITICAL(&zjTimingMux);
-  zjControlConsumedImu=zjImuMailbox.sample;
-  zjControlConsumedInput=zjControlInput;
+  imuSample=zjImuMailbox.sample;conditions.input=zjControlInput;
   rates[0]=zjImuMailbox.RateRoll;rates[1]=zjImuMailbox.RatePitch;rates[2]=zjImuMailbox.RateYaw;
-  imuReady=zjImuMailbox.gyroReady;
+  imuReady=zjImuMailbox.gyroReady;next.imuReadMaxUs=zjImuMailbox.gyroMaxReadUs;
   for(unsigned i=0;i<3;i++)gains[i]=zjShadowGains[i];
-  requested=zjShadowRequested;release=zjShadowReleasedAt;next.revision=zjShadowRevision;
+  requested=zjShadowRequested;epoch=zjFlightRevokeEpoch;next.revision=zjShadowRevision;
   portEXIT_CRITICAL(&zjTimingMux);
-  const auto& input=zjControlConsumedInput;
-  const bool fresh=input.valid&&uint32_t(millis()-input.receivedMs)<=(input.source==1?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS);
-  const bool imuFresh=imuReady&&zjControlConsumedImu.fresh(micros(),12000);
-  next.maxIntervalPhase=previous.maxIntervalPhase;
+  const auto& input=conditions.input;
+  conditions.nowMs=millis();
+  conditions.inputDeadlineMs=input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
+  conditions.acro=requested;
+  const uint32_t at=micros();
+  next.imuSampleAgeUs=imuSample.valid?imuSample.ageUs(at):UINT32_MAX;
+  conditions.imuFresh=imuReady&&imuSample.fresh(at,12000);
+  conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000&&control.missedTicks==previousMissed;
+  const unsigned phase=uint32_t(at-started)<1000000?0:!imuReady?1:requested?3:2;
+  const char* const labels[]={"STARTUP","IMU_CALIBRATION","DISARMED","RC_DIAGNOSTIC"};
+  next.maxIntervalPhase=control.maxIntervalUs>previousWorst?labels[phase]:previous.maxIntervalPhase;
+  for(unsigned i=0;i<4;i++)next.phaseMaxUs[i]=previous.phaseMaxUs[i];
+  next.phaseMaxUs[phase]=std::max(next.phaseMaxUs[phase],control.intervalUs);
   next.computeMaxUs=previous.computeMaxUs;
-  if(control.maxIntervalUs>previousWorst)next.maxIntervalPhase=control.ticks<=250?"STARTUP":
-   !imuReady?"IMU_CALIBRATION":requested?"RC_DIAGNOSTIC":"DISARMED";
   if(requested){
-   if(!fresh)next.reason="INPUT_STALE";
-   else if(!imuFresh)next.reason="IMU_STALE";
-   else if(control.intervalUs<1000||control.intervalUs>8000)next.reason="TIMING_FAULT";
+   if(!input.fresh(conditions.nowMs,conditions.inputDeadlineMs))next.reason="INPUT_STALE";
+   else if(!conditions.imuFresh)next.reason="IMU_STALE";
+   else if(!conditions.timingHealthy){next.reason="TIMING_FAULT";next.deadlineFault=true;}
    else{
-    if(lastRelease!=release||lastSource!=input.source||previous.revision!=next.revision){
+    if(lastEpoch!=epoch||lastGeneration!=input.generation||lastSource!=input.source||previous.revision!=next.revision){
      for(auto& axis:pid)axis={};
      previous.mix={};
     }
     const uint32_t computeStarted=micros();
-    const uint16_t commands[]={input.roll,input.pitch,input.yaw};
+    const uint16_t commands[]={input.channels[0],input.channels[1],input.channels[3]};
     ZjRatePidResult correction[3];
     bool valid=true;
     for(unsigned i=0;i<3;i++){
@@ -124,15 +144,26 @@ static void zjControlTask(void*){
     }
     if(valid){
      next.reason="READY";
-     next.mix=zjRateMixQuadX(input.throttle,correction[0].output,correction[1].output,correction[2].output);
+     next.mix=zjRateMixQuadX(input.channels[2],correction[0].output,correction[1].output,correction[2].output);
     }else next.reason="PID_INVALID";
     next.computeMaxUs=std::max(next.computeMaxUs,uint32_t(micros()-computeStarted));
    }
   }
-  if(!next.mix.pulse[0])for(auto& axis:pid)axis={};
-  lastRelease=release;lastSource=input.source;previous=next;
+  const auto deadlines=control.deadlineMisses;
   control.finish(micros());
-  portENTER_CRITICAL(&zjTimingMux);zjControl=control;zjRateShadow=next;portEXIT_CRITICAL(&zjTimingMux);
+  if(requested&&control.deadlineMisses!=deadlines){
+   conditions.timingHealthy=false;next.deadlineFault=true;next.reason="TIMING_FAULT";next.mix={};
+  }
+  portENTER_CRITICAL(&zjTimingMux);
+  if(epoch!=zjFlightRevokeEpoch){next.reason="DISARMED";next.mix={};}
+  if(next.deadlineFault)zjFlightOutputGate.revoke(ZjFlightFault::DEADLINE_MISSED);
+  // Qualification is locked out and no command reaches the actuator driver.
+  // The same independent gate is exercised with a mock actuator on the host.
+  next.outputAuthorized=zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED)&&next.mix.pulse[0]!=0;
+  zjControl=control;zjRateShadow=next;
+  portEXIT_CRITICAL(&zjTimingMux);
+  if(!next.mix.pulse[0])for(auto& axis:pid)axis={};
+  lastEpoch=epoch;lastGeneration=input.generation;lastSource=input.source;previous=next;
  }
 }
 static ZjRateShadowResult zjReadRateShadow(){
@@ -156,6 +187,7 @@ static void zjControlRuntimeSetup(){
  if(ok)ok=esp_timer_start_periodic(zjControlTimer,4000)==ESP_OK;
  if(ok)ok=esp_timer_start_periodic(zjImuTimer,1000)==ESP_OK;
  zjControlRuntimeReady=ok;
+ if(ok)zjFlightRevokeHandler=zjControlRevoke;
  if(!ok){
   if(zjControlTimer){esp_timer_stop(zjControlTimer);esp_timer_delete(zjControlTimer);zjControlTimer=nullptr;}
   if(zjImuTimer){esp_timer_stop(zjImuTimer);esp_timer_delete(zjImuTimer);zjImuTimer=nullptr;}
@@ -164,15 +196,12 @@ static void zjControlRuntimeSetup(){
   // No fallback claims 250Hz. Existing bench authorization remains separate.
  }
 }
-static void zjPublishControlInput(uint32_t receivedMs){
- ZjControlInputSnapshot value;value.sequence=zjRcSeq;value.receivedMs=receivedMs;value.observedUs=micros();
- value.valid=zjRcOwned&&zjRcHasFrame&&uint32_t(millis()-receivedMs)<=ZJ_RC_DEADMAN_MS;
- value.throttle=zjRcThrottle;value.roll=zjRcRoll;value.pitch=zjRcPitch;value.yaw=zjRcYaw;
- value.source=zjRcSource=="PPM"?1:zjRcSource=="ANDROID"?2:zjRcSource=="WEB"?3:0;
- const bool requested=zjFlightMode=="acro"&&zjRcInputArmed&&!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed;
+static void zjPublishControlInput(){
+ const auto value=zjRcReceiver();
+ const bool requested=zjFlightMode=="acro"&&value.inputArmed&&!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed;
  const ZjRateGains gains[]={zjPidSettings.axis(0),zjPidSettings.axis(1),zjPidSettings.axis(2)};
  portENTER_CRITICAL(&zjTimingMux);
- zjControlInput=value;zjShadowRequested=requested;zjShadowRevision=zjPidSettings.revision;zjShadowReleasedAt=zjRcLastReleaseAt;
+ zjControlInput=value;zjShadowRequested=requested;zjShadowRevision=zjPidSettings.revision;
  for(unsigned i=0;i<3;i++)zjShadowGains[i]=gains[i];
  portEXIT_CRITICAL(&zjTimingMux);
 }
@@ -186,5 +215,5 @@ static ZjRateShadowResult zjReadRateShadow(){return zjRateShadow;}
 static ZjControlScheduler zjReadControl(){return zjControl;}
 static ZjImuAcquisition zjReadImu(uint32_t now){zjImuDriver.updateGyro(now);return zjImuDriver;}
 static void zjControlRuntimeSetup(){zjImuDriver.lastGyroProbe=millis()-2500;}
-static void zjPublishControlInput(uint32_t receivedMs){}
+static void zjPublishControlInput(){}
 #endif
