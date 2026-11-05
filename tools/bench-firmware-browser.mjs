@@ -61,6 +61,10 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true}})));
  await showing('fwFileVersion',published.version);
  await page.evaluate(()=>{window.ZebjusKits.getState=window.restoreBenchKit;});
+ // Re-select the offline A2 board: without a connected Kit, Auto detection
+ // intentionally falls back to the published A1 default rather than guessing.
+ await field('fwBoardProfile').selectOption('ZFC-A2');
+ await showing('fwFileVersion',version);
  await field('fwAutoLoadBtn').click();
  await showing('fwFileVersion',version);
  await field('fwFileInput').setInputFiles(`${folder}/${release.app.file}`);
