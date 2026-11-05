@@ -101,6 +101,10 @@ try{
  await page.evaluate(()=>{pidFixture.kit.connected=false;window.dispatchEvent(new Event('dronelab:kit-link'));});
  await frame.locator('#tpPidTarget').filter({hasText:'SIMULATOR'}).waitFor();
  assert.equal(await gain('rateRoll').inputValue(),'1.55');
+ await page.evaluate(()=>{Object.assign(pidFixture.kit,{connected:true,board:'ZFC-A1',kitId:'ZFC-A1-012345ABCDEF'});window.dispatchEvent(new Event('dronelab:kit-link'));});
+ await status.filter({hasText:'FC PID unavailable on this Kit'}).waitFor();
+ assert.equal(await gain('rateRoll').isEditable(),true);
+ assert.equal(await save.isVisible(),false);
  await page.setViewportSize({width:320,height:740});
  assert.equal(await frame.locator('#tpPidKitActions').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
  assert.deepEqual(errors,[]);

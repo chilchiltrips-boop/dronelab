@@ -19,7 +19,7 @@
 
 The 1.5.5 / 1.8.7 release separates authenticated RX and APPLIED feedback, retains early input until the next 20 ms apply tick, and reports receive/apply ages and reason-based NACKs. The 350 ms watchdogs, exclusive owner, independent UDP receiver and latest-frame-only sender remain enforced. See [protocol, regressions and upgrade notes](docs/UDP_RX_APPLIED_1_5_5.md).
 
-## A2 Rate PID
+## A2 PID profiles and tuning
 
 The existing PID Tuning panel and Python Lab share the verified A2 settings. FlightCore 1.7.16 candidates support Rate and Angle gains, disarmed RAM preview and Aerof450 Quad X / Quad + profiles in Setup Wizard. Use USB teacher admin or an authorized direct AP/STA Kit connection. A save is confirmed by independent FC readback. See [Rate PID settings and timing](docs/A2_RATE_PID.md). The [A2 qualification checklist](docs/A2_FLIGHT_QUALIFICATION.md) tracks firmware candidates, release hold, receiver monitoring and propeller-free verification.
 

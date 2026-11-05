@@ -1,4 +1,4 @@
-import {createPidClient,encodePidGains,PID_CHANGED} from './flightcore-pid-client.js';
+import {createPidClient,encodePidGains,pidFirmwareSupported,PID_CHANGED} from './flightcore-pid-client.js';
 import {RATE_BANKS} from './rate-pid.js';
 import {getPidProfile,PID_BANKS} from './pid-profiles.js';
 import * as THREE from '../three.module.min.js';
@@ -349,8 +349,8 @@ function initKitPid(host){
  ]));
  let simGains=DEFAULT_PID,simDraft=null,verified=null,busy=false,refreshPending=false,message='',operation=0,binding='';
  const kitState=()=>kitApi.getState()||{};
- const supported=kit=>kit.connected&&kit.board==='ZFC-A2'&&['usb','ap','sta'].includes(kit.transport);
- const link=kit=>kit.connected?[kit.kitId,kit.transport,kit.bootId,kit.connectionGeneration].join('|'):'';
+ const supported=kit=>kit.connected&&kit.board==='ZFC-A2'&&['usb','ap','sta'].includes(kit.transport)&&pidFirmwareSupported(kit.version);
+ const link=kit=>supported(kit)?[kit.kitId,kit.transport,kit.bootId,kit.connectionGeneration].join('|'):'';
  const supportsBoth=()=>verified?.schemaVersion===2;
  const profileMatches=()=>!supportsBoth()||getPidProfile(verified.active.profile)?.layout===verified.wiredLayout;
  const banks=()=>binding&&!supportsBoth()?RATE_BANKS:PID_BANKS;
@@ -388,7 +388,7 @@ function initKitPid(host){
     verified.storageState==='RECOVERED'?'Recovered saved backup':verified.persisted?'Stored on FC':'Defaults',diagnostic,
     !match?'Load a matching profile in Setup Wizard':!authorized?'Read-only · authorize this Kit':''].filter(Boolean).join(' · '):
    supported(kit)?'Read the selected FC to verify PID settings.':'PID settings require a verified A2 Kit over USB, AP or STA.':
-   'Simulator gains · Rate and Angle';
+   'Simulator gains · Rate and Angle'+(kit.connected?' · FC PID unavailable on this Kit or transport':'');
   status.textContent=message?base+' · '+message:base;
  }
  function accept(record){
