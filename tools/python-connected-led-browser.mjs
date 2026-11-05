@@ -48,6 +48,7 @@ try{
   },{board,transport});
   await page.waitForFunction(t=>document.getElementById('pythonTarget').value===t,transport);
   await page.locator('#pythonQuickHardware').selectOption('led');
+  if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
   await page.locator('#runPythonBtn').click();
   await page.waitForFunction(()=>window.__connectedLed.commands.some(c=>c.line.endsWith('SET,100'))&&window.__connectedLed.commands.some(c=>c.line.endsWith('SET,0')),null,{timeout:90000});
   assert.equal(await page.locator('#pyLedHealth').getAttribute('data-state'),'healthy');

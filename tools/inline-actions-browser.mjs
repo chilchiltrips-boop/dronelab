@@ -126,5 +126,21 @@ try{
  assert.equal(await connection.isVisible(),false,'Escape restores the controller too');
  assert.equal(await page.locator('#flightCockpit').isVisible(),true);
  assert.deepEqual(native,[]);assert.deepEqual(errors,[]);
+ // Standalone pairing stays in the simulator page. Hiding/revealing the live
+ // canvas at Close must not stall input delivery or recreate its scene.
+ await page.setViewportSize({width:1366,height:900});
+ await page.goto('http://127.0.0.1:8765/tripod.html?standalone=1');
+ await page.waitForFunction(()=>window.ZebjusTraining?.isReady?.());
+ await page.evaluate(()=>{window.__inlineCanvas=document.querySelector('#tpStage canvas');});
+ await page.locator('#topPairMobileBtn').click();
+ assert.equal(await page.locator('#connectionDialog').evaluate(node=>getComputedStyle(node).position),'static');
+ assert.equal(await page.locator('.tp-shell').isVisible(),true);
+ assert.equal(await page.locator('#connectionStop').isVisible(),true);
+ await page.locator('#connectionClose').click();
+ assert.equal(await page.locator('#connectionDialog').isVisible(),false);
+ assert.equal(await page.evaluate(()=>document.querySelector('#tpStage canvas')===__inlineCanvas),true,'closing pairing retains the canvas');
+ await page.locator('#topPairMobileBtn').click();await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#connectionDialog').isVisible(),false);
+ assert.deepEqual(native,[]);assert.deepEqual(errors,[]);
  console.log('PASS simulated inline confirm/prompt validation, cancel/STOP/context revocation, mobile connection page and Back/Escape restoration; no native dialogs');
 }finally{await browser.close();}
