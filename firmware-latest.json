@@ -1,8 +1,11 @@
 {
   "schema": 2,
   "product": "ZEBJUS_FLIGHTCORE",
-  "version": "1.7.14",
-  "builtAt": "2026-11-05T07:15:12Z",
+  "version": "1.7.15",
+  "builtAt": "2026-11-05T10:43:34Z",
   "catalog": "firmware-catalog.json",
-  "note": "Board-aware firmware catalog. Build automation marks each verified package available after compilation."
+  "note": "BENCH DIAGNOSTIC ONLY; physical flight output disabled and acceptance pending.",
+  "releaseScope": "BENCH_DIAGNOSTIC",
+  "flightOutputQualified": false,
+  "physicalAcceptance": "NOT_RUN"
 }
