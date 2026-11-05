@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "candidateVersion": "1.7.15",
+  "releaseScope": "BENCH_DIAGNOSTIC",
+  "flightOutputQualified": false,
+  "physicalAcceptance": "NOT_RUN",
+  "note": "Verified software-only diagnostic/ESC bench firmware; physical flight PID actuator remains disabled."
+}
