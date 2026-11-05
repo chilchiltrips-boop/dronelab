@@ -16,6 +16,12 @@ export function createPidClient(kitApi,events,guard){
   const kit=kitApi?.getState?.();
   if(!kit?.connected||!kit.kitId)throw Error('Connect a verified Kit');
   if(kit.board!=='ZFC-A2')throw Error('FC PID UNSUPPORTED • A2 required');
+  const version=String(kit.version||'').match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if(version){
+   const [,major,minor,patch]=version.map(Number);
+   if(major<1||major===1&&(minor<7||minor===7&&patch<14))
+    throw Error('FC PID UNSUPPORTED • update A2 to FlightCore 1.7.14 or newer');
+  }
   if(transport&&transport!==kit.transport)throw Error('Select the same verified Kit transport in Devices');
   if(!['usb','ap','sta'].includes(kit.transport))throw Error('Select direct USB, AP or STA for PID settings');
   return kit;

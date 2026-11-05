@@ -819,7 +819,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=async e=>{const selected=e.target.value;if(!selected)return;if(!await applyExample(selected)){e.target.value='';return;}pythonTargetIntent=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(selected)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
+ $('pythonQuickHardware').onchange=async e=>{const selected=e.target.value;if(!selected)return;if(!await applyExample(selected)){e.target.value='';return;}pythonTargetIntent=['rate_pid','joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(selected)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',()=>{pythonTargetIntent=$('pythonTarget').value==='python'?'isolated':'manual';usbStatus()});$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
