@@ -149,6 +149,7 @@ static ZjRateTraceEvent zjTraceTerminalEvent(ZjFlightFault fault){
 }
 static void zjTraceReceiver(ZjRateTraceSample& trace,const FlightReceiverSnapshot& input,uint32_t nowMs,bool fresh){
  trace.source=input.source;trace.inputSeq=input.sequence;trace.inputAccepted=input.accepted;trace.inputGeneration=input.generation;
+ trace.inputAgeMs=UINT16_MAX;
  if(input.valid){
   std::copy_n(input.channels,4,trace.channels);
   trace.inputAgeMs=std::min(uint32_t(nowMs-input.receivedAtMs),uint32_t(UINT16_MAX-1));
@@ -310,10 +311,12 @@ static void zjControlTask(void*){
   const bool newCapture=preview?next.generation!=recordedPreview:
    inputArmEpoch!=recordedInputArm||(lease&&lease!=recordedFlightLease);
   const bool startCapture=requested&&epoch==zjFlightRevokeEpoch&&newCapture&&!zjFlightTrace.active;
+  uint32_t triggerAt=trace.atUs;
   if(zjFlightTrace.active||startCapture||zjFlightLease){
    const auto driver=zjFlightDriverRead();
    zjTraceDriver(trace,driver);
    next.actuating=driver.owner==ZjOutputOwner::FLIGHT&&driver.appliedKnown&&driver.applied[0];
+   if(lease&&!driver.lease&&driver.fault==fault)triggerAt=driver.faultAtUs;
   }
   if(zjFlightLease)trace.flags|=ZJ_TRACE_FLIGHT_ARMED;
   if(startCapture){
@@ -348,7 +351,7 @@ static void zjControlTask(void*){
      ZjFlightFault::OUTPUT_RESERVED:ZjFlightFault::INPUT_DISARMED;
    }
    if(fault!=ZjFlightFault::NONE){
-    if(zjTracePendingFault==ZjFlightFault::NONE)trace.triggerUs=trace.atUs;
+    if(zjTracePendingFault==ZjFlightFault::NONE)trace.triggerUs=triggerAt;
     zjFlightTrace.freeze(trace,zjTraceTerminalEvent(fault),fault);
    }else zjFlightTrace.observe(trace);
   }

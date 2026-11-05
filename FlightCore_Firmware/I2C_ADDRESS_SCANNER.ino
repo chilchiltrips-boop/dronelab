@@ -5,6 +5,7 @@
 #include <esp_system.h>
 #include "FlightCoreTiming.h"
 #include "FlightCoreEscProfile.h"
+#include "FlightCoreFlightOutput.h"
 static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,

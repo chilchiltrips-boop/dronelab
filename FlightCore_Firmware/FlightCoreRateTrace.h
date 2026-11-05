@@ -15,10 +15,10 @@ struct ZjRateTraceAxis {
 
 struct ZjRateTraceSample {
  uint32_t atUs=0,dtUs=0,triggerUs=0,inputSeq=0,inputAccepted=0,inputGeneration=0;
- uint32_t imuAgeUs=UINT32_MAX,missedTicks=0,revision=0,pidGeneration=0;
+ uint32_t imuAgeUs=0,missedTicks=0,revision=0,pidGeneration=0;
  ZjRateTraceAxis axes[3];
  uint16_t channels[4]={},requested[4]={},applied[4]={};
- uint16_t inputAgeMs=UINT16_MAX,flags=0,throttleUsed=0;
+ uint16_t inputAgeMs=0,flags=0,throttleUsed=0;
  uint8_t profile=0,pidSaturationMask=0,mixClipMask=0;
  ZjReceiverSource source=ZjReceiverSource::NONE;
  ZjOutputOwner owner=ZjOutputOwner::NONE;

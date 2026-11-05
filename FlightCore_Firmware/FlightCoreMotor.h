@@ -45,7 +45,7 @@ static bool zjMotorPwmStopLocked(){
 }
 static void zjFlightDriverStopLocked(ZjFlightFault fault){
  zjFlightDriver={};
- zjFlightDriver.fault=fault;
+ zjFlightDriver.fault=fault;zjFlightDriver.faultAtUs=micros();
  zjFlightDriver.appliedKnown=zjFlightDriver.offAck=zjMotorPwmStopLocked();
 }
 static void zjFlightDriverStop(uint32_t lease,ZjFlightFault fault){

@@ -31,7 +31,7 @@ inline const char* zjFlightFaultName(ZjFlightFault fault){
 enum class ZjOutputOwner : uint8_t {NONE,ESC_CALIBRATION,BENCH,FLIGHT};
 
 struct ZjFlightDriverState {
- uint32_t lease=0;
+ uint32_t lease=0,faultAtUs=0;
  uint16_t applied[4]={};
  ZjOutputOwner owner=ZjOutputOwner::NONE;
  ZjFlightFault fault=ZjFlightFault::NONE;
