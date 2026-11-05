@@ -146,7 +146,7 @@ export function createPythonIDEShell(api){
   pyConnectUsbBtn:['usb-connect','Connect FlightCore A1/A2 via Web Serial at 115200 baud'],
   pythonCameraStart:['camera','Request camera permission and open the live preview'],
   pythonCameraStop:['stop','Stop the camera and release its stream'],
-  pythonOutputOpen:['chart','Open the latest Python Matplotlib plot window'],
+  pythonOutputOpen:['chart','Open the latest Python Matplotlib plot as a full page'],
   clearTerminalBtn:['trash','Clear Run / Terminal output without stopping the script'],
   copyTerminalBtn:['copy','Copy Run / Terminal output to the clipboard'],
  };
@@ -263,52 +263,55 @@ export function createPythonIDEShell(api){
   for(const row of combined)if(!folderChain(parent(row.path)).some(f=>collapsedFolders.has(f)))makeRow(row.path,row.kind);
  }
  function selectedKind(){const implicit=[...api.listFiles(),...assets.keys()].some(p=>p.startsWith(selected+'/'));return folders.has(selected)||implicit?'folder':api.listFiles().includes(selected)?'code':assets.has(selected)?'asset':null}
- function newFolder(){
-  let path=prompt('New folder path (inside the project)',currentFolder?currentFolder+'/images':'images');
-  if(path===null)return;path=cleanPath(path);
-  if(!folderPattern.test(path)||path.length>160)return alert('Use folder names with letters, numbers, _ or -');
+ async function newFolder(){
+  const folder=currentFolder,revision=api.revision?.();
+  let path=await globalThis.AerionDialogs?.prompt('New folder path (inside the project)',currentFolder?currentFolder+'/images':'images',{kitBound:false,label:'Folder path',required:true,maxLength:160,confirmLabel:'Create folder',guard:()=>currentFolder===folder&&api.revision?.()===revision});
+  if(path==null||currentFolder!==folder||api.revision?.()!==revision)return;path=cleanPath(path);
+  if(!folderPattern.test(path)||path.length>160)return notice('Use folder names with letters, numbers, _ or -');
   addFolders(path);selected=path;currentFolder=path;refreshExplorer()
  }
  async function renameSelected(){
-  const kind=selectedKind();if(!kind)return notice('Select a project file or folder first.');
-  let next=prompt('Rename / move project path',selected);if(next===null)return;next=cleanPath(next);
-  if(next===selected)return;
+  const kind=selectedKind(),target=selected,revision=api.revision?.();if(!kind)return notice('Select a project file or folder first.');
+  let next=await globalThis.AerionDialogs?.prompt('Rename / move project path',target,{kitBound:false,label:'Project path',required:true,maxLength:190,confirmLabel:'Rename / move',guard:()=>selected===target&&api.revision?.()===revision});
+  if(next==null||selected!==target||api.revision?.()!==revision)return;next=cleanPath(next);
+  if(next===target)return;
   if(kind==='folder'){
-   if(!folderPattern.test(next)||folders.has(next)||api.listFiles().some(x=>x===next||x.startsWith(next+'/'))||[...assets.keys()].some(x=>x===next||x.startsWith(next+'/')))return alert('Invalid or conflicting folder path');
-   const changes=api.listFiles().filter(x=>x.startsWith(selected+'/')).map(x=>[x,next+x.slice(selected.length)]);
-   if(changes.some(([a,b])=>!validPath(b)||b.length>190||api.listFiles().includes(b)))return alert('Folder rename conflicts with existing files');
+   if(!folderPattern.test(next)||folders.has(next)||api.listFiles().some(x=>x===next||x.startsWith(next+'/'))||[...assets.keys()].some(x=>x===next||x.startsWith(next+'/')))return notice('Invalid or conflicting folder path');
+   const changes=api.listFiles().filter(x=>x.startsWith(target+'/')).map(x=>[x,next+x.slice(target.length)]);
+   if(changes.some(([a,b])=>!validPath(b)||b.length>190||api.listFiles().includes(b)))return notice('Folder rename conflicts with existing files');
    for(const [oldPath,newPath] of changes)api.renameFile(oldPath,newPath);
-   const assetMoves=[...assets.keys()].filter(x=>x.startsWith(selected+'/'));
-   for(const path of assetMoves)await moveAsset(path,next+path.slice(selected.length));
-   for(const folder of [...folders])if(folder===selected||folder.startsWith(selected+'/')){folders.delete(folder);folders.add(next+folder.slice(selected.length))}
+   const assetMoves=[...assets.keys()].filter(x=>x.startsWith(target+'/'));
+   for(const path of assetMoves)await moveAsset(path,next+path.slice(target.length));
+   for(const folder of [...folders])if(folder===target||folder.startsWith(target+'/')){folders.delete(folder);folders.add(next+folder.slice(target.length))}
    addFolders(parent(next));saveFolders();
   }else if(kind==='code'){
-   if(!next.endsWith('.py')||!validPath(next)||api.listFiles().includes(next)||assets.has(next))return alert('Choose a unique .py path');
-   if(!api.renameFile(selected,next))return;addFolders(parent(next));
+   if(!next.endsWith('.py')||!validPath(next)||api.listFiles().includes(next)||assets.has(next))return notice('Choose a unique .py path');
+   if(!api.renameFile(target,next))return;addFolders(parent(next));
   }else{
-   if(!validPath(next)||assets.has(next)||api.listFiles().includes(next))return alert('Choose a unique asset path');
-   await moveAsset(selected,next);addFolders(parent(next));
+   if(!validPath(next)||assets.has(next)||api.listFiles().includes(next))return notice('Choose a unique asset path');
+   await moveAsset(target,next);addFolders(parent(next));
   }
-  selected=next;currentFolder=parent(next);refreshExplorer()
+  if(selected===target){selected=next;currentFolder=parent(next)}refreshExplorer()
  }
  async function moveAsset(oldPath,newPath){const entry=assets.get(oldPath);if(!entry)return;await assetQuery('put',{...entry,path:newPath});await assetQuery('delete',null,oldPath);assets.delete(oldPath);assets.set(newPath,{...entry,path:newPath})}
  async function deleteSelected(){
-  const kind=selectedKind();if(!kind)return;
-  if(!confirm('Delete '+selected+(kind==='folder'?' and all its contents':'')+'?'))return;
-  if(kind==='code'){api.removeFile(selected)}
-  if(kind==='asset'){await assetQuery('delete',null,selected);assets.delete(selected)}
-  if(kind==='folder'){const removing=api.listFiles().filter(x=>x.startsWith(selected+'/'));
-   if(removing.length>=api.listFiles().length)return alert('Keep at least one Python file.');
+  const kind=selectedKind(),target=selected,revision=api.revision?.();if(!kind)return;
+  if(!await globalThis.AerionDialogs?.confirm('Delete '+target+(kind==='folder'?' and all its contents':'')+'?',{kitBound:false,danger:true,confirmLabel:'Delete selected',guard:()=>selected===target&&api.revision?.()===revision}))return;
+  if(selected!==target||api.revision?.()!==revision)return;
+  if(kind==='code'){api.removeFile(target)}
+  if(kind==='asset'){await assetQuery('delete',null,target);assets.delete(target)}
+  if(kind==='folder'){const removing=api.listFiles().filter(x=>x.startsWith(target+'/'));
+   if(removing.length>=api.listFiles().length)return notice('Keep at least one Python file.');
    for(const path of removing)api.removeFile(path);
-   for(const path of [...assets.keys()].filter(x=>x.startsWith(selected+'/'))){await assetQuery('delete',null,path);assets.delete(path)}
-   for(const f of [...folders])if(f===selected||f.startsWith(selected+'/'))folders.delete(f);saveFolders()
+   for(const path of [...assets.keys()].filter(x=>x.startsWith(target+'/'))){await assetQuery('delete',null,path);assets.delete(path)}
+   for(const f of [...folders])if(f===target||f.startsWith(target+'/'))folders.delete(f);saveFolders()
   }
-  selected='';refreshExplorer()
+  if(selected===target)selected='';refreshExplorer()
  }
  async function copySelected(){
   if(!selected)return notice('Select a file or folder in Project Explorer first.');
   const path='/home/project/'+selected;
-  try{await navigator.clipboard.writeText(path);notice('Copied path: '+path)}catch{prompt('Copy Python project path',path)}
+  try{await navigator.clipboard.writeText(path);notice('Copied path: '+path)}catch{await globalThis.AerionDialogs?.prompt('Copy Python project path',path,{kitBound:false,label:'Project path',readOnly:true,confirmLabel:'Done'})}
  }
  async function showAsset(path){
   const entry=assets.get(path);if(!entry)return;

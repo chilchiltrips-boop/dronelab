@@ -365,7 +365,7 @@ function init(){
   try{save(b.dataset.diagExport)}catch{const output=p.querySelector('[data-diag-summary]');if(output)output.textContent='Export unavailable; your local log remains saved.'}
  }));
  const clear=p.querySelector('[data-diag-clear]');
- clear?.addEventListener('click',()=>{if(!confirm('Erase locally saved ACK diagnostics from this device?'))return;
+ clear?.addEventListener('click',async()=>{if(!await root.AerionDialogs?.confirm('Erase locally saved ACK diagnostics from this device?',{kitBound:false,host:p,danger:true,confirmLabel:'Erase diagnostics'}))return;
   events=[];try{localStorage.removeItem(KEY)}catch{}paint(true);
  });
  p.addEventListener('toggle',()=>paint(true));

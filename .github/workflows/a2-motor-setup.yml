@@ -22,6 +22,7 @@ on:
       - 'tools/motor-link-stability.test.mjs'
       - 'tools/ack-diagnostics.test.mjs'
       - 'js/kit-ack-diagnostics.js'
+      - 'js/inline-dialogs.js'
       - 'FlightCore_Firmware/build-report.json'
       - 'app-version.json'
       - 'FlightCore_Firmware/FlightCoreAutoEsc.h'

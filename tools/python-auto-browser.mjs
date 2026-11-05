@@ -121,6 +121,7 @@ try{
  // for the same Kit is not a silent replacement.
  await page.evaluate(()=>{window.__pyFixture.transport='usb';window.dispatchEvent(new CustomEvent('dronelab:kit-link'))});
  await page.locator('#pythonQuickHardware').selectOption('joystick');
+  if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
  await edit("from zebjus_simple import Drone\nimport asyncio\ndrone=Drone()\nwhile True:\n    rc=await drone.read_joystick()\n    print('BOUND_USB', rc['throttle'])\n    await asyncio.sleep(0.1)\n");
  await page.locator('#runPythonBtn').click();await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('BOUND_USB'),null,{timeout:90000});
  const editorBefore=await page.evaluate(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py')).getValue());

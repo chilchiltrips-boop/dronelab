@@ -28,6 +28,14 @@ and ordinary non-Wizard sliders use one serialized SLIDE/KEEP fallback pump.
 
 ## Safety and saves
 
+- Output Calibration keeps its propeller, wiring, power and physical cutoff
+  confirmation on the page. Checking it never starts output; an explicit Start
+  is still required. Stop and motor Back/Next keep the confirmation during the
+  same page visit. Leaving the page, reconnecting, changing controller context
+  or reloading clears it. It is an operator observation, never a saved setting.
+- Start rechecks that confirmation after a delayed session acknowledgement.
+  A revoked confirmation cannot proceed to CAL_SLIDER. No native browser
+  confirmation is opened for individual or group Output Calibration.
 - The independent slider freshness limit remains 750 ms. KEEP does not reset
   that limit. Actual control loss still cuts PWM and requires a new Start.
 - The live session lease remains 1500 ms; the hard slider run limit remains

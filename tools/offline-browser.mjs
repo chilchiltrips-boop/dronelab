@@ -20,7 +20,7 @@ try{
  const warmFactory=await page.evaluate(async path=>{const r=await fetch(path);return {ok:r.ok,bytes:(await r.arrayBuffer()).byteLength}},firmwareUrl);
  if(!warmFactory.ok||warmFactory.bytes!==a2Factory.size)throw Error('Online Factory download mismatch');
  await page.locator('[data-tab=python]').click();await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:30000});
- page.once('dialog',d=>d.accept());await page.locator('#pythonQuickHardware').selectOption('plot');await page.locator('#runPythonBtn').click();
+ await page.locator('#pythonQuickHardware').selectOption('plot');if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.waitForFunction(async path=>!!await caches.match(new URL(path,location.href)),firmwareUrl,{timeout:30000});
  await ctx.setOffline(true);await page.goto(base+'#firmware');await page.locator('#tab-firmware.active').waitFor();
@@ -28,7 +28,7 @@ try{
  const fw=await page.evaluate(async path=>{const r=await fetch(path);return {ok:r.ok,bytes:(await r.arrayBuffer()).byteLength}},firmwareUrl);
  if(!fw.ok||fw.bytes!==a2Factory.size)throw Error('Offline firmware mismatch '+JSON.stringify(fw));
  await page.locator('[data-tab=python]').click();await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:30000});
- page.once('dialog',d=>d.accept());await page.locator('#pythonQuickHardware').selectOption('plot');await page.locator('#runPythonBtn').click();
+ await page.locator('#pythonQuickHardware').selectOption('plot');if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.screenshot({path:'test-output/offline-python-plot.png',fullPage:true});
  await page.goto(base+'#pid');

@@ -168,9 +168,9 @@ try{
  await page.locator('#pythonRedoFileBtn').click();
  const textAfterRedo=await page.evaluate(()=>window.monaco.editor.getModels()[0].getValue());
  if(textAfterRedo!==textAfterEdit)throw Error('Redo toolbar did not restore Python code');
- page.once('dialog',dialog=>dialog.accept());
 
  await page.locator('#pythonQuickHardware').selectOption('basic');
+ if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
  await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonTerminal').textContent.includes('Finished! Total = 15'),null,{timeout:90000});
  if(!((await page.locator('#pyLastRun').textContent())||'').includes('COMPLETE'))throw Error('Python script did not complete');
@@ -216,8 +216,8 @@ try{
  await page.evaluate(()=>{window.DroneLabSerial=window.__previousDroneSerial});
  // Live USB gyro integration: actual Python awaits asynchronous worker RPC data,
  // distinct from a static I2C address scan. Check both A1 and A2 on one Python example.
- page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('gyro');
+ if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
  await page.waitForFunction(()=>window.monaco.editor.getModels().find(m=>m.uri.toString().includes('main.py'))?.getValue().includes('await drone.read_gyro('));
  if(await page.locator('#pythonTarget option[value=auto]').count())throw Error('Connected Kit must be detected without a manual Auto option');
  await page.locator('#pythonTarget').selectOption('usb'); // This legacy test uses an explicitly selected raw Serial boundary; verified Auto is covered separately.
@@ -262,9 +262,10 @@ try{
  if(terminalAfter.height-terminalBefore.height<40)throw Error('Terminal vertical resize failed: '+terminalBefore.height+' -> '+terminalAfter.height);
  const layout=await page.evaluate(()=>JSON.parse(localStorage.getItem('zebjus-python-ide-panels-v1')||'{}'));
  if(!(layout.rightWidth>360&&layout.bottomHeight>200))throw Error('Layout dimensions were not saved: '+JSON.stringify(layout));
- page.once('dialog',dialog=>dialog.accept('browser_test.py'));
  await page.locator('.py-ide-menu:has(#pythonNewFileBtn) > summary').click();
  await page.locator('#pythonNewFileBtn').click();
+ await page.locator('.aerion-inline-action input').fill('browser_test.py');
+ await page.locator('[data-inline-accept]').click();
  await page.waitForFunction(()=>[...document.querySelectorAll('#pythonFileList option')].some(o=>o.value==='browser_test.py'));
  const fileCount=await page.locator('#pythonFileList option').count();
  if(fileCount<2)throw Error('New Python file not added');
@@ -287,8 +288,8 @@ try{
  const activeOutput=await page.locator('#pythonTerminal').textContent();
  if(!activeOutput.includes('>>> Running browser_test.py'))throw Error('Run executed the wrong Python file: '+activeOutput);
  await page.waitForFunction(()=>document.getElementById('runPythonBtn').disabled===false,null,{timeout:90000});
- page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('basic');
+ if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
  const modelValue=await page.evaluate(()=>window.monaco.editor.getModels().map(m=>m.getValue()).join('\n'));
  if(!modelValue.includes('Finished! Total'))throw Error('Example selection did not update editor model');
  const infinite='import asyncio\nprint("Loop started")\nwhile True:\n    print("tick")\n    await asyncio.sleep(0.15)\n';
@@ -298,8 +299,8 @@ try{
  await page.locator('#stopPythonBtn').click();
  if(!((await page.locator('#pyLastRun').textContent())||'').includes('STOPPED'))throw Error('Stop did not terminate while True');
  if(!(await page.locator('#runPythonBtn').isEnabled()))throw Error('Run button did not reactivate after Stop');
- page.once('dialog',dialog=>dialog.accept());
  await page.locator('#pythonQuickHardware').selectOption('plot');
+ if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();
  await page.locator('#runPythonBtn').click();
  await page.locator('#pythonInlinePlot').waitFor({state:'visible',timeout:120000});
  await page.waitForFunction(()=>{
@@ -308,6 +309,15 @@ try{
  },null,{timeout:30000});
  if(!(await page.locator('#pythonSideStack').isVisible()))throw Error('Python Plotter dock did not open');
  if(!(await page.locator('#pyLastRun').textContent()).includes('COMPLETE'))throw Error('Matplotlib example did not finish');
+ await page.locator('#pythonOutputOpen').click();
+ if(await page.locator('#app').isVisible())throw Error('Enlarged plot should be a separate full-page view');
+ if(await page.locator('#pythonOutputWindow').evaluate(node=>getComputedStyle(node).position)!=='static')throw Error('Enlarged plot must not float above the app');
+ if(!(await page.locator('#pythonOutputImage').isVisible()))throw Error('Enlarged plot image missing');
+ await page.screenshot({path:'test-output/python-plot-full-page.png',fullPage:true});
+ await page.locator('#pythonOutputStop').click();
+ if(await page.locator('#pyLastRun').textContent()!=='STOPPED')throw Error('Full-page plot STOP must terminate Python');
+ await page.locator('#pythonOutputClose').click();
+ if(!await page.locator('#app').isVisible())throw Error('Closing the plot must restore Python Lab');
  await page.locator('.py-tool-rail [data-py-rail="plotter"]').click();
 
 

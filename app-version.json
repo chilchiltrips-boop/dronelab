@@ -10,7 +10,8 @@
     "FlightCore 1.7.13 verified A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
     "Aerion A2 IMU XYZ calibration, automatic stored ESC controller result without tone ticks, Output Calibration and final Report; saved requests survive leaving the page",
-    "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing"
+    "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing",
+    "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check"
   ],
   "buildCommit": "8621aee31eea",
   "publishedAt": "2026-11-04T17:55:04.537049+00:00",

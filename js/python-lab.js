@@ -14,7 +14,7 @@ let cameraStream=null,cameraEpoch=0,cameraStarting=false,plotUrl=null,layoutRead
 let ledSession=false,ledHeartbeat=null,ledReportedPhase='',ledErrorEpisode=false;
 const ledController=createPythonLedSession({write:writeBoundLed,verify:verifyLedBinding,onHealth:renderLedHealth,
  onObsoleteFailure:({binding,command,error})=>terminal('[LED earlier session • '+binding.kitId+'] '+command+' failed: '+String(error.message||error)+'\n','error')});
-let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null;
+let files={'main.py':EXAMPLES.scanner},active='main.py',editor=null,monaco=null,models=new Map(),worker=null,running=false,saveTimer=null,terminalLines=0,loading=false,hasRun=false,syntaxWorker=null,projectRevision=0;
 const fallbacks=new Map();
 let workspace=null;
 const PY_FILE_PATH=/^(?:[A-Za-z_][\w-]*\/)*[A-Za-z_][\w-]*\.py$/;
@@ -34,7 +34,7 @@ function save(){
  if(!loading)files[active]=currentCode();
  try{localStorage.setItem(KEY,JSON.stringify({active,files,updated:Date.now()}));if(!running&&!pythonStarting&&!ledSession)$('pyLastRun').textContent='SAVED'}catch{status('Browser storage unavailable','warn')}
 }
-function autosave(){clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
+function autosave(){projectRevision++;clearTimeout(saveTimer);saveTimer=setTimeout(save,350)}
 function load(){
  try{const data=JSON.parse(localStorage.getItem(KEY)||'null');
  if(data&&data.files){const f=Object.fromEntries(Object.entries(data.files).filter(([name,v])=>PY_FILE_PATH.test(name)&&typeof v==='string').slice(0,100));if(Object.keys(f).length){files=f;active=Object.hasOwn(f,data.active)?data.active:Object.keys(f)[0]}}}catch{}
@@ -72,11 +72,13 @@ function undoRedo(redo=false){
 }
 function addProjectFile(path,source){
  if(!PY_FILE_PATH.test(path)||Object.hasOwn(files,path)||Object.keys(files).length>=100)return false;
+ projectRevision++;
  files[active]=currentCode();files[path]=String(source);renderFiles();save();return true;
 }
 function renameProjectFile(from,to){
  if(!Object.hasOwn(files,from)||!PY_FILE_PATH.test(to)||(from!==to&&Object.hasOwn(files,to)))return false;
  if(from===to)return true;
+ projectRevision++;
  files[active]=currentCode();const value=files[from],wasActive=active;
  if(wasActive===from&&editor)editor.setModel(null);
  models.get(from)?.dispose();models.delete(from);
@@ -86,25 +88,30 @@ function renameProjectFile(from,to){
 }
 function removeProjectFile(path,ask=false){
  if(!Object.hasOwn(files,path)||Object.keys(files).length<=1)return false;
- if(ask&&!confirm('Delete '+path+'?'))return false;
+ if(ask){const revision=projectRevision;return (globalThis.AerionDialogs?.confirm('Delete '+path+'?',{kitBound:false,danger:true,confirmLabel:'Delete file',guard:()=>revision===projectRevision})??Promise.resolve(false)).then(yes=>yes&&revision===projectRevision?removeProjectFile(path):false);}
+ projectRevision++;
  files[active]=currentCode();if(active===path&&editor)editor.setModel(null);
  models.get(path)?.dispose();models.delete(path);fallbacks.delete(path);delete files[path];
  if(active===path)active=Object.keys(files)[0];
  syncEditor();renderFiles();save();return true;
 }
-function newFile(){
- if(Object.keys(files).length>=100)return alert('Maximum 100 Python files.');
- let name=prompt('New Python file path',((workspace?.getFolder()||'')?workspace.getFolder()+'/':'')+'sensor.py');
- if(name===null)return;name=name.trim();if(!name.endsWith('.py'))name+='.py';
- if(!PY_FILE_PATH.test(name))return alert('Use a path such as scripts/sensor.py');
+async function newFile(){
+ if(Object.keys(files).length>=100)return globalThis.AerionDialogs?.notify('Maximum 100 Python files.');
+ const revision=projectRevision;
+ let name=await globalThis.AerionDialogs?.prompt('New Python file path',((workspace?.getFolder()||'')?workspace.getFolder()+'/':'')+'sensor.py',{kitBound:false,label:'File path',required:true,maxLength:190,confirmLabel:'Create file',guard:()=>revision===projectRevision});
+ if(name==null||revision!==projectRevision)return;
+ name=name.trim();if(!name.endsWith('.py'))name+='.py';
+ if(!PY_FILE_PATH.test(name))return globalThis.AerionDialogs?.notify('Use a path such as scripts/sensor.py');
  if(Object.hasOwn(files,name)){switchFile(name);return}
  if(addProjectFile(name,'# '+name+'\n')){switchFile(name);workspace?.openBottom('closed');editor?.focus();status('Created and opened '+name,'good')}
 }
-function deleteFile(){if(Object.keys(files).length<=1)return alert('Keep at least one .py file.');removeProjectFile(active,true)}
-function applyExample(key){
- const code=EXAMPLES[key];if(!code)return;
- if(!Object.values(EXAMPLES).includes(currentCode())&&!confirm('Replace the selected file with the example?'))return;
- setCode(code);save();
+function deleteFile(){if(Object.keys(files).length<=1)return globalThis.AerionDialogs?.notify('Keep at least one .py file.');return removeProjectFile(active,true)}
+async function applyExample(key){
+ const code=EXAMPLES[key];if(!code)return false;
+ const revision=projectRevision;
+ if(!Object.values(EXAMPLES).includes(currentCode())&&!await globalThis.AerionDialogs?.confirm('Replace the selected file with the example?',{kitBound:false,guard:()=>revision===projectRevision,confirmLabel:'Replace file'}))return false;
+ if(revision!==projectRevision)return false;
+ setCode(code);save();return true;
 }
 async function exportProject(){
  files[active]=currentCode();save();
@@ -116,10 +123,12 @@ async function exportProject(){
 }
 async function importProject(file){
  if(!file)return;
+ const revision=projectRevision;
  try{
   const data=JSON.parse(await file.text()),f=Object.fromEntries(Object.entries(data.files||{}).filter(([name,v])=>PY_FILE_PATH.test(name)&&typeof v==='string').slice(0,100));
   if(!Object.keys(f).length)throw Error('No valid .py files found');
-  if(!confirm('Replace current project with imported files?'))return;
+  if(revision!==projectRevision||!await globalThis.AerionDialogs?.confirm('Replace current project with imported files?',{kitBound:false,danger:true,confirmLabel:'Replace project',guard:()=>revision===projectRevision}))return;
+  if(revision!==projectRevision)return;projectRevision++;
   if(editor)editor.setModel(null);for(const model of models.values())model.dispose();models.clear();fallbacks.clear();files=f;active=Object.hasOwn(files,data.active)?data.active:Object.keys(files)[0];syncEditor();if(workspace)await workspace.restore(data);renderFiles();save();status('Imported project','good');
  }catch(e){status('Import failed: '+e.message,'warn')}
 }
@@ -335,7 +344,7 @@ function stopPython(notify=true){
 async function pythonMotorOperation(operation,a,w){
  const current=()=>{if(worker!==w||!running||document.hidden)throw Error('Python motor operation cancelled.');};
  current();
- const confirm=async text=>{await confirmMotor(text);current();};
+ const confirmStep=async text=>{await confirmMotor(text);current();};
  const wait=async()=>{
   for(let n=0;n<400;n++){
    await new Promise(r=>setTimeout(r,100));current();
@@ -351,7 +360,7 @@ async function pythonMotorOperation(operation,a,w){
   if(operation==='status')return await motorClient.status();
   if(operation==='stop'){await motorClient.stop('python');return motorClient.state||{};}
   if(operation==='begin'){
-   await confirm('A2 motor setup: remove all propellers. Verify D0–D3 ESC wiring, the controller power circuit, and that your ESC supports 50 Hz PWM with 1000–2000 µs endpoints. USB requires Teacher Unlock. Continue?');
+   await confirmStep('A2 motor setup: remove all propellers. Verify D0–D3 ESC wiring, the controller power circuit, and that your ESC supports 50 Hz PWM with 1000–2000 µs endpoints. USB requires Teacher Unlock. Continue?');
    motorWorkerAlive=Date.now();return await motorClient.begin('python',pythonBinding);
   }
   if(operation==='layout'){
@@ -360,25 +369,25 @@ async function pythonMotorOperation(operation,a,w){
    return await motorClient.command('LAYOUT',[a.layout,pins,rotations],'python');
   }
   if(operation==='minimum'){
-   await confirm('Save '+a.pulse_us+' µs as the observed minimum starting pulse for M'+a.motor+'? Confirm you physically observed that motor spinning.');
+   await confirmStep('Save '+a.pulse_us+' µs as the observed minimum starting pulse for M'+a.motor+'? Confirm you physically observed that motor spinning.');
    return await motorClient.command('MINIMUM',[a.motor,a.pulse_us,'OBSERVED_SPIN'],'python');
   }
   if(operation==='calibrate'){
-   await confirm('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH? The board holds HIGH until LOW or its 15-second limit even if browser updates are delayed.');
+   await confirmStep('Disconnect the motor battery. Keep the A2 powered through its verified separate supply. Start calibration HIGH? The board holds HIGH until LOW or its 15-second limit even if browser updates are delayed.');
    await motorClient.command('CAL_HIGH',['POWER_DISCONNECTED'],'python');
-   await confirm('HIGH signal is active for at most 15 seconds. Connect the motor battery; wait for the calibration prompt specified by your ESC manual, then Continue to send LOW.');
+   await confirmStep('HIGH signal is active for at most 15 seconds. Connect the motor battery; wait for the calibration prompt specified by your ESC manual, then Continue to send LOW.');
    await motorClient.command('CAL_LOW',[],'python');const s=await wait();
-   await confirm('Output has ended. Confirm only if you heard your ESC success tones.');
+   await confirmStep('Output has ended. Confirm only if you heard your ESC success tones.');
    const saved=s.calibrationSaveSupported===true?await motorClient.confirmCalibration(pythonBinding):s;
    return {...saved,escSuccess:'user confirmed',calibrationPersisted:saved.escCalibrationSaved===true};
   }
   if(operation==='single'||operation==='all'){
    const label=operation==='all'?'ALL FOUR motors':'motor '+a.motor;
-   await confirm('Run '+label+' at '+a.pulse_us+' µs for '+a.duration_ms+' ms? Propellers must be removed.');
+   await confirmStep('Run '+label+' at '+a.pulse_us+' µs for '+a.duration_ms+' ms? Propellers must be removed.');
    await motorClient.command(operation==='all'?'ALL':'SINGLE',[operation==='all'?1:a.motor,a.pulse_us,a.duration_ms],'python');return await wait();
   }
   if(operation==='input'){
-   await confirm('Test ALL FOUR motors using the selected input for '+a.duration_ms+' ms? Lower throttle and disarm input first. Output is capped at 1200 µs; enable input ARM or use the PPM yaw gesture after the test begins.');
+   await confirmStep('Test ALL FOUR motors using the selected input for '+a.duration_ms+' ms? Lower throttle and disarm input first. Output is capped at 1200 µs; enable input ARM or use the PPM yaw gesture after the test begins.');
    await motorClient.command('INPUT',[a.source,a.duration_ms,'CONFIRM_ALL_MOTORS'],'python');return await wait();
   }
   throw Error('Unknown motor operation');
@@ -761,39 +770,27 @@ function stopCamera(){
  $('pythonCameraStatus').textContent='Camera stopped. Open Camera to preview again.';
  $('pythonCameraStart').disabled=false;$('pythonCameraStop').disabled=true;
 }
-function clampPlotWindow(){
- const modal=$('pythonOutputWindow');if(modal.hidden)return;
- const box=modal.getBoundingClientRect();
- modal.style.left=clamp(box.left,0,Math.max(0,innerWidth-box.width))+'px';
- modal.style.top=clamp(box.top,0,Math.max(0,innerHeight-box.height))+'px';
-}
 function openPlotWindow(){
  const el=$('pythonOutputWindow');if(!plotUrl){$('pythonVisualTools').open=true;$('pythonCameraStatus').textContent='Run a Matplotlib example to create a Python plot.';return}
- el.hidden=false;$('pythonOutputImage').src=plotUrl;clampPlotWindow();
+ $('pythonOutputImage').src=plotUrl;
+ globalThis.AerionDialogs?.mount(el,{page:true,host:document.body});
 }
 function showPythonPlot(message){
  const base64=String(message.base64||'');
  if(!/^[A-Za-z0-9+/=]+$/.test(base64)||base64.length>4500000){terminal('[Plot output is empty or too large]\n','warn');return}
  plotUrl='data:image/png;base64,'+base64;
  const image=$('pythonInlinePlot');image.src=plotUrl;image.hidden=false;
- $('pythonCameraStatus').textContent='Python Matplotlib figure generated. Click Open Plot Window to enlarge.';
+ $('pythonCameraStatus').textContent='Python Matplotlib figure generated. Click Enlarge plot to open the full-page view.';
  $('pythonVisualTools').open=true;
- // Show Matplotlib figures inside the Plotter dock; floating is optional.
+ // Show Matplotlib figures in the Plotter dock; enlargement is a separate page.
  if(workspace)workspace.openRight('plotter');else openPlotWindow();
 }
 function bindPlotWindow(){
- const modal=$('pythonOutputWindow'),title=$('pythonOutputDrag');
- $('pythonOutputClose').onclick=()=>{modal.hidden=true};
+ const plot=$('pythonOutputWindow');
+ $('pythonOutputClose').onclick=()=>plot.close?.();
+ $('pythonOutputStop').onclick=()=>stopPython();
  $('pythonOutputOpen').onclick=openPlotWindow;
  $('pythonCameraStart').onclick=startCamera;$('pythonCameraStop').onclick=stopCamera;
- title?.addEventListener('pointerdown',e=>{
-  if(e.target.closest('button'))return;
-  e.preventDefault();const box=modal.getBoundingClientRect(),dx=e.clientX-box.left,dy=e.clientY-box.top;
-  const move=ev=>{modal.style.left=clamp(ev.clientX-dx,0,Math.max(0,innerWidth-box.width))+'px';modal.style.top=clamp(ev.clientY-dy,0,Math.max(0,innerHeight-box.height))+'px'};
-  const finish=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',finish);window.removeEventListener('pointercancel',finish)};
-  window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish,{once:true});window.addEventListener('pointercancel',finish,{once:true});
- });
- window.addEventListener('resize',clampPlotWindow);
 }
 async function copyTerminal(){
  const value=$('pythonTerminal').textContent;
@@ -807,7 +804,7 @@ function bind(){
  $('pythonDeleteFileBtn').onclick=deleteFile;$('pythonExportBtn').onclick=exportProject;
  $('pythonImportBtn').onclick=()=>$('pythonImportFile').click();
  $('pythonImportFile').onchange=e=>{void importProject(e.target.files?.[0]);e.target.value=''};
- $('pythonQuickHardware').onchange=e=>{if(!e.target.value)return;applyExample(e.target.value);pythonTargetIntent=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(e.target.value)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
+ $('pythonQuickHardware').onchange=async e=>{const selected=e.target.value;if(!selected)return;if(!await applyExample(selected)){e.target.value='';return;}pythonTargetIntent=['joystick','wifi_scan','wifi_save','scanner','custom','gyro','led','fade','warning','safe','sos','pattern'].includes(selected)?'connected':'isolated';if(pythonTargetIntent==='isolated')$('pythonTarget').value='python';usbStatus();e.target.value=''};
  $('pyConnectUsbBtn').onclick=connectUsb;$('pythonTarget').addEventListener('change',()=>{pythonTargetIntent=$('pythonTarget').value==='python'?'isolated':'manual';usbStatus()});$('runPythonBtn').onclick=runPython;
  $('stopPythonBtn').onclick=()=>stopPython();$('rerunPythonBtn').onclick=()=>{stopPython(false);runPython()};
  $('pythonCheckSyntaxBtn')?.addEventListener('click',checkPythonSyntax);
@@ -848,6 +845,7 @@ function init(){if(!$('tab-python'))return;load();renderFiles();syncEditor();bin
  workspace=createPythonIDEShell({
   listFiles:()=>Object.keys(files),currentFile:()=>active,selectFile:switchFile,
   addFile:addProjectFile,renameFile:renameProjectFile,removeFile:removeProjectFile,
+  revision:()=>projectRevision,
   layoutEditor:()=>editor?.layout()
  });
  renderFiles();usbStatus();void enableMonaco()}

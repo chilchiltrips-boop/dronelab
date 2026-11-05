@@ -223,20 +223,14 @@ async function hardwareRequest(kit,args,guard){
 export const motorClient=createMotorClient({getKit:selectedKit,request:hardwareRequest,onState:state=>{
  if(typeof globalThis.dispatchEvent==='function')globalThis.dispatchEvent(new CustomEvent('zebjus:motor-state',{detail:state}));
 }});
-export function confirmMotor(message){
- return new Promise((resolve,reject)=>{
-  const d=document.createElement('dialog');d.className='motor-confirm';
-  const p=document.createElement('p');p.textContent=message;
-  const ok=document.createElement('button');ok.textContent='Confirm / Continue';ok.className='btn';
-  const cancel=document.createElement('button');cancel.textContent='Cancel / STOP';cancel.className='btn danger';
-  let settled=false;
-  const cancelPending=()=>finish(false);
-  const hidden=()=>{if(document.hidden)cancelPending();};
-  const finish=yes=>{if(settled)return;settled=true;pendingConfirmations.delete(cancelPending);document.removeEventListener('visibilitychange',hidden);globalThis.removeEventListener('pagehide',cancelPending);d.close();d.remove();yes?resolve(true):reject(Error('Motor operation cancelled.'));};
-  ok.onclick=()=>finish(true);cancel.onclick=()=>finish(false);d.addEventListener('cancel',e=>{e.preventDefault();finish(false)});
-  pendingConfirmations.add(cancelPending);document.addEventListener('visibilitychange',hidden);globalThis.addEventListener('pagehide',cancelPending);
-  d.append(p,ok,cancel);document.body.append(d);d.showModal();
- });
+export async function confirmMotor(message,{rejectOnCancel=true,...options}={}){
+ const controller=new AbortController(),cancelPending=()=>controller.abort();
+ pendingConfirmations.add(cancelPending);
+ try{
+  const yes=await (globalThis.AerionDialogs?.confirm(message,{confirmLabel:'Confirm / Continue',cancelLabel:'Cancel / STOP',...options,signal:controller.signal})??Promise.resolve(false));
+  if(!yes&&rejectOnCancel)throw Error('Motor operation cancelled.');
+  return !!yes;
+ }finally{pendingConfirmations.delete(cancelPending);}
 }
 if(typeof document!=='undefined'){
  document.addEventListener('visibilitychange',()=>{if(document.hidden)void motorClient.leavePage().catch(()=>{});});

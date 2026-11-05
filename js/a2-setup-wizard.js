@@ -1,4 +1,4 @@
-import {motorClient,cancelMotorConfirmations} from './motor-setup.js';
+import {motorClient,cancelMotorConfirmations,confirmMotor} from './motor-setup.js';
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
@@ -116,6 +116,7 @@ if(root){
  <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
  <p class="a2-output-prerequisite" role="status"></p><div class="a2-actions"><button class="btn ghost" data-action="skip-output" hidden>Skip output calibration → Report</button></div>
  <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
+ <div class="a2-output-safety"><label class="a2-check"><input id="a2OutputSafety" type="checkbox"><span>All propellers are removed. Motor/ESC wiring and power are checked, and a physical power cutoff is ready.</span></label></div>
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
  <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
  <p class="a2-cal-output a2-test-state" role="status"></p></section>
@@ -421,10 +422,11 @@ if(root){
   const time=Math.max(0,Math.ceil(((state?.remainingMs||0)-(Date.now()-lastStateAt))/1000));
   const text=operationError||(!observedOff()&&!fresh?'Output state unconfirmed · verify STOP or reconnect.':outputOff(state)?'Outputs off':state?.mode||'Waiting for board');
   $('#a2CalAll').checked=calAll;$('#a2CalAll').disabled=busy;
+  const safety=$('#a2OutputSafety');safety.disabled=busy;
   $('#a2CalPulse').disabled=!calLive||!!working;
   const cal=$('[data-action="cal-slider"]');
   cal.textContent=working==='cal-slider'?(calLive?'Stopping…':'Starting…'):calLive?'Stop':'Start';
-  cal.disabled=!!working||(!calLive&&(disabled||!escReadyForOutput()));cal.classList.toggle('danger',calLive);
+  cal.disabled=!!working||(!calLive&&(disabled||!escReadyForOutput()||!safety.checked));cal.classList.toggle('danger',calLive);
   const value=pulses()[calMotor-1],recorded=calAll?targetMotors(calMotor,true).every(n=>validPulse(pulses()[n-1])):validPulse(value);
   const pending=targetMotors(calMotor,calAll).some(n=>validPulse(minimums[n-1]));
   $('.a2-cal-target').textContent=calAll?'M1–M4 · Wait for all four motors to spin steadily. Stop replaces all four draft values.':`Motor ${calMotor} of 4 · ${layouts[draft.layout].positions[calMotor-1]} · ${draft.layoutPins[calMotor-1]} · ${draft.rotations[calMotor-1]}`;
@@ -432,6 +434,7 @@ if(root){
   $('.a2-cal-result').textContent=overRange.length?overRange.map(n=>`M${n} · ${pulses()[n-1]} µs saved · recalibration required`).join(' · '):pending?'Pending save':recorded?'Saved on board':'No compatible pulse recorded';
   const ack=activeRun?.motors.map(n=>state?.pulseUs?.[n-1])||[];
   $('.a2-cal-output').textContent=calLive&&fresh?`Live · ACK ${ack[0]??'—'} µs · ${time} s`:outputOff(state)&&pending&&!operationError?'Outputs off · Pending save':text;
+  if(!safety.checked&&outputOff(state)&&!operationError&&!busy)$('.a2-cal-output').textContent+=' · Confirm the safety check to enable Start.';
   const resume=$('[data-action="resume-cal"]');
   resume.hidden=!calLive||!activeRun.ready||activeRun.resume===1000||activeRun.target!==1000;
   resume.disabled=!!working||!fresh;
@@ -566,6 +569,7 @@ if(root){
   renderVisual();
  }
  function show(next){
+  if(next!==step)$('#a2OutputSafety').checked=false;
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
   if(step===OUTPUT)setCalPulse(currentResult());
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
@@ -604,6 +608,9 @@ if(root){
   if(!canStart()||!wiringCompatible()||!outputChecks())throw Error('Save wiring, verify PWM OFF and use the supported 50 Hz ESC profile.');
   await motorClient.begin('wizard',null,{...base,mapping:encode(draft)});
  }
+ function requireOutputSafety(){
+  if(!$('#a2OutputSafety').checked)throw Error('Confirm the on-page safety check before Start.');
+ }
  function ensureOperation(run){
   if(run!==operation||!live())throw Error('Wizard operation cancelled.');
  }
@@ -630,13 +637,14 @@ if(root){
   }
   if(!outputCalibrationSupported())throw Error('Update A2 to FlightCore 1.7.13+ before starting Output Calibration.');
   if(!wiringCompatible()||!escReadyForOutput()||escAttempt)throw Error('Verify the saved controller ESC sequence and wiring before starting output calibration.');
-  if(!window.confirm('Start '+(calAll?'all four motors':'motor M'+calMotor)+' at minimum pulse? Remove all propellers, verify motor/ESC wiring and power, and keep a physical power cutoff ready.'))return;
+  requireOutputSafety();
   const resume=currentResult();
   ensureOperation(runId);
   setCalPulse(1000);
   const run={mask:mask(calMotor,calAll),motors:targetMotors(calMotor,calAll),resume,ready:false,target:1000,ramp:0,rampPulse:1000};
   activeRun=run;
   await prepare('cal');ensureOperation(runId);
+  requireOutputSafety();
   await motorClient.startSlider(run.mask,()=>{
    if(activeRun!==run)throw Error('Slider cancelled.');
    if(!run.ramp)return calTarget;
@@ -763,7 +771,8 @@ if(root){
    const selected=name==='reset-all'?'all':$('#a2ResetScope').value;
    const scope={all:'RESET_ALL',accel:'RESET_ACCEL',esc:'RESET_ESC',minimums:'RESET_OUTPUT'}[selected];
    if(!canSaveScope(scope))throw Error('Verify the board and outputs before resetting setup.');
-   if(!window.confirm(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`))return;
+   if(!await confirmMotor(`Reset ${selected==='all'?'all Wizard settings':selected} on the controller now?`,{rejectOnCancel:false,danger:true,confirmLabel:'Reset on controller'}))return;
+   ensureOperation(run);
    await save(scope);return;
   }
   if(name==='imu-restore-manual'){
@@ -798,7 +807,8 @@ if(root){
    if(!supportsAutoResult())throw Error('Update A2 to FlightCore 1.7.12+ for automatic stored results.');
    if(accelAction!=='KEEP'||captureRequest)throw Error('Save or restore the pending accelerometer changes before preparing a power cycle.');
    if(!canStart()||!wiringCompatible()||!outputChecks()||saved?.autoEsc?.version!==1)throw Error('Save wiring, disarm input and verify PWM OFF before preparing automatic ESC calibration.');
-   if(!window.confirm('Propellers must be REMOVED. Confirm motor wiring, low throttle and DISARMED input. Prepare a one-use 2000→1000 µs ESC sequence for the next FULL power-on? Existing ESC records and motor starting pulses will be cleared. Disconnect USB power AND LiPo until the A2 is completely OFF, then reconnect LiPo only.'))return;
+   if(!await confirmMotor('Propellers must be REMOVED. Confirm motor wiring, low throttle and DISARMED input. Prepare a one-use 2000→1000 µs ESC sequence for the next FULL power-on? Existing ESC records and motor starting pulses will be cleared. Disconnect USB power AND LiPo until the A2 is completely OFF, then reconnect LiPo only.',{rejectOnCancel:false,danger:true,confirmLabel:'Prepare next power-on'}))return;
+   ensureOperation(run);
    const intent=autoPrepareIntent={...base,mapping:encode(draft)};
    let failure='';
    try{await motorClient.wizardCommand('WIZARD_AUTO_ESC_PREPARE',['PROPS_REMOVED:WIRING_VERIFIED:POWER_CYCLE_UNDERSTOOD',intent.revision,intent.bootId],intent.bootId);}
@@ -880,6 +890,7 @@ if(root){
  window.addEventListener('zebjus:motor-state',e=>{if(live())receive(e.detail);});
  const observe=()=>{
   if(!live()){
+   if(!document.getElementById('tab-setup')?.classList.contains('active'))$('#a2OutputSafety').checked=false;
    if(working)cancelMotorConfirmations();
    if(motorClient.owner==='wizard'){++operation;activeRun=null;escAttempt=false;void motorClient.stop('wizard').catch(()=>{});}
    return;

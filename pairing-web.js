@@ -47,7 +47,11 @@ function openSettings(){
   const details=$('kitMobilePairDetails');if(details)details.open=true;
   return;
  }
- if(!dialog.open)dialog.showModal();
+ if(!dialog.open&&window.AerionDialogs){
+  // Keep the simulator's canvas and live input layout mounted during pairing.
+  window.AerionDialogs.mount(dialog,{host:document.querySelector('.tp-shell')||document.body});
+  dialog.tabIndex=-1;dialog.scrollIntoView({block:'start'});dialog.focus({preventScroll:true});
+ }
 }
 function closeSettings(){
  stopCamera();
@@ -59,7 +63,7 @@ function closeSettings(){
   else window.ZebjusDevicesWorkspace?.open(view==='mobile'?'overview':view,{scroll:true});
   return;
  }
- $('connectionDialog').close();$('topPairMobileBtn').focus();
+ $('connectionDialog').close?.();
 }
 function openStep(number){
  const s=host.status();
@@ -305,7 +309,7 @@ function bind(){
  },2000);
  $('topPairMobileBtn').onclick=openSettings;
  $('connectionClose').onclick=closeSettings;
- if(!inlineSettings())$('connectionDialog').addEventListener('close',stopCamera);
+ if(!inlineSettings())$('connectionDialog').addEventListener('close',()=>{stopCamera();$('topPairMobileBtn').focus();});
  if(!inlineSettings())$('connectionDialog').addEventListener('cancel',stopCamera);
  $('pairCreateBtn').onclick=createOffer;
  $('pairCameraMode').onclick=()=>selectMode('camera');

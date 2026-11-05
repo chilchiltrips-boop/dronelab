@@ -70,6 +70,9 @@
 .a2-slider input[type=range]{width:100%;accent-color:#62d4b6;margin:7px 0 4px;cursor:pointer;min-height:30px;touch-action:pan-y}
 .a2-slider>div{display:flex;justify-content:space-between;color:#7998ae;font-size:10px}
 .a2-test-actions{display:block}.a2-test-actions .btn{width:100%;min-height:40px}
+.a2-output-safety{margin-top:12px;padding:10px 12px;border:1px solid #796334;border-radius:8px;background:#282519}
+.a2-output-safety .a2-check{align-items:flex-start;margin:0;color:#ead39d}
+.a2-output-safety input[type=checkbox]{margin-top:1px}
 .a2-test-toggle{background:#247d6a!important;border:1px solid #5cd9b6!important;color:#ecfff9!important;font-weight:700}
 .a2-test-toggle.danger{background:#642d38!important;border-color:#e48d9d!important}
 .a2-test-state{font:11px/1.5 ui-monospace,monospace!important;color:#85dac5!important;margin-bottom:0!important}

@@ -61,14 +61,14 @@ export function initFirmwarePage(){
     }catch(e){last=e;await disconnectUsb();if(rate!==115200)log(`USB handshake/probe at ${rate} failed; retrying 115200.`)}}
     throw usbConnectionError(last);
   });if(needImage)await autoLoad()}
-  function confirmTarget(kind,erase=false){const line=`${image.name}\n${image.board.name} [${image.boardId}]\n${formatBytes(image.bytes.length)} · SHA-256 ${image.hash}\nTarget: ${kind}`;
-    const warning=erase?'ERASE ALL FLASH. Saved settings and calibration may be cleared.':image.kind==='factory'?'Complete Factory/Merged image replaces bootloader, partitions and app; saved settings and calibration may be cleared.':'Remove propellers and use stable power.';return confirm(`Confirm firmware target and image:\n\n${line}\n\n${warning}\n\nContinue?`)}
+  function confirmTarget(kind,erase=false){const targetImage=image,targetUsb=usb,targetBoard=usbBoard,capacity=usbFlashBytes,layoutReady=usbLayoutReady,appReady=$('fwAppReady').checked,line=`${image.name}\n${image.board.name} [${image.boardId}]\n${formatBytes(image.bytes.length)} · SHA-256 ${image.hash}\nTarget: ${kind}`;
+    const warning=erase?'ERASE ALL FLASH. Saved settings and calibration may be cleared.':image.kind==='factory'?'Complete Factory/Merged image replaces bootloader, partitions and app; saved settings and calibration may be cleared.':'Remove propellers and use stable power.';return globalThis.AerionDialogs?.confirm(`Confirm firmware target and image:\n\n${line}\n\n${warning}\n\nContinue?`,{danger:erase||image.kind==='factory',guard:()=>image===targetImage&&usb===targetUsb&&usbBoard===targetBoard&&usbFlashBytes===capacity&&usbLayoutReady===layoutReady&&$('fwAppReady').checked===appReady,confirmLabel:'Flash verified image'})??Promise.resolve(false)}
   async function flashUsb(erase=false){await run(async()=>{
     if(!usb||!usbBoard||!usbFlashBytes||!image)throw Error('Connect and verify USB, flash capacity and image first.');
     if(image.boardId!==usbBoard.id||!usbBoard.imageChipIds.includes(usb.chip?.IMAGE_CHIP_ID))throw Error('Selected image differs from actual USB chip/board.');
     inspectImage(image.bytes,image.kind,usbBoard,catalog);
     const plan=usbWritePlan({image,board:usbBoard,chipId:usb.chip?.IMAGE_CHIP_ID,flashBytes:usbFlashBytes,erase,appReady:usbLayoutReady&&$('fwAppReady').checked,armed:false});const address=plan.address;
-    if(!confirmTarget(`USB ${usbBoard.id} @ 0x${address.toString(16)}`,erase))return;
+    if(!await confirmTarget(`USB ${usbBoard.id} @ 0x${address.toString(16)}`,erase))return;
     progress(0,'Preparing verified image','Prepare');badge('FLASHING');let written=false;
     try{if(erase){log('Explicit erase requested; clearing entire flash.');await usb.eraseFlash()}
       progress(1,'Writing image…','Flash');await usb.writeFlash({fileArray:[{data:image.bytes,address}],...plan,compress:true,calculateMD5Hash:md5Hex,reportProgress:(i,w,total)=>{progress(1+w/total*85,`USB ${formatBytes(w)} / ${formatBytes(total)}`,'Flash');$('fwTransferred').textContent=`${formatBytes(w)} / ${formatBytes(total)}`}});
