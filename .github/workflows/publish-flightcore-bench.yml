@@ -1,0 +1,79 @@
+name: Verify and publish approved FlightCore bench package
+on:
+  push:
+    branches: [main, release/flightcore-1.7.16-bench-20261105]
+    paths:
+      - 'FlightCore_Firmware/bench-release-policy.json'
+      - 'firmware-updater.js'
+      - 'tools/bench-firmware-browser.mjs'
+      - 'tools/verify_release.py'
+      - '.github/workflows/publish-flightcore-bench.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: flightcore-bench-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify pinned compiled package and published catalog
+        env:
+          ARTIFACT_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/bench_release_gate.py --source
+          python3 tools/verify_release.py
+          version=$(cat VERSION.txt)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          destination="FlightCore_Firmware/bench/$version"
+          if [ ! -d "$destination" ]; then
+            policy=FlightCore_Firmware/bench-release-policy.json
+            artifact_id=$(jq -er '.benchArtifact.id | numbers' "$policy")
+            digest=$(jq -er '.benchArtifact.sha256 | select(test("^[a-f0-9]{64}$"))' "$policy")
+            archive="$RUNNER_TEMP/flightcore-bench.zip"
+            curl --fail --silent --show-error --location --retry 2 --max-time 120 \
+              -H "Authorization: Bearer $ARTIFACT_TOKEN" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" -o "$archive"
+            printf '%s  %s\n' "$digest" "$archive" | sha256sum -c -
+            mkdir -p "$destination"
+            unzip -q "$archive" -d "$destination"
+          fi
+          python3 tools/verify_release.py --bench "$destination"
+      - name: Test the real bench images through Firmware Center
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/flightcore-bench-http.log" 2>&1 &
+          for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
+          node tools/bench-firmware-browser.mjs
+      - name: Publish the verified versioned bench package on main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          destination="FlightCore_Firmware/bench/$(cat VERSION.txt)"
+          verified="$PWD/$destination"
+          git fetch origin main
+          git worktree add --detach "$RUNNER_TEMP/bench-publish" FETCH_HEAD
+          cd "$RUNNER_TEMP/bench-publish"
+          python3 tools/verify_release.py --bench "$verified"
+          if [ -d "$destination" ]; then
+            python3 tools/verify_release.py --bench "$destination"
+            exit 0
+          fi
+          mkdir -p "$(dirname "$destination")"
+          cp -a "$verified" "$destination"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$destination"
+          git commit -m "Publish verified FlightCore $(cat VERSION.txt) bench package"
+          git push origin HEAD:main

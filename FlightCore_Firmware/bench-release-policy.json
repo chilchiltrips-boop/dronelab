@@ -4,5 +4,12 @@
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "Bench diagnostic candidate for software verification; physical flight output disabled and publication held."
+  "note": "Explicit bench diagnostic download. Physical flight output is disabled.",
+  "benchArtifact": {
+    "id": 13417864690,
+    "sha256": "e1fe1b973432f0358c288333b8471541e333fa4103a4f48de10ad9ace7cb768d",
+    "sourceCommit": "d4de0bced6165c815c0ebb17b7eebb1fd736b0b3",
+    "catalogSha256": "4af98490c7ae7a0922552c6d771d3ae0433d4077179c512c026e24176f7d2d7d",
+    "reportSha256": "15177b53a88d49fce8d8ac950d69cad008b3167e14dc148ed09ec4158f663bfe"
+  }
 }

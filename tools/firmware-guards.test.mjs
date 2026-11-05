@@ -27,7 +27,7 @@ test('APP erase request cannot reach a writer',async()=>{
  const r=flashRuntime();r.elements.get('#fwEraseUsb').checked=true;await r.run();assert.equal(r.writes.length,0);assert.ok(r.logs.some(x=>x.includes('Erase is blocked')));
 });
 test('ROM boot output and scanner-only text cannot claim firmware startup without live ZJINFO',()=>{
- const ctx={monitorPendingScan:true,monitorBootText:'',usbRuntimeInfo:null,usbFlashBoardId:'',usbFlashPhase:'idle',usbRomDownload:false,logs:[], $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log:v=>ctx.logs.push(v)};
+ const ctx={monitorPendingScan:true,monitorBootText:'',usbRuntimeInfo:null,usbFlashExpected:null,usbFlashPhase:'idle',usbRomDownload:false,logs:[], $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log:v=>ctx.logs.push(v)};
  const code=source.slice(source.indexOf('function serialVisibleLine('),source.indexOf('function clearSerialOutput('));
  vm.runInNewContext(code+';globalThis.append=appendSerialOutput;',ctx);
  ctx.append('ESP-ROM:esp32c3-api1-20210207\nwaiting for download\n');
@@ -37,4 +37,21 @@ test('ROM boot output and scanner-only text cannot claim firmware startup withou
  ctx.usbRuntimeInfo={boardId:'ZFC-A1',version:'1.2.1'};
  ctx.append('Scanning I2C bus...\n');
  assert.equal(ctx.monitorPendingScan,false);assert.ok(ctx.logs[0].includes('Live USB firmware identity verified'));
+});
+test('USB completion requires the requested version and build stamp after a flash',()=>{
+ const buildStamp='Nov  5 2026 13:29:19',oldBuild='Nov  5 2026 10:45:59';
+ const ctx={monitorPendingScan:true,monitorBootText:'',usbRuntimeInfo:null,usbFlashExpected:{boardId:'ZFC-A2',version:'1.7.16',buildStamp},usbFlashPhase:'written',usbRomDownload:false,
+  $:()=>null,pushSerialLines(){},stage(){},progress(){},badge(){},log(){}};
+ const code=source.slice(source.indexOf('function serialVisibleLine('),source.indexOf('function clearSerialOutput('));
+ vm.runInNewContext(code+';globalThis.append=appendSerialOutput;',ctx);
+ for(const [version,stamp] of [['1.7.15',oldBuild],['1.7.16',oldBuild]]){
+  ctx.usbRuntimeInfo={boardId:'ZFC-A2',version,buildStamp:stamp};
+  ctx.append('ZJSCAN,ACK\n');
+  assert.equal(ctx.monitorPendingScan,true);
+  assert.equal(ctx.usbFlashPhase,'boot-mismatch');
+ }
+ ctx.usbRuntimeInfo={boardId:'ZFC-A2',version:'1.7.16',buildStamp};
+ ctx.append('ZJSCAN,ACK\n');
+ assert.equal(ctx.monitorPendingScan,false);
+ assert.equal(ctx.usbFlashPhase,'verified');
 });
