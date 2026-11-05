@@ -11,6 +11,8 @@ on:
       - 'tools/firmware-compile-time.test.mjs'
       - 'tools/offline-cache.test.mjs'
       - 'tools/connectivity-state-regression.test.mjs'
+      - 'tools/ap-admin-settings.test.mjs'
+      - 'tools/serial-readable-monitor.test.mjs'
       - 'tools/bench-firmware-browser.mjs'
       - 'tools/verify_release.py'
       - '.github/workflows/publish-flightcore-bench.yml'
