@@ -42,6 +42,7 @@ static bool zjLocalDiagnosticRoute(){
  const bool ap=String(zjClientTransport())=="AP";
  if(get)return (path=="/api/status"||path=="/api/telemetry"||path=="/api/rc/snapshot"||path=="/api/ppm/status"||path=="/api/pid/settings"||path=="/api/pid/status")||
    (ap&&(path=="/api/wifi/scan"||path=="/api/wifi/saved"));
+ if(path=="/api/flight/trace")return true; // Signed, encrypted request for a disarmed read-only trace.
  if(!ap)return path=="/api/auth/close"; // STA local sessions are observer-only
  return (path=="/api/motor"||path=="/api/command"||path=="/api/rc/access"||path=="/api/rc/claim"||path=="/api/rc/preview"||
    path=="/api/rc/release"||path=="/api/rc/stop"||path=="/api/flight/mode"||path=="/api/pid/settings"||path=="/api/pid/reset"||path=="/api/pid/apply"||path=="/api/auth/close")||

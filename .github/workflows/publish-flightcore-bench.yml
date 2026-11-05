@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           python3 tools/bench_release_gate.py --source
           python3 tools/verify_release.py
-          version=$(cat VERSION.txt)
+          version=$(jq -er '.benchArtifact.version' FlightCore_Firmware/bench-release-policy.json)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           destination="FlightCore_Firmware/bench/$version"
           if [ ! -d "$destination" ]; then
@@ -72,7 +72,9 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
-          destination="FlightCore_Firmware/bench/$(cat VERSION.txt)"
+          version=$(jq -er '.benchArtifact.version' FlightCore_Firmware/bench-release-policy.json)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          destination="FlightCore_Firmware/bench/$version"
           verified="$PWD/$destination"
           git fetch origin main
           git worktree add --detach "$RUNNER_TEMP/bench-publish" FETCH_HEAD
@@ -87,5 +89,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- "$destination"
-          git commit -m "Publish verified FlightCore $(cat VERSION.txt) bench package"
+          git commit -m "Publish verified FlightCore $version bench package"
           git push origin HEAD:main

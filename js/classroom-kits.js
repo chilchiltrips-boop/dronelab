@@ -460,6 +460,7 @@ function wifiDirect(ip,key,route,method='GET',args={},guard=null){
  const expected=state.kitId||localKitHosts.get(ip)||adminKitHosts.get(ip)||discoveredKits.find(k=>k.ip===ip)?.kitId||[...pairedKeys].find(([id,k])=>k===key)?.[0];
  const ticket=reconnectTicket,slot=expected||ip,boot=state.bootId;
  if(requestScheduler){
+  const traceRead=route==='/api/flight/trace';
   const emergency=route==='/api/motor'&&args.action==='STOP'||['/api/rc/stop','/api/rc/release'].includes(route);
   const control=route==='/api/motor'&&!['STATUS','WIZARD_STATUS'].includes(args.action);
   const queuedAt=Date.now();
@@ -474,11 +475,11 @@ function wifiDirect(ip,key,route,method='GET',args={},guard=null){
     throw error;
    }
   },{
-   priority:emergency?100:control?80:route==='/api/rc/preview'?70:method==='POST'&&route!=='/api/motor'?60:route==='/api/motor'?40:10,
-   generation:ticket,read:method==='GET'||route==='/api/motor'&&!control,preempt:emergency&&route!=='/api/rc/release',
+   priority:emergency?100:control?80:route==='/api/rc/preview'?70:traceRead?10:method==='POST'&&route!=='/api/motor'?60:route==='/api/motor'?40:10,
+   generation:ticket,read:traceRead||method==='GET'||route==='/api/motor'&&!control,preempt:emergency&&route!=='/api/rc/release',
    motion:!emergency&&(control||method==='POST'&&['/api/rc/claim','/api/rc/preview'].includes(route)),
    maxQueueMs:route==='/api/motor'&&['SLIDE','KEEP','RTC'].includes(args.action)?250:
-    emergency||route.startsWith('/api/firmware/')?12000:method==='GET'?1800:5000,
+    emergency||route.startsWith('/api/firmware/')?12000:traceRead||method==='GET'?1800:5000,
    guard:()=>{if(ticket!==reconnectTicket)throw Error('Selected kit changed before the queued request');guard?.();}
   });
  }
@@ -2350,6 +2351,43 @@ async function pidExchange(kit,action,args,operationGuard){
  if(line.startsWith('ZJPID,NACK,'))throw Error(value);
  return JSON.parse(value);
 }
+function openFlightTraceReader(){
+ const {kitId,board,transport,connectionGeneration}=root.ZebjusKits.getState();
+ const usb=transport==='usb',usbGeneration=serial()?.generation?.();
+ let bootId=state.bootId;
+ if(!linkFresh()||board!=='ZFC-A2'||!/^ZFC-A2-[0-9a-f]{12}$/i.test(kitId)||
+    !['usb','ap','sta'].includes(transport))throw Error('Connect a verified A2 Kit over USB, AP or STA.');
+ if(!usb&&(!/^[a-f0-9]{32}$/i.test(bootId)||
+    !(localKitHosts.get(state.ip)===kitId||adminKitHosts.get(state.ip)===kitId||secureIds.has(kitId))))
+  throw Error('Reverify the A2 signed network session or use USB.');
+ const guard=()=>{
+  if(!linkFresh()||reconnectTicket!==connectionGeneration||state.kitId!==kitId||state.transport!==transport||
+     bootId&&state.bootId&&bootId!==state.bootId||usb&&usbGeneration!==serial()?.generation?.())
+   throw Error('Kit, boot or transport changed while reading the flight trace.');
+ };
+ return async(capture,offset)=>{
+  guard();
+  let page;
+  if(usb){
+   const token=Array.from(root.crypto.getRandomValues(new Uint8Array(8)),x=>x.toString(16).padStart(2,'0')).join('');
+   const pending=waitSerial(new RegExp('^ZJTRACE,(ACK|NACK),'+kitId+','+token+','),3500);
+   pending.catch(()=>{});
+   await usbWrite(['ZJTRACE','READ',kitId,token,bootId||'-',capture,offset].join(','));
+   const line=await pending;
+   const value=line.split(',').slice(4).join(',');
+   if(line.startsWith('ZJTRACE,NACK,'))throw Error(value);
+   page=JSON.parse(value);
+  }else{
+   page=await deviceRequest('/api/flight/trace','POST',{bootId,capture,offset},guard);
+  }
+  guard();
+  if(page?.kitId!==kitId||!/^[a-f0-9]{32}$/i.test(page.bootId)||bootId&&page.bootId!==bootId)
+   throw Error('Flight trace response does not match the verified A2 boot.');
+  bootId=page.bootId;
+  if(!usb){state.heartbeatAt=Date.now();state.linkState='connected';pollErrors=0;}
+  return page;
+ };
+}
 function getMonitorPaths(){
  const id=state.kitId,link=linkFresh(),serialLink=serial();
  const usbVerified=!!id&&usbCandidate.kitId===id&&
@@ -2380,7 +2418,7 @@ root.ZebjusKits={
  changeRcAccess,selectControlPath,
  connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
- setFlightMode,pidExchange,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
+ setFlightMode,pidExchange,openFlightTraceReader,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({requestQueue:requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,ppmObservedAt:state.ppmObservedAt||0,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   networkBusy:!!(wifiTesting||headerModePending),authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),

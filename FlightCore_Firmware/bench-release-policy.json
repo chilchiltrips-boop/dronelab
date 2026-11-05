@@ -1,11 +1,12 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.16",
+  "candidateVersion": "1.7.17",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
   "note": "Explicit bench diagnostic download. Physical flight output is disabled.",
   "benchArtifact": {
+    "version": "1.7.16",
     "id": 13417864690,
     "sha256": "e1fe1b973432f0358c288333b8471541e333fa4103a4f48de10ad9ace7cb768d",
     "sourceCommit": "d4de0bced6165c815c0ebb17b7eebb1fd736b0b3",

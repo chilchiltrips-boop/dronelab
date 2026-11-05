@@ -14,7 +14,11 @@ test('production hardware watchdog enforces absolute manual deadlines during a s
 #include <cassert>
 #include <string>
 #include <iostream>
+#include <algorithm>
+#include <atomic>
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreEscProfile.h'))}
+#include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreFlightOutput.h'))}
+#include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreMotorConfig.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreMotorSafety.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreAutoEsc.h'))}
 static ZjAutoEscSequence zjAutoEscSequence;static ZjAutoEscRecord zjAutoEscRecord;
@@ -22,7 +26,7 @@ static void zjAutoEscTick(uint32_t){assert(false);}
 using portMUX_TYPE=int;using esp_timer_handle_t=void*;using ledc_channel_t=int;
 #define portMUX_INITIALIZER_UNLOCKED 0
 static void portENTER_CRITICAL(int*){}static void portEXIT_CRITICAL(int*){}
-static uint32_t clockMs=0,zjMotorUpdateMaxUs=0;static uint32_t millis(){return clockMs;}
+static uint32_t clockMs=0;static std::atomic<uint32_t> zjMotorUpdateMaxUs{0};static uint32_t millis(){return clockMs;}
 static uint32_t micros(){return clockMs*1000;}
 constexpr int LEDC_LOW_SPEED_MODE=0,ESP_OK=0;
 static uint32_t duties[4];
@@ -46,6 +50,17 @@ int main(){
  clockMs+=3000;zjMotorWatch(nullptr);off(ZjMotorSafety::CAL_FINISHED);
  begin();assert(zjMotor.startCalibration(clockMs,true));zjMotorApply();
  clockMs+=15000;zjMotorWatch(nullptr);off(ZjMotorSafety::CAL_TIMEOUT);
+ // Inject an already-owned mock lease to exercise independent flight OFF
+ // without changing the compiled hardware qualification policy.
+ zjFlightDriver.lease=1;zjFlightDriverAtUs=micros();zjMotorDriverOwner=ZjOutputOwner::FLIGHT;
+ for(auto& duty:duties)duty=1000;
+ clockMs+=7;zjMotorWatch(nullptr);assert(zjFlightDriverRead().lease==1&&duties[0]==1000);
+ clockMs+=1;zjMotorWatch(nullptr);auto flight=zjFlightDriverRead();
+ assert(!flight.lease&&flight.offAck&&flight.fault==ZjFlightFault::DEADLINE_MISSED);
+ for(auto duty:duties)assert(!duty);
+ const uint16_t stale[]={1500,1500,1500,1500};
+ assert(!zjFlightDriverSubmit(1,stale,micros()+4000).lease);
+ for(auto duty:duties)assert(!duty);
  begin();assert(zjMotor.startSlider(clockMs,15,30000));assert(zjMotor.slide(clockMs,1800,1));zjMotorApply();
  clockMs+=3000;zjMotorWatch(nullptr);assert(!zjMotorWatchTripped&&duties[0]>0);
  clockMs+=27000;zjMotorWatch(nullptr);off(ZjMotorSafety::TEST_FINISHED);

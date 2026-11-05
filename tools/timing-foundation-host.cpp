@@ -1,6 +1,8 @@
 #include "../FlightCore_Firmware/FlightCoreTiming.h"
 #include "../FlightCore_Firmware/FlightCoreEscProfile.h"
 #include "../FlightCore_Firmware/FlightCoreFlightOutput.h"
+#include "../FlightCore_Firmware/FlightCoreRateTrace.h"
+#include "../FlightCore_Firmware/FlightCoreRatePid.h"
 #include "../FlightCore_Firmware/FlightCorePpmFallback.h"
 #include <cassert>
 #include <cmath>
@@ -31,11 +33,18 @@ int main(){
  flight.input.sequence=1;flight.input.generation=1;flight.input.receivedAtMs=1;
  flight.nowMs=2;flight.inputDeadlineMs=150;
  flight.acro=flight.imuFresh=flight.timingHealthy=flight.outputOffAck=true;
+ flight.driverReady=flight.wiringVerified=true;
  ZjFlightOutputGate gate;
  assert(!gate.arm(flight,ZJ_FLIGHT_HARDWARE_QUALIFIED,true));
  assert(!gate.arm(flight,true,false)&&gate.reason==ZjFlightFault::EXPLICIT_ARM_REQUIRED);
  flight.benchActive=true;assert(!gate.arm(flight,true,true));
- flight.benchActive=false;assert(gate.arm(flight,true,true)&&gate.permit(flight,true));
+ flight.benchActive=false;
+ flight.input.source=ZjReceiverSource::WEB;assert(!gate.arm(flight,true,true)&&gate.reason==ZjFlightFault::SOURCE_UNSUPPORTED);
+ flight.input.source=ZjReceiverSource::PPM;
+ flight.outputOffAck=false;assert(!gate.arm(flight,true,true)&&gate.reason==ZjFlightFault::OFF_UNVERIFIED);
+ flight.outputOffAck=true;
+ flight.input.channels[2]=1051;assert(!gate.arm(flight,true,true)&&gate.reason==ZjFlightFault::THROTTLE_HIGH);
+ flight.input.channels[2]=1050;assert(gate.arm(flight,true,true)&&gate.permit(flight,true));
  assert(c.begin(124600)&&c.intervalUs==120600&&c.missedTicks==29);
  flight.timingHealthy=false;
  assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::DEADLINE_MISSED);
@@ -45,6 +54,38 @@ int main(){
  ++flight.input.generation;assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::SOURCE_CHANGED);
  assert(gate.arm(flight,true,true));flight.imuFresh=false;
  assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::IMU_STALE);
+ assert(zjFlightLowThrottle(1050)&&!zjFlightLowThrottle(1051));
+ assert(zjFlightMixThrottle(1750)==1750&&zjFlightMixThrottle(2000)==1800);
+ assert(zjRateMixQuadX(1800,300,0,0).clipMask==6);
+ assert(zjRateMixQuadPlus(1800,300,0,0).clipMask==2);
+
+ // 250 Hz tick jitter does not drift the 50 Hz sample grid or replay a stall.
+ ZjRateTrace trace;
+ ZjRateTraceSample sample;
+ const uint32_t start=0xffff0000;
+ sample.atUs=start;trace.begin(sample,false);
+ for(unsigned tick=0;tick<3000;tick++){
+  sample.atUs=start+tick*4000+(tick%2?30:0);
+  sample.inputSeq=tick;sample.requested[0]=1320;
+  if(tick==499)trace.flightArm(sample);
+  trace.observe(sample);
+ }
+ sample.atUs+=120600;sample.dtUs=120600;sample.triggerUs=sample.atUs;
+ sample.flags=ZJ_TRACE_OFF_ACK|ZJ_TRACE_APPLIED_KNOWN;
+ trace.freeze(sample,ZjRateTraceEvent::FAILSAFE,ZjFlightFault::DEADLINE_MISSED);
+ assert(trace.size()==503&&trace.capture==1&&!trace.active);
+ assert(trace.read(0,sample)&&sample.event==ZjRateTraceEvent::INPUT_ARM);
+ assert(trace.read(1,sample)&&sample.event==ZjRateTraceEvent::FLIGHT_ARM);
+ assert(trace.read(2,sample)&&sample.inputSeq==500&&sample.atUs==uint32_t(start+2000000));
+ assert(trace.read(501,sample)&&sample.inputSeq==2995&&sample.requested[0]==1320);
+ assert(trace.read(502,sample)&&sample.reason==ZjFlightFault::DEADLINE_MISSED&&sample.dtUs==120600);
+ assert((sample.flags&ZJ_TRACE_OFF_ACK)&&sample.applied[0]==0&&!trace.read(503,sample));
+ trace.freeze({},ZjRateTraceEvent::STOP,ZjFlightFault::EMERGENCY_STOP);
+ assert(trace.read(502,sample)&&sample.reason==ZjFlightFault::DEADLINE_MISSED);
+ trace.begin(sample,true);assert(trace.capture==2&&trace.size()==0);
+ trace.observe(sample);sample.atUs+=120600;trace.observe(sample);
+ trace.freeze(sample,ZjRateTraceEvent::EXPORT,ZjFlightFault::NONE);
+ assert(trace.size()==4&&trace.read(0,sample)&&sample.event==ZjRateTraceEvent::PREVIEW_START);
  assert(zjDecidePpmFallback(349,false,true,true,false)==ZjPpmFallbackDecision::WAIT);
  assert(zjDecidePpmFallback(349,true,true,true,false)==ZjPpmFallbackDecision::CANCEL);
  assert(zjDecidePpmFallback(350,false,true,true,false)==ZjPpmFallbackDecision::START_AP);

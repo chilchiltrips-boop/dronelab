@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 
-const version=readFileSync('VERSION.txt','utf8').trim();
+const version=JSON.parse(readFileSync('FlightCore_Firmware/bench-release-policy.json')).benchArtifact.version;
 const folder=`FlightCore_Firmware/bench/${version}`;
 const catalog=JSON.parse(readFileSync(`${folder}/catalog.json`));
 const published=JSON.parse(readFileSync('firmware-catalog.json'));

@@ -5,6 +5,30 @@
 'use strict';
 const client=document.getElementById('kitAckDiagnostics')?.dataset?.client==='android'?'android':'web';
 const KEY='zebjus.ackdiagnostics.'+client+'.v1',LIMIT=350,FLUSH_MS=2000;
+const TRACE_KEY=KEY+'.flight-trace',TRACE_MAX_ROWS=503;
+const traceEvents=['SAMPLE','INPUT_ARM','PREVIEW_START','FLIGHT_ARM','DISARM','STOP','FAILSAFE','EXPORT'];
+const traceReasons=['NONE','UNQUALIFIED','EMERGENCY_STOP','OUTPUT_RESERVED','INPUT_STALE','INPUT_DISARMED','SOURCE_CHANGED',
+ 'IMU_STALE','DEADLINE_MISSED','MODE_UNSUPPORTED','EXPLICIT_ARM_REQUIRED','THROTTLE_HIGH','OFF_UNVERIFIED',
+ 'SOURCE_UNSUPPORTED','WIRING_UNVERIFIED','OUTPUT_ERROR','PID_INVALID','LOW_THROTTLE','PROFILE_CHANGED','PPM_SIGNAL_LOST'];
+const traceSources=['NONE','PPM','ANDROID','WEB'],traceOwners=['NONE','ESC_CALIBRATION','BENCH','FLIGHT'];
+const traceProfiles=['aerof450-quad-x','aerof450-quad-plus'];
+const uint=(value,max=0xffffffff)=>Number.isSafeInteger(value)&&value>=0&&value<=max;
+const firmwareVersion=value=>typeof value==='string'&&/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value);
+function validTraceRow(row){
+ return Array.isArray(row)&&row.length===50&&row.slice(0,32).every(v=>uint(v))&&
+  !!(traceEvents[row[3]]&&traceReasons[row[4]]&&traceSources[row[5]]&&traceProfiles[row[14]]&&traceOwners[row[19]])&&
+  row[9]<=65535&&row[15]<=1023&&row[16]<=1800&&row[17]<=7&&row[18]<=15&&row.slice(20,32).every(v=>v<=2500)&&
+  row.slice(32).every(v=>v===null||typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000);
+}
+function checkedTrace(value){
+ if(!value||!uint(value.capture)||!value.capture||value.sampleHz!==50||!firmwareVersion(value.firmwareVersion)||
+    !uint(value.receivedAt,8.64e15)||!Array.isArray(value.rows)||value.rows.length<2||value.rows.length>TRACE_MAX_ROWS||
+    !value.rows.every(validTraceRow)||![1,2].includes(value.rows[0][3])||value.rows.at(-1)[3]<4)throw Error('Invalid FC flight trace.');
+ const {capture,sampleHz,firmwareVersion:version,receivedAt,rows}=value;
+ return {capture,sampleHz,firmwareVersion:version,receivedAt,rows};
+}
+let flightTrace=null;
+try{const saved=localStorage.getItem(TRACE_KEY);if(saved)flightTrace=checkedTrace(JSON.parse(saved));}catch{}
 const allowedEvents=new Set(['app_start','connect_start','connect_ok','connect_error','kit_status',
  'native_request','native_response','native_failure','rc_claim','rc_claim_error','rc_ack',
  'rc_ack_error','udp_start','udp_tx','udp_ack','udp_nack','udp_warning','udp_error','input_disarm','rc_release','link_change','wifi_event','request','request_ok',
@@ -17,7 +41,7 @@ const fields=['ackRequired','requestedInputArmed','sentSeq','route','transport',
  'rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed','nackSent','nackFailed',
  'maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs','apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','requestQueueDepth','oldestQueuedRequestMs','cancelledStaleRequests','connectionGeneration','requestQueueWaitMs','requestNetworkWaitMs','reconnectAttempts','lastRecoveryReason','ppmPresent','rcActive','inputValid','failsafe','profileSaved','selectedPath','activePath','lastObservedPath','targetInput','lastStaInput','handoverState','handoverError','handoverBlocker','handoverLastReject','ppmThrottleUs','handMotorDisabled','diagnosticArmReleased'];
 const routes=new Set(['/api/rc/claim','/api/rc/preview','/api/rc/stop','/api/rc/release',
- '/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status','/api/motor','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode']);
+ '/api/rc/snapshot','/api/status','/api/telemetry','/api/ppm/status','/api/motor','/api/identify','/api/auth/local','/api/rc/access','/api/wifi/mode','/api/flight/trace']);
 const statuses=new Set(['ok','fail','timeout','unknown','pending']);
 const reasons=new Set(['PROFILE_SAVE_FAILED','INPUT_UNSAFE','HANDOVER_BUSY','STA_CONFIG_REQUIRED','INPUT_STALE','QUEUE_STALE','ACK_INVALID','TIMEOUT','IDENTITY','AUTH','NETWORK','CANCELLED','OWNER_BUSY','OWNER_STALE','FRAME_REJECTED','OTHER',
  'UDP_SESSION_INVALID','UDP_START_FAILED','UDP_INPUT_STALE','UDP_ACK_TIMEOUT','UDP_FIRMWARE_RX_STALE','UDP_FIRMWARE_APPLY_STALE','UDP_FEEDBACK_DELAY','UDP_NO_ACK','UDP_SEND_OR_AUTH_FAILED','UDP_APPLY_TIMEOUT','UDP_NACK_INVALID_FRAME','UDP_NACK_STALE','UDP_NACK_OWNER_CONFLICT','UDP_NACK_APPLY_STALLED','UDP_NACK_AUTH_EXPIRED','UDP_UNKNOWN']);
@@ -48,7 +72,7 @@ const motorResultEnums={
 fields.push('motorAction','motorMode','motorReason','motorPolicy',...motorCounts,...motorResultPulses,...motorResultFlags,...Object.keys(motorResultEnums));
 // IMU records share the existing bounded/private diagnostic log. IDs below
 // select an observation internally and are never exported.
-const timingCounts=['controlTargetHz','controlDtUs','controlMaxDtUs','controlStartupMaxDtUs','controlCalibrationMaxDtUs','controlDisarmedMaxDtUs','controlDiagnosticMaxDtUs','imuReadMaxUs','pidComputeMaxUs','motorUpdateMaxUs','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','controlMaxIntervalAtUs','ratePidComputeMaxUs','ratePidShadowRevision','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
+const timingCounts=['controlTargetHz','controlDtUs','controlMaxDtUs','controlStartupMaxDtUs','controlCalibrationMaxDtUs','controlDisarmedMaxDtUs','controlDiagnosticMaxDtUs','controlFlightMaxDtUs','imuReadMaxUs','pidComputeMaxUs','motorUpdateMaxUs','controlIntervalUs','controlMinIntervalUs','controlMaxIntervalUs','controlJitterUs','controlMaxJitterUs','controlExecutionUs','controlMaxExecutionUs','controlMissedTicks','controlDeadlineMisses','controlOverruns','controlLastTickUs','controlMaxIntervalAtUs','ratePidComputeMaxUs','ratePidShadowRevision','imuTargetHz','imuSensorOdrHz','imuSampleAgeUs','imuErrors','imuMissedNormalSamples','imuDlpFilter','imuGyroBandwidthHz','gyroRangeDps','accelRangeG','escPwmHz','telemetryConfiguredHz','telemetryDrops'];
 const timingRates=['controlMeasuredHz','controlActualHz','imuActualHz','telemetryActualHz','imuFilterDelayMs'];
 const timingHealth=new Set(['UNAVAILABLE','STARTING','HEALTHY','LATE']);
 fields.push(...timingCounts,...timingRates,'controlHealth','controlMaxIntervalPhase','ratePidShadowState','ratePidShadowSaturated','flightQualified','flightDeadlineFault','controlActuating','imuValid','accelXG','accelYG','accelZG','androidUdpReceivedHz','androidUdpAppliedHz','udpCoalescedFrames');
@@ -78,8 +102,8 @@ function normalizeImu(value,expectedBoard=''){
   out[key]=v;
  }
  if(value.controlHealth!==undefined){if(!timingHealth.has(value.controlHealth))return null;out.controlHealth=value.controlHealth;}
- if(['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC'].includes(value.controlMaxIntervalPhase))out.controlMaxIntervalPhase=value.controlMaxIntervalPhase;
- if(['DISARMED','READY','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID'].includes(value.ratePidShadowState))out.ratePidShadowState=value.ratePidShadowState;
+ if(['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC','RATE_FLIGHT'].includes(value.controlMaxIntervalPhase))out.controlMaxIntervalPhase=value.controlMaxIntervalPhase;
+ if(['DISARMED','READY','LOW_THROTTLE','BENCH_PREVIEW','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID','ANGLE_LEVEL_REQUIRED'].includes(value.ratePidShadowState))out.ratePidShadowState=value.ratePidShadowState;
  for(const key of ['controlActuating','imuValid','ratePidShadowSaturated','flightQualified','flightDeadlineFault'])if(typeof value[key]==='boolean')out[key]=value[key];
  if(value.accelG!==undefined){if(!Array.isArray(value.accelG)||value.accelG.length!==3||!value.accelG.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=8))return null;out.accelG=[...value.accelG];}
  if(value.sampleAgeMs!==undefined&&value.sampleAgeMs!==null){if(!Number.isSafeInteger(value.sampleAgeMs)||value.sampleAgeMs<0||value.sampleAgeMs>0xffffffff)return null;out.sampleAgeMs=value.sampleAgeMs;}
@@ -214,8 +238,8 @@ function clean(data){
   else if([...timingRates,'androidUdpReceivedHz','androidUdpAppliedHz','accelXG','accelYG','accelZG'].includes(key)){if(typeof v==='number'&&Number.isFinite(v)&&Math.abs(v)<=1000000)result[key]=Math.round(v*10000)/10000;}
   else if(key==='udpCoalescedFrames'){if(Number.isSafeInteger(v)&&v>=0&&v<=0xffffffff)result[key]=v;}
   else if(key==='controlHealth'){if(timingHealth.has(v))result[key]=v;}
-  else if(key==='controlMaxIntervalPhase'&&['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC'].includes(v))result[key]=v;
-  else if(key==='ratePidShadowState'&&['DISARMED','READY','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID'].includes(v))result[key]=v;
+  else if(key==='controlMaxIntervalPhase'&&['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC','RATE_FLIGHT'].includes(v))result[key]=v;
+  else if(key==='ratePidShadowState'&&['DISARMED','READY','LOW_THROTTLE','BENCH_PREVIEW','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID','ANGLE_LEVEL_REQUIRED'].includes(v))result[key]=v;
   else if(['controlActuating','imuValid','ratePidShadowSaturated','flightQualified','flightDeadlineFault'].includes(key)){if(typeof v==='boolean')result[key]=v;}
   else if(imuFloatFields.includes(key)){if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.round(Math.max(-1000,Math.min(1000,v))*10000)/10000;}
   else if(imuCountFields.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
@@ -345,14 +369,70 @@ function observeInput(rc={},kit={}){
  const key=[rc.source,rc.active,rc.inputArmed,rc.failsafe,path].join('|');
  if(key!==lastInputState||Date.now()-lastInputAt>=2000){record('input_sample',data);lastInputAt=Date.now();lastInputState=key;}
 }
+function flightTraceRows(){
+ if(!flightTrace)return [];
+ const origin=flightTrace.rows[0][0];
+ return flightTrace.rows.map(row=>{
+  const flag=mask=>!!(row[15]&mask);
+  const event=traceEvents[row[3]],reason=traceReasons[row[4]];
+  const data={flightCapture:flightTrace.capture,flightFirmware:flightTrace.firmwareVersion,flightEvent:event,flightReason:reason,
+   flightTickUs:row[0],flightElapsedUs:(row[0]-origin)>>>0,flightDtUs:row[1],
+   flightTriggerUs:row[3]>=3?row[2]:null,flightSource:traceSources[row[5]],flightInputSeq:row[6],flightInputAccepted:row[7],
+   flightInputGeneration:row[8],flightInputAgeMs:row[9]===65535?null:row[9],flightImuAgeUs:row[10]===0xffffffff?null:row[10],
+   flightMissedTicks:row[11],flightPidRevision:row[12],flightPidGeneration:row[13],flightProfile:traceProfiles[row[14]],
+   flightFrame:row[14]?'QUAD_PLUS':'QUAD_X',flightMode:flag(128)?'ANGLE':'RATE',flightPreview:flag(256),
+   flightInputArmed:flag(1),flightInputFresh:flag(2),flightImuValid:flag(4),flightPidValid:flag(8),flightArmed:flag(64),
+   flightThrottleUsedUs:row[16]||null,flightThrottleCapped:flag(512),flightPidSaturationMask:row[17],flightMixClipMask:row[18],
+   flightOutputOwner:traceOwners[row[19]],flightOffAck:flag(32)};
+  for(const [n,name] of ['Roll','Pitch','Throttle','Yaw'].entries())data['flightInput'+name+'Us']=row[20+n]||null;
+  for(let n=0;n<4;n++){
+   data['flightRequestedM'+(n+1)+'Us']=row[24+n]||null;
+   data['flightAppliedM'+(n+1)+'Us']=flag(16)?row[28+n]:null;
+  }
+  const pidValues=flag(8)||reason==='LOW_THROTTLE';
+  for(const [n,name] of ['Roll','Pitch','Yaw'].entries()){
+   const [desired,measured,p,i,d,correction]=row.slice(32+n*6,38+n*6);
+   const target=flag(256)||row[9]!==65535?desired:null,rate=flag(4)?measured:null;
+   const axis='flight'+name;
+   data[axis+'DesiredDps']=target;data[axis+'MeasuredDps']=rate;
+   data[axis+'ErrorDps']=target===null||rate===null?null:Number((target-rate).toFixed(3));
+   data[axis+'PUs']=pidValues?p:null;data[axis+'IUs']=pidValues?i:null;data[axis+'DUs']=pidValues?d:null;
+   data[axis+'CorrectionUs']=pidValues?correction:null;
+  }
+  return data;
+ });
+}
+async function fetchFlightTrace(onProgress){
+ const read=root.ZebjusKits?.openFlightTraceReader?.();
+ if(!read)throw Error('Connect a verified A2 Kit to read its recorder.');
+ let capture=0,total=0,version='';
+ const rows=[];
+ do{
+  const page=await read(capture,rows.length);
+  if(page?.version!==1||page.sampleHz!==50||page.offset!==rows.length||!uint(page.capture)||
+     !uint(page.total,TRACE_MAX_ROWS)||!firmwareVersion(page.firmwareVersion)||!Array.isArray(page.rows))
+   throw Error('Invalid FC flight trace response.');
+  if(!page.capture&&page.total===0)throw Error('No trace on this boot. Run a Rate diagnostic or PID preview, then disarm.');
+  if(!page.capture||page.total<2||!page.rows.length||page.rows.length>8||rows.length+page.rows.length>page.total||
+     !page.rows.every(validTraceRow)||capture&&(page.capture!==capture||page.total!==total||page.firmwareVersion!==version))
+   throw Error('FC flight trace changed or contains invalid data.');
+  capture=page.capture;total=page.total;version=page.firmwareVersion;
+  rows.push(...page.rows);onProgress?.(rows.length,total);
+ }while(rows.length<total);
+ flightTrace=checkedTrace({capture,sampleHz:50,firmwareVersion:version,receivedAt:Date.now(),rows});
+ try{localStorage.setItem(TRACE_KEY,JSON.stringify(flightTrace));return true;}
+ catch{return false;}
+}
 function exportData(format){
  const s=summary();
+ const rows=flightTraceRows();
  if(format==='json')return JSON.stringify({schema:'zebjus-ack-diagnostics-v1',client,generatedAt:new Date().toISOString(),
-  notes:'Input and explicit motor-bench diagnostics. ACKs are sampled; slow motor ACKs and motor state changes are retained. No credentials/Device ID/SSID/IP are included.',
-  summary:s,events},null,2);
- const columns=['at','event',...fields];
+  notes:'Input and motor-bench diagnostics. Flight trace timestamps use the FC clock. Applied pulses are driver acknowledgements. No credentials, Device ID, SSID or IP are included.',
+  summary:s,events,...(flightTrace?{flightTrace:{...flightTrace,rows}}:{})},null,2);
+ const columns=['at','event',...fields,...Object.keys(rows[0]||{})];
  const quote=v=>'"'+String(v===undefined||v===null?'':v).replace(/"/g,'""')+'"';
- return [columns.join(','),...events.map(e=>columns.map(k=>quote(k==='at'?new Date(e.at).toISOString():k==='event'?e.event:e.data[k])).join(','))].join('\r\n');
+ return [columns.join(','),...events.map(e=>columns.map(k=>quote(k==='at'?new Date(e.at).toISOString():k==='event'?e.event:e.data[k])).join(',')),
+  ...rows.map(row=>columns.map(k=>quote(k==='event'?'flight_trace':row[k])).join(','))].join('\r\n');
 }
 function save(format){
  flush(true);
@@ -371,8 +451,28 @@ function init(){
   try{save(b.dataset.diagExport)}catch{const output=p.querySelector('[data-diag-summary]');if(output)output.textContent='Export unavailable; your local log remains saved.'}
  }));
  const clear=p.querySelector('[data-diag-clear]');
+ const fetchTrace=p.querySelector('[data-diag-flight-trace]'),traceStatus=p.querySelector('[data-diag-flight-status]');
+ if(traceStatus&&flightTrace)traceStatus.textContent=flightTrace.rows.length+' FC flight trace rows saved locally.';
+ fetchTrace?.addEventListener('click',async()=>{
+  if(fetchTrace.disabled||!traceStatus)return;
+  fetchTrace.disabled=true;if(clear)clear.disabled=true;
+  traceStatus.textContent='Reading the disarmed A2 recorder…';
+  try{
+   const saved=await fetchFlightTrace((count,total)=>{traceStatus.textContent='Reading FC trace • '+count+'/'+total;});
+   traceStatus.textContent=flightTrace.rows.length+(saved?' FC flight trace rows saved locally.':' FC flight trace rows ready to download. Local storage is full or unavailable.');
+  }catch(error){
+   const msg={DISARM_BEFORE_TRACE_READ:'Disarm input and stop motor tests before fetching the trace.',
+    TRACE_STILL_RECORDING:'Wait for the terminal control tick and fetch again.',
+    TRACE_CHANGED:'The FC capture changed while reading. Fetch again after disarm.',
+    BOOT_CHANGED:'The A2 restarted. Verify the Kit connection before fetching again.'}[error?.message];
+   traceStatus.textContent=msg||(error?.status===404?'Update the A2 to firmware with flight recorder support.':error.message||'Flight trace unavailable.');
+  }finally{fetchTrace.disabled=false;if(clear)clear.disabled=false;}
+ });
  clear?.addEventListener('click',async()=>{if(!await root.AerionDialogs?.confirm('Erase locally saved ACK diagnostics from this device?',{kitBound:false,host:p,danger:true,confirmLabel:'Erase diagnostics'}))return;
-  events=[];try{localStorage.removeItem(KEY)}catch{}paint(true);
+  events=[];flightTrace=null;
+  try{localStorage.removeItem(KEY);localStorage.removeItem(TRACE_KEY)}catch{}
+  if(traceStatus)traceStatus.textContent='No FC flight trace saved locally.';
+  paint(true);
  });
  p.addEventListener('toggle',()=>paint(true));
  root.addEventListener('pagehide',()=>flush(true));

@@ -6,7 +6,7 @@ from firmware_compile_time import check_compiled_at
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'FlightCore_Firmware'
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--bench',type=Path,help='Verify the approved bench package against the current compiled source')
+parser.add_argument('--bench',type=Path,help='Verify the approved bench package against its pinned compiled source')
 bench=parser.parse_args().bench
 OUT=bench or SOURCE
 catalog_path=OUT/'catalog.json' if bench else ROOT/'firmware-catalog.json'
@@ -22,10 +22,11 @@ hold_path=SOURCE/'publication-hold.json'
 held=CAT['version']!=source_version
 if bench:
  policy=json.loads((SOURCE/'bench-release-policy.json').read_text())
- assert not held and CAT['version']==policy['candidateVersion'], 'Bench package is for a different firmware source version'
+ approved=policy['benchArtifact']
+ assert policy['candidateVersion']==source_version and CAT['version']==approved.get('version',source_version), 'Bench package version differs from the approved version'
  for metadata in (CAT,LATEST):
   assert metadata.get('releaseScope')=='BENCH_DIAGNOSTIC' and metadata.get('flightOutputQualified') is False and metadata.get('physicalAcceptance')=='NOT_RUN', 'Bench qualification metadata is invalid'
-if held:
+if held and not bench:
  hold=json.loads(hold_path.read_text()) if hold_path.exists() else {}
  assert hold.get('schema')==1 and hold.get('candidateVersion')==source_version and hold.get('publishedVersion')==CAT['version'], 'Source/catalog version mismatch: rebuild both profiles'
 
@@ -39,15 +40,27 @@ report=json.loads((OUT/'build-report.json').read_text())
 assert report['version']==CAT['version'], 'Build report/catalog version mismatch'
 assert report.get('sourceCommit') and report.get('sourceSha256'), 'Compile provenance required; rebuild both profiles'
 if bench:
- approved=policy['benchArtifact']
  assert report['sourceCommit']==approved['sourceCommit'], 'Wrong source commit for the approved bench artifact'
  assert hashlib.sha256(catalog_path.read_bytes()).hexdigest()==approved['catalogSha256'], 'Bench catalog differs from the approved artifact'
  assert hashlib.sha256((OUT/'build-report.json').read_bytes()).hexdigest()==approved['reportSha256'], 'Bench report differs from the approved artifact'
  assert report['hardwareFlashingTested'] is False and {b['boardId'] for b in report['boards']}=={'ZFC-A1','ZFC-A2'}
- compiled={str(p.relative_to(ROOT)) for p in [SOURCE/'I2C_ADDRESS_SCANNER.ino',SOURCE/'partitions.csv',*SOURCE.glob('*.h')]}
+ commit=report['sourceCommit']
+ assert len(commit)==40 and all(c in '0123456789abcdef' for c in commit), 'Bench source must be a full Git SHA'
+ subprocess.run(['git','merge-base','--is-ancestor',commit,'HEAD'],cwd=ROOT,check=True)
+ if held:
+  # A new source candidate can coexist with the previously approved bench
+  # package. Verify the original compiled inputs from Git in that case.
+  files=subprocess.check_output(['git','ls-tree','--name-only',commit,'FlightCore_Firmware/'],cwd=ROOT,text=True).splitlines()
+  compiled={name for name in files if name.endswith('.h')}|{'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino','FlightCore_Firmware/partitions.csv'}
+  assert subprocess.check_output(['git','show',f'{commit}:VERSION.txt'],cwd=ROOT,text=True).strip()==CAT['version']
+ else:
+  compiled={str(p.relative_to(ROOT)) for p in [SOURCE/'I2C_ADDRESS_SCANNER.ino',SOURCE/'partitions.csv',*SOURCE.glob('*.h')]}
  assert set(report['sourceSha256'])==compiled, 'Bench report has an incomplete compiled source set'
- subprocess.run(['git','merge-base','--is-ancestor',report['sourceCommit'],'HEAD'],cwd=ROOT,check=True)
-if held:
+if bench and held:
+ for name,digest in report['sourceSha256'].items():
+  content=subprocess.check_output(['git','show',f'{commit}:{name}'],cwd=ROOT)
+  assert hashlib.sha256(content).hexdigest()==digest, 'Pinned compiled source differs: '+name
+elif held:
  assert report['sourceCommit']==hold['publishedSourceCommit'] and hashlib.sha256((OUT/'build-report.json').read_bytes()).hexdigest()==hold['publishedBuildReportSha256'], 'Held release report differs from pinned production provenance'
  print(f"Publication hold: verifying published {CAT['version']}; current source is candidate {source_version}")
 else:

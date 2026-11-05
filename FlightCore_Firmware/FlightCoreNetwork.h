@@ -69,6 +69,9 @@ static void zjCorsHeaders(){
 }
 static void zjReply(int status,const String& body);
 static bool zjAllow();static const char* zjClientTransport();
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static bool zjAutoEscOutputsOff();
+#endif
 #include "FlightCoreEnrollment.h"
 #include "FlightCoreUdp.h"
 #include "FlightCoreOta.h"
@@ -104,6 +107,7 @@ static void zjReply(int status,const String& body){
 #include "FlightCoreHandover.h"
 #include "FlightCoreWifiPolicy.h"
 #include "FlightCorePidApi.h"
+#include "FlightCoreRateTraceApi.h"
 static const char* zjClientTransport();
 static String zjMdnsKitHostname();
 static String zjStatus(){
@@ -190,6 +194,7 @@ static void zjSetupHttp(){
  zjSetupEnrollmentHttp();
  zjSetupSecureOtaHttp();
  zjSetupPidHttp();
+ zjSetupFlightTraceHttp();
  zjHttp.on("/",HTTP_GET,[](){zjHttp.sendHeader("Cache-Control","no-store");zjHttp.send_P(200,"text/html",ZJ_SETUP_PORTAL);});
  zjHttp.on("/api/health",HTTP_GET,[](){zjReply(200,"{\"product\":\"ZEBJUS_FLIGHTCORE\",\"board\":"+zjJson(FC_BOARD)+"}");});
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
@@ -362,7 +367,17 @@ static void zjSetupHttp(){
   if(zjArg("ledKeep")=="true"&&ledMode!=LED_OFF)leaseStart=millis();
   zjReply(200,"{\"received\":true,\"kitId\":"+zjJson(zjKitId)+",\"seq\":"+String(zjRcSeq)+",\"receivedAtMs\":"+String(zjRcLast)+",\"flightModeState\":"+zjFlightModeState()+",\"inputArmed\":"+(zjRcInputArmed?String("true"):String("false"))+",\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"))+","+zjMotorFlags()+"}");
  });
- zjHttp.on("/api/rc/stop",HTTP_POST,[](){if(!zjAllow())return;zjMotorEmergencyStop();zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");});
+ zjHttp.on("/api/rc/stop",HTTP_POST,[](){
+  if(!zjAllow())return;
+  zjMotorEmergencyStop();zjUdpInvalidate();zjRcRelease("NETWORK_EMERGENCY_STOP");
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+  if(!zjAutoEscOutputsOff()){
+   zjReply(409,"{\"error\":\"OUTPUT_OFF_UNVERIFIED\",\"stopped\":false,\"motorsDisabled\":false}");
+   return;
+  }
+#endif
+  zjReply(200,"{\"stopped\":true,\"motorsDisabled\":true}");
+ });
  zjHttp.on("/api/rc/snapshot",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjRcLoop(millis());zjReply(200,zjRcState());});
  zjHttp.on("/api/ppm/status",HTTP_GET,[](){if(!zjAllow())return;zjPpmLoop(millis());zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"ppm\":"+zjPpmStatus()+"}");});
 
@@ -571,9 +586,6 @@ static bool zjNetSerialCommand(char* line){
  }
  return false;
 }
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
-static bool zjAutoEscOutputsOff();
-#endif
 #include "FlightCorePpmFallback.h"
 static bool zjPpmFallbackSwitching=false;
 static bool zjPpmFallbackOutputsOff(){

@@ -9,7 +9,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.16";
+constexpr const char* FW_VERSION="1.7.17";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -85,6 +85,7 @@ bool readLong(char*& state,long low,long high,long& result){
 static bool zjAccessStationary();
 static bool zjAccessBusy();
 static String zjControlRadio();
+static bool zjFlightSerialCommand(char* line);
 void ledCommand(char* line){
  ledCommandOk=false;
  if(strncmp(line,"ZJLED,",6)!=0)return;
@@ -132,6 +133,7 @@ static bool zjNetSerialCommand(char* line); // implemented by network module lat
 static bool zjMotorSerial(char* line);
 void serialCommand(char* line){
  if(zjMotorSerial(line))return;
+ if(zjFlightSerialCommand(line))return;
  if(zjMotorSessionActive&&strncmp(line,"ZJRC,",5)&&strncmp(line,"ZJINFO,",7)){Serial.println("ZJMOTOR,ERR,STOP_SETUP_FIRST");return;}
  if(zjAccessSerialCommand(line,zjAccessStationary(),zjAccessBusy(),zjControlRadio()))return;
  if(zjRcSerialCommand(line))return;
@@ -256,7 +258,7 @@ static uint32_t gyroDiagnosticDrops=0;
 static String zjControlTimingStatus(){
  const auto c=zjReadControl();const auto shadow=zjReadRateShadow();const uint32_t now=micros();
  const char* health=!zjControlRuntimeReady?"UNAVAILABLE":!c.ticks?"STARTING":c.healthy(now)?"HEALTHY":"LATE";
- return String("\"controlTargetHz\":250,\"controlActuating\":false,\"controlHealth\":\"")+health+"\",\"controlActualHz\":"+
+ return String("\"controlTargetHz\":250,\"controlActuating\":")+(shadow.actuating?"true":"false")+",\"controlHealth\":\""+health+"\",\"controlActualHz\":"+
   (c.rate.known?String(c.rate.actual(now),2):String("null"))+",\"controlIntervalUs\":"+String(c.intervalUs)+
   ",\"controlMinIntervalUs\":"+String(c.minIntervalUs)+",\"controlMaxIntervalUs\":"+String(c.maxIntervalUs)+
   ",\"controlJitterUs\":"+String(c.jitterUs)+",\"controlMaxJitterUs\":"+String(c.maxJitterUs)+
@@ -268,8 +270,9 @@ static String zjControlTimingStatus(){
   ",\"controlDtUs\":"+String(c.intervalUs)+",\"controlMaxDtUs\":"+String(c.maxIntervalUs)+
   ",\"controlStartupMaxDtUs\":"+String(shadow.phaseMaxUs[0])+",\"controlCalibrationMaxDtUs\":"+String(shadow.phaseMaxUs[1])+
   ",\"controlDisarmedMaxDtUs\":"+String(shadow.phaseMaxUs[2])+",\"controlDiagnosticMaxDtUs\":"+String(shadow.phaseMaxUs[3])+
+  ",\"controlFlightMaxDtUs\":"+String(shadow.phaseMaxUs[4])+
   ",\"imuReadMaxUs\":"+String(shadow.imuReadMaxUs)+",\"pidComputeMaxUs\":"+String(shadow.computeMaxUs)+
-  ",\"motorUpdateMaxUs\":"+String(zjMotorUpdateMaxUs)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
+  ",\"motorUpdateMaxUs\":"+String(zjMotorUpdateMaxUs.load(std::memory_order_relaxed))+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
   ",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
   ",\"flightDeadlineFault\":"+(shadow.deadlineFault?"true":"false")+
   ",\"controlMaxIntervalAtUs\":"+String(c.maxIntervalAtUs)+",\"ratePidShadowState\":\""+shadow.reason+
@@ -449,6 +452,25 @@ void emitTelemetry(unsigned long now){
  Serial.println();zjTelemetryRate.event(micros());
 }
 #include "FlightCoreMotor.h"
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
+static ZjFlightConditions zjFlightMainConditions(){
+ ZjFlightConditions conditions;
+ conditions.input=zjRcReceiver();
+ conditions.acro=zjFlightMode=="acro";
+ const bool flight=zjFlightDriverRead().lease!=0;
+ conditions.escCalibration=!zjAutoEscFinalized||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
+  zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING||zjMotor.mode==ZjMotorSafety::CAL_HIGH||zjMotor.mode==ZjMotorSafety::CAL_LOW;
+ conditions.benchActive=!flight&&(zjMotorEnabled||zjMotorSessionActive||zjMotorArmed);
+ conditions.maintenance=zjMaintenanceActive||zjHandoverPending||zjNetTesting||zjUsbScanning||
+  zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjImuMaintenanceBusy();
+ conditions.wiringVerified=zjPidLayoutMatches(ZJ_PID_PROFILES[zjPidActive.profile].plus)&&
+  zjWizardRecordVerified&&!zjPidStorageCorrupt&&!zjPidStorageUncertain;
+ if(flight||ZJ_FLIGHT_HARDWARE_QUALIFIED)
+  for(unsigned n=0;n<4;n++)conditions.wiringVerified=conditions.wiringVerified&&zjMotorConfig.rotation[n]==n%2;
+ conditions.driverReady=zjMotorDriverReady;
+ return conditions;
+}
+#endif
 // Network code can access verified scanner/gyro state and existing serial commands.
 void setup(){
  Serial.begin(115200);
