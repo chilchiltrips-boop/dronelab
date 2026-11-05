@@ -3,6 +3,7 @@
 #include "FlightCoreMotorSafety.h"
 #include "FlightCoreMotorConfig.h"
 #include "FlightCoreEscProfile.h"
+#include "FlightCoreFlightOutput.h"
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 #include "FlightCoreWizardConfig.h"
 #include "FlightCoreAutoEsc.h"
@@ -28,16 +29,78 @@ static volatile uint32_t zjMotorWatchAt=0,zjMotorWatchLimit=100;
 static volatile bool zjMotorPwmOffAck=false;
 static volatile ZjMotorSafety::Reason zjMotorWatchReason=ZjMotorSafety::DEADLINE_MISSED;
 static esp_timer_handle_t zjMotorWatchTimer=nullptr;
+static ZjFlightDriverState zjFlightDriver;
+static ZjMotorConfig zjFlightDriverWiring;
+static uint32_t zjFlightDriverAtUs=0;
+static ZjOutputOwner zjMotorDriverOwner=ZjOutputOwner::NONE;
+
+// The driver lock serializes all LEDC owners, including the independent
+// watchdog. There is no transition directly from flight to bench or ESC.
+static bool zjMotorPwmStopLocked(){
+ bool off=true;
+ for(int n=0;n<4;n++)off=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&off;
+ zjMotorPwmOffAck=off;
+ zjMotorDriverOwner=ZjOutputOwner::NONE;
+ return off;
+}
+static void zjFlightDriverStopLocked(ZjFlightFault fault){
+ zjFlightDriver={};
+ zjFlightDriver.fault=fault;zjFlightDriver.faultAtUs=micros();
+ zjFlightDriver.appliedKnown=zjFlightDriver.offAck=zjMotorPwmStopLocked();
+}
+static void zjFlightDriverStop(uint32_t lease,ZjFlightFault fault){
+ portENTER_CRITICAL(&zjMotorMux);
+ if(lease&&zjFlightDriver.lease==lease)zjFlightDriverStopLocked(fault);
+ portEXIT_CRITICAL(&zjMotorMux);
+}
+static ZjFlightDriverState zjFlightDriverRead(){
+ portENTER_CRITICAL(&zjMotorMux);
+ auto result=zjFlightDriver;
+ result.owner=zjMotorDriverOwner;result.offAck=zjMotorPwmOffAck;
+ if(!result.lease)result.appliedKnown=result.offAck;
+ portEXIT_CRITICAL(&zjMotorMux);
+ return result;
+}
+static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4],uint32_t deadlineUs){
+ portENTER_CRITICAL(&zjMotorMux);
+ if(ZJ_FLIGHT_HARDWARE_QUALIFIED&&lease&&zjFlightDriver.lease==lease){
+  const uint32_t at=micros();
+  if(int32_t(at-deadlineUs)>=0||uint32_t(at-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US){
+   zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
+  }else{
+   bool ok=true;
+   for(auto value:pulse)ok=ok&&value>=1000&&value<=2000;
+   for(int n=0;n<4&&ok;n++){
+    const auto duty=ZJ_ESC_PROFILE.duty(zjFlightDriverWiring.physicalPulse(n,pulse));
+    ok=duty&&ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)==ESP_OK&&
+     ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))==ESP_OK;
+   }
+   const uint32_t finished=micros();
+   zjMotorUpdateMaxUs=std::max(zjMotorUpdateMaxUs.load(std::memory_order_relaxed),finished-at);
+   if(!ok)zjFlightDriverStopLocked(ZjFlightFault::OUTPUT_ERROR);
+   else if(int32_t(finished-deadlineUs)>=0)zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
+   else{
+    zjFlightDriverAtUs=finished;
+    zjMotorPwmOffAck=zjFlightDriver.offAck=false;
+    zjFlightDriver.appliedKnown=true;
+    std::copy_n(pulse,4,zjFlightDriver.applied);
+   }
+  }
+ }
+ auto result=zjFlightDriver;
+ portEXIT_CRITICAL(&zjMotorMux);
+ return result;
+}
 static void zjMotorWatch(void*){
  portENTER_CRITICAL(&zjMotorMux);
  if(zjAutoEscSequence.active()){
   zjAutoEscTick(millis());portEXIT_CRITICAL(&zjMotorMux);return;
  }
+ if(zjFlightDriver.lease&&uint32_t(micros()-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US)
+  zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
  if(zjMotorWatchActive&&uint32_t(millis()-zjMotorWatchAt)>=zjMotorWatchLimit){
   zjMotorWatchTripped=true;zjMotorWatchActive=false;
-  bool off=true;
-  for(int n=0;n<4;n++)off=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&off;
-  zjMotorPwmOffAck=off;
+  (void)zjMotorPwmStopLocked();
  }
  portEXIT_CRITICAL(&zjMotorMux);
 }
@@ -130,6 +193,21 @@ static bool zjMotorSaveConfig(const ZjMotorConfig& next){
 }
 static String zjMotorOwner,zjMotorToken,zjMotorPath,zjMotorProducer,zjMotorRadio;
 static bool zjMotorDriverReady=false;
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+static bool zjFlightDriverClaim(uint32_t lease){
+ if(!ZJ_FLIGHT_HARDWARE_QUALIFIED||!lease||!zjMotorDriverReady||zjMotorEnabled||zjMotorSessionActive||zjMotorArmed)return false;
+ portENTER_CRITICAL(&zjMotorMux);
+ const bool available=!zjFlightDriver.lease&&!zjMotorWatchActive&&!zjAutoEscSequence.active()&&zjMotorPwmOffAck;
+ if(available){
+  zjFlightDriver={};zjFlightDriver.lease=lease;zjFlightDriver.offAck=zjFlightDriver.appliedKnown=true;
+  zjFlightDriver.owner=zjMotorDriverOwner=ZjOutputOwner::FLIGHT;
+  zjFlightDriverAtUs=micros();zjFlightDriverWiring=zjMotorConfig;
+  zjMotorEnabled=zjMotorSessionActive=zjMotorArmed=true;
+ }
+ portEXIT_CRITICAL(&zjMotorMux);
+ return available;
+}
+#endif
 static uint32_t zjMotorCommandSeq=0,zjMotorInputDuration=0;
 static ZjMotorInput zjMotorRtc;
 static const char* zjMotorMode(){
@@ -148,7 +226,9 @@ static void zjMotorApply(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  portENTER_CRITICAL(&zjMotorMux);
  const bool autoActive=zjAutoEscSequence.active();
+ const bool flightActive=zjFlightDriver.lease!=0;
  portEXIT_CRITICAL(&zjMotorMux);
+ if(flightActive)return;
  if(autoActive){zjMotorEnabled=zjMotorSessionActive=true;zjMotorArmed=zjMotorInputTest=false;return;}
 #endif
  const bool enabled=zjMotor.benchEnabled&&zjMotor.mode!=ZjMotorSafety::FAULT;
@@ -168,12 +248,10 @@ static void zjMotorApply(){
       ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))!=ESP_OK)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
   }
   if(!zjMotor.benchEnabled){
-   bool off=true;
-   for(int n=0;n<4;n++)off=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&off;
-   zjMotorPwmOffAck=off;
-   if(!off)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
-  }
-  zjMotorUpdateMaxUs=std::max(zjMotorUpdateMaxUs,uint32_t(micros()-started));
+   if(!zjMotorPwmStopLocked())zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
+  }else zjMotorDriverOwner=zjMotor.mode==ZjMotorSafety::CAL_HIGH||zjMotor.mode==ZjMotorSafety::CAL_LOW?
+   ZjOutputOwner::ESC_CALIBRATION:ZjOutputOwner::BENCH;
+  zjMotorUpdateMaxUs=std::max(zjMotorUpdateMaxUs.load(std::memory_order_relaxed),uint32_t(micros()-started));
  }
  zjMotorServicedAt=millis();zjMotorWatchActive=zjMotor.benchEnabled;
  const bool timed=zjMotor.timedManual()||(zjMotor.timedBench&&zjMotor.mode==ZjMotorSafety::READY);
@@ -253,6 +331,7 @@ static bool zjAutoEscSequenceReady(){
 static void zjAutoEscWrite(){
  const uint16_t pulse=zjAutoEscSequence.pulse();bool ok=true;
  zjMotorPwmOffAck=false;
+ zjMotorDriverOwner=pulse?ZjOutputOwner::ESC_CALIBRATION:ZjOutputOwner::NONE;
  for(int n=0;n<4;n++){
   if(!pulse)ok=(ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0)==ESP_OK)&&ok;
   else{
@@ -262,7 +341,7 @@ static void zjAutoEscWrite(){
  }
  if(!ok){
   zjAutoEscSequence.stop(ZjAutoEscRecord::DRIVER_ERROR);
-  for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);
+  (void)zjMotorPwmStopLocked();
  }
  if(!pulse&&ok)zjMotorPwmOffAck=true;
 }
@@ -347,6 +426,7 @@ static String zjAutoEscStatus(){
 #endif
 static void zjMotorLoop(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
+ if(zjFlightDriverRead().lease)return;
  zjAutoEscLoop();
 #endif
  const uint32_t now=millis();
@@ -367,6 +447,9 @@ static void zjMotorLoop(){
 static String zjMotorStatus(){
  zjMotorLoop();
  const auto input=zjMotorReadInput();const bool rtc=zjRcControlPath=="ANDROID_WEBRTC";
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+ const auto flight=zjFlightDriverRead();
+#endif
  const bool fresh=input.valid&&input.selected&&uint32_t(millis()-input.receivedMs)<=(input.source==ZjMotorInput::PPM?ZjMotorSafety::INPUT_PPM_MS:ZjMotorSafety::INPUT_NETWORK_MS);
  String out="{\"version\":3,\"timedBenchSupported\":true,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+",\"supported\":"+(zjMotorDriverReady?String("true"):String("false"))+
   ",\"mode\":"+zjJson(zjMotorMode())+",\"reason\":"+zjJson(zjMotorReason())+","+zjMotorFlags()+
@@ -389,7 +472,10 @@ static String zjMotorStatus(){
   if(n)out+=',';
   uint16_t pulse=zjMotorEnabled?zjMotor.pulses[n]:0;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
-  portENTER_CRITICAL(&zjMotorMux);if(zjAutoEscSequence.active())pulse=zjAutoEscSequence.pulse();portEXIT_CRITICAL(&zjMotorMux);
+  if(flight.lease)pulse=flight.applied[n];
+  else{
+   portENTER_CRITICAL(&zjMotorMux);if(zjAutoEscSequence.active())pulse=zjAutoEscSequence.pulse();portEXIT_CRITICAL(&zjMotorMux);
+  }
 #endif
   out+=String(pulse);
  }
@@ -474,6 +560,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  }
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  if(action=="WIZARD_STATUS")return zjWizardStatus();
+ if(zjFlightDriverRead().lease)return error("flight_output_reserved");
  // Result inspection and cancellation must remain available after a driver
  // initialization failure. Neither command can enable PWM.
  if(!zjMotorDriverReady&&action!="WIZARD_AUTO_ESC_CANCEL")return error("a2_motor_driver_required");

@@ -39,6 +39,7 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/timing-http.log 2>&1 &
           for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
           node tools/imu-status-browser.mjs
+          node tools/flight-trace-browser.mjs
           node tools/a2-motor-setup-browser.mjs
           node tools/inline-actions-browser.mjs
           node tools/authoritative-status-browser.mjs

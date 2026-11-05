@@ -1,7 +1,7 @@
 name: Verify and publish approved FlightCore bench package
 on:
   push:
-    branches: [main, release/flightcore-1.7.16-bench-20261105, fix/a2-default-latest-bench-1716-20261105]
+    branches: [main, feat/a2-rate-flight-recorder-20261106, release/flightcore-1.7.16-bench-20261105, fix/a2-default-latest-bench-1716-20261105]
     paths:
       - 'FlightCore_Firmware/bench-release-policy.json'
       - 'firmware-updater.js'
@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           python3 tools/bench_release_gate.py --source
           python3 tools/verify_release.py
-          version=$(cat VERSION.txt)
+          version=$(jq -er '.benchArtifact.version' FlightCore_Firmware/bench-release-policy.json)
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           destination="FlightCore_Firmware/bench/$version"
           if [ ! -d "$destination" ]; then
@@ -68,13 +68,15 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/flightcore-bench-http.log" 2>&1 &
           for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
           node tools/bench-firmware-browser.mjs
-      - name: Publish the verified versioned bench package on main
-        if: github.ref == 'refs/heads/main'
+      - name: Publish the verified versioned bench package
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/a2-rate-flight-recorder-20261106'
         run: |
           set -euo pipefail
-          destination="FlightCore_Firmware/bench/$(cat VERSION.txt)"
+          version=$(jq -er '.benchArtifact.version' FlightCore_Firmware/bench-release-policy.json)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          destination="FlightCore_Firmware/bench/$version"
           verified="$PWD/$destination"
-          git fetch origin main
+          git fetch origin "$GITHUB_REF_NAME"
           git worktree add --detach "$RUNNER_TEMP/bench-publish" FETCH_HEAD
           cd "$RUNNER_TEMP/bench-publish"
           python3 tools/verify_release.py --bench "$verified"
@@ -87,5 +89,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- "$destination"
-          git commit -m "Publish verified FlightCore $(cat VERSION.txt) bench package"
-          git push origin HEAD:main
+          git commit -m "Publish verified FlightCore $version bench package"
+          git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"

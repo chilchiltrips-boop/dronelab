@@ -1,15 +1,16 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.16",
+  "candidateVersion": "1.7.17",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
   "note": "Explicit bench diagnostic download. Physical flight output is disabled.",
   "benchArtifact": {
-    "id": 13417864690,
-    "sha256": "e1fe1b973432f0358c288333b8471541e333fa4103a4f48de10ad9ace7cb768d",
-    "sourceCommit": "d4de0bced6165c815c0ebb17b7eebb1fd736b0b3",
-    "catalogSha256": "4af98490c7ae7a0922552c6d771d3ae0433d4077179c512c026e24176f7d2d7d",
-    "reportSha256": "15177b53a88d49fce8d8ac950d69cad008b3167e14dc148ed09ec4158f663bfe"
+    "version": "1.7.17",
+    "id": 13446424869,
+    "sha256": "f7ccc48e02a49eddb96b39b5ad5b041e2f45fa7b9ea505c29cd25112bf404213",
+    "sourceCommit": "81d1fb883844603a6b2ad3780a225238eeb35c75",
+    "catalogSha256": "9810edd717531ac5f506038bf9455f6e54f37e3de82e27525cab3ba531aa4fa6",
+    "reportSha256": "79d025e235d9f2bf9d7137975986f6ff315ae1c3df40e6236ffb0880975f38aa"
   }
 }

@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 
-const version=readFileSync('VERSION.txt','utf8').trim();
+const version=JSON.parse(readFileSync('FlightCore_Firmware/bench-release-policy.json')).benchArtifact.version;
 const folder=`FlightCore_Firmware/bench/${version}`;
 const catalog=JSON.parse(readFileSync(`${folder}/catalog.json`));
 const published=JSON.parse(readFileSync('firmware-catalog.json'));
@@ -83,5 +83,5 @@ try{
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  assert.deepEqual(writes,[]);
  assert.deepEqual(errors,[]);
- console.log('PASS A2 defaults to verified 1.7.16 bench, A1 published fallback, explicit 1.7.15 rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection');
+ console.log(`PASS A2 defaults to verified ${version} bench, A1 published fallback, explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
 }finally{await browser.close();}

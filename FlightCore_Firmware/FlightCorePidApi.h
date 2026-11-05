@@ -15,7 +15,7 @@ static String zjPidReply(const String& requestId=""){
  const char* storage=zjPidStorageCorrupt?"CORRUPT":!zjPidSettings.persisted?"DEFAULTS":
   zjPidLoadedSlot>=0&&zjPidLoadedSlot!=zjPidHead.slot?"RECOVERED":"VERIFIED";
  return String("{\"version\":1,\"schemaVersion\":2,\"supported\":")+(zjPidSupported()?"true":"false")+
-  ",\"actuating\":false,\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
+  ",\"actuating\":"+(shadow.actuating?"true":"false")+",\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
   ",\"revision\":"+String(zjPidSettings.revision)+",\"persisted\":"+(zjPidSettings.persisted?"true":"false")+
   ",\"requestId\":"+zjJson(requestId)+",\"savedRequestId\":"+zjJson(zjPidSettings.requestId)+
   ",\"storageState\":"+zjJson(storage)+",\"wiredLayout\":"+zjJson(zjPidLayoutMatches(true)?"A2_QUAD_PLUS":zjPidLayoutMatches(false)?"A2_QUAD_X":"")+

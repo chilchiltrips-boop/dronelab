@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include <stdint.h>
 
 struct ZjRateGains {float p=0,i=0,d=0;};
 struct ZjRatePidState {float integral=0,error=0,rate=0,derivative=0;bool ready=false;};
@@ -34,6 +35,7 @@ struct ZjRateMix {
  float pulse[4]={};
  float residual[3]={};
  bool saturated=false;
+ uint8_t clipMask=0;
 };
 
 // Quad X M1..M4: front left, front right, back right, back left.
@@ -45,8 +47,9 @@ inline ZjRateMix zjRateMixQuadX(float throttle,float roll,float pitch,float yaw)
  for(unsigned i=0;i<4;i++){
   mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
   removed[i]=requested[i]-mix.pulse[i];
-  mix.saturated|=removed[i]!=0;
+  if(removed[i]!=0)mix.clipMask|=uint8_t(1u<<i);
  }
+ mix.saturated=mix.clipMask!=0;
  mix.residual[0]=(-removed[0]+removed[1]+removed[2]-removed[3])*.25f;
  mix.residual[1]=(-removed[0]-removed[1]+removed[2]+removed[3])*.25f;
  mix.residual[2]=(-removed[0]+removed[1]-removed[2]+removed[3])*.25f;
@@ -91,8 +94,9 @@ inline ZjRateMix zjRateMixQuadPlus(float throttle,float roll,float pitch,float y
  for(unsigned i=0;i<4;i++){
   mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
   removed[i]=requested[i]-mix.pulse[i];
-  mix.saturated|=removed[i]!=0;
+  if(removed[i]!=0)mix.clipMask|=uint8_t(1u<<i);
  }
+ mix.saturated=mix.clipMask!=0;
  mix.residual[0]=(removed[1]-removed[3])*.5f;
  mix.residual[1]=(removed[2]-removed[0])*.5f;
  mix.residual[2]=(-removed[0]+removed[1]-removed[2]+removed[3])*.25f;
