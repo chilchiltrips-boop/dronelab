@@ -33,6 +33,14 @@
   return {mode,targetInput:mode==='ap'?'ANDROID_AP':sta,lastStaInput:sta};
  }
  function acceptRcObservation(previous,next){
+  const before=previous?.receiver,after=next?.receiver;
+  const counters=['generation','accepted','receivedAtMs'];
+  if(before&&after&&counters.every(key=>[before[key],after[key]].every(n=>Number.isInteger(n)&&n>=0&&n<=0xffffffff))){
+   for(const key of counters){
+    if(key==='receivedAtMs'&&(!before.valid||!after.valid))break;
+    if(before[key]!==after[key])return ((after[key]-before[key])>>>0)<0x80000000;
+   }
+  }
   if(!previous?.active||!next?.active||previous.source!==next.source||previous.ownerId!==next.ownerId)return true;
   // PPM reacquisition resets the lease sequence, but accepted is a boot-wide
   // firmware counter. A newer accepted frame proves this is a new acquisition,
@@ -63,12 +71,15 @@
    busy=pending||kit.working===true||kit.networkBusy===true||kit.otaInProgress===true,
    observedAge=Number.isFinite(kit.rcAt)&&kit.rcAt>0?Math.max(0,now-kit.rcAt):Infinity,
    ageKnown=Number.isFinite(rc.ageMs)&&rc.ageMs>=0,
-   ppmLost=kit.ppm?.present===false&&Number.isFinite(kit.ppmObservedAt)&&kit.ppmObservedAt>0&&
+   ppmLost=rc.active!==true&&rc.lastReleaseReason==='PPM_SIGNAL_LOST'&&observedAge<=3500||
+    kit.ppm?.present===false&&Number.isFinite(kit.ppmObservedAt)&&kit.ppmObservedAt>0&&
     now>=kit.ppmObservedAt&&now-kit.ppmObservedAt<=3500&&kit.ppmObservedAt>=(kit.rcAt||0),
    currentRc=connected&&!(rc.source==='PPM'&&ppmLost)&&rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true&&
     Number.isSafeInteger(rc.seq)&&rc.seq>0&&observedAge<=900&&
     (ageKnown?rc.ageMs+observedAge<=400:kit.transport==='usb'&&observedAge<=400),
-   kitActive=currentRc?(rc.source==='PPM'?'PPM':rc.source==='WEB'?'WEB_STA':rc.source==='ANDROID'&&mode==='ap'?'ANDROID_AP':null):null,
+   firmwareActive=connected&&!paused&&observedAge<=3500&&rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true?
+    (rc.source==='PPM'&&!ppmLost?'PPM':rc.source==='WEB'?'WEB_STA':rc.source==='ANDROID'&&mode==='ap'?'ANDROID_AP':null):null,
+   kitActive=currentRc?firmwareActive:null,
    virtualActive=selected==='ANDROID_WEBRTC'&&virtual.running===true&&virtual.origin==='webrtc'&&virtual.fresh===true?'ANDROID_WEBRTC':null,
    active=paused?null:virtualActive||kitActive;
   const options=paths.map(path=>{
@@ -92,10 +103,9 @@
   const telemetryAgeMs=Number.isFinite(kit.heartbeatAt)&&kit.heartbeatAt>0?Math.max(0,now-kit.heartbeatAt):null;
   const telemetryLabel=connected?(kit.linkState==='delayed'?'Telemetry delayed':telemetryAgeMs===null?'Telemetry age unknown':'Telemetry '+(telemetryAgeMs<3500?'fresh':(telemetryAgeMs/1000).toFixed(1)+' s ago')):'Telemetry offline';
   const switching=access?.handoverPaused===true;
-  const lastObservedPath=connected&&!paused&&!currentRc&&!ppmLost&&rc.source==='PPM'&&rc.active===true&&
-   rc.inputValid!==false&&rc.failsafe!==true&&observedAge<=3500?'PPM':null;
-  const rcState=switching?(kit.radioHandover?.state==='FAILED'?'RC handover failed':'RC switching'):paused?'RC Paused':active?actual.label:selected==='PPM'&&ppmLost?'PPM Signal Lost':lastObservedPath?'PPM RX/TX · observation delayed':selected==='ANDROID_AP'&&kit.radioHandover?.state==='WAITING_CONTROLLER'?'Waiting for Android':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
-  return {paths:options,selected,active,lastObservedPath,mode,capable,paused,safe,busy,authorized,telemetryAgeMs,telemetryLabel,
+  const lastObservedPath=!currentRc&&observedAge<=3500?firmwareActive:null;
+  const rcState=switching?(kit.radioHandover?.state==='FAILED'?'RC handover failed':'RC switching'):paused?'RC Paused':active?actual.label:selected==='PPM'&&ppmLost?'PPM Signal Lost':lastObservedPath?find(lastObservedPath).label+' · observation delayed':selected==='ANDROID_AP'&&kit.radioHandover?.state==='WAITING_CONTROLLER'?'Waiting for Android':selected==='ANDROID_WEBRTC'&&!paired?'WebRTC Disconnected':rc.active===true?'RC telemetry delayed':'RC Idle';
+  return {paths:options,selected,active,firmwareActive,lastObservedPath,mode,capable,paused,safe,busy,authorized,telemetryAgeMs,telemetryLabel,
    selectedLabel:item?.label||(capable&&access.controlPath==='AUTO'?'Auto':access?.selection&&access.selection!=='AUTO'?'Legacy '+access.selection:'Not selected'),activeLabel:rcState,
    target:actual?.target||item?.target||'Kit',
    connection:connected?(kit.linkState==='delayed'?'Response delayed':mode?mode.toUpperCase()+' Connected':String(kit.transport||'').toUpperCase()+' Connected'):kit.linkVerified?'Reconnecting':'Offline',

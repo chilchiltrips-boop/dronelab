@@ -68,10 +68,22 @@ test('delayed PPM observations retain the source label while fresh receiver loss
  const delayed={...kit,rcAt:now-600,heartbeatAt:now,ppmObservedAt:now-600};
  const view=policy.describe({kit:delayed,now});
  assert.equal(view.active,null);
+ assert.equal(view.firmwareActive,'PPM');
  assert.equal(view.lastObservedPath,'PPM');
  assert.match(view.activeLabel,/observation delayed/);
  const lost=policy.describe({kit:{...delayed,rcAt:now-50,ppmObservedAt:now,ppm:{present:false}},now});
  assert.equal(lost.active,null);
+ assert.equal(lost.firmwareActive,null);
  assert.equal(lost.lastObservedPath,null);
  assert.equal(lost.activeLabel,'PPM Signal Lost');
+});
+
+
+test('a delayed RC observation cannot overwrite confirmed loss after generation advance',()=>{
+ const old={active:true,source:'PPM',receiver:{valid:true,generation:4,accepted:25,receivedAtMs:200}};
+ const lost={active:false,source:'NONE',receiver:{valid:false,generation:5,accepted:25,receivedAtMs:0}};
+ const recovered={...old,receiver:{valid:true,generation:5,accepted:26,receivedAtMs:400}};
+ assert.equal(policy.acceptRcObservation(old,lost),true);
+ assert.equal(policy.acceptRcObservation(lost,old),false);
+ assert.equal(policy.acceptRcObservation(lost,recovered),true);
 });

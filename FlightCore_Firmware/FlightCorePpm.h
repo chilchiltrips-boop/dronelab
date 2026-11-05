@@ -116,7 +116,7 @@ static bool zjPpmSaveConfig(const ZjPpmConfig& config){
  String payload="1|";
  for(auto ch:config.map)payload+=char('1'+ch);
  payload+='|';
- char fields[13];
+ char fields[16];
  for(unsigned i=0;i<8;i++){
   if(!zjPpmCalibrationValid(config.minimum[i],config.middle[i],config.maximum[i]))return false;
   snprintf(fields,sizeof(fields),"%04u%04u%04u",unsigned(config.minimum[i]),unsigned(config.middle[i]),unsigned(config.maximum[i]));
@@ -142,8 +142,8 @@ static bool zjPpmSaveConfig(const ZjPpmConfig& config){
  const String stored=zjKitPrefs.getString(key,"");
  if(stored!=stage||!zjPpmDecodeSlot(stored,checked,verified)||verified!=revision+1)return false;
  const String head=String(target)+"|"+String(verified);
- if(zjKitPrefs.putString(ZJ_PPM_CONFIG_HEAD,head)!=head.length())return false;
- if(zjKitPrefs.getString(ZJ_PPM_CONFIG_HEAD,"")!=head){
+ if(zjKitPrefs.putString(ZJ_PPM_CONFIG_HEAD,head)!=head.length()||
+    zjKitPrefs.getString(ZJ_PPM_CONFIG_HEAD,"")!=head){
   // Keep the previous selector if the commit cannot be verified.
   if(oldHead.isEmpty())zjKitPrefs.remove(ZJ_PPM_CONFIG_HEAD);
   else zjKitPrefs.putString(ZJ_PPM_CONFIG_HEAD,oldHead);

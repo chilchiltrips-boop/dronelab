@@ -61,12 +61,13 @@ static void verifyPpmTransactions(){
  };
  zjPpmSetup();verifyOld();
  assert(ppmCommand("ZJPPM,MAP,8,8,3,4,5")=="ZJPPM,ERR,MAP_VALUE\n");
- for(unsigned fault=0;fault<5;fault++){
+ for(unsigned fault=0;fault<6;fault++){
   const auto writes=zjKitPrefs.writes;
   if(fault==0)zjKitPrefs.failWriteAt=writes+1;
   if(fault==1)zjKitPrefs.truncateWriteAt=writes+1;
   if(fault==2)zjKitPrefs.failWriteAt=writes+2;
   if(fault==3){zjKitPrefs.mismatchAfterWrite=writes+1;zjKitPrefs.mismatchKey=ZJ_PPM_CONFIG_KEYS[1];}
+  if(fault==5)zjKitPrefs.truncateWriteAt=writes+2;
   if(fault==4){zjKitPrefs.mismatchAfterWrite=writes+2;zjKitPrefs.mismatchKey=ZJ_PPM_CONFIG_HEAD;}
   assert(ppmCommand("ZJPPM,CAL,2,960,1510,2040")=="ZJPPM,NACK,STORAGE_FAILED\n");
   verifyOld();zjPpmSetup();verifyOld();

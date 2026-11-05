@@ -309,10 +309,10 @@ function record(event,data={}){
 }
 let lastInputAt=0,lastInputState='',lastPpmPresent,lastPpmLosses=0,lastPath='',lastHandover='',lastInputBinding='',lastView='';
 function observeView(view,kit){
- const key=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport,view.active,view.lastObservedPath,view.paused,view.connection].join('|');
+ const key=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport,view.active,view.firmwareActive,view.lastObservedPath,view.paused,view.connection].join('|');
  if(key===lastView)return;lastView=key;
  record('input_freshness',{transport:kit.transport,connected:kit.connected===true,selectedPath:kit.rcAccess?.controlPath,
-  activePath:view.active||'NONE',lastObservedPath:view.lastObservedPath||'NONE',rcActive:!!view.active,telemetryAgeMs:view.telemetryAgeMs,
+  activePath:view.firmwareActive||'NONE',lastObservedPath:view.lastObservedPath||'NONE',rcActive:!!view.active,telemetryAgeMs:view.telemetryAgeMs,
   connectionGeneration:kit.connectionGeneration,...kit.requestQueue,
   observationAgeMs:Number.isFinite(kit.rcAt)?Math.max(0,Date.now()-kit.rcAt):undefined});
 }

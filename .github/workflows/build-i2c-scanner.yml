@@ -86,6 +86,7 @@ jobs:
         if: steps.firmware_integrity.outputs.rebuild == 'true'
         run: |
           python3 tools/embed_setup_portal.py
+          git diff --exit-code -- FlightCore_Firmware/FlightCoreSetupPortal.h
           python3 tools/build_scanner.py
       - name: Validate both APP and Factory binaries
         run: |

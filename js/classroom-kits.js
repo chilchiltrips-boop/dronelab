@@ -473,7 +473,7 @@ function wifiDirect(ip,key,route,method='GET',args={},guard=null){
    }
   },{
    priority:emergency?100:control?80:route==='/api/rc/preview'?70:method==='POST'&&route!=='/api/motor'?60:route==='/api/motor'?40:10,
-   generation:ticket,read:method==='GET',preempt:emergency&&route!=='/api/rc/release',
+   generation:ticket,read:method==='GET'||route==='/api/motor'&&!control,preempt:emergency&&route!=='/api/rc/release',
    motion:!emergency&&(control||method==='POST'&&['/api/rc/claim','/api/rc/preview'].includes(route)),
    maxQueueMs:route==='/api/motor'&&['SLIDE','KEEP','RTC'].includes(args.action)?250:
     emergency||route.startsWith('/api/firmware/')?12000:method==='GET'?1800:5000,
