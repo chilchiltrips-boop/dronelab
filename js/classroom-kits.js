@@ -489,7 +489,7 @@ function wifiDirect(ip,key,route,method='GET',args={},guard=null){
  return pending.finally(()=>{if(networkTails.get(slot)===pending)networkTails.delete(slot)});
 }
 async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,signal){
- signal?.throwIfAborted();
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  const local=!!expected&&localKitHosts.get(ip)===expected;
  const admin=!!expected&&adminKitHosts.get(ip)===expected;
  if(admin)key=pairedKeys.get(expected)||key;
@@ -501,7 +501,7 @@ async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,si
   catch(e){
    if(e.status===401)authSessions.delete(slot);
    if(e.status!==401||!local&&!admin||method==='POST'&&route.startsWith('/api/pid/'))throw e;
-   signal?.throwIfAborted();
+   if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
    // The kit may have rebooted (or its local session may have been replaced).
    // Retry ONCE only after rechecking the full hardware Device ID.
    const fresh=await probeIdentity(ip,2800);
@@ -555,8 +555,8 @@ async function deviceRequest(route,method='GET',args={},guard=null){
   },0); // Never cache a completed RC snapshot: STOP/failsafe must be visible immediately.
  }
  catch(error){
-  trace('request_error',{route,transport:state.transport,reason:classify(error),
-   roundTripMs:Math.round(diagnosticClock()-started),queueMs:error?.queueMs,responseWaitMs:error?.responseWaitMs,outcome:'fail'});
+  trace('request_error',{route,transport:state.transport,reason:error?.code==='REQUEST_QUEUE_STALE'?'REQUEST_QUEUE_STALE':classify(error),
+   connectionGeneration:reconnectTicket,...requestScheduler?.metrics?.(),roundTripMs:Math.round(diagnosticClock()-started),queueMs:error?.queueMs,responseWaitMs:error?.responseWaitMs,outcome:'fail'});
   throw error;
  }
 }

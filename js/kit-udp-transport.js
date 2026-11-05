@@ -17,8 +17,11 @@
    return ready;
   })();return checking;
  }
- async function request(ip,route,method='GET',args={},headers={}){
+ async function request(ip,route,method='GET',args={},headers={},signal){
+  if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
   const control=new AbortController(),timer=setTimeout(()=>control.abort(),route.startsWith('/api/firmware/')?16000:5000);
+  const cancel=()=>control.abort(signal.reason);
+  signal?.addEventListener('abort',cancel,{once:true});
   try{
    const response=await root.fetch(HOST+'/rpc',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',
     targetAddressSpace:'loopback',signal:control.signal,headers:{'Content-Type':'application/json'},
@@ -26,8 +29,8 @@
    const result=await response.json();
    if(!response.ok||result.protocol!=='ZJM1'||typeof result.text!=='string')throw Error(result.error||'Invalid local UDP bridge response');
    return result;
-  }catch(error){if(control.signal.aborted)throw Error('UDP bridge deadline exceeded; delivery is unconfirmed');throw error}
-  finally{clearTimeout(timer)}
+  }catch(error){if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');if(control.signal.aborted)throw Error('UDP bridge deadline exceeded; delivery is unconfirmed');throw error}
+  finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel)}
  }
  root.ZebjusKitUdp=Object.freeze({available,request});
 })(globalThis);

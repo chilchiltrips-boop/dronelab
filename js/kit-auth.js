@@ -31,7 +31,7 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
    udpKey:claim=>{if(!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("Invalid UDP claim");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={},{signal}={}){
    const run=async()=>{
-    signal?.throwIfAborted();
+    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Session expired; reconnect this kit.');
     const counter=String(++seq);let payload='';
     if(method==='POST'){
@@ -76,7 +76,7 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
    udpKey:claim=>{if(r.scope!=="ap_diagnostics"||!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("UDP session not authorized");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={},{signal}={}){
    const run=async()=>{
-    signal?.throwIfAborted();
+    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
     if(Date.now()>=api.expiresAt||seq>=2147483647)throw Error('Local session expired; reconnect Kit Wi-Fi.');
     // Never allow local credentials to become an OTA/admin authority.
     if(route.startsWith('/api/firmware/')||route.startsWith('/api/reboot'))
@@ -102,12 +102,12 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
  return api;
 }
 function http(host){return async(route,method='GET',args={},headers={},signal)=>{
- signal?.throwIfAborted();
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(!/^\/(?:api\/[a-z/]+)$/.test(route))throw Error('Invalid device route');
  // Hosted browser raw UDP uses the exact-origin loopback bridge. Preserve the
  // signed session across this transport; never retry a failed UDP write in HTTP.
  if(root.ZebjusKitUdp&&await root.ZebjusKitUdp.available())
-  return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers);
+  return root.ZebjusKitUdp.request(host.replace(/^http:\/\//,''),route,method,args,headers,signal);
  const firmwareWrite=/^\/api\/firmware\/(?:begin|chunk|end|abort)$/.test(route);
  const timeoutMs=root.ZebjusKitNetworkPolicy?.requestTimeout(route,method,host.includes('192.168.4.1')?'ap':'sta')||(firmwareWrite?20000:4200);
  const control=new AbortController();let timedOut=false;

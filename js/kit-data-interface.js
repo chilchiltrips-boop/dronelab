@@ -26,7 +26,7 @@
    slot.running=job;
    Promise.resolve().then(()=>{
     job.guard?.();
-    job.controller?.signal.throwIfAborted();
+    if(job.controller?.signal.aborted)throw job.controller.signal.reason||stale('Kit observation cancelled');
     const queueMs=Math.max(0,now()-job.at);
     if(queueMs>job.maxQueueMs){cancelled++;throw Object.assign(stale('Kit request expired in the queue'),{queueMs});}
     return job.run(job.controller?.signal);

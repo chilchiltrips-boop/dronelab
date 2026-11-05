@@ -78,6 +78,8 @@ function normalizeImu(value,expectedBoard=''){
   out[key]=v;
  }
  if(value.controlHealth!==undefined){if(!timingHealth.has(value.controlHealth))return null;out.controlHealth=value.controlHealth;}
+ if(['STARTUP','IMU_CALIBRATION','DISARMED','RC_DIAGNOSTIC'].includes(value.controlMaxIntervalPhase))out.controlMaxIntervalPhase=value.controlMaxIntervalPhase;
+ if(['DISARMED','READY','INPUT_STALE','IMU_STALE','TIMING_FAULT','PID_INVALID'].includes(value.ratePidShadowState))out.ratePidShadowState=value.ratePidShadowState;
  for(const key of ['controlActuating','imuValid','ratePidShadowSaturated'])if(typeof value[key]==='boolean')out[key]=value[key];
  if(value.accelG!==undefined){if(!Array.isArray(value.accelG)||value.accelG.length!==3||!value.accelG.every(x=>typeof x==='number'&&Number.isFinite(x)&&Math.abs(x)<=8))return null;out.accelG=[...value.accelG];}
  if(value.sampleAgeMs!==undefined&&value.sampleAgeMs!==null){if(!Number.isSafeInteger(value.sampleAgeMs)||value.sampleAgeMs<0||value.sampleAgeMs>0xffffffff)return null;out.sampleAgeMs=value.sampleAgeMs;}
@@ -223,7 +225,7 @@ function clean(data){
   else if(key==='gyroUnits'){if(v==='deg/s')result[key]=v;}
   else if(['sentSeq','feedbackVersion','lastRxSeq','lastAppliedSeq','receiveAgeMs','applyAgeMs','appliedAckCount','seq','accepted','rejected','ageMs','roundTripMs','queueMs','bindMs','sendMs','responseWaitMs','readMs','lastReleaseAtMs','staReason','rssi','httpStatus','frameGapMs','sent','ackReceived','lost','jitterMs','lastPacketAgeMs','inputAgeMs','maxSendGapMs','maxAckGapMs','udpReceived','udpRejected','rxAckSent','rxAckFailed','appliedAckSent','appliedAckFailed',
    'nackSent','nackFailed','maxAckTxUs','maxRxToAckUs','rpcMaxLoopUs','rpcMaxDispatchUs','firmwareDeadmanMs','feedbackWarnMs','feedbackStopMs',
-   'apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision'].includes(key)){
+   'apClientCount','apJoinEvents','apLeaveEvents','apLastLeaveReason','throttle','roll','pitch','yaw','ch1','ch2','ch3','ch4','ch5','ch6','ch7','ch8','ppmAgeMs','ppmSeq','ppmLosses','ppmFaults','telemetryAgeMs','observationAgeMs','profileRevision','requestQueueDepth','oldestQueuedRequestMs','cancelledStaleRequests','connectionGeneration'].includes(key)){
    if(typeof v==='number'&&Number.isFinite(v))result[key]=Math.max(-1000000,Math.min(1000000000,Math.round(v)));
   }else if(['ackRequired','requestedInputArmed','appliedKnown','rcOwned','inputArmed','apActive','staConnected','connected','udpActive','ppmPresent','rcActive','inputValid','failsafe','profileSaved'].includes(key)){
    if(typeof v==='boolean')result[key]=v;
@@ -231,7 +233,7 @@ function clean(data){
   else if(key==='feedbackHealth'){if(['HEALTHY','DEGRADED','WAITING_RX','STOPPED','UNKNOWN'].includes(v))result.feedbackHealth=v;}
   else if(key==='nackReason'){if(['NONE','INVALID_FRAME','STALE','OWNER_CONFLICT','APPLY_STALLED','AUTH_EXPIRED'].includes(v))result.nackReason=v;}
   else if(key==='route'){if(routes.has(v))result.route=v;}
-  else if(key==='reason'){if(reasons.has(v)||typeof v==='string'&&/^UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)$/.test(v))result.reason=v;}
+  else if(key==='reason'){if(reasons.has(v)||v==='REQUEST_QUEUE_STALE'||typeof v==='string'&&/^UDP_START_(?:PINNED_NETWORK|OPEN_SOCKET|BIND_SOCKET|CONNECT_PEER|START_SENDER)_(?:MAIN_THREAD_NETWORK|SOCKET|PERMISSION|NETWORK_IDENTITY|ADDRESS|NATIVE)$/.test(v))result.reason=v;}
   else if(key==='transport'){if(['ap','sta','usb','android-relay','none','unknown'].includes(v))result.transport=v;}
   else if(key==='managementProtocol'){if(['ZJM1','HTTP','USB'].includes(v))result.managementProtocol=v;}
   else if(key==='source'){if(['ANDROID','WEB','PPM','USB','NONE'].includes(v))result.source=v;}
@@ -306,7 +308,7 @@ function record(event,data={}){
 }
 let lastInputAt=0,lastInputState='',lastPpmPresent,lastPpmLosses=0,lastPath='',lastHandover='',lastInputBinding='',lastView='';
 function observeView(view,kit){
- const key=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport,view.active,view.paused,view.connection].join('|');
+ const key=[kit.kitId,kit.bootId,kit.connectionGeneration,kit.transport,view.active,view.lastObservedPath,view.paused,view.connection].join('|');
  if(key===lastView)return;lastView=key;
  record('input_freshness',{transport:kit.transport,connected:kit.connected===true,selectedPath:kit.rcAccess?.controlPath,
   activePath:view.active||'NONE',lastObservedPath:view.lastObservedPath||'NONE',rcActive:!!view.active,telemetryAgeMs:view.telemetryAgeMs,
