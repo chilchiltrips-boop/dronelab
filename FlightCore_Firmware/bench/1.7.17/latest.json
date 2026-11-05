@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "product": "ZEBJUS_FLIGHTCORE",
+  "version": "1.7.17",
+  "builtAt": "2026-11-05T19:47:40Z",
+  "catalog": "catalog.json",
+  "note": "BENCH DIAGNOSTIC ONLY; physical flight output disabled and acceptance pending.",
+  "releaseScope": "BENCH_DIAGNOSTIC",
+  "flightOutputQualified": false,
+  "physicalAcceptance": "NOT_RUN"
+}
