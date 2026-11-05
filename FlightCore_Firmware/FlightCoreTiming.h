@@ -57,11 +57,3 @@ struct ZjControlScheduler {
  }
  bool healthy(uint32_t now)const{return started&&ticks&&uint32_t(now-lastSuccessfulUs)<3*PERIOD_US&&executionUs<PERIOD_US;}
 };
-
-// Fixed-size, read-only observations. No armed/actuator authorization fields.
-struct ZjControlInputSnapshot {
- uint32_t sequence=0,receivedMs=0,observedUs=0;
- uint16_t throttle=1000,roll=1500,pitch=1500,yaw=1500;
- uint8_t source=0; // 0 none, 1 PPM, 2 Android, 3 Web; never inferred as permission
- bool valid=false;
-};

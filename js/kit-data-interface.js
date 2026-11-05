@@ -15,7 +15,8 @@
  }
  function isNetwork(transport){return network.has(String(transport||'').toLowerCase())}
  // Keep signed requests ordered, but let motor control and STOP pass queued
- // monitoring reads. A request already sent is never interrupted or replayed.
+ // monitoring reads. Only an in-flight read may be interrupted, and the
+ // authenticated serial lane remains occupied until that read settles.
  function createRequestScheduler({now=()=>Date.now(),limit=32}={}){
   const slots=new Map();let cancelled=0;
   const stale=message=>Object.assign(Error(message),{code:'REQUEST_QUEUE_STALE'});
@@ -32,15 +33,25 @@
     return job.run(job.controller?.signal);
    }).then(job.resolve,job.reject).finally(()=>{slot.running=null;pump(key,slot)});
   }
-  function schedule(key,run,{priority=0,maxQueueMs=Infinity,guard,generation,read=false}={}){
+  function schedule(key,run,{priority=0,maxQueueMs=Infinity,guard,generation,read=false,preempt=false,motion=false}={}){
    let slot=slots.get(key);if(!slot){slot={running:null,jobs:[]};slots.set(key,slot)}
+   if(preempt){
+    const cancel=()=>Object.assign(Error('Observation or queued control cancelled by STOP'),{code:'SAFETY_CANCELLED'});
+    slot.jobs=slot.jobs.filter(job=>{
+     if(!job.motion)return true;
+     cancelled++;job.reject(cancel());return false;
+    });
+    if(slot.running?.controller&&!slot.running.controller.signal.aborted){
+     cancelled++;slot.running.controller.abort(cancel());
+    }
+   }
    if(slot.jobs.length>=limit){
     const last=slot.jobs.at(-1);
     if(priority<100||last.priority>=priority)return Promise.reject(Error('Kit request queue full'));
     slot.jobs.pop();cancelled++;last.reject(stale('Safety request replaced queued work'));
    }
    return new Promise((resolve,reject)=>{
-    slot.jobs.push({run,resolve,reject,priority,maxQueueMs,guard,generation,controller:read?new AbortController():null,at:now()});
+    slot.jobs.push({run,resolve,reject,priority,maxQueueMs,guard,generation,motion,controller:read?new AbortController():null,at:now()});
     slot.jobs.sort((a,b)=>b.priority-a.priority);
     pump(key,slot);
    });

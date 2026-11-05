@@ -1,5 +1,6 @@
 #pragma once
 #include "FlightCoreRatePid.h"
+#include "FlightCoreSettingsChecksum.h"
 #include <Preferences.h>
 
 // Wire/storage gain units are integer thousandths. The active pointer is the
@@ -45,14 +46,9 @@ static String zjPidEncodeGains(const ZjPidSettings& config){
  for(unsigned n=0;n<9;n++){if(n)out+='|';out+=String(config.gains[n]);}
  return out;
 }
-static uint32_t zjPidChecksum(const String& body){
- uint32_t checksum=2166136261u;
- for(size_t n=0;n<body.length();n++)checksum=(checksum^uint8_t(body[n]))*16777619u;
- return checksum;
-}
 static String zjPidRecord(const ZjPidSettings& config){
  const String body=String("1;")+String(config.revision)+";"+config.requestId+";"+zjPidEncodeGains(config);
- return body+";"+String(zjPidChecksum(body));
+ return body+";"+String(zjSettingsChecksum(body));
 }
 static bool zjPidDecode(const String& record,ZjPidSettings& config){
  const int revisionEnd=record.indexOf(';',2),tokenEnd=record.indexOf(';',revisionEnd+1),checksumStart=record.indexOf(';',tokenEnd+1);
@@ -60,7 +56,7 @@ static bool zjPidDecode(const String& record,ZjPidSettings& config){
  if(record.substring(0,2)!="1;"||revisionEnd<3||tokenEnd<=revisionEnd||checksumStart<=tokenEnd||
     !zjPidUnsigned(record.substring(2,revisionEnd),UINT32_MAX,config.revision)||!config.revision||
     !zjPidUnsigned(record.substring(checksumStart+1),UINT32_MAX,checksum)||
-    checksum!=zjPidChecksum(record.substring(0,checksumStart)))return false;
+    checksum!=zjSettingsChecksum(record.substring(0,checksumStart)))return false;
  config.requestId=record.substring(revisionEnd+1,tokenEnd);
  if(!zjPidToken(config.requestId)||!zjPidParseGains(record.substring(tokenEnd+1,checksumStart),config))return false;
  config.persisted=true;return true;

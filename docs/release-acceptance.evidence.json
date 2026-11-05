@@ -331,6 +331,66 @@
       "evidenceSha256": null,
       "artifactSha256": null,
       "notes": null
+    },
+    {
+      "id": "A2_PPM_CALIBRATION_REBOOT",
+      "platform": "A2",
+      "expected": "Save valid calibrated receiver endpoints and verify all eight channels after a power cycle",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": null
+    },
+    {
+      "id": "A2_PPM_MAPPING_REBOOT",
+      "platform": "A2",
+      "expected": "Save a unique mapping, reboot, and verify assigned channel order with a physical receiver",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": null
+    },
+    {
+      "id": "A2_FLIGHT_ARM_INTERLOCKS",
+      "platform": "A2",
+      "expected": "With propellers removed, confirm separate input, bench and flight authorization and verify bench and maintenance exclusion",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": null
+    },
+    {
+      "id": "A2_IMU_FAILSAFE",
+      "platform": "A2",
+      "expected": "Inject IMU loss with propellers removed and measure fault reporting, output disable and explicit rearm interlock",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": null
+    },
+    {
+      "id": "A2_ANDROID_UPGRADE_INPUT",
+      "platform": "A2",
+      "expected": "After upgrading the installed Android app, confirm AP joystick and WebRTC behavior and physical ownership boundaries",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": null
     }
   ]
 }

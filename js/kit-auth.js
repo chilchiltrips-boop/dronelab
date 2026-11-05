@@ -27,7 +27,7 @@ async function open(transport,deviceId,credential,kind='diagnostic'){
  const key=mac(credential,'session|'+msg+'|'+r.session);
  if(!equal(mac(key,'server|'+msg),r.proof))throw Error('Controller identity proof failed');
  let seq=0,tail=Promise.resolve();const created=Date.now();
- const api={deviceId,created,setupUntil:created+(Number(r.setupExpiresMs)||0),expiresAt:created+Math.min(Number(r.expiresMs)||0,1800000),
+ const api={deviceId,bootId:c.bootId,created,setupUntil:created+(Number(r.setupExpiresMs)||0),expiresAt:created+Math.min(Number(r.expiresMs)||0,1800000),
    udpKey:claim=>{if(!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("Invalid UDP claim");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={},{signal}={}){
    const run=async()=>{
@@ -72,7 +72,7 @@ async function local(transport,deviceId,requiredScope='ap_diagnostics'){
     !/^[a-f0-9]{64}$/.test(r.key||''))throw Error('Local Wi-Fi session identity/scope invalid');
  const key=r.key,bootId=r.bootId;
  let seq=0,tail=Promise.resolve();
- const api={deviceId,local:true,scope:r.scope,expiresAt:Date.now()+Math.min(Math.max(Number(r.expiresMs)||0,0),1800000),
+ const api={deviceId,bootId,local:true,scope:r.scope,expiresAt:Date.now()+Math.min(Math.max(Number(r.expiresMs)||0,0),1800000),
    udpKey:claim=>{if(r.scope!=="ap_diagnostics"||!/^[a-fA-F0-9]{32}$/.test(claim||""))throw Error("UDP session not authorized");return mac(key,"ZJUDP1|"+deviceId+"|"+claim);},
   request(route,method='GET',args={},{signal}={}){
    const run=async()=>{

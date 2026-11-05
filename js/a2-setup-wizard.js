@@ -461,7 +461,7 @@ if(root){
  function renderInputs(){
   const m=state||{},input=selectedInput(),ppm=input.receiver;
   const age=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';
-  const monitoring=input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':kit().connected?'WAITING FOR INPUT':'KIT OFFLINE';
+  const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':kit().connected?'WAITING FOR INPUT':'KIT OFFLINE';
   $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${m.inputArmed?'armed':'disarmed'}`;
   root.querySelectorAll('[data-channel]').forEach(row=>{
    const value=input.channels?.[Number(row.dataset.channel)],reported=Number.isFinite(value)&&value>=1000&&value<=2000;

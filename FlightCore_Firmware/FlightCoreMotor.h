@@ -158,6 +158,7 @@ static void zjMotorApply(){
   else zjMotor.disable(zjMotorWatchReason);
  }
  if(zjMotorDriverReady){
+  const uint32_t started=micros();
   zjMotorPwmOffAck=false;
   for(int n=0;n<4;n++){
    const auto& wiring=zjWizardBench?zjWizardBenchConfig:zjMotorConfig;
@@ -171,6 +172,7 @@ static void zjMotorApply(){
    zjMotorPwmOffAck=off;
    if(!off)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
   }
+  zjMotorUpdateMaxUs=std::max(zjMotorUpdateMaxUs,uint32_t(micros()-started));
  }
  zjMotorServicedAt=millis();zjMotorWatchActive=zjMotor.benchEnabled;
  const bool timed=zjMotor.timedManual()||(zjMotor.timedBench&&zjMotor.mode==ZjMotorSafety::READY);
@@ -431,6 +433,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
  if(action=="STATUS")return zjMotorStatus();
  if(action=="STOP"){
   if(!authorized&&!(token==zjMotorToken&&caller==zjMotorOwner&&token.length()))return error("authorization_required");
+  zjFlightRevoke("EMERGENCY_STOP");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   // STOP cancels a pending/running sequence, but must NOT erase a verified
   // controller COMPLETE record after reboot. Otherwise every motor-test STOP

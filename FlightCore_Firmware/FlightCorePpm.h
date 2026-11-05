@@ -13,6 +13,7 @@ static constexpr uint8_t ZJ_PPM_PIN=18;
 static constexpr uint8_t ZJ_PPM_PIN=10;
 #endif
 #include "FlightCorePpmArm.h"
+#include "FlightCoreSettingsChecksum.h"
 static constexpr uint8_t ZJ_PPM_CHANNELS=8;
 static constexpr uint32_t ZJ_PPM_SYNC_US=3200,ZJ_PPM_MAX_GAP_US=30000;
 static constexpr uint32_t ZJ_PPM_LOST_MS=150,ZJ_PPM_LOG_MS=100;
@@ -84,21 +85,70 @@ static bool zjPpmDecodeConfig(const String& record,ZjPpmConfig& config){
  }
  return true;
 }
+static const char* const ZJ_PPM_CONFIG_KEYS[]={"ppmConfig0","ppmConfig1"};
+static constexpr const char* ZJ_PPM_CONFIG_HEAD="ppmConfigHead";
+static bool zjPpmDecodeHead(const String& head,unsigned& slot,uint32_t& revision){
+ long number=0;
+ if(head.length()<3||(head[0]!='0'&&head[0]!='1')||head[1]!='|'||
+    !parseNumber(head.substring(2).c_str(),1,1000000000L,number))return false;
+ slot=unsigned(head[0]-'0');revision=uint32_t(number);return true;
+}
+static bool zjPpmDecodeSlot(const String& record,ZjPpmConfig& config,uint32_t& revision){
+ const int separator=record.indexOf('|',2);
+ const int checksumAt=separator+105; // 104-byte v1 body, then a separator
+ long number=0;
+ if(record.substring(0,2)!="2|"||separator<3||record.length()<=unsigned(checksumAt+1)||
+    record[checksumAt]!='|'||!parseNumber(record.substring(2,separator).c_str(),1,1000000000L,number))return false;
+ if(record.substring(checksumAt+1)!=String(zjSettingsChecksum(record.substring(0,checksumAt)))||
+    !zjPpmDecodeConfig(record.substring(separator+1,checksumAt),config))return false;
+ revision=uint32_t(number);return true;
+}
+static bool zjPpmLoadCommitted(ZjPpmConfig& config){
+ unsigned slot=0;
+ uint32_t committed=0,revision=0;
+ if(!zjPpmDecodeHead(zjKitPrefs.getString(ZJ_PPM_CONFIG_HEAD,""),slot,committed))return false;
+ if(zjPpmDecodeSlot(zjKitPrefs.getString(ZJ_PPM_CONFIG_KEYS[slot],""),config,revision)&&revision==committed)return true;
+ // Only an older, previously committed slot can recover a corrupt active record.
+ // A newer inactive slot may have been staged by an interrupted save.
+ return zjPpmDecodeSlot(zjKitPrefs.getString(ZJ_PPM_CONFIG_KEYS[slot^1],""),config,revision)&&revision<committed;
+}
 static bool zjPpmSaveConfig(const ZjPpmConfig& config){
- // NVS commits the complete value atomically. Legacy keys are read-only
- // migration input and never override a verified v1 record.
- String record="1|";
- for(auto ch:config.map)record+=char('1'+ch);
- record+='|';
- char fields[13];
+ String payload="1|";
+ for(auto ch:config.map)payload+=char('1'+ch);
+ payload+='|';
+ char fields[16];
  for(unsigned i=0;i<8;i++){
-  snprintf(fields,sizeof(fields),"%04u%04u%04u",unsigned(config.minimum[i])%10000,unsigned(config.middle[i])%10000,unsigned(config.maximum[i])%10000);
-  record+=fields;
+  if(!zjPpmCalibrationValid(config.minimum[i],config.middle[i],config.maximum[i]))return false;
+  snprintf(fields,sizeof(fields),"%04u%04u%04u",unsigned(config.minimum[i]),unsigned(config.middle[i]),unsigned(config.maximum[i]));
+  payload+=fields;
  }
- if(zjKitPrefs.putString("ppmConfig",record)!=record.length())return false;
  ZjPpmConfig checked;
- const String stored=zjKitPrefs.getString("ppmConfig","");
- if(stored!=record||!zjPpmDecodeConfig(stored,checked))return false;
+ if(!zjPpmDecodeConfig(payload,checked))return false;
+ const String oldHead=zjKitPrefs.getString(ZJ_PPM_CONFIG_HEAD,"");
+ unsigned active=1;
+ uint32_t revision=0,verified=0;
+ if(!oldHead.isEmpty()&&!zjPpmDecodeHead(oldHead,active,revision))return false;
+ if(revision>=1000000000)return false;
+ if(revision){
+  uint32_t current=0;
+  if(!zjPpmDecodeSlot(zjKitPrefs.getString(ZJ_PPM_CONFIG_KEYS[active],""),checked,current)||current!=revision)
+   return false; // preserve a valid backup if the committed slot is damaged
+ }
+ const unsigned target=active^1;
+ const String body=String("2|")+String(revision+1)+"|"+payload;
+ const String stage=body+"|"+String(zjSettingsChecksum(body));
+ const char* key=ZJ_PPM_CONFIG_KEYS[target];
+ if(zjKitPrefs.putString(key,stage)!=stage.length())return false;
+ const String stored=zjKitPrefs.getString(key,"");
+ if(stored!=stage||!zjPpmDecodeSlot(stored,checked,verified)||verified!=revision+1)return false;
+ const String head=String(target)+"|"+String(verified);
+ if(zjKitPrefs.putString(ZJ_PPM_CONFIG_HEAD,head)!=head.length()||
+    zjKitPrefs.getString(ZJ_PPM_CONFIG_HEAD,"")!=head){
+  // Keep the previous selector if the commit cannot be verified.
+  if(oldHead.isEmpty())zjKitPrefs.remove(ZJ_PPM_CONFIG_HEAD);
+  else zjKitPrefs.putString(ZJ_PPM_CONFIG_HEAD,oldHead);
+  return false;
+ }
  zjPpmApplyConfig(checked);return true;
 }
 
@@ -185,7 +235,7 @@ static void zjPpmSetup(){
   zjPpmMin[i]=valid?lo:1000;zjPpmMid[i]=valid?mid:1500;zjPpmMax[i]=valid?hi:2000;
  }
  ZjPpmConfig record;
- if(zjPpmDecodeConfig(zjKitPrefs.getString("ppmConfig",""),record))zjPpmApplyConfig(record);
+ if(zjPpmLoadCommitted(record)||zjPpmDecodeConfig(zjKitPrefs.getString("ppmConfig",""),record))zjPpmApplyConfig(record);
  else{
   uint8_t map[5];
   const bool valid=zjPpmDecodeMap(zjKitPrefs.getString("ppmMap",""),map);
@@ -287,20 +337,23 @@ static void zjPpmLoop(uint32_t now){
     zjPpmSafeFrames=0;zjPpmArm.reset();
    }else if(zjRcOwned&&zjRcSource=="PPM"){
     zjPpmArm.accept(t,y,receivedAt);
+    if(zjRcInputArmed&&!zjPpmArm.armed)zjFlightRevoke("INPUT_DISARMED");
     zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
     zjRcInputArmed=zjPpmArm.armed;zjRcHasFrame=true;
-    zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
-    zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
+    zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];
+    zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);zjApplyPendingFlightMode();
+    zjRcLast=zjRcReceivedAt=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
    }else if(!zjRcOwned){
     zjPpmArm.reset(); // no old ARM state crosses an RC ownership release
     if(t<=ZjPpmArmGesture::THROTTLE_LOW_US)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
     else zjPpmSafeFrames=0;
     if(zjPpmSafeFrames>=3){
      zjRcOwned=true;zjRcNetwork=false;zjRcSource="PPM";zjRcTransport="PPM";
-     zjRcSession="";zjRcOwnerId="PPM";zjRcLast=receivedAt;zjRcLeaseAt=receivedAt;
+     zjRcSession="";zjRcOwnerId="PPM";zjRcLast=zjRcReceivedAt=receivedAt;zjRcLeaseAt=receivedAt;
      zjRcInputArmed=false;zjPpmArm.accept(t,y,receivedAt);
      zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;zjRcHasFrame=true;
-     zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];zjApplyPendingFlightMode();
+     zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];
+    zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);zjApplyPendingFlightMode();
      zjRcSeq=1;++zjRcAccepted;
     }
    }else {zjPpmSafeFrames=0;zjPpmArm.reset();} // Never steal a WEB/ANDROID session.
@@ -337,7 +390,7 @@ static bool zjPpmSerialCommand(char* line){
   const uint8_t idx=uint8_t(c-1);
   auto candidate=zjPpmCurrentConfig();
   candidate.minimum[idx]=l;candidate.middle[idx]=m;candidate.maximum[idx]=h;
-  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,ERR,STORAGE_FAILED");return true;}
+  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,NACK,STORAGE_FAILED");return true;}
   Serial.printf("ZJPPM,ACK,CAL,%ld\n",c);return true;
  }
  if(!strncmp(line,"ZJPPM,MAP,",10)){
@@ -353,7 +406,7 @@ static bool zjPpmSerialCommand(char* line){
   }
   auto candidate=zjPpmCurrentConfig();
   memcpy(candidate.map,channels,sizeof(channels));
-  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,ERR,STORAGE_FAILED");return true;}
+  if(!zjPpmSaveConfig(candidate)){Serial.println("ZJPPM,NACK,STORAGE_FAILED");return true;}
   Serial.println("ZJPPM,ACK,MAP");return true;
  }
  return false;

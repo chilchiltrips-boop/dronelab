@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import {createMotorClient,setupInputSample,motorStopDescription} from '../js/motor-setup.js';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
-function dataApi(){const context={};vm.runInNewContext(read('js/kit-data-interface.js'),context);return context.ZebjusKitData;}
+function dataApi(){const context={AbortController};vm.runInNewContext(read('js/kit-data-interface.js'),context);return context.ZebjusKitData;}
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject};};
 
 test('30-second USB motor tests retain physical heartbeat polling while network bench polls yield',async()=>{
@@ -22,6 +22,23 @@ test('30-second USB motor tests retain physical heartbeat polling while network 
   for(let elapsed=0;elapsed<=30000;elapsed+=2200){at=100000+elapsed;await poll();if(transport==='usb')assert.ok(at-state.heartbeatAt<6500);}
   assert.equal(reads,transport==='usb'?14:0,transport+' heartbeat scheduling during motor test');
  }
+});
+
+test('STOP cancels an obsolete read and queued motion without overlapping signed work',async()=>{
+ const queue=dataApi().createRequestScheduler(),order=[];
+ const read=queue.schedule('kit',signal=>new Promise((_,reject)=>{
+  signal.addEventListener('abort',()=>{
+   order.push('cancel status');reject(signal.reason);
+  },{once:true});
+ }),{read:true,generation:1});
+ await turn();
+ const motion=queue.schedule('kit',()=>assert.fail('motion replayed'),{generation:1,motion:true,priority:80});
+ const diagnostic=queue.schedule('kit',()=>order.push('new status'),{generation:1});
+ const cancelled=[assert.rejects(read,{code:'SAFETY_CANCELLED'}),assert.rejects(motion,{code:'SAFETY_CANCELLED'})];
+ const stop=queue.schedule('kit',()=>order.push('STOP ACK'),{priority:100,generation:1,preempt:true});
+ await Promise.all([...cancelled,stop,diagnostic]);
+ assert.deepEqual(order,['cancel status','STOP ACK','new status']);
+ assert.equal(queue.metrics().cancelledStaleRequests,2);
 });
 
 test('signed request queue gives STOP and motor commands priority without interrupting an active read',async()=>{

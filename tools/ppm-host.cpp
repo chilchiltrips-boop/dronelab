@@ -45,6 +45,37 @@ static void arm(){
  assert(std::string(zjPpmStatus().c_str()).find("\"armStatus\":\"ARMED\"")!=std::string::npos);
  assert(std::string(zjPpmStatus().c_str()).find("\"motorsDisabled\":true")!=std::string::npos);
 }
+static std::string ppmCommand(const char* input){
+ char command[128];snprintf(command,sizeof(command),"%s",input);
+ Serial.output.clear();Serial.capture=true;
+ assert(zjPpmSerialCommand(command));
+ Serial.capture=false;return Serial.output;
+}
+static void verifyPpmTransactions(){
+ zjAdminUnlocked=true;zjAdminUnlockAt=clockMs;
+ assert(ppmCommand("ZJPPM,CAL,2,920,1470,1980")=="ZJPPM,ACK,CAL,2\n");
+ assert(ppmCommand("ZJPPM,MAP,8,1,3,4,5")=="ZJPPM,ACK,MAP\n");
+ const auto verifyOld=[](){
+  assert(zjPpmMin[1]==920&&zjPpmMid[1]==1470&&zjPpmMax[1]==1980);
+  assert(zjPpmMap[0]==7&&zjPpmMap[1]==0);
+ };
+ zjPpmSetup();verifyOld();
+ assert(ppmCommand("ZJPPM,MAP,8,8,3,4,5")=="ZJPPM,ERR,MAP_VALUE\n");
+ for(unsigned fault=0;fault<6;fault++){
+  const auto writes=zjKitPrefs.writes;
+  if(fault==0)zjKitPrefs.failWriteAt=writes+1;
+  if(fault==1)zjKitPrefs.truncateWriteAt=writes+1;
+  if(fault==2)zjKitPrefs.failWriteAt=writes+2;
+  if(fault==3){zjKitPrefs.mismatchAfterWrite=writes+1;zjKitPrefs.mismatchKey=ZJ_PPM_CONFIG_KEYS[1];}
+  if(fault==5)zjKitPrefs.truncateWriteAt=writes+2;
+  if(fault==4){zjKitPrefs.mismatchAfterWrite=writes+2;zjKitPrefs.mismatchKey=ZJ_PPM_CONFIG_HEAD;}
+  assert(ppmCommand("ZJPPM,CAL,2,960,1510,2040")=="ZJPPM,NACK,STORAGE_FAILED\n");
+  verifyOld();zjPpmSetup();verifyOld();
+ }
+ assert(ppmCommand("ZJPPM,MAP,2,1,3,4,5")=="ZJPPM,ACK,MAP\n");
+ zjPpmSetup();assert(zjPpmMap[0]==1&&zjPpmMin[1]==920);
+ zjAdminUnlocked=false;
+}
 int main(){
  clockMs=1000;zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjPpmSetup();
  zjKitPrefs.putUShort("ppm1lo",910);
@@ -58,7 +89,8 @@ int main(){
  assert(zjPpmSaveConfig(config));
  zjPpmSetup();
  assert(zjPpmMin[0]==950&&zjPpmMap[0]==0&&zjPpmMap[1]==1);
- zjKitPrefs.remove("ppmConfig");zjKitPrefs.remove("ppm1lo");zjKitPrefs.remove("ppmMap");
+ verifyPpmTransactions();
+ zjKitPrefs.clear();
  zjPpmSetup();
  acquire();
  // Neither CH5=2000 nor high-throttle yaw-right arms diagnostics.

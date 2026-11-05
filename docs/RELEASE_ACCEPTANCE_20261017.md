@@ -2,7 +2,9 @@
 
 **Status: NOT YET HARDWARE ACCEPTED.** Repository CI can establish static source checks, simulated browser interactions, firmware hashes and emulator behavior. It cannot observe real ESP32/PPM radio signals, physically interrupted flashes, real handset Wi-Fi chipsets, or a remotely deployed Admin server.
 
-## Reference build and source distinction
+This document records the October baseline. Use the [current A2 qualification procedure](A2_FLIGHT_QUALIFICATION.md) for the candidate and current evidence format.
+
+## Historical build and source distinction
 - Main reference before this change: `aa8052d957da266a847c999d683f82a246ea0272`; final acceptance MUST record the exact newly tested commit in the separate evidence report. Do not copy this older SHA into real-run evidence.
 - A1 / A2 FlightCore **1.4.12**; A1 compiled `2026-10-17T17:25:55Z`, A2 `2026-10-17T17:26:40Z` (reported in published catalog, not independently observed in device).
 - Android previously published release **1.7.15-live-link-recovery**, versionCode **31**, is the baseline. The **1.7.16-release-gate**, versionCode **32** candidate must pass pinned-signature APK verifier and native touch gates before CI publishes it; the actual published APK version/sha256 is always authoritative in `mobile-apk/`.
@@ -17,7 +19,7 @@
 ## Required physical A1 and A2 procedure — perform independently
 - **AP/STA:** boot with saved router available → STA only. Switch manually to AP → AP only. Switch STA and test wrong/offline router → AP recovery. No simultaneous *associated* AP+STA state; reconnect never auto-arms. Verify Kit ID reauthentication and 2.2-second heartbeat stale detection.
 - **Live Inputs:** over USB, AP and STA read gyro, Android/Web controls and serial `ZJRC/ZJTEL`; verify source ownership, sequence changes, channel values, 350ms deadman, 1.8s lease, and safety `motorsDisabled=true`. A fresh HTTP poll containing old packet sequence must display STALE.
-- **PPM loss:** on **A1 GPIO10 / A2 D10=GPIO18**, apply a suitable PPM-SUM receiver/logic generator with CH1–CH8. Three valid throttle-low, switch-low frames establish PPM owner; CH5 raising at low throttle enables **diagnostic INPUT ARM ONLY**. Remove signal and measure LOST within **150ms**. Assert neutral, input disarmed and **MOTOR OFF**. Observe reacquisition only after safe low switch sequence. Test network source cannot be stolen.
+- **PPM loss:** on **A1 GPIO10 / A2 D10=GPIO18**, apply a suitable PPM-SUM receiver/logic generator with CH1–CH8. Three valid throttle-low frames establish PPM ownership. For current firmware, use the low-throttle yaw gesture to arm or disarm diagnostic input. CH5 is auxiliary. Remove signal and measure LOST within **150ms**. Assert neutral, input disarmed and **MOTOR OFF**. Observe reacquisition only after fresh low-throttle and yaw handshake. Test network source cannot be stolen.
 - **USB recovery:** remove/reconnect cable and power; verify fresh live `ZJINFO`, ROM bootloader identification not mistaken for a running firmware, appropriate Factory rescue at 0x0 only if safe, and retained pairing/Wi-Fi for APP update.
 - **OTA interruption:** controlled network/power interruption on expendable test board, recorded offsets/ACK, no premature success, reconnect or USB recovery, SHA-256 and Device ID/board rejection, saved config retained after successful APP OTA. Test corrupt digest and wrong board with **no** installation.
 - **Build timestamps:** compare loaded `ZJ_BUILD_UTC` and catalog `compiledAt`, then record **running** timestamp after verified boot, avoiding the historical ESP-IDF descriptor's Sep 17 time.

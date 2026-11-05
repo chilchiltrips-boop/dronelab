@@ -1,4 +1,4 @@
-import {describePpmMonitorHealth} from './input-monitor.js';
+import {describePpmMonitorHealth,isOlderReceiverCounter,parseReceiverSnapshot} from './input-monitor.js';
 export {describePpmMonitorHealth} from './input-monitor.js';
 /* Live Inputs — read-only hardware-received RC telemetry.
  * Never claims controller ownership, arms motors, or writes joystick values.
@@ -21,6 +21,13 @@ const bounded=(v,min,max)=>Math.max(min,Math.min(max,v));
 const motorLabel=flags=>flags?.motorsDisabled===true?'DISABLED':flags?.motorsDisabled===false?'ENABLED':'NOT REPORTED';
 const ownerKey=rc=>String(rc?.ownerId||rc?.diagnosticId||'');
 export function isOlderAcceptedInput(previous,next){
+ const earlier=parseReceiverSnapshot(previous),later=parseReceiverSnapshot(next);
+ if(earlier&&later){
+  if(later.generation!==earlier.generation)return isOlderReceiverCounter(later.generation,earlier.generation);
+  if(later.accepted!==earlier.accepted)return isOlderReceiverCounter(later.accepted,earlier.accepted);
+  return later.valid&&earlier.valid&&isOlderReceiverCounter(later.receivedAtMs,earlier.receivedAtMs);
+ }
+ if(previous?.active===false||next?.active===false)return false;
  const before=previous?.accepted,after=next?.accepted;
  const counters=Number.isSafeInteger(before)&&Number.isSafeInteger(after);
  if(counters&&after<before)return true;
@@ -43,6 +50,7 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
  if(!rc||typeof rc!=='object')return {...m,state:'waiting'};
  const valid=channels.every(field=>finitePulse(rc[field]));
  if(!valid)return {...m,state:'waiting'};
+ const receiver=parseReceiverSnapshot(rc);
  const seq=Number(rc.seq),ageBase=Number(rc.ageMs);
  const receiveAge=Math.max(0,now-sample.at);
  const sequenceAge=sample.sequenceAt==null?receiveAge:Math.max(0,now-sample.sequenceAt);
@@ -63,7 +71,9 @@ export function normalizeAcceptedInput(kit,sample,{now=Date.now()}={}){
   ageMs:Math.round(ageMs),rateHz:recent&&Number.isFinite(sample.rateHz)?sample.rateHz:null,
   accepted:Number.isSafeInteger(rc.accepted)&&rc.accepted>=0?rc.accepted:null,
   rejected:Number.isSafeInteger(rc.rejected)&&rc.rejected>=0?rc.rejected:null,
-  aux:{ch5:finitePulse(rc.ch5)?rc.ch5:null,ch6:finitePulse(rc.ch6)?rc.ch6:null},
+  ...(receiver?{receiverChannels:receiver.channels,receiverGeneration:receiver.generation}:{}),
+  aux:{ch5:receiver?receiver.channels[4]:finitePulse(rc.ch5)?rc.ch5:null,
+       ch6:receiver?receiver.channels[5]:finitePulse(rc.ch6)?rc.ch6:null},
   inputArm:stale?'STALE':typeof rc.inputArmed!=='boolean'?'NOT REPORTED':armed?'ARMED':'DISARMED',
    flightMode:['angle','acro'].includes(rc.flightMode)?rc.flightMode:
     ['angle','acro'].includes(kit.flightMode)?kit.flightMode:null,
@@ -127,7 +137,7 @@ function initLiveInputs(){
      !rc||rc.kitId!==kit.kitId||!Number.isFinite(at)||at<=0||
      at<=Number(sample?.at||0)||now-at>SNAPSHOT_TTL_MS||
      !channels.every(field=>finitePulse(rc[field])))return;
-  if(sample?.rc?.active&&rc.active&&isOlderAcceptedInput(sample.rc,rc))return;
+  if(isOlderAcceptedInput(sample?.rc,rc))return;
   const previous=sample;
   const sequenceAt=previous?.rc?.seq===rc.seq&&previous?.rc?.source===rc.source&&ownerKey(previous.rc)===ownerKey(rc)&&previous.rc.accepted===rc.accepted?
    previous.sequenceAt??previous.at:at;
@@ -213,7 +223,7 @@ function initLiveInputs(){
   const ppmActive=v.source==='PPM'&&v.ppmChannels!==null;
   write('liPpmHealth',describePpmMonitorHealth(kit,accepted));
   for(let i=0;i<8;i++){
-   const n=ppmActive?v.ppmChannels[i]:null;
+   const n=v.receiverChannels?v.receiverChannels[i]:ppmActive?v.ppmChannels[i]:null;
    write('liCh'+(i+1),n??'—');
    const bar=$('liCh'+(i+1)+'Bar');
    if(bar)bar.style.width=n===null?'0%':((n-1000)/10)+'%';
@@ -234,7 +244,7 @@ function initLiveInputs(){
       current.transport!==transport||current.physicalLink!==physicalLink||reply?.kitId!==id||current.bootId!==bootId)return;
    const at=Number.isFinite(reply.__observedAt)?reply.__observedAt:Date.now();
    const prev=sample;
-   if(prev?.rc?.active&&reply.active&&isOlderAcceptedInput(prev.rc,reply))return;
+   if(isOlderAcceptedInput(prev?.rc,reply))return;
    const seqChanged=!prev||prev.rc?.seq!==reply.seq||prev.rc?.source!==reply.source||ownerKey(prev.rc)!==ownerKey(reply)||Number(reply.accepted)>Number(prev.rc.accepted);
    const sequenceAt=seqChanged?at:prev.sequenceAt??prev.at;
    const hz=rate.observe(id,reply,at);

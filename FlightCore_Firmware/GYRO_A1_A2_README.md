@@ -1,4 +1,4 @@
-# ZEBJUS FlightCore v1.5.4 — Hardware / USB / Python Lab
+# ZEBJUS FlightCore — Hardware / USB / Python Lab
 
 ## Current supported hardware (IMPORTANT)
 
@@ -7,17 +7,17 @@
 | ZEBJUS FlightCore A1 SuperMini | `ZFC-A1`, ESP32-C3 | LSM6DS3, address `0x6B` | **SDA GPIO4 / SCL GPIO5** | GPIO8, active-low, usable for Python LED effects |
 | ZEBJUS FlightCore A2 C6 | `ZFC-A2`, XIAO ESP32-C6 | MPU6050, address `0x68` | **SDA GPIO22 / SCL GPIO23** (XIAO D4/D5) | GPIO15, current board wiring |
 
-Connect sensor VCC to **3V3** and GND to GND. **A1 firmware v1.5.4 does NOT use Arduino's default GPIO8/GPIO9 I2C pins.** Physically disconnect any sensor SDA/SCL leads from GPIO8/GPIO9 before installation; connect to GPIO4/GPIO5. GPIO8 remains LED only; GPIO9 is the ESP32-C3 BOOT strap. The user previously found LSM6DS3 at `0x6B` with `Wire.begin()`; that is evidence that the older wiring worked, *not* evidence that the new GPIO4/5 wiring has yet been checked in hardware.
+Connect sensor VCC to **3V3** and GND to GND. **A1 uses dedicated GPIO4/GPIO5 I2C.** Physically disconnect any sensor SDA/SCL leads from GPIO8/GPIO9 before installation; connect to GPIO4/GPIO5. GPIO8 remains LED only; GPIO9 is the ESP32-C3 BOOT strap. The user previously found LSM6DS3 at `0x6B` with `Wire.begin()`; that is evidence that the older wiring worked, *not* evidence that the new GPIO4/5 wiring has yet been checked in hardware.
 
 ## USB installation
 
-Open **Firmware** in desktop Chrome/Edge and select **Connect USB**. ROM chip ID `5` selects A1; chip ID `13` selects A2. A1/C3 and A2/C6 USB VID/PID may be the same — never identify a board by VID/PID alone. Check the selected board profile. Use **Factory image** (`0x0`) on first install or when migrating from Arduino's default partitions; **APP** at `0x10000` requires a matching existing dual-OTA partition layout. Verify current firmware version `1.5.4`, `LOADED`, and USB bootloader + flash verified before pressing **Flash over USB**. Leave BOOT and press RESET after flashing if the controller stays in ROM DOWNLOAD. Open USB Serial Monitor at 115200 baud; it identifies the actual running firmware using `ZJINFO,FW,...`.
+Open **Firmware** in desktop Chrome/Edge and select **Connect USB**. ROM chip ID `5` selects A1; chip ID `13` selects A2. A1/C3 and A2/C6 USB VID/PID may be the same — never identify a board by VID/PID alone. Check the selected board profile. Use **Factory image** (`0x0`) on first install or when migrating from Arduino's default partitions; **APP** at `0x10000` requires a matching existing dual-OTA partition layout. Verify the selected image against the [current catalog](../firmware-catalog.json), `LOADED`, and USB bootloader + flash verified before pressing **Flash over USB**. Leave BOOT and press RESET after flashing if the controller stays in ROM DOWNLOAD. Open USB Serial Monitor at 115200 baud; it identifies the actual running firmware using `ZJINFO,FW,...`.
 
 The built-in USB flashing page validates the selected profile, detected ROM chip, firmware ESP image header, SHA-256 catalog integrity and flash capacity. This is chip-family protection, *not* unique manufacturer board authentication.
 
 ## Nonblocking USB telemetry
 
-Both boards sample gyro at **50 Hz** (20 ms). The USB telemetry stream defaults to **20 Hz** (50 ms), configurable to **10 / 20 / 50 Hz** in the Serial Monitor toolbar. These settings change *transport frequency*, not IMU sampling rate or a motor-control loop.
+A1 samples the gyro at **50 Hz**. A2 uses the asynchronous acquisition worker for the MPU6050 and exposes measured sample timing in signed status. See the [A2 qualification guide](../docs/A2_FLIGHT_QUALIFICATION.md) for the candidate and actuator restrictions. The USB telemetry stream defaults to **20 Hz** (50 ms), configurable to **10 / 20 / 50 Hz** in the Serial Monitor toolbar. These settings change *transport frequency*, not IMU sampling rate or a motor-control loop.
 
 Canonical prefix (12 CSV fields, followed by RC fields in COMBINED mode):
 
