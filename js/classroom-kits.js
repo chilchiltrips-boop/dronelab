@@ -260,11 +260,13 @@ function authorizationNotice(id){
  if(until&&!rejectedPairings.has(id))return 'Authorization cooldown ended. Retry Authorize control & updates.';
  return authorizationNotices.get(id)||'';
 }
-async function openNetworkSession(ip,id,key,local,admin){
- if(local)return root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),id,ip==='192.168.4.1'?'ap':'sta');
+async function openNetworkSession(ip,id,key,local,admin,signal){
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
+ if(local)return root.ZebjusKitAuth.openLocal(root.ZebjusKitAuth.http('http://'+ip),id,ip==='192.168.4.1'?'ap':'sta',signal);
  checkEnrollmentAccess(id,key);
- try{return await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),id,key,admin?'admin':'diagnostic')}
+ try{return await root.ZebjusKitAuth.open(root.ZebjusKitAuth.http('http://'+ip),id,key,admin?'admin':'diagnostic',signal)}
  catch(e){
+  if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
   const code=e.code||e.message;
   if(code==='enrollment_rate_limited'||code==='challenge_busy'){
    enrollmentCooldowns.set(id,Date.now()+31000);
@@ -497,7 +499,11 @@ async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,si
  if(admin)key=pairedKeys.get(expected)||key;
  if(local||admin||secureIds.has(expected)){
   const slot=expected+'@'+ip;let session=authSessions.get(slot);
-  if(!session||Date.now()>session.expiresAt-5000){session=await openNetworkSession(ip,expected,key,local,admin);authSessions.set(slot,session)}
+  if(!session||Date.now()>session.expiresAt-5000){
+   session=await openNetworkSession(ip,expected,key,local,admin,signal);
+   if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');guard?.();
+   authSessions.set(slot,session);
+  }
   guard?.();
   const stop=route==='/api/rc/stop'||route==='/api/motor'&&args.action==='STOP';
   if(method==='POST'&&!stop&&boot&&session.bootId&&session.bootId!==boot)
@@ -509,11 +515,11 @@ async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,si
    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
    // The kit may have rebooted (or its local session may have been replaced).
    // Retry ONCE only after rechecking the full hardware Device ID.
-   const fresh=await probeIdentity(ip,2800);
+   const fresh=await probeIdentity(ip,2800,null,signal);
    if(!fresh||fresh.kitId!==expected)throw Error('Kit session rejected and Device ID could not be reverified. Connection blocked.');
-   const renewed=await openNetworkSession(ip,expected,key,local,admin);
+   const renewed=await openNetworkSession(ip,expected,key,local,admin,signal);
+   if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');guard?.();
    authSessions.set(slot,renewed);
-   guard?.();
    return renewed.request(route,method,args,{signal});
   }
  }
@@ -1418,15 +1424,18 @@ async function pairAndAuthorizeSelectedKit(){
  return true;
 }
 let discoveryReport={attempted:0,verified:0,unreachable:0,timeouts:0,httpErrors:0,invalidIdentity:0,blocked:false};
-async function probeIdentity(ip,timeoutMs=1550,report=null){
+async function probeIdentity(ip,timeoutMs=1550,report=null,signal){
+ if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');
  if(!safeKitHost(ip))return null;
  if(report)report.attempted++;
  const count=key=>{if(report)report[key]++};
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs);
+ const cancel=()=>ctrl.abort(signal.reason);
+ signal?.addEventListener('abort',cancel,{once:true});
  try{
   let d;
   if(root.ZebjusKitUdp&&await root.ZebjusKitUdp.available()){
-   const reply=await root.ZebjusKitUdp.request(ip,'/api/identify');
+   const reply=await root.ZebjusKitUdp.request(ip,'/api/identify','GET',{},{},ctrl.signal);
    if(reply.status!==200){count('httpErrors');return null;}d=JSON.parse(reply.text);
   }else{
    const response=await fetch('http://'+ip+'/api/identify',{method:'GET',mode:'cors',credentials:'omit',
@@ -1439,7 +1448,8 @@ async function probeIdentity(ip,timeoutMs=1550,report=null){
   count('verified');
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
    simpleConnection:!!d.simpleConnection,adminSessions:!!d.adminSessions,exclusiveWifi:!!d.exclusiveWifi,hostname:d.hostname||'',board:d.board,ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
- }catch(e){count(ctrl.signal.aborted?'timeouts':e instanceof SyntaxError?'invalidIdentity':'unreachable');return null}finally{clearTimeout(timer)}
+ }catch(e){if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');count(ctrl.signal.aborted?'timeouts':e instanceof SyntaxError?'invalidIdentity':'unreachable');return null}
+ finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel)}
 }
 function showDiscovered(){
  for(const id of ['kitDiscoveryResults','fwDiscoveryResults']){
@@ -2322,7 +2332,7 @@ async function pidExchange(kit,action,args,operationGuard){
  };
  guard();
  if(kit.transport!=='usb'){
-  const route=action==='RESET'?'/api/pid/reset':'/api/pid/settings';
+  const route=action==='RESET'?'/api/pid/reset':action==='APPLY'?'/api/pid/apply':'/api/pid/settings';
   const reply=await deviceRequest(route,action==='GET'?'GET':'POST',action==='GET'?{}:{...args,bootId:kit.bootId},guard);
   guard();return reply;
  }
@@ -2332,7 +2342,8 @@ async function pidExchange(kit,action,args,operationGuard){
  response.catch(()=>{});
  const fields=['ZJPID',action,id,token];
  if(action!=='GET')fields.push(kit.bootId,args.expectedRevision);
- if(action==='SET')fields.push(args.gains);
+ if(args.profile)fields.push(args.expectedGeneration,args.profile);
+ if(action==='SET'||action==='APPLY')fields.push(args.gains);
  guard();await usbWrite(fields.join(','));
  const line=await response;guard();
  const value=line.split(',').slice(4).join(',');

@@ -1,10 +1,15 @@
 name: Build and verify FlightCore A1/A2 AP/STA Firmware
 on:
   push:
-    branches: [release/flightcore-1.7.15-bench-safe-20261105, feat/a2-flight-safety-acceptance-20261105, feat/a2-unified-rate-pid-20261105, fix/a2-output-calibration-stability-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-imu-manual-xyz-offsets-live-visual-20261104, feat/a2-page-save-20261104, feat/a2-complete-wizard-20261104, fix/imu-diagnostic-freshness-20261103,feat/a2-timing-250hz-foundation,fix/wizard-single-toolbar-20261103, fix/radio-handover-ppm-arm-diagnostics-20261102, feat/ppm-yaw-arm-status-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, feat/a2-motor-setup-20261030, feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, feat/unified-input-status-20261026, feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
+    branches: [feat/a2-aerof450-pid-profiles-20261105, release/flightcore-1.7.15-bench-safe-20261105, feat/a2-flight-safety-acceptance-20261105, feat/a2-unified-rate-pid-20261105, fix/a2-output-calibration-stability-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-imu-manual-xyz-offsets-live-visual-20261104, feat/a2-page-save-20261104, feat/a2-complete-wizard-20261104, fix/imu-diagnostic-freshness-20261103,feat/a2-timing-250hz-foundation,fix/wizard-single-toolbar-20261103, fix/radio-handover-ppm-arm-diagnostics-20261102, feat/ppm-yaw-arm-status-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, feat/a2-motor-setup-20261030, feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, feat/unified-input-status-20261026, feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
     paths:
       - 'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'
       - 'FlightCore_Firmware/*.h'
+      - 'js/pid-profiles.js'
+      - 'tools/sync-pid-profiles.mjs'
+      - 'tools/bench_release_gate.py'
+      - 'FlightCore_Firmware/bench-release-policy.json'
+      - 'FlightCore_Firmware/publication-hold.json'
       - 'tools/embed_setup_portal.py'
       - 'tools/setup-portal.html'
       - 'js/kit-auth.js'
@@ -65,7 +70,7 @@ jobs:
           if test -f FlightCore_Firmware/publication-hold.json; then
             python3 tools/verify_release.py
             echo 'rebuild=true' >> "$GITHUB_OUTPUT"
-            if python3 tools/bench_release_gate.py --source && [ "$GITHUB_REF_NAME" = "main" ]; then
+            if [ "$GITHUB_REF_NAME" = "main" ] && python3 tools/bench_release_gate.py --publish-source; then
               echo 'publish=true' >> "$GITHUB_OUTPUT"
               echo 'Bench-only candidate approved for software publication; flight output remains disabled'
             else

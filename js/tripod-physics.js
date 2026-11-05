@@ -1,4 +1,5 @@
-import {RATE_DEFAULTS,stepRatePid} from './rate-pid.js';
+import {stepRatePid} from './rate-pid.js';
+import {DEFAULT_PID_PROFILE} from './pid-profiles.js';
 /* F450 tripod educational dynamics. 250 Hz deterministic, physical motor thrust and
  * three-axis rigid-body rotational equations. No hardware/browser dependencies.
  * Teaching approximation: no aerodynamic measurement-based calibration claimed.
@@ -9,10 +10,7 @@ export const degToRad=d=>d*Math.PI/180;
 const DEG=180/Math.PI;
 const wrap=a=>((a+180)%360+360)%360-180;
 const clone=x=>JSON.parse(JSON.stringify(x));
-export const DEFAULT_PID={
- ...RATE_DEFAULTS,
- angleRoll:{p:3,i:0,d:0},anglePitch:{p:3,i:0,d:0}
-};
+export const DEFAULT_PID=DEFAULT_PID_PROFILE.gains;
 export const DEFAULT_ENV={batteryV:12.2,payloadG:0,cgX:0,cgY:0,wind:0,lag:0.04,gyroNoise:.07,noiseSeed:7919};
 // SI-unit educational estimates, not measured aircraft calibration.
 export const PLANT=Object.freeze({mass:1.12,g:9.81,maxRPM:8500,kT:11/(8500*Math.PI/30)**2,kQ:.020*11/(8500*Math.PI/30)**2,idle:.08,spring:100,damper:14,travel:.12});

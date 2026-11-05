@@ -45,6 +45,7 @@ static void zjMotorWatch(void*){
 static ZjMotorSafety zjMotor;
 static ZjMotorConfig zjMotorConfig;
 static bool zjMotorConfigValid=true;
+static bool zjPidLayoutMatches(bool plus){return zjMotorConfigValid&&zjMotorConfig.plus==plus;}
 // This records an operator's confirmation, not sensor detection of ESC tones.
 // Endpoints live in each ESC; this board record survives ordinary power cycles.
 static bool zjMotorCalibrationSaved=false,zjMotorCalibrationPending=false;

@@ -8,9 +8,9 @@ static FlightReceiverSnapshot zjControlInput;
 
 static bool zjControlRuntimeReady=false;
 struct ZjRateShadowResult {
- uint32_t revision=0,computeMaxUs=0,imuReadMaxUs=0,imuSampleAgeUs=0;
+ uint32_t revision=0,generation=0,computeMaxUs=0,imuReadMaxUs=0,imuSampleAgeUs=0;
  uint32_t phaseMaxUs[4]={};
- bool deadlineFault=false,outputAuthorized=false;
+ bool deadlineFault=false,outputAuthorized=false,angle=false;
  const char* maxIntervalPhase="STARTUP";
  const char* reason="DISARMED";
  ZjRateMix mix;
@@ -22,8 +22,10 @@ static ZjRateShadowResult zjRateShadow;
 static SemaphoreHandle_t zjI2cMutex=nullptr;
 static portMUX_TYPE zjTimingMux=portMUX_INITIALIZER_UNLOCKED;
 static ZjImuAcquisition zjImuMailbox;
-static ZjRateGains zjShadowGains[3];
-static uint32_t zjShadowRevision=0,zjFlightRevokeEpoch=0;
+static ZjRateGains zjShadowGains[ZJ_PID_GAIN_COUNT/3];
+static uint32_t zjShadowRevision=0,zjShadowGeneration=0,zjFlightRevokeEpoch=0;
+static bool zjShadowAngle=false,zjShadowPlus=false,zjShadowPreview=false;
+static bool zjPidLayoutMatches(bool plus);
 static ZjFlightOutputGate zjFlightOutputGate;
 static bool zjShadowRequested=false;
 static ZjAccelModel zjSavedAccelModel;
@@ -89,6 +91,7 @@ static void zjControlTask(void*){
  const uint32_t started=micros();
  ZjControlScheduler control;control.start(started);
  ZjRatePidState pid[3]={};
+ ZjAnglePidState outer[2]={};
  ZjRateShadowResult previous;
  uint32_t lastEpoch=0,lastGeneration=0;
  ZjReceiverSource lastSource=ZjReceiverSource::NONE;
@@ -96,9 +99,9 @@ static void zjControlTask(void*){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
   const auto previousWorst=control.maxIntervalUs,previousMissed=control.missedTicks;
   if(!control.begin(micros()))continue;
-  ZjRateGains gains[3];
-  float rates[3];
-  bool requested,imuReady;
+  ZjRateGains gains[ZJ_PID_GAIN_COUNT/3];
+  float rates[3],gravity[3]={};
+  bool requested,imuReady,level,plus,preview;
   uint32_t epoch;
   ZjRateShadowResult next;
   ZjSampleStamp imuSample;
@@ -107,13 +110,16 @@ static void zjControlTask(void*){
   imuSample=zjImuMailbox.sample;conditions.input=zjControlInput;
   rates[0]=zjImuMailbox.RateRoll;rates[1]=zjImuMailbox.RatePitch;rates[2]=zjImuMailbox.RateYaw;
   imuReady=zjImuMailbox.gyroReady;next.imuReadMaxUs=zjImuMailbox.gyroMaxReadUs;
-  for(unsigned i=0;i<3;i++)gains[i]=zjShadowGains[i];
+  for(unsigned i=0;i<3;i++)gravity[i]=zjImuMailbox.accelG[i]-zjImuMailbox.accelModel.trim[i]/1000.0f;
+  level=zjImuMailbox.accelModel.level;
+  std::copy_n(zjShadowGains,ZJ_PID_GAIN_COUNT/3,gains);
   requested=zjShadowRequested;epoch=zjFlightRevokeEpoch;next.revision=zjShadowRevision;
+  next.generation=zjShadowGeneration;next.angle=zjShadowAngle;plus=zjShadowPlus;preview=zjShadowPreview;
   portEXIT_CRITICAL(&zjTimingMux);
   const auto& input=conditions.input;
   conditions.nowMs=millis();
   conditions.inputDeadlineMs=input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
-  conditions.acro=requested;
+  conditions.acro=requested&&!next.angle;
   const uint32_t at=micros();
   next.imuSampleAgeUs=imuSample.valid?imuSample.ageUs(at):UINT32_MAX;
   conditions.imuFresh=imuReady&&imuSample.fresh(at,12000);
@@ -125,26 +131,32 @@ static void zjControlTask(void*){
   next.phaseMaxUs[phase]=std::max(next.phaseMaxUs[phase],control.intervalUs);
   next.computeMaxUs=previous.computeMaxUs;
   if(requested){
-   if(!input.fresh(conditions.nowMs,conditions.inputDeadlineMs))next.reason="INPUT_STALE";
+   float angles[2]={};
+   if(!preview&&!input.fresh(conditions.nowMs,conditions.inputDeadlineMs))next.reason="INPUT_STALE";
    else if(!conditions.imuFresh)next.reason="IMU_STALE";
    else if(!conditions.timingHealthy){next.reason="TIMING_FAULT";next.deadlineFault=true;}
+   else if(next.angle&&(!level||!zjBenchAngles(gravity[0],gravity[1],gravity[2],angles)))next.reason="ANGLE_LEVEL_REQUIRED";
    else{
-    if(lastEpoch!=epoch||lastGeneration!=input.generation||lastSource!=input.source||previous.revision!=next.revision){
+    if(lastEpoch!=epoch||lastGeneration!=input.generation||lastSource!=input.source||previous.generation!=next.generation||previous.angle!=next.angle){
      for(auto& axis:pid)axis={};
+     for(auto& axis:outer)axis={};
      previous.mix={};
     }
     const uint32_t computeStarted=micros();
     const uint16_t commands[]={input.channels[0],input.channels[1],input.channels[3]};
+    const float dt=control.intervalUs*.000001f;
     ZjRatePidResult correction[3];
     bool valid=true;
     for(unsigned i=0;i<3;i++){
-     correction[i]=zjStepRatePid(pid[i],gains[i],zjRateStick(commands[i]),rates[i],
-                                 control.intervalUs*.000001f,previous.mix.residual[i]);
+     float target=preview?0:zjRateStick(commands[i]);
+     if(next.angle&&i<2)target=zjStepAnglePid(outer[i],gains[i+3],target*(26.0f/75.0f),angles[i],dt);
+     correction[i]=zjStepRatePid(pid[i],gains[i],target,rates[i],dt,previous.mix.residual[i]);
      valid=valid&&correction[i].valid;
     }
     if(valid){
-     next.reason="READY";
-     next.mix=zjRateMixQuadX(input.channels[2],correction[0].output,correction[1].output,correction[2].output);
+     next.reason=preview?"BENCH_PREVIEW":"READY";
+     const float throttle=preview?1000:input.channels[2];
+     next.mix=(plus?zjRateMixQuadPlus:zjRateMixQuadX)(throttle,correction[0].output,correction[1].output,correction[2].output);
     }else next.reason="PID_INVALID";
     next.computeMaxUs=std::max(next.computeMaxUs,uint32_t(micros()-computeStarted));
    }
@@ -162,7 +174,7 @@ static void zjControlTask(void*){
   next.outputAuthorized=zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED)&&next.mix.pulse[0]!=0;
   zjControl=control;zjRateShadow=next;
   portEXIT_CRITICAL(&zjTimingMux);
-  if(!next.mix.pulse[0])for(auto& axis:pid)axis={};
+  if(!next.mix.pulse[0]){for(auto& axis:pid)axis={};for(auto& axis:outer)axis={};}
   lastEpoch=epoch;lastGeneration=input.generation;lastSource=input.source;previous=next;
  }
 }
@@ -198,11 +210,16 @@ static void zjControlRuntimeSetup(){
 }
 static void zjPublishControlInput(){
  const auto value=zjRcReceiver();
- const bool requested=zjFlightMode=="acro"&&value.inputArmed&&!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed;
- const ZjRateGains gains[]={zjPidSettings.axis(0),zjPidSettings.axis(1),zjPidSettings.axis(2)};
+ const bool plus=ZJ_PID_PROFILES[zjPidActive.profile].plus;
+ const bool preview=zjPidPreview&&!value.inputArmed;
+ const bool requested=(value.inputArmed||preview)&&!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed&&
+  !zjMaintenanceActive&&zjPidLayoutMatches(plus)&&!zjPidStorageCorrupt&&!zjPidStorageUncertain;
+ ZjRateGains gains[ZJ_PID_GAIN_COUNT/3];
+ for(unsigned i=0;i<ZJ_PID_GAIN_COUNT/3;i++)gains[i]=zjPidActive.axis(i);
  portENTER_CRITICAL(&zjTimingMux);
- zjControlInput=value;zjShadowRequested=requested;zjShadowRevision=zjPidSettings.revision;
- for(unsigned i=0;i<3;i++)zjShadowGains[i]=gains[i];
+ zjControlInput=value;zjShadowRequested=requested;zjShadowRevision=zjPidActive.revision;
+ zjShadowGeneration=zjPidGeneration;zjShadowAngle=zjFlightMode=="angle";zjShadowPlus=plus;zjShadowPreview=preview;
+ std::copy_n(gains,ZJ_PID_GAIN_COUNT/3,zjShadowGains);
  portEXIT_CRITICAL(&zjTimingMux);
 }
 #else

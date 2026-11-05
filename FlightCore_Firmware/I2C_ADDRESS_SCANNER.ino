@@ -9,7 +9,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.15";
+constexpr const char* FW_VERSION="1.7.16";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -43,7 +43,7 @@ uint32_t telemetrySeq=0,telemetryDropped=0; // Declare before serialCommand() so
 uint8_t activeSda=BUS_SDA,activeScl=BUS_SCL;
 bool ledAvailable=true;
 uint16_t onDuration=500,offDuration=500,fadeDuration=1200;
-char serialLine[192];size_t serialUsed=0;
+char serialLine[256];size_t serialUsed=0;bool serialOverflow=false;
 
 void ledLevel(uint8_t pct){if(ledAvailable)ledcWrite(LED_PIN,255-(uint32_t(constrain(pct,0,100))*255/100));}
 void ledOff(){ledMode=LED_OFF;manualBrightness=0;patternCount=0;ledLevel(0);}
@@ -165,9 +165,10 @@ void readLedCommands(){
  for(uint8_t n=0;n<96&&Serial.available();++n){
   const char c=char(Serial.read());
   if(c=='\n'||c=='\r'){
-   if(serialUsed){serialLine[serialUsed]='\0';serialCommand(serialLine);serialUsed=0;}
+   if(serialUsed&&!serialOverflow){serialLine[serialUsed]='\0';serialCommand(serialLine);}
+   serialUsed=0;serialOverflow=false;
   }else if(serialUsed<sizeof(serialLine)-1)serialLine[serialUsed++]=c;
-  else serialUsed=0;
+  else serialOverflow=true;
  }
 }
 void updateLedEffect(unsigned long now){

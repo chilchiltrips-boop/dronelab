@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Operator evidence validator. It does NOT connect to hardware or certify observations.
 import fs from 'node:fs';
-import {createHash} from 'node:crypto';
+import {createHash,createPublicKey,verify} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -57,20 +57,28 @@ function verifiedEvidenceBytes(ref,digest){
   return bytes.length>0&&sha256(bytes)===digest?bytes:null;
  }catch{return null;}
 }
-function verifyEvidenceRef(ref,digest,row,release){
+// Only keys provided by the release environment can authorize physical PASS.
+export function evidenceSigningPayload(record){
+ return Buffer.from(JSON.stringify(['zebjus-physical-acceptance-v1',record.schema,record.caseId,
+  record.result,record.operator,record.observedAt,record.deviceId,record.firmwareVersion,
+  record.sourceCommit,record.artifactSha256,record.logRef,record.logSha256,record.notes]));
+}
+function verifyEvidenceRef(ref,digest,row,release,operators){
  const bytes=verifiedEvidenceBytes(ref,digest);
  if(!bytes)return false;
  try{
   const record=JSON.parse(bytes);
   const fields={caseId:row.id,result:row.status,operator:row.operator,observedAt:row.observedAt,
    deviceId:row.deviceId,firmwareVersion:row.firmwareVersion,sourceCommit:release?.sourceCommit,
-   artifactSha256:row.artifactSha256??null};
-  return record.schema===1&&Object.entries(fields).every(([key,value])=>record[key]===value)&&
-   !/^(fixture|unknown|placeholder|test(?:er)?)$/i.test(row.operator.trim())&&
-   record.logRef!==ref&&!!verifiedEvidenceBytes(record.logRef,record.logSha256);
+   artifactSha256:row.artifactSha256??null,notes:row.notes};
+  if(record.schema!==1||!Object.entries(fields).every(([key,value])=>record[key]===value)||
+     record.logRef===ref||!verifiedEvidenceBytes(record.logRef,record.logSha256)||
+     !Object.hasOwn(operators,row.operator)||!(/^[A-Za-z0-9_-]{86}$/.test(record.signature)))return false;
+  const key=createPublicKey(operators[row.operator]);
+  return key.asymmetricKeyType==='ed25519'&&verify(null,evidenceSigningPayload(record),key,Buffer.from(record.signature,'base64url'));
  }catch{return false;}
 }
-export function validateEvidence(report,{strict=false,release=null,verifyEvidence=verifyEvidenceRef}={}){
+export function validateEvidence(report,{strict=false,release=null,operators={},verifyEvidence=verifyEvidenceRef}={}){
  const errors=[];
  if(report?.schema!==1||!Array.isArray(report.cases))throw Error('Invalid acceptance evidence schema');
  const ids=new Set(),totals={PASS:0,FAIL:0,NOT_RUN:0};
@@ -86,9 +94,9 @@ export function validateEvidence(report,{strict=false,release=null,verifyEvidenc
    const t=Date.parse(c.observedAt);
    if(!Number.isFinite(t)||t>Date.now()+5*60000)errors.push(c.id+': invalid/future observedAt');
    if(strict){
-    if(!verifyEvidence(c.evidenceRef,c.evidenceSha256,c,release))errors.push(c.id+': evidence file or digest unverified');
+    if(!verifyEvidence(c.evidenceRef,c.evidenceSha256,c,release,operators))errors.push(c.id+': evidence file or digest unverified');
     const profile=/^A[12]_/.test(c.id)?c.id.slice(0,2):null;
-    if(profile&&(!release||c.firmwareVersion!==release.version||!sha(c.artifactSha256)||c.artifactSha256!==release.artifacts?.[profile]))
+    if(profile&&(!new RegExp('^ZFC-'+profile+'-[A-F0-9]{12}$').test(c.deviceId)||!release||c.firmwareVersion!==release.version||!sha(c.artifactSha256)||c.artifactSha256!==release.artifacts?.[profile]))
      errors.push(c.id+': evidence must identify the exact tested APP and firmware version');
    }
    if(c.evidenceRef&&/password|secret|token|cookie|private.key/i.test(c.evidenceRef))errors.push(c.id+': evidenceRef may expose credentials');
@@ -107,7 +115,10 @@ if(executed){
  const filepath=idx>=0?args[idx+1]:defaultFile;
  if(!filepath){console.error('--evidence requires a path');process.exitCode=2}
  else try{
-  const report=JSON.parse(fs.readFileSync(filepath,'utf8')),r=validateEvidence(report,{strict,release:strict?releaseIdentity():null});
+  const report=JSON.parse(fs.readFileSync(filepath,'utf8'));
+  const operators=strict?JSON.parse(process.env.ZJ_ACCEPTANCE_OPERATOR_KEYS||'{}'):{};
+  if(!operators||typeof operators!=='object'||Array.isArray(operators))throw Error('Invalid trusted operator keyring');
+  const r=validateEvidence(report,{strict,operators,release:strict?releaseIdentity():null});
   console.log('Hardware/deployment acceptance: '+JSON.stringify(r.totals)+'; mode='+(strict?'STRICT':'SCHEMA ONLY'));
   if(!strict)console.log('CI schema checks DO NOT prove real A1/A2/Android/deployment acceptance.');
   for(const err of r.errors)console.error('BLOCKED: '+err);

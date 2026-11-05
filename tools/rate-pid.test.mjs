@@ -10,6 +10,7 @@ import {createPidClient,encodeRateGains,PID_CHANGED} from '../js/flightcore-pid-
 import {validateEvidence,requiredIds} from './release-acceptance.mjs';
 
 test('C++ PID storage, scheduler fault and Quad X tests, with shared JS/C++ gain vectors',()=>{
+ execFileSync(process.execPath,['tools/sync-pid-profiles.mjs','--check']);
  const dir=mkdtempSync(join(tmpdir(),'zj-rate-'));
  try{
   const bin=join(dir,'host');
@@ -56,7 +57,9 @@ test('PID save verifies Kit, boot, exact gain readback and lost ACK without retr
  kit={...kit,motorsArmed:false};lostAck=false;
  assert.equal((await client.reset()).revision,2);
  assert.equal(writes,2);
- await assert.rejects(client.save({...values,rateRoll:{p:NaN,i:1,d:1}},2),/nine Rate gains/);
+ await assert.rejects(client.save({...values,rateRoll:{p:NaN,i:1,d:1}},2),/all 9 gains/);
+ await assert.rejects(client.save({...values,angleRoll:{p:3,i:0,d:0},anglePitch:{p:3,i:0,d:0}},2),/Angle gains.*1\.7\.16/);
+ assert.equal(writes,2);
  kit={...kit,bootId:'b'.repeat(32)};
  await assert.rejects(client.read(),/identity/);
 });
@@ -79,7 +82,7 @@ test('reconnect rejects queued operations and aborts only the in-flight read',as
 test('strict acceptance binds the release commit, firmware APP hashes and evidence digests',()=>{
  const release={sourceCommit:'a'.repeat(40),version:'fixture',artifacts:{A1:'b'.repeat(64),A2:'c'.repeat(64)}};
  const report={schema:1,sourceCommit:release.sourceCommit,cases:requiredIds.map(id=>({
-  id,status:'PASS',observedAt:'2026-01-01T00:00:00Z',operator:'fixture',deviceId:'fixture',firmwareVersion:release.version,
+  id,status:'PASS',observedAt:'2026-01-01T00:00:00Z',operator:'fixture',deviceId:/^A[12]_/.test(id)?'ZFC-'+id.slice(0,2)+'-012345ABCDEF':'fixture',firmwareVersion:release.version,
   evidenceRef:'fixture.md',evidenceSha256:'e'.repeat(64),artifactSha256:release.artifacts[id.slice(0,2)],notes:'synthetic unit test'
  }))};
  const valid={strict:true,release,verifyEvidence:(_path,hash)=>hash==='e'.repeat(64)};

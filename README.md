@@ -21,7 +21,7 @@ The 1.5.5 / 1.8.7 release separates authenticated RX and APPLIED feedback, retai
 
 ## A2 Rate PID
 
-The existing PID Tuning panel and Python Lab share the verified A2 settings. Use USB teacher admin or an authorized direct AP/STA Kit connection for saves. Read the FC revision before editing or saving. A successful save requires a separate readback of all nine gains. See [Rate PID settings and timing](docs/A2_RATE_PID.md). The [A2 qualification checklist](docs/A2_FLIGHT_QUALIFICATION.md) tracks firmware candidates, release hold, receiver monitoring and propeller-free verification.
+The existing PID Tuning panel and Python Lab share the verified A2 settings. FlightCore 1.7.16 candidates support Rate and Angle gains, disarmed RAM preview and Aerof450 Quad X / Quad + profiles in Setup Wizard. Use USB teacher admin or an authorized direct AP/STA Kit connection. A save is confirmed by independent FC readback. See [Rate PID settings and timing](docs/A2_RATE_PID.md). The [A2 qualification checklist](docs/A2_FLIGHT_QUALIFICATION.md) tracks firmware candidates, release hold, receiver monitoring and propeller-free verification.
 
 ## UDP management and IMU
 
@@ -59,7 +59,7 @@ Browser storage can be lost after clearing site data, using private browsing or 
 
 Local QR/WebRTC simulator pairing may use host and STUN ICE candidates. **No TURN relay will be deployed** and connectivity across restrictive networks is neither promised nor a release goal. Optional CONNECT-code signaling itself requires internet; use direct QR on a reachable local network when offline. Kit physical diagnostics, input ARM and firmware operations are limited to verified local AP/STA/USB routes; **no internet-based physical Kit control** is planned. Existing explicitly granted telemetry remains read-only, not a control tunnel.
 
-## FlightCore A1/A2 1.5.5 — verified diagnostic firmware
+## FlightCore A1/A2 diagnostic firmware
 
 `FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. This is **not physical motor-flight firmware**. A1: ESP32-C3 Super Mini, SDA4/SCL5, PPM GPIO10. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. Both build profiles use a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
 

@@ -29,23 +29,12 @@
 .tp-cascade small{font-size:9px;color:#75e0bc;font-weight:900}
 .tp-cascade strong{font-size:12px;color:#e5f9f1}
 .tp-cascade span{font-size:10px;color:#9cb7c9;line-height:1.45}
-.tp-pid-secondary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 14px 12px}
-.tp-pid-secondary small{flex:1 1 220px;color:#91b2c0;font-size:10px;line-height:1.4}
-.tp-ab-compare{margin:13px 14px;background:#071923;border:1px solid #274859;border-radius:11px;padding:4px 0 10px}
-.tp-ab-compare .panel-title{padding:10px 11px 8px}
-.tp-ab-compare .panel-title h2{font-size:13px}
-.tp-ab-inputs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;padding:0 10px;align-items:end}
-.tp-ab-inputs label{display:flex;flex-direction:column;gap:5px;font-size:9px;color:#95b8c4;font-weight:850}
-.tp-ab-inputs select,.tp-ab-inputs input{width:100%;min-width:0;border:1px solid #2b5b6c;background:#0b2432;color:#e1faf0;border-radius:8px;padding:9px 6px;font-size:12px}
-.tp-ab-result{font-size:10px;color:#b6ded7;padding:10px 12px;line-height:1.6}
-.tp-compare-chart{height:160px;padding:0 12px}
-.tp-compare-chart canvas{width:100%;height:100%}
 .tp-chart-head button{min-height:30px;padding:6px 9px;font-size:10px}
 .tp-view-panel .tp-stage{background:#112431}
 .tp-stage-tip{background:#0b2634aa}
 #tpSound:focus-visible,#tpResetIntegrators:focus-visible,#tpCompare:focus-visible{outline:2px solid #67e9ca;outline-offset:2px}
-@media(max-width:760px){.tp-cascade{grid-template-columns:1fr}.tp-ab-inputs{grid-template-columns:repeat(3,minmax(0,1fr))}.tp-ab-inputs .action{grid-column:1/-1}.tp-command .tp-audio{flex:1 1 100%}.tp-compare-chart{height:135px}}
-@media(max-width:400px){.tp-ab-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}.tp-ab-inputs label:first-child{grid-column:1/-1}.tp-ab-inputs .action{grid-column:1/-1}}
+@media(max-width:760px){.tp-cascade{grid-template-columns:1fr}.tp-command .tp-audio{flex:1 1 100%}}
+@media(max-width:400px){}
 
 /* Flight Training: one receiver, accessible connection sheet and measured travel. */
 .tp-nav a.active{text-decoration:none;border-bottom:1px solid #277d5f}
@@ -79,17 +68,16 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 .tp-pid-bank-section[hidden]{display:none!important}
 .tp-pid-bank-heading{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;margin:2px 3px 8px;color:#dcfff0;font-size:12px}
 .tp-pid-bank-heading small{font-size:9px;color:#86bfc2}
-.tp-pid-bank{display:grid;grid-template-columns:minmax(78px,1.15fr) repeat(3,minmax(0,1fr)) minmax(59px,.7fr);gap:7px;align-items:center;background:#071723;border:1px solid #264657;padding:7px;border-radius:9px;margin-top:5px}
+.tp-pid-bank{display:grid;grid-template-columns:minmax(69px,.9fr) repeat(3,minmax(0,1fr));gap:7px;align-items:center;background:#071723;border:1px solid #264657;padding:7px;border-radius:9px;margin-top:5px}
 .tp-pid-bank>strong{font-size:12px;color:#e0f8f5}
 .tp-pid-bank label{display:grid;gap:3px;font-size:9px;color:#9ccbd3;font-weight:750}
 .tp-pid-bank input{min-width:0;width:100%;height:36px;padding:5px;background:#092635;border:1px solid #376377;color:#f0fff7;border-radius:7px;font-size:12px;font-variant-numeric:tabular-nums}
 .tp-pid-bank .action{padding:6px 8px;min-width:0;font-size:10px;min-height:40px}
-.tp-pid-detail-title{padding:7px 14px;margin:0 14px 10px;border-top:1px solid #31596a;color:#98e9d2;font-size:10px;font-weight:900;letter-spacing:.045em}
-@media(max-width:470px){.tp-pid-bank{grid-template-columns:minmax(43px,.9fr) repeat(3,minmax(0,1fr)) 53px;gap:3px;padding:4px}.tp-pid-bank input{font-size:11px;padding:4px}.tp-pid-bank>strong{font-size:10px}.tp-pid-bank .action{font-size:9px;padding:4px}}
+@media(max-width:470px){.tp-pid-bank{grid-template-columns:minmax(44px,.75fr) repeat(3,minmax(0,1fr));gap:3px;padding:4px}.tp-pid-bank input{font-size:11px;padding:4px}.tp-pid-bank>strong{font-size:10px}.tp-pid-bank .action{font-size:9px;padding:4px}}
 
 
 /* PID full-width workbench: top F450 and joysticks, middle full-width PID,
-   bottom attitude/target left and environment/A-B right. Layout only. */
+   bottom attitude/target left and environment right. Layout only. */
 .tp-shell{max-width:2120px}
 .tp-main-grid.tp-layout-full-pid{display:grid;grid-template-columns:minmax(0,3fr) minmax(390px,2fr);grid-template-areas:"sim controls" "pid pid" "lower lower";gap:16px;align-items:start}
 .tp-layout-full-pid>.tp-top-simulator{grid-area:sim;min-width:0}
@@ -99,10 +87,8 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 .tp-lower-left,.tp-lower-right{display:grid;gap:16px;align-content:start;min-width:0}
 .tp-layout-full-pid .tp-sticks,.tp-layout-full-pid .tp-env-panel{grid-column:auto;min-width:0}
 .tp-layout-full-pid .tp-pid-matrix{grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
-.tp-layout-full-pid .tp-pid-matrix:has(#tpAnglePidSection[hidden]) #tpRatePidSection{grid-column:1/-1}
 .tp-layout-full-pid .tp-pid-bank-section{align-self:start}
 .tp-layout-full-pid .tp-pid-bank{min-width:0}
-.tp-layout-full-pid .tp-ab-compare{margin:0;padding:4px 1px 14px;background:linear-gradient(165deg,#0b1d2b,#071724);border:1px solid #29485c;border-radius:16px;min-width:0}
 .tp-layout-full-pid .tp-telemetry .tp-chart-wrap{height:240px}
 .tp-layout-full-pid .tp-lower-right .tp-env-sliders{gap:14px 12px}
 @media(max-width:1050px){
@@ -279,7 +265,7 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 #tpControlSource{min-width:154px}
 #tpKitMode{min-width:94px}
 #tpInputArm{min-width:139px}
-.tp-stick-header-values #tpInputValues{flex:0 0 100%;width:100%;min-width:0;white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;letter-spacing:0}
+.tp-stick-header-values #tpInputValues{flex:0 0 100%;width:100%;min-width:0;white-space:normal;text-align:right;font-variant-numeric:tabular-nums;font-size:12px;letter-spacing:0}
 @media(max-width:1000px){
  .tp-sticks>.panel-title{grid-template-columns:minmax(0,1fr);min-height:135px}
  .tp-stick-header-values{justify-content:flex-start}
@@ -288,7 +274,6 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 @media(max-width:560px){
  .tp-sticks>.panel-title{min-height:150px}
  .tp-sticks>.panel-title h2{white-space:normal}
- .tp-stick-header-values #tpInputValues{white-space:normal}
  .tp-stick-header-values .smallstate{min-width:0!important}
 }
 
@@ -301,6 +286,14 @@ html.pid-embedded .tp-shell{max-width:none;padding:14px;margin:0}
 .tp-connection-dialog[hidden]{display:none!important}
 .tp-connection-dialog.aerion-inline-action{max-height:none;overflow:visible}
 
-#tpPidKitActions{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
-#tpPidKitStatus{flex:1 1 230px;overflow-wrap:anywhere}
 #tpPidTarget{max-width:70%;white-space:normal;overflow-wrap:anywhere;text-align:right}
+
+
+/* One row of controller actions for the current PID source. */
+.tp-pid-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 14px}
+.tp-pid-actions .action{flex:0 1 auto;min-width:0;white-space:normal}
+.tp-pid-actions [hidden]{display:none}
+.tp-pid-status{margin:8px 14px 13px;color:#b3d6df;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+@media(max-width:540px){
+ .tp-pid-actions .action{flex:1 1 42%;min-height:44px}
+}

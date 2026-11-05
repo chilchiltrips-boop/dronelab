@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {webcrypto} from 'node:crypto';
 import {createMotorClient,setupInputSample,motorStopDescription} from '../js/motor-setup.js';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const turn=()=>new Promise(resolve=>setImmediate(resolve));
@@ -39,6 +40,45 @@ test('STOP cancels an obsolete read and queued motion without overlapping signed
  await Promise.all([...cancelled,stop,diagnostic]);
  assert.deepEqual(order,['cancel status','STOP ACK','new status']);
  assert.equal(queue.metrics().cancelledStaleRequests,2);
+});
+
+test('STOP aborts obsolete local session enrollment and then uses a signed request',{timeout:2500},async()=>{
+ const source=read('js/classroom-kits.js'),id='ZFC-A2-012345ABCDEF',ip='192.168.4.1';
+ const boot='a'.repeat(32),session='b'.repeat(32),key='c'.repeat(64),started=deferred(),order=[];
+ const env={AbortController,TextEncoder,TextDecoder,Uint8Array,URLSearchParams,crypto:webcrypto,setTimeout,clearTimeout,
+  state:{kitId:id,bootId:boot},reconnectTicket:1,localKitHosts:new Map([[ip,id]]),adminKitHosts:new Map(),
+  authSessions:new Map(),secureIds:new Set(),pairedKeys:new Map()};
+ let enrollments=0;
+ env.fetch=async(url,options)=>{
+  const route=new URL(url).pathname;
+  if(route==='/api/auth/local'){
+   if(++enrollments===1)return new Promise((_,reject)=>{
+    order.push('old enrollment');started.resolve();
+    options.signal.addEventListener('abort',()=>{order.push('aborted');reject(options.signal.reason);},{once:true});
+   });
+   order.push('STOP enrollment');
+   return {status:200,text:async()=>JSON.stringify({kitId:id,bootId:boot,session,key,
+    scope:'ap_diagnostics',expiresMs:60000,setupExpiresMs:0}),headers:{get:()=>null}};
+  }
+  assert.equal(route,'/api/motor');
+  assert.equal(options.headers['X-ZJ-Seq'],'1');
+  assert.ok(options.headers['X-ZJ-Proof']);
+  const text=JSON.stringify({kitId:id,motorsDisabled:true});
+  order.push('STOP dispatched');
+  return {status:200,text:async()=>text,headers:{get:()=>env.ZebjusKitAuth.mac(key,'response|1|200|'+text)}};
+ };
+ vm.createContext(env);
+ for(const file of ['vendor/crypto/zfc-crypto.js','js/kit-auth.js','js/kit-local-auth.js','js/kit-data-interface.js'])
+  vm.runInContext(read(file),env);
+ env.root=env;env.requestScheduler=env.ZebjusKitData.createRequestScheduler();
+ vm.runInContext(source.slice(source.indexOf('async function openNetworkSession'),source.indexOf('async function ',source.indexOf('async function openNetworkSession')+20)),env);
+ vm.runInContext(source.slice(source.indexOf('function wifiDirect('),source.indexOf('async function deviceRequest(')),env);
+ const readback=assert.rejects(env.wifiDirect(ip,'','/api/status'),{code:'SAFETY_CANCELLED'});
+ await started.promise;
+ const stopped=await env.wifiDirect(ip,'','/api/motor','POST',{action:'STOP'});
+ await readback;
+ assert.equal(stopped.motorsDisabled,true);
+ assert.deepEqual(order,['old enrollment','aborted','STOP enrollment','STOP dispatched']);
 });
 
 test('signed request queue gives STOP and motor commands priority without interrupting an active read',async()=>{

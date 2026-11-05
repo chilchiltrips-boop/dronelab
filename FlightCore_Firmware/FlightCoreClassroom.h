@@ -317,7 +317,7 @@ static bool zjAdminSerialCommand(char* line){
  }
  if(!strcmp(line,"ZJADMIN,FACTORY_RESET,CONFIRM")){
   Preferences net;net.begin("zj-network",false);net.clear();net.end();
-  zjKitPrefs.clear();zjPidSettings=ZjPidSettings{};zjRcRelease("FACTORY_RESET");
+  zjKitPrefs.clear();zjPidResetState();zjRcRelease("FACTORY_RESET");
   Serial.println("ZJADMIN,ACK,FACTORY_RESET,RESTART_BOARD_TO_APPLY");return true;
  }
  Serial.println("ZJADMIN,ERR,UNSUPPORTED_COMMAND");return true;
