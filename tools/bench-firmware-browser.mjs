@@ -83,5 +83,5 @@ try{
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  assert.deepEqual(writes,[]);
  assert.deepEqual(errors,[]);
- console.log('PASS A2 defaults to verified 1.7.16 bench, A1 published fallback, explicit 1.7.15 rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection');
+ console.log(`PASS A2 defaults to verified ${version} bench, A1 published fallback, explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
 }finally{await browser.close();}
