@@ -1,10 +1,12 @@
 name: Verify and publish approved FlightCore bench package
 on:
   push:
-    branches: [main, release/flightcore-1.7.16-bench-20261105]
+    branches: [main, release/flightcore-1.7.16-bench-20261105, fix/a2-default-latest-bench-1716-20261105]
     paths:
       - 'FlightCore_Firmware/bench-release-policy.json'
       - 'firmware-updater.js'
+      - 'index.html'
+      - 'sw.js'
       - 'tools/bench-firmware-browser.mjs'
       - 'tools/verify_release.py'
       - '.github/workflows/publish-flightcore-bench.yml'
