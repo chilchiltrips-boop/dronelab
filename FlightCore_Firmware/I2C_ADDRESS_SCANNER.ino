@@ -609,6 +609,7 @@ void loop(){
  zjNetworkLoop(now);
  zjRcLoop(now);
  zjPublishControlInput();
+ zjControlPpmArmEdge(); // at most one flight ARM attempt per fresh PPM gesture
  emitTimingDiagnostics(millis());
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;
