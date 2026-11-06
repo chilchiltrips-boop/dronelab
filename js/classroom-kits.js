@@ -1892,7 +1892,7 @@ async function selectControlPath(path){
  return state.rcAccess;
 }
 async function maintainRcPause(){
- if(maintenanceKeepPending||accessBusy||document.hidden||!linkFresh()||!state.rcAccess?.maintenance?.owned)return;
+ if(maintenanceKeepPending||accessBusy||state.working||otaActive||document.hidden||!linkFresh()||!state.rcAccess?.maintenance?.owned)return;
  maintenanceKeepPending=true;
  try{await changeRcAccess('KEEP');if(maintenanceKeepFailed)audit('Maintenance lease re-verified; RC remains paused.','success');maintenanceKeepFailed=false;}
  catch(error){if(!maintenanceKeepFailed)audit('Maintenance keepalive failed: '+error.message+' • RC remains paused; verify before Resume.','error');maintenanceKeepFailed=true;}

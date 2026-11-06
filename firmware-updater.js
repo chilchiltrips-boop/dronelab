@@ -107,6 +107,17 @@ function usbFlashReadiness(){
  if(fw.type!==kind)return {ready:false,message:'The selected image type has not finished loading. Click Auto Load Latest.'};
  return {ready:true,message:kind==='factory'?'USB READY + Factory image verified for '+boardName(target)+'. Flash overwrites the existing firmware/partition layout after confirmation.':'USB READY + APP image verified. Existing compatible dual-OTA partitions must be present; otherwise choose Factory image.'};
 }
+function ppmOtaMaintenanceReadiness(device){
+ const rc=device?.rc||{},access=device?.rcAccess;
+ if(rc.claimed!==true||rc.source!=='PPM')return{needed:false,ready:false,message:''};
+ if(rc.inputArmed!==false)return{needed:true,ready:false,message:'PPM input is ARMED. Set throttle LOW and hold yaw LEFT to DISARM before OTA.'};
+ if(!Number.isFinite(rc.throttle)||rc.throttle>1050)return{needed:true,ready:false,message:'PPM throttle must be verified at 1050 µs or below before OTA.'};
+ if(device.motorsArmed!==false||device.motorsDisabled!==true)return{needed:true,ready:false,message:'Motor outputs must be verified OFF before entering OTA maintenance.'};
+ if(access?.version!==1||access.paused===true)return{needed:true,ready:false,message:'Refresh the verified RC maintenance status; an active/unknown pause requires explicit confirmation.'};
+ if(access.stationary!==true)return{needed:true,ready:false,message:'Keep A2 motionless until IMU confirms stationary for maintenance OTA.'};
+ if(device.controlAuthorized!==true)return{needed:true,ready:false,message:'Authorize this browser for diagnostic maintenance before OTA.'};
+ return{needed:true,ready:true,message:'PPM disarmed, throttle LOW, motors OFF and IMU stationary. Flash will first pause RC using authenticated maintenance, then recheck the Kit before OTA.'};
+}
 function networkFlashReadiness(){
  const device=globalThis.ZebjusKits?.getState?.();
  if(busy)return{ready:false,message:'Firmware update or USB flashing already in progress'};
@@ -114,13 +125,21 @@ function networkFlashReadiness(){
   return{ready:false,message:'Connect and verify the kit over STA or AP for APP OTA. USB uses the separate Flash over USB button.'};
  if(device.otaAuthorized!==true)return{ready:false,message:'Pair this browser once over physical USB, reconnect the same kit, then click Authorize control & updates. Observer/setup access alone cannot update firmware.'};
  if(device.transport==='ap'&&/^1\.[0-3]\.|^1\.4\.[0-4]$/.test(device.version||''))return{ready:false,message:'AP OTA requires FlightCore 1.4.5 or later. Install it using STA OTA or USB FACTORY first.'};
- if(device.working||device.owner||device.rc?.claimed)
-  return{ready:false,message:'Release diagnostic control; firmware cannot be updated while a controller owns the kit.'};
+ if(device.motorsArmed!==false||device.motorsDisabled!==true)
+  return{ready:false,message:'Firmware must confirm all motor outputs OFF and motors DISARMED before Wi-Fi OTA.'};
+ if(device.rc?.inputArmed===true)
+  return{ready:false,message:'Disarm the selected controller before Wi-Fi OTA.'};
+ if(device.working)return{ready:false,message:'An existing Kit operation must finish before OTA.'};
+ if(device.owner)return{ready:false,message:'This browser owns WebApp RC. Use Release WebApp RC in Overview, then retry OTA.'};
+ const ppmMaintenance=ppmOtaMaintenanceReadiness(device);
+ if(device.rc?.claimed&&!ppmMaintenance.ready)
+  return{ready:false,message:ppmMaintenance.message||'Release the selected Android/Web controller before OTA; only a safe disarmed PPM source may enter maintenance.'};
  if(!fw||!(fw.bytes instanceof Uint8Array)||fw.type!=='app')
   return{ready:false,message:'Choose a verified matching APP image. FACTORY/MERGED images can only be flashed over USB.'};
  if(!device.kitId||!device.kitId.startsWith(fw.boardId+'-')||device.board&&device.board!==fw.boardId)
   return{ready:false,message:'Loaded firmware does not match the connected '+device.transport.toUpperCase()+' kit board. Load the correct A1/A2 APP.'};
- return{ready:true,message:'APP OTA ready over verified '+device.transport.toUpperCase()+' • '+device.kitId+'. Requires browser local-network access and existing dual-OTA partitions; image signatures not enforced.'};
+ return{ready:true,message:ppmMaintenance.ready?ppmMaintenance.message:
+   'APP OTA ready over verified '+device.transport.toUpperCase()+' • '+device.kitId+'. Requires browser local-network access and existing dual-OTA partitions; image signatures not enforced.'};
 }
 function syncFirmwareControls(){
  const serialSupported=!!navigator.serial&&globalThis.isSecureContext;
@@ -147,12 +166,9 @@ function syncFirmwareControls(){
  const check=$('#fwCheckKitBtn');if(check)check.disabled=busy;
  const bench=$('#fwLoadBenchBtn');if(bench){bench.disabled=busy;bench.setAttribute('aria-pressed',String(releaseChoice==='bench'));}
  const published=$('#fwLoadPublishedBtn');if(published){published.disabled=busy;published.setAttribute('aria-pressed',String(releaseChoice==='published'));}
- for(const id of ['#fwGoUsbFlashBtn','#fwGoWifiFlashBtn']){const shortcut=$(id);if(shortcut){shortcut.disabled=busy||!fw;shortcut.title=fw?'Open Step 2 flashing setup; no flash starts automatically':'Verify an A1/A2 firmware image first';}}
- const shortcutHelp=$('#fwFlashShortcutHelp');
- if(shortcutHelp)shortcutHelp.textContent=fw?'Firmware '+fw.version+' verified. Choose USB or Wi-Fi below to open its flash setup. Nothing has been flashed.':'Load and verify an A1/A2 firmware image, then choose USB or Wi-Fi flashing. Loading is not flashing.';
  for(const id of ['#fwTargetWifiTab','#fwTargetUsbTab']){const tab=$(id);if(tab)tab.disabled=busy;}
 }
-function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab','#fwGoUsbFlashBtn','#fwGoWifiFlashBtn'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){const hashes=await import('./js/firmware-hashes.js');return hashes.sha256(bytes)}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
@@ -458,12 +474,30 @@ async function flashNetworkApp(){
  const gate=networkFlashReadiness();
  if(!gate.ready){log(gate.message);badge('#fwOverallBadge','NETWORK OTA BLOCKED','warn');return}
  const kit=window.ZebjusKits.getState();
+ const ppmPause=ppmOtaMaintenanceReadiness(kit);
  const ok=await confirmInLab('Flash verified '+fw.name+' v'+fw.version+' over '+kit.transport.toUpperCase()+
   ' to '+kit.kitName+' ('+kit.kitId+')?\n\nAPP image only. OTA is unsigned bench firmware; propellers and ESC power disconnected. Never disconnect power during update. Continue?');
  if(!ok)return;
  setBusy(true);resetStages();stage('Prepare','done');stage('Flash','active');
  progress(3,'Preparing selected '+kit.transport.toUpperCase()+' kit for OTA');badge('#fwOverallBadge','NETWORK OTA • UPDATING','warn');
  try{
+  if(ppmPause.needed){
+   if(!ppmPause.ready)throw Error(ppmPause.message);
+   const kitApi=window.ZebjusKits;
+   if(typeof kitApi.changeRcAccess!=='function'||typeof kitApi.read!=='function')
+    throw Error('Firmware does not expose verified RC maintenance. Use a supported firmware or USB flashing.');
+   progress(1,'Requesting authenticated maintenance pause for disarmed PPM…');
+   const paused=await kitApi.changeRcAccess('BEGIN');
+   if(paused?.paused!==true||paused.maintenance?.owned!==true)
+    throw Error('PPM maintenance pause not confirmed. OTA was not started.');
+   await kitApi.read(); // independent post-pause firmware status, no optimistic UI shortcut
+   const after=kitApi.getState();
+   if(!after?.connected||after.kitId!==kit.kitId||after.bootId!==kit.bootId||
+      after.rc?.claimed!==false||after.rcAccess?.paused!==true||
+      after.motorsArmed!==false||after.motorsDisabled!==true)
+    throw Error('PPM ownership release or motor-off readback could not be verified. OTA not started; RC remains paused until explicitly resumed.');
+   progress(3,'RC paused, motor outputs OFF, verified Kit unchanged • OTA ready');
+  }
   const img=validateEspImage(fw.bytes,fw.boardId,'app');
   if(img.type!=='app')throw Error('Only verified APP image can use network OTA');
   const result=await window.ZebjusKits.uploadAppFirmware({
@@ -477,7 +511,7 @@ async function flashNetworkApp(){
   });
   if(result.verified){progress(100,'Firmware '+result.version+' verified from live '+kit.transport.toUpperCase()+' status');badge('#fwOverallBadge','OTA VERIFIED','good');log('Network APP OTA verified • '+result.kitId+' firmware '+result.version);}
   else{progress(99,'Firmware write ACK received • runtime not yet verified');badge('#fwOverallBadge','OTA ACK • RECONNECT PENDING','warn');log('OTA write acknowledged but runtime remains unverified. Reconnect the same kit and verify its version/build before retrying. '+(result.reason||''));}
- }catch(e){stage('Flash','error');badge('#fwOverallBadge','NETWORK OTA INTERRUPTED / UNCONFIRMED','warn');log('Network OTA interrupted; no confirmed write ACK: '+String(e.message||e)+'. Check the running firmware version before retrying.');}
+ }catch(e){stage('Flash','error');badge('#fwOverallBadge','NETWORK OTA INTERRUPTED / UNCONFIRMED','warn');log('Network OTA interrupted; no confirmed write ACK: '+String(e.message||e)+'. Check the running firmware version before retrying.'+(ppmPause.needed?' PPM maintenance may remain paused. Resume RC only after verifying safe conditions.':''));}
  finally{setBusy(false);kitStatus()}
 }
 async function wifiFlash(){
@@ -1132,17 +1166,6 @@ function setFirmwareTargetMethod(method,focus=false){
   if(panel)panel.hidden=!selected;
  }
 }
-function showFlashSetup(method){
- if(busy||!fw||!['usb','wifi'].includes(method))return;
- setFirmwareTargetMethod(method);
- const target=$('#fwTarget'+(method==='usb'?'Usb':'Wifi')+'Panel');
- target?.scrollIntoView?.({behavior:'smooth',block:'center'});
- const help=$('#fwFlashShortcutHelp');
- if(help)help.textContent=method==='usb'
-  ? 'USB Flash: connect the physical A2 board and verify its identity, then press Flash Connected FlightCore over USB. Nothing flashed yet.'
-  : 'Wi-Fi OTA: connect and authorize the selected kit, release RC control, then press Flash Selected Kit over Wi-Fi. Nothing flashed yet.';
- // Navigation only. No USB, network, erase or flash operations here.
-}
 function bind(){
  for(const [kind,id] of [['wifi','#fwTargetWifiTab'],['usb','#fwTargetUsbTab']]){
   const tab=$(id);if(!tab)continue;
@@ -1154,8 +1177,6 @@ function bind(){
   });
  }
  setFirmwareTargetMethod('wifi');
- $('#fwGoUsbFlashBtn')?.addEventListener('click',()=>showFlashSetup('usb'));
- $('#fwGoWifiFlashBtn')?.addEventListener('click',()=>showFlashSetup('wifi'));
  window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('latest'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwLoadPublishedBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad('latest'));const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}const k=globalThis.ZebjusKits?.getState?.();if(k?.connected&&['sta','ap'].includes(k.transport))await prepareConnectedFirmware();else{if(firmwareTargetMethod==='wifi'&&$('#fwImageType'))$('#fwImageType').value='app';await autoLoad()}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
