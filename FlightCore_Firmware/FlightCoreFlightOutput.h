@@ -1,9 +1,17 @@
 #pragma once
 #include "FlightCoreReceiverSnapshot.h"
 
-// Firmware builds in this repository are unqualified for flight actuation.
-// The gate has no RC, USB, browser, persistence or boot-time bypass.
-static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
+// Bench firmware is always non-actuating. A separately reviewed A2 release may
+// define this build-time acceptance switch only after matching physical evidence
+// is recorded. Saving the Setup Wizard, RC ARM or network calls cannot set it.
+#if defined(ZJ_A2_FLIGHT_ACCEPTANCE_RELEASE)
+ #if !defined(CONFIG_IDF_TARGET_ESP32C6)
+  #error "Flight acceptance release must target the A2 ESP32-C6 board"
+ #endif
+ static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=true;
+#else
+ static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
+#endif
 static constexpr uint16_t ZJ_FLIGHT_STOP_THROTTLE_US=1050;
 // Acro armed LOW throttle sends ESC minimum (not spin-idle). Disarm/STOP/failsafe sends PWM OFF.
 static constexpr uint16_t ZJ_FLIGHT_ARMED_IDLE_US=1000;
