@@ -1,5 +1,5 @@
 {
-  "version": "1.52",
+  "version": "1.53",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -14,7 +14,7 @@
     "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check",
     "Aerof450 Quad X and Quad + PID profiles, unified Rate and Angle editor, and disarmed preview on supported A2 firmware"
   ],
-  "buildCommit": "df4de1c76279",
-  "publishedAt": "2026-11-06T17:54:00.171319+00:00",
-  "buildNumber": 485
+  "buildCommit": "e2a6f2d5d3a9",
+  "publishedAt": "2026-11-06T19:28:06.427393+00:00",
+  "buildNumber": 486
 }
