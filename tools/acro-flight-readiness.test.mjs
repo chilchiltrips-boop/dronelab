@@ -81,6 +81,11 @@ test('Firmware and WebApp expose read-only Acro readiness while preserving actua
  assert.match(api,/ZJFLIGHT,STATUS/);
  assert.match(fw,/checkAcroReadiness/);
  assert.match(markup,/fwAcroCheckBtn/);
+ assert.match(markup,/fwAcroSetup/);
+ assert.match(fw,/data\.setupComplete===true/);
+ assert.match(source('FlightCore_Firmware/FlightCoreMotor.h'),/static bool zjWizardSetupComplete\(\)/);
+ assert.match(firmware,/setupComplete/);
+ assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_FLIGHT_HARDWARE_QUALIFIED=false/);
  assert.match(markup,/fwAcroArmState/);
  assert.match(markup,/fwAcroFailsafe/);
  assert.match(markup,/fwAcroLoop/);
