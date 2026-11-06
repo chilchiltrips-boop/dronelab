@@ -84,4 +84,10 @@ test('Firmware and WebApp expose read-only Acro readiness while preserving actua
  assert.match(fw,/ZebjusKits\.request\('\/api\/flight\/readiness'/);
  assert.doesNotMatch(fw,/writePythonSerialLine\('ZJFLIGHT,ARM/);
  assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_FLIGHT_HARDWARE_QUALIFIED=false/);
+ assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_A2_FLIGHT_ACCEPTANCE_RELEASE/);
+ assert.match(source('FlightCore_Firmware/FlightCoreControlRuntime.h'),/static void zjControlPpmArmEdge\(\)/);
+ assert.match(source('FlightCore_Firmware/FlightCoreControlRuntime.h'),/if\(zjFlightPpmArmEdgeSeen\)return/);
+ assert.match(source('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'),/zjControlPpmArmEdge\(\)/);
+ assert.match(source('FlightCore_Firmware/FlightCorePpm.h'),/zjFlightRevoke\("INPUT_DISARMED"\)/);
+ assert.match(source('FlightCore_Firmware/FlightCoreMotor.h'),/ledc_stop\(LEDC_LOW_SPEED_MODE,ledc_channel_t\(n\),0\)/);
 });
