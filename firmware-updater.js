@@ -378,6 +378,14 @@ function renderAcroReadiness(data){
  if(data?.schema!==1||data.mode!=='ACRO_READINESS'||data.board!=='ZFC-A2'||!/^(?:ZFC-A2-[0-9A-F]{12})$/i.test(data.kitId||'')){
   throw Error('An authenticated A2 Acro status was not returned');
  }
+ const ppmSelected=data.inputSource==='PPM';
+ const ppmFresh=ppmSelected&&data.ppmFresh===true;
+ const inputArmed=data.inputArmed===true;
+ text('#fwAcroArmState',inputArmed?'INPUT ARMED • '+String(data.inputSource||'UNKNOWN'):'INPUT DISARMED');
+ text('#fwAcroFailsafe',!ppmSelected?'PPM NOT SELECTED':!ppmFresh?'PPM NOT FRESH • OUTPUT OFF REQUIRED':inputArmed?'PPM FRESH • LOSS MONITORED':'PPM FRESH • DISARMED');
+ const loopHz=Number.isFinite(data.controlHz)?data.controlHz.toFixed(1)+' Hz':'NOT READY';
+ const missed=Number.isFinite(data.controlMissedTicks)?' • missed '+data.controlMissedTicks:'';
+ text('#fwAcroLoop',loopHz+' / 250 Hz target'+missed);
  text('#fwAcroFlight',data.flightQualified===true?'QUALIFICATION DATA REQUIRES PHYSICAL EVIDENCE':'BLOCKED • FLIGHT DISABLED');
  text('#fwAcroBlocker',String(data.softwareBlockReason||data.blockReason||'UNKNOWN'));
  text('#fwAcroPPM',(data.ppmFresh?'PPM FRESH':'PPM NOT FRESH')+' • '+(data.inputArmed?'INPUT ARMED':'INPUT DISARMED')+
