@@ -386,6 +386,7 @@ function renderAcroReadiness(data){
  const loopHz=Number.isFinite(data.controlHz)?data.controlHz.toFixed(1)+' Hz':'NOT READY';
  const missed=Number.isFinite(data.controlMissedTicks)?' • missed '+data.controlMissedTicks:'';
  text('#fwAcroLoop',loopHz+' / 250 Hz target'+missed);
+ text('#fwAcroSetup',data.setupComplete===true?'SETUP SAVED • REV '+String(data.setupRevision??'--'):'SETUP INCOMPLETE');
  text('#fwAcroFlight',data.flightQualified===true?'QUALIFICATION DATA REQUIRES PHYSICAL EVIDENCE':'BLOCKED • FLIGHT DISABLED');
  text('#fwAcroBlocker',String(data.softwareBlockReason||data.blockReason||'UNKNOWN'));
  text('#fwAcroPPM',(data.ppmFresh?'PPM FRESH':'PPM NOT FRESH')+' • '+(data.inputArmed?'INPUT ARMED':'INPUT DISARMED')+
