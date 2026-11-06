@@ -297,6 +297,11 @@
 </div>
 <div class="firmware-config-row"><label>Image type<select id="fwImageType"><option value="app">Application image (existing layout)</option><option value="factory">Factory image (first flash)</option></select></label><label>Board profile<select id="fwBoardProfile"><option value="auto">Auto detect connected board</option></select></label></div><div class="firmware-board-detect"><div><span>TARGET BOARD</span><b id="fwDetectedBoard">ZEBJUS FlightCore A1 SuperMini</b></div><div><span>DETECTION</span><b id="fwBoardSource">Default profile</b></div><div><span>LATEST PACKAGE</span><b id="fwPackageState">Checking…</b></div></div>
 <p class="micro-note" id="fwSourceMessage">Connect USB for automatic board detection. Without USB, select a board profile to load the matching firmware.</p>
+<div class="firmware-source-actions fw-flash-shortcuts" role="group" aria-label="Continue to firmware flashing">
+<button class="btn primary" type="button" id="fwGoUsbFlashBtn" disabled>Continue to USB Flash</button>
+<button class="btn ghost" type="button" id="fwGoWifiFlashBtn" disabled>Continue to Wi-Fi OTA</button>
+</div>
+<p class="micro-note" id="fwFlashShortcutHelp" role="status">Load and verify an A1/A2 firmware image, then choose USB or Wi-Fi flashing. Loading is not flashing.</p>
 </div>
 <div class="form-card firmware-target-card firmware-target-v2">
 <div class="panel-head"><div><small>STEP 2 • TARGET</small><h2>Connection &amp; flash method</h2></div></div>

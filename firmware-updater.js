@@ -147,9 +147,12 @@ function syncFirmwareControls(){
  const check=$('#fwCheckKitBtn');if(check)check.disabled=busy;
  const bench=$('#fwLoadBenchBtn');if(bench){bench.disabled=busy;bench.setAttribute('aria-pressed',String(releaseChoice==='bench'));}
  const published=$('#fwLoadPublishedBtn');if(published){published.disabled=busy;published.setAttribute('aria-pressed',String(releaseChoice==='published'));}
+ for(const id of ['#fwGoUsbFlashBtn','#fwGoWifiFlashBtn']){const shortcut=$(id);if(shortcut){shortcut.disabled=busy||!fw;shortcut.title=fw?'Open Step 2 flashing setup; no flash starts automatically':'Verify an A1/A2 firmware image first';}}
+ const shortcutHelp=$('#fwFlashShortcutHelp');
+ if(shortcutHelp)shortcutHelp.textContent=fw?'Firmware '+fw.version+' verified. Choose USB or Wi-Fi below to open its flash setup. Nothing has been flashed.':'Load and verify an A1/A2 firmware image, then choose USB or Wi-Fi flashing. Loading is not flashing.';
  for(const id of ['#fwTargetWifiTab','#fwTargetUsbTab']){const tab=$(id);if(tab)tab.disabled=busy;}
 }
-function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab','#fwGoUsbFlashBtn','#fwGoWifiFlashBtn'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){const hashes=await import('./js/firmware-hashes.js');return hashes.sha256(bytes)}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
@@ -1129,6 +1132,17 @@ function setFirmwareTargetMethod(method,focus=false){
   if(panel)panel.hidden=!selected;
  }
 }
+function showFlashSetup(method){
+ if(busy||!fw||!['usb','wifi'].includes(method))return;
+ setFirmwareTargetMethod(method);
+ const target=$('#fwTarget'+(method==='usb'?'Usb':'Wifi')+'Panel');
+ target?.scrollIntoView?.({behavior:'smooth',block:'center'});
+ const help=$('#fwFlashShortcutHelp');
+ if(help)help.textContent=method==='usb'
+  ? 'USB Flash: connect the physical A2 board and verify its identity, then press Flash Connected FlightCore over USB. Nothing flashed yet.'
+  : 'Wi-Fi OTA: connect and authorize the selected kit, release RC control, then press Flash Selected Kit over Wi-Fi. Nothing flashed yet.';
+ // Navigation only. No USB, network, erase or flash operations here.
+}
 function bind(){
  for(const [kind,id] of [['wifi','#fwTargetWifiTab'],['usb','#fwTargetUsbTab']]){
   const tab=$(id);if(!tab)continue;
@@ -1140,6 +1154,8 @@ function bind(){
   });
  }
  setFirmwareTargetMethod('wifi');
+ $('#fwGoUsbFlashBtn')?.addEventListener('click',()=>showFlashSetup('usb'));
+ $('#fwGoWifiFlashBtn')?.addEventListener('click',()=>showFlashSetup('wifi'));
  window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('latest'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwLoadPublishedBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad('latest'));const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}const k=globalThis.ZebjusKits?.getState?.();if(k?.connected&&['sta','ap'].includes(k.transport))await prepareConnectedFirmware();else{if(firmwareTargetMethod==='wifi'&&$('#fwImageType'))$('#fwImageType').value='app';await autoLoad()}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
