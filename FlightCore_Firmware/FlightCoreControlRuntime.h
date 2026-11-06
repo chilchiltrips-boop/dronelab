@@ -397,6 +397,18 @@ static void zjControlRuntimeSetup(){
   // No fallback claims 250Hz. Existing bench authorization remains separate.
  }
 }
+static bool zjFlightPpmArmEdgeSeen=false;
+// PPM yaw-right held with low throttle is the deliberate ARM gesture. It can
+// claim a flight output lease only once per fresh disarm/arm cycle. Failed
+// qualification or failed readiness must not retry while sticks stay ARMED.
+// Receiver loss, DISARM and STOP still revoke through the independent path.
+static void zjControlPpmArmEdge(){
+ const bool ppmArmed=zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed;
+ if(!ppmArmed){zjFlightPpmArmEdgeSeen=false;return;}
+ if(zjFlightPpmArmEdgeSeen)return;
+ zjFlightPpmArmEdgeSeen=true;
+ if(ZJ_FLIGHT_HARDWARE_QUALIFIED)(void)zjControlArmFlight();
+}
 static void zjPublishControlInput(){
  const auto conditions=zjFlightMainConditions();
  const bool plus=ZJ_PID_PROFILES[zjPidActive.profile].plus;
@@ -427,4 +439,5 @@ static ZjControlScheduler zjReadControl(){return zjControl;}
 static ZjImuAcquisition zjReadImu(uint32_t now){zjImuDriver.updateGyro(now);return zjImuDriver;}
 static void zjControlRuntimeSetup(){zjImuDriver.lastGyroProbe=millis()-2500;}
 static void zjPublishControlInput(){}
+static void zjControlPpmArmEdge(){}
 #endif
