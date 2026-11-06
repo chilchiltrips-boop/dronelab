@@ -373,6 +373,48 @@ function kitStatus(){
  text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');text('#fwUsbMode',serial?usbBusMode:'--');
  return {s:schoolApi,d,online:wifiOnline,usbConnected,board,state,version};
 }
+// Read-only Acro hardware-qualification panel. No firmware flash and no motor writes.
+function renderAcroReadiness(data){
+ if(data?.schema!==1||data.mode!=='ACRO_READINESS'||data.board!=='ZFC-A2'||!/^(?:ZFC-A2-[0-9A-F]{12})$/i.test(data.kitId||'')){
+  throw Error('An authenticated A2 Acro status was not returned');
+ }
+ text('#fwAcroFlight',data.flightQualified===true?'QUALIFICATION DATA REQUIRES PHYSICAL EVIDENCE':'BLOCKED • FLIGHT DISABLED');
+ text('#fwAcroBlocker',String(data.softwareBlockReason||data.blockReason||'UNKNOWN'));
+ text('#fwAcroPPM',(data.ppmFresh?'PPM FRESH':'PPM NOT FRESH')+' • '+(data.inputArmed?'INPUT ARMED':'INPUT DISARMED')+
+  ' • '+String(data.inputSource||'NONE'));
+ text('#fwAcroIMU',(data.gyroFresh?'GYRO OK':'GYRO NOT READY')+' • '+(data.timingHealthy?'TIMING OK':'TIMING CHECK')+
+  ' • '+(Number.isFinite(data.controlHz)?data.controlHz.toFixed(1)+' Hz':'--'));
+ text('#fwAcroESC',(data.escOperatorConfirmed?'Operator confirmed':'ESC unconfirmed')+' • '+
+  (data.wiringVerified?'Wiring profile OK':'Wiring not verified')+' • '+(data.outputsOffAck?'PWM OFF ACK':'OFF unverified'));
+ text('#fwAcroIdle',String(data.armedIdlePulseUs||1000)+' µs armed low • '+String(data.disarmedOutput||'PWM_OFF')+' on STOP');
+ text('#fwAcroRates',Array.isArray(data.gyroRateDegS)?data.gyroRateDegS.map(x=>Number.isFinite(x)?x.toFixed(2):'--').join(' / '):'--');
+ text('#fwAcroMix',Array.isArray(data.geometryPredictionUs)?data.geometryPredictionUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
+ text('#fwAcroPidShadow',Array.isArray(data.pidShadowPulseUs)?data.pidShadowPulseUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
+ text('#fwAcroStatusText','P-only 1500 µs motor geometry prediction — NEVER ESC PWM. Physical flight '+(data.flightQualified?'requires measured hardware acceptance':'is disabled')+
+  '. STOP/disarm = PWM OFF. Actual outputs: '+(Array.isArray(data.actualMotorPulseUs)?data.actualMotorPulseUs.join('/'):'unknown')+
+  '. Flight ARM is independent of PPM/WebApp/Android input ARM.');
+}
+async function checkAcroReadiness(){
+ if(busy){text('#fwAcroStatusText','Firmware operation in progress. Acro read is paused.');return;}
+ if(monitorPort){
+  try{await writePythonSerialLine('ZJFLIGHT,STATUS\n');text('#fwAcroStatusText','Requested read-only Acro status over USB…');}
+  catch(error){text('#fwAcroStatusText',String(error.message||error));}
+  return;
+ }
+ const kit=globalThis.ZebjusKits?.getState?.();
+ if(!kit?.connected||kit.board!=='ZFC-A2'||!['ap','sta'].includes(kit.transport)||!globalThis.ZebjusKits?.request){
+  text('#fwAcroStatusText','Connect a verified A2 over AP/STA or Open Serial Port over USB first. No motor command sent.');return;
+ }
+ const before=[kit.kitId,kit.bootId,kit.transport,kit.connectionGeneration];
+ text('#fwAcroStatusText','Reading authenticated, read-only Acro diagnostics…');
+ try{
+  const data=await globalThis.ZebjusKits.request('/api/flight/readiness','GET');
+  const after=globalThis.ZebjusKits?.getState?.();
+  if(!after||before.some((v,i)=>v!==[after.kitId,after.bootId,after.transport,after.connectionGeneration][i])||
+    data.kitId!==before[0]||before[1]&&data.bootId!==before[1])throw Error('Selected Kit identity or boot changed. Reconnect and read again.');
+  renderAcroReadiness(data);
+ }catch(e){text('#fwAcroStatusText','Acro readiness unavailable: '+String(e.message||e));}
+}
 async function refreshKit(){const{s}=kitStatus();try{if(globalThis.ZebjusKits)await globalThis.ZebjusKits.refreshConnection();else await s?.refreshNow?.();const info=await onlineBoardInfo();if(info?.boardId){text('#fwLiveBoard',info.boardName||boardName(info.boardId));text('#fwCurrentVersion',info.firmware||info.version||'--');textTitle('#fwCurrentBuildTime',formatBuildTime(info.firmwareBuiltAt||info.buildDateTime||info.buildTime||''));if(!usbBoardId)await targetBoardId(true)}kitStatus();log(globalThis.ZebjusKits?.getState?.().connected?'Kit status verified.':'Kit offline • no verified heartbeat.')}catch(e){log('Kit check: '+e.message)}}
 function ensureWifiReady(){const{s,d,online}=kitStatus();if(!fw)throw new Error('Load firmware first.');if(fw.type!=='app')throw new Error('Wi-Fi OTA accepts an application image only. Use USB for Factory/Merged images.');if(!online||!s?.client?.connected)throw new Error('Connect the kit first.');if(d.armed)throw new Error('DISARM the flight controller before firmware update.');if(!s.canControl?.())throw new Error('Take Control of the kit before firmware update.');return s}
 async function verifyPostFlashFirmware(s,expectedVersion=''){
@@ -761,6 +803,10 @@ function appendSerialOutput(value){
  serialDisplayBuffer+=value;
  const lines=serialDisplayBuffer.split(/\r\n|\n|\r/);
  serialDisplayBuffer=lines.pop()||'';
+ for(const line of lines)if(line.startsWith('ZJFLIGHT,STATUS,')){
+  try{const data=JSON.parse(line.slice('ZJFLIGHT,STATUS,'.length));if(usbRuntimeInfo?.boardId==='ZFC-A2'&&(!usbRuntimeInfo.kitId||data.kitId===usbRuntimeInfo.kitId))renderAcroReadiness(data);else text('#fwAcroStatusText','USB A2 identity not yet verified; read running firmware first.');}
+  catch(e){text('#fwAcroStatusText','Invalid USB Acro status: '+String(e.message||e));}
+ }
  if(serialDisplayBuffer.length>2048)serialDisplayBuffer=serialDisplayBuffer.slice(-2048);
  if(out&&lines.length){
   const scroll=$('#fwSerialAutoScroll')?.checked!==false;
@@ -1005,6 +1051,7 @@ function initSerialTools(){
  $('#fwSerialSendBtn')?.addEventListener('click',sendSerialMessage);
  $('#fwLedTestBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJLED,900,BLINK,250,250,100\n','LED test (4-second safety timeout)'));
  $('#fwI2cScanBtn')?.addEventListener('click',()=>runUsbDiagnostic('ZJI2C,SCAN\n','I2C scan'));
+ $('#fwAcroCheckBtn')?.addEventListener('click',()=>void checkAcroReadiness());
  $('#fwTelRate')?.addEventListener('change',e=>{configureDiagnosticTick();void setUsbTelemetryRate(e.target.value)});
  $('#fwReadRunningBtn')?.addEventListener('click',()=>openSerialMonitor().catch(e=>log('Read Running Firmware: '+e.message)));
  $('#fwSerialInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendSerialMessage()}});

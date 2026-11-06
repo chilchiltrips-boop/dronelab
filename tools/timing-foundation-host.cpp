@@ -33,7 +33,7 @@ int main(){
  flight.input.sequence=1;flight.input.generation=1;flight.input.receivedAtMs=1;
  flight.nowMs=2;flight.inputDeadlineMs=150;
  flight.acro=flight.imuFresh=flight.timingHealthy=flight.outputOffAck=true;
- flight.driverReady=flight.wiringVerified=true;
+ flight.driverReady=flight.wiringVerified=flight.escOperatorConfirmed=true;
  ZjFlightOutputGate gate;
  assert(!gate.arm(flight,ZJ_FLIGHT_HARDWARE_QUALIFIED,true));
  assert(!gate.arm(flight,true,false)&&gate.reason==ZjFlightFault::EXPLICIT_ARM_REQUIRED);

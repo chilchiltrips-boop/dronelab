@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.17";
+constexpr const char* FW_VERSION="1.7.18";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -411,6 +411,7 @@ static bool zjAccessStationary(){
  if(!zjStationarySince)zjStationarySince=now;
  return uint32_t(now-zjStationarySince)>=500;
 }
+static String zjFlightReadinessJson(); // read-only A2 snapshot; no flight ARM or PWM operation
 #include "FlightCoreNetwork.h"
 static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
 static bool zjAccessBusy(){return zjHandoverPending||zjNetTesting||zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning;}
@@ -469,7 +470,103 @@ static ZjFlightConditions zjFlightMainConditions(){
  if(flight||ZJ_FLIGHT_HARDWARE_QUALIFIED)
   for(unsigned n=0;n<4;n++)conditions.wiringVerified=conditions.wiringVerified&&zjMotorConfig.rotation[n]==n%2;
  conditions.driverReady=zjMotorDriverReady;
+ // Explicit operator-saved ESC confirmation, not merely a completed HIGH/LOW timer.
+ conditions.escOperatorConfirmed=zjMotorCalibrationSaved&&zjWizardRecordVerified;
  return conditions;
+}
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
+// A2 read-only Acro preflight. All motor corrections are *mathematical predictions*.
+// It never claims a lease, arms, changes throttle, or writes PWM.
+static String zjFlightReadinessJson(){
+ auto c=zjFlightMainConditions();
+ const auto imu=zjReadImu(millis());
+ const auto control=zjReadControl();
+ const auto shadow=zjReadRateShadow();
+ const auto driver=zjFlightDriverRead();
+ const uint32_t at=micros();
+ c.nowMs=millis();
+ c.inputDeadlineMs=c.input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
+ c.imuFresh=imu.gyroReady&&imu.sample.fresh(at,12000)&&
+  std::isfinite(imu.RateRoll)&&std::isfinite(imu.RatePitch)&&std::isfinite(imu.RateYaw);
+ c.timingHealthy=zjControlRuntimeReady&&control.healthy(at)&&
+  control.intervalUs>=1000&&control.intervalUs<=8000;
+ c.outputOffAck=driver.offAck&&!driver.lease;
+ const bool receiverFresh=c.input.source==ZjReceiverSource::PPM&&c.input.fresh(c.nowMs,ZJ_PPM_LOST_MS);
+ // Evaluate each software precondition without claiming hardware qualification.
+ // This is a checklist; a green software check is NEVER physical-flight approval.
+ const auto softwareFault=ZjFlightOutputGate{}.fault(c,true);
+ const char* softwareBlock=zjFlightFaultName(softwareFault);
+ if(softwareFault==ZjFlightFault::NONE){
+  if(!zjFlightLowThrottle(c.input.channels[2]))softwareBlock="THROTTLE_HIGH";
+  else if(!c.outputOffAck)softwareBlock="OFF_UNVERIFIED";
+  else softwareBlock="NONE";
+ }
+ const auto gyroFresh=c.imuFresh;
+ const bool readyForAnyFlight=ZJ_FLIGHT_HARDWARE_QUALIFIED&&softwareFault==ZjFlightFault::NONE&&
+  zjFlightLowThrottle(c.input.channels[2])&&c.outputOffAck;
+ // P-only 1500us fixed-reference geometry prediction, NOT a dynamic PID output
+ // and NEVER a real ESC request. Body rotation sign must be physically checked.
+ const auto gainsRoll=zjPidActive.axis(0).p,gainsPitch=zjPidActive.axis(1).p,gainsYaw=zjPidActive.axis(2).p;
+ ZjRateMix reference;
+ if(gyroFresh&&c.wiringVerified){
+  const float roll=-gainsRoll*imu.RateRoll,pitch=-gainsPitch*imu.RatePitch,yaw=-gainsYaw*imu.RateYaw;
+  reference=(zjMotorConfig.plus?zjRateMixQuadPlus:zjRateMixQuadX)(1500,roll,pitch,yaw);
+ }
+ String out;
+ out.reserve(980);
+ out=String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"kitId\":")+zjJson(zjKitId)+
+  ",\"bootId\":"+zjJson(zjBootId)+",\"firmwareVersion\":"+zjJson(FW_VERSION)+
+  ",\"board\":"+zjJson(FC_BOARD)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
+  ",\"physicalAcceptance\":\"NOT_RUN\",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
+  ",\"controlActuating\":"+(shadow.actuating?"true":"false")+
+  ",\"blockReason\":"+zjJson(ZJ_FLIGHT_HARDWARE_QUALIFIED?softwareBlock:"UNQUALIFIED")+
+  ",\"softwareBlockReason\":"+zjJson(softwareBlock)+
+  ",\"acroSelected\":"+(c.acro?"true":"false")+
+  ",\"inputArmed\":"+(c.input.inputArmed?"true":"false")+
+  ",\"ppmFresh\":"+(receiverFresh?"true":"false")+
+  ",\"gyroFresh\":"+(gyroFresh?"true":"false")+
+  ",\"wiringVerified\":"+(c.wiringVerified?"true":"false")+
+  ",\"escOperatorConfirmed\":"+(c.escOperatorConfirmed?"true":"false")+
+  ",\"driverReady\":"+(c.driverReady?"true":"false")+
+  ",\"timingHealthy\":"+(c.timingHealthy?"true":"false")+
+  ",\"outputsOffAck\":"+(c.outputOffAck?"true":"false")+
+  ",\"maintenance\":"+(c.maintenance?"true":"false")+
+  ",\"escCalibrationActive\":"+(c.escCalibration?"true":"false")+
+  ",\"benchActive\":"+(c.benchActive?"true":"false")+
+  ",\"canArm\":"+(readyForAnyFlight?"true":"false")+
+  ",\"explicitFlightArmRequired\":true,\"safeForFlight\":false"+
+  ",\"inputSource\":"+zjJson(c.input.source==ZjReceiverSource::PPM?"PPM":
+    c.input.source==ZjReceiverSource::ANDROID?"ANDROID":
+    c.input.source==ZjReceiverSource::WEB?"WEB":"NONE")+
+  ",\"inputAgeMs\":"+(c.input.valid?String(uint32_t(c.nowMs-c.input.receivedAtMs)):String("null"))+
+  ",\"throttleUs\":"+String(c.input.channels[2])+
+  ",\"armedIdlePulseUs\":"+String(ZJ_FLIGHT_ARMED_IDLE_US)+
+  ",\"disarmedOutput\":\"PWM_OFF\",\"escPwmHz\":"+String(ZJ_ESC_PROFILE.hz)+
+  ",\"actualMotorPulseUs\":[";
+ for(unsigned n=0;n<4;n++){if(n)out+=',';out+=String(driver.lease?driver.applied[n]:0);}
+ out+="],\"gyroRateDegS\":[";
+ const float rate[]={imu.RateRoll,imu.RatePitch,imu.RateYaw};
+ for(unsigned n=0;n<3;n++){if(n)out+=',';out+=gyroFresh?String(rate[n],3):String("null");}
+ out+="],\"geometryPredictionUs\":[";
+ for(unsigned n=0;n<4;n++){if(n)out+=',';out+=gyroFresh&&c.wiringVerified?String(reference.pulse[n],1):String("null");}
+ out+="],\"pidShadowPulseUs\":[";
+ const bool hasPidShadow=c.acro&&c.input.inputArmed&&shadow.reason&&!strcmp(shadow.reason,"READY");
+ for(unsigned n=0;n<4;n++){if(n)out+=',';out+=hasPidShadow?String(shadow.mix.pulse[n],1):String("null");}
+ out+="],\"geometryPredictionNote\":\"P-only at neutral sticks / 1500us reference; not PID dynamic output or PWM\",\"controlHz\":";
+ out+=control.rate.known?String(control.rate.actual(at),2):String("null");
+ out+=",\"controlMissedTicks\":"+String(control.missedTicks)+
+  ",\"controlDeadlineMisses\":"+String(control.deadlineMisses)+
+  ",\"flightDriverFault\":"+zjJson(zjFlightFaultName(driver.fault))+
+  ",\"owner\":"+zjJson(driver.owner==ZjOutputOwner::FLIGHT?"FLIGHT":
+   driver.owner==ZjOutputOwner::BENCH?"BENCH":
+   driver.owner==ZjOutputOwner::ESC_CALIBRATION?"ESC_CALIBRATION":"NONE")+"}";
+ return out;
+}
+#else
+static String zjFlightReadinessJson(){
+ return String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"board\":")+zjJson(FC_BOARD)+
+  ",\"flightQualified\":false,\"canArm\":false,\"blockReason\":\"UNSUPPORTED_A2_ONLY\"}";
 }
 #endif
 // Network code can access verified scanner/gyro state and existing serial commands.

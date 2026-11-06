@@ -5,6 +5,8 @@
 // The gate has no RC, USB, browser, persistence or boot-time bypass.
 static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
 static constexpr uint16_t ZJ_FLIGHT_STOP_THROTTLE_US=1050;
+// Acro armed LOW throttle sends ESC minimum (not spin-idle). Disarm/STOP/failsafe sends PWM OFF.
+static constexpr uint16_t ZJ_FLIGHT_ARMED_IDLE_US=1000;
 static constexpr uint16_t ZJ_FLIGHT_THROTTLE_CAP_US=1800;
 static constexpr uint32_t ZJ_FLIGHT_OUTPUT_LEASE_US=8000;
 
@@ -13,18 +15,18 @@ struct ZjFlightConditions {
  uint32_t nowMs=0,inputDeadlineMs=0;
  bool acro=false,imuFresh=false,timingHealthy=false,outputOffAck=false;
  bool emergency=false,escCalibration=false,benchActive=false,maintenance=false;
- bool wiringVerified=false,driverReady=false;
+ bool wiringVerified=false,driverReady=false,escOperatorConfirmed=false;
 };
 
 enum class ZjFlightState : uint8_t {OUTPUT_OFF,ARMED,FAILSAFE};
 enum class ZjFlightFault : uint8_t {NONE,UNQUALIFIED,EMERGENCY_STOP,OUTPUT_RESERVED,
  INPUT_STALE,INPUT_DISARMED,SOURCE_CHANGED,IMU_STALE,DEADLINE_MISSED,MODE_UNSUPPORTED,EXPLICIT_ARM_REQUIRED,THROTTLE_HIGH,OFF_UNVERIFIED,
- SOURCE_UNSUPPORTED,WIRING_UNVERIFIED,OUTPUT_ERROR,PID_INVALID,LOW_THROTTLE,PROFILE_CHANGED,PPM_SIGNAL_LOST};
+ SOURCE_UNSUPPORTED,WIRING_UNVERIFIED,OUTPUT_ERROR,PID_INVALID,LOW_THROTTLE,PROFILE_CHANGED,PPM_SIGNAL_LOST,ESC_UNCONFIRMED};
 
 inline const char* zjFlightFaultName(ZjFlightFault fault){
  const char* const names[]={"NONE","UNQUALIFIED","EMERGENCY_STOP","OUTPUT_RESERVED","INPUT_STALE","INPUT_DISARMED",
   "SOURCE_CHANGED","IMU_STALE","DEADLINE_MISSED","MODE_UNSUPPORTED","EXPLICIT_ARM_REQUIRED","THROTTLE_HIGH","OFF_UNVERIFIED",
-  "SOURCE_UNSUPPORTED","WIRING_UNVERIFIED","OUTPUT_ERROR","PID_INVALID","LOW_THROTTLE","PROFILE_CHANGED","PPM_SIGNAL_LOST"};
+  "SOURCE_UNSUPPORTED","WIRING_UNVERIFIED","OUTPUT_ERROR","PID_INVALID","LOW_THROTTLE","PROFILE_CHANGED","PPM_SIGNAL_LOST","ESC_UNCONFIRMED"};
  return names[static_cast<unsigned>(fault)];
 }
 
@@ -39,6 +41,7 @@ struct ZjFlightDriverState {
 };
 
 inline bool zjFlightLowThrottle(uint16_t throttle){return throttle<=ZJ_FLIGHT_STOP_THROTTLE_US;}
+inline uint16_t zjFlightArmedLowPulse(uint16_t throttle){return zjFlightLowThrottle(throttle)?ZJ_FLIGHT_ARMED_IDLE_US:0;}
 inline uint16_t zjFlightMixThrottle(uint16_t throttle){
  return throttle>ZJ_FLIGHT_THROTTLE_CAP_US?ZJ_FLIGHT_THROTTLE_CAP_US:throttle;
 }
@@ -61,6 +64,7 @@ struct ZjFlightOutputGate {
   if(!c.acro)return ZjFlightFault::MODE_UNSUPPORTED;
   if(!c.driverReady)return ZjFlightFault::OUTPUT_ERROR;
   if(!c.wiringVerified)return ZjFlightFault::WIRING_UNVERIFIED;
+  if(!c.escOperatorConfirmed)return ZjFlightFault::ESC_UNCONFIRMED;
   if(!c.timingHealthy)return ZjFlightFault::DEADLINE_MISSED;
   if(!c.imuFresh)return ZjFlightFault::IMU_STALE;
   if(!c.input.fresh(c.nowMs,c.inputDeadlineMs))return ZjFlightFault::INPUT_STALE;
