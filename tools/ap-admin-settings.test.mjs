@@ -40,7 +40,7 @@ test('both entry pages wire the same teacher security UI and cache versions',()=
   assert.ok(ui.includes("guardAction('"+id+"'"),id);
  for(const source of [entry,sw]){
   assert.match(source,/classroom-kits\.js\?v=kit-transport-unified-20261017/);
-  assert.match(source,/firmware-updater\.js\?v=a2-latest-bench-1716-20261105/);
+  assert.match(source,/firmware-updater\.js\?v=a2-bench-1718-acro-readiness-20261106/);
  }
  assert.match(ui,/hideAdminApCredentials\(\)/);
 });
