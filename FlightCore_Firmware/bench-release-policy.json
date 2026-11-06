@@ -4,13 +4,13 @@
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "1.7.18 Acro readiness BENCH candidate; 1.7.17 remains the independently approved published rollback until new images and source SHA are verified. Physical flight outputs remain disabled.",
+  "note": "1.7.18 verified Acro diagnostic-only A1/A2 candidate. Flight ARM remains disabled; true physical acceptance NOT_RUN.",
   "benchArtifact": {
-    "version": "1.7.17",
-    "id": 13446424869,
-    "sha256": "f7ccc48e02a49eddb96b39b5ad5b041e2f45fa7b9ea505c29cd25112bf404213",
-    "sourceCommit": "81d1fb883844603a6b2ad3780a225238eeb35c75",
-    "catalogSha256": "9810edd717531ac5f506038bf9455f6e54f37e3de82e27525cab3ba531aa4fa6",
-    "reportSha256": "79d025e235d9f2bf9d7137975986f6ff315ae1c3df40e6236ffb0880975f38aa"
+    "version": "1.7.18",
+    "id": 13518578442,
+    "sha256": "5c1566f76ba5d43168db610ad1c941da77d6a0b84c4df210f3414e855ae36667",
+    "sourceCommit": "d66514e605f5322e3ba1a1c1b835bb7c1a5cc820",
+    "catalogSha256": "3fd91124ee078e1ea5ac68b7c6e5bdc6b29f7ca31fa7d934094690b7e9803e50",
+    "reportSha256": "5d317186757c8178ad57692d6fedeb4957290b80b4115696f02dca3deb7cfd67"
   }
 }

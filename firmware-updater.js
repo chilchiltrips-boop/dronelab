@@ -9,7 +9,7 @@ function confirmInLab(message){
 
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
-const BENCH_VERSION='1.7.17',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
+const BENCH_VERSION='1.7.18',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let benchCatalog=null,releaseTrack='published',releaseChoice='latest'; // A2 defaults to verified bench; explicit published rollback remains available.
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
@@ -277,7 +277,7 @@ async function autoLoad(choice=releaseChoice){
   releaseChoice=choice;
   if(choice==='latest'){
    // Auto Load Latest resolves the verified board before choosing a package.
-   // A2 uses the newer versioned 1.7.16 BENCH image; A1 retains published 1.7.15.
+   // A2 uses the verified versioned BENCH image; A1 retains the stable published APP.
    // Nothing is flashed by this selection.
    const id=await targetBoardId(false);
    releaseTrack=id==='ZFC-A2'?'bench':'published';
