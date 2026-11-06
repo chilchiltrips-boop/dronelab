@@ -4,13 +4,13 @@
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "1.7.19 A1/A2 bench candidate: updated PPM ARM/DISARM, Rate PID loop and saved setup diagnostics. Flight output remains disabled pending physical acceptance. Previous 1.7.18 bench package remains pinned until 1.7.19 artifact verification.",
+  "note": "FlightCore 1.7.19 verified A1/A2 bench diagnostics and PPM ARM/DISARM source, source-hash pinned. Physical flight output remains disabled (NOT_RUN acceptance); no flight-qualified package.",
   "benchArtifact": {
-    "version": "1.7.18",
-    "id": 13518578442,
-    "sha256": "5c1566f76ba5d43168db610ad1c941da77d6a0b84c4df210f3414e855ae36667",
-    "sourceCommit": "d66514e605f5322e3ba1a1c1b835bb7c1a5cc820",
-    "catalogSha256": "3fd91124ee078e1ea5ac68b7c6e5bdc6b29f7ca31fa7d934094690b7e9803e50",
-    "reportSha256": "5d317186757c8178ad57692d6fedeb4957290b80b4115696f02dca3deb7cfd67"
+    "version": "1.7.19",
+    "id": 13536561970,
+    "sha256": "82f00c9a560d71a1a9da5e59057c80becc366fdf949b92ecdc30f456ae86dbf5",
+    "sourceCommit": "b3756ecac377792e162e3423600029d804a00db3",
+    "catalogSha256": "e880e0c71f398e775dbc7d1e8269960a330eb53858b4fa6de50923ee4ff839b9",
+    "reportSha256": "257cdddd5e8410c272d8b90d99b98133c0362ceec26ea39e54560e40793d34c8"
   }
 }
