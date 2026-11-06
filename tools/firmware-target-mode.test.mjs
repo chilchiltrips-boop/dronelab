@@ -56,7 +56,7 @@ test('PPM ownership permits OTA setup only with disarm, low throttle, verified m
   state={...state,...patch};
   assert.equal(ctx.isOtaReady().ready,false,JSON.stringify(patch));
  }
- state={...state,owner:false,otaAuthorized:true,rc:{claimed:false,source:'NONE'},rcAccess:{...state.rcAccess,stationary:true}};
+ state={...state,owner:false,otaAuthorized:true,motorsArmed:false,motorsDisabled:true,rc:{claimed:false,source:'NONE',inputArmed:false,throttle:1000},rcAccess:{...state.rcAccess,stationary:true}};
  assert.equal(ctx.isOtaReady().ready,true,'unclaimed, authenticated, matched APP still OTA-ready');
 });
 test('PPM OTA uses firmware-enforced maintenance pause and independent safe readback before upload',()=>{
