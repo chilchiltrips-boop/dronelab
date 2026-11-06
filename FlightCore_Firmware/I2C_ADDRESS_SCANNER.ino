@@ -518,7 +518,8 @@ static String zjFlightReadinessJson(){
  out=String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"kitId\":")+zjJson(zjKitId)+
   ",\"bootId\":"+zjJson(zjBootId)+",\"firmwareVersion\":"+zjJson(FW_VERSION)+
   ",\"board\":"+zjJson(FC_BOARD)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
-  ",\"physicalAcceptance\":\"NOT_RUN\",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
+  ",\"physicalAcceptance\":\"NOT_RUN\",\"setupComplete\":"+(zjWizardSetupComplete()?"true":"false")+
+  ",\"setupRevision\":"+String(zjWizardSaved.revision)+",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
   ",\"controlActuating\":"+(shadow.actuating?"true":"false")+
   ",\"blockReason\":"+zjJson(ZJ_FLIGHT_HARDWARE_QUALIFIED?softwareBlock:"UNQUALIFIED")+
   ",\"softwareBlockReason\":"+zjJson(softwareBlock)+
@@ -609,6 +610,7 @@ void loop(){
  zjNetworkLoop(now);
  zjRcLoop(now);
  zjPublishControlInput();
+ zjControlPpmArmEdge(); // one flight ARM attempt per fresh PPM gesture
  emitTimingDiagnostics(millis());
  // Versioned extension leaves the legacy ZJTEL record unchanged.
  static uint32_t lastState=0;
