@@ -1,0 +1,87 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
+
+const source=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+
+test('Acro physical ARM has independent prerequisites and immutable hardware block',()=>{
+ const tmp=mkdtempSync(join(tmpdir(),'zj-acro-'));
+ try{
+  const cpp=`#include <cassert>
+#include <iostream>
+#include "${process.cwd()}/FlightCore_Firmware/FlightCoreFlightOutput.h"
+#include "${process.cwd()}/FlightCore_Firmware/FlightCoreRatePid.h"
+int main(){
+ assert(!ZJ_FLIGHT_HARDWARE_QUALIFIED);
+ ZjFlightConditions c;
+ c.nowMs=1000;c.inputDeadlineMs=150;c.acro=true;c.imuFresh=true;c.timingHealthy=true;
+ c.outputOffAck=true;c.wiringVerified=true;c.driverReady=true;c.escOperatorConfirmed=true;
+ c.input.source=ZjReceiverSource::PPM;c.input.sequence=3;c.input.selected=true;c.input.valid=true;
+ c.input.inputArmed=true;c.input.generation=1;c.input.availableMask=15;c.input.receivedAtMs=990;
+ c.input.channels[2]=1000;
+ ZjFlightOutputGate gate;
+ assert(gate.fault(c,false)==ZjFlightFault::UNQUALIFIED);
+ assert(gate.fault(c,true)==ZjFlightFault::NONE);
+ assert(!gate.arm(c,true,false)&&gate.reason==ZjFlightFault::EXPLICIT_ARM_REQUIRED);
+ c.escOperatorConfirmed=false;
+ assert(gate.fault(c,true)==ZjFlightFault::ESC_UNCONFIRMED);
+ c.escOperatorConfirmed=true;c.imuFresh=false;
+ assert(gate.fault(c,true)==ZjFlightFault::IMU_STALE);
+ c.imuFresh=true;c.timingHealthy=false;
+ assert(gate.fault(c,true)==ZjFlightFault::DEADLINE_MISSED);
+ c.timingHealthy=true;c.input.receivedAtMs=800;
+ assert(gate.fault(c,true)==ZjFlightFault::INPUT_STALE);
+ c.input.receivedAtMs=990;c.input.source=ZjReceiverSource::WEB;
+ assert(gate.fault(c,true)==ZjFlightFault::SOURCE_UNSUPPORTED);
+ c.input.source=ZjReceiverSource::PPM;c.input.inputArmed=false;
+ assert(gate.fault(c,true)==ZjFlightFault::INPUT_DISARMED);
+ c.input.inputArmed=true;c.input.channels[2]=1200;
+ assert(!gate.arm(c,true,true)&&gate.reason==ZjFlightFault::THROTTLE_HIGH);
+ c.input.channels[2]=1000;c.outputOffAck=false;
+ assert(!gate.arm(c,true,true)&&gate.reason==ZjFlightFault::OFF_UNVERIFIED);
+ c.outputOffAck=true;
+ assert(gate.arm(c,true,true)&&gate.state==ZjFlightState::ARMED);
+ assert(gate.permit(c,true));
+ c.input.generation=2;
+ assert(!gate.permit(c,true)&&gate.reason==ZjFlightFault::SOURCE_CHANGED);
+ gate={};c.input.generation=1;assert(gate.arm(c,true,true));
+ gate.revoke(ZjFlightFault::INPUT_DISARMED);
+ assert(gate.state==ZjFlightState::OUTPUT_OFF);
+ gate={};assert(gate.arm(c,true,true));
+ gate.revoke(ZjFlightFault::EMERGENCY_STOP);
+ assert(gate.state==ZjFlightState::FAILSAFE);
+ assert(zjFlightArmedLowPulse(1000)==1000&&zjFlightArmedLowPulse(1050)==1000&&zjFlightArmedLowPulse(1051)==0);
+ assert(zjFlightMixThrottle(1900)==1800);
+ const auto roll=zjRateMixQuadX(1500,-40,0,0);
+ assert(roll.pulse[0]>1500&&roll.pulse[3]>1500&&roll.pulse[1]<1500&&roll.pulse[2]<1500);
+ const auto pitch=zjRateMixQuadX(1500,0,-40,0);
+ assert(pitch.pulse[0]>1500&&pitch.pulse[1]>1500&&pitch.pulse[2]<1500&&pitch.pulse[3]<1500);
+ const auto yaw=zjRateMixQuadX(1500,0,0,-40);
+ assert(yaw.pulse[0]>1500&&yaw.pulse[2]>1500&&yaw.pulse[1]<1500&&yaw.pulse[3]<1500);
+ std::cout<<"PASS Acro readiness/mixer contract"; }
+`;
+  const main=join(tmp,'acro.cpp'),bin=join(tmp,'acro');
+  writeFileSync(main,cpp);
+  execFileSync('g++',['-std=c++17',main,'-o',bin],{timeout:45000});
+  assert.match(execFileSync(bin,{encoding:'utf8'}),/PASS Acro readiness/);
+ }finally{rmSync(tmp,{recursive:true,force:true});}
+});
+test('Firmware and WebApp expose read-only Acro readiness while preserving actuator lockout',()=>{
+ const firmware=source('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino');
+ const api=source('FlightCore_Firmware/FlightCoreRateTraceApi.h');
+ const fw=source('firmware-updater.js');
+ const markup=source('index.html');
+ assert.match(firmware,/static String zjFlightReadinessJson\(\)/);
+ assert.match(firmware,/geometryPredictionUs/);
+ assert.match(firmware,/escOperatorConfirmed=zjMotorCalibrationSaved/);
+ assert.match(api,/api\/flight\/readiness/);
+ assert.match(api,/ZJFLIGHT,STATUS/);
+ assert.match(fw,/checkAcroReadiness/);
+ assert.match(markup,/fwAcroCheckBtn/);
+ assert.match(fw,/ZebjusKits\.request\('\/api\/flight\/readiness'/);
+ assert.doesNotMatch(fw,/writePythonSerialLine\('ZJFLIGHT,ARM/);
+ assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_FLIGHT_HARDWARE_QUALIFIED=false/);
+});

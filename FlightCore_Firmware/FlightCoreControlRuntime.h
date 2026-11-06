@@ -251,7 +251,7 @@ static void zjControlTask(void*){
    }else if(!preview&&zjFlightLowThrottle(input.channels[2])){
     next.reason="LOW_THROTTLE";trace.reason=ZjFlightFault::LOW_THROTTLE;
     trace.throttleUsed=1000;
-    for(auto& pulse:next.mix.pulse)pulse=1000;
+    for(auto& pulse:next.mix.pulse)pulse=ZJ_FLIGHT_ARMED_IDLE_US;
    }else if(next.angle&&(!level||!zjBenchAngles(gravity[0],gravity[1],gravity[2],angles))){
     next.reason="ANGLE_LEVEL_REQUIRED";fault=ZjFlightFault::MODE_UNSUPPORTED;
    }else{

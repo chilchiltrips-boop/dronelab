@@ -70,6 +70,10 @@ static const char* zjFlightTracePage(const String& boot,const String& captureArg
 #endif
 
 static void zjSetupFlightTraceHttp(){
+ zjHttp.on("/api/flight/readiness",HTTP_GET,[](){
+  if(!zjAllow())return;
+  zjReply(200,zjFlightReadinessJson()); // read-only; never ARM or command motors
+ });
  zjHttp.on("/api/flight/trace",HTTP_POST,[](){
   if(!zjAllow())return;
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
@@ -86,6 +90,9 @@ static void zjSetupFlightTraceHttp(){
 }
 
 static bool zjFlightSerialCommand(char* line){
+ if(!strcmp(line,"ZJFLIGHT,STATUS")){
+  Serial.print("ZJFLIGHT,STATUS,");Serial.println(zjFlightReadinessJson());return true;
+ }
  const bool trace=!strncmp(line,"ZJTRACE,",8);
  if(!trace&&strncmp(line,"ZJFLIGHT,",9))return false;
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
