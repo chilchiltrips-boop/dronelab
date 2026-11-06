@@ -93,6 +93,9 @@ try{
  await fetchTrace.click();await status.filter({hasText:'does not match the verified A2 boot'}).waitFor();
  assert.equal(await page.evaluate(()=>JSON.parse(window.ZebjusAckDiagnostics.exportData('json')).flightTrace.capture),7);
 
+ const checkRows=rows.map(row=>[...row]);
+ checkRows[1][19]=2;checkRows[1][28]=1100;checkRows[1][15]&=~32;
+ checkRows[3][3]=4;checkRows[3][4]=20;
  await page.evaluate(async({id,boot,code,rows})=>{
   await window.ZebjusKits.disconnect();
   const dispatch=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
@@ -100,23 +103,27 @@ try{
   window.DroneLabSerial={generation:()=>42,isOpen:()=>true,isFlashing:()=>false,async writeLine(value){
    const line=value.trim();
    if(line==='ZJKIT,GET'){dispatch('ZJKIT,ID,'+id);dispatch('ZJKIT,CODE,'+code);}
-   if(line==='ZJINFO,GET')dispatch('ZJINFO,FW,ZFC-A2,1.7.17');
+   if(line==='ZJINFO,GET')dispatch('ZJINFO,FW,ZFC-A2,1.7.18');
    if(line==='ZJNET,PAIR')dispatch('ZJNET,ERR,UNAVAILABLE');
    if(!line.startsWith('ZJTRACE,'))return;
    const [_,action,device,token,binding,capture,index]=line.split(',');
    window.traceSerialCommands.push([action,device,binding,Number(capture),Number(index)]);
    dispatch('ZJTRACE,ACK,'+device+','+token+','+JSON.stringify({version:1,kitId:id,bootId:boot,
-    firmwareVersion:'1.7.17',capture:8,offset:Number(index),total:rows.length,sampleHz:50,rows:rows.slice(Number(index),Number(index)+2)}));
+    firmwareVersion:'1.7.18',capture:8,offset:Number(index),total:rows.length,sampleHz:50,rows:rows.slice(Number(index),Number(index)+2)}));
   }};
   document.getElementById('kitTransport').value='usb';
   await window.ZebjusKits.connect();
- },{id,boot,code,rows});
+ },{id,boot,code,rows:checkRows});
  await page.waitForFunction(()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='usb');
  await fetchTrace.click();await status.filter({hasText:'4 FC flight trace rows saved locally'}).waitFor();
  assert.deepEqual(await page.evaluate(()=>traceSerialCommands),[['READ',id,'-',0,0],['READ',id,boot,8,2]]);
  await page.reload();
  await page.waitForFunction(()=>window.ZebjusAckDiagnostics);
- assert.equal(await page.evaluate(()=>JSON.parse(window.ZebjusAckDiagnostics.exportData('json')).flightTrace.capture),8);
+ const check=await page.evaluate(()=>JSON.parse(window.ZebjusAckDiagnostics.exportData('json')).flightTrace);
+ assert.equal(check.capture,8);
+ assert.equal(check.rows[1].flightOutputOwner,'BENCH');
+ assert.equal(check.rows[1].flightAppliedM1Us,1100);
+ assert.equal(check.rows.at(-1).flightReason,'RATE_CHECK_COMPLETE');
  assert.deepEqual(errors,[]);
  console.log('PASS A2 trace over signed STA and bound USB fixtures, boot-change rejection, local save, CSV and JSON');
 }finally{await browser.close();}

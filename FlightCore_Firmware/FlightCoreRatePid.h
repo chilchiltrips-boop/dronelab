@@ -39,13 +39,13 @@ struct ZjRateMix {
 };
 
 // Quad X M1..M4: front left, front right, back right, back left.
-inline ZjRateMix zjRateMixQuadX(float throttle,float roll,float pitch,float yaw){
+inline ZjRateMix zjRateMixQuadX(float throttle,float roll,float pitch,float yaw,float maxPulse=2000){
  const float requested[]={throttle-roll-pitch-yaw,throttle+roll-pitch+yaw,
                           throttle+roll+pitch-yaw,throttle-roll+pitch+yaw};
  ZjRateMix mix;
  float removed[4];
  for(unsigned i=0;i<4;i++){
-  mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
+  mix.pulse[i]=zjRateClamp(requested[i],1000,maxPulse);
   removed[i]=requested[i]-mix.pulse[i];
   if(removed[i]!=0)mix.clipMask|=uint8_t(1u<<i);
  }
@@ -86,13 +86,13 @@ inline bool zjBenchAngles(float x,float y,float z,float (&angles)[2]){
  return true;
 }
 
-// Quad + M1..M4: front, right, rear, left. Diagnostic mixer only.
-inline ZjRateMix zjRateMixQuadPlus(float throttle,float roll,float pitch,float yaw){
+// Quad + M1..M4: front, right, rear, left.
+inline ZjRateMix zjRateMixQuadPlus(float throttle,float roll,float pitch,float yaw,float maxPulse=2000){
  const float requested[]={throttle-pitch-yaw,throttle+roll+yaw,throttle+pitch-yaw,throttle-roll+yaw};
  ZjRateMix mix;
  float removed[4];
  for(unsigned i=0;i<4;i++){
-  mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
+  mix.pulse[i]=zjRateClamp(requested[i],1000,maxPulse);
   removed[i]=requested[i]-mix.pulse[i];
   if(removed[i]!=0)mix.clipMask|=uint8_t(1u<<i);
  }

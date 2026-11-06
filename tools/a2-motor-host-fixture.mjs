@@ -6,8 +6,7 @@ export function a2MotorFixture(dir){
  for(const name of ['driver/ledc.h','esp_timer.h','freertos/FreeRTOS.h'])writeFileSync(join(dir,name),'');
  const integration=readFileSync('tools/motor-integration-host.cpp','utf8');
  const common=integration.slice(0,integration.indexOf('#define DISABLED'));
- return common+String.raw`
-#define CONFIG_IDF_TARGET_ESP32C6 1
+ return '#define CONFIG_IDF_TARGET_ESP32C6 1\n'+common+String.raw`
 #define HIGH 1
 #define LOW 0
 #include "FlightCoreAccelCalibration.h"

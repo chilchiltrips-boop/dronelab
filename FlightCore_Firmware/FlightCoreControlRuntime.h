@@ -9,7 +9,7 @@ static bool zjControlRuntimeReady=false;
 struct ZjRateShadowResult {
  uint32_t revision=0,generation=0,computeMaxUs=0,imuReadMaxUs=0,imuSampleAgeUs=0;
  uint32_t phaseMaxUs[5]={};
- bool deadlineFault=false,outputAuthorized=false,actuating=false,angle=false;
+ bool deadlineFault=false,outputAuthorized=false,rateCheckActive=false,actuating=false,angle=false;
  const char* maxIntervalPhase="STARTUP";
  const char* reason="DISARMED";
  ZjRateMix mix;
@@ -23,6 +23,7 @@ static portMUX_TYPE zjTimingMux=portMUX_INITIALIZER_UNLOCKED;
 static ZjImuAcquisition zjImuMailbox;
 static ZjRateGains zjShadowGains[ZJ_PID_GAIN_COUNT/3];
 static uint32_t zjShadowRevision=0,zjShadowGeneration=0,zjFlightRevokeEpoch=0,zjFlightLease=0,zjFlightArmAt=0;
+static bool zjFlightRateCheck=false;
 static uint32_t zjShadowInputArmEpoch=0,zjLastPublishedInputGeneration=0;
 static bool zjLastPublishedInputArmed=false;
 static uint8_t zjShadowProfile=0;
@@ -30,7 +31,8 @@ static bool zjShadowAngle=false,zjShadowPlus=false,zjShadowPreview=false;
 static bool zjPidLayoutMatches(bool plus);
 static ZjFlightConditions zjFlightMainConditions();
 static ZjFlightDriverState zjFlightDriverRead();
-static bool zjFlightDriverClaim(uint32_t lease);
+static bool zjFlightDriverClaim(uint32_t lease,bool rateCheck);
+static bool zjRateCheckWiringReady();
 static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4],uint32_t deadlineUs);
 static void zjFlightDriverStop(uint32_t lease,ZjFlightFault fault);
 static ZjFlightOutputGate zjFlightOutputGate;
@@ -113,8 +115,9 @@ static void zjControlRevoke(const char* reason){
  zjFlightLease=0;zjFlightPolicy.input={};zjShadowRequested=false;
  portEXIT_CRITICAL(&zjTimingMux);
 }
-static ZjFlightFault zjControlArmFlight(){
- if(!ZJ_FLIGHT_HARDWARE_QUALIFIED)return ZjFlightFault::UNQUALIFIED;
+static ZjFlightFault zjControlArmRateOutput(bool rateCheck){
+ if(!rateCheck&&!ZJ_FLIGHT_HARDWARE_QUALIFIED)return ZjFlightFault::UNQUALIFIED;
+ if(rateCheck&&!zjRateCheckWiringReady())return ZjFlightFault::WIRING_UNVERIFIED;
  auto conditions=zjFlightMainConditions();
  portENTER_CRITICAL(&zjTimingMux);
  const uint32_t at=micros();
@@ -125,12 +128,15 @@ static ZjFlightFault zjControlArmFlight(){
  conditions.outputOffAck=zjFlightDriverRead().offAck;
  auto result=ZjFlightFault::OUTPUT_RESERVED;
  if(!zjFlightLease){
-  if(zjFlightOutputGate.arm(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED,true)){
+  // The same receiver, IMU and ownership interlocks apply to the bench check.
+  // Its driver lease is separately limited in pulse width and absolute time.
+  if(zjFlightOutputGate.arm(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED||rateCheck,true)){
    if(!++zjFlightRevokeEpoch)++zjFlightRevokeEpoch;
-   if(zjFlightDriverClaim(zjFlightRevokeEpoch)){
+   if(zjFlightDriverClaim(zjFlightRevokeEpoch,rateCheck)){
     zjFlightLease=zjFlightRevokeEpoch;zjFlightArmAt=at;
+    zjFlightRateCheck=rateCheck;
     zjFlightPolicy=conditions;zjShadowRequested=true;
-    if(zjFlightTrace.active){
+    if(zjFlightTrace.active&&!rateCheck){
      auto arm=zjFlightTrace.last;arm.atUs=arm.triggerUs=at;arm.flags|=ZJ_TRACE_FLIGHT_ARMED;
      zjFlightTrace.flightArm(arm);
     }
@@ -144,7 +150,7 @@ static ZjFlightFault zjControlArmFlight(){
 }
 static ZjRateTraceEvent zjTraceTerminalEvent(ZjFlightFault fault){
  if(fault==ZjFlightFault::EMERGENCY_STOP)return ZjRateTraceEvent::STOP;
- if(fault==ZjFlightFault::INPUT_DISARMED)return ZjRateTraceEvent::DISARM;
+ if(fault==ZjFlightFault::INPUT_DISARMED||fault==ZjFlightFault::RATE_CHECK_COMPLETE)return ZjRateTraceEvent::DISARM;
  return ZjRateTraceEvent::FAILSAFE;
 }
 static void zjTraceReceiver(ZjRateTraceSample& trace,const FlightReceiverSnapshot& input,uint32_t nowMs,bool fresh){
@@ -186,7 +192,7 @@ static void zjControlTask(void*){
 
   ZjRateGains gains[ZJ_PID_GAIN_COUNT/3];
   float rates[3],gravity[3];
-  bool requested,imuReady,level,plus,preview;
+  bool requested,imuReady,level,plus,preview,rateCheck;
   uint32_t epoch,lease,inputArmEpoch;
   ZjRateShadowResult next;
   ZjSampleStamp imuSample;
@@ -200,6 +206,7 @@ static void zjControlTask(void*){
   level=zjImuMailbox.accelModel.level;
   std::copy_n(zjShadowGains,ZJ_PID_GAIN_COUNT/3,gains);
   requested=zjShadowRequested;epoch=zjFlightRevokeEpoch;lease=zjFlightLease;inputArmEpoch=zjShadowInputArmEpoch;
+  rateCheck=lease&&zjFlightRateCheck;
   next.revision=zjShadowRevision;next.generation=zjShadowGeneration;trace.profile=zjShadowProfile;
   next.angle=zjShadowAngle;plus=zjShadowPlus;preview=zjShadowPreview;
   portEXIT_CRITICAL(&zjTimingMux);
@@ -213,7 +220,7 @@ static void zjControlTask(void*){
   conditions.imuFresh=imuReady&&imuSample.fresh(at,12000)&&
    std::isfinite(rates[0])&&std::isfinite(rates[1])&&std::isfinite(rates[2]);
   conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000&&control.missedTicks==previousMissed;
-  const unsigned phase=uint32_t(at-started)<1000000?0:!imuReady?1:lease?4:requested?3:2;
+  const unsigned phase=uint32_t(at-started)<1000000?0:!imuReady?1:lease&&!rateCheck?4:requested?3:2;
   const char* const labels[]={"STARTUP","IMU_CALIBRATION","DISARMED","RC_DIAGNOSTIC","RATE_FLIGHT"};
   next.maxIntervalPhase=control.maxIntervalUs>previousWorst?labels[phase]:previous.maxIntervalPhase;
   std::copy_n(previous.phaseMaxUs,5,next.phaseMaxUs);
@@ -269,9 +276,10 @@ static void zjControlTask(void*){
     if(fault==ZjFlightFault::NONE){
      trace.flags|=ZJ_TRACE_PID_VALID;
      next.reason=preview?"BENCH_PREVIEW":"READY";
-     trace.throttleUsed=preview?1000:zjFlightMixThrottle(input.channels[2]);
+     const uint16_t maxPulse=rateCheck?ZJ_RATE_CHECK_MAX_PULSE_US:2000;
+     trace.throttleUsed=preview?1000:std::min(zjFlightMixThrottle(input.channels[2]),maxPulse);
      if(!preview&&trace.throttleUsed!=input.channels[2])trace.flags|=ZJ_TRACE_THROTTLE_CAPPED;
-     next.mix=(plus?zjRateMixQuadPlus:zjRateMixQuadX)(trace.throttleUsed,correction[0],correction[1],correction[2]);
+     next.mix=(plus?zjRateMixQuadPlus:zjRateMixQuadX)(trace.throttleUsed,correction[0],correction[1],correction[2],maxPulse);
     }else next.reason="PID_INVALID";
     next.computeMaxUs=std::max(next.computeMaxUs,uint32_t(micros()-computeStarted));
    }
@@ -290,7 +298,7 @@ static void zjControlTask(void*){
    if(profileChanged&&fault==ZjFlightFault::NONE)fault=ZjFlightFault::PROFILE_CHANGED;
    conditions.nowMs=millis();
    conditions.imuFresh=conditions.imuFresh&&imuSample.fresh(micros(),12000);
-   if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED))
+   if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED||rateCheck))
     fault=zjFlightOutputGate.reason;
    if(fault==ZjFlightFault::NONE){
     const auto driver=zjFlightDriverSubmit(lease,trace.requested,control.nextDueUs);
@@ -307,7 +315,8 @@ static void zjControlTask(void*){
    zjFlightOutputGate.revoke(fault);zjFlightDriverStop(lease,fault);zjFlightLease=0;
    next.mix={};
   }
-  next.outputAuthorized=zjFlightLease!=0;
+  next.outputAuthorized=zjFlightLease&&!zjFlightRateCheck;
+  next.rateCheckActive=zjFlightLease&&zjFlightRateCheck;
   const bool newCapture=preview?next.generation!=recordedPreview:
    inputArmEpoch!=recordedInputArm||(lease&&lease!=recordedFlightLease);
   const bool startCapture=requested&&epoch==zjFlightRevokeEpoch&&newCapture&&!zjFlightTrace.active;
@@ -315,17 +324,17 @@ static void zjControlTask(void*){
   if(zjFlightTrace.active||startCapture||zjFlightLease){
    const auto driver=zjFlightDriverRead();
    zjTraceDriver(trace,driver);
-   next.actuating=driver.owner==ZjOutputOwner::FLIGHT&&driver.appliedKnown&&driver.applied[0];
+   next.actuating=driver.lease&&driver.appliedKnown&&driver.applied[0];
    if(lease&&!driver.lease&&driver.fault==fault)triggerAt=driver.faultAtUs;
   }
-  if(zjFlightLease)trace.flags|=ZJ_TRACE_FLIGHT_ARMED;
+  if(next.outputAuthorized)trace.flags|=ZJ_TRACE_FLIGHT_ARMED;
   if(startCapture){
    zjFlightTrace.begin(trace,preview);
    if(preview)recordedPreview=next.generation;else recordedInputArm=inputArmEpoch;
   }
   if(zjFlightTrace.active){
    if(lease)recordedFlightLease=lease;
-   if(lease&&!zjFlightTrace.haveArm){
+   if(lease&&!rateCheck&&!zjFlightTrace.haveArm){
     auto arm=trace;arm.triggerUs=zjFlightArmAt;zjFlightTrace.flightArm(arm);
    }
    if(zjTracePendingFault!=ZjFlightFault::NONE){
