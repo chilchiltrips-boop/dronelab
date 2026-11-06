@@ -92,7 +92,7 @@ test('unified Devices & Firmware sidebar loads offline with its exact versioned 
 
 test('latest audited AP/STA, USB and WebRTC scripts are precached with the exact page versions',async()=>{
  const page=readFileSync(new URL('index.html',root),'utf8'),sw=source;
- const versions=[['pairing-web.js','phase1-remote-20261017'],['firmware-updater.js','a2-latest-bench-1716-20261105-bench-1717'],['js/firmware-connect.js','embed-clean-20261017-udp-management-20261019'],['js/classroom-kits.js','kit-transport-unified-20261017-udp-management-20261019-flight-trace'],['js/kit-ack-diagnostics.js','ackdiag-20261018-flight-trace']];
+ const versions=[['pairing-web.js','phase1-remote-20261017'],['firmware-updater.js','a2-bench-1718-acro-readiness-20261106'],['js/firmware-connect.js','embed-clean-20261017-udp-management-20261019'],['js/classroom-kits.js','kit-transport-unified-20261017-udp-management-20261019-flight-trace'],['js/kit-ack-diagnostics.js','ackdiag-20261018-flight-trace']];
  for(const [asset,version] of versions){
   assert.ok(page.includes(asset+'?v='+version),asset+' page source');
   assert.ok(sw.includes(asset+'?v='+version),asset+' offline precache');
