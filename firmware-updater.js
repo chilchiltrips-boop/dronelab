@@ -389,6 +389,7 @@ function renderAcroReadiness(data){
  text('#fwAcroIdle',String(data.armedIdlePulseUs||1000)+' µs armed low • '+String(data.disarmedOutput||'PWM_OFF')+' on STOP');
  text('#fwAcroRates',Array.isArray(data.gyroRateDegS)?data.gyroRateDegS.map(x=>Number.isFinite(x)?x.toFixed(2):'--').join(' / '):'--');
  text('#fwAcroMix',Array.isArray(data.geometryPredictionUs)?data.geometryPredictionUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
+ text('#fwAcroPidShadow',Array.isArray(data.pidShadowPulseUs)?data.pidShadowPulseUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
  text('#fwAcroStatusText','P-only 1500 µs motor geometry prediction — NEVER ESC PWM. Physical flight '+(data.flightQualified?'requires measured hardware acceptance':'is disabled')+
   '. STOP/disarm = PWM OFF. Actual outputs: '+(Array.isArray(data.actualMotorPulseUs)?data.actualMotorPulseUs.join('/'):'unknown')+
   '. Flight ARM is independent of PPM/WebApp/Android input ARM.');
@@ -410,7 +411,7 @@ async function checkAcroReadiness(){
   const data=await globalThis.ZebjusKits.request('/api/flight/readiness','GET');
   const after=globalThis.ZebjusKits?.getState?.();
   if(!after||before.some((v,i)=>v!==[after.kitId,after.bootId,after.transport,after.connectionGeneration][i])||
-    data.kitId!==before[0]||data.bootId!==before[1])throw Error('Selected Kit identity or boot changed. Reconnect and read again.');
+    data.kitId!==before[0]||before[1]&&data.bootId!==before[1])throw Error('Selected Kit identity or boot changed. Reconnect and read again.');
   renderAcroReadiness(data);
  }catch(e){text('#fwAcroStatusText','Acro readiness unavailable: '+String(e.message||e));}
 }

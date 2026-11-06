@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.17";
+constexpr const char* FW_VERSION="1.7.18";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -550,6 +550,9 @@ static String zjFlightReadinessJson(){
  for(unsigned n=0;n<3;n++){if(n)out+=',';out+=gyroFresh?String(rate[n],3):String("null");}
  out+="],\"geometryPredictionUs\":[";
  for(unsigned n=0;n<4;n++){if(n)out+=',';out+=gyroFresh&&c.wiringVerified?String(reference.pulse[n],1):String("null");}
+ out+="],\"pidShadowPulseUs\":[";
+ const bool hasPidShadow=c.acro&&c.input.inputArmed&&shadow.reason&&!strcmp(shadow.reason,"READY");
+ for(unsigned n=0;n<4;n++){if(n)out+=',';out+=hasPidShadow?String(shadow.mix.pulse[n],1):String("null");}
  out+="],\"geometryPredictionNote\":\"P-only at neutral sticks / 1500us reference; not PID dynamic output or PWM\",\"controlHz\":";
  out+=control.rate.known?String(control.rate.actual(at),2):String("null");
  out+=",\"controlMissedTicks\":"+String(control.missedTicks)+

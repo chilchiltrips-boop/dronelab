@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.17",
+  "candidateVersion": "1.7.18",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "Explicit bench diagnostic download. Physical flight output is disabled.",
+  "note": "1.7.18 Acro readiness BENCH candidate; 1.7.17 remains the independently approved published rollback until new images and source SHA are verified. Physical flight outputs remain disabled.",
   "benchArtifact": {
     "version": "1.7.17",
     "id": 13446424869,
