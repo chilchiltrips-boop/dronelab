@@ -58,7 +58,7 @@ test('WebApp checks official binary compiledAt, catalog build start, and version
  assert.match(fw,/embedded in verified \.bin/);
  assert.match(img,/export function imageBuildTimeIso/);
  assert.match(sw,/dronelab-tripod-input-mirror-20261021/);
- for(const p of [read('index.html'),read('lab.html'),sw])assert.match(p,/firmware-updater\.js\?v=a2-bench-1718-acro-readiness-20261106/);
+ for(const p of [read('index.html'),read('lab.html'),sw])assert.match(p,/firmware-updater\.js\?v=a2-bench-1719-arm-failsafe-20261107/);
  assert.match(sw,/firmware-image\.js\?v=compile-time-verified-20261017/);
  assert.equal(read('index.html'),read('lab.html'));
 });
