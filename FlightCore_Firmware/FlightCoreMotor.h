@@ -326,6 +326,14 @@ static bool zjAutoEscSequenceReady(){
  return !running&&zjWizardRecordVerified&&zjAutoEscRecordVerified&&!zjAutoEscStorageError&&
   zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&zjAutoEscCompatible()&&zjAutoEscOutputsOff();
 }
+// Persistent setup completeness is a read-only configuration fact, NOT a flight-output authorization.
+// A saved Wizard revision, four recorded motor minimums and the existing ESC record
+// are enough to show Setup complete after a reboot, without repeating calibration.
+static bool zjWizardSetupComplete(){
+ if(!zjMotorConfigValid||!zjWizardSaved.revision||!zjWizardRecordVerified||!zjWizardSaved.accel.valid())return false;
+ for(const auto pulse:zjWizardSaved.motor.minimumUs)if(pulse<1000||pulse>1500)return false;
+ return zjMotorCalibrationSaved||zjAutoEscSequenceReady();
+}
 // Called with zjMotorMux held, from the timer task or startup/STOP. No flash,
 // network, allocations, input claims or application sessions in this path.
 static void zjAutoEscWrite(){
@@ -502,6 +510,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
  return status.substring(0,status.length()-1)+",\"wizardVersion\":1,\"pageSaveVersion\":1,\"accelManualVersion\":1,\"configRevision\":"+String(zjWizardSaved.revision)+
   ",\"autoEsc\":"+zjAutoEscStatus()+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
+  ",\"setupComplete\":"+(zjWizardSetupComplete()?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
   ",\"imuRequestSequence\":"+String(requestSequence)+",\"capture\":{\"sequence\":"+String(imu.maintenanceSequence)+
