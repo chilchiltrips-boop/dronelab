@@ -46,12 +46,22 @@ The trace contains receiver source, sequence and age, four channels, desired and
 
 The versioned read protocol is signed `POST /api/flight/trace` with `bootId`, `capture` and `offset`. Start with zero capture and offset, then use the returned capture and next row offset. USB uses `ZJTRACE,READ,<kit>,<request>,<boot-or->,<capture>,<offset>` with a request-bound ACK/NACK. Both paths require disarm and reject capture changes during paging. The separate local admin command `ZJFLIGHT,ARM,<kit>,<request>,<boot>,<monotonic-nonce>` is checked against the same driver interlocks and qualification lock. The shipped bench firmware cannot arm flight output.
 
+## A2 Rate PWM check on a fixture
+
+The 1.7.18 candidate adds a USB-only check for the PPM-to-PID-to-PWM path. Remove all propellers and secure the airframe. Start with the ESC signal leads disconnected and a scope on D0–D3. Save the verified motor wiring and matching PID profile, select Rate (Acro) and PPM, and wait for gyro calibration. Use Diagnostic ARM at low throttle and unlock the USB teacher session.
+
+Send `ZJFLIGHT,RATE_CHECK,<kit>,<request>,<boot>,<monotonic-nonce>,PROPS_REMOVED` from a local USB serial terminal. Use the current Kit and boot IDs from verified status and a new nonce for each attempt. An ACK reports `RATE_CHECK_ACTIVE`. The check requires fresh armed PPM, throttle at or below 1050 µs, a healthy IMU and control loop, verified wiring, exclusive output ownership and an OFF acknowledgement.
+
+The check uses the same Rate PID, mixer, wiring map and 50 Hz driver. It limits every requested pulse to 1000–1200 µs and independently rejects a driver request outside that range. The lease expires after five seconds and the motor watchdog still enforces the eight-millisecond servicing limit. The flight authorization flag stays false. Confirm scope OFF after expiry or STOP and export the trace after disarming PPM. Its applied pulses carry the `BENCH` owner and a normal expiry ends with `RATE_CHECK_COMPLETE`.
+
+If the driver cannot confirm OFF, Motor Setup STOP reports `output_off_unverified` and status leaves `motorsDisabled` false. End the test and isolate ESC power before inspecting the output. New motor sessions, PID writes, OTA starts and explicit radio handovers require verified OFF.
+
 ## Propeller-free evidence sequence
 
 1. Use a current-limited bench supply and remove all propellers. Record the candidate CI run, build-report source commit and APP SHA-256. Confirm the exact running version and build timestamp over USB and signed Wi-Fi.
 2. Exercise authorized PID and PPM writes, restart, and read back saved revisions and channel mapping. Verify unauthorized, stale-revision and armed-state writes are rejected.
 3. Log 50 Hz PWM and OFF on all four outputs with a scope. Check configured pins, orientation and rotation one motor at a time. Run the one-use ESC and output calibration steps and read back their controller-side results after power-cycle.
-4. Capture STOP, PPM signal interruption, AP fallback, STA recovery, IMU failure and control deadlines under active diagnostic load. Collect board timestamps and scope traces. Check that reconnection leaves motor authorization revoked. Verify Android upgrade and OTA interruption on test hardware.
+4. Use the bounded Rate PWM check to capture applied mixer signals and scope OFF on STOP, PPM loss, IMU failure and missed deadlines. Test AP fallback and STA recovery separately. Collect board timestamps and scope traces. Check that reconnection leaves motor authorization revoked. Verify Android upgrade and OTA interruption on test hardware.
 5. Record observed outcomes in [the ledger](release-acceptance.evidence.json). After wiring and safety review, validate an explicitly qualified actuator handoff on the restrained fixture before approving any flight test. Angle/self-level validation is a separate requirement.
 
 Each strict PASS attaches a repository-relative JSON manifest and its SHA-256. The manifest includes `schema` (1), `caseId`, `result`, `operator`, `observedAt`, `deviceId`, `firmwareVersion`, `sourceCommit`, `artifactSha256` (exact APP for a board case), `logRef`, `logSha256`, `notes` and `signature`. Attach a separate redacted observation log. For A1 and A2 cases, the Device ID must be the actual board's `ZFC-A1-` or `ZFC-A2-` identity.

@@ -25,7 +25,7 @@ static String zjPidReply(const String& requestId=""){
   ",\"diagnosticState\":"+zjJson(shadow.reason)+"}";
 }
 static bool zjPidWriteIdle(){
- return !zjMotorArmed&&!zjMotorEnabled&&!zjMotorSessionActive&&!zjRcInputArmed&&zjRcThrottle<=1050&&
+ return zjMotorOutputsDisabled()&&!zjMotorSessionActive&&!zjRcInputArmed&&zjRcThrottle<=1050&&
   !zjNetTesting&&!zjUsbScanning&&!zjOtaAuthorized&&!zjSecureOtaActive&&!zjOtaRebootAt&&
   !zjMaintenanceActive&&!zjHandoverPending&&!zjImuMaintenanceBusy();
 }

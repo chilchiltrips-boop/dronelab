@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.17";
+constexpr const char* FW_VERSION="1.7.18";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
@@ -275,6 +275,7 @@ static String zjControlTimingStatus(){
   ",\"imuReadMaxUs\":"+String(shadow.imuReadMaxUs)+",\"pidComputeMaxUs\":"+String(shadow.computeMaxUs)+
   ",\"motorUpdateMaxUs\":"+String(zjMotorUpdateMaxUs.load(std::memory_order_relaxed))+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
   ",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
+  ",\"rateCheckActive\":"+(shadow.rateCheckActive?"true":"false")+
   ",\"flightDeadlineFault\":"+(shadow.deadlineFault?"true":"false")+
   ",\"controlMaxIntervalAtUs\":"+String(c.maxIntervalAtUs)+",\"ratePidShadowState\":\""+shadow.reason+
   "\",\"ratePidShadowRevision\":"+String(shadow.revision)+",\"ratePidShadowSaturated\":"+(shadow.mix.saturated?"true":"false");
@@ -448,7 +449,7 @@ void emitTelemetry(unsigned long now){
   Serial.print(",P=");Serial.print(fresh?zjRcPitch:1500);
   Serial.print(",Y=");Serial.print(fresh?zjRcYaw:1500);
   Serial.print(",INPUT_ARMED=");Serial.print(fresh&&zjRcInputArmed?1:0);
-  Serial.print(zjMotorEnabled?",MOTORS=ACTIVE":",MOTORS=OFF");
+  Serial.print(zjMotorOutputsDisabled()?",MOTORS=OFF":",MOTORS=ACTIVE");
  }
  Serial.println();zjTelemetryRate.event(micros());
 }
@@ -522,7 +523,7 @@ void loop(){
    zjKitId.c_str(),zjSavedFlightMode.c_str(),zjFlightMode.c_str(),zjFlightModePending?zjSavedFlightMode.c_str():"none",
    zjRcThrottle,zjRcRoll,zjRcPitch,zjRcYaw,zjRcCh5,zjRcCh6,unsigned(ledMode),
    (unsigned long)zjRcSeq,(unsigned long)(zjRcSeq?uint32_t(millis()-zjRcLast):0),(unsigned long)zjRcAccepted,(unsigned long)zjRcRejected,
-   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U,zjMotorEnabled?1U:0U,zjMotorArmed?1U:0U);
+   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U,zjMotorOutputsDisabled()?0U:1U,zjMotorArmed?1U:0U);
  }
  // Legacy ZJGYRO duplicates are disabled.
  static uint32_t lastAccess=0;

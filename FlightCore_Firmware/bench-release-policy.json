@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.17",
+  "candidateVersion": "1.7.18",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",

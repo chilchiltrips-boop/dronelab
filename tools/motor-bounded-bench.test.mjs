@@ -16,6 +16,8 @@ test('production hardware watchdog enforces absolute manual deadlines during a s
 #include <iostream>
 #include <algorithm>
 #include <atomic>
+using String=std::string;
+#include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreMotorStatus.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreEscProfile.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreFlightOutput.h'))}
 #include ${JSON.stringify(resolve('FlightCore_Firmware/FlightCoreMotorConfig.h'))}
@@ -26,7 +28,7 @@ static void zjAutoEscTick(uint32_t){assert(false);}
 using portMUX_TYPE=int;using esp_timer_handle_t=void*;using ledc_channel_t=int;
 #define portMUX_INITIALIZER_UNLOCKED 0
 static void portENTER_CRITICAL(int*){}static void portEXIT_CRITICAL(int*){}
-static uint32_t clockMs=0;static std::atomic<uint32_t> zjMotorUpdateMaxUs{0};static uint32_t millis(){return clockMs;}
+static uint32_t clockMs=0;static uint32_t millis(){return clockMs;}
 static uint32_t micros(){return clockMs*1000;}
 constexpr int LEDC_LOW_SPEED_MODE=0,ESP_OK=0;
 static uint32_t duties[4];
@@ -37,7 +39,7 @@ ${watch}
 static ZjMotorSafety zjMotor;
 struct Mapping {uint16_t physicalPulse(int n,const uint16_t* p) const{return p[n];}} zjMotorConfig,zjWizardBenchConfig;
 static bool zjWizardBench=false,zjWizardCalSlider=false;
-static bool zjMotorDriverReady=true,zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false,zjMotorInputTest=false;
+static bool zjMotorDriverReady=true;
 static std::string zjMotorToken,zjMotorOwner;
 ${apply}
 static void begin(){zjMotor.disable();zjMotorWatchTripped=false;assert(zjMotor.prepare(clockMs,true,true,true));zjMotorApply();}

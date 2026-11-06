@@ -99,18 +99,21 @@ static bool zjFlightSerialCommand(char* line){
  if(trace&&action=="READ"){
   const String capture=strtok_r(nullptr,",",&rest),offset=strtok_r(nullptr,",",&rest);
   error=strtok_r(nullptr,",",&rest)?"INVALID_TRACE_REQUEST":zjFlightTracePage(boot,capture,offset,ZJ_TRACE_USB_PAGE,reply);
- }else if(!trace&&action=="ARM"){
+ }else if(!trace&&(action=="ARM"||action=="RATE_CHECK")){
   static uint32_t lastArmNonce=0;
+  const bool rateCheck=action=="RATE_CHECK";
   uint32_t nonce=0;
   const String value=strtok_r(nullptr,",",&rest);
+  const String confirmation=rateCheck?String(strtok_r(nullptr,",",&rest)):String("");
   if(!zjAdminAuthorized())error="ADMIN_LOCKED";
   else if(boot!=zjBootId)error="BOOT_CHANGED";
   else if(strtok_r(nullptr,",",&rest)||!zjPidUnsigned(value,UINT32_MAX,nonce)||nonce<=lastArmNonce)error="INVALID_OR_REPLAYED_ARM";
+  else if(rateCheck&&confirmation!="PROPS_REMOVED")error="CONFIRM_PROPS_REMOVED";
   else{
    lastArmNonce=nonce;
-   const auto fault=zjControlArmFlight();
+   const auto fault=zjControlArmRateOutput(rateCheck);
    if(fault!=ZjFlightFault::NONE)error=zjFlightFaultName(fault);
-   else reply="ARMED";
+   else reply=rateCheck?"RATE_CHECK_ACTIVE":"ARMED";
   }
  }else error="UNSUPPORTED_ACTION";
  Serial.print(trace?"ZJTRACE,":"ZJFLIGHT,");

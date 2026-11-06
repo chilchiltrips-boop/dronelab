@@ -21,8 +21,9 @@ test('timer callbacks notify workers; the tick uses only the fenced flight drive
  assert.match(tick,/zjFlightLowThrottle[\s\S]*LOW_THROTTLE[\s\S]*zjStepRatePid/);
  assert.match(tick,/zjFlightTrace.freeze\(trace,zjTraceTerminalEvent\(fault\),fault\)/);
  const motor=readFileSync('FlightCore_Firmware/FlightCoreMotor.h','utf8');
- assert.match(motor,/ZJ_FLIGHT_HARDWARE_QUALIFIED&&lease&&zjFlightDriver.lease==lease/);
- assert.match(motor,/zjFlightDriverAtUs\)>=ZJ_FLIGHT_OUTPUT_LEASE_US\)[\s\S]*?zjFlightDriverStopLocked\(ZjFlightFault::DEADLINE_MISSED\)/);
+ assert.match(motor,/lease&&zjFlightDriver.lease==lease&&\(ZJ_FLIGHT_HARDWARE_QUALIFIED\|\|rateCheck\)/);
+ assert.match(motor,/zjFlightDriverAtUs\)>=ZJ_FLIGHT_OUTPUT_LEASE_US\)return ZjFlightFault::DEADLINE_MISSED/);
+ assert.match(motor,/zjFlightDriverExpiry\(micros\(\)\)[\s\S]*?zjFlightDriverStopLocked\(expiry\)/);
  assert.match(readFileSync('FlightCore_Firmware/FlightCoreFlightOutput.h','utf8'),/ZJ_FLIGHT_HARDWARE_QUALIFIED=false/);
  assert.match(tick,/ulTaskNotifyTake\(pdTRUE/);assert.match(runtime,/skip_unhandled_events=true/);
  assert.match(runtime,/xSemaphoreTake\(zjI2cMutex,0\)/);

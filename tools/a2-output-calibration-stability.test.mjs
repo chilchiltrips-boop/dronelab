@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {a2MotorFixture} from './a2-motor-host-fixture.mjs';
@@ -84,5 +84,108 @@ int main(){
   assert.equal(compile.status,0,compile.stderr);
   const result=spawnSync(bin,[],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
   assert.match(result.stdout,/PASS calibration slide lease/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('A2 Rate Check uses the authorized bounded PWM driver and STOP reports an unverified output',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'a2-rate-check-'));
+ try{
+  const runtime=readFileSync('FlightCore_Firmware/FlightCoreControlRuntime.h','utf8');
+  const arm=runtime.slice(runtime.indexOf('static ZjFlightFault zjControlReleaseReason('),runtime.indexOf('static ZjRateTraceEvent zjTraceTerminalEvent('));
+  const api=readFileSync('FlightCore_Firmware/FlightCoreRateTraceApi.h','utf8');
+  const serial=api.slice(api.indexOf('static bool zjFlightSerialCommand('));
+  const code=a2MotorFixture(dir)+String.raw`
+#include "FlightCoreTiming.h"
+#include "FlightCorePidSettings.h"
+#include "FlightCoreRateTrace.h"
+static portMUX_TYPE zjTimingMux=0;
+static ZjControlScheduler zjControl;
+static ZjFlightOutputGate zjFlightOutputGate;
+static ZjFlightConditions preflight,zjFlightPolicy;
+static ZjRateTrace zjFlightTrace;
+static ZjFlightFault zjTracePendingFault=ZjFlightFault::NONE;
+static FlightReceiverSnapshot zjTraceFaultInput;
+static uint32_t zjFlightLease=0,zjFlightRevokeEpoch=0,zjFlightArmAt=0,zjTraceFaultAt=0;
+static bool zjFlightRateCheck=false,zjShadowRequested=false,zjControlRuntimeReady=true;
+static constexpr uint32_t ZJ_PPM_LOST_MS=150;
+static struct {bool gyroReady=true;ZjSampleStamp sample;} zjImuMailbox;
+static ZjFlightConditions zjFlightMainConditions(){return preflight;}
+static constexpr unsigned ZJ_TRACE_USB_PAGE=4;
+static const char* zjFlightTracePage(const String&,const String&,const String&,unsigned,String&){return "UNSUPPORTED";}
+`+arm+serial+String.raw`
+static bool has(const String& value,const char* expected){return strstr(value.c_str(),expected);}
+static void request(const char* line,const char* expected){
+ char command[128];snprintf(command,sizeof(command),"%s",line);
+ Serial.output.clear();assert(zjFlightSerialCommand(command));
+ assert(Serial.output.find(expected)!=std::string::npos);
+}
+static void fresh(){
+ preflight.input.receivedAtMs=clockMs;
+ zjImuMailbox.sample.accept(micros());zjControl.start(micros()-8000);
+ assert(zjControl.begin(micros()-4000));zjControl.finish(micros()-3900);
+ assert(zjControl.begin(micros()));zjControl.finish(micros());
+}
+static void allOff(){
+ for(auto value:duty)assert(!value);
+ assert(zjFlightDriverRead().offAck);
+}
+int main(){
+ clockMs=1000;zjKitId="ZFC-A2-012345ABCDEF";zjMotorSetup();Serial.capture=true;
+ zjFlightRevokeHandler=zjControlRevoke;
+ assert(!zjRateCheckWiringReady()&&!zjFlightDriverClaim(1,true));
+ auto saved=zjWizardSaved;
+ assert(saved.motor.decode("X:2103:0101:0:0:0:0")&&zjPersistWizard(saved));
+ preflight.acro=preflight.wiringVerified=preflight.driverReady=true;
+ auto& input=preflight.input;
+ input.source=ZjReceiverSource::PPM;input.valid=input.selected=input.inputArmed=true;
+ input.sequence=input.generation=1;input.availableMask=15;fresh();
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,1,PROPS_REMOVED","ADMIN_LOCKED");
+ zjAdminUnlocked=true;zjAdminUnlockAt=clockMs;
+ request("ZJFLIGHT,ARM,ZFC-A2-012345ABCDEF,req,boot-1,1","UNQUALIFIED");
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,oldboot,2,PROPS_REMOVED","BOOT_CHANGED");
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,2","CONFIRM_PROPS_REMOVED");
+ input.channels[2]=1100;
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,2,PROPS_REMOVED","THROTTLE_HIGH");
+ input.channels[2]=1000;input.source=ZjReceiverSource::WEB;
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,3,PROPS_REMOVED","SOURCE_UNSUPPORTED");
+ input.source=ZjReceiverSource::PPM;
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,4,PROPS_REMOVED","RATE_CHECK_ACTIVE");
+ request("ZJFLIGHT,RATE_CHECK,ZFC-A2-012345ABCDEF,req,boot-1,4,PROPS_REMOVED","INVALID_OR_REPLAYED_ARM");
+ const auto lease=zjFlightLease;
+ const auto mix=zjRateMixQuadX(1150,80,0,0,ZJ_RATE_CHECK_MAX_PULSE_US);
+ assert(mix.pulse[0]==1070&&mix.pulse[1]==1200&&mix.clipMask==6);
+ uint16_t pulse[4];for(unsigned n=0;n<4;n++)pulse[n]=mix.pulse[n];
+ auto result=zjFlightDriverSubmit(lease,pulse,micros()+4000);
+ assert(result.rateCheck()&&result.appliedKnown&&result.applied[1]==1200);
+ for(unsigned n=0;n<4;n++)assert(duty[n]==ZJ_ESC_PROFILE.duty(zjMotorConfig.physicalPulse(n,pulse)));
+ failStop=true;
+ assert(has(zjMotorCommand("STOP","USB","","-","-","-",true),"output_off_unverified"));
+ assert(!zjFlightLease&&!zjMotorOutputsDisabled()&&!zjFlightDriverRead().offAck);
+ assert(has(zjMotorStatus(),"\"motorsDisabled\":false"));
+ assert(!zjFlightDriverClaim(101,true));
+ assert(!zjFlightDriverSubmit(lease,pulse,micros()+4000).lease);
+ failStop=false;
+ assert(has(zjMotorCommand("STOP","USB","","-","-","-",true),"\"motorsDisabled\":true"));allOff();
+
+ assert(zjFlightDriverClaim(102,true));
+ for(unsigned n=0;n<1250;n++){
+  result=zjFlightDriverSubmit(102,pulse,micros()+4000);assert(result.rateCheck());clockMs+=4;
+ }
+ zjMotorWatch(nullptr);allOff();
+ assert(zjFlightDriverRead().fault==ZjFlightFault::RATE_CHECK_COMPLETE);zjMotorLoop();
+ assert(zjFlightDriverClaim(103,true));
+ pulse[0]=1201;result=zjFlightDriverSubmit(103,pulse,micros()+4000);
+ assert(!result.lease&&result.fault==ZjFlightFault::OUTPUT_ERROR);allOff();zjMotorLoop();
+ assert(zjFlightDriverClaim(104,true));
+ clockMs+=8;zjMotorWatch(nullptr);allOff();
+ assert(zjFlightDriverRead().fault==ZjFlightFault::DEADLINE_MISSED);
+ std::cout<<"PASS bounded A2 Rate Check and authoritative STOP";
+}
+`;
+  const file=join(dir,'rate-check.cpp'),bin=join(dir,'rate-check');writeFileSync(file,code);
+  const compile=spawnSync('g++',['-std=c++17','-I'+resolve('FlightCore_Firmware'),'-I'+resolve('tools'),'-I'+resolve('tools/host-stubs'),'-I'+dir,file,'-lcrypto','-o',bin],{encoding:'utf8'});
+  assert.equal(compile.status,0,compile.stderr);
+  const result=spawnSync(bin,[],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);
+  assert.match(result.stdout,/PASS bounded A2 Rate Check and authoritative STOP/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
