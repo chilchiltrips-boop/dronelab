@@ -67,7 +67,7 @@ test('WebApp only transforms display; raw telemetry, Web Serial event, plotter, 
  assert.match(html,/id="fwSerialRawFrames"/);
  assert.match(html,/Motor output status is reported separately by firmware/);
  assert.match(sw,/serial-readable-monitor\.js\?v=usb-rc-shared-20261017/);
- assert.match(sw,/firmware-updater\.js\?v=a2-bench-1719-arm-failsafe-20261107/);
+ assert.match(sw,/firmware-updater\.js\?v=a2-bench-1719-ppm-ota-maintenance-20261107/);
 });
 
 test('new native combined frame retains gyro and joystick values as one serial line',async()=>{
