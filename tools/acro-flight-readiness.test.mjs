@@ -90,7 +90,7 @@ test('Firmware and WebApp expose read-only Acro readiness while preserving actua
  assert.match(markup,/fwAcroFailsafe/);
  assert.match(markup,/fwAcroLoop/);
  assert.match(markup,/Advanced Acro diagnostics/);
- assert.match(fw,/ppmFresh=data\.inputSource/);
+ assert.match(fw,/ppmSelected=data\.inputSource/);
  assert.match(fw,/controlMissedTicks/);
  assert.match(fw,/ZebjusKits\.request\('\/api\/flight\/readiness'/);
  assert.doesNotMatch(fw,/writePythonSerialLine\('ZJFLIGHT,ARM/);
