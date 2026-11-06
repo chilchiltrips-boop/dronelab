@@ -125,6 +125,10 @@ function networkFlashReadiness(){
   return{ready:false,message:'Connect and verify the kit over STA or AP for APP OTA. USB uses the separate Flash over USB button.'};
  if(device.otaAuthorized!==true)return{ready:false,message:'Pair this browser once over physical USB, reconnect the same kit, then click Authorize control & updates. Observer/setup access alone cannot update firmware.'};
  if(device.transport==='ap'&&/^1\.[0-3]\.|^1\.4\.[0-4]$/.test(device.version||''))return{ready:false,message:'AP OTA requires FlightCore 1.4.5 or later. Install it using STA OTA or USB FACTORY first.'};
+ if(device.motorsArmed!==false||device.motorsDisabled!==true)
+  return{ready:false,message:'Firmware must confirm all motor outputs OFF and motors DISARMED before Wi-Fi OTA.'};
+ if(device.rc?.inputArmed===true)
+  return{ready:false,message:'Disarm the selected controller before Wi-Fi OTA.'};
  if(device.working)return{ready:false,message:'An existing Kit operation must finish before OTA.'};
  if(device.owner)return{ready:false,message:'This browser owns WebApp RC. Use Release WebApp RC in Overview, then retry OTA.'};
  const ppmMaintenance=ppmOtaMaintenanceReadiness(device);
