@@ -12,7 +12,7 @@ const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.n
 const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
 const supportedKitId=id=>typeof id==='string'&&/^ZFC-A2-[A-Fa-f0-9]{12}$/.test(id);
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
- version:'',imu:null,imuObservedAt:0,imuSampleObservedAt:0,imuSampleAgeAtObservationMs:null,imuTimingObservedAt:0,imuGeneration:0,flightMode:null,flightModeState:null,rc:null,telemetryRc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
+ version:'',flightTelemetry:null,flightTelemetryVersion:0,imu:null,imuObservedAt:0,imuSampleObservedAt:0,imuSampleAgeAtObservationMs:null,imuTimingObservedAt:0,imuGeneration:0,flightMode:null,flightModeState:null,rc:null,telemetryRc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',relaySessionId:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
 let apiReady=false,sendBusy=false,pollTimer=null,rcTimer=null,logs=[],adminPending=false,serialClaims=[];
 const usbCandidate={};let usbMonitorPacketAt=0;let wifiTesting=false,adminUnlockedUntil=0,adminEnrolled=null;
@@ -78,7 +78,7 @@ function adoptImuSample(imu,observedAt){
 }
 function adoptNetworkStatus(d){
  if(d.bootId&&d.bootId!==state.bootId)clearImuObservation();
- Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
+ Object.assign(state,{flightTelemetryVersion:d.flightTelemetryVersion===1?1:0,setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
   radioHandover:d.radioHandover?.version===1?{...d.radioHandover}:null,rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,ppm:d.ppm&&typeof d.ppm.present==='boolean'?{...d.ppm}:null,
   ppmObservedAt:Date.now(),outputObservedAt:Date.now(),flight:root.ZebjusKitAccessPolicy?.flightState?.(d.flight)||null,
   controlAuthorized:d.controlAuthorized===true||(d.controlAuthorized===undefined&&(state.transport==='ap'||!!state.key)),
@@ -433,7 +433,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
  state.connected=false;state.imu=null;state.imuObservedAt=0;state.ppm=null;state.radioHandover=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
- Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,flight:null,outputObservedAt:0,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:null});
+ Object.assign(state,{flightTelemetry:null,flightTelemetryVersion:0,setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,flight:null,outputObservedAt:0,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:null});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
 function waitSerial(pattern,timeout=2300){
@@ -717,11 +717,51 @@ function read(){
  if(statusPending)return statusPending;
  statusPending=readStatus().finally(()=>{statusPending=null});return statusPending;
 }
-let nextFlightDataReadAt=0;
+let nextFlightDataReadAt=0,flightTelemetryPending=false;
+async function readFlightTelemetry(){
+ const binding={kitId:state.kitId,bootId:state.bootId,transport:state.transport,connectionGeneration:reconnectTicket};
+ const current=()=>binding.kitId===state.kitId&&binding.bootId===state.bootId&&binding.transport===state.transport&&binding.connectionGeneration===reconnectTicket;
+ const started=Date.now();flightTelemetryPending=true;
+ try{
+  let data;
+  if(binding.transport==='usb'){
+   const token='fd'+started.toString(36),prefix='ZJFD,ACK,'+binding.kitId+','+token+',';
+   const reply=waitSerial(new RegExp('^'+prefix),900);reply.catch(()=>{});
+   await usbWrite('ZJFD,GET,'+binding.kitId+','+token);
+   const line=await reply;data=JSON.parse(line.slice(prefix.length));
+  }else data=await deviceRequest('/api/flight/telemetry','GET',{},()=>{if(!current())throw Error('Telemetry connection changed');});
+  if(!current())return;
+  if(binding.transport==='usb'&&/^[a-f0-9]{32}$/i.test(data?.bootId||'')&&data.kitId===binding.kitId){
+   // Token + current USB connection bind the first boot observation. A changed
+   // boot invalidates every queued control operation before adopting telemetry.
+   if(binding.bootId&&binding.bootId!==data.bootId){
+    advanceConnectionGeneration();++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId='';
+    state.flightTelemetry=null;clearImuObservation();lastRecoveryReason='BOOT_CHANGED';
+   }
+   state.bootId=binding.bootId=data.bootId;binding.connectionGeneration=reconnectTicket;
+  }
+  const now=Date.now();
+  const observation=root.ZebjusFlightTelemetry?.normalize(data,binding,state.flightTelemetry,now,now-started);
+  if(!observation)throw Error('Invalid FlightCore telemetry');
+  state.flightTelemetry=observation;
+  root.dispatchEvent(new CustomEvent('dronelab:flight-telemetry'));
+ }catch{nextFlightDataReadAt=Date.now()+1500}
+ finally{flightTelemetryPending=false;}
+}
+
 async function observeFlightData(){
- // Share the authenticated status read with the regular heartbeat. Extra
- // observations are only for the visible, disarmed bench display.
+ // Visible Flight Data uses compact authenticated observations on capable FCs.
+ // Older firmware retains its disarmed-only full-status preview.
  const now=Date.now();
+ const compact=state.flightTelemetryVersion===1||state.transport==='usb'&&/^1\.7\.(2[1-9]|[3-9]\d)$/.test(state.version);
+ if(compact){
+  if(document.hidden||!$('tab-telemetry')?.classList.contains('active')||!linkFresh()||
+    !['usb','ap','sta'].includes(state.transport)||state.working||headerModePending||otaActive||wifiTesting||accessBusy||
+    motorTrafficBusy()||flightTelemetryPending||statusPending||now<nextFlightDataReadAt||
+    (requestScheduler?.metrics?.().requestQueueDepth||0)>0)return;
+  nextFlightDataReadAt=now+100;
+  return readFlightTelemetry();
+ }
  if(document.hidden||!$('tab-telemetry')?.classList.contains('active')||
     !linkFresh()||state.linkState!=='connected'||state.board!=='ZFC-A2'||!['ap','sta'].includes(state.transport)||
     state.working||headerModePending||otaActive||wifiTesting||accessBusy||motorTrafficBusy()||
@@ -2490,7 +2530,7 @@ root.ZebjusKits={
  connect,disconnect,read,observeFlightData,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  setFlightMode,pidExchange,openFlightTraceReader,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
- getState:()=>({requestQueue:requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,ppmObservedAt:state.ppmObservedAt||0,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
+ getState:()=>({flightTelemetry:state.flightTelemetry,flightTelemetryVersion:state.flightTelemetryVersion,requestQueue:requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,ppmObservedAt:state.ppmObservedAt||0,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   networkBusy:!!(wifiTesting||headerModePending),authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
   kitName:state.kitName,board:state.board,imu:linkFresh()&&state.imu?{...state.imu,
    corrected:state.imu.corrected?.slice(),accelG:state.imu.accelG?.slice(),raw:state.imu.raw?.slice(),

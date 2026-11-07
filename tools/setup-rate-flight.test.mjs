@@ -16,6 +16,7 @@ test('real A2 control worker drives Rate PWM only after setup and one fresh ARM;
   const code='#define ZJ_A2_EXPERIMENTAL_RATE_FLIGHT 1\n'+a2MotorFixture(dir)+String.raw`
 #include "FlightCoreTiming.h"
 #include "FlightCoreRateTrace.h"
+#include "FlightCoreAttitude.h"
 #include <functional>
 constexpr uint32_t ZJ_PPM_LOST_MS=150,portMAX_DELAY=0xffffffff;
 constexpr bool pdTRUE=true;
@@ -23,6 +24,7 @@ static ZjControlScheduler zjControl;
 static int zjTimingMux=0;
 static ZjRateGains zjShadowGains[ZJ_PID_GAIN_COUNT/3];
 static uint32_t zjShadowRevision=1,zjShadowGeneration=1,zjFlightRevokeEpoch=1,zjFlightLease=0,zjFlightArmAt=0,zjShadowInputArmEpoch=1;
+static uint32_t zjImuModelGeneration=0;
 static uint8_t zjShadowProfile=0;
 static bool zjShadowAngle=false,zjShadowPlus=false,zjShadowPreview=false,zjShadowRequested=true;
 static ZjFlightConditions zjFlightPolicy;
@@ -33,10 +35,11 @@ static ZjRateTrace zjFlightTrace;
 static ZjFlightFault zjTracePendingFault=ZjFlightFault::NONE;
 static uint32_t zjTraceFaultAt=0;
 static FlightReceiverSnapshot zjTraceFaultInput;
-static struct {ZjSampleStamp sample;bool gyroReady=true;uint32_t gyroMaxReadUs=100;
+static struct {ZjSampleStamp sample;bool gyroReady=true;uint32_t gyroMaxReadUs=100,maintenanceSequence=0;
  float RateRoll=0,RatePitch=0,RateYaw=0,accelG[3]={0,0,1};ZjAccelModel accelModel;} zjImuMailbox;
 struct End {};
 static unsigned ticks=0,limit=10;
+static bool angleMode=false;
 static std::function<void(unsigned)> inject;
 static void ulTaskNotifyTake(bool,uint32_t){
  if(ticks==limit)throw End{};
@@ -52,7 +55,8 @@ static bool has(const String& s,const char* text){return strstr(s.c_str(),text);
 static void off(){for(auto d:duty)assert(d==0);assert(zjMotorOutputsDisabled());}
 static ZjFlightConditions conditions(){
  ZjFlightConditions c;c.nowMs=clockMs;c.inputDeadlineMs=150;
- c.acro=c.imuFresh=c.timingHealthy=c.outputOffAck=true;
+ c.acro=!angleMode;c.angle=angleMode;c.attitudeReady=c.levelCalibrated=true;
+ c.imuFresh=c.timingHealthy=c.outputOffAck=true;
  c.driverReady=c.wiringVerified=true;c.setupComplete=zjWizardSetupComplete();c.pidSaved=true;
  c.escSequenceComplete=zjAutoEscStoredResult();
  c.input.source=ZjReceiverSource::PPM;c.input.valid=c.input.selected=true;c.input.availableMask=255;
@@ -61,6 +65,7 @@ static ZjFlightConditions conditions(){
 }
 int main(int argc,char** argv){
  const std::string scenario=argc>1?argv[1]:"normal";
+ angleMode=argc>2;zjShadowAngle=angleMode;zjImuMailbox.accelModel.level=true;
  static_assert(ZJ_FLIGHT_OUTPUT_ENABLED&&!ZJ_FLIGHT_HARDWARE_QUALIFIED);
  zjKitId="ZFC-A2-012345ABCDEF";clockMs=100;zjMotorSetup();off();
  auto c=conditions();c.input.inputArmed=true;
@@ -92,7 +97,7 @@ int main(int argc,char** argv){
   if(n==2){for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1000));zjFlightPolicy.input.channels[2]=1400;zjFlightPolicy.input.channels[0]=1600;}
   if(n==3){
    assert(zjRateShadow.outputAuthorized&&zjRateShadow.actuating);
-   assert(std::fabs(zjFlightTrace.last.axes[0].target-15)<.001f&&zjFlightTrace.last.axes[0].correction>0);
+   assert(std::fabs(zjFlightTrace.last.axes[0].target-(angleMode?30:15))<.001f&&zjFlightTrace.last.axes[0].correction>0);
    assert(duty[0]<duty[1]&&duty[3]<duty[2]);
    assert(zjWizardSetupComplete()); // PWM ON must not erase setup readiness
    zjMotorLoop();assert(zjFlightDriverRead().lease==zjFlightLease&&zjFlightLease!=0); // bench loop cannot steal owner
@@ -133,7 +138,7 @@ int main(int argc,char** argv){
   const file=join(dir,'worker.cpp'),bin=join(dir,'worker');writeFileSync(file,code);
   execFileSync('g++',['-std=c++17','-I'+dir,'-I'+resolve('tools'),'-I'+resolve('tools/host-stubs'),'-I'+resolve('FlightCore_Firmware'),file,'-lcrypto','-o',bin],{timeout:60000});
   for(const scenario of ['normal','stop','disarm','loss','imu','timing','source','pid','watchdog','driver']){
-   assert.match(execFileSync(bin,[scenario],{encoding:'utf8',timeout:10000}),/PASS production worker/);
+   for(const mode of [[],['angle']])assert.match(execFileSync(bin,[scenario,...mode],{encoding:'utf8',timeout:10000}),/PASS production worker/);
   }
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

@@ -22,7 +22,7 @@ test('I gain corrects more of the same persistent body torque, not acting like P
  assert.ok(Math.abs(r.results[1].metrics.integral)>Math.abs(r.results[0].metrics.integral));
 });
 test('D gain changes actual response damping',()=>{
- const r=compare('rateRoll','d',0,.2,'acro');
+ const r=simulateResponse({basePID:{...DEFAULT_PID,rateRoll:{p:1.4,i:18,d:.035}},bank:'rateRoll',gain:'d',values:[0,.2],mode:'acro',axis:'roll',duration:6});
  assert.ok(r.results[1].metrics.overshoot<r.results[0].metrics.overshoot,
  'D gain failed to change actual overshoot');
 });

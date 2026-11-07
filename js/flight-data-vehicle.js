@@ -147,7 +147,7 @@ export function createFlightDataVehicle(container) {
   function step(time) {
     animation = 0;
     if (!active()) return;
-    const progress = Math.min(1, (time - startedAt) / 200);
+    const progress = Math.min(1, (time - startedAt) / 100);
     const ease = 1 - (1 - progress) ** 3;
     for (const axis of axes) current[axis] = start[axis] + (target[axis] - start[axis]) * ease;
     draw();
@@ -159,7 +159,7 @@ export function createFlightDataVehicle(container) {
     const nextCaption = preview
       ? 'Interactive airframe preview · use the arrow buttons to orbit.'
       : live
-        ? `${tilt.stationary ? 'Stationary tilt' : 'Accel reference'} · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
+        ? `${tilt.fused ? 'FC attitude' : tilt.stationary ? 'Stationary tilt' : 'Accel reference'} · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
         : 'Reference airframe · no tilt data';
     if (caption.textContent !== nextCaption) caption.textContent = nextCaption;
     const next = { roll: live ? tilt.roll : 0, pitch: live ? tilt.pitch : 0, orbit: preview ? orbit : defaultOrbit };

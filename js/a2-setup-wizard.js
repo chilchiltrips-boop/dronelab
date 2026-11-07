@@ -72,7 +72,17 @@ if(root){
   <div class="a2-actions"><button class="btn" data-action="load-pid-profile" type="button">Load &amp; Save PID Profile</button></div>
   <p class="a2-pid-status" role="status">Provisional Rate and Angle gains · bench tuning.</p>
  </div></section>
- <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Auxiliary','Auxiliary','Auxiliary','Auxiliary'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div>
+ <section data-panel="2"><h3>Input &amp; flight mode</h3>
+ <div class="a2-flight-options">
+  <div class="a2-check-card"><label for="a2InputSource">Controller input</label>
+   <select id="a2InputSource"><option value="PPM">PPM receiver · AP / STA</option><option value="ANDROID_AP">Android joystick · AP</option><option value="WEB_STA">WebApp joystick · STA</option><option value="ANDROID_WEBRTC">Android WebRTC · STA</option></select>
+   <button class="btn" type="button" data-action="select-input">Save input source</button><p class="a2-source-status" role="status"></p>
+  </div>
+  <div class="a2-check-card"><label for="a2FlightMode">Flight mode</label>
+   <select id="a2FlightMode"><option value="acro">Acro · Rate PID</option><option value="angle">Angle · self-level + Rate PID</option></select>
+   <button class="btn" type="button" data-action="save-flight-mode">Save flight mode</button><p class="a2-flight-mode-status" role="status"></p>
+  </div>
+ </div><p>Angle requires saved Quick Level calibration with the board level and forward-facing. AP: PPM / Android AP. STA: PPM / WebApp / Android WebRTC. WebRTC is simulator-only; it cannot arm physical flight outputs. Input selection and mode saves never arm motors.</p><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Auxiliary','Auxiliary','Auxiliary','Auxiliary'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div>
  <div class="a2-check-card"><h4>PPM receiver check</h4>
   <p>Select PPM and leave outputs disarmed. Move one stick at a time. Check direction and travel near 1000–2000 µs. CH1 Roll, CH2 Pitch, and CH4 Yaw should center near 1500 µs. Return CH3 Throttle to its lowest position.</p>
   <p class="a2-ppm-mapping"></p><p class="a2-ppm-throttle"></p>
@@ -522,14 +532,14 @@ if(root){
    const flags=['flightOutputEnabled','setupComplete','pidSaved','ppmFresh','inputArmed','gyroFresh','timingHealthy',
     'outputsOffAck','benchActive','escCalibrationActive'];
    const reason=value=>typeof value==='string'&&/^[A-Z_]{1,40}$/.test(value);
-   if(data?.schema!==1||data.mode!=='ACRO_READINESS'||data.board!==k.board||data.kitId!==k.kitId||data.bootId!==bootId||
+   if(data?.schema!==1||!['ACRO_READINESS','FLIGHT_READINESS'].includes(data.mode)||data.board!==k.board||data.kitId!==k.kitId||data.bootId!==bootId||
     !flight||flight.enabled!==data.flightOutputEnabled||!flags.every(flag=>typeof data[flag]==='boolean')||
     !reason(data.blockReason)||!reason(data.softwareBlockReason)||!Number.isSafeInteger(data.setupRevision)||data.setupRevision<0||
     typeof data.firmwareVersion!=='string'||!data.firmwareVersion||k.version&&data.firmwareVersion!==k.version)
     throw Error('The A2 returned an invalid or mismatched readiness snapshot.');
    readiness={key,bootId,serialGeneration,startedAt,readAt:new Date().toISOString(),data:{
     kitId:k.kitId,bootId,firmwareVersion:data.firmwareVersion,firmwareBuiltAt:k.firmwareBuiltAt||null,
-    ...Object.fromEntries(flags.map(flag=>[flag,data[flag]])),setupRevision:data.setupRevision,
+    ...Object.fromEntries(flags.map(flag=>[flag,data[flag]])),receiverFresh:data.receiverFresh,attitudeReady:data.attitudeReady,levelCalibrated:data.levelCalibrated,flightModeState:data.flightModeState,setupRevision:data.setupRevision,
     blockReason:data.blockReason,softwareBlockReason:data.softwareBlockReason,flight,
     inputSource:['PPM','ANDROID','WEB'].includes(data.inputSource)?data.inputSource:'NONE',
     inputAgeMs:Number.isSafeInteger(data.inputAgeMs)&&data.inputAgeMs>=0?data.inputAgeMs:null,
@@ -561,15 +571,17 @@ if(root){
   const d=snapshot?.data,signal=saved?.outputSignal;
   let rows=[];
   if(d){
-   const ppm=d.ppmFresh&&d.inputSource==='PPM'&&d.inputAgeMs!==null;
+   const ppm=(d.receiverFresh??d.ppmFresh)&&d.inputSource!=='NONE'&&d.inputAgeMs!==null;
    const low=ppm&&d.throttleUs!==null&&d.throttleUs<=RATE_LOW_THROTTLE_US;
    const off=d.outputsOffAck&&!d.benchActive&&!d.escCalibrationActive&&d.flight.state!=='ARMED';
    const blocker=d.flight.authorized?d.flight.blockReason:d.blockReason;
    rows=[
-    ['Running firmware',`${d.firmwareVersion} · ${d.flightOutputEnabled?'Experimental PPM Rate':'Bench · flight output locked'}${d.firmwareBuiltAt?' · '+d.firmwareBuiltAt:''}`,'neutral'],
+    ['Running firmware',`${d.firmwareVersion} · ${d.flightOutputEnabled?'Experimental Acro / Angle':'Bench · flight output locked'}${d.firmwareBuiltAt?' · '+d.firmwareBuiltAt:''}`,'neutral'],
+    ['Flight mode',d.flightModeState?`Saved ${d.flightModeState.saved.toUpperCase()} · Active ${d.flightModeState.active.toUpperCase()}`:'Not reported','neutral'],
+    ['Angle estimator',d.attitudeReady?d.levelCalibrated?'Ready · level saved':'Ready · save Quick Level':'Not ready',d.attitudeReady&&d.levelCalibrated?'ok':'warn'],
     ['Saved setup',`${d.setupComplete?'Complete':'Incomplete'} · revision ${d.setupRevision}`,d.setupComplete?'ok':'warn'],
     ['Rate PID',d.pidSaved?'Active gains saved on FC':'Save or restore the active gains on FC',d.pidSaved?'ok':'warn'],
-    ['Receiver',ppm?`PPM fresh · ${d.inputAgeMs} ms at FC · Input ${d.inputArmed?'armed':'disarmed'}`:
+    ['Receiver',ppm?`${d.inputSource} fresh · ${d.inputAgeMs} ms at FC · Input ${d.inputArmed?'armed':'disarmed'}`:
      d.inputSource==='PPM'?'PPM not fresh':`Accepted source ${d.inputSource}`,ppm?'ok':'warn'],
     ['Throttle',ppm&&d.throttleUs!==null?`${d.throttleUs} µs · ${low?'LOW':'above '+RATE_LOW_THROTTLE_US+' µs'}`:'No verified PPM throttle',low?'ok':'warn'],
     ['IMU / scheduler',`${d.gyroFresh?'Gyro fresh':'Gyro unavailable'} · ${d.timingHealthy?'Timing healthy':'Timing not ready'}${d.controlHz!==null?' · '+d.controlHz.toFixed(1)+' Hz':''}`,
@@ -605,7 +617,30 @@ if(root){
    ['Physical acceptance','Not verified by software']
   ];
  }
+ let inputBinding="",modeObserved="",pathObserved="";
+ function renderInputOptions(){
+  const k=kit(),m=k.flightModeState,policy=window.ZebjusControlPaths;
+  const info=policy?.describe({kit:k,peer:window.ZebjusDeviceRelay?.status?.()||{},client:'web'});
+  const choice=$('#a2InputSource'),mode=$('#a2FlightMode');
+  const binding=[k.kitId,k.bootId,k.connectionGeneration].join(':');
+  if(binding!==inputBinding){inputBinding=binding;modeObserved=pathObserved='';}
+  if(m?.saved&&m.saved!==modeObserved){mode.value=modeObserved=m.saved;}
+  if(info?.selected&&info.selected!==pathObserved){choice.value=pathObserved=info.selected;}
+
+  for(const option of choice.options){
+   const state=info?.paths.find(p=>p.id===option.value);
+   option.disabled=!state?.selectable&&option.value!==info?.selected;
+  }
+  const selected=info?.paths.find(p=>p.id===choice.value);
+  $('[data-action="select-input"]').disabled=!!working||!selected?.selectable||k.rc?.inputArmed===true;
+  $('[data-action="save-flight-mode"]').disabled=!!working||!k.connected||!m||k.motorsDisabled!==true||k.rc?.inputArmed===true||
+    !(k.transport==='usb'?k.adminUnlocked:k.controlAuthorized);
+  $('.a2-source-status').textContent=(info?.selectedLabel?'FC selected: '+info.selectedLabel+'. ':'')+(selected?.reason||'Connect a verified A2.');
+  $('.a2-flight-mode-status').textContent=m?'Saved '+m.saved.toUpperCase()+' · Active '+m.active.toUpperCase()+(m.pending?' · Pending '+m.pending.toUpperCase():''):'Read a verified FC to see its saved mode.';
+  mode.disabled=!!working||!k.connected;
+ }
  function renderInputs(){
+  renderInputOptions();
   const m=state||{},input=selectedInput(),ppm=input.receiver;
   const age=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';
   const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':kit().connected?'WAITING FOR INPUT':'KIT OFFLINE';
@@ -1044,6 +1079,13 @@ if(root){
  root.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;cues.unlock();
   const action=b.dataset.action;
+  if(action==='select-input'||action==='save-flight-mode'){
+   if(working)return;
+   working=action;render();
+   const operation=action==='select-input'?window.ZebjusKits.selectControlPath($('#a2InputSource').value):window.ZebjusKits.setFlightMode($('#a2FlightMode').value);
+   Promise.resolve(operation).then(()=>message('FlightCore confirmed the saved '+(action==='select-input'?'input source':'flight mode')+'.'))
+    .catch(error=>message(error.message)).finally(()=>{working='';render();});return;
+  }
   if(action==='read-readiness'){void readFlightReadiness();return;}
   if(action==='sound'){
    cues.setEnabled(!cues.enabled);

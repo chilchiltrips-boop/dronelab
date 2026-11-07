@@ -269,3 +269,6 @@
 @media(max-width:880px){.a2-imu-offset-grid{gap:5px}.a2-imu-table{font-size:11px}.a2-imu-table th,.a2-imu-table td{padding:6px 2px}}
 @media(max-width:760px){#a2SetupRoot[data-step="3"] .a2-visual{min-height:0}.a2-imu-stage{height:185px}.a2-imu-chart svg{height:130px!important}}
 @media(prefers-reduced-motion:reduce){.a2-imu-cube{transition:none}}
+
+/* Input and mode remain in the existing Inputs step. */
+.a2-flight-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.a2-flight-options .a2-check-card{display:grid;gap:10px;align-content:start}.a2-flight-options select{width:100%;min-width:0}.a2-flight-options p{margin:0;overflow-wrap:anywhere}@media(max-width:680px){.a2-flight-options{grid-template-columns:1fr}}

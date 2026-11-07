@@ -2,9 +2,9 @@
 // then regenerate FlightCorePidProfiles.h with node tools/sync-pid-profiles.mjs.
 export const PID_BANKS=Object.freeze(['rateRoll','ratePitch','rateYaw','angleRoll','anglePitch']);
 const baseline=Object.freeze({
- rateRoll:Object.freeze({p:1.4,i:18,d:.035}),
- ratePitch:Object.freeze({p:1.4,i:18,d:.035}),
- rateYaw:Object.freeze({p:3,i:20,d:0}),
+ rateRoll:Object.freeze({p:.9,i:15,d:.03}),
+ ratePitch:Object.freeze({p:.9,i:15,d:.03}),
+ rateYaw:Object.freeze({p:3,i:15,d:0}),
  angleRoll:Object.freeze({p:3,i:0,d:0}),
  anglePitch:Object.freeze({p:3,i:0,d:0})
 });

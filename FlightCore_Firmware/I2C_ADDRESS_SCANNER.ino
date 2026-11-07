@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.20";
+constexpr const char* FW_VERSION="1.7.21";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr const char* ZJ_OUTPUT_BUILD=ZJ_FLIGHT_OUTPUT_ENABLED?"ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL":"ZJ_OUTPUT=BENCH_DIAGNOSTIC";
@@ -414,6 +414,7 @@ static bool zjAccessStationary(){
  return uint32_t(now-zjStationarySince)>=500;
 }
 static String zjFlightStatusJson();
+static String zjFlightTelemetryJson();
 static String zjFlightReadinessJson(); // read-only A2 snapshot; no flight ARM or PWM operation
 #include "FlightCoreNetwork.h"
 static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
@@ -461,7 +462,12 @@ void emitTelemetry(unsigned long now){
 static ZjFlightConditions zjFlightMainConditions(){
  ZjFlightConditions conditions;
  conditions.input=zjRcReceiver();
- conditions.acro=zjFlightMode=="acro";
+ conditions.acro=zjFlightMode=="acro";conditions.angle=zjFlightMode=="angle";
+ const auto attitude=zjReadRateShadow().attitude;
+ conditions.attitudeReady=attitude.valid&&uint32_t(micros()-attitude.atUs)<=12000;
+ conditions.levelCalibrated=attitude.levelCalibrated;
+ conditions.localController=zjRcNetwork&&((zjRcControlPath=="ANDROID_AP"&&String(zjRcTransport)=="AP"&&zjRcSource=="ANDROID")||
+  (zjRcControlPath=="WEB_STA"&&String(zjRcTransport)=="STA"&&zjRcSource=="WEB"));
  const bool flight=zjFlightDriverRead().lease!=0;
  conditions.escCalibration=!zjAutoEscFinalized||zjAutoEscRecord.state==ZjAutoEscRecord::PENDING||
   zjAutoEscRecord.state==ZjAutoEscRecord::RUNNING||zjMotor.mode==ZjMotorSafety::CAL_HIGH||zjMotor.mode==ZjMotorSafety::CAL_LOW;
@@ -488,7 +494,7 @@ static ZjFlightConditions zjFlightObservedConditions(){
  auto c=zjFlightMainConditions();
  const auto imu=zjReadImu(millis());const auto control=zjReadControl();
  const auto driver=zjFlightDriverRead();const uint32_t at=micros();
- c.nowMs=millis();c.inputDeadlineMs=ZJ_PPM_LOST_MS;
+ c.nowMs=millis();c.inputDeadlineMs=c.input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
  c.imuFresh=imu.gyroReady&&imu.sample.fresh(at,12000)&&
   std::isfinite(imu.RateRoll)&&std::isfinite(imu.RatePitch)&&std::isfinite(imu.RateYaw);
  c.timingHealthy=zjControlRuntimeReady&&control.healthy(at)&&control.intervalUs>=1000&&control.intervalUs<=8000;
@@ -508,7 +514,7 @@ static String zjFlightStatusJson(){
  const bool ready=preflight.arm(c,ZJ_FLIGHT_OUTPUT_ENABLED,true);
  const auto block=authorized?ZjFlightFault::NONE:preflight.reason;
  return String("{\"version\":1,\"enabled\":")+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+
-  ",\"qualified\":false,\"physicalAcceptance\":\"NOT_RUN\",\"inputScope\":\"PPM_RATE\""+
+  ",\"qualified\":false,\"physicalAcceptance\":\"NOT_RUN\",\"inputScope\":\"LOCAL_ACRO_ANGLE\""+
   ",\"setupComplete\":"+(c.setupComplete?"true":"false")+",\"pidSaved\":"+(c.pidSaved?"true":"false")+
   ",\"authorized\":"+(authorized?"true":"false")+",\"canArm\":"+(!authorized&&ready?"true":"false")+
   ",\"state\":"+zjJson(authorized?"ARMED":state==ZjFlightState::FAILSAFE?"FAILSAFE":"DISARMED")+
@@ -523,7 +529,7 @@ static String zjFlightReadinessJson(){
  const auto shadow=zjReadRateShadow();
  const auto driver=zjFlightDriverRead();
  const uint32_t at=micros();
- const bool receiverFresh=c.input.source==ZjReceiverSource::PPM&&c.input.fresh(c.nowMs,ZJ_PPM_LOST_MS);
+ const bool receiverFresh=c.input.fresh(c.nowMs,c.inputDeadlineMs);
  // Evaluate each software precondition without claiming hardware qualification.
  // This is a checklist; a green software check is NEVER physical-flight approval.
  auto prearm=c;prearm.input.inputArmed=true;
@@ -547,7 +553,7 @@ static String zjFlightReadinessJson(){
  }
  String out;
  out.reserve(980);
- out=String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"kitId\":")+zjJson(zjKitId)+
+ out=String("{\"schema\":1,\"mode\":\"FLIGHT_READINESS\",\"kitId\":")+zjJson(zjKitId)+
   ",\"bootId\":"+zjJson(zjBootId)+",\"firmwareVersion\":"+zjJson(FW_VERSION)+
   ",\"board\":"+zjJson(FC_BOARD)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
   ",\"flightOutputEnabled\":"+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+",\"flight\":"+zjFlightStatusJson()+
@@ -556,9 +562,12 @@ static String zjFlightReadinessJson(){
   ",\"controlActuating\":"+(shadow.actuating?"true":"false")+
   ",\"blockReason\":"+zjJson(ZJ_FLIGHT_OUTPUT_ENABLED?softwareBlock:"UNQUALIFIED")+
   ",\"softwareBlockReason\":"+zjJson(softwareBlock)+
+  ",\"flightModeState\":"+zjFlightModeState()+",\"attitudeReady\":"+(c.attitudeReady?"true":"false")+
+  ",\"levelCalibrated\":"+(c.levelCalibrated?"true":"false")+
   ",\"acroSelected\":"+(c.acro?"true":"false")+
   ",\"inputArmed\":"+(c.input.inputArmed?"true":"false")+
-  ",\"ppmFresh\":"+(receiverFresh?"true":"false")+
+  ",\"receiverFresh\":"+(receiverFresh?"true":"false")+
+  ",\"ppmFresh\":"+(receiverFresh&&c.input.source==ZjReceiverSource::PPM?"true":"false")+
   ",\"gyroFresh\":"+(gyroFresh?"true":"false")+
   ",\"wiringVerified\":"+(c.wiringVerified?"true":"false")+
   ",\"escOperatorConfirmed\":"+(c.escOperatorConfirmed?"true":"false")+
@@ -602,10 +611,46 @@ static String zjFlightReadinessJson(){
 #else
 static String zjFlightStatusJson(){return "{\"version\":1,\"enabled\":false,\"qualified\":false,\"authorized\":false,\"canArm\":false,\"state\":\"DISARMED\",\"blockReason\":\"UNSUPPORTED_A2_ONLY\"}";}
 static String zjFlightReadinessJson(){
- return String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"board\":")+zjJson(FC_BOARD)+
+ return String("{\"schema\":1,\"mode\":\"FLIGHT_READINESS\",\"board\":")+zjJson(FC_BOARD)+
   ",\"flightQualified\":false,\"canArm\":false,\"blockReason\":\"UNSUPPORTED_A2_ONLY\"}";
 }
 #endif
+// Compact observation built outside the control/IMU workers. It never renews RC
+// ownership, updates sample freshness, reserves an output, or writes flash.
+static String zjFlightTelemetryJson(){
+#if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
+ auto sample=zjReadRateShadow();const auto control=zjReadControl();
+ const auto driver=zjFlightDriverRead();const uint32_t at=micros();
+ portENTER_CRITICAL(&zjTimingMux);
+ const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reason;
+ portEXIT_CRITICAL(&zjTimingMux);
+ const uint32_t age=uint32_t(at-sample.sampleAtUs);
+ // Invalid sensor numbers must not prevent delivery of a failsafe observation.
+ for(unsigned n=0;n<3;n++){
+  if(!std::isfinite(sample.rates[n])){sample.rates[n]=0;sample.sampleValid=false;}
+  if(!std::isfinite(sample.gravity[n])){sample.gravity[n]=0;sample.sampleValid=false;sample.attitude.valid=false;}
+ }
+ String out;out.reserve(900);
+ out=String("{\"version\":1,\"kitId\":")+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
+  ",\"sequence\":"+String(control.ticks)+",\"sampleSequence\":"+String(sample.sampleSequence)+
+  ",\"atUs\":"+String(at)+",\"ageUs\":"+String(age)+",\"valid\":"+(sample.sampleValid&&age<=12000?"true":"false")+
+  ",\"rates\":"+zjImuVector(sample.rates)+",\"gravity\":"+zjImuVector(sample.gravity)+
+  ",\"attitude\":["+String(sample.attitude.roll,3)+","+String(sample.attitude.pitch,3)+"]"+
+  ",\"attitudeValid\":"+(sample.attitude.valid&&uint32_t(at-sample.attitude.atUs)<=12000?"true":"false")+
+  ",\"levelCalibrated\":"+(sample.attitude.levelCalibrated?"true":"false")+
+  ",\"accelUsed\":"+(sample.attitude.accelUsed?"true":"false")+
+  ",\"flightModeState\":"+zjFlightModeState()+",\"owner\":"+String(unsigned(driver.owner))+
+  ",\"offAck\":"+(driver.offAck?"true":"false")+",\"authorized\":"+(driver.lease&&state==ZjFlightState::ARMED?"true":"false")+
+  ",\"state\":"+zjJson(state==ZjFlightState::ARMED?"ARMED":state==ZjFlightState::FAILSAFE?"FAILSAFE":"DISARMED")+
+  ",\"reason\":"+zjJson(zjFlightFaultName(reason))+",\"applied\":[";
+ for(unsigned n=0;n<4;n++){if(n)out+=',';out+=driver.appliedKnown?String(driver.applied[n]):String("null");}
+ out+="],\"dtUs\":"+String(control.intervalUs)+",\"measuredHz\":"+String(control.rate.known?control.rate.actual(at):0,1)+
+  ",\"missedTicks\":"+String(control.missedTicks)+",\"deadlineFault\":"+(sample.deadlineFault?"true":"false")+"}";
+ return out;
+#else
+ return "{\"version\":0,\"error\":\"UNSUPPORTED\"}";
+#endif
+}
 // Network code can access verified scanner/gyro state and existing serial commands.
 void setup(){
  Serial.begin(115200);

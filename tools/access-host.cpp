@@ -3,6 +3,9 @@
 #include "ppm-host.cpp"
 #undef main
 #include "../FlightCore_Firmware/FlightCoreAccess.h"
+static Preferences zjPrefs;
+static String zjMode="sta",zjSavedSsid="router";
+#include "../FlightCore_Firmware/FlightCoreHandover.h"
 static void errorIs(const char* actual,const char* expected){
  if(!actual||std::string(actual)!=expected)std::cerr<<"Expected "<<expected<<"; got "<<(actual?actual:"accepted")<<std::endl;
  assert(actual&&std::string(actual)==expected);
@@ -84,5 +87,17 @@ int main(){
  frame(1000);frame(1000);frame(1000);assert(zjRcOwned&&zjRcSource=="PPM");
  waitMs(151);zjPpmLoop(clockMs);assert(!zjRcOwned&&!zjRcHasFrame);
  assert(!zjRcClaim("ANDROID",zjKitCode,true,IPAddress(2),"STA"));
+ // Persist a selection even with transmitter OFF; restart cannot restore ARM.
+ assert(!zjAccessChange("SELECT","PPM","USB",false,true,"PPM","AP"));
+ const auto saved=zjPrefs.getString("inputProfile","");assert(saved.length());
+ zjRcSelection="AUTO";zjRcControlPath="AUTO";zjLoadRadioProfile();
+ assert(zjRcSelection=="PPM"&&zjRcControlPath=="PPM"&&zjMode=="ap"&&!zjRcInputArmed&&!zjRcOwned);
+ zjPrefs.failNextWrite=true;
+ errorIs(zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","AP"),"input_profile_save_failed");
+ assert(zjRcControlPath=="PPM"&&zjPrefs.getString("inputProfile","")==saved);
+ zjLoadRadioProfile();assert(zjRcControlPath=="PPM");
+ zjMotorEnabled=true;
+ errorIs(zjAccessChange("SELECT","ANDROID","USB",false,true,"ANDROID_AP","AP"),"stop_motor_setup_first");
+ zjMotorEnabled=false;
  std::cout<<"PASS production RC access: safe handover, maintenance, authorization, lease expiry and explicit resume"<<std::endl;
 }

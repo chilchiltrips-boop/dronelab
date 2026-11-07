@@ -1,6 +1,7 @@
 #pragma once
 #include "FlightCoreTiming.h"
 #include "FlightCoreRatePid.h"
+#include "FlightCoreAttitude.h"
 #include "FlightCoreRateTrace.h"
 static ZjImuAcquisition zjImuDriver;
 static ZjControlScheduler zjControl;
@@ -13,6 +14,10 @@ struct ZjRateShadowResult {
  const char* maxIntervalPhase="STARTUP";
  const char* reason="DISARMED";
  ZjRateMix mix;
+ ZjAttitudeEstimate attitude;
+ float rates[3]={},gravity[3]={};
+ uint32_t sampleSequence=0,sampleAtUs=0;
+ bool sampleValid=false;
 };
 static ZjRateShadowResult zjRateShadow;
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
@@ -41,12 +46,13 @@ static uint32_t zjTraceFaultAt=0;
 static FlightReceiverSnapshot zjTraceFaultInput;
 static bool zjShadowRequested=false;
 static ZjAccelModel zjSavedAccelModel;
+static uint32_t zjAccelModelGeneration=0,zjImuModelGeneration=0;
 static ZjImuAction zjPendingImuAction=ZjImuAction::NONE;
 static uint8_t zjPendingImuFace=0;
 static uint32_t zjImuRequestSequence=0;
 static bool zjImuActionInFlight=false;
 static void zjSetAccelModel(const ZjAccelModel& model){
- portENTER_CRITICAL(&zjTimingMux);zjSavedAccelModel=model;portEXIT_CRITICAL(&zjTimingMux);
+ portENTER_CRITICAL(&zjTimingMux);zjSavedAccelModel=model;++zjAccelModelGeneration;portEXIT_CRITICAL(&zjTimingMux);
 }
 static bool zjImuMaintenanceBusy(){
  portENTER_CRITICAL(&zjTimingMux);
@@ -79,7 +85,7 @@ static void zjImuTask(void*){
   const auto action=zjPendingImuAction;const uint8_t face=zjPendingImuFace;
   const uint32_t sequence=zjImuRequestSequence;
   zjImuActionInFlight=action!=ZjImuAction::NONE;zjPendingImuAction=ZjImuAction::NONE;
-  zjImuDriver.accelModel=zjSavedAccelModel;
+  zjImuDriver.accelModel=zjSavedAccelModel;const uint32_t modelGeneration=zjAccelModelGeneration;
   portEXIT_CRITICAL(&zjTimingMux);
   const uint32_t now=millis();
   if(action!=ZjImuAction::NONE){
@@ -88,7 +94,7 @@ static void zjImuTask(void*){
   }
   zjImuDriver.updateGyro(now);zjReleaseI2c();
   portENTER_CRITICAL(&zjTimingMux);
-  zjImuMailbox=zjImuDriver;zjImuActionInFlight=false;
+  zjImuMailbox=zjImuDriver;zjImuModelGeneration=modelGeneration;zjImuActionInFlight=false;
   portEXIT_CRITICAL(&zjTimingMux);
  }
 }
@@ -118,7 +124,7 @@ static ZjFlightFault zjControlArmFlight(){
  auto conditions=zjFlightMainConditions();
  portENTER_CRITICAL(&zjTimingMux);
  const uint32_t at=micros();
- conditions.nowMs=millis();conditions.inputDeadlineMs=ZJ_PPM_LOST_MS;
+ conditions.nowMs=millis();conditions.inputDeadlineMs=conditions.input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
  conditions.imuFresh=zjImuMailbox.gyroReady&&zjImuMailbox.sample.fresh(at,12000);
  conditions.timingHealthy=zjControlRuntimeReady&&zjControl.healthy(at)&&
   zjControl.intervalUs>=1000&&zjControl.intervalUs<=8000&&uint32_t(at-zjControl.lastSuccessfulUs)<ZJ_FLIGHT_OUTPUT_LEASE_US;
@@ -171,6 +177,7 @@ static void zjControlTask(void*){
  ZjRatePidState pid[3]={};
  ZjAnglePidState outer[2]={};
  ZjRateShadowResult previous;
+ ZjAttitudeFilter attitude;
  uint32_t lastEpoch=0,lastGeneration=0;
  uint32_t recordedInputArm=0,recordedPreview=0,recordedFlightLease=0;
  ZjReceiverSource lastSource=ZjReceiverSource::NONE;
@@ -190,6 +197,7 @@ static void zjControlTask(void*){
   uint32_t epoch,lease,inputArmEpoch;
   ZjRateShadowResult next;
   ZjSampleStamp imuSample;
+  uint32_t attitudeCalibration=0;
   ZjFlightConditions conditions;
   ZjRateTraceSample trace;
   portENTER_CRITICAL(&zjTimingMux);
@@ -198,6 +206,7 @@ static void zjControlTask(void*){
   imuReady=zjImuMailbox.gyroReady;next.imuReadMaxUs=zjImuMailbox.gyroMaxReadUs;
   for(unsigned i=0;i<3;i++)gravity[i]=zjImuMailbox.accelG[i]-zjImuMailbox.accelModel.trim[i]/1000.0f;
   level=zjImuMailbox.accelModel.level;
+  attitudeCalibration=zjImuMailbox.maintenanceSequence+zjImuModelGeneration;
   std::copy_n(zjShadowGains,ZJ_PID_GAIN_COUNT/3,gains);
   requested=zjShadowRequested;epoch=zjFlightRevokeEpoch;lease=zjFlightLease;inputArmEpoch=zjShadowInputArmEpoch;
   next.revision=zjShadowRevision;next.generation=zjShadowGeneration;trace.profile=zjShadowProfile;
@@ -212,6 +221,11 @@ static void zjControlTask(void*){
   next.imuSampleAgeUs=imuSample.valid?imuSample.ageUs(at):UINT32_MAX;
   conditions.imuFresh=imuReady&&imuSample.fresh(at,12000)&&
    std::isfinite(rates[0])&&std::isfinite(rates[1])&&std::isfinite(rates[2]);
+  attitude.step(imuSample.sequence,imuSample.atUs,rates,gravity,conditions.imuFresh,level,attitudeCalibration);
+  next.attitude=attitude.value;
+  std::copy_n(rates,3,next.rates);std::copy_n(gravity,3,next.gravity);
+  next.sampleSequence=imuSample.sequence;next.sampleAtUs=imuSample.atUs;next.sampleValid=conditions.imuFresh;
+  conditions.attitudeReady=next.attitude.valid;conditions.levelCalibrated=level;
   conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000&&control.missedTicks==previousMissed;
   const unsigned phase=uint32_t(at-started)<1000000?0:!imuReady?1:lease?4:requested?3:2;
   const char* const labels[]={"STARTUP","IMU_CALIBRATION","DISARMED","RC_DIAGNOSTIC","RATE_FLIGHT"};
@@ -240,7 +254,7 @@ static void zjControlTask(void*){
 
   auto fault=ZjFlightFault::NONE;
   if(requested){
-   float angles[2]={};
+   const float angles[2]={next.attitude.roll,next.attitude.pitch};
    if(!preview&&!inputFresh){
     next.reason="INPUT_STALE";
     fault=input.source==ZjReceiverSource::PPM?ZjFlightFault::PPM_SIGNAL_LOST:ZjFlightFault::INPUT_STALE;
@@ -252,15 +266,16 @@ static void zjControlTask(void*){
     next.reason="LOW_THROTTLE";trace.reason=ZjFlightFault::LOW_THROTTLE;
     trace.throttleUsed=1000;
     for(auto& pulse:next.mix.pulse)pulse=ZJ_FLIGHT_ARMED_IDLE_US;
-   }else if(next.angle&&(!level||!zjBenchAngles(gravity[0],gravity[1],gravity[2],angles))){
-    next.reason="ANGLE_LEVEL_REQUIRED";fault=ZjFlightFault::MODE_UNSUPPORTED;
+   }else if(next.angle&&(!level||!next.attitude.valid)){
+    next.reason=level?"ATTITUDE_INVALID":"ANGLE_LEVEL_REQUIRED";
+    fault=level?ZjFlightFault::ATTITUDE_INVALID:ZjFlightFault::LEVEL_REQUIRED;
    }else{
     const uint32_t computeStarted=micros();
     const float dt=control.intervalUs*.000001f;
     float correction[3]={};
     for(unsigned i=0;i<3;i++){
      auto& axis=trace.axes[i];
-     if(next.angle&&i<2)axis.target=zjStepAnglePid(outer[i],gains[i+3],axis.target*(26.0f/75.0f),angles[i],dt);
+     if(next.angle&&i<2)axis.target=zjStepAnglePid(outer[i],gains[i+3],preview?0:zjAngleStick(commands[i]),angles[i],dt);
      const auto pidResult=zjStepRatePid(pid[i],gains[i],axis.target,axis.measured,dt,previous.mix.residual[i]);
      axis.p=pidResult.p;axis.i=pidResult.i;axis.d=pidResult.d;axis.correction=correction[i]=pidResult.output;
      if(pidResult.saturated)trace.pidSaturationMask|=uint8_t(1u<<i);
@@ -404,8 +419,8 @@ static ZjFlightArmEdge zjFlightPpmArmEdge;
 // Receiver loss, DISARM and STOP still revoke through the independent path.
 static void zjControlPpmArmEdge(){
  const auto input=zjRcReceiver();
- if(input.source!=ZjReceiverSource::PPM){zjFlightPpmArmEdge={};return;}
- if(zjFlightPpmArmEdge.accept(input,millis(),ZJ_PPM_LOST_MS)){
+ if(input.source==ZjReceiverSource::NONE){zjFlightPpmArmEdge={};return;}
+ if(zjFlightPpmArmEdge.accept(input,millis(),input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS)){
   // A failed attempt is visible in readiness; recovery requires another gesture.
   const auto fault=zjControlArmFlight();
   portENTER_CRITICAL(&zjTimingMux);

@@ -93,8 +93,8 @@
    else if(paused){status='PAUSED';reason='End maintenance safely before selecting input';}
    else if(!safe){status='LOCKED';reason='Lower throttle and disarm';}
    else if(other&&selected!==path.id){status='IN USE';reason='Release the current controller first';}
-   else if(path.id==='PPM'&&!ppm){status='NOT CONNECTED';reason='No fresh PPM receiver signal';}
-   else if(path.id==='ANDROID_WEBRTC'&&!paired){status='NOT CONNECTED';reason='Pair Android and approve WebRTC';}
+   else if(path.id==='PPM'&&!ppm){status='AVAILABLE';reason='Select PPM; waiting for transmitter frames before ARM';}
+   else if(path.id==='ANDROID_WEBRTC'&&!paired){status='AVAILABLE';reason='Select, then pair Android. Simulator only; physical WebRTC flight is unsupported';}
    else if(path.id==='ANDROID_AP'&&client==='web'&&kitActive!=='ANDROID_AP'){status='AVAILABLE';reason='Select, then connect Android to this Kit hotspot';}
    const selectable=['READY','AVAILABLE'].includes(status);
    return {...path,status:active===path.id?'ACTIVE':status,reason,selectable};
