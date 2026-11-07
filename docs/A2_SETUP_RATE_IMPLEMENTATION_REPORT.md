@@ -20,11 +20,11 @@ The existing PID editor and Python APIs are preserved. Saved FC settings are aut
 
 ## Verification
 
-- Local regression after integrating current main: **710 PASS, 2 SKIPPED, 0 FAIL** (712 total).
+- Local regression after integrating current main: **711 PASS, 2 SKIPPED, 0 FAIL** (713 total).
 - Source/asset validation: **PASS**, 60 ES modules, 35 references, 15 GLBs.
 - Tests execute the production control worker, ARM function and driver with host hardware doubles: normal output, low throttle/reset, STOP, disarm, receiver/source loss, stale IMU, invalid PID, deadline fault, watchdog and driver errors.
 - Local Chromium: Wizard/ESC/output setup, Aerof450 dual-loop PID, trace export, authoritative status/viewports, bench import/rollback, Android direct AP touch/STOP, and real compiled experimental APP/FACTORY import: **PASS**. File routing was used locally; it does not prove radio or service-worker behavior. GitHub runs real HTTP browser checks separately.
-- Initial exact-source A1/A2 bench and experimental A2 build: **PASS**. Build source `21cd85dfd80cad3cd93200c1a7f8a8f02703cf1c`, [run 42342360598](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42342360598). Later reviewed candidate provenance is stored with its artifacts.
+- Initial exact-source A1/A2 bench and experimental A2 build: **PASS**. Final atomic-output A1/A2 bench compilation also passed in run 42343365487. Build source `21cd85dfd80cad3cd93200c1a7f8a8f02703cf1c`, [run 42342360598](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42342360598). Final candidate: source `991a72f44e68be377b2f9382088cdc33e2944e8f`, [run 42343365487](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42343365487), artifact `13562398729`. APP SHA-256 `9de39b8423ed4c6c882fdea1f20cd880e282fe54bc77a130ebe120f49f1fea40`; FACTORY SHA-256 `bc8f11106798c7ed4f403ccb72646c72e6df55346fa327c9f0a8adf905847af7`. Full provenance is stored with the pinned package. The compile commit is retained as a parent of the publication commit; it is intentionally distinct from the later main/version stamp.
 - Strict production acceptance: **BLOCKED**, 31 physical/deployment cases NOT_RUN and no matching operator-tested source record. Existing evidence was not relabeled or fabricated. Ordinary production catalog and publication hold are retained.
 - Physical board, propeller-free motor/mixer direction, PWM waveform, PPM failsafe/AP fallback, loaded timing, real Android handset upgrade and flight: **NOT_RUN**. No hardware was attached to this session.
 - Queue latency and reconnect radio measurements: not measured on hardware in this update; existing software regression remains enabled.
@@ -71,6 +71,13 @@ Use the explicitly imported experimental artifact and complete saved setup/PID. 
 - `FlightCore_Firmware/FlightCoreRateTraceApi.h`
 - `FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino`
 - `FlightCore_Firmware/bench-release-policy.json`
+- `FlightCore_Firmware/experimental-rate-catalog.json`
+- `FlightCore_Firmware/experimental/1.7.20/README.md`
+- `FlightCore_Firmware/experimental/1.7.20/ZEBJUS_FLIGHTCORE_A2_APP_RATE_EXPERIMENTAL.bin`
+- `FlightCore_Firmware/experimental/1.7.20/ZEBJUS_FLIGHTCORE_A2_FACTORY_RATE_EXPERIMENTAL.bin`
+- `FlightCore_Firmware/experimental/1.7.20/build-report.json`
+- `FlightCore_Firmware/experimental/1.7.20/catalog.json`
+- `FlightCore_Firmware/experimental/1.7.20/provenance.json`
 - `FlightCore_Firmware/publication-hold.json`
 - `README.md`
 - `VERSION.txt`
@@ -79,6 +86,7 @@ Use the explicitly imported experimental artifact and complete saved setup/PID. 
 - `docs/A2_ACRO_PHYSICAL_READINESS.md`
 - `docs/A2_FLIGHT_QUALIFICATION.md`
 - `docs/A2_SETUP_RATE_FLOW.md`
+- `docs/A2_SETUP_RATE_IMPLEMENTATION_REPORT.md`
 - `docs/AI_UPDATE_GUIDE.md`
 - `firmware-updater.js`
 - `index.html`
@@ -94,12 +102,15 @@ Use the explicitly imported experimental artifact and complete saved setup/PID. 
 - `tools/ack-diagnostics.test.mjs`
 - `tools/acro-flight-readiness.test.mjs`
 - `tools/android-camera-permission.test.mjs`
+- `tools/android-direct-kit-browser.mjs`
+- `tools/android-direct-kit-control.test.mjs`
 - `tools/bench_release_gate.py`
 - `tools/build_scanner.py`
 - `tools/ci-impact.mjs`
 - `tools/ci-impact.test.mjs`
 - `tools/connection-freshness-recovery.test.mjs`
 - `tools/experimental-rate-browser.mjs`
+- `tools/experimental-rate-package.test.mjs`
 - `tools/firmware-target-mode.test.mjs`
 - `tools/motor-bounded-bench.test.mjs`
 - `tools/poco-x2-network-compat.test.mjs`

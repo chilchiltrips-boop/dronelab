@@ -63,7 +63,7 @@ Local QR/WebRTC simulator pairing may use host and STUN ICE candidates. **No TUR
 
 ## FlightCore A1/A2 diagnostic firmware
 
-`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. This is **not physical motor-flight firmware**. A1: ESP32-C3 Super Mini, SDA4/SCL5, PPM GPIO10. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. Both build profiles use a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
+`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. The ordinary published/bench package does not enable physical flight; the separately imported experimental A2 PPM Rate build can actuate through saved-setup/runtime gates and remains physically unqualified. A1: ESP32-C3 Super Mini, SDA4/SCL5, PPM GPIO10. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. Both build profiles use a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
 
 `FlightCore_Firmware/catalog.json`, `firmware-catalog.json` and `build-report.json` publish the A1 and A2 version, SHA-256, `builtAt` (build start) and `compiledAt` (individually embedded sketch compilation timestamp). `tools/verify_release.py` rejects stale precompiled dates, nonmatching source hash, wrong chip/partition, and APP/FACTORY mismatch. USB `ZJINFO,GET` and signed Wi-Fi `/api/status` report the **running** firmware timestamp; the Firmware Center separately shows the **loaded** image date.
 

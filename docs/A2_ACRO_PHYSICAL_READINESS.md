@@ -19,6 +19,6 @@ The above is a **mathematical contract**, not proof of the actual mounted IMU ax
 
 ## Controlled validation still outstanding
 
-Collect signed board- and source-hash-bound physical evidence for ESC 1000–2000 µs pulse widths at 50 Hz; motor mapping/rotation, MPU mounting/orientation, ESC minimum start thresholds, PPM receiver loss, emergency STOP/ISR watchdog under stalled main loop, IMU loss, PID invalid, deadline misses and all output-off latencies. Only subsequently consider a separate physically qualified Acro release.
+Collect signed board- and source-hash-bound physical evidence for ESC 1000–2000 µs pulse widths at 50 Hz; motor mapping/rotation, MPU mounting/orientation, ESC minimum start thresholds, PPM receiver loss, emergency STOP/independent watchdog under stalled main loop, IMU loss, PID invalid, deadline misses and all output-off latencies. Only subsequently consider a separate physically qualified Acro release.
 
 `ZJ_FLIGHT_HARDWARE_QUALIFIED=false` remains the evidence status. The separately built `ZJ_A2_EXPERIMENTAL_RATE_FLIGHT` candidate enables setup-gated output without claiming qualification. [Setup to Rate ARM](A2_SETUP_RATE_FLOW.md) describes this explicit test build and its PPM-only scope.

@@ -2,7 +2,7 @@
 
 Current versions come from [WebApp metadata](../app-version.json), the [published firmware catalog](../firmware-catalog.json), the [candidate firmware version](../VERSION.txt) and [Android APK metadata](../mobile-apk/ANDROID_RELEASE_META.txt). The firmware publication hold pins the existing A1/A2 package while CI compiles and uploads candidate APP and Factory images. The candidate is intended for controlled bench qualification. Production promotion requires the candidate’s strict acceptance evidence and review.
 
-For bench testing, open **Devices & Firmware → Firmware Flash** and select **A2**. **Auto Load Latest** or **Load 1.7.17 Bench** prepares the verified 1.7.17 image. On an enrolled kit with the dual-OTA layout, use the APP image and authorized Wi-Fi OTA to retain settings. Use the FACTORY image over USB for first installation or recovery. After flashing, check that **Running FW** reports 1.7.17 and the loaded build time. The bench catalog identifies the exact compiled artifact and marks physical flight output locked.
+For bench testing, open **Devices & Firmware → Firmware Flash** and select **A2**. **Auto Load Latest** or **Load Bench** prepares the version pinned in [bench-release-policy.json](../FlightCore_Firmware/bench-release-policy.json). On an enrolled kit with the dual-OTA layout, use the APP image and authorized Wi-Fi OTA to retain settings. Use the FACTORY image over USB for first installation or recovery. After flashing, check that **Running FW** matches that pinned version and the loaded build time. The bench catalog identifies the exact compiled artifact and marks physical flight output locked.
 
 ## Receiver and recovery
 
@@ -23,7 +23,7 @@ The request scheduler retires stale queued writes after a connection-generation 
 
 ## Rate control and safety
 
-The [shared Rate PID settings contract](A2_RATE_PID.md) applies to the existing WebApp and Python editor. On the A2, the MPU6050 X/Y/Z rates map to roll/pitch/yaw after gyro bias calibration. The command mapping clamps stick pulses to 1000–2000 µs, uses a ±15 µs center deadband and scales the remaining offset by 0.15 °/s per µs. The candidate span is ±75 °/s. FlightCore tests the following software signs. Confirm the mounted sensor and actual thrust/reaction signs on the fixture.
+The [shared Rate PID settings contract](A2_RATE_PID.md) applies to the existing WebApp and Python editor. On the A2, the MPU6050 X/Y/Z rates map to roll/pitch/yaw after gyro bias calibration. The command mapping clamps stick pulses to 1000–2000 µs, uses a ±15 µs center deadband and scales the offset outside that deadband by 0.15 °/s per µs. The candidate span is ±75 °/s. FlightCore tests the following software signs. Confirm the mounted sensor and actual thrust/reaction signs on the fixture.
 
 | Logical output | Location | A2 default pin | Expected rotation | Roll, pitch, yaw correction signs |
 | --- | --- | --- | --- | --- |
@@ -38,13 +38,13 @@ Timing telemetry separates startup, IMU calibration, disarmed, RC diagnostic and
 
 ## FC flight recorder
 
-In A2 firmware 1.7.17, diagnostic input ARM or a new disarmed PID preview starts a capture. The 50 Hz RAM ring holds the latest 500 periodic observations, about ten seconds for a full window. Input/preview start, physical Flight ARM when qualified, and the terminal event occupy separate rows. STOP, disarm and faults freeze the history and retain the terminal control tick. On a main-loop event, `flightTriggerUs` identifies when the event was raised and `flightTickUs` identifies the control observation. The FC clock wraps at 32 bits. CSV consumers should use the exported `flightElapsedUs` or subtract adjacent tick timestamps modulo 2³².
+In A2 firmware 1.7.17 and later, diagnostic input ARM or a new disarmed PID preview starts a capture. The 50 Hz RAM ring holds the latest 500 periodic observations, about ten seconds for a full window. Input/preview start, physical Flight ARM when the experimental output gate accepts it, and the terminal event occupy separate rows. STOP, disarm and faults freeze the history and retain the terminal control tick. On a main-loop event, `flightTriggerUs` identifies when the event was raised and `flightTickUs` identifies the control observation. The FC clock wraps at 32 bits. CSV consumers should use the exported `flightElapsedUs` or subtract adjacent tick timestamps modulo 2³².
 
 Disarm and stop motor tests, then open **Devices & Firmware → Diagnostics → Fetch FC Flight Trace**. USB or a verified AP/STA session can read the capture. Fetching an active disarmed preview freezes its current trace. The browser saves the fetched trace locally and includes it in the existing CSV and JSON downloads. A radio disconnect leaves the FC RAM capture available after reconnect while the board stays powered. A new explicit run can replace the capture. An FC reboot clears its RAM. A trace already saved in the browser remains available.
 
 The trace contains receiver source, sequence and age, four channels, desired and measured rates, per-axis error and PID terms, profile/revision, motor request, clip and saturation masks, output owner, applied pulse acknowledgement, OFF acknowledgement and timing. A blank applied value means unknown or a different driver owner. An applied value of zero with OFF ACK means LEDC acknowledged disable. Motor motion still requires physical observation.
 
-The versioned read protocol is signed `POST /api/flight/trace` with `bootId`, `capture` and `offset`. Start with zero capture and offset, then use the returned capture and next row offset. USB uses `ZJTRACE,READ,<kit>,<request>,<boot-or->,<capture>,<offset>` with a request-bound ACK/NACK. Both paths require disarm and reject capture changes during paging. The separate local admin command `ZJFLIGHT,ARM,<kit>,<request>,<boot>,<monotonic-nonce>` is checked against the same driver interlocks and qualification lock. The shipped bench firmware cannot arm flight output.
+The versioned read protocol is signed `POST /api/flight/trace` with `bootId`, `capture` and `offset`. Start with zero capture and offset, then use the returned capture and next row offset. USB uses `ZJTRACE,READ,<kit>,<request>,<boot-or->,<capture>,<offset>` with a request-bound ACK/NACK. Both paths require disarm and reject capture changes during paging. Legacy `ZJFLIGHT,ARM` requests return `USE_PPM_ARM_GESTURE`; there is no second USB ARM route. Only a fresh PPM DISARM-to-ARM edge can request the experimental flight lease. Ordinary bench firmware cannot arm flight output.
 
 ## Propeller-free evidence sequence
 
