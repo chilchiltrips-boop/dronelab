@@ -973,7 +973,8 @@ async function uploadAdminApp(file){
   if(!catalogResponse.ok)throw Error('Official firmware catalog is unavailable in this Android release.');
   const catalog=await catalogResponse.json();
   const target=policy?.otaTarget?.({method:'wifi',kit:{connected:online&&onKitLink,transport:link,kitId:id,board:id.slice(0,6)}});
-  board=target?.boardId||(id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1');
+  board=target?.boardId||(id.startsWith('ZFC-A2-')?'ZFC-A2':'');
+  if(board!=='ZFC-A2')throw Error('Only A2 firmware updates are supported; no image uploaded.');
   if(target&&target.kitId!==id)throw Error('Selected Wi-Fi Kit is not verified for OTA');
   const entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
   if(!release?.available||!release.sha256||file.name!==release.file)throw Error('Choose the official '+board+' APP firmware from the currently bundled release.');

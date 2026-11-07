@@ -1,6 +1,7 @@
 name: Android OTA Recovery Regression
 on:
   push:
+    branches: [main]
     paths:
       - 'companion-network.js'
       - 'js/inline-dialogs.js'
@@ -33,6 +34,9 @@ on:
       - 'tools/android-camera-permission.test.mjs'
       - 'tools/release-signing.test.mjs'
       - '.github/workflows/android-ota-recovery.yml'
+      - 'js/kit-network-policy.js'
+      - 'android-native-bridge.js'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
 permissions:
   contents: read
 jobs:

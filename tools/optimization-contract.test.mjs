@@ -12,7 +12,7 @@ test('focused checks retain a full PR/main suite and exact-source APK release pr
  for(const name of Object.keys(domains))assert.ok(domainTests(name).length>3,name);
  assert.throws(()=>domainTests('typo'),/Unknown test domain/);
 });
-test('review firmware compiles ordinary boards once and a separate verified experimental candidate',()=>{
+test('review firmware compiles ordinary A2 once and a separate verified experimental candidate',()=>{
  const ci=read('.github/workflows/v2-safe-fixes.yml');
  assert.equal((ci.match(/run: python3 tools\/build_scanner.py --skip-core-install\n/g)||[]).length,1);
  assert.match(ci,/--board ZFC-A2 --experimental-rate-flight/);

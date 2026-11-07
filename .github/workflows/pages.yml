@@ -13,7 +13,7 @@ on:
       'FlightCore_Firmware/**/*.json', 'tools/site-package*', 'tools/prepare-pages*',
       'tools/pages-decision*', 'tools/verify-live-site.mjs', '.github/workflows/pages.yml']
   workflow_run:
-    workflows: ['Build ZEBJUS Stable-Signed Android APK', 'Verify and publish approved FlightCore bench package', 'Build and verify FlightCore A1/A2 AP/STA Firmware']
+    workflows: ['Build ZEBJUS Stable-Signed Android APK', 'Verify and publish approved FlightCore bench package', 'Build and verify FlightCore A2 AP/STA Firmware']
     types: [completed]
     branches: [main]
   workflow_dispatch:

@@ -1021,7 +1021,7 @@ function usbSetupState(){
  const verified=linkFresh()&&state.transport==='usb'&&usbCandidate.kitId===state.kitId&&
   usbCandidate.board===state.board&&usbCandidate.serialGeneration===serial()?.generation?.();
  const unlocked=verified&&adminBoundId===state.kitId&&adminBoundGeneration===serial()?.generation?.()&&Date.now()<adminUnlockedUntil;
- const blocked=!verified?'Connect the target A1/A2 via USB and verify its Device ID.':serial()?.isFlashing?.()?'Wait for firmware flashing to finish.':
+ const blocked=!verified?'Connect the target A2 via USB and verify its Device ID.':serial()?.isFlashing?.()?'Wait for firmware flashing to finish.':
   state.owner||state.rc?.claimed?'Release diagnostic control before changing Wi-Fi.':state.working||wifiTesting?'Wait for the current Kit operation to finish.':'';
  return {verified,available:!blocked&&!setupBusy,busy:setupBusy,kitId:state.kitId,board:state.board,kitName:state.kitName,kitCode:state.kitCode,
   version:state.version,apSsid:state.apSsid,apActive:state.apActive,staConnected:state.staConnected,staIp:state.staIp,

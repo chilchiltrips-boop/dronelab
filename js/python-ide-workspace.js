@@ -143,7 +143,7 @@ export function createPythonIDEShell(api){
   runPythonBtn:['play','Run the Python file currently open in the editor (Ctrl/⌘ + Enter)'],
   stopPythonBtn:['stop','Stop the running Python script and release resources'],
   rerunPythonBtn:['rerun','Stop and run the currently selected Python file again'],
-  pyConnectUsbBtn:['usb-connect','Connect FlightCore A1/A2 via Web Serial at 115200 baud'],
+  pyConnectUsbBtn:['usb-connect','Connect FlightCore A2 via Web Serial at 115200 baud'],
   pythonCameraStart:['camera','Request camera permission and open the live preview'],
   pythonCameraStop:['stop','Stop the camera and release its stream'],
   pythonOutputOpen:['chart','Open the latest Python Matplotlib plot as a full page'],

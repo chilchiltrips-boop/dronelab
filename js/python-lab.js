@@ -222,7 +222,7 @@ function usbStatus(){
  else if(usbButton)usbButton.textContent=connected?'USB Connected':'Connect USB Serial';
  if(usbButton){
   usbButton.classList.toggle('connected',connected);
-  usbButton.setAttribute('aria-label',connected?'USB serial connected to FlightCore':'Connect USB serial to FlightCore A1/A2');
+  usbButton.setAttribute('aria-label',connected?'USB serial connected to FlightCore':'Connect USB serial to FlightCore A2');
  }
 }
 async function connectUsb(){
@@ -448,7 +448,7 @@ async function onRpc(w,m){
         throw Error('NetworkDisconnectedError: Connected kit or AP/STA transport changed during gyro read.');
       });
     }else{
-     if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A1/A2 gyroscope.');
+     if(!window.DroneLabSerial?.isOpen?.())throw Error('USBDisconnectedError: Connect USB Serial at 115200 baud to read A2 gyroscope.');
      result=await gyroBridge.readGyro(m.args?.timeout||3000);
     }
    }else if(m.method==='latest_scan')result=bridge.getLatest();
@@ -624,7 +624,7 @@ function addCompletions(M){
      motor_setup:['motor_setup()','Async A2 setup session: use async with await drone.motor_setup()'],
      motor_status:['motor_status()','Read authoritative motor status'],
      read_joystick:['read_joystick()','Read identity-verified ESP32 receive state over STA without claiming control'],
-     read_gyro:['read_gyro(timeout=3000)','Await fresh A1/A2 gyro sample with address and angular rates'],
+     read_gyro:['read_gyro(timeout=3000)','Await fresh A2 gyro sample with address and angular rates'],
      i2c_scan:['i2c_scan()','Last complete I2C scan (or None)'],
      latest_i2c_scan:['latest_i2c_scan()','Latest I2C scan snapshot'],
      wifi_scan:['wifi_scan()','Async 2.4 GHz router scan, verified AP/STA target'],

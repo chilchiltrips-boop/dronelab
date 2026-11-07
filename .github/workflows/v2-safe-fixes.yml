@@ -36,7 +36,7 @@ jobs:
       - name: Validate offline bundle and project
         run: npm run check
       # Pull requests may edit firmware source without publishing new binaries.
-      # Firmware build job below recompiles both boards and verifies its artifacts.
+      # Firmware build job below recompiles A2 and verifies its artifacts.
       # Never compare unreleased PR source against the committed stable binary hashes.
       - name: Verify existing firmware catalog and binary release
         if: github.event_name != 'pull_request'
@@ -73,7 +73,7 @@ jobs:
           retention-days: 7
 
   firmware-build:
-    name: Compile A1 and A2 review firmware
+    name: Compile A2 review firmware
     runs-on: ubuntu-24.04
     timeout-minutes: 55
     steps:
@@ -95,7 +95,7 @@ jobs:
             echo 'Main firmware publication workflow owns exact-source production build'
           elif ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             echo "compile=true" >> "$GITHUB_OUTPUT"
-            echo "Base SHA unavailable; conservatively compile both boards"
+            echo "Base SHA unavailable; conservatively compile A2"
           elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
             'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino' \
             'FlightCore_Firmware/*.h' \
@@ -113,7 +113,7 @@ jobs:
             echo "No compiled firmware input changed; use existing verified package"
           else
             echo "compile=true" >> "$GITHUB_OUTPUT"
-            echo "Compiled firmware input changed; run both-board review build"
+            echo "Compiled firmware input changed; run A2 review build"
           fi
       - uses: ./.github/actions/setup-flightcore
         if: steps.firmware_changes.outputs.compile == 'true'
@@ -128,10 +128,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: steps.firmware_changes.outputs.compile == 'true'
         with:
-          name: v2-review-a1-a2-firmware
+          name: v2-review-a2-firmware
           path: |
-            FlightCore_Firmware/*_APP.bin
-            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin
+            FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
             FlightCore_Firmware/build-report.json
             FlightCore_Firmware/catalog.json
           if-no-files-found: error

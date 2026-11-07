@@ -8,10 +8,11 @@ const client=read('companion-network.js');
 const bridge=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
 const activity=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
 const network=read('FlightCore_Firmware/FlightCoreNetwork.h');
-const id='ZFC-A1-012345ABCDEF',board='ZFC-A1',hash='11'.repeat(32),bootA='0'.repeat(32),bootB='1'.repeat(32);
+const hash='11'.repeat(32),bootA='0'.repeat(32),bootB='1'.repeat(32);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-function harness(mode){
+function harness(mode,board='ZFC-A2'){
+ const id=board+'-012345ABCDEF';
  const listeners=new Map(),elements=new Map();
  const el=name=>{
   if(!elements.has(name))elements.set(name,{value:'',disabled:false,checked:false,dataset:{},textContent:'',
@@ -20,7 +21,7 @@ function harness(mode){
   return elements.get(name);
  };
  el('kitLink').value='ap';el('kitKey').value='private-label';
- const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[1]=2;bytes[12]=5;
+ const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[1]=2;bytes[12]=board==='ZFC-A2'?13:5;
  bytes.set([0x32,0x54,0xcd,0xab],32);bytes.fill(0x23,176,208);
  const build=Array.from(bytes.slice(176,208),v=>v.toString(16).padStart(2,'0')).join('');
  const file={name:'official-app.bin',size:bytes.length,type:'application/octet-stream',slice:(start,end)=>({arrayBuffer:async()=>bytes.slice(start,end).buffer}),arrayBuffer:async()=>bytes.buffer};
@@ -170,4 +171,11 @@ test('native + JS timers, cancellation and OTA progress contract agree',()=>{
  assert.match(network,/zjAuthAdmin&&zjRequestSession>=0/);
  assert.match(network,/zjSecureOtaSession==zjSessions\[zjRequestSession\]\.id/);
  assert.match(read('companion.html'),/id="kitOtaCancel"/);
+});
+
+test('retired A1 never receives an A2 OTA upload',async()=>{
+ const h=harness('normal','ZFC-A1');await connectAndUpload(h);
+ const message=await completion(h,'OTA stopped:');
+ assert.match(message,/Only A2 firmware updates are supported/);
+ assert.equal(h.calls.length,0);assert.equal(h.ends,0);
 });

@@ -142,7 +142,7 @@ test('native C3/C6 port duplicates must not be auto-selected by same VID/PID',()
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  assert.ok(source.includes('Multiple matching ESP controllers are connected'));
  assert.ok(source.includes('Never guess between them')||source.includes('Never guess'));
- assert.ok(source.includes('select A1 or A2'));
+ assert.ok(source.includes('select the A2 controller'));
 });
 
 
@@ -181,10 +181,10 @@ test('Downloaded firmware is not counted as flashed and both pages expose USB ch
  }
 });
 
-test('Serial monitor shows dedicated A1 I2C and A2 XIAO wiring labels',()=>{
+test('Serial monitor retains legacy parsing and advertises active A2 XIAO wiring',()=>{
  const updater=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  for(const token of ['ZJI2C,MODE,','Dedicated SDA4/SCL5','XIAO D4/D5','fwUsbMode'])assert.ok(updater.includes(token),token);
- for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('LED GPIO8'));}
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('MPU6050 SDA GPIO22 / SCL GPIO23'));}
 });
 
 

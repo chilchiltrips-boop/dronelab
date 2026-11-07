@@ -19,7 +19,7 @@ let diagnosticSample=null,diagnosticAt=0,diagnosticError='',diagnosticRenderedSe
 let telRxSeq=null,telMissed=0,telLastAt=0,telDeviceDrops=0,telRateActual=0;
 let usbFlashPhase='idle',usbFlashExpected=null,usbVerifiedPortInfo=null;
 let firmwareTargetMethod='wifi'; // Switching mode NEVER writes the controller.
-let preparingConnectedFirmware=false,preparedConnectedFirmwareKey='';
+let preparingConnectedFirmware=false,preparedConnectedFirmwareKey='',preparedConnectedFirmwareIdentity='';
 async function prepareConnectedFirmware(){
  const kit=globalThis.ZebjusKits?.getState?.();
  if(releaseChoice==='experimental')return; // keep an explicitly imported candidate; no implicit download/overwrite
@@ -32,19 +32,23 @@ async function prepareConnectedFirmware(){
  if(track==='bench')await loadBenchCatalog();
  const pkg=releaseForBoard(kit.board,track)?.app;
  if(!pkg?.available||!pkg.sha256)return;
+ const identity=kit.kitId+'|'+(kit.bootId||'')+'|'+(kit.connectionGeneration??'');
+ // Preserve an explicit Factory choice for this connection. Status polling
+ // must not replace it with APP; another Kit/boot still defaults to APP.
+ if(preparedConnectedFirmwareIdentity===identity&&$('#fwImageType')?.value==='factory')return;
  const expected=kit.kitId+'|'+kit.board+'|'+pkg.sha256;
- if(preparedConnectedFirmwareKey===expected&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase())return;
+ if(preparedConnectedFirmwareKey===expected&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase()){preparedConnectedFirmwareIdentity=identity;return;}
  const boardSelect=$('#fwBoardProfile'),imageSelect=$('#fwImageType');
  if(boardSelect)boardSelect.value='auto'; // identify board from the live STA/AP device
  if(imageSelect)imageSelect.value='app'; // FACTORY is never the implicit network source
  if(fw?.type==='app'&&fw.boardId===kit.board&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase()){
-  preparedConnectedFirmwareKey=expected;renderFirmware();await targetBoardId(true);return;
+  preparedConnectedFirmwareKey=expected;preparedConnectedFirmwareIdentity=identity;renderFirmware();await targetBoardId(true);return;
  }
  preparingConnectedFirmware=true;
  try{
   fw=null;renderFirmware();
   await autoLoad(releaseChoice); // verified download only; connecting a kit never flashes it
-  if(fw?.type==='app'&&fw.boardId===kit.board&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase())preparedConnectedFirmwareKey=expected;
+  if(fw?.type==='app'&&fw.boardId===kit.board&&fw?.hash?.toLowerCase()===pkg.sha256.toLowerCase()){preparedConnectedFirmwareKey=expected;preparedConnectedFirmwareIdentity=identity;}
  }finally{preparingConnectedFirmware=false}
 }
 function expectedUsbBoard(){return (monitorPort&&usbRuntimeInfo?.boardId)||usbBoardId||''}
@@ -65,7 +69,7 @@ function markPackagePrepared(label='Firmware package verified'){
  }
 }
 // Fallback has profiles only. Never advertise unsigned or stale embedded firmware checksums.
-const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_FLIGHTCORE","version":"1.3.1","defaultBoardId":"ZFC-A1","boards":[{"id":"ZFC-A1","name":"ZEBJUS AERION A1","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.3.1","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A1_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":"2026-10-10T15:08:41Z"},"usbMatch":["ESP32-C3","ESP32C3"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:esp32c3:CDCOnBoot=cdc"},"imageChipIds":[5],"supportedSensors":["LSM6DS3","MPU6050"],"recommendedSensor":"LSM6DS3"},{"id":"ZFC-A2","name":"ZEBJUS AERION A2","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.3.1","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":"2026-10-10T15:08:41Z"},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-10T15:08:41Z"};
+const EMBEDDED_CATALOG={"schema":2,"product":"ZEBJUS_FLIGHTCORE","version":"1.3.1","defaultBoardId":"ZFC-A2","boards":[{"id":"ZFC-A2","name":"ZEBJUS AERION A2","appAddress":"0x10000","flashMode":"dio","flashFreq":"80m","flashSize":"4MB","latest":{"version":"1.3.1","app":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_APP.bin","sha256":"","size":0,"builtAt":"","buildId":""},"factory":{"available":false,"file":"ZEBJUS_FLIGHTCORE_A2_FACTORY.bin","sha256":"","size":0,"builtAt":"","buildId":""},"builtAt":"2026-10-10T15:08:41Z"},"usbMatch":["ZEBJUS Aerion F1","ESP32C6"],"flasher":"serial-loader-v1","build":{"builder":"arduino-cli","fqbn":"esp32:esp32:XIAO_ESP32C6"},"imageChipIds":[13],"supportedSensors":["MPU6050","LSM6DS3"],"recommendedSensor":"MPU6050"}],"builtAt":"2026-10-10T15:08:41Z"};
 function school(){return window.zebjusSchool||null}
 function flashDiagnostic(kind,detail={}){try{window.dispatchEvent(new CustomEvent('aerion-link-event',{detail:{kind:'firmware',phase:kind,message:kind,...detail}}))}catch{}}
 function log(msg){msg=String(msg).replace(/ZJNET,(?:PAIR|ACCESS),[^\r\n]*/g,'[USB private credentials redacted]').replace(/ZJADMIN,AP_CREDENTIALS,[^\r\n]*/g,'[AP Wi-Fi password redacted]');const e=$('#fwLog');if(e)e.textContent=`${new Date().toLocaleTimeString()}  ${msg}\n${e.textContent}`.slice(0,16000);flashDiagnostic('log',{message:String(msg).slice(0,1200)})}
@@ -139,7 +143,7 @@ function networkFlashReadiness(){
  if(!fw||!(fw.bytes instanceof Uint8Array)||fw.type!=='app')
   return{ready:false,message:'Choose a verified matching APP image. FACTORY/MERGED images can only be flashed over USB.'};
  if(!device.kitId||!device.kitId.startsWith(fw.boardId+'-')||device.board&&device.board!==fw.boardId)
-  return{ready:false,message:'Loaded firmware does not match the connected '+device.transport.toUpperCase()+' kit board. Load the correct A1/A2 APP.'};
+  return{ready:false,message:'Loaded firmware does not match the connected '+device.transport.toUpperCase()+' kit board. Load the correct A2 APP.'};
  return{ready:true,message:ppmMaintenance.ready?ppmMaintenance.message:
    'APP OTA ready over verified '+device.transport.toUpperCase()+' • '+device.kitId+'. Requires browser local-network access and existing dual-OTA partitions; image signatures not enforced.'};
 }
@@ -181,7 +185,7 @@ function releaseForBoard(id,track=releaseTrack){
 function mapHardwareSignature(raw){const s=String(raw||'').toUpperCase();if(/\bUNKNOWN\b/.test(s))return'';const chips=Array.from(s.matchAll(/\bESP32[-_\s]*(C6(?:FH[48])?|[A-Z]\d+)\b/g),m=>'ESP32'+m[1].replace(/FH[48]$/,''));for(const b of catalog?.boards||[])for(const match of b.usbMatch||[]){const alias=String(match).toUpperCase(),compact=alias.replace(/[-_\s]+/g,'');if(compact.startsWith('ESP32')?chips.includes(compact):s.includes(alias))return b.id}return''}
 function boardName(id){return boardById(id)?.name||id||'Unknown board'}
 function cleanHardwareText(v){return String(v||'').replace(/ESP32[- ]?C[36]/ig,'controller').replace(/ESP32C[36]/ig,'controller').replace(/ESP-ROM[^\n]*/ig,'FlightCore bootloader').replace(/Espressif/ig,'ZEBJUS controller')}
-function validateEspImage(bytes,boardId,type='app'){if(!(bytes instanceof Uint8Array)||bytes.length<32768)throw new Error('Firmware file is too small to be a valid controller image.');if(bytes[0]!==0xE9)throw new Error('Invalid firmware image: ESP image magic 0xE9 is missing.');const segments=bytes[1];if(segments<1||segments>16)throw new Error('Invalid firmware image: segment table is not plausible.');let nonZero=0,nonFF=0;const step=Math.max(1,Math.floor(bytes.length/8192));for(let i=0;i<bytes.length;i+=step){if(bytes[i]!==0)nonZero++;if(bytes[i]!==0xFF)nonFF++}if(nonZero<64||nonFF<64)throw new Error('Invalid firmware image: file contains mostly empty/zero data.');const board=boardById(boardId),chipId=bytes.length>13?(bytes[12]|(bytes[13]<<8)):null,allowed=board?.imageChipIds||[];if(allowed.length&&chipId!=null&&!allowed.includes(chipId))throw new Error(`Firmware chip ID ${chipId} does not match ${boardName(boardId)}.`);const appOffset=type==='factory'?parseInt(board?.appAddress||'0x10000'):0;
+function validateEspImage(bytes,boardId,type='app'){if(boardId!=='ZFC-A2')throw Error('A2 is the only active board; archived A1 images cannot be flashed here.');if(!(bytes instanceof Uint8Array)||bytes.length<32768)throw new Error('Firmware file is too small to be a valid controller image.');if(bytes[0]!==0xE9)throw new Error('Invalid firmware image: ESP image magic 0xE9 is missing.');const segments=bytes[1];if(segments<1||segments>16)throw new Error('Invalid firmware image: segment table is not plausible.');let nonZero=0,nonFF=0;const step=Math.max(1,Math.floor(bytes.length/8192));for(let i=0;i<bytes.length;i+=step){if(bytes[i]!==0)nonZero++;if(bytes[i]!==0xFF)nonFF++}if(nonZero<64||nonFF<64)throw new Error('Invalid firmware image: file contains mostly empty/zero data.');const board=boardById(boardId),chipId=bytes.length>13?(bytes[12]|(bytes[13]<<8)):null,allowed=board?.imageChipIds||[];if(allowed.length&&chipId!=null&&!allowed.includes(chipId))throw new Error(`Firmware chip ID ${chipId} does not match ${boardName(boardId)}.`);const appOffset=type==='factory'?parseInt(board?.appAddress||'0x10000'):0;
 if(bytes.length<appOffset+32768||bytes[appOffset]!==0xE9)throw new Error('Application image is missing at the required flash offset.');
 const appChip=bytes[appOffset+12]|(bytes[appOffset+13]<<8);
 if(allowed.length&&!allowed.includes(appChip))throw new Error('Factory application belongs to a different controller profile.');
@@ -206,6 +210,9 @@ async function loadCatalog(){
    catalogSource='embedded';
    log('Firmware catalog file unavailable • using built-in board catalog.');
  }
+ // Active product is A2-only; published historical catalogs stay immutable.
+ catalog={...catalog,defaultBoardId:'ZFC-A2',boards:catalog.boards.filter(board=>board.id==='ZFC-A2')};
+ if(catalog.boards.length!==1)throw Error('A2 firmware profile missing');
  const sel=$('#fwBoardProfile');
  if(sel){for(const b of catalog.boards||[]){if(!sel.querySelector(`option[value="${b.id}"]`)){const o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o)}}}
  const publishedButton=$('#fwLoadPublishedBtn');
@@ -219,7 +226,8 @@ async function loadBenchCatalog(){
  const data=await response.json();
  if(data?.schema!==2||data.product!=='ZEBJUS_FLIGHTCORE'||data.version!==BENCH_VERSION||
     data.releaseScope!=='BENCH_DIAGNOSTIC'||data.flightOutputQualified!==false||data.physicalAcceptance!=='NOT_RUN'||
-    !Array.isArray(data.boards)||data.boards.length!==2||!['ZFC-A1','ZFC-A2'].every(id=>{
+    !Array.isArray(data.boards)||!data.boards.some(b=>b.id==='ZFC-A2')||
+    new Set(data.boards.map(b=>b.id)).size!==data.boards.length||!data.boards.every(b=>['ZFC-A1','ZFC-A2'].includes(b.id))||!['ZFC-A2'].every(id=>{
      const release=data.boards.find(b=>b?.id===id)?.latest;
      return release?.version===BENCH_VERSION&&['app','factory'].every(type=>{
       const pkg=release[type];
@@ -252,7 +260,7 @@ async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))
   if(!compiledIso)throw Error('Official firmware image is missing its embedded compile timestamp. Reload the current release; nothing flashed.');
   const compiled=Date.parse(compiledIso),built=Date.parse(opt.builtAt||''),expected=Date.parse(opt.compiledAt||'');
   if(opt.compiledAt){
-   if(!Number.isFinite(expected)||Math.abs(compiled-expected)>1000)throw Error('Firmware compile date differs from the verified catalog. Clear old cache and reload current A1/A2 firmware; nothing flashed.');
+   if(!Number.isFinite(expected)||Math.abs(compiled-expected)>1000)throw Error('Firmware compile date differs from the verified catalog. Clear old cache and reload current A2 firmware; nothing flashed.');
   }else if(!Number.isFinite(built)||compiled<built-15*60*1000||compiled>built+12*60*60*1000)
    throw Error('Firmware compile date does not match the release build date. Old cached firmware may be selected; reload. Nothing flashed.');
  }
@@ -299,13 +307,17 @@ async function autoLoad(choice=releaseChoice){
   releaseChoice=choice;
   if(choice==='latest'){
    // Auto Load Latest resolves the verified board before choosing a package.
-   // A2 uses the verified versioned BENCH image; A1 retains the stable published APP.
+   // A2 uses the verified versioned BENCH image. Historical A1 is archive-only.
    // Nothing is flashed by this selection.
    const id=await targetBoardId(false);
-   releaseTrack=id==='ZFC-A2'?'bench':'published';
+   if(id!=='ZFC-A2')throw Error('Only A2 firmware is supported');
+   releaseTrack='bench';
   }else if(choice==='bench'||choice==='published')releaseTrack=choice;
   else throw Error('Unknown firmware release selection');
   await loadFirmwarePackage();
+ }catch(error){
+  fw=null;renderFirmware();text('#fwPackageState','UNSUPPORTED BOARD');
+  text('#fwSourceMessage',String(error.message||error)+'; nothing flashed.');
  }finally{setBusy(false)}
 }
 async function loadFirmwarePackage(){
@@ -346,7 +358,7 @@ async function importFile(file){
  try{
   await loadCatalog();const bytes=new Uint8Array(await file.arrayBuffer()),{imageType}=await import('./js/firmware-image.js'),type=imageType(bytes);
   const chip=bytes[12]|bytes[13]<<8,detected=catalog.boards.find(b=>(b.imageChipIds||[]).includes(chip));
-  if(!detected)throw Error('Unsupported image chip. Choose an A1 or A2 FlightCore .bin.');
+  if(!detected)throw Error('Unsupported image chip. Choose an A2 FlightCore .bin.');
   const chosen=$('#fwBoardProfile')?.value||'auto',connected=expectedUsbBoard()||globalThis.ZebjusKits?.getState?.().board;
   if(chosen!=='auto'&&chosen!==detected.id||connected&&connected!==detected.id)throw Error('Imported firmware does not match the selected or connected board.');
   const id=detected.id,hash=await sha256(bytes);
@@ -650,7 +662,7 @@ async function connectUsb(){
     usbBoardId=mapHardwareSignature(usbSignature);
     if(!usbBoardId&&loader.chip?.IMAGE_CHIP_ID)usbBoardId=catalog.boards?.find(b=>b.imageChipIds?.includes(loader.chip.IMAGE_CHIP_ID))?.id||'';
     const board=boardById(usbBoardId);
-    if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Select the actual A1/C3 or A2/C6 controller port.');
+    if(!board||!board.imageChipIds?.includes(loader.chip?.IMAGE_CHIP_ID))throw Error('Unsupported USB chip: '+usbSignature+'. Only the A2/C6 controller is supported.');
     log('ROM chip identified • '+usbSignature+'; verifying flash before enabling USB flashing.');
     await probeUsbFlash(loader,board);
     if($('#fwUsbBaud'))$('#fwUsbBaud').value=String(plan.baud);
@@ -983,7 +995,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   if(!port){
    const ports=await navigator.serial.getPorts(),matches=ports.filter(matchingUsbPort);
    // C3 and C6 can share native USB VID/PID 303A:1001. Never guess between them.
-   if(matches.length>1)throw Error('Multiple matching ESP controllers are connected. Click Open Serial Port and explicitly select A1 or A2.');
+   if(matches.length>1)throw Error('Multiple matching ESP controllers are connected. Click Open Serial Port and explicitly select the A2 controller.');
    port=matches[0]||(ports.length===1?ports[0]:null);
   }
   if(!port){serialUi(false,'Board not detected • reconnect USB');throw Error('No authorized USB serial port is available. Reconnect the board and press Open Serial Port.')}

@@ -9,11 +9,11 @@ test('WebApp edits do not masquerade as C++ firmware builds',()=>{
  assert.match(renderImpact(report),/WebApp changed/);
 });
 
-test('Real A1/A2 compiled inputs require both-board verification',()=>{
+test('Real A2 compiled inputs require verification',()=>{
  const report=classifyChanges(['FlightCore_Firmware/FlightCoreMotor.h',
   'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino','tools/build_scanner.py']);
  assert.equal(report.sections.firmware.length,3);
- assert.match(report.suggestions.join(' '),/both A1\/A2 builds/);
+ assert.match(report.suggestions.join(' '),/A2 builds/);
 });
 
 test('Published binaries are release artifacts, not source compile triggers',()=>{
@@ -28,7 +28,7 @@ test('documentation change report is tiny, deterministic, and deduplicated',()=>
  assert.equal(report.changedCount,2);
  assert.equal(report.sections.docs.length,2);
  assert.match(report.suggestions.join(' '),/documentation-only/);
- assert.doesNotMatch(renderImpact(report),/both A1\/A2 builds/);
+ assert.doesNotMatch(renderImpact(report),/A2 builds/);
 });
 
 test('Android and CI changes remain visibly categorized',()=>{

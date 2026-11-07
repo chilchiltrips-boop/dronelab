@@ -1,7 +1,68 @@
 name: Build ZEBJUS Stable-Signed Android APK
 on:
   push:
-    branches: [feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-full-height-menu-panel-20261016, feature/android-adaptive-control-center-20261016, fix/android-178-acceptance-release-20261016, feature/unified-connection-admin-v2, work/sta-ap-diagnostics-20261012, testing/audit-compact-pairing-v1.4.5, testing/stable-android-signing-v1.4.2, testing/fast-qr-step2-signed-v1.4.3, feature/android-landscape-flight-controller-v1.6.0, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/ap-sta-transport-v1, main, feature/authoritative-status-integration-20261021]
+    branches: [main]
+    paths:
+      - 'control-path.css'
+      - 'js/control-path-policy.js'
+      - 'js/control-path-ui.js'
+      - 'js/kit-access-policy.js'
+      - 'tools/android-direct-kit*'
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/android-peerjs-menu-regression.test.mjs'
+      - 'tools/flight-ack-priority.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/release-metadata.test.mjs'
+      - 'mobile-android/**'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/controls-browser.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
+      - 'tools/android-simple-ap-connect.test.mjs'
+      - 'tools/verify_signed_android_release.py'
+      - 'tools/write_android_release_metadata.py'
+      - 'tools/verify_android_assets.py'
+      - 'tools/wait-release-checks.mjs'
+      - '.github/workflows/build-qr-android.yml'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-network.js'
+      - 'android-native-bridge.js'
+      - 'companion-flight.js'
+      - 'companion-menu.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'remote-rtc.js'
+      - 'remote-rtc-config.json'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'js/kit-auth.js'
+      - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
+      - 'js/inline-dialogs.js'
+      - 'firmware-catalog.json'
+      - 'vendor/crypto/**'
+  # This entire path set is mirrored in the eight exact-SHA required workflows.
+  # tools/android-release-gate-triggers.test.mjs guards against drift.
+  # Web-only PID changes do not produce a duplicate signed APK. Existing APK
+  # releases are immutable; Android UI/package changes require incrementing
+  # versionCode and passing the exact-source signed native release gate.
+  pull_request:
+    branches: [main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
@@ -74,6 +135,7 @@ concurrency:
 
 jobs:
   release_candidate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: Check whether Android package inputs changed
     runs-on: ubuntu-latest
     outputs:
@@ -247,7 +309,7 @@ jobs:
   native_touch:
     name: Native Android touch (16x9 REQUIRED)
     needs: android
-    if: (github.ref == 'refs/heads/feat/a2-gyro-calibration-20261028' || github.ref == 'refs/heads/feat/coordinated-handover-20261027') || github.ref == 'refs/heads/fix/android-layout-safe-20261027' || github.ref == 'refs/heads/fix/kit-control-20261017' || github.ref == 'refs/heads/fix/android-178-acceptance-release-20261016' || github.ref == 'refs/heads/fix/android-full-height-menu-panel-20261016' || github.ref == 'refs/heads/feature/android-adaptive-control-center-20261016' || github.ref == 'refs/heads/feature/unified-connection-admin-v2' || github.ref == 'refs/heads/work/sta-ap-diagnostics-20261012' || (github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/feature/authoritative-status-integration-20261021' || github.ref == 'refs/heads/feat/unified-input-status-20261026')) || github.ref == 'refs/heads/feature/unified-flight-training-v1.6.1' || github.ref == 'refs/heads/feature/android-reference-cockpit-v1.6.2'
+    if: needs.android.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -316,7 +378,7 @@ jobs:
   legacy_api30:
     name: POCO X2 legacy Android API 30 networking
     needs: android
-    if: ((github.ref == 'refs/heads/feat/a2-gyro-calibration-20261028' || github.ref == 'refs/heads/feat/coordinated-handover-20261027') || github.ref == 'refs/heads/fix/android-layout-safe-20261027' || github.ref == 'refs/heads/main' || (github.ref == 'refs/heads/feature/authoritative-status-integration-20261021' || github.ref == 'refs/heads/feat/unified-input-status-20261026'))
+    if: needs.android.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

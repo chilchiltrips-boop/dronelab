@@ -7,7 +7,6 @@ The 1.7.20 source adds an explicitly imported **experimental PPM Rate** build wi
 | Component | Published source metadata | Hardware/deployment status |
 | --- | --- | --- |
 | WebApp | Live build in `app-version.json` | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
-| FlightCore A1 (ESP32-C3) | Version in `firmware-catalog.json`, APP / FACTORY, A1 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
 | FlightCore A2 (XIAO ESP32-C6) | Version in `firmware-catalog.json`, APP / FACTORY, A2 embedded UTC compile stamp | Binary/catalog/partition SHA-256 CI passed; real device acceptance pending |
 | Android signed companion | Gradle candidate in `mobile-android/app/build.gradle`; published APK identity in `mobile-apk/ANDROID_RELEASE_META.txt` | New signed build requires native CI gate; real-handset radio, touch, and reconnect acceptance pending |
 | WebRTC pairing | Local QR/peer simulator pairing uses host/STUN candidates; Kit controls remain local AP/STA/USB | **TURN relay and internet-based physical Kit control intentionally out of scope** |
@@ -15,7 +14,7 @@ The 1.7.20 source adds an explicitly imported **experimental PPM Rate** build wi
 
 **Firmware dates must not be conflated.** Firmware Center's **LOADED FW BUILT** comes from `ZJ_BUILD_UTC` embedded in the selected, SHA-256-verified firmware binary, with `compiledAt` cross-checked against the catalog. **Running FW built** is reported by the currently connected verified Kit over USB `ZJINFO` or signed UDP management or browser-compatible HTTP `/api/status`. A September date in **Running** while **Loaded** shows October means the Kit may still be running an older image; flashing is never inferred from downloading a file. Browser time displays in the viewer's timezone. The ESP-IDF core descriptor may retain a *precompiled toolchain* date and is not accepted as the official build stamp.
 
-**A2 Rate PID is available for settings and diagnostic computation.** Diagnostic INPUT ARM and the existing bench MOTOR ARM remain separate. A1 PPM input is GPIO10; on A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
+**A2 Rate PID is available for settings and diagnostic computation.** Diagnostic INPUT ARM and the existing bench MOTOR ARM remain separate. On A2 XIAO ESP32-C6 D10 maps to GPIO18. Remove propellers and ESC/motor power during acceptance.
 
 **Release gates:** `npm test`, `npm run check`, `npm run verify:firmware`, `npm run verify:acceptance` (schema/status only; not a device test), and the GitHub Actions browser/native workflows. Real tests and signed operator evidence must be recorded separately in `docs/release-acceptance.evidence.json`; `node tools/release-acceptance.mjs --strict` intentionally fails until all mandatory tests genuinely pass. See [acceptance procedure](docs/RELEASE_ACCEPTANCE_20261017.md) and the [optional Central Admin hosting guide](docs/REMOTE_DEPLOYMENT_RUNBOOK.md). TURN and internet-based physical Kit control are excluded from the project.
 
@@ -61,11 +60,11 @@ Browser storage can be lost after clearing site data, using private browsing or 
 
 Local QR/WebRTC simulator pairing may use host and STUN ICE candidates. **No TURN relay will be deployed** and connectivity across restrictive networks is neither promised nor a release goal. Optional CONNECT-code signaling itself requires internet; use direct QR on a reachable local network when offline. Kit physical diagnostics, input ARM and firmware operations are limited to verified local AP/STA/USB routes; **no internet-based physical Kit control** is planned. Existing explicitly granted telemetry remains read-only, not a control tunnel.
 
-## FlightCore A1/A2 diagnostic firmware
+## FlightCore A2 diagnostic firmware
 
-`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. The ordinary published/bench package does not enable physical flight; the separately imported experimental A2 PPM Rate build can actuate through saved-setup/runtime gates and remains physically unqualified. A1: ESP32-C3 Super Mini, SDA4/SCL5, PPM GPIO10. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. Both build profiles use a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
+`FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino` contains AP/STA, USB I2C/IMU/LED diagnostics, authenticated APP OTA and 8-channel PPM diagnostic reception with exclusive input-source ownership, RC deadman and neutral failsafe. The ordinary published/bench package does not enable physical flight; the separately imported experimental A2 PPM Rate build can actuate through saved-setup/runtime gates and remains physically unqualified. A2: XIAO ESP32-C6, SDA22/SCL23, PPM D10/GPIO18. The A2 build uses a 4 MiB Factory image and an APP image fitting the 0x1e0000 OTA slot.
 
-`FlightCore_Firmware/catalog.json`, `firmware-catalog.json` and `build-report.json` publish the A1 and A2 version, SHA-256, `builtAt` (build start) and `compiledAt` (individually embedded sketch compilation timestamp). `tools/verify_release.py` rejects stale precompiled dates, nonmatching source hash, wrong chip/partition, and APP/FACTORY mismatch. USB `ZJINFO,GET` and signed Wi-Fi `/api/status` report the **running** firmware timestamp; the Firmware Center separately shows the **loaded** image date.
+`FlightCore_Firmware/catalog.json`, `firmware-catalog.json` and `build-report.json` retain archived A1/A2 versions and publish new A2-only builds with version, SHA-256, `builtAt` (build start) and `compiledAt` (individually embedded sketch compilation timestamp). `tools/verify_release.py` rejects stale precompiled dates, nonmatching source hash, wrong chip/partition, and APP/FACTORY mismatch. USB `ZJINFO,GET` and signed Wi-Fi `/api/status` report the **running** firmware timestamp; the Firmware Center separately shows the **loaded** image date.
 
 For first installation use the matching board-specific Factory image at `0x0`; APP updates at `0x10000` require the existing verified dual-OTA layout. APP OTA must preserve Wi-Fi/pairing; Factory erase may not. OTA transfer validation is not publisher signing or Secure Boot. Always bench-test both boards, disconnected motors and propellers, before school rollout. See `docs/SCHOOL_PRODUCTION_FIRMWARE_SECURITY.md` and `docs/FLIGHTCORE_PPM_RECEIVER.md`.
 
@@ -111,3 +110,5 @@ The main DroneLab shell now includes one `PID TUNING` tab. Its existing Tripod s
 ## Repository and deployment checks
 
 See [the project map](AGENTS.md) and [lean update guide](docs/AI_UPDATE_GUIDE.md). Run `npm run audit:repo`, `npm run impact -- --base origin/main --head HEAD`, and `npm run build:site`. Pages uploads only the verified `_site` directory; historical firmware download URLs remain intact.
+
+Active board support is **A2 only**. New firmware builds and the firmware selector target XIAO ESP32-C6. A1 binary URLs and evidence records remain compatibility archives; they are not offered for flashing, rebuilt or required for A2 qualification. A2 physical acceptance and safety interlocks are unchanged.

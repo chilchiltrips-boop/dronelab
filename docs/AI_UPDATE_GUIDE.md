@@ -16,7 +16,7 @@ APK/firmware publishers use `GITHUB_TOKEN`, whose commits do not trigger new pus
 
 The V2 workflow owns one full Node suite on PRs and main. Domain workflows keep their integration/browser coverage and run focused host tests (`node tools/run-domain-tests.mjs <domain>`). Signed Android publication also waits for the exact-source V2 result, alongside its existing native/signature/integration gates. Branch-specific one-off build workflows were removed; manual firmware builds remain available.
 
-PRs compile ordinary A1/A2 once plus the separately verified A2 experimental candidate when compiled inputs or build infrastructure change. UI-only edits skip compilation. Main source publication remains separately verified. The pinned Arduino toolchain is cached; compiled firmware is never reused by a broad cache key. Browser evidence expires after seven days; firmware/release artifacts retain their existing retention.
+PRs compile ordinary A2 once plus the separately verified A2 experimental candidate when compiled inputs or build infrastructure change. UI-only edits skip compilation. Main source publication remains separately verified. The pinned Arduino toolchain is cached; compiled firmware is never reused by a broad cache key. Browser evidence expires after seven days; firmware/release artifacts retain their existing retention.
 
 `lab.html` aliases the canonical `index.html` in Git. Consumers that do not resolve Git symlinks should use `index.html` or `npm run build:site`, which emits both full HTML files. The live URL remains compatible.
 

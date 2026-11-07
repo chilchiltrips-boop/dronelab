@@ -10,7 +10,7 @@ do not dump binaries, vendored libraries or the entire repository into context.
 | PID/simulator | `tripod.html`, `js/tripod-page.js`, `js/tripod-physics.js`, `js/flightcore-pid-client.js` | pid domain; tripod browser |
 | Kit/connection/input | `js/classroom-kits.js`, `js/live-inputs.js`, `js/simulator-input.js` | network/input domains; authoritative browser |
 | Python | `js/python-lab.js`, `python-lab-worker.js`, `js/python-ide-workspace.js` | setup domain; Python/offline browsers |
-| Physical firmware | `FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino`, relevant `FlightCore*.h` | firmware domain; A1/A2 builds |
+| Physical firmware | `FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino`, relevant `FlightCore*.h` | firmware domain; A2 builds |
 | Flash/download | `firmware-updater.js`, firmware catalogs, `tools/verify_release.py` | release domain; bench/candidate browsers |
 | Android | `mobile-android/`, `companion-*.js`, `android-native-bridge.js` | Android exact-source signing/native gates |
 | CI/Pages | `.github/workflows/pages.yml`, `tools/site-package.mjs`, `tools/prepare-pages.mjs` | package tests; exact `_site` browser tests |
