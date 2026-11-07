@@ -2,9 +2,25 @@ name: Stamp DroneLab WebApp Version
 on:
   push:
     branches: [main]
+    # A documentation, firmware, APK or workflow-only commit must not create
+    # another WebApp version commit and a second GitHub Pages deployment.
     paths-ignore:
       - 'app-version.json'
+      - '.github/**'
+      - 'docs/**'
+      - 'tools/**'
+      - 'FlightCore_Firmware/**'
+      - 'mobile-android/**'
       - 'mobile-apk/**'
+      - 'VERSION.txt'
+      - 'firmware-catalog.json'
+      - 'firmware-latest.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '**/*.md'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'LICENSE*'
   workflow_dispatch:
 permissions:
   contents: write
