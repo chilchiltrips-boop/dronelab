@@ -87,7 +87,7 @@ jobs:
       - run: node --test tools/control-path-policy.test.mjs tools/authoritative-status.test.mjs tools/firmware-host.test.mjs tools/led-failsafe.test.mjs tools/ppm-host.test.mjs tools/kit-access.test.mjs tools/ppm-simulator-input.test.mjs tools/udp-management.test.mjs tools/android-direct-kit-control.test.mjs tools/legacy-connectivity-runtime.test.mjs tools/live-inputs.test.mjs tools/live-inputs-runtime.test.mjs tools/simulator-input.test.mjs
   browser:
     needs: protocol
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
