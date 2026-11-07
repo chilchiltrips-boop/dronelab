@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {a2MotorFixture} from './a2-motor-host-fixture.mjs';
 import '../js/kit-access-policy.js';
+import {experimentalRateRelease} from '../js/firmware-image.js';
 
 const runtime=readFileSync('FlightCore_Firmware/FlightCoreControlRuntime.h','utf8');
 const section=(from,to)=>runtime.slice(runtime.indexOf(from),runtime.indexOf(to));
@@ -159,5 +160,20 @@ test('WebApp and Android output labels follow fresh firmware state, never input 
 test('experimental build requires explicit A2 target and isolated output directory',()=>{
  for(const args of [[],['--board','ZFC-A1','--output-dir','/tmp/test-rate'],['--board','ZFC-A2','--output-dir','FlightCore_Firmware']]){
   assert.throws(()=>execFileSync('python3',['tools/build_scanner.py','--experimental-rate-flight',...args],{stdio:'pipe'}),/Command failed/);
+ }
+});
+
+test('experimental import requires a separately pinned unqualified A2 package',()=>{
+ const candidate={schema:2,product:'ZEBJUS_FLIGHTCORE',version:'1.7.20',sourceCommit:'a'.repeat(40),
+  releaseScope:'EXPERIMENTAL_PPM_RATE',flightOutputEnabled:true,flightOutputQualified:false,physicalAcceptance:'NOT_RUN',
+  boards:[{id:'ZFC-A2',latest:{version:'1.7.20'}}]};
+ for(const kind of ['app','factory'])candidate.boards[0].latest[kind]={available:true,sha256:'b'.repeat(64),size:kind==='app'?1300000:4194304,
+  file:`ZEBJUS_FLIGHTCORE_A2_${kind.toUpperCase()}_RATE_EXPERIMENTAL.bin`,builtAt:'2026-11-07T00:00:00Z',compiledAt:'2026-11-07T00:00:00Z'};
+ assert.equal(experimentalRateRelease(candidate,'ZFC-A2'),candidate.boards[0].latest);
+ assert.throws(()=>experimentalRateRelease(candidate,'ZFC-A1'));
+ for(const change of [c=>c.flightOutputQualified=true,c=>c.physicalAcceptance='PASS',c=>c.sourceCommit='short',
+  c=>c.boards.push(c.boards[0]),c=>c.boards[0].latest.app.sha256='',c=>c.boards[0].latest.app.file='published.bin',
+  c=>c.boards[0].latest.version='1.7.19',c=>c.boards[0].latest.app.available=false]){
+  const invalid=structuredClone(candidate);change(invalid);assert.throws(()=>experimentalRateRelease(invalid,'ZFC-A2'));
  }
 });
