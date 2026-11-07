@@ -1145,9 +1145,9 @@ function initSerialTools(){
   navigator.serial.addEventListener('connect',e=>{
    const port=e.port||e.target;
    if(!monitorWanted||monitorPort||monitorStarting||busy||!matchingUsbPort(port))return;
-   // Automatic re-selection by VID/PID can send commands to a different A1/A2.
+   // Automatic re-selection by VID/PID can send commands to a different Kit.
    if(isEspNativeUsbPort(port)){
-    log('Native USB device detected. Select its port explicitly to avoid confusing A1 SuperMini with A2 C6.');
+    log('Native USB device detected. Select the intended A2 port explicitly to avoid connecting to a different Kit.');
     serialUi(false,'USB detected • click Open Serial Port to select board');
     return;
    }

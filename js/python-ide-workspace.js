@@ -101,7 +101,7 @@ export function createPythonIDEShell(api){
  const panels=[
   ['camera','Camera','camera'],['plotter','Plotter','chart'],['usb','USB Hardware','usb-connect'],['assets','Assets','image']
  ];
- const railHelp={camera:'Open Camera and MediaPipe preview',plotter:'Open live USB gyro charts and Python plots',usb:'Connect USB FlightCore A1 / A2 and read sensors',assets:'Preview imported project images and files'};
+ const railHelp={camera:'Open Camera and MediaPipe preview',plotter:'Open live USB gyro charts and Python plots',usb:'Connect USB FlightCore A2 and read sensors',assets:'Preview imported project images and files'};
  for(const [id,label,svg] of panels){const b=button('',svg,()=>openRight(right===id?'closed':id),'py-rail-button');hint(b,railHelp[id]);b.dataset.pyRail=id;rail.append(b)}
  layout.append(rail);
  const tools=side.querySelector('.python-tools-card'),usb=$('pythonUsbTools'),visual=$('pythonVisualTools'),market=side.querySelector('.python-market-card');
