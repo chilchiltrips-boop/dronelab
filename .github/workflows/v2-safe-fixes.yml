@@ -65,6 +65,7 @@ jobs:
           node tools/legacy-connectivity-browser.mjs
           node tools/exclusive-connectivity-browser.mjs
           node tools/offline-browser.mjs
+          node tools/experimental-rate-browser.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

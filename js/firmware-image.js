@@ -104,18 +104,17 @@ export function usbConnectionError(error){
   if(['NetworkError','InvalidStateError'].includes(name)||/busy|already open|in use|access denied/i.test(message))return Error('USB port is busy. Close Serial Monitor or another flasher, then hold BOOT, tap RESET and retry at 115200.');
   return Error(message||'USB bootloader connection failed.');
 }
-// An explicit local import may match this separately pinned candidate. It is
-// never an Auto Load Latest source and cannot claim physical qualification.
+// Explicit selection and local import use the separately published candidate.
 export function experimentalRateRelease(catalog,boardId){
  const board=catalog?.boards?.[0],release=board?.latest;
  if(catalog?.schema!==2||catalog.product!=='ZEBJUS_FLIGHTCORE'||
   catalog.releaseScope!=='EXPERIMENTAL_PPM_RATE'||catalog.flightOutputEnabled!==true||
   catalog.flightOutputQualified!==false||catalog.physicalAcceptance!=='NOT_RUN'||
   !/^[a-f0-9]{40}$/.test(catalog.sourceCommit||'')||
-  !/^\d+\.\d+\.\d+$/.test(catalog.version||'')||catalog.boards.length!==1||
+  !/^\d+\.\d+\.\d+$/.test(catalog.version||'')||!Array.isArray(catalog.boards)||catalog.boards.length!==1||
   boardId!=='ZFC-A2'||board?.id!==boardId||release?.version!==catalog.version||
   !['app','factory'].every(kind=>{
-   const p=release?.[kind];return p?.available===true&&/^[a-f0-9]{64}$/.test(p.sha256||'')&&
+   const p=release?.[kind];return p?.available===true&&!p.url&&/^[a-f0-9]{64}$/.test(p.sha256||'')&&
     Number.isSafeInteger(p.size)&&p.size>=32768&&p.size<=4194304&&
     p.file===`ZEBJUS_FLIGHTCORE_A2_${kind.toUpperCase()}_RATE_EXPERIMENTAL.bin`&&
     Number.isFinite(Date.parse(p.builtAt))&&Number.isFinite(Date.parse(p.compiledAt));
