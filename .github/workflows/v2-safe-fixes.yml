@@ -78,11 +78,48 @@ jobs:
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # This workflow runs on every PR, but a UI-only change does not change
+      # compiled FlightCore bytes. Keep this required job present while
+      # skipping expensive Arduino installs and duplicate firmware builds.
+      - name: Detect compiled firmware inputs changed
+        id: firmware_changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+            echo "Base SHA unavailable; conservatively compile both boards"
+          elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+            'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino' \
+            'FlightCore_Firmware/*.h' \
+            'FlightCore_Firmware/partitions.csv' \
+            'FlightCore_Firmware/bench-release-policy.json' \
+            'FlightCore_Firmware/publication-hold.json' \
+            'VERSION.txt' \
+            'js/pid-profiles.js' 'tools/sync-pid-profiles.mjs' \
+            'tools/build_scanner.py' 'tools/embed_setup_portal.py' \
+            'tools/setup-portal.html' 'tools/bench_release_gate.py' \
+            'tools/verify_release.py' 'tools/firmware_compile_time.py'; then
+            echo "compile=false" >> "$GITHUB_OUTPUT"
+            echo "No compiled firmware input changed; use existing verified package"
+          else
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+            echo "Compiled firmware input changed; run both-board review build"
+          fi
       - uses: arduino/setup-arduino-cli@v2
+        if: steps.firmware_changes.outputs.compile == 'true'
       - run: python3 tools/embed_setup_portal.py
+        if: steps.firmware_changes.outputs.compile == 'true'
       - run: python3 tools/build_scanner.py
+        if: steps.firmware_changes.outputs.compile == 'true'
       - run: python3 tools/verify_release.py
+        if: steps.firmware_changes.outputs.compile == 'true'
       - uses: actions/upload-artifact@v4
+        if: steps.firmware_changes.outputs.compile == 'true'
         with:
           name: v2-review-a1-a2-firmware
           path: |
