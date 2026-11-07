@@ -8,6 +8,7 @@ const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
  const ESC=5,OUTPUT=6,REPORT=7;
+ const RATE_LOW_THROTTLE_US=1050,READINESS_MAX_AGE_MS=10000;
  const shortSteps=['Board','Wiring','Inputs','IMU','Signal','ESC Cal.','Output Cal.','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
@@ -52,6 +53,7 @@ if(root){
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
  let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
  let visualStep=-1,visualMarkup='',autoPrepareIntent=null,lastAutoAttempt='',loadedPid=null;
+ let readiness=null,readinessError='',readingReadiness=false;
  const slider=(id,max)=>`<div class="a2-slider"><label for="${id}"><span>Output pulse</span><output id="${id}Value">1000 µs</output></label><input id="${id}" type="range" min="1000" max="${max}" step="1" value="1000" disabled><div><span>1000</span><span>${max} µs</span></div></div>`;
  const pageStatus=n=>`<p class="a2-page-save" data-save-page="${n}" role="status"></p>`;
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
@@ -70,7 +72,12 @@ if(root){
   <div class="a2-actions"><button class="btn" data-action="load-pid-profile" type="button">Load &amp; Save PID Profile</button></div>
   <p class="a2-pid-status" role="status">Provisional Rate and Angle gains · bench tuning.</p>
  </div></section>
- <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Aux / ARM','Aux / mode','Aux 7','Aux 8'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
+ <section data-panel="2"><h3>Live inputs</h3><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Auxiliary','Auxiliary','Auxiliary','Auxiliary'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div>
+ <div class="a2-check-card"><h4>PPM receiver check</h4>
+  <p>Select PPM and leave outputs disarmed. Move one stick at a time. Check direction and travel near 1000–2000 µs. CH1 Roll, CH2 Pitch, and CH4 Yaw should center near 1500 µs. Return CH3 Throttle to its lowest position.</p>
+  <p class="a2-ppm-mapping"></p><p class="a2-ppm-throttle"></p>
+  <p>CH5 is auxiliary. Flight ARM is a separate firmware check. Receiver bars are observations and may lag.</p>
+ </div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
  <section data-panel="3" class="a2-imu-page">
  <div class="a2-imu-heading"><h3>IMU Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>${pageStatus(3)}
  <div class="a2-imu-card">
@@ -122,6 +129,10 @@ if(root){
  <div class="a2-actions"><button class="btn ghost" data-action="auto-read">Read stored result</button><button class="btn ghost" data-action="auto-retry" hidden>Retry storing controller result</button></div></section>
  <section data-panel="6"><div class="a2-panel-heading"><h3>Output Calibration</h3>${soundButton}</div>${pageStatus(OUTPUT)}
  <p>Press Start, then raise the slider slowly until the motor spins steadily. Press Stop to record the value, then press Save to store it on the controller.</p>
+ <div class="a2-check-card"><h4>Verify motor order and rotation</h4>
+  <p>Remove all propellers and leave the all-motor option unchecked. Use the existing single-motor test for M1 through M4. Look from above and compare the motor position and CW/CCW direction with the selected motor below and the frame diagram.</p>
+  <p>If a different motor responds or its direction differs, press STOP and disconnect motor power before correcting wiring. The PWM acknowledgment only confirms the controller command.</p>
+ </div>
  <label class="a2-check"><input id="a2CalAll" type="checkbox"> Calibrate all motor outputs at the same time</label>
  <p class="a2-output-prerequisite" role="status"></p><div class="a2-actions"><button class="btn ghost" data-action="skip-output" hidden>Skip output calibration → Report</button></div>
  <p class="a2-cal-target"></p><p class="a2-cal-result"></p>${slider('a2CalPulse',1500)}
@@ -129,7 +140,13 @@ if(root){
  <div class="a2-actions a2-test-actions"><button class="btn a2-test-toggle" data-action="cal-slider">Start</button></div>
  <div class="a2-actions"><button class="btn ghost" data-action="resume-cal" hidden>Resume recorded pulse</button></div>
  <p class="a2-cal-output a2-test-state" role="status"></p></section>
- <section data-panel="7"><h3>Setup report</h3><p class="a2-report-state" role="status"></p><div class="a2-report"></div>
+ <section data-panel="7"><h3>Setup report</h3><p class="a2-report-state" role="status"></p>
+ <section class="a2-check-card a2-readiness" aria-labelledby="a2ReadinessTitle">
+  <div class="a2-readiness-head"><h4 id="a2ReadinessTitle">Flight Readiness</h4><button class="btn ghost" data-action="read-readiness" type="button">Read FC status</button></div>
+  <p class="a2-readiness-status" role="status"></p>
+  <dl class="a2-readiness-grid" aria-label="FlightCore readiness checks"></dl>
+  <p class="a2-readiness-physical"><strong>Physical validation pending.</strong> Verify motor order, direction and the physical failsafe on the bench. This report reads software interlocks.</p>
+ </section><div class="a2-report"></div>
  <div class="a2-actions"><button class="btn ghost" data-action="download">Download report</button></div>
  <details class="a2-secondary-test"><summary>Reset setup</summary>
  <p>Reset writes the selected defaults to the controller after confirmation. ESC endpoints are stored in the ESCs.</p>
@@ -143,13 +160,26 @@ if(root){
  const $=s=>root.querySelector(s),message=t=>$('.a2-message').textContent=t;
  const kit=()=>window.ZebjusKits?.getState?.()||{};
  const live=()=>document.getElementById('tab-setup')?.classList.contains('active')&&!document.hidden;
+ const kitIdentity=k=>[k.kitId,k.bootId,k.transport,k.connectionGeneration,k.connected].join('|');
+ const verifiedBoot=k=>k.bootId||(k.transport==='usb'&&saved?.kitId===k.kitId?saved.bootId:'');
+ const readinessPath=k=>k.connected&&k.board==='ZFC-A2'&&/^ZFC-A2-[a-f0-9]{12}$/i.test(k.kitId||'')&&
+  !!verifiedBoot(k)&&['usb','ap','sta'].includes(k.transport);
+ const verifiedPpmMap=map=>Array.isArray(map)&&map.length===5&&new Set(map).size===5&&
+  map.every(n=>Number.isInteger(n)&&n>=1&&n<=8)?map:null;
  function selectedInput(){
-  const s=state||{};
-  if(s.selectedInput==='ANDROID_WEBRTC'&&kit().connected){
+  const s=state||{},k=kit();
+  if(s.selectedInput==='ANDROID_WEBRTC'&&k.connected){
    const p=window.ZebjusSimulatorInputs?.snapshot?.(),sample=p?.sample;
-   if(p?.fresh&&p.ageMs<=300&&p.peer?.approved&&(!sample?.kitId||sample.kitId===kit().kitId))return {source:'Android WebRTC · paired phone',reported:true,monitoring:true,valid:true,age:p.ageMs,channels:sample?.channels?[sample.channels.roll,sample.channels.pitch,sample.channels.throttle,sample.channels.yaw,sample.aux?.ch5,sample.aux?.ch6,null,null]:[]};
+   if(p?.fresh&&p.ageMs<=300&&p.peer?.approved&&(!sample?.kitId||sample.kitId===k.kitId))return {source:'Android WebRTC · paired phone',reported:true,monitoring:true,valid:true,age:p.ageMs,channels:sample?.channels?[sample.channels.roll,sample.channels.pitch,sample.channels.throttle,sample.channels.yaw,sample.aux?.ch5,sample.aux?.ch6,null,null]:[]};
   }
-  return setupMonitorSample(state,lastStateAt,kit());
+  const input=setupMonitorSample(state,lastStateAt,k),path=k.rcAccess?.controlPath||s.selectedInput;
+  const ppmSelected=path==='PPM'||path==='AUTO'&&(!s.inputValid||s.inputSource==='PPM');
+  if(!ppmSelected)return input;
+  // The receiver diagnostics carry calibrated channels in physical order.
+  // Apply the mapping from that same observation, just as FlightCore does.
+  const map=verifiedPpmMap(input.receiver?.map);
+  const order=map?[...map,...[1,2,3,4,5,6,7,8].filter(n=>!map.includes(n))]:[];
+  return {...input,ppmMap:map,channels:order.map(n=>input.channels[n-1]??null)};
  }
  const view=(label,rows)=>`<dl aria-label="${esc(label)}">${rows.map(([a,b])=>`<div><dt>${esc(a)}</dt><dd>${esc(b)}</dd></div>`).join('')}</dl>`;
  const config=s=>s?.layout in layouts?{layout:s.layout,layoutPins:[...s.layoutPins],rotations:[...s.rotations]}:defaults();
@@ -209,8 +239,9 @@ if(root){
   root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
  }
  function refreshIdentity(){
-  const k=kit(),key=[k.kitId,k.bootId,k.transport,k.connectionGeneration,k.connected].join('|');
+  const k=kit(),key=kitIdentity(k);
   if(key===identity)return;
+  readiness=null;readinessError='';
   identity=key;
   if(!base||k.kitId&&k.kitId!==contextKit||k.bootId&&base.bootId!==k.bootId)resetContext();
   else{
@@ -450,6 +481,111 @@ if(root){
   resume.disabled=!!working||!fresh;
   if(!resume.hidden)resume.textContent=`Resume ${activeRun.resume} µs`;
  }
+ function readUsbReadiness(guard){
+  const serial=window.DroneLabSerial,prefix='ZJFLIGHT,STATUS,';
+  return new Promise((resolve,reject)=>{
+   const finish=(error,value)=>{
+    clearTimeout(timeout);window.removeEventListener('dronelab:serial-line',receiveLine);
+    if(error)reject(error);else resolve(value);
+   };
+   const receiveLine=({detail})=>{
+    if(detail?.transport&&detail.transport!=='usb'||!detail?.line?.startsWith(prefix))return;
+    try{guard();finish(null,JSON.parse(detail.line.slice(prefix.length)));}
+    catch(error){finish(error);}
+   };
+   const timeout=setTimeout(()=>finish(Error('USB Flight Readiness response timed out.')),1800);
+   window.addEventListener('dronelab:serial-line',receiveLine);
+   serial.writeLine('ZJFLIGHT,STATUS\n').catch(finish);
+  });
+ }
+ async function readFlightReadiness(){
+  // Adopt a transport or boot transition before capturing this read's binding.
+  // A click can arrive before the next periodic Wizard render.
+  refreshIdentity();
+  const k=kit(),bootId=verifiedBoot(k),key=kitIdentity(k),run=operation;
+  const serial=window.DroneLabSerial,usb=k.transport==='usb',serialGeneration=usb?serial?.generation?.():null;
+  if(readingReadiness||working||motorClient.busy||!live()||step!==REPORT||!readinessPath(k))return;
+  const current=()=>run===operation&&!working&&live()&&step===REPORT&&key===kitIdentity(kit())&&bootId===verifiedBoot(kit())&&
+   (!usb||serial?.generation?.()===serialGeneration);
+  const guard=()=>{
+   if(!current())throw Error('The selected A2, boot or connection changed. Read the status again.');
+   if(usb&&(!serial?.isOpen?.()||serial.isFlashing?.()||window.ZebjusKits.getUsbMonitorState?.()?.kitId!==k.kitId))
+    throw Error('Verify the selected A2 over USB first.');
+  };
+  const startedAt=Date.now();
+  readingReadiness=true;readiness=null;readinessError='';renderReadiness(k);
+  try{
+   guard();
+   const data=usb?await readUsbReadiness(guard):await window.ZebjusKits.requestBound(k,'/api/flight/readiness','GET',{},guard);
+   guard();
+   const flight=window.ZebjusKitAccessPolicy?.flightState(data?.flight);
+   const flags=['flightOutputEnabled','setupComplete','pidSaved','ppmFresh','inputArmed','gyroFresh','timingHealthy',
+    'outputsOffAck','benchActive','escCalibrationActive'];
+   const reason=value=>typeof value==='string'&&/^[A-Z_]{1,40}$/.test(value);
+   if(data?.schema!==1||data.mode!=='ACRO_READINESS'||data.board!==k.board||data.kitId!==k.kitId||data.bootId!==bootId||
+    !flight||flight.enabled!==data.flightOutputEnabled||!flags.every(flag=>typeof data[flag]==='boolean')||
+    !reason(data.blockReason)||!reason(data.softwareBlockReason)||!Number.isSafeInteger(data.setupRevision)||data.setupRevision<0||
+    typeof data.firmwareVersion!=='string'||!data.firmwareVersion||k.version&&data.firmwareVersion!==k.version)
+    throw Error('The A2 returned an invalid or mismatched readiness snapshot.');
+   readiness={key,bootId,serialGeneration,startedAt,readAt:new Date().toISOString(),data:{
+    kitId:k.kitId,bootId,firmwareVersion:data.firmwareVersion,firmwareBuiltAt:k.firmwareBuiltAt||null,
+    ...Object.fromEntries(flags.map(flag=>[flag,data[flag]])),setupRevision:data.setupRevision,
+    blockReason:data.blockReason,softwareBlockReason:data.softwareBlockReason,flight,
+    inputSource:['PPM','ANDROID','WEB'].includes(data.inputSource)?data.inputSource:'NONE',
+    inputAgeMs:Number.isSafeInteger(data.inputAgeMs)&&data.inputAgeMs>=0?data.inputAgeMs:null,
+    throttleUs:Number.isSafeInteger(data.throttleUs)&&data.throttleUs>=1000&&data.throttleUs<=2000?data.throttleUs:null,
+    controlHz:Number.isFinite(data.controlHz)?data.controlHz:null
+   }};
+  }catch(error){
+   if(current())readinessError=String(error.message||error);
+  }finally{
+   readingReadiness=false;render();
+  }
+ }
+ function currentReadiness(k){
+  if(!readiness||!k.connected||readiness.key!==kitIdentity(k)||readiness.bootId!==verifiedBoot(k)||
+   Date.now()-readiness.startedAt>=READINESS_MAX_AGE_MS||
+   saved?.receivedAt>readiness.startedAt&&saved.configRevision!==readiness.data.setupRevision||
+   readiness.data.outputsOffAck&&k.outputObservedAt>readiness.startedAt&&k.motorsDisabled===false||
+   k.transport==='usb'&&window.DroneLabSerial?.generation?.()!==readiness.serialGeneration)return null;
+  return readiness;
+ }
+ function renderReadiness(k){
+  const snapshot=currentReadiness(k),status=$('.a2-readiness-status'),button=$('[data-action="read-readiness"]');
+  const hint=readingReadiness?'Reading verified A2 status…':readinessError||(!k.connected?'Connect a verified A2 to review live interlocks.':
+   !readinessPath(k)?'Verify the selected A2 over USB, AP or STA.':readiness&&!snapshot?'Observation is stale or the board state changed. Read FC status again.':
+   snapshot?`A2 snapshot at ${new Date(snapshot.readAt).toLocaleTimeString()} · ${k.transport.toUpperCase()}`:'Read FC status to verify current interlocks.');
+  if(status.textContent!==hint)status.textContent=hint;
+  status.dataset.tone=readinessError?'error':snapshot?'neutral':'warn';
+  button.disabled=readingReadiness||!!working||motorClient.busy||!readinessPath(k);
+  const d=snapshot?.data,signal=saved?.outputSignal;
+  let rows=[];
+  if(d){
+   const ppm=d.ppmFresh&&d.inputSource==='PPM'&&d.inputAgeMs!==null;
+   const low=ppm&&d.throttleUs!==null&&d.throttleUs<=RATE_LOW_THROTTLE_US;
+   const off=d.outputsOffAck&&!d.benchActive&&!d.escCalibrationActive&&d.flight.state!=='ARMED';
+   const blocker=d.flight.authorized?d.flight.blockReason:d.blockReason;
+   rows=[
+    ['Running firmware',`${d.firmwareVersion} · ${d.flightOutputEnabled?'Experimental PPM Rate':'Bench · flight output locked'}${d.firmwareBuiltAt?' · '+d.firmwareBuiltAt:''}`,'neutral'],
+    ['Saved setup',`${d.setupComplete?'Complete':'Incomplete'} · revision ${d.setupRevision}`,d.setupComplete?'ok':'warn'],
+    ['Rate PID',d.pidSaved?'Active gains saved on FC':'Save or restore the active gains on FC',d.pidSaved?'ok':'warn'],
+    ['Receiver',ppm?`PPM fresh · ${d.inputAgeMs} ms at FC · Input ${d.inputArmed?'armed':'disarmed'}`:
+     d.inputSource==='PPM'?'PPM not fresh':`Accepted source ${d.inputSource}`,ppm?'ok':'warn'],
+    ['Throttle',ppm&&d.throttleUs!==null?`${d.throttleUs} µs · ${low?'LOW':'above '+RATE_LOW_THROTTLE_US+' µs'}`:'No verified PPM throttle',low?'ok':'warn'],
+    ['IMU / scheduler',`${d.gyroFresh?'Gyro fresh':'Gyro unavailable'} · ${d.timingHealthy?'Timing healthy':'Timing not ready'}${d.controlHz!==null?' · '+d.controlHz.toFixed(1)+' Hz':''}`,
+     d.gyroFresh&&d.timingHealthy?'ok':'error'],
+    ['PWM output',`${off?'OFF acknowledged':d.benchActive?'Bench active':d.escCalibrationActive?'ESC calibration active':'OFF unconfirmed'}${signal?.hz?' · '+signal.hz+' Hz':''}`,off?'ok':'warn'],
+    ['Flight state',d.flight.state,d.flight.state==='FAILSAFE'?'error':'neutral'],
+    ['FC blocker',blocker==='NONE'?'None reported':blocker,blocker==='NONE'?'ok':'error']
+   ];
+   if(!d.flight.authorized&&d.softwareBlockReason!==blocker&&d.softwareBlockReason!=='NONE')
+    rows.push(['Software check',d.softwareBlockReason,'warn']);
+   if(d.flight.lastArmReason!=='NONE'&&d.flight.lastArmReason!=='UNKNOWN')
+    rows.push(['Last ARM / fault reason',d.flight.lastArmReason,'neutral']);
+  }
+  const grid=$('.a2-readiness-grid'),markup=rows.map(([label,value,tone])=>`<div data-tone="${tone}"><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('');
+  if(grid.innerHTML!==markup)grid.innerHTML=markup;
+ }
  function reportRows(){
   const k=kit(),signal=saved?.outputSignal,values=pulses(),stored=saved?.observedMinimumUs||[];
   const pulseText=p=>p?p+' µs':'Not calibrated';
@@ -465,8 +601,7 @@ if(root){
    ['ESC acceptance','Not directly measurable through standard PWM ESC wiring'],
    ['ESC',autoSequenceReady()?'Controller sequence stored · ESC endpoint acceptance unverified':compatibleEsc()?'Legacy confirmation saved':escCleared()?'Cleared · pending reset':'Not completed'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
-   ['Setup',saved?.setupComplete===true?'Complete · saved on FC':'Incomplete · finish page saves'],
-   ['Rate flight',saved?.flightOutputEnabled===true?'Experimental PPM + Acro · save PID, throttle LOW, then a fresh ARM gesture':'Bench firmware · physical flight output disabled'],
+   ['Setup',!saved?'Unverified':saved.setupComplete===true?'Complete · saved on FC':'Incomplete · finish page saves'],
    ['Physical acceptance','Not verified by software']
   ];
  }
@@ -474,7 +609,17 @@ if(root){
   const m=state||{},input=selectedInput(),ppm=input.receiver;
   const age=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';
   const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':kit().connected?'WAITING FOR INPUT':'KIT OFFLINE';
-  $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${m.inputArmed?'armed':'disarmed'}`;
+  const armObserved=kit().connected&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
+  $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${armObserved?(m.inputArmed?'armed':'disarmed'):'arm state unverified'}`;
+  const map=verifiedPpmMap(ppm?.map);
+  $('.a2-ppm-mapping').textContent=map?`Receiver channels → Roll ${map[0]} · Pitch ${map[1]} · Throttle ${map[2]} · Yaw ${map[3]} · Aux ${map[4]}`:'Saved PPM mapping unverified.';
+  const ppmSelected=(kit().rcAccess?.controlPath||m.selectedInput)==='PPM';
+  const throttle=input.channels?.[2],freshThrottle=ppmSelected&&input.ppmMap&&input.valid&&!input.monitorDelayed&&Number.isInteger(throttle);
+  const throttleStatus=$('.a2-ppm-throttle');
+  throttleStatus.dataset.tone=freshThrottle&&throttle<=RATE_LOW_THROTTLE_US?'ok':ppmSelected&&ppm?.present===false?'error':'warn';
+  throttleStatus.textContent=freshThrottle?`PPM throttle ${throttle} µs · ${throttle<=RATE_LOW_THROTTLE_US?'LOW':'lower to '+RATE_LOW_THROTTLE_US+' µs or below'}`:
+   !ppmSelected?'Select PPM to verify its throttle.':input.monitorDelayed?'Monitor delayed · throttle unverified.':
+   ppm?.present===false?'A2 reported no PPM signal.':!map?'Throttle unverified until the PPM mapping is read.':'Waiting for a fresh PPM throttle observation.';
   root.querySelectorAll('[data-channel]').forEach(row=>{
    const value=input.channels?.[Number(row.dataset.channel)],reported=Number.isFinite(value)&&value>=1000&&value<=2000;
    row.dataset.fresh=String(reported&&input.monitoring);
@@ -482,7 +627,7 @@ if(root){
    row.querySelector('i').style.width=reported?(value-1000)/10+'%':'0%';
   });
   $('.a2-input-health').textContent=(input.receiverHealth||'PPM signal diagnostics are not verified yet.')+
-   (ppm?` · ${ppm.captureBackend||'receiver'} · ${ppm.captureHz??'—'} Hz (target 50 Hz) · ${ppm.captureReady===false?'capture unavailable · ':''}losses ${ppm.losses||0} · invalid intervals ${ppm.faults||0}`:'')+
+   (ppm?` · ${ppm.captureBackend||'receiver'} · ${ppm.captureHz??'—'} Hz (target 50 Hz) · frame ${ppm.seq??'—'} · ${ppm.captureReady===false?'capture unavailable · ':''}losses ${ppm.losses||0} · invalid intervals ${ppm.faults||0}`:'')+
    (readError?' · Status refresh delayed.':'')+(m.selectedInput==='ANDROID_AP'?' · Android AP owns input.':'');
   if(step===2&&input.monitoring&&Number.isFinite(input.channels?.[2])&&lastStateAt!==historyAt){
    historyAt=lastStateAt;history.push(input.channels[2]);if(history.length>48)history.shift();
@@ -550,6 +695,7 @@ if(root){
    ['Alternate profile compatibility','Physical validation pending']
   ]);
   $('.a2-report').innerHTML=view('Wizard review',reportRows());
+  if(step===REPORT)renderReadiness(k);
   $('.a2-report-state').textContent=conflict?'Board configuration changed. Refresh board to reload its verified setup.':saveState||'Board-saved setup summary. Return to a page to save any pending changes.';
   const lock=!!working||motorClient.busy||autoPending();
   $('[data-nav="-1"]').disabled=step===0||!!working;
@@ -595,6 +741,7 @@ if(root){
  }
  function show(next){
   if(next!==step)$('#a2OutputSafety').checked=false;
+  if(next!==REPORT){readiness=null;readinessError='';}
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
   if(step===OUTPUT)setCalPulse(currentResult());
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
@@ -791,7 +938,9 @@ if(root){
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
   if(name==='download'){
+   const snapshot=currentReadiness(kit());
    const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,
+    flightReadiness:snapshot?{readAt:snapshot.readAt,...snapshot.data}:null,
     escResultSource:compatibleEsc()?'LEGACY_OPERATOR':autoSequenceReady()?'CONTROLLER_SEQUENCE_ONLY':'NOT_VERIFIED',
     escAcceptanceVerified:false,physicalAcceptance:'NOT_VERIFIED'};
    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
@@ -880,6 +1029,7 @@ if(root){
  function perform(name){
   if(working&&name!=='stop')return;
   if(name==='stop'&&working==='stop')return;
+  if(name!=='download')readiness=null;
   const run=operation;working=name;operationError='';render();
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
@@ -894,6 +1044,7 @@ if(root){
  root.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;cues.unlock();
   const action=b.dataset.action;
+  if(action==='read-readiness'){void readFlightReadiness();return;}
   if(action==='sound'){
    cues.setEnabled(!cues.enabled);
    try{localStorage.setItem('zebjus.setup.sound',cues.enabled?'on':'off');}catch{}
@@ -930,7 +1081,9 @@ if(root){
  window.addEventListener('zebjus:motor-state',e=>{if(live())receive(e.detail);});
  const observe=()=>{
   if(!live()){
-   if(!document.getElementById('tab-setup')?.classList.contains('active'))$('#a2OutputSafety').checked=false;
+   if(!document.getElementById('tab-setup')?.classList.contains('active')){
+    $('#a2OutputSafety').checked=false;readiness=null;readinessError='';
+   }
    if(working)cancelMotorConfirmations();
    if(motorClient.owner==='wizard'){++operation;activeRun=null;escAttempt=false;void motorClient.stop('wizard').catch(()=>{});}
    return;

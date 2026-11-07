@@ -2,6 +2,14 @@
 
 The 1.7.20 source adds an explicitly selected **experimental PPM Rate** build with saved-Setup/PID gates and a single receiver ARM gesture. Standard bench releases remain flight-disabled. WebApp and Android display firmware-reported output state. See [Setup to Rate ARM](docs/A2_SETUP_RATE_FLOW.md) for build profiles, controls and remaining physical tests.
 
+## Flight Data
+
+Open **Flight Data** from the main navigation to monitor a verified A2 Kit. The dashboard reuses existing Kit observations and sends no control or calibration commands. It separates receiver ARM, physical Rate ARM, and PWM status. Health badges show OK (green), warning (orange), confirmed fault (red), or unavailable (gray).
+
+The level reference and 3D vehicle can show a stationary accelerometer tilt estimate when fresh AP/STA data supports it. Gyro rates are in degrees per second. Heading, GPS position, altitude, speed, and battery measurements are unavailable on current A2 telemetry. Orbit Preview is a separate interactive airframe view. The gyro chart holds up to one minute of browser observations in memory and clears on stale data, a Kit or source change, or leaving the page. Use **Diagnostics** for controller tick traces.
+
+Use **Setup Wizard → Report → Flight Readiness** to check the running firmware, saved setup and PID, PPM, IMU, timing, and PWM OFF acknowledgment. The read-only check is tied to the selected Kit and current connection. Software readiness and physical acceptance are displayed separately.
+
 ## Current releases and verification
 
 Active board support is A2 only (Seeed XIAO ESP32-C6). The firmware picker, Kit connection and Android controller target A2. Older A1 images and evidence remain archives at their existing paths.
@@ -38,7 +46,7 @@ Reset removes only the `apName` and `apPass` entries from the `zj-classroom` pre
 
 
 
-DroneLab retains **Assembly**, **2D Wiring**, **Python Lab**, **Settings**, and **Firmware / USB Serial Tools**, with one canonical **Flight Training** page at `tripod.html`. `index.html` and `lab.html` are synchronized entry points; `companion.html` is also packaged in the Android companion.
+The main WebApp includes **Assembly**, **Wiring**, **Python Lab**, **Setup Wizard**, **PID Tuning**, **Flight Data**, and **Devices & Firmware**. PID Tuning uses the simulator at `tripod.html`. `index.html` and `lab.html` are synchronized entry points; `companion.html` is also packaged in the Android companion.
 
 Run `npm run dev`, then open `http://localhost:4173/`. GitHub Pages hosts the app under `/dronelab/`. Desktop Chrome/Edge on HTTPS or localhost supports Web Serial. Android WebView USB flashing is unsupported.
 

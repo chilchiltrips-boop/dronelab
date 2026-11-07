@@ -1,7 +1,8 @@
 // Shared Aerion WebApp shell: a 56px control row and a 48px centered navigation row and real File actions.
-// The same authenticated controls stay mounted across all six pages.
+// The same authenticated controls stay mounted across all seven pages.
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
+import {testFlightData} from './flight-data-browser.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 const expectedVersion='v'+JSON.parse(readFileSync(new URL('../app-version.json',import.meta.url),'utf8')).version;
@@ -34,8 +35,8 @@ try{
   assert.ok(metrics.scroll<=width,JSON.stringify(metrics));
   assert.equal(metrics.hiddenWorkspaceTools,false);
   assert.ok(metrics.inputVisible,'Input selection must be directly visible');
-  assert.equal(metrics.navButtons.length,7);
-  assert.deepEqual(await page.locator('.topbar-main .tab').evaluateAll(es=>es.map(e=>e.dataset.tab)),['assembly','wiring','python','setup','pid','firmware']);
+  assert.equal(metrics.navButtons.length,8);
+  assert.deepEqual(await page.locator('.topbar-main .tab').evaluateAll(es=>es.map(e=>e.dataset.tab)),['assembly','wiring','python','setup','pid','telemetry','firmware']);
   assert.equal(metrics.navigationOnly,true,'Only navigation belongs in the lower row');
   assert.deepEqual(metrics.shop,{count:1,text:'Shop',href:'https://www.zebjus.in/category/all-products',target:'_blank'});
   for(const {id,rect,primary} of metrics.controls){
@@ -135,7 +136,7 @@ try{
    // Keep DOM nodes and handlers while changing pages; status text may grow
    // without moving the toolbar, input or save controls.
    await page.evaluate(()=>{window.__shellNodes=[document.querySelector('.topbar'),document.getElementById('topGrantMobileSwitch'),document.getElementById('headerControlPath')]});
-   for(const tab of ['assembly','wiring','python','pid','firmware']){
+   for(const tab of ['assembly','wiring','python','setup','pid','telemetry','firmware']){
     await page.locator('[data-tab="'+tab+'"]').click();
     assert.ok(await page.evaluate(()=>window.__shellNodes.every(e=>e.isConnected)&&window.__shellNodes[0]===document.querySelector('.topbar')));
     assert.equal((await page.locator('.topbar').boundingBox()).height,104);
@@ -144,6 +145,7 @@ try{
    await page.screenshot({path:'test-output/v2/desktop-pid-1366.png'});
   }
   await page.screenshot({path:`test-output/v2/header-${width}.png`});
+  if([390,1366].includes(width))await testFlightData(page,width);
   await context.close();console.log('PASS desktop shell/fallback',width,metrics.header.height);
  }
 }finally{writeFileSync('test-output/v2/layout.json',JSON.stringify(results,null,2));await browser.close()}

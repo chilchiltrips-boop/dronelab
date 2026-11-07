@@ -17,10 +17,11 @@ try{
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
   ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'A2',version:'1.7.13'};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.20'};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
-  const f=window.__wizard={kit,calls:[],writes:0,run:0,imuSequence:3,candidates:{},
+  const f=window.__wizard={kit,calls:[],readinessReads:0,writes:0,run:0,imuSequence:3,candidates:{},
    board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,calibrationSlideKeepsSession:true,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
+    inputArmed:false,ppm:{present:true,ageMs:2,seq:12,map:[2,1,4,3,5],channels:[1510,1530,1000,1350],captureHz:50},
     imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
     ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false}}
   };
@@ -29,8 +30,25 @@ try{
    const [frame,pins,rotations]=encoded.split(':');
    Object.assign(f.board,{layout:frame==='P'?'A2_QUAD_PLUS':'A2_QUAD_X',layoutPins:[...pins].map(n=>'D'+n),rotations:[...rotations].map(n=>n==='0'?'CW':'CCW')});
   };
+  f.readinessResponse=()=>{
+   const enabled=f.experimental===true,blocker=f.readinessBlocker||'NONE';
+   return {schema:1,mode:'ACRO_READINESS',board:kit.board,kitId:kit.kitId,bootId:f.wrongBoot?'other-boot':kit.bootId,
+    firmwareVersion:kit.version,flightOutputEnabled:enabled,setupComplete:true,pidSaved:true,
+    flight:{version:1,enabled,authorized:false,canArm:enabled&&blocker==='NONE',state:'DISARMED',
+     blockReason:enabled?blocker:'UNQUALIFIED',lastArmReason:'NONE'},
+    setupRevision:f.board.configRevision,blockReason:enabled?blocker:'UNQUALIFIED',softwareBlockReason:blocker,
+    ppmFresh:true,inputArmed:false,inputSource:'PPM',inputAgeMs:2,throttleUs:blocker==='THROTTLE_HIGH'?1350:1000,
+    gyroFresh:true,timingHealthy:true,controlHz:249.8,outputsOffAck:true,benchActive:false,escCalibrationActive:false};
+  };
   window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
-   guard?.();if(route!=='/api/motor')throw Error('Unexpected fixture request');
+   guard?.();
+   if(route==='/api/flight/readiness'&&method==='GET'){
+    f.readinessReads++;
+    const value=f.readinessResponse();
+    if(f.holdReadiness)await new Promise(resolve=>{f.releaseReadiness=resolve;});
+    return value;
+   }
+   if(route!=='/api/motor')throw Error('Unexpected fixture request');
    f.calls.push({...a});const b=f.board;let extra={};
    if(a.action==='WIZARD_STATUS'&&f.failStatus)throw Error('Simulated unavailable readback');
    switch(a.action){
@@ -138,6 +156,16 @@ try{
  assert.match(await savedBadge(1).textContent(),/✓ Saved on board/);
  assert.equal(await fixture(()=>__wizard.writes),1);
  await nav(1).click();assert.equal(await button('save-page').isVisible(),false);
+ assert.match(await wizard.locator('[data-channel="4"] b').textContent(),/^Auxiliary$/);
+ await expectText('.a2-ppm-mapping','Roll 2 · Pitch 1 · Throttle 4 · Yaw 3');
+ await expectText('.a2-ppm-throttle','1350 µs · lower');
+ await expectText('[data-channel="0"] output','1530 µs');
+ await expectText('[data-channel="2"] output','1350 µs');
+ await fixture(()=>{__wizard.board.ppm.map=null;});
+ await expectText('.a2-ppm-throttle','Throttle unverified');
+ await expectText('[data-channel="2"] output','—');
+ await fixture(()=>{__wizard.board.ppm.map=[2,1,4,3,5];__wizard.board.ppm.channels[3]=1000;});
+ await expectText('.a2-ppm-throttle','1000 µs · LOW');
  await nav(1).click();await expectText('.a2-gyro-status','2000 / 2000');
  assert.equal(await button('save-page').isDisabled(),true,'runtime gyro bias is not persisted as accelerometer calibration');
  await check('a2Still');await button('imu-level').click();
@@ -301,6 +329,18 @@ try{
  assert.equal(await button('save-page').isVisible(),false);assert.equal(await nav(1).isVisible(),false,'Report must be the last step');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1087,1090,1105,1110]);
  assert.doesNotMatch(await wizard.locator('.a2-report').textContent(),/Pending|Motor test/i);
+ const readiness='.a2-readiness-grid',readStatus=()=>button('read-readiness').click();
+ await fixture(()=>{__wizard.readinessBlocker='THROTTLE_HIGH';});
+ await readStatus();await expectText(readiness,'UNQUALIFIED');
+ await expectText(readiness,'THROTTLE_HIGH');await expectText(readiness,'1350 µs');await expectText(readiness,'OFF acknowledged');
+ assert.match(await wizard.locator('.a2-readiness-physical').textContent(),/Physical validation pending/);
+ await fixture(()=>{__wizard.experimental=true;__wizard.readinessBlocker='NONE';});
+ await readStatus();await expectText(readiness,'Experimental PPM Rate');await expectText(readiness,'None reported');
+ assert.match(await wizard.locator('.a2-readiness-physical').textContent(),/Physical validation pending/);
+ await fixture(()=>{__wizard.wrongBoot=true;});
+ await readStatus();await expectText('.a2-readiness-status','mismatched readiness snapshot');
+ assert.equal(await wizard.locator(readiness).textContent(),'');
+ assert.equal(await fixture(()=>__wizard.readinessReads),3);
  await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(6);
  assert.equal(await pulse.inputValue(),'1110');
  assert.equal(await safety.isChecked(),false,'returning from Report requires a new page confirmation');
@@ -346,5 +386,33 @@ try{
  assert.deepEqual(safetyPrompts,[],'the complete Wizard uses no native browser dialogs');
  assert.deepEqual(errors,[]);
  await step(7).click();assert.equal(await nav(1).isVisible(),false);
- console.log('PASS simulated A2 one-click ESC prepare, cold-power auto result with no tone ticks, persisted sequence/STOP, output calibration, reset and final Report');
+ const width=(await wizard.locator('.a2-readiness').boundingBox()).width;
+ assert.ok(width<=390,'readiness fits the mobile viewport');
+ await fixture(()=>{__wizard.holdReadiness=true;});
+ await readStatus();await page.waitForFunction(()=>!!__wizard.releaseReadiness);
+ await fixture(()=>{__wizard.kit.connectionGeneration++;__wizard.releaseReadiness();});
+ await expectText('.a2-readiness-status','Read FC status to verify');
+ assert.equal(await wizard.locator(readiness).textContent(),'','late previous-generation reply is discarded');
+ await fixture(()=>{
+  const f=__wizard,k=f.kit;f.usbLines=[];k.transport='usb';k.connectionGeneration++;
+  window.ZebjusKits.getUsbMonitorState=()=>({...k});
+  window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>2,writeLine:async line=>{
+   f.usbLines.push(line);
+   if(line==='ZJFLIGHT,STATUS\n'){
+    window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:'ZJFLIGHT,STATUS,'+JSON.stringify(f.readinessResponse())}}));
+   }
+  }};
+  // Click before the next Wizard poll can observe the new transport.
+  document.querySelector('[data-action="read-readiness"]').click();
+ });
+ await expectText('.a2-readiness-status','· USB');
+ await expectText(readiness,'UNQUALIFIED');
+ assert.deepEqual(await fixture(()=>__wizard.usbLines.filter(line=>line.startsWith('ZJFLIGHT'))),['ZJFLIGHT,STATUS\n']);
+ await fixture(()=>{
+  const now=Date.now();Date.now=()=>now+11000;
+ });
+ await expectText('.a2-readiness-status','Observation is stale');
+ assert.equal(await wizard.locator(readiness).textContent(),'','expired observation cannot supply a ready or OFF claim');
+ assert.deepEqual(errors,[]);
+ console.log('PASS simulated A2 one-click ESC prepare, cold-power auto result, persisted STOP, output calibration, reset, PPM mapping and read-only readiness');
 }finally{await browser.close();}
