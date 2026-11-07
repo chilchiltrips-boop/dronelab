@@ -2,6 +2,7 @@
 // This intentionally cannot run firmware builds, deployments or GitHub writes.
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const compiled=/^FlightCore_Firmware\/(?:[^/]+\.(?:h|ino)|partitions\.csv|bench-release-policy\.json|publication-hold\.json)$/;
@@ -58,6 +59,6 @@ function main(args){
  const report=classifyChanges(raw.split(/\r?\n/));
  process.stdout.write(args.includes('--json')?JSON.stringify(report,null,2)+'\n':renderImpact(report)+'\n');
 }
-if(process.argv[1]&&fileURLToPath(import.meta.url)===fileURLToPath(new URL('file://'+process.argv[1]))){
+if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1])){
  try{main(process.argv.slice(2))}catch(error){console.error('Change-impact report: '+error.message);process.exitCode=1}
 }
