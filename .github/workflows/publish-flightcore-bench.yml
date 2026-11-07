@@ -1,7 +1,7 @@
 name: Verify and publish approved FlightCore bench package
 on:
   push:
-    branches: [main, feat/a2-rate-flight-recorder-20261106, release/flightcore-1.7.16-bench-20261105, fix/a2-default-latest-bench-1716-20261105]
+    branches: [main]
     # A pinned release policy or verifier update can promote a new artifact.
     # Ordinary WebApp/firmware UI edits should not republish an unchanged binary.
     paths:
@@ -64,7 +64,7 @@ jobs:
           for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
           node tools/bench-firmware-browser.mjs
       - name: Publish the verified versioned bench package
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/a2-rate-flight-recorder-20261106'
+        if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           version=$(jq -er '.benchArtifact.version' FlightCore_Firmware/bench-release-policy.json)

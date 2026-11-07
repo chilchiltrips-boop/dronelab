@@ -1,7 +1,7 @@
 name: Release Acceptance Contracts (not hardware proof)
 on:
   push:
-    branches: [main, fix/release-acceptance-20261017]
+    branches: [main]
     paths:
       - 'README.md'
       - 'app-version.json'

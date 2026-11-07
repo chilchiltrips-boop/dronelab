@@ -1,7 +1,7 @@
 name: Tripod PID Simulator Tests
 on:
   pull_request:
-    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
+    branches: [main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
@@ -15,8 +15,69 @@ on:
       - 'tools/tripod-compact-browser.mjs'
       - 'tools/tripod-ap-mirror-browser.mjs'
       - '.github/workflows/tripod-simulator.yml'
+      - 'vendor/peerjs*'
+      - 'tools/android-menu-browser.mjs'
+      - 'tools/pid-shell-browser.mjs'
+      - 'mobile-android/**'
+      - 'companion.html'
+      - 'companion.css'
+      - 'companion.js'
+      - 'companion-flight.js'
+      - 'flight-input.js'
+      - 'pairing-core.js'
+      - 'pairing-code.js'
+      - 'pairing-qr-ui.js'
+      - 'vendor/qrgen.js'
+      - 'vendor/jsqr.js'
+      - 'tools/verify_signed_android_release.py'
+      - '.github/workflows/build-qr-android.yml'
+      - 'app-version.json'
+      - 'docs/flight-training/**'
+      - 'js/tripod-physics.js'
+      - 'js/simulator-input.js'
+      - 'tools/simulator-input.test.mjs'
+      - 'js/tripod-audio.js'
+      - 'js/tripod-realism.js'
+      - 'js/tripod-assembly-model.js'
+      - 'js/tripod-experiments.js'
+      - 'tools/tripod-physics.test.mjs'
+      - 'tools/export-flight-bench.mjs'
+      - 'sw.js'
+      - 'tools/android-direct-kit*'
+      - 'tools/flight-controller-browser.mjs'
+      - 'tools/flight-preview-browser.mjs'
+      - 'tools/android-peerjs-menu-regression.test.mjs'
+      - 'tools/flight-ack-priority.test.mjs'
+      - 'tools/apk-verifier.test.mjs'
+      - 'tools/release-metadata.test.mjs'
+      - 'tools/android-camera-permission.test.mjs'
+      - 'tools/native-flight-acceptance.sh'
+      - 'tools/configure-native-avd.py'
+      - 'tools/release-signing.test.mjs'
+      - 'tools/android_release_needed.py'
+      - 'tools/android-release-needed.test.mjs'
+      - 'tools/network-transport.test.mjs'
+      - 'tools/controls-browser.mjs'
+      - 'tools/android-origin-wifi-nsd.test.mjs'
+      - 'tools/android-grants-vault-ota.test.mjs'
+      - 'tools/android-connection-reliability.test.mjs'
+      - 'tools/android-simple-ap-connect.test.mjs'
+      - 'tools/write_android_release_metadata.py'
+      - 'tools/verify_android_assets.py'
+      - 'tools/wait-release-checks.mjs'
+      - 'companion-network.js'
+      - 'android-native-bridge.js'
+      - 'companion-menu.js'
+      - 'remote-rtc.js'
+      - 'remote-rtc-config.json'
+      - 'js/kit-auth.js'
+      - 'js/kit-network-policy.js'
+      - 'js/kit-ack-diagnostics.js'
+      - 'js/inline-dialogs.js'
+      - 'firmware-catalog.json'
+      - 'vendor/crypto/**'
   push:
-    branches: [feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, fix/kit-control-20261017, fix/android-178-acceptance-release-20261016, work/sta-ap-diagnostics-20261012, feature/tripod-pid-simulator-v1.5.0, feature/tripod-realistic-pid-audio-v1.5.1, feature/tripod-v1.5.2-dynamics-assembly, feature/tripod-yaw-reverse-v1.5.3, feature/unified-flight-training-v1.6.1, feature/android-reference-cockpit-v1.6.2, feature/unified-pid-settings-shell-v1.6.3, main, feature/pid-fullwidth-responsive-layout, feature/authoritative-status-integration-20261021]
+    branches: [main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
@@ -116,7 +177,7 @@ jobs:
           node --check js/tripod-experiments.js
           node --test tools/tripod-physics.test.mjs
           npm run check
-          npm test
+          node tools/run-domain-tests.mjs pid
       - name: Install isolated Chromium test environment
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
@@ -136,4 +197,5 @@ jobs:
         with:
           name: tripod-simulator-desktop-mobile
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

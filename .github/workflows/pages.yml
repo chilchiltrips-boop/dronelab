@@ -1,0 +1,135 @@
+name: Build and deploy WebApp package
+on:
+  push:
+    branches: [main]
+    paths: ['*.html', '*.css', '*.js', '*.mjs', '*.json', '*.glb', '*.png', '*.svg', 'THREE-LICENSE.txt',
+      'js/**', 'assets/**', 'vendor/**', 'mobile-apk/**', 'FlightCore_Firmware/**/*.bin',
+      'FlightCore_Firmware/**/*.json', '.nojekyll', 'tools/site-package*', 'tools/prepare-pages*',
+      'tools/pages-decision*', 'tools/verify-live-site.mjs', '.github/workflows/pages.yml']
+  pull_request:
+    branches: [main]
+    paths: ['*.html', '*.css', '*.js', '*.mjs', '*.json', '*.glb', '*.png', '*.svg',
+      'js/**', 'assets/**', 'vendor/**', 'mobile-apk/**', 'FlightCore_Firmware/**/*.bin',
+      'FlightCore_Firmware/**/*.json', 'tools/site-package*', 'tools/prepare-pages*',
+      'tools/pages-decision*', 'tools/verify-live-site.mjs', '.github/workflows/pages.yml']
+  workflow_run:
+    workflows: ['Build ZEBJUS Stable-Signed Android APK', 'Verify and publish approved FlightCore bench package', 'Build and verify FlightCore A2 AP/STA Firmware']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Redeploy already verified content (recovery only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: pages-${{ github.event.pull_request.number || 'production' }}
+  # Do not cancel an active Pages file sync; retain only the newest queued run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      deploy: ${{ steps.package.outputs.deploy }}
+      source: ${{ steps.package.outputs.source }}
+      digest: ${{ steps.package.outputs.digest }}
+      metadata: ${{ steps.package.outputs.metadata }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.sha }}
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tools/site-package.test.mjs tools/pages-decision.test.mjs tools/webapp-version.test.mjs
+      - run: npm run check
+      - name: Package only live WebApp files; skip identical content
+        id: package
+        env:
+          PAGES_PRODUCTION: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          FORCE_DEPLOY: ${{ inputs.force == true }}
+        run: node tools/prepare-pages.mjs
+      - name: Verify the exact deployment directory in Chromium
+        if: github.event_name == 'pull_request' || steps.package.outputs.deploy == 'true'
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory _site > /tmp/pages-http.log 2>&1 &
+          for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
+          node tools/bench-firmware-browser.mjs
+          candidate_version="$(node -p "JSON.parse(require('fs').readFileSync('FlightCore_Firmware/experimental-rate-catalog.json')).version")"
+          A2_RATE_ARTIFACT_DIR="FlightCore_Firmware/experimental/$candidate_version" node tools/experimental-rate-browser.mjs
+          node tools/offline-browser.mjs
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.package.outputs.deploy == 'true'
+        with:
+          path: _site
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pages-browser-evidence
+          path: test-output/
+          retention-days: 7
+  deploy:
+    needs: build
+    if: needs.build.outputs.deploy == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Commit only the reviewed version metadata, without a second deployment
+        id: current
+        env:
+          EXPECTED_SOURCE: ${{ needs.build.outputs.source }}
+          VERSION_METADATA: ${{ needs.build.outputs.metadata }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SOURCE" ]; then
+            echo 'Main advanced; the newer queued run owns deployment.'
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          Path('app-version.json').write_text(json.dumps(json.loads(os.environ['VERSION_METADATA']),indent=2)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app-version.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Stamp deployed WebApp version [version-stamp]'
+            git push origin HEAD:main
+          fi
+          echo 'active=true' >> "$GITHUB_OUTPUT"
+      - uses: actions/configure-pages@v5
+        if: steps.current.outputs.active == 'true'
+      - uses: actions/deploy-pages@v4
+        id: deployment
+        if: steps.current.outputs.active == 'true'
+        with:
+          timeout: '1200000'
+      - uses: actions/setup-node@v4
+        if: steps.current.outputs.active == 'true'
+        with:
+          node-version: '22'
+      - name: Verify live version and byte-exact runtime, APK and historical firmware URLs
+        if: steps.current.outputs.active == 'true'
+        env:
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_CONTENT_DIGEST: ${{ needs.build.outputs.digest }}
+        run: node tools/verify-live-site.mjs

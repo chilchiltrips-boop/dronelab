@@ -1,7 +1,7 @@
 name: Full DroneLab Form and Input Fit Audit
 on:
   push:
-    branches: [fix/android-178-acceptance-release-20261016, main, work/sta-ap-diagnostics-20261012, fix/complete-webapp-input-fit-audit]
+    branches: [main]
     paths:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'
@@ -33,7 +33,7 @@ jobs:
       - name: Run project validation and unit tests
         run: |
           node --check tools/full-page-input-fit-browser.mjs
-          npm test
+          node tools/run-domain-tests.mjs ui
           npm run check
       - name: Install Chromium
         run: |

@@ -108,3 +108,7 @@ Detailed assignment, audit, diagrams, exhaustive test matrix and reproducible nu
 ## V1.6.3 shared PID tuning and persistent WebRTC settings
 
 The main DroneLab shell now includes one `PID TUNING` tab. Its existing Tripod simulator is retained in a same-origin, mounted iframe; navigating Assembly/Wiring/Python/PID/Settings no longer unloads the parent WebRTC host. Settings embeds compact QR/6-digit-code/WebRTC confirmation controls directly; `Grant Mobile Control` is a single switch in the persistent header. Direct `tripod.html` bookmarks redirect to canonical shared `index.html#pid`; isolated legacy renderer tests opt into `tripod.html?standalone=1`. Closing Settings or changing tabs does not disconnect P2P; explicit Disconnect, STOP, refresh, permission revocation, and loss of heartbeat still enforce safety.
+
+## Repository and deployment checks
+
+See [the project map](AGENTS.md) and [lean update guide](docs/AI_UPDATE_GUIDE.md). Run `npm run audit:repo`, `npm run impact -- --base origin/main --head HEAD`, and `npm run build:site`. Pages uploads only the verified `_site` directory; historical firmware download URLs remain intact.

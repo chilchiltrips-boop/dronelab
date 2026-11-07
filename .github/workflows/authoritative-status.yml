@@ -1,7 +1,7 @@
 name: Authoritative status integration
 on:
   push:
-    branches: [feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, fix/android-layout-safe-20261027, feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, feature/authoritative-status-integration-20261021, main]
+    branches: [main]
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
@@ -68,7 +68,7 @@ on:
       - 'live-inputs.css'
       - '.github/workflows/authoritative-status.yml'
   pull_request:
-    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -115,3 +115,4 @@ jobs:
         with:
           name: authoritative-status-browser-evidence
           path: test-output/
+          retention-days: 7

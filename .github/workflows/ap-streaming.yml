@@ -1,7 +1,7 @@
 name: AP UDP Streaming Regression
 on:
   push:
-    branches: [work/ap-ack-free-stream-20261020, main]
+    branches: [main]
     paths:
       - 'companion-network.js'
       - 'companion-flight.js'
@@ -36,7 +36,7 @@ jobs:
           node --test tools/udp-stream.test.mjs tools/android-direct-kit-control.test.mjs tools/android-udp-feedback-watchdog.test.mjs tools/udp-rc-contract.test.mjs
       - name: Run repository regressions
         run: |
-          npm test
+          node tools/run-domain-tests.mjs network
           npm run check
       - name: Install Chromium
         run: |

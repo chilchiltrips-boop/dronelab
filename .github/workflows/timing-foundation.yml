@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm test
+      - run: node tools/run-domain-tests.mjs firmware
       - run: npm run check
       - run: python3 tools/verify_release.py
       - run: npm run verify:acceptance
@@ -49,4 +49,5 @@ jobs:
         with:
           name: timing-simulation-evidence
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

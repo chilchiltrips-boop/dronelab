@@ -1,7 +1,7 @@
 name: Verify Grant Mobile Toggle Layout
 on:
   push:
-    branches: [feat/compact-desktop-header-20261026, main, work/sta-ap-diagnostics-20261012, fix/grant-mobile-toggle-no-overlap]
+    branches: [main]
     paths:
       - 'v2-header.css'
       - 'control-path.css'
@@ -25,7 +25,7 @@ jobs:
           node-version: '22'
       - name: Verify project and switch markup
         run: |
-          npm test
+          node tools/run-domain-tests.mjs ui
           npm run check
           node --check tools/grant-toggle-layout-browser.mjs
       - name: Install Chromium
@@ -43,4 +43,5 @@ jobs:
         with:
           name: grant-mobile-layout-screenshots
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore
