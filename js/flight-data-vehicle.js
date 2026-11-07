@@ -159,7 +159,7 @@ export function createFlightDataVehicle(container) {
     const nextCaption = preview
       ? 'Interactive airframe preview · use the arrow buttons to orbit.'
       : live
-        ? `Stationary tilt · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
+        ? `${tilt.stationary ? 'Stationary tilt' : 'Accel reference'} · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
         : 'Reference airframe · no tilt data';
     if (caption.textContent !== nextCaption) caption.textContent = nextCaption;
     const next = { roll: live ? tilt.roll : 0, pitch: live ? tilt.pitch : 0, orbit: preview ? orbit : defaultOrbit };

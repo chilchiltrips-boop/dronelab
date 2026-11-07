@@ -107,8 +107,8 @@ export function createFlightDataPfd(container) {
         <strong id="fd-tilt-status">NO ATTITUDE DATA</strong>
         <span>Reference display</span>
       </div>
-      <div class="fd-pfd-tilt-readout" aria-label="Stationary tilt estimate" hidden>
-        <span>STATIONARY TILT</span>
+      <div class="fd-pfd-tilt-readout" hidden>
+        <span data-pfd-tilt-label>STATIONARY TILT</span>
         <span>R <output id="fd-roll" aria-label="Roll">—</output></span>
         <span>P <output id="fd-pitch" aria-label="Pitch">—</output></span>
       </div>
@@ -126,6 +126,7 @@ export function createFlightDataPfd(container) {
   const main = select('.fd-pfd-main');
   const overlay = select('#fd-tilt-overlay');
   const readout = select('.fd-pfd-tilt-readout');
+  const tiltLabel = select('[data-pfd-tilt-label]');
   const roll = select('#fd-roll');
   const pitch = select('#fd-pitch');
   const set = (node, value) => {
@@ -141,23 +142,29 @@ export function createFlightDataPfd(container) {
 
   function update(data) {
     const {health, tilt} = data;
-    const stationary = tilt && Number.isFinite(tilt.roll) && Number.isFinite(tilt.pitch);
-    main.dataset.tilt = stationary ? 'stationary' : 'unavailable';
-    world.setAttribute('visibility', stationary ? 'visible' : 'hidden');
-    reference.setAttribute('visibility', stationary ? 'hidden' : 'visible');
-    overlay.hidden = Boolean(stationary);
-    readout.hidden = !stationary;
-    if (stationary) {
+    const hasTilt = tilt && Number.isFinite(tilt.roll) && Number.isFinite(tilt.pitch);
+    main.dataset.tilt = hasTilt ? tilt.stationary ? 'stationary' : 'accel-reference' : 'unavailable';
+    world.setAttribute('visibility', hasTilt ? 'visible' : 'hidden');
+    reference.setAttribute('visibility', hasTilt ? 'hidden' : 'visible');
+    overlay.hidden = Boolean(hasTilt);
+    readout.hidden = !hasTilt;
+    if (hasTilt) {
+      const description = tilt.stationary ? 'Stationary tilt estimate'
+        : 'Accelerometer reference. Motion can distort the estimate.';
+      if (readout.title !== description) readout.title = description;
+      set(tiltLabel, tilt.stationary ? 'STATIONARY TILT' : 'ACCEL REFERENCE');
       world.setAttribute('transform', `rotate(${-tilt.roll} 160 78) translate(0 ${tilt.pitch * 1.95})`);
     } else {
       world.removeAttribute('transform');
     }
-    set(roll, stationary ? tilt.roll.toFixed(1) + '°' : '—');
-    set(pitch, stationary ? tilt.pitch.toFixed(1) + '°' : '—');
+    set(roll, hasTilt ? tilt.roll.toFixed(1) + '°' : '—');
+    set(pitch, hasTilt ? tilt.pitch.toFixed(1) + '°' : '—');
 
     flag('link', data.connected ? data.transport.toUpperCase() : 'KIT OFFLINE', health.link.state, health.link.label);
     flag('flight', ...flightArmStatus(data));
-    flag('input', data.rc.state === 'fresh' ? data.rc.source : 'RC INPUT', health.input.state, health.input.label);
+    const inputLabel = data.rc.state === 'fresh' ? data.rc.source
+      : data.rc.state === 'waiting' ? 'PPM WAIT' : 'RC INPUT';
+    flag('input', inputLabel, health.input.state, health.input.label);
     const adverse = Object.values(health).filter(row => ['error', 'warning'].includes(row.state));
     const caution = adverse.some(row => row.state === 'error') ? 'error' : adverse.length ? 'warning' : 'unknown';
     flag('caution', 'MASTER CAUTION', caution, adverse.length
