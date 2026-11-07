@@ -2,7 +2,7 @@
 #include "FlightCoreReceiverSnapshot.h"
 
 // Output capability and measured hardware qualification are different facts.
-// The explicit experimental build permits setup-gated PPM Rate control. Ordinary
+// The explicit experimental build permits setup-gated Acro/Angle control. Ordinary
 // bench packages remain non-actuating. Neither build flag asserts physical PASS.
 #if defined(ZJ_A2_EXPERIMENTAL_RATE_FLIGHT)
  #if !defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -14,7 +14,7 @@
 #endif
 static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
 static constexpr uint16_t ZJ_FLIGHT_STOP_THROTTLE_US=1050;
-// Acro armed LOW throttle sends ESC minimum (not spin-idle). Disarm/STOP/failsafe sends PWM OFF.
+// Armed LOW throttle sends ESC minimum (not spin-idle). Disarm/STOP/failsafe sends PWM OFF.
 static constexpr uint16_t ZJ_FLIGHT_ARMED_IDLE_US=1000;
 static constexpr uint16_t ZJ_FLIGHT_THROTTLE_CAP_US=1800;
 static constexpr uint32_t ZJ_FLIGHT_OUTPUT_LEASE_US=8000;
@@ -22,7 +22,8 @@ static constexpr uint32_t ZJ_FLIGHT_OUTPUT_LEASE_US=8000;
 struct ZjFlightConditions {
  FlightReceiverSnapshot input;
  uint32_t nowMs=0,inputDeadlineMs=0;
- bool acro=false,imuFresh=false,timingHealthy=false,outputOffAck=false;
+ bool acro=false,angle=false,attitudeReady=false,levelCalibrated=false,localController=false;
+ bool imuFresh=false,timingHealthy=false,outputOffAck=false;
  bool emergency=false,escCalibration=false,benchActive=false,maintenance=false;
  bool wiringVerified=false,driverReady=false,escOperatorConfirmed=false;
  bool setupComplete=false,pidSaved=false,escSequenceComplete=false;
@@ -32,13 +33,13 @@ enum class ZjFlightState : uint8_t {OUTPUT_OFF,ARMED,FAILSAFE};
 enum class ZjFlightFault : uint8_t {NONE,UNQUALIFIED,EMERGENCY_STOP,OUTPUT_RESERVED,
  INPUT_STALE,INPUT_DISARMED,SOURCE_CHANGED,IMU_STALE,DEADLINE_MISSED,MODE_UNSUPPORTED,EXPLICIT_ARM_REQUIRED,THROTTLE_HIGH,OFF_UNVERIFIED,
  SOURCE_UNSUPPORTED,WIRING_UNVERIFIED,OUTPUT_ERROR,PID_INVALID,LOW_THROTTLE,PROFILE_CHANGED,PPM_SIGNAL_LOST,ESC_UNCONFIRMED,
- SETUP_INCOMPLETE,PID_NOT_SAVED};
+ SETUP_INCOMPLETE,PID_NOT_SAVED,ATTITUDE_INVALID,LEVEL_REQUIRED};
 
 inline const char* zjFlightFaultName(ZjFlightFault fault){
  const char* const names[]={"NONE","UNQUALIFIED","EMERGENCY_STOP","OUTPUT_RESERVED","INPUT_STALE","INPUT_DISARMED",
   "SOURCE_CHANGED","IMU_STALE","DEADLINE_MISSED","MODE_UNSUPPORTED","EXPLICIT_ARM_REQUIRED","THROTTLE_HIGH","OFF_UNVERIFIED",
   "SOURCE_UNSUPPORTED","WIRING_UNVERIFIED","OUTPUT_ERROR","PID_INVALID","LOW_THROTTLE","PROFILE_CHANGED","PPM_SIGNAL_LOST","ESC_UNCONFIRMED",
-  "SETUP_INCOMPLETE","PID_NOT_SAVED"};
+  "SETUP_INCOMPLETE","PID_NOT_SAVED","ATTITUDE_INVALID","LEVEL_REQUIRED"};
  return names[static_cast<unsigned>(fault)];
 }
 
@@ -73,7 +74,9 @@ struct ZjFlightOutputGate {
   if(c.emergency)return ZjFlightFault::EMERGENCY_STOP;
   if(c.escCalibration||c.benchActive||c.maintenance)return ZjFlightFault::OUTPUT_RESERVED;
   if(!enabled)return ZjFlightFault::UNQUALIFIED;
-  if(!c.acro)return ZjFlightFault::MODE_UNSUPPORTED;
+  if(!c.acro&&!c.angle)return ZjFlightFault::MODE_UNSUPPORTED;
+  if(c.angle&&!c.levelCalibrated)return ZjFlightFault::LEVEL_REQUIRED;
+  if(c.angle&&!c.attitudeReady)return ZjFlightFault::ATTITUDE_INVALID;
   if(!c.driverReady)return ZjFlightFault::OUTPUT_ERROR;
   if(!c.setupComplete)return ZjFlightFault::SETUP_INCOMPLETE;
   if(!c.pidSaved)return ZjFlightFault::PID_NOT_SAVED;
@@ -82,7 +85,7 @@ struct ZjFlightOutputGate {
   if(!c.timingHealthy)return ZjFlightFault::DEADLINE_MISSED;
   if(!c.imuFresh)return ZjFlightFault::IMU_STALE;
   if(!c.input.fresh(c.nowMs,c.inputDeadlineMs))return ZjFlightFault::INPUT_STALE;
-  if(c.input.source!=ZjReceiverSource::PPM)return ZjFlightFault::SOURCE_UNSUPPORTED;
+  if(c.input.source!=ZjReceiverSource::PPM&&!c.localController)return ZjFlightFault::SOURCE_UNSUPPORTED;
   if(!c.input.inputArmed)return ZjFlightFault::INPUT_DISARMED;
   return ZjFlightFault::NONE;
  }

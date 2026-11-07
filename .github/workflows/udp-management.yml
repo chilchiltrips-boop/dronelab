@@ -5,6 +5,7 @@ on:
     paths:
       - 'control-path.css'
       - 'js/control-path-policy.js'
+      - 'js/flight-telemetry.js'
       - 'js/control-path-ui.js'
       - 'js/kit-access-policy.js'
       - 'FlightCore_Firmware/*.h'

@@ -513,3 +513,6 @@ button{min-height:44px}
 .mobile-connection>.flight-topbar{--cyan:#74d9c9;position:sticky;top:0;flex:0 0 auto;min-height:50px}
 .mobile-connection>.flight-topbar button{min-height:44px}
 .mobile-connection>.flight-topbar .flight-stop{color:#fff5f5;background:#813746;border-color:#d78089}
+
+#flightAttitude[data-source="flightcore"] #flightAttitudeLadder{transition:transform .10s linear}
+@media(prefers-reduced-motion:reduce){#flightAttitude[data-source="flightcore"] #flightAttitudeLadder{transition:none}}

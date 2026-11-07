@@ -97,7 +97,7 @@ try{
  assert.equal(await page.evaluate(()=>pidFixture.cfg.active.profile),'aerof450-quad-plus');
  await page.evaluate(()=>{location.hash='pid';});
  await status.filter({hasText:'Aerof450 · Quad +'}).filter({hasText:'revision 5'}).waitFor();
- assert.equal(await gain('rateRoll').inputValue(),'1.4');
+ assert.equal(await gain('rateRoll').inputValue(),'0.9');
 
  await page.evaluate(()=>{pidFixture.kit.connected=false;window.dispatchEvent(new Event('dronelab:kit-link'));});
  await frame.locator('#tpPidTarget').filter({hasText:'SIMULATOR'}).waitFor();

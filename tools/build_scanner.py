@@ -83,7 +83,7 @@ def sync_catalog_version(catalog,version):
     if policy_path.exists():
         policy=json.loads(policy_path.read_text())
         if policy.get('candidateVersion')==version:
-            catalog.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN')
+            catalog.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN',controllerContractVersion=2,flightModes=['acro','angle'],physicalInputPaths=['PPM','ANDROID_AP','WEB_STA'],webRtcPhysicalFlight=False)
     catalog['version']=version
     for board in catalog.get('boards',[]):
         board.setdefault('latest',{})['version']=version
@@ -97,7 +97,7 @@ def write_metadata(catalog,version,built_at):
     bench=catalog.get('releaseScope')=='BENCH_DIAGNOSTIC'
     note='BENCH DIAGNOSTIC ONLY; physical flight output disabled and acceptance pending.' if bench else 'Board-aware firmware catalog. Build automation marks each verified package available after compilation.'
     sub={'schema':2,'product':'ZEBJUS_FLIGHTCORE','version':version,'builtAt':built_at,'catalog':'catalog.json','note':note}
-    if bench: sub.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN')
+    if bench: sub.update(releaseScope='BENCH_DIAGNOSTIC',flightOutputQualified=False,physicalAcceptance='NOT_RUN',controllerContractVersion=2,flightModes=['acro','angle'],physicalInputPaths=['PPM','ANDROID_AP','WEB_STA'],webRtcPhysicalFlight=False)
     top={**sub,'catalog':'firmware-catalog.json'}
     (OUT/'latest.json').write_text(json.dumps(sub,indent=2)+'\n')
     (ROOT/'firmware-latest.json').write_text(json.dumps(top,indent=2)+'\n')
@@ -118,7 +118,7 @@ def main():
     setup.add_argument('--skip-core-install',action='store_true')
     setup.add_argument('--install-only',action='store_true',help='Install the pinned core without compiling or changing firmware files')
     ap.add_argument('--config-file',help='Optional Arduino CLI configuration file')
-    ap.add_argument('--experimental-rate-flight',action='store_true',help='Explicit A2 PPM Rate output candidate; never publishes to the normal catalog')
+    ap.add_argument('--experimental-rate-flight',action='store_true',help='Explicit A2 Acro/Angle output candidate; never publishes to the normal catalog')
     ap.add_argument('--output-dir',type=Path,help='Required separate artifact directory for the experimental candidate')
     args=ap.parse_args()
     experimental=args.experimental_rate_flight
@@ -141,7 +141,7 @@ def main():
     flags=['-fstack-usage']+(['-DZJ_A2_EXPERIMENTAL_RATE_FLIGHT=1'] if experimental else [])
     if experimental:
         catalog['boards']=[b for b in catalog['boards'] if b['id']=='ZFC-A2']
-        catalog.update(defaultBoardId='ZFC-A2',releaseScope='EXPERIMENTAL_PPM_RATE',flightOutputEnabled=True,flightOutputQualified=False,physicalAcceptance='NOT_RUN')
+        catalog.update(defaultBoardId='ZFC-A2',releaseScope='EXPERIMENTAL_PPM_RATE',flightOutputEnabled=True,flightOutputQualified=False,physicalAcceptance='NOT_RUN',controllerContractVersion=2,flightModes=['acro','angle'],physicalInputPaths=['PPM','ANDROID_AP','WEB_STA'],webRtcPhysicalFlight=False)
         for b in catalog['boards']:
             for kind in ('app','factory'):
                 b['latest'][kind]['file']=f'ZEBJUS_FLIGHTCORE_A2_{kind.upper()}_RATE_EXPERIMENTAL.bin'

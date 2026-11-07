@@ -114,7 +114,7 @@ export async function testFlightData(page, width) {
       dispatchEvent(new CustomEvent('dronelab:kit-link'));
     });
     assert.equal(await telemetry.locator('.fd-pfd-main').getAttribute('data-tilt'), 'accel-reference');
-    assert.notEqual(await telemetry.locator('#fd-horizon-world').getAttribute('transform'), previousHorizon);
+    await page.waitForFunction(previous => document.querySelector('#fd-horizon-world').getAttribute('transform') !== previous, previousHorizon);
     assert.match(await telemetry.locator('[data-vehicle-caption]').textContent(), /Accel reference/);
     assert.equal(await telemetry.locator('[data-pfd-status="input"]').textContent(), 'PPM WAIT');
     assert.equal(await telemetry.locator('[data-health="input"]').getAttribute('data-tone'), 'warning');
@@ -134,6 +134,34 @@ export async function testFlightData(page, width) {
     assert.equal(await telemetry.locator('#fd-rate-roll').textContent(), '—');
     assert.equal(await telemetry.locator('#fd-horizon-world').getAttribute('visibility'), 'hidden');
     assert.equal(await telemetry.locator('#fd-line-roll').getAttribute('points'), '');
+    // New compact firmware: the transmitter may be OFF while fused tilt remains live.
+    await page.evaluate(() => {
+      const k=window.__flightDataFixture;
+      const update=(roll,sequence) => {
+        const now=Date.now();
+        const sample={version:1,kitId:k.kitId,bootId:k.bootId,sequence,sampleSequence:sequence,atUs:sequence*4000,ageUs:3000,
+          valid:true,rates:[1,2,3],gravity:[0,0,1],attitude:[roll,-12],attitudeValid:true,levelCalibrated:true,accelUsed:true,
+          offAck:true,authorized:false,deadlineFault:false,owner:0,state:'DISARMED',reason:'NONE',applied:[0,0,0,0],
+          dtUs:4000,measuredHz:250,missedTicks:0,flightModeState:{supported:true,saved:'angle',active:'angle',pending:null}};
+        k.flightTelemetry=window.ZebjusFlightTelemetry.normalize(sample,k,k.flightTelemetry,now,20);
+        dispatchEvent(new CustomEvent('dronelab:flight-telemetry'));
+      };
+      window.__setFusedTilt=update;update(0,100);
+    });
+    assert.equal(await telemetry.locator('.fd-pfd-main').getAttribute('data-tilt'), 'fc-attitude');
+    assert.equal(await telemetry.locator('[data-pfd-status="mode"]').textContent(), 'ANGLE');
+    assert.match(await telemetry.locator('[data-pfd-status="mode"]').getAttribute('title'), /saved angle/);
+    assert.equal(await telemetry.locator('[data-health="output"]').getAttribute('data-tone'), 'good');
+    for(let n=1;n<=6;n++){
+      await page.evaluate(n=>window.__setFusedTilt(n*5,100+n),n);
+      await page.waitForTimeout(100); // one actual 10Hz observation, display interpolates at RAF cadence
+    }
+    assert.equal(await telemetry.locator('#fd-roll').textContent(), '30.0°');
+    assert.match(await telemetry.locator('[data-vehicle-caption]').textContent(), /FC attitude/);
+    await telemetry.locator('.fd-window').screenshot({path:`test-output/v2/flight-data-fused-${width}.png`});
+    await page.evaluate(()=>{window.__flightDataFixture.flightTelemetry.sampleObservedAt-=1000;dispatchEvent(new CustomEvent('dronelab:flight-telemetry'));});
+    assert.equal(await telemetry.locator('#fd-horizon-world').getAttribute('visibility'),'hidden');
+
   } finally {
     await page.evaluate(() => {
       window.ZebjusKits.getState = window.__flightDataGetState;

@@ -29,7 +29,21 @@ static bool zjStaInputPath(const String& path){return path=="PPM"||path=="WEB_ST
 static String zjPathSource(const String& path){return path=="PPM"?String("PPM"):path=="WEB_STA"?String("WEB"):String("ANDROID");}
 static bool zjRadioProfileValid(const String& mode,const String& path,const String& sta){
  return (mode=="ap"||mode=="sta"||mode=="auto")&&zjStaInputPath(sta)&&
-  (mode=="ap"?path=="ANDROID_AP":zjStaInputPath(path));
+  (mode=="ap"?(path=="ANDROID_AP"||path=="PPM"):zjStaInputPath(path));
+}
+// NVS atomically replaces one complete string; no partial per-field writes.
+// A failed/ambiguous write never activates a new source or restores an ARM.
+static const char* zjPersistInputSelection(const String& path,const String& radio){
+ const String mode=radio=="AP"?String("ap"):radio=="STA"?String("sta"):String("");
+ const String sta=mode=="sta"?path:zjLastStaInput;
+ if(!zjRadioProfileValid(mode,path,sta))return "control_path_requires_matching_wifi";
+ const uint32_t revision=zjHandoverRevision>=1000000000?1:zjHandoverRevision+1;
+ const String record=String("1|")+mode+"|"+path+"|"+sta+"|"+String(revision);
+ if(zjPrefs.putString("inputProfile",record)!=record.length()||zjPrefs.getString("inputProfile","")!=record)
+  return "input_profile_save_failed";
+ zjHandoverRevision=revision;zjLastStaInput=sta;zjHandoverTargetInput=path;
+ zjHandoverSaved=true;zjHandoverState="WAITING_CONTROLLER";zjHandoverError="";
+ return nullptr;
 }
 static void zjLoadRadioProfile(){
  const String record=zjPrefs.getString("inputProfile","");

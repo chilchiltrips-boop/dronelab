@@ -58,10 +58,10 @@ int main(){
  ZjPidSettings plus(1);plus.requestId="plus";
  assert(!zjPidSave(prefs,plus,3)&&zjPidLoad(prefs)&&zjPidSettings.profile==1&&zjPidSettings.revision==4);
  assert(prefs.getString("pidActive")=="0");
- prefs.clear();assert(zjPidLoad(prefs)&&!zjPidSettings.persisted&&zjPidSettings.gains[0]==1400);
+ prefs.clear();assert(zjPidLoad(prefs)&&!zjPidSettings.persisted&&zjPidSettings.gains[0]==900);
 
  ZjRatePidState state;
- const ZjRateGains gains{1.4f,18,.035f};
+ const ZjRateGains gains=ZjPidSettings().axis(0);
  const float vectors[][4]={{20,0,.004,0},{20,2,.004,0},{-20,2,.005,0},{-20,-2,.004,-5},
   {500,0,.004,0},{0,0,.120629f,0},{-15,0,.004,0}};
  for(const auto& v:vectors){

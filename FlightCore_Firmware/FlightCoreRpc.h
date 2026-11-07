@@ -11,7 +11,7 @@
 
 class ZjNetworkServer : public WebServer {
  struct Route {String path;HTTPMethod verb;std::function<void()> run;};
- Route routes[40];size_t routeCount=0;
+ Route routes[48];size_t routeCount=0;
  bool rpc=false;HTTPMethod rpcMethod=HTTP_GET;String rpcPath,rpcForm,rpcHeaders[4];
  IPAddress rpcPeer;int rpcStatus=500;String rpcBody,rpcProof;
  static String decode(const String& in){
@@ -26,7 +26,7 @@ class ZjNetworkServer : public WebServer {
  explicit ZjNetworkServer(int port):WebServer(port){}
  void on(const char* path,HTTPMethod verb,std::function<void()> run){
   WebServer::on(path,verb,run);
-  if(routeCount<40&&String(path).startsWith("/api/"))routes[routeCount++]={String(path),verb,run};
+  if(routeCount<48&&String(path).startsWith("/api/"))routes[routeCount++]={String(path),verb,run};
  }
  void on(const char* path,HTTPMethod verb,std::function<void()> run,std::function<void()> upload){
   // Retired multipart OTA is deliberately HTTP-only and always returns 410.

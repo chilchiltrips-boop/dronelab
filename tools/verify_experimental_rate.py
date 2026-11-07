@@ -33,7 +33,9 @@ def verify(directory, pinned=False):
         assert catalog['version'] == (ROOT / 'VERSION.txt').read_text().strip()
     assert catalog['version'] == report['version']
     expected = {'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino', 'FlightCore_Firmware/partitions.csv'}
-    expected.update(str(p.relative_to(ROOT)) for p in (ROOT / 'FlightCore_Firmware').glob('*.h'))
+    # Later main/publish commits may add headers: bind the source set to the compiled commit.
+    names = subprocess.check_output(['git', 'ls-tree', '--name-only', report['sourceCommit'] + ':FlightCore_Firmware'], cwd=ROOT, text=True).splitlines()
+    expected.update('FlightCore_Firmware/' + name for name in names if name.endswith('.h'))
     assert set(report['sourceSha256']) == expected
     for name, digest in report['sourceSha256'].items():
         if not pinned:

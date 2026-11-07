@@ -1,3 +1,4 @@
+import './flight-telemetry.js';
 import {isOlderReceiverCounter, parseReceiverSnapshot, PPM_OBSERVATION_MS} from './input-monitor.js';
 
 const usbObservationMs = 2500;
@@ -101,7 +102,7 @@ function inputSnapshot(kit, connected, now) {
 }
 
 function outputSnapshot(kit, connected, now) {
-  const usb = kit.transport === 'usb';
+  const usb = kit.transport === 'usb' && !kit.compactFlightObservation;
   const usbFlags = kit.usbStatusOutputExplicit === true && kit.usbStatus?.kitId === kit.kitId
     ? kit.usbStatus.rc : null;
   const observedAt = usb ? kit.usbStatusObservedAt : kit.outputObservedAt;
@@ -123,7 +124,7 @@ function outputSnapshot(kit, connected, now) {
   } else if (armed === true && disabled === true) {
     health = healthRow('error', 'Conflicting output status', 'FlightCore reported simultaneous arm and output disabled.');
   } else if (flightArmed) {
-    health = healthRow('warning', 'Rate flight armed', 'FlightCore reports flight output authorization.');
+    health = healthRow('warning', (kit.flightMode === 'angle' ? 'Angle' : 'Acro') + ' flight armed', 'FlightCore reports flight output authorization.');
   } else if (benchArmed === true || usb && observed && usbFlags?.motorsDisabled === false) {
     health = healthRow('warning', 'Bench output active', 'FlightCore reports a bench output session. Motor rotation is unmeasured.');
   } else if (disabled === true) {
@@ -140,16 +141,37 @@ function outputSnapshot(kit, connected, now) {
 }
 
 export function buildFlightData(kit = {}, now = Date.now()) {
+  const raw = kit.flightTelemetry;
+  const compact = raw && raw.generation === kit.connectionGeneration && raw.transport === kit.transport &&
+    within(observationAge(raw.observedAt, now), PPM_OBSERVATION_MS)
+    ? globalThis.ZebjusFlightTelemetry.normalize(raw, kit, null, raw.observedAt, raw.roundTripMs) : null;
+  if (compact) {
+    // Only this read-only presentation copy is enriched. Motor/maintenance
+    // authorization continues to consume the original verified Kit state.
+    kit = {...kit, compactFlightObservation: true,
+      imu: {...kit.imu, board: 'A2', state: compact.valid ? 'READY' : kit.imu?.state || 'READY',
+        configValid: compact.valid, dataReady: compact.valid, imuValid: compact.valid,
+        sampleSequence: compact.sampleSequence, corrected: compact.rates, accelG: compact.gravity,
+        controlDtUs: compact.dtUs, controlMeasuredHz: compact.measuredHz, controlTargetHz: 250,
+        controlMissedTicks: compact.missedTicks, flightDeadlineFault: compact.deadlineFault,
+        controlHealth: compact.deadlineFault ? 'LATE' : compact.dtUs >= 1000 && compact.dtUs <= 8000 ? 'HEALTHY' : 'STARTING'},
+      imuObservedAt: compact.observedAt, imuSampleObservedAt: raw.sampleObservedAt,
+      imuSampleAgeAtObservationMs: compact.ageUs / 1000,
+      imuTimingObservedAt: compact.observedAt, outputObservedAt: compact.observedAt,
+      motorsDisabled: compact.offAck, motorsArmed: compact.owner === 2,
+      flight: {...kit.flight, state: compact.state, authorized: compact.authorized, lastArmReason: compact.reason},
+      flightMode: compact.flightModeState.active, flightModeState: compact.flightModeState};
+  }
   const connected = kit.connected === true && kit.linkVerified === true && kit.board === 'ZFC-A2' &&
     /^ZFC-A2-[A-Fa-f0-9]{12}$/.test(kit.kitId) && supportedTransports.includes(kit.transport);
   const transport = connected ? kit.transport : null;
   const linkState = connected ? kit.linkState : null;
-  const limit = transport === 'usb' ? usbObservationMs : PPM_OBSERVATION_MS;
+  const limit = compact ? 500 : transport === 'usb' ? usbObservationMs : PPM_OBSERVATION_MS;
   const imu = connected && kit.imu?.board === 'A2' ? kit.imu : null;
   const imuObservedAge = observationAge(kit.imuObservedAt, now);
   const sampleAge = observationAge(kit.imuSampleObservedAt, now);
   const boardSampleAge = number(kit.imuSampleAgeAtObservationMs);
-  const imuAgeMs = imu && sampleAge !== null && boardSampleAge !== null ? sampleAge + boardSampleAge : null;
+  const imuAgeMs = imu && sampleAge !== null && boardSampleAge !== null ? sampleAge + boardSampleAge + (compact?.roundTripMs || 0) : null;
   const imuSequence = counter(imu?.sampleSequence) ? imu.sampleSequence : null;
   const imuFresh = imu?.state === 'READY' && imu.configValid === true && imu.dataReady === true &&
     imu.imuValid !== false && imuSequence > 0 && within(boardSampleAge, firmwareImuAgeMs) &&
@@ -157,7 +179,7 @@ export function buildFlightData(kit = {}, now = Date.now()) {
   const rates = imuFresh ? vector(imu.corrected, 500) : null;
   // Network status binds gyro and acceleration to a single observation. The
   // USB diagnostic stream currently reports rates without acceleration.
-  const accel = rates && transport !== 'usb' ? vector(imu.accelG, 8) : null;
+  const accel = rates && (transport !== 'usb' || compact) ? vector(imu.accelG, 8) : null;
   const {rc, health: inputHealth} = inputSnapshot(kit, connected, now);
   const {output, flight, health: outputHealth} = outputSnapshot(kit, connected, now);
   const stationary = kit.rcAccess?.stationary === true && rates?.every(n => Math.abs(n) < 3);
@@ -167,11 +189,17 @@ export function buildFlightData(kit = {}, now = Date.now()) {
     output.fresh && output.disabled === true && output.armed === false &&
     flight?.state === 'DISARMED' && flight.authorized === false;
   const magnitude = accel ? Math.hypot(...accel) : null;
-  const tilt = (stationary || disarmedPreview) && accel && magnitude >= 0.9 && magnitude <= 1.1 ? {
+  let tilt = (stationary || disarmedPreview) && accel && magnitude >= 0.9 && magnitude <= 1.1 ? {
     roll: Math.atan2(accel[1], accel[2]) * 180 / Math.PI,
     pitch: Math.atan2(-accel[0], Math.hypot(accel[1], accel[2])) * 180 / Math.PI,
     stationary: stationary === true
   } : null;
+  if (compact && connected) {
+    tilt = rates && compact.attitudeValid && compact.roundTripMs <= 350 ? {
+      roll: compact.attitude[0], pitch: compact.attitude[1], fused: true,
+      stationary: stationary === true, levelCalibrated: compact.levelCalibrated
+    } : null;
+  }
   const timingFresh = imu && within(observationAge(kit.imuTimingObservedAt, now), limit);
   const timing = {
     health: timingFresh ? imu.controlHealth ?? null : null,
@@ -235,15 +263,24 @@ export function buildFlightData(kit = {}, now = Date.now()) {
   return {
     binding, connected, kitId, kitName: connected ? kit.kitName || kit.kitId : null,
     board: connected ? kit.board : null, bootId, version: connected ? kit.version || null : null,
-    transport, linkState, mode: connected ? kit.flightMode ?? null : null, rates, accel, tilt,
+    transport, linkState, mode: connected ? kit.flightMode ?? null : null,
+    modeState: connected ? kit.flightModeState || null : null,
+    telemetry: compact ? {ageMs: now - compact.observedAt, roundTripMs: compact.roundTripMs, targetHz: 10} : null, rates, accel, tilt,
     imuAgeMs, imuSequence, sample, rc, output, flight, timing,
-    health: {link: linkHealth, imu: imuHealth, input: inputHealth, timing: timingHealth,
+    health: {attitude: tilt?.fused ? healthRow(tilt.levelCalibrated ? 'good' : 'warning',
+        tilt.levelCalibrated ? 'FC attitude · level calibrated' : 'FC attitude · save Quick Level') : healthRow('unknown', 'FC attitude unavailable'),
+      stabilization: connected && kit.flightModeState?.stabilizationSupported === true && output.fresh
+        ? healthRow(flight?.state === 'FAILSAFE' ? 'error' : 'warning',
+          (kit.flightModeState.active === 'angle' ? 'Angle cascade' : 'Acro Rate PID') + (flight?.authorized ? ' active' : ' · disarmed'),
+          'Experimental controller capability. Physical acceptance is separate.')
+        : healthRow('unknown', 'Stabilization capability unconfirmed'),
+      link: linkHealth, imu: imuHealth, input: inputHealth, timing: timingHealth,
       output: outputHealth, setup: setupHealth, qualification: qualificationHealth},
     unsupported
   };
 }
 
-export function appendFlightSample(samples, data, limit = 60) {
+export function appendFlightSample(samples, data, limit = 1200) {
   const last = samples.at(-1);
   const history = last && last.binding !== data.binding ? [] : samples;
   const sample = data.sample;

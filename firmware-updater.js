@@ -10,7 +10,7 @@ function confirmInLab(message){
 const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 const BENCH_VERSION='1.7.19',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
-const EXPERIMENTAL_NOTICE='Experimental PPM Rate. Saved setup and a separate PPM Flight ARM can enable motors. Physical tests NOT_RUN. Test with propellers removed.';
+const EXPERIMENTAL_NOTICE='Experimental flight firmware. Saved setup and a fresh Flight ARM can enable motors. Physical tests NOT_RUN. Test with propellers removed.';
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let experimentalCatalog=null;
 let benchCatalog=null,releaseTrack='published',releaseChoice='latest'; // A2 defaults to verified bench; explicit published rollback remains available.
@@ -248,7 +248,7 @@ async function loadExperimentalCatalog(){
   const data=await response.json(),{experimentalRateRelease}=await import('./js/firmware-image.js');
   experimentalRateRelease(data,'ZFC-A2');
   experimentalCatalog=data;
-  text('#fwLoadExperimentalBtn','Load '+data.version+' Experimental Rate');
+  text('#fwLoadExperimentalBtn','Load '+data.version+(data.flightModes?.includes('angle')?' Acro + Angle':' Experimental Rate'));
  }
  return releaseForBoard('ZFC-A2','experimental');
 }
