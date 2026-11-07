@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdint.h>
+#include <limits>
 
 struct ZjRateGains {float p=0,i=0,d=0;};
 struct ZjRatePidState {float integral=0,error=0,rate=0,derivative=0;bool ready=false;};
@@ -64,6 +65,10 @@ struct ZjAnglePidState {float sum=0,angle=0,derivative=0;bool ready=false;};
 
 // Angle outer loop matches the educational simulator's gain units and limits.
 inline float zjStepAnglePid(ZjAnglePidState& state,const ZjRateGains& gains,float target,float measured,float dt){
+ if(!std::isfinite(target)||!std::isfinite(measured)||!std::isfinite(dt)||dt<.001f||dt>.008f||
+    !zjRateGainValid(gains.p)||!zjRateGainValid(gains.i)||!zjRateGainValid(gains.d)){
+  state={};return std::numeric_limits<float>::quiet_NaN();
+ }
  const float error=target-measured;
  const float rate=state.ready?(measured-state.angle)/dt:0;
  state.derivative+=(rate-state.derivative)*(1-std::exp(-dt/.1f));

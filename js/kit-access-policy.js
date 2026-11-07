@@ -45,14 +45,14 @@
   const reason=v=>typeof v==='string'&&/^[A-Z_]{1,40}$/.test(v)?v:'UNKNOWN';
   return {version:1,enabled:value.enabled,authorized:value.authorized,canArm:value.canArm,
    state:value.state,setupComplete:value.setupComplete===true,pidSaved:value.pidSaved===true,
-   inputScope:value.inputScope==='PPM_RATE'?'PPM_RATE':'UNSUPPORTED',
+   inputScope:['PPM_RATE','LOCAL_ACRO_ANGLE'].includes(value.inputScope)?value.inputScope:'UNSUPPORTED',
    blockReason:reason(value.blockReason),lastArmReason:reason(value.lastArmReason)};
  }
  function outputLabel(kit={},now=Date.now()){
   const observed=kit.outputObservedAt;
   if(kit.connected!==true||!Number.isFinite(observed)||observed<=0||now<observed||now-observed>1500)return 'OUTPUT UNKNOWN';
   const flight=flightState(kit.flight);
-  if(flight?.authorized&&kit.motorsArmed===true&&kit.motorsDisabled===false)return 'RATE FLIGHT ARMED';
+  if(flight?.authorized&&kit.motorsArmed===true&&kit.motorsDisabled===false)return kit.flightModeState?.active === 'angle' ? 'ANGLE FLIGHT ARMED' : 'RATE FLIGHT ARMED';
   if(kit.motorsDisabled===true)return flight?.state==='FAILSAFE'?'FAILSAFE • OUTPUT OFF':'OUTPUT DISABLED';
   // A command ACK says nothing about physical rotation. Unknown ownership is
   // never labelled BENCH, and an old observation never promises output OFF.

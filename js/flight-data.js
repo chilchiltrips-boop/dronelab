@@ -67,15 +67,16 @@ function render() {
   let flightLabel = '—';
   if (flight && output.fresh) {
     if (flight.state === 'FAILSAFE') flightLabel = 'Failsafe';
-    else if (flight.state === 'ARMED' && flight.authorized === true && output.disabled !== true) flightLabel = 'Rate flight armed';
+    else if (flight.state === 'ARMED' && flight.authorized === true && output.disabled !== true) flightLabel = (data.mode === 'angle' ? 'Angle' : 'Acro') + ' flight armed';
     else if (flight.state === 'DISARMED') flightLabel = 'Flight disarmed';
   }
   set('flight', flightLabel);
+  set('mode', data.modeState ? 'Saved ' + data.modeState.saved.toUpperCase() + ' · active ' + data.modeState.active.toUpperCase() + (data.modeState.pending ? ' · pending ' + data.modeState.pending.toUpperCase() : '') : 'Saved mode unavailable');
   set('output', output.label.startsWith('Last observed')
     ? output.label + ' · ' + fixed(output.observedAgeMs, ' ms ago') : output.label);
   set('loop', fixed(timing.measuredHz, ' Hz', 1));
   set('loop-detail', timing.targetHz
-    ? 'Target ' + fixed(timing.targetHz, ' Hz') + (timing.dtUs ? ' · ' + fixed(timing.dtUs, ' µs') : '')
+    ? 'Target ' + fixed(timing.targetHz, ' Hz') + (timing.dtUs ? ' · ' + fixed(timing.dtUs, ' µs') : '') + (data.telemetry ? ' · link ' + fixed(data.telemetry.roundTripMs, ' ms') : '')
     : 'Timing unavailable');
   const inputChannels = rc.channels;
   set('rc-caption', inputChannels ? 'Accepted input · ' + fixed(rc.ageMs, ' ms ago') : 'Accepted input');
@@ -104,12 +105,13 @@ function refreshVisibility() {
     timer = window.setInterval(() => {
       render();
       void window.ZebjusKits?.observeFlightData?.();
-    }, 250);
+    }, 50);
   } else if (!visible && timer) {
     window.clearInterval(timer);
     timer = undefined;
     samples = [];
     vehicle.update({tilt: null, visible: false});
+    instruments.pause();
   }
 }
 
@@ -121,6 +123,7 @@ byId('details-toggle').addEventListener('click', event => {
 byId('setup').addEventListener('click', () => document.querySelector('.tab[data-tab="setup"]').click());
 byId('diagnostics').addEventListener('click', () => window.ZebjusDevicesWorkspace?.open('diagnostics'));
 window.addEventListener('dronelab:tab', refreshVisibility);
+window.addEventListener('dronelab:flight-telemetry', () => { if (timer) render(); });
 window.addEventListener('dronelab:kit-link', () => { if (timer) render(); });
 document.addEventListener('visibilitychange', refreshVisibility);
 refreshVisibility();

@@ -391,6 +391,54 @@
       "firmwareVersion": null,
       "evidenceRef": null,
       "notes": null
+    },
+    {
+      "id": "A2_ANGLE_LEVEL_REBOOT",
+      "platform": "A2",
+      "expected": "Save Quick Level and Angle/Acro mode; reboot; verify authoritative settings and fused roll/pitch at measured known angles.",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": "New 1.7.21 integration requires measured hardware evidence."
+    },
+    {
+      "id": "A2_ANGLE_CORRECTIONS",
+      "platform": "A2",
+      "expected": "Propellers removed: verify roll/pitch/yaw correction directions on M1\u2013M4 in Acro and Angle and all output interlocks with this exact artifact.",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": "New 1.7.21 integration requires measured hardware evidence."
+    },
+    {
+      "id": "A2_COMPACT_ATTITUDE_LATENCY",
+      "platform": "A2",
+      "expected": "Measure USB/AP/STA motion-to-display latency and 250 Hz timing under telemetry load, active PPM and native Android input; verify stale data expires.",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": "New 1.7.21 integration requires measured hardware evidence."
+    },
+    {
+      "id": "A2_ANDROID_ANGLE_LOSS",
+      "platform": "A2",
+      "expected": "Exact upgraded Android APK plus A2 artifact: low-throttle explicit ARM in Acro/Angle, DISARM PWM OFF, background/link-loss failsafe and fresh-arm recovery.",
+      "status": "NOT_RUN",
+      "observedAt": null,
+      "operator": null,
+      "deviceId": null,
+      "firmwareVersion": null,
+      "evidenceRef": null,
+      "notes": "New 1.7.21 integration requires measured hardware evidence."
     }
   ]
 }

@@ -1,5 +1,6 @@
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
+import {DEFAULT_PID_PROFILE} from '../js/pid-profiles.js';
 const browser=await chromium.launch(browserOptions);
 const context=await browser.newContext({viewport:{width:1440,height:920},serviceWorkers:'block'});
 await configureContext(context);
@@ -145,7 +146,7 @@ try{
  await page.locator('#tpApplyPid').click();
  if(!(await text('tpPidKitStatus')).includes('Applied to Simulator'))throw Error('Reflow broke PID Apply');
  await page.locator('#tpPidDefaults').click();
- if(Number(await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').inputValue())!==1.4)throw Error('Restore Defaults failed');
+ if(Number(await page.locator('[data-pid-bank="rateRoll"] [data-gain="p"]').inputValue())!==DEFAULT_PID_PROFILE.gains.rateRoll.p)throw Error('Restore Defaults failed');
  if(errors.length)throw Error('Page errors: '+errors.join(' | '));
  console.log('PASS V1.5.2 Tripod: Assembly GLBs, ACRO/ANGLE, live Apply, Restore Defaults, PID pulse, camera follow, audio, mobile and safe Stop');
 }catch(e){console.error(e.stack||e);await page.screenshot({path:'test-output/flight-training-error.png',fullPage:true}).catch(()=>{});process.exitCode=1}

@@ -1,6 +1,7 @@
 # ZEBJUS DroneLab candidate checks
 
-The 1.7.20 source adds an explicitly selected **experimental PPM Rate** build with saved-Setup/PID gates and a single receiver ARM gesture. Standard bench releases remain flight-disabled. WebApp and Android display firmware-reported output state. See [Setup to Rate ARM](docs/A2_SETUP_RATE_FLOW.md) for build profiles, controls and remaining physical tests.
+The 1.7.21 source adds measured-dt roll/pitch fusion, a setup-gated Angle → Rate cascade, compact USB/AP/STA flight telemetry and saved input/mode controls. Standard bench releases remain flight-disabled; the separate experimental image retains independent output and watchdog gates. See [Acro / Angle and telemetry](docs/A2_ANGLE_TELEMETRY.md) for software scope, source limitations and physical acceptance.
+
 
 Published firmware version and checksums come from `firmware-catalog.json`. `npm run verify:firmware` verifies both profiles, APP/Factory sizes, chip IDs, SHA-256, the 0x10000/0x1f0000 application slots and byte-identical APP contents. Runtime identity and build time are available over `ZJINFO` or signed status.
 

@@ -1,14 +1,15 @@
 # ZEBJUS DroneLab
 
-The 1.7.20 source adds an explicitly selected **experimental PPM Rate** build with saved-Setup/PID gates and a single receiver ARM gesture. Standard bench releases remain flight-disabled. WebApp and Android display firmware-reported output state. See [Setup to Rate ARM](docs/A2_SETUP_RATE_FLOW.md) for build profiles, controls and remaining physical tests.
+The 1.7.21 source adds measured-dt roll/pitch fusion, a setup-gated Angle → Rate cascade, compact USB/AP/STA flight telemetry and saved input/mode controls. Standard bench releases remain flight-disabled; the separate experimental image retains independent output and watchdog gates. See [Acro / Angle and telemetry](docs/A2_ANGLE_TELEMETRY.md) for software scope, source limitations and physical acceptance.
+
 
 ## Flight Data
 
-Open **Flight Data** from the main navigation to monitor a verified A2 Kit. The dashboard uses authenticated Kit status observations. The visible cockpit can request quicker status updates while direct AP/STA reports disarmed outputs and idle RC. It separates receiver ARM, physical Rate ARM, and PWM status. Health badges show OK (green), warning (orange), confirmed fault (red), or unavailable (gray).
+Open **Flight Data** from the main navigation to monitor a verified A2 Kit. The dashboard uses authenticated Kit status observations. Capable firmware supplies compact telemetry at up to 10 Hz on USB/AP/STA, including while PPM input is active; old firmware retains its disarmed-only preview. It separates receiver ARM, physical flight ARM, and PWM status. Health badges show OK (green), warning (orange), confirmed fault (red), or unavailable (gray).
 
-The cockpit places the primary flight display above the 3D vehicle and System Health, alongside an offline Natural Earth map. The map provides manual pan and zoom. The level reference and 3D vehicle show stationary tilt from fresh accelerometer data. A disarmed AP/STA bench can also show a labeled accelerometer reference while the board moves. The reading can be affected by linear acceleration. Gyro rates are in degrees per second. Heading, GPS position, altitude, speed, and battery measurements are unavailable on current A2 telemetry. Orbit Preview is a separate interactive airframe view. The gyro chart under **Telemetry details** holds up to one minute of browser observations in memory and clears on stale data, a Kit or source change, or leaving the page. Use **Diagnostics** for controller tick traces.
+The cockpit places the primary flight display above the 3D vehicle and System Health, alongside an offline Natural Earth map. The map provides manual pan and zoom. The horizon and 3D vehicle interpolate fresh firmware-fused attitude, including saved Quick Level trim. Older disarmed AP/STA firmware shows a labeled accelerometer reference. The reading can be affected by linear acceleration. Gyro rates are in degrees per second. Heading, GPS position, altitude, speed, and battery measurements are unavailable on current A2 telemetry. Orbit Preview is a separate interactive airframe view. The gyro chart under **Telemetry details** holds up to one minute of browser observations in memory and clears on stale data, a Kit or source change, or leaving the page. Use **Diagnostics** for controller tick traces.
 
-Use **Setup Wizard → Report → Flight Readiness** to check the running firmware, saved setup and PID, PPM, IMU, timing, and PWM OFF acknowledgment. The read-only check is tied to the selected Kit and current connection. Software readiness and physical acceptance are displayed separately.
+Use **Setup Wizard → Report → Flight Readiness** to check the running firmware, saved setup and PID, selected receiver, Angle level/attitude, IMU, timing, and PWM OFF acknowledgment. The read-only check is tied to the selected Kit and current connection. Software readiness and physical acceptance are displayed separately.
 
 ## Current releases and verification
 

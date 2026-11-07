@@ -15,17 +15,17 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
  };
  const kitId='ZFC-A2-012345ABCDEF';
  let reportedTransport='STA';
- const response=route=>{
+ const response=(route,args={})=>{
   if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',version:'1.4.0',mode:'auto',
    inputArmSupported:true,controlAuthorized:true,requestTransport:reportedTransport,apActive:true,staConnected:true,ip:'192.168.1.42',apIp:'192.168.4.1'};
   if(route==='/api/rc/claim')return {kitId,session:'owned-sta'};
-  if(route==='/api/rc/preview')return {kitId,received:true,seq:1,inputArmed:true};
+  if(route==='/api/rc/preview')return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'};
   if(route==='/api/rc/release')return {released:true};
   return {};
  };
  const window={dispatchEvent(){},addEventListener(){},ZebjusKitAuth:{label:()=>({deviceId:kitId,secret:'private'}),
-  diagnosticKey:()=> 'diagnostic',open:async()=>({expiresAt:Date.now()+60000,request:async route=>{
-   requests.push(route);return response(route);
+  diagnosticKey:()=> 'diagnostic',open:async()=>({expiresAt:Date.now()+60000,request:async(route,method,args)=>{
+   requests.push(route);return response(route,args);
   }})}};
  window.ZebjusNative={request(){},requestSecure(id,ip,method,route){
   requests.push(route+'@'+ip);

@@ -3,6 +3,7 @@
 // An identifying six-digit code is NOT a password or an authorization secret.
 #include <Preferences.h>
 #include "FlightCoreMotorStatus.h"
+#include "FlightCoreFlightOutput.h"
 #include "FlightCoreReceiverSnapshot.h"
 #include "FlightCorePidSettings.h"
 #include <mbedtls/sha256.h>
@@ -25,7 +26,7 @@ static bool zjKitAutoName=false;
 bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
-// Classroom-selected flight mode is saved metadata, NOT a hardware flight-control loop.
+// Saved/active mode is applied only after disarm; experimental builds use it for control.
 static String zjFlightMode="angle";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
@@ -74,7 +75,7 @@ static bool zjSaveFlightMode(Preferences& prefs,const String& next){
  zjApplyPendingFlightMode();return true;
 }
 static String zjFlightModeState(){
- return String("{\"supported\":true,\"stabilizationSupported\":false,\"saved\":\"")+zjSavedFlightMode+
+ return String("{\"supported\":true,\"stabilizationSupported\":")+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+",\"saved\":\""+zjSavedFlightMode+
   "\",\"active\":\""+zjFlightMode+"\",\"pending\":"+(zjFlightModePending?String("\"")+zjSavedFlightMode+"\"":String("null"))+"}";
 }
 

@@ -70,6 +70,7 @@ static const char* zjFlightTracePage(const String& boot,const String& captureArg
 #endif
 
 static void zjSetupFlightTraceHttp(){
+ zjHttp.on("/api/flight/telemetry",HTTP_GET,[](){if(zjAllow())zjReply(200,zjFlightTelemetryJson());});
  zjHttp.on("/api/flight/readiness",HTTP_GET,[](){
   if(!zjAllow())return;
   zjReply(200,zjFlightReadinessJson()); // read-only; never ARM or command motors
@@ -90,6 +91,15 @@ static void zjSetupFlightTraceHttp(){
 }
 
 static bool zjFlightSerialCommand(char* line){
+ if(!strncmp(line,"ZJFD,GET,",9)){
+  char* rest=nullptr;const String id=strtok_r(line+9,",",&rest),token=strtok_r(nullptr,",",&rest);
+  if(id!=zjKitId||!zjPidToken(token)||strtok_r(nullptr,",",&rest)){
+   Serial.println("ZJFD,NACK,INVALID_REQUEST_OR_DEVICE");return true;
+  }
+  Serial.print("ZJFD,ACK,");Serial.print(id);Serial.print(',');Serial.print(token);Serial.print(',');
+  Serial.println(zjFlightTelemetryJson());return true;
+ }
+
  if(!strcmp(line,"ZJFLIGHT,STATUS")){
   Serial.print("ZJFLIGHT,STATUS,");Serial.println(zjFlightReadinessJson());return true;
  }

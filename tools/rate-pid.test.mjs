@@ -38,7 +38,7 @@ test('PID save verifies Kit, boot, exact gain readback and lost ACK without retr
   assert.equal(binding.kitId,kit.kitId);
   if(action==='GET')return config;
   writes++;
-  const axis=action==='RESET'?RATE_DEFAULTS.rateRoll:{p:1.725,i:18,d:.035};
+  const axis=action==='RESET'?RATE_DEFAULTS.rateRoll:{...RATE_DEFAULTS.rateRoll,p:1.725};
   assert.equal(args.expectedRevision,config.revision);
   if(action==='SET')assert.equal(args.gains,encodeRateGains({...RATE_DEFAULTS,rateRoll:axis}));
   config={...config,rateRoll:axis,revision:config.revision+1,persisted:true,savedRequestId:args.requestId,requestId:args.requestId};

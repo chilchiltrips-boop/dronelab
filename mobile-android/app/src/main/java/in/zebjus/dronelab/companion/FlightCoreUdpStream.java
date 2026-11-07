@@ -24,7 +24,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-/** ZJUDP1: diagnostic input only. Physical motors stay firmware-disabled.
+/** ZJUDP1: authenticated receiver input. FlightCore alone authorizes motor output.
  *   58B encrypted input; negotiated legacy 58B or v2 72B encrypted feedback.
  *   Separate from management worker; new frames only, no joystick retransmission.
  *   Index 0..5 = T/R/P/Y/AUX1/AUX2; index 6 = input-arm flag (bit 0).
@@ -267,8 +267,15 @@ final class FlightCoreUdpStream {
             System.arraycopy(prefix,0,header,16,4);put32(header,20,seq);
             System.arraycopy(new byte[]{'A','N','D','R'},0,header,24,4);
             byte[] values=new byte[14];
-            for(int i=0;i<6;i++){values[2*i]=(byte)(channels[i]>>>8);values[2*i+1]=(byte)channels[i];}
-            values[12]=(byte)(inputArm?1:0);
+            // Establish actual low-throttle DISARM frames even when WebView
+            // offers ARM before the sender's first tick. Three new sequences
+            // span 40 ms; no old control is replayed. If all are lost, firmware
+            // stays disarmed and requires another explicit claim/ARM attempt.
+            for(int i=0;i<6;i++){
+                int pulse=seq<=3?(i>=1&&i<=3?1500:1000):channels[i];
+                values[2*i]=(byte)(pulse>>>8);values[2*i+1]=(byte)pulse;
+            }
+            values[12]=(byte)(seq>3&&inputArm?1:0);
             byte[] encrypted=cipher(true,key,header,values);
             if(encrypted.length!=30)throw new IllegalStateException("UDP_CIPHER_LENGTH");
             System.arraycopy(encrypted,0,header,28,30);

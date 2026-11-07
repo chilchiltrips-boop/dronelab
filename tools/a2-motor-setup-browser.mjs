@@ -337,10 +337,17 @@ try{
  await fixture(()=>{__wizard.experimental=true;__wizard.readinessBlocker='NONE';});
  await readStatus();await expectText(readiness,'Experimental PPM Rate');await expectText(readiness,'None reported');
  assert.match(await wizard.locator('.a2-readiness-physical').textContent(),/Physical validation pending/);
+ await fixture(()=>{const previous=__wizard.readinessResponse;__wizard.readinessResponse=()=>{
+  const response=previous();return {...response,mode:'FLIGHT_READINESS',receiverFresh:true,inputSource:'ANDROID',
+   flight:{...response.flight,inputScope:'LOCAL_ACRO_ANGLE'},attitudeReady:true,levelCalibrated:true,
+   flightModeState:{supported:true,saved:'angle',active:'angle',pending:null}};
+ };});
+ await readStatus();await expectText(readiness,'Experimental Acro / Angle');await expectText(readiness,'Saved ANGLE · Active ANGLE');
+ await expectText(readiness,'ANDROID fresh');await expectText(readiness,'Ready · level saved');
  await fixture(()=>{__wizard.wrongBoot=true;});
  await readStatus();await expectText('.a2-readiness-status','mismatched readiness snapshot');
  assert.equal(await wizard.locator(readiness).textContent(),'');
- assert.equal(await fixture(()=>__wizard.readinessReads),3);
+ assert.equal(await fixture(()=>__wizard.readinessReads),4);
  await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(6);
  assert.equal(await pulse.inputValue(),'1110');
  assert.equal(await safety.isChecked(),false,'returning from Report requires a new page confirmation');

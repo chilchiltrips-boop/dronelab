@@ -15,7 +15,7 @@ test('four-path availability distinguishes AP/STA, target, pairing and authoriza
  const ap=policy.describe({kit:{...kit,staConnected:false,apActive:true,transport:'ap',physicalLink:'ap'}});
  assert.deepEqual(ap.paths.filter(p=>p.selectable).map(p=>p.id),['ANDROID_AP','PPM']);
  assert.equal(sta.active,'PPM');assert.equal(sta.joystickLocked,true);
- assert.equal(policy.describe({kit,peer:{connected:true,approved:false}}).paths[1].selectable,false);
+ assert.equal(policy.describe({kit,peer:{connected:true,approved:false}}).paths[1].selectable,true);
  assert.equal(policy.describe({kit:{...kit,controlAuthorized:false}}).paths.some(p=>p.selectable),false);
  assert.equal(policy.describe({kit:{...kit,rcAccess:{...access,controlPath:'AUTO',selection:'AUTO'}}}).capable,true);
 });

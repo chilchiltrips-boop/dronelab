@@ -1,6 +1,6 @@
 /* Native Android-to-FlightCore AP/STA input transport.
- * Physical output state comes only from signed FC status. The experimental
- * Rate flight path is PPM-only; Android input ARM remains diagnostic. */
+ * Physical output state comes only from signed FC status. Experimental local
+ * Android AP input ARM requests the independently gated Acro/Angle flight path. */
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
@@ -13,8 +13,16 @@ const validModeState=value=>value?.supported===true&&['angle','acro'].includes(v
 const modeStatus=d=>validModeState(d?.flightModeState)?{...d.flightModeState}:null;
 const modeTraffic=(route,method)=>route==='/api/flight/mode'&&method==='POST'||(flightModeSaving||ledBusy)&&route==='/api/status'&&method==='GET'||ledBusy&&route==='/api/command'&&method==='POST';
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
+let flightTelemetry=null,flightTelemetryBusy=false,nextFlightTelemetryAt=0;
 let kitSnapshot={},kitSnapshotAt=0,kitRcReadStartedAt=0,controlPathBusy=false;
-function getState(){return {...kitSnapshot,rcAccess:window.ZebjusKitAccessPolicy?.normalize?.(kitSnapshot.rcAccess)||null,
+function getState(){
+ const fresh=flightTelemetry&&flightTelemetry.kitId===verifiedKitId&&flightTelemetry.bootId===kitSnapshot.bootId&&
+  flightTelemetry.generation===linkEpoch&&flightTelemetry.transport===link&&Date.now()-flightTelemetry.observedAt<500;
+ const compact=fresh?{flightTelemetry,outputObservedAt:flightTelemetry.observedAt,
+  motorsDisabled:flightTelemetry.offAck,motorsArmed:flightTelemetry.owner===2||flightTelemetry.owner===3&&flightTelemetry.authorized,
+  flight:{...kitSnapshot.flight,state:flightTelemetry.state,authorized:flightTelemetry.authorized,lastArmReason:flightTelemetry.reason},
+  flightModeState:flightTelemetry.flightModeState}:{};
+ return {...kitSnapshot,...compact,rcAccess:window.ZebjusKitAccessPolicy?.normalize?.(kitSnapshot.rcAccess)||null,
  connected:online&&onKitLink&&controlLinkFresh(),linkVerified:!!verifiedKitId,transport:link,physicalLink:link,
  connectionGeneration:linkEpoch,kitId:verifiedKitId,owner:!!rcSession,controlAuthorized,
  working:connecting||controlPathBusy,otaInProgress:otaBusy,rcAt:kitSnapshotAt,
@@ -66,12 +74,12 @@ const udpFeedback=data=>({
  feedbackWarnMs:Number.isFinite(data?.feedbackWarnMs)?data.feedbackWarnMs:350,
  feedbackStopMs:Number.isFinite(data?.feedbackStopMs)?data.feedbackStopMs:750
 });
-const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot']);
+const readRoutes=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/telemetry','GET /api/rc/snapshot','GET /api/flight/telemetry']);
 const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRoutes.has(method+' '+route);
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
 const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/access','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','POST /api/wifi/test','POST /api/rc/access','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','GET /api/flight/telemetry','POST /api/wifi/test','POST /api/rc/access','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
  const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
@@ -699,6 +707,21 @@ async function command(line){
  if(typeof line!=='string'||line.length>160||!/^(ZJI2C,SCAN|ZJINFO,GET|ZJLED,[0-9]+,(?:STOP|KEEP|SET|BLINK|FADE|SAFE|WARNING|SOS|PATTERN)(?:,.*)?|ZJTEL,RATE,(?:10|20|50))$/.test(line))throw Error('Command is not allowed on the network bridge');
  return request('/api/command','POST',{line});
 }
+async function pollFlightTelemetry(){
+ if(document.hidden||!online||!onKitLink||kitSnapshot.flightTelemetryVersion!==1||flightTelemetryBusy||
+    Date.now()<nextFlightTelemetryAt||statusInFlight||statusBusy||connecting||otaBusy||controlPathBusy||
+    (rcClaiming||rcSession||previewBusy)&&!safeUdpRead('/api/flight/telemetry','GET')||nonRcNativeRequests.size)return;
+ const binding={kitId:verifiedKitId,bootId:kitSnapshot.bootId,connectionGeneration:linkEpoch,transport:link};
+ const started=Date.now();nextFlightTelemetryAt=started+150;flightTelemetryBusy=true;
+ try{
+  const data=await request('/api/flight/telemetry');
+  if(binding.kitId!==verifiedKitId||binding.bootId!==kitSnapshot.bootId||binding.connectionGeneration!==linkEpoch||binding.transport!==link)return;
+  const observed=window.ZebjusFlightTelemetry?.normalize(data,binding,flightTelemetry,Date.now(),Date.now()-started);
+  if(!observed)throw Error('Invalid flight telemetry');
+  flightTelemetry=observed;
+  window.dispatchEvent(new CustomEvent('zebjus:kit-status'));
+ }catch{nextFlightTelemetryAt=Date.now()+1500}finally{flightTelemetryBusy=false}
+}
 async function pollTelemetry(){
  if((rcClaiming||rcSession||previewBusy)&&!safeUdpRead('/api/telemetry','GET'))throw Error('Release diagnostic input before requesting full IMU telemetry; RC ACK has priority.');
  const data=await request('/api/telemetry');if(data.kitId===verifiedKitId){kitSnapshot.imu=data.imu;window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());}const line='ZJTEL,1,'+data.board+','+(data.rcSeq||0)+','+data.millis+',0x'+Number(data.address).toString(16).toUpperCase()+','+(data.imu?.enabled&&(['SETTLING','CALIBRATING'].includes(data.imu.state)||data.imu.state==='READY'&&!data.imu.dataReady)?'CALIBRATING':data.gyroReady?'READY':'NOT_FOUND')+','+data.roll+','+data.pitch+','+data.yaw+',1,0';
@@ -824,9 +847,18 @@ async function armControls(){
  if(!canArm())throw Error(inputArmSupported?'Verify Kit control permission first':'Update FlightCore firmware for direct ARM');
  if(rcSession)await releaseRc();
  await claimRc();
- rcInputArmed=true;
+ const session=rcSession,epoch=rcEpoch;
+ const neutral={throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'};
  try{
-  await previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'},true);
+  // HTTP must establish a fresh DISARM frame in this ownership generation.
+  // Native UDP sends its bounded neutral prefix before transmitting ARM.
+  if(!udpActive){
+   await previewControls(neutral,true);
+   if(session!==rcSession||epoch!==rcEpoch||!firmwareAck||firmwareAck.inputArmed!==false)
+    throw Error('Kit did not acknowledge disarmed input before ARM');
+  }
+  rcInputArmed=true;
+  await previewControls(neutral,true);
   if(!rcInputArmed||!apStreaming()&&!firmwareAck?.inputArmed)throw Error('Kit did not acknowledge ARM');
  }catch(error){await releaseRc();throw error;}
  return firmwareAck;
@@ -869,7 +901,7 @@ function previewControls(m,critical=false){
   throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw)})
  .then(d=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
-  if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||rcInputArmed&&d.inputArmed!==true)throw Error('Invalid firmware receive ACK');
+  if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||d.inputArmed!==rcInputArmed)throw Error('Invalid firmware receive ACK');
   lastStatus=Date.now();statusFailures=0;
   firmwareAck={seq:d.seq,at:Date.now(),rtt:Math.round(performance.now()-at),inputArmed:d.inputArmed===true};
   trace('rc_ack',{transport:link,source:'ANDROID',seq:d.seq,roundTripMs:firmwareAck.rtt,
@@ -1204,6 +1236,7 @@ function bind(){
   if(file)void uploadAdminApp(file).catch(error=>{if(!/OTA stopped:|UNCONFIRMED|NOT VERIFIED/.test(el('kitNetStatus')?.textContent||''))show('OTA: '+error.message,'warn');});
  });
  setInterval(pollConnection,3500);
+ setInterval(()=>void pollFlightTelemetry(),150);
  setInterval(()=>void pollObservedInput(),100);
  setInterval(()=>{if(ledOn&&online&&onKitLink&&!rcSession&&!ledBusy&&!statusBusy&&!connecting&&!otaBusy&&!document.hidden)
   void command('ZJLED,'+(++ledSequence)+',KEEP').catch(()=>{ledOn=false;syncLedButton()});},1800);

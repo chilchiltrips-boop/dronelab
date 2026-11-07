@@ -56,7 +56,13 @@ function handle(host,path,method,args={},headers={}){
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
  else if(path==='/api/rc/preview'){
   assert.equal(args.session,owner);assert.equal(args.armed,'false');assert.ok(Number(args.seq)>(frame?.seq||0));
-  assert.equal(args.inputArmed,'true');if(!frame)assert.equal(Number(args.throttle),1000,'First ARM frame must have low throttle');
+  if(!frame){
+   assert.equal(args.inputArmed,'false','A new owner must confirm DISARM before ARM');
+   assert.deepEqual(['throttle','roll','pitch','yaw'].map(k=>Number(args[k])),[1000,1500,1500,1500]);
+  }else{
+   assert.equal(args.inputArmed,'true');
+   if(frame.inputArmed==='false')assert.equal(Number(args.throttle),1000,'First ARM frame must have low throttle');
+  }
   for(const key of ['throttle','roll','pitch','yaw'])assert.ok(Number(args[key])>=1000&&Number(args[key])<=2000);
   frame={...Object.fromEntries(Object.entries(args).map(([k,v])=>['throttle','roll','pitch','yaw','seq'].includes(k)?[k,Number(v)]:[k,v])),at:Date.now()};accepted++;
   body={kitId:id,received:true,seq:frame.seq,receivedAtMs:frame.at,inputArmed:frame.inputArmed==='true',motorsDisabled:true};

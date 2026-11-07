@@ -73,7 +73,7 @@ function refreshConnectionLabel(){
  const label=$('flightConnection');
  label.textContent=receiver?'CONNECTED':kit?'KIT '+window.ZebjusNetwork.selectedTransport().toUpperCase()+' CONNECTED':'NOT CONNECTED';
  label.dataset.ready=String(receiver||kit);
- label.title=receiver?'WebRTC simulator receiver connected':kit?'FlightCore Wi-Fi connected • ARM sends Kit input; motor outputs disabled':'No verified WebRTC receiver or FlightCore Kit';
+ label.title=receiver?'WebRTC simulator receiver connected':kit?'FlightCore Wi-Fi connected • ARM requests input; actual flight output depends on FC interlocks':'No verified WebRTC receiver or FlightCore Kit';
 }
 function updateStatus(message){
  $('flightWarning').textContent=message;
@@ -142,6 +142,14 @@ function render(){
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
  if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • '+outputLabel:'KIT INPUT DISARMED • '+outputLabel;
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
+ if(directKit()){
+  const live=motorState?.flightTelemetry;
+  const fresh=live?.valid&&live.attitudeValid&&live.roundTripMs<=350&&Date.now()-live.sampleObservedAt+live.roundTripMs<500;
+  $('flightAttitudeLadder').style.transform=fresh?'rotate('+(-live.attitude[0])+'deg) translateY('+F.clamp(live.attitude[1]*.55,-40,40)+'px)':'';
+  $('flightAttitude').dataset.source=fresh?'flightcore':'unavailable';
+  $('flightAttitudeLabel').textContent=fresh?'FC '+(live.levelCalibrated?'ATTITUDE':'LEVEL UNCALIBRATED'):'FC ATTITUDE UNAVAILABLE';
+ }
+
  for(const side of ['left','right'])stickRender(side,drag[side]);
  for(const side of ['flightLeftZone','flightRightZone'])$(side).setAttribute('aria-disabled',String(inputLocked()));
  if(inputLocked()){

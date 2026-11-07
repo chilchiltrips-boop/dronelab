@@ -67,7 +67,10 @@ for(const sta of [false,true])test(`direct ${sta?'STA':'AP'} ARM claims and ACKs
  const b=bench();await b.connect(sta);assert.equal(b.network.canArm(),true);
  await b.network.armControls();assert.equal(b.network.inputArmed(),true);
  const first=b.requests.find(x=>x.route==='/api/rc/preview');
- assert.equal(first.args.throttle,1000);assert.equal(first.args.armed,'false');assert.equal(first.args.inputArmed,'true');
+ assert.equal(first.args.throttle,1000);assert.equal(first.args.armed,'false');assert.equal(first.args.inputArmed,'false');
+ const armed=b.requests.filter(x=>x.route==='/api/rc/preview')[1];
+ assert.equal(armed.args.inputArmed,'true');assert.equal(armed.args.seq,first.args.seq+1);
+ assert.equal(armed.args.session,first.args.session);assert.equal(armed.args.throttle,1000);
  await new Promise(resolve=>setTimeout(resolve,105));
  await b.network.previewControls({throttle:1350,axes:{roll:.4,pitch:-.2,yaw:.6}});
  const frame=b.requests.at(-1).args;

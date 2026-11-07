@@ -1,7 +1,7 @@
 #pragma once
-// Resource separation for diagnostics. No actuator or physical PID support.
-// Callers must authenticate before invoking transitions; no public Kit code
-// or status field authorizes a write. State is RAM-only and bound to a boot.
+// Callers authenticate before transitions. Selection persists independently of
+// RC ownership: every reboot/source change revokes ARM and the output lease.
+static const char* zjPersistInputSelection(const String& path,const String& radio);
 static bool zjMaintenanceActive=false;
 static String zjMaintenanceOwner,zjAccessReason="BOOT";
 static uint32_t zjMaintenanceRenewedAt=0;
@@ -24,7 +24,7 @@ static bool zjAccessCanSwitchRadio(){
 static const char* zjAccessChange(const String& action,const String& source,
  const String& caller,bool ownsCurrent,bool stationary,const String& path="",const String& radio=""){
  zjAccessLoop();
- if(zjMotorSessionActive)return "stop_motor_setup_first";
+ if(zjMotorSessionActive||zjMotorEnabled||zjMotorArmed)return "stop_motor_setup_first";
  if(caller.isEmpty())return "authorization_required";
  if(zjHandoverPending)return "radio_handover_pending";
  if(action=="KEEP"){
@@ -47,7 +47,11 @@ static const char* zjAccessChange(const String& action,const String& source,
  if(zjRcOwned&&zjRcSource!="PPM"&&!ownsCurrent)return "rc_owned_by_other_controller";
  if(zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return "lower_throttle_and_disarm";
  if(action=="BEGIN"&&!stationary)return "fresh_stationary_imu_required";
- if(action!="BEGIN"&&source=="PPM"&&!zjPpmSignalFresh(millis()))return "ppm_signal_required";
+ if(action=="RESUME"&&source=="PPM"&&!zjPpmSignalFresh(millis()))return "ppm_signal_required";
+ // Saving an absent receiver selects it; it does not manufacture a live frame.
+ if(action!="BEGIN"&&!path.isEmpty()){
+  const char* error=zjPersistInputSelection(path,radio);if(error)return error;
+ }
  zjRcPaused=true;zjRcHandoverPaused=false;zjRcRelease(action=="BEGIN"?"MAINTENANCE_PAUSE":"EXPLICIT_SOURCE_HANDOVER");
  zjPpmSafeFrames=0; // PPM ARM resets on loss/reacquisition in zjPpmLoop
  if(action=="BEGIN"){

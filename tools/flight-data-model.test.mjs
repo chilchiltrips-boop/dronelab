@@ -247,7 +247,7 @@ test('network flight authorization is independent of bench arm and a missing OFF
   const armed = buildFlightData({...fixture, motorsDisabled: false,
     flight: {...fixture.flight, state: 'ARMED', authorized: true}}, now);
   assert.equal(armed.output.armed, true);
-  assert.match(armed.output.label, /Rate flight armed/);
+  assert.match(armed.output.label, /Acro flight armed/);
 });
 
 test('network reads ignore local echoes and RC observations from a prior boot', () => {

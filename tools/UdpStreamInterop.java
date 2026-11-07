@@ -45,6 +45,11 @@ public final class UdpStreamInterop {
    byte[] packet=new byte[58];DatagramPacket p=new DatagramPacket(packet,58);
    try{server.receive(p);}catch(SocketTimeoutException empty){continue;}
    byte[] clear=crypto(false,packet,Arrays.copyOfRange(packet,28,58));
+   int sequence=((packet[12]&255)<<24)|((packet[13]&255)<<16)|((packet[14]&255)<<8)|(packet[15]&255);
+   if(sequence<=3){
+    require(clear[12]==0,"New ownership must establish DISARM before any ARM");
+    for(int i=0;i<6;i++)require(((clear[i*2]&255)<<8|(clear[i*2+1]&255))==(i>=1&&i<=3?1500:1000),"Neutral handshake channels");
+   }
    observed.add(new ObservedFrame(packet,clear));frames.add(clear);
    if(mute)continue;
    byte[] ack=packet.clone();ack[2]='A';System.arraycopy(new byte[]{'K','I','T','!'},0,ack,24,4);

@@ -47,7 +47,7 @@ const horizon = `
   <g class="fd-pfd-ladder">
     <text x="132" y="42">20</text><text x="188" y="42">20</text>
     <text x="139" y="61">10</text><text x="181" y="61">10</text>
-    <text x="160" y="100">−10</text><text x="160" y="119">−15</text><text x="160" y="139">−20</text>
+    <text x="160" y="100">−10</text><text x="160" y="119">−20</text><text x="160" y="139">−30</text>
   </g>`;
 
 const scene = `
@@ -140,22 +140,45 @@ export function createFlightDataPfd(container) {
     node.setAttribute('aria-label', title);
   };
 
+  // Interpolate only between received orientations; never predict a new sample.
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let current = null, target = null, start = null, started = 0, animation = 0;
+  const draw = () => world.setAttribute('transform', `rotate(${-current.roll} 160 78) translate(0 ${current.pitch * 1.95})`);
+  function cancel() { if (animation) cancelAnimationFrame(animation); animation = 0; }
+  function step(time) {
+    animation = 0;
+    if (document.hidden || !target) return;
+    const progress = Math.min(1, (time - started) / 100);
+    const ease = 1 - (1 - progress) ** 3;
+    current = {roll: start.roll + (target.roll - start.roll) * ease, pitch: start.pitch + (target.pitch - start.pitch) * ease};
+    draw();
+    if (progress < 1) animation = requestAnimationFrame(step);
+  }
+  function orient(tilt) {
+    if (!tilt) { cancel(); current = target = null; world.removeAttribute('transform'); return; }
+    if (target?.roll === tilt.roll && target?.pitch === tilt.pitch) return;
+    cancel(); target = {roll: tilt.roll, pitch: tilt.pitch};
+    if (!current || reducedMotion.matches) { current = {...target}; draw(); return; }
+    start = {...current}; start.roll += Math.round((target.roll - start.roll) / 360) * 360;
+    started = performance.now(); animation = requestAnimationFrame(step);
+  }
+
   function update(data) {
     const {health, tilt} = data;
     const hasTilt = tilt && Number.isFinite(tilt.roll) && Number.isFinite(tilt.pitch);
-    main.dataset.tilt = hasTilt ? tilt.stationary ? 'stationary' : 'accel-reference' : 'unavailable';
+    main.dataset.tilt = hasTilt ? tilt.fused ? 'fc-attitude' : tilt.stationary ? 'stationary' : 'accel-reference' : 'unavailable';
     world.setAttribute('visibility', hasTilt ? 'visible' : 'hidden');
     reference.setAttribute('visibility', hasTilt ? 'hidden' : 'visible');
     overlay.hidden = Boolean(hasTilt);
     readout.hidden = !hasTilt;
     if (hasTilt) {
-      const description = tilt.stationary ? 'Stationary tilt estimate'
+      const description = tilt.fused ? 'FlightCore gyro and accelerometer fusion' : tilt.stationary ? 'Stationary tilt estimate'
         : 'Accelerometer reference. Motion can distort the estimate.';
       if (readout.title !== description) readout.title = description;
-      set(tiltLabel, tilt.stationary ? 'STATIONARY TILT' : 'ACCEL REFERENCE');
-      world.setAttribute('transform', `rotate(${-tilt.roll} 160 78) translate(0 ${tilt.pitch * 1.95})`);
+      set(tiltLabel, tilt.fused ? 'FC ATTITUDE' : tilt.stationary ? 'STATIONARY TILT' : 'ACCEL REFERENCE');
+      orient(tilt);
     } else {
-      world.removeAttribute('transform');
+      orient(null);
     }
     set(roll, hasTilt ? tilt.roll.toFixed(1) + '°' : '—');
     set(pitch, hasTilt ? tilt.pitch.toFixed(1) + '°' : '—');
@@ -169,11 +192,15 @@ export function createFlightDataPfd(container) {
     const caution = adverse.some(row => row.state === 'error') ? 'error' : adverse.length ? 'warning' : 'unknown';
     flag('caution', 'MASTER CAUTION', caution, adverse.length
       ? adverse.map(row => row.label).join(' · ') : 'No current caution reported');
-    flag('mode', data.mode?.toUpperCase() || 'MODE —', 'unknown', data.mode ? 'Flight mode ' + data.mode : 'Flight mode unavailable');
+    const modes = data.modeState;
+    flag('mode', modes ? modes.active.toUpperCase() + (modes.pending ? ' → ' + modes.pending.toUpperCase() : '') : data.mode?.toUpperCase() || 'MODE —',
+      modes ? modes.pending ? 'warning' : 'good' : 'unknown', modes
+        ? 'Active ' + modes.active + ' · saved ' + modes.saved + (modes.pending ? ' · applies after disarm' : '')
+        : 'Saved flight mode unconfirmed');
     flag('imu', 'IMU', health.imu.state, health.imu.label);
     flag('output', data.output.fresh && data.output.disabled === true ? 'PWM OFF' : 'OUTPUT',
       health.output.state, health.output.label);
   }
 
-  return {update};
+  return {update, pause: () => orient(null)};
 }
