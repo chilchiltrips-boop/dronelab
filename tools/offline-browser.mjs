@@ -31,6 +31,15 @@ try{
  await page.locator('#pythonQuickHardware').selectOption('plot');if(await page.locator('[data-inline-accept]').isVisible())await page.locator('[data-inline-accept]').click();await page.locator('#runPythonBtn').click();
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.screenshot({path:'test-output/offline-python-plot.png',fullPage:true});
+ await page.goto(base+'#telemetry');
+ await page.locator('#tab-telemetry.active .fd-map-canvas image').waitFor({state:'attached'});
+ const map=await page.evaluate(async()=>{
+  const image=new Image();
+  image.src=document.querySelector('.fd-map-canvas image').getAttribute('href');
+  await image.decode();
+  return image.naturalWidth>0;
+ });
+ if(!map)throw Error('Offline Flight Data map unavailable');
  await page.goto(base+'#pid');
  await page.waitForFunction(()=>window.ZebjusTraining?.isReady?.()&&document.querySelector('#pidFrame')?.contentWindow?.document?.getElementById('tpSceneStatus')?.textContent.includes('ASSEMBLY LAB F450'),null,{timeout:30000});
  await page.goto(base+'tripod.html?standalone=1');

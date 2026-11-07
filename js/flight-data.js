@@ -1,14 +1,13 @@
 import {appendFlightSample, buildFlightData} from './flight-data-model.js';
 import {createFlightDataVehicle} from './flight-data-vehicle.js';
+import {createFlightDataPfd} from './flight-data-pfd.js';
+import {createFlightDataHealth} from './flight-data-health.js';
+import {createFlightDataMap} from './flight-data-map.js';
 
 const page = document.getElementById('tab-telemetry');
 const byId = name => page.querySelector('#fd-' + name);
 const axes = ['roll', 'pitch', 'yaw'];
 const historyMs = 60000;
-const healthLabels = {
-  link: 'Kit link', imu: 'IMU', input: 'Receiver', timing: 'Control timing',
-  output: 'Motor output', setup: 'Saved settings', qualification: 'Physical acceptance'
-};
 const pathLabels = {
   AUTO: 'Automatic', PPM: 'PPM RX', ANDROID_AP: 'Android AP',
   ANDROID_WEBRTC: 'Android WebRTC', WEB_STA: 'WebApp STA'
@@ -24,23 +23,10 @@ function pill(node, text, tone) {
 }
 const fixed = (n, unit, digits = 0) => Number.isFinite(n) ? n.toFixed(digits) + unit : '—';
 
-const healthRows = {};
-for (const [key, label] of Object.entries(healthLabels)) {
-  const row = document.createElement('div');
-  const title = document.createElement('dt');
-  title.textContent = label;
-  const badge = document.createElement('dd');
-  badge.className = 'fd-pill';
-  const detail = document.createElement('dd');
-  detail.className = 'fd-health-detail';
-  row.dataset.health = key;
-  row.append(title, badge, detail);
-  byId('health').append(row);
-  healthRows[key] = {badge, detail};
-}
-
 let samples = [];
 let vehicle;
+let instruments;
+let systemHealth;
 let timer;
 
 function renderChart(data, now) {
@@ -68,9 +54,6 @@ function render() {
   const data = buildFlightData(window.ZebjusKits?.getState?.(), now);
   const {health, rc, flight, output, timing, tilt} = data;
   pill(byId('link'), health.link.label, health.link.state);
-  set('link-detail', data.connected
-    ? 'Read-only telemetry from the selected A2 FlightCore.'
-    : 'Connect a verified A2 Kit to view telemetry.');
   set('kit', data.kitName || '—');
   set('kit-id', data.kitId || 'No verified identity');
   set('version', data.version ? 'v' + data.version : '—');
@@ -99,20 +82,8 @@ function render() {
   for (const [i, channel] of ['roll', 'pitch', 'throttle', 'yaw'].entries()) {
     set('rc-' + channel, fixed(inputChannels?.[i], ' µs'));
   }
-  for (const [key, row] of Object.entries(healthRows)) {
-    pill(row.badge, health[key].label, health[key].state);
-    if (row.detail.textContent !== health[key].detail) row.detail.textContent = health[key].detail;
-    row.detail.hidden = !health[key].detail || health[key].state === 'good';
-  }
-  pill(byId('tilt-status'), tilt ? 'Gravity estimate' : 'Unavailable', tilt ? 'good' : 'unknown');
-  set('tilt-overlay', data.transport === 'usb'
-    ? 'Accelerometer tilt unavailable over USB' : 'Awaiting stationary accelerometer data');
-  byId('tilt-overlay').hidden = !!tilt;
-  const world = byId('horizon-world');
-  world.setAttribute('visibility', tilt ? 'visible' : 'hidden');
-  if (tilt) world.setAttribute('transform', `rotate(${-tilt.roll} 200 116) translate(0 ${tilt.pitch * 3})`);
-  set('roll', fixed(tilt?.roll, '°', 1));
-  set('pitch', fixed(tilt?.pitch, '°', 1));
+  instruments.update(data);
+  systemHealth.update(data);
   vehicle.update({tilt, visible: true});
   axes.forEach((axis, i) => set('rate-' + axis, fixed(data.rates?.[i], ' °/s', 1)));
   pill(byId('sample-age'), data.rates ? 'Sample age ' + fixed(data.imuAgeMs, ' ms') : 'No fresh sample',
@@ -123,7 +94,12 @@ function render() {
 function refreshVisibility() {
   const visible = page.classList.contains('active') && !document.hidden;
   if (visible && !timer) {
-    vehicle ??= createFlightDataVehicle(byId('vehicle'));
+    if (!instruments) {
+      instruments = createFlightDataPfd(byId('pfd'));
+      systemHealth = createFlightDataHealth(byId('health'));
+      createFlightDataMap(byId('map'));
+      vehicle = createFlightDataVehicle(byId('vehicle'));
+    }
     render();
     timer = window.setInterval(render, 250);
   } else if (!visible && timer) {
@@ -134,6 +110,11 @@ function refreshVisibility() {
   }
 }
 
+byId('details-toggle').addEventListener('click', event => {
+  const details = byId('details');
+  details.hidden = !details.hidden;
+  event.currentTarget.setAttribute('aria-expanded', String(!details.hidden));
+});
 byId('setup').addEventListener('click', () => document.querySelector('.tab[data-tab="setup"]').click());
 byId('diagnostics').addEventListener('click', () => window.ZebjusDevicesWorkspace?.open('diagnostics'));
 window.addEventListener('dronelab:tab', refreshVisibility);

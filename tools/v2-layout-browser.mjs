@@ -145,7 +145,7 @@ try{
    await page.screenshot({path:'test-output/v2/desktop-pid-1366.png'});
   }
   await page.screenshot({path:`test-output/v2/header-${width}.png`});
-  if([390,1366].includes(width))await testFlightData(page,width);
+  if([390,736,1366].includes(width))await testFlightData(page,width);
   await context.close();console.log('PASS desktop shell/fallback',width,metrics.header.height);
  }
 }finally{writeFileSync('test-output/v2/layout.json',JSON.stringify(results,null,2));await browser.close()}

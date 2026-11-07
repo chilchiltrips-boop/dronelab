@@ -1,115 +1,190 @@
 .flight-data-page {
-  --fd-bg: #08131e;
-  --fd-card: #0d202d;
-  --fd-line: #264356;
-  --fd-ink: #e5f3ff;
-  --fd-muted: #a0b8c9;
-  --fd-accent: #74e6c6;
+  --fd-gray: #666763;
+  --fd-line: #30312e;
+  --fd-light: #dddcd7;
+  --fd-ink: #151613;
   color: var(--fd-ink);
-  background: radial-gradient(ellipse at 12% 0%, #122d40 0%, transparent 42%), var(--fd-bg);
-  padding: clamp(12px, 1.6vw, 24px);
+  background: #4f514d;
+  padding: 5px;
+  min-width: 0;
+  font-family: Arial, sans-serif;
+}
+.fd-window {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid #2b2e27;
+  background: #777970;
+  box-shadow: inset 0 1px #a6a69d;
+}
+.fd-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 7px;
+  min-height: 20px;
+  background: linear-gradient(#527c20, #36560e);
+  color: white;
+  border-bottom: 1px solid #294408;
+}
+.fd-titlebar h1 { margin: 0; font-size: 12px; font-weight: 600; }
+.fd-titlebar span { font-size: 9px; letter-spacing: .06em; }
+.fd-cockpit {
+  display: grid;
+  grid-template-columns: minmax(0, 44fr) minmax(0, 56fr);
+  gap: 5px;
+  min-width: 0;
+  height: clamp(354px, min(49vw, calc(100dvh - var(--topbar-height, 104px) - 90px)), 960px);
+  padding: 0 3px;
+}
+.fd-instruments {
+  display: grid;
+  grid-template-rows: minmax(228px, 68fr) minmax(110px, 32fr);
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+.fd-instrument-tray {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+#fd-vehicle {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #3e3e63;
+  background: linear-gradient(180deg, #242363 0%, #7469d9 42%, #c2bced 78%, #eeeff5 100%);
+  color: #0d1034;
+}
+.flight-data-vehicle-scene { display: block; align-self: center; width: 100%; height: 100%; }
+.flight-data-vehicle-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px;
+}
+.flight-data-vehicle-controls button, .fd-button {
+  border: 1px solid #77786f;
+  border-radius: 2px;
+  background: linear-gradient(#fbfbf9, #cecec8);
+  color: #151613;
+  cursor: pointer;
+  font: 600 11px Arial, sans-serif;
+  padding: 3px 6px;
+  min-height: 22px;
+}
+.flight-data-vehicle-controls button { font-size: 10px; }
+.flight-data-vehicle-controls button:hover, .fd-button:hover { background: #fff; }
+.flight-data-vehicle-controls button:focus-visible, .fd-button:focus-visible {
+  outline: 2px solid #2b72cc;
+  outline-offset: -2px;
+}
+.flight-data-vehicle-controls button[aria-pressed="true"] { background: #cfdec1; }
+.flight-data-vehicle-caption {
+  margin: 0;
+  padding: 2px 4px 3px;
+  font-size: 10px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+.fd-bottom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  padding: 2px 4px 1px;
+  background: linear-gradient(#ecebe6, #bfbfb6);
+  border-top: 1px solid #f8f7f0;
+  font-size: 11px;
+}
+.fd-active-label {
+  align-self: stretch;
+  padding: 5px 7px;
+  background: #f9f8f3;
+  border: 1px solid #a8a79e;
+  border-bottom-color: #f9f8f3;
+  font-weight: 700;
+}
+.fd-connection, .fd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   min-width: 0;
 }
-.fd-shell { display: grid; gap: 14px; max-width: 1740px; margin: 0 auto; }
-.fd-hero, .fd-hero-actions, .fd-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.fd-hero { flex-wrap: wrap; padding: 4px 0; }
-.fd-hero-actions { flex-wrap: wrap; justify-content: flex-start; }
-.fd-kicker { color: var(--fd-accent); font-size: 10px; letter-spacing: .14em; font-weight: 750; }
-.fd-hero h1 { margin: 4px 0; font-size: clamp(27px, 3vw, 41px); letter-spacing: -.045em; line-height: 1.1; }
-.fd-hero p { color: var(--fd-muted); margin: 5px 0 0; font-size: 13px; overflow-wrap: anywhere; }
-.fd-strip {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; overflow: hidden;
-  background: var(--fd-line); border: 1px solid var(--fd-line); border-radius: 13px;
+.fd-connection { margin-inline-start: auto; overflow-wrap: anywhere; }
+.fd-connection small { color: #44453e; font-size: 10px; }
+.flight-data-page .fd-pill {
+  display: inline-block;
+  border: 1px solid #171817;
+  border-radius: 2px;
+  background: #454742;
+  color: #fff;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
 }
-.fd-strip > div, .fd-readouts > div { display: grid; align-content: start; min-width: 0; gap: 4px; }
-.fd-strip > div { padding: 11px 13px; background: #102634; overflow-wrap: anywhere; }
-.fd-strip span, .fd-readouts span { color: var(--fd-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
-.fd-strip strong, .fd-readouts strong { font-size: 15px; font-variant-numeric: tabular-nums; }
-.fd-strip small { color: var(--fd-muted); font-size: 11px; }
-.fd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
-.fd-card {
-  display: flex; flex-direction: column; gap: 12px; min-width: 0;
-  padding: 15px; border: 1px solid var(--fd-line); border-radius: 14px;
-  background: linear-gradient(155deg, #122a38, var(--fd-card) 68%); box-shadow: 0 8px 24px #040b1230;
+.flight-data-page .fd-pill[data-tone="good"] { background: #17570c; }
+.flight-data-page .fd-pill[data-tone="warning"] { background: #ad460c; }
+.flight-data-page .fd-pill[data-tone="error"] { background: #a21919; }
+.fd-details {
+  background: #e3e2dc;
+  border-top: 1px solid #f2f1eb;
+  font-size: 12px;
 }
-.fd-card-head { align-items: flex-start; flex-wrap: wrap; }
-.fd-card-head h2 { margin: 3px 0 0; font-size: 18px; letter-spacing: -.018em; }
-.fd-rates { grid-column: span 2; }
-.fd-instrument, .fd-chart { position: relative; display: grid; place-items: center; border: 1px solid var(--fd-line); border-radius: 12px; overflow: hidden; background: #091520; }
-.fd-pfd, .fd-chart svg { display: block; width: 100%; }
-.fd-instrument > span, .fd-chart > span {
-  position: absolute; bottom: 9px; max-width: calc(100% - 16px); padding: 4px 8px;
-  color: #b8cedc; background: #0a1724ed; border: 1px solid #345366; border-radius: 6px;
-  font-size: 11px; text-align: center;
+#fd-details-toggle[aria-expanded="true"] { background: #cfdec1; }
+.fd-detail-body { display: grid; gap: 8px; padding: 8px; }
+.fd-strip, .fd-readouts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid #a4a59d;
+  background: #a4a59d;
 }
-.fd-instrument > [hidden], .fd-chart > [hidden] { display: none; }
-.fd-readouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-.fd-readouts > div { padding: 8px 9px; border-radius: 8px; border: 1px solid var(--fd-line); background: #091824; }
-.fd-readouts strong { font-size: clamp(13px, 1.4vw, 18px); }
-.fd-note { color: var(--fd-muted); font-size: 11px; line-height: 1.45; margin: 0; }
-.flight-data-page [data-tone="good"] { --fd-tone: #8ff0bc; --fd-tint: #193a32; }
-.flight-data-page [data-tone="warning"] { --fd-tone: #ffbd7b; --fd-tint: #412d1e; }
-.flight-data-page [data-tone="error"] { --fd-tone: #ff9b9e; --fd-tint: #402331; }
-.flight-data-page [data-tone="unknown"] { --fd-tone: #b9c9d7; --fd-tint: #1e3040; }
-.fd-pill, .fd-status-key span {
-  display: inline-flex; align-items: center; gap: 5px; width: fit-content; max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--fd-tone) 32%, transparent);
-  border-radius: 100px; padding: 4px 8px; background: var(--fd-tint); color: var(--fd-tone);
-  font-size: 11px; font-weight: 700; line-height: 1.3;
+.fd-readouts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fd-strip > div, .fd-readouts > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  align-content: start;
+  padding: 6px;
+  background: #eeeee8;
+  overflow-wrap: anywhere;
 }
-.fd-pill::before, .fd-status-key span::before { content: ""; border-radius: 50%; width: 6px; height: 6px; background: currentColor; flex: none; }
-.fd-health, .fd-inactive-metrics { display: grid; margin: 0; gap: 5px; }
-.fd-health > div, .fd-inactive-metrics > div {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px;
-  padding: 7px 8px; border-radius: 8px; background: #0a1b28; border: 1px solid #1f3a4d;
+.fd-strip span, .fd-readouts span { color: #4e4f45; text-transform: uppercase; font-size: 10px; }
+.fd-strip small { font-size: 10px; }
+.fd-receiver, .fd-chart-head { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; }
+.fd-receiver > div { display: flex; flex: 1 0 auto; gap: 4px; align-items: baseline; }
+.fd-receiver > span { font-weight: 700; }
+.fd-chart-head { justify-content: space-between; }
+.fd-chart-head h2 { margin: 0; font-size: 13px; }
+.fd-chart {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border: 1px solid #505248;
+  background: #151b1e;
+  color: #e9eae8;
 }
-.fd-health dt, .fd-inactive-metrics dt { min-width: 0; font-weight: 650; font-size: 12px; }
-.fd-health dd, .fd-inactive-metrics dd { margin: 0; font-size: 11px; }
-.fd-health .fd-health-detail { grid-column: 1 / -1; color: var(--fd-muted); line-height: 1.35; overflow-wrap: anywhere; }
-.fd-inactive-metrics dd { color: var(--fd-muted); text-align: right; }
-.fd-status-key { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; }
-.fd-status-key span { padding: 3px 6px; font-size: 10px; }
-.fd-button {
-  width: fit-content; min-height: 34px; padding: 6px 10px; border: 1px solid #3d657a;
-  border-radius: 8px; color: var(--fd-ink); background: #153243; cursor: pointer; font-size: 12px; font-weight: 700;
-}
-.fd-button:hover { background: #214659; }
-.fd-button:focus-visible { outline: 2px solid var(--fd-accent); outline-offset: 2px; }
-.fd-button span { color: var(--fd-accent); }
-.fd-chart svg { height: 126px; }
-.fd-chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.fd-chart svg { display: block; width: 100%; height: 126px; }
+.fd-chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 #fd-line-roll { stroke: #74e6c6; }
 #fd-line-pitch { stroke: #82bcff; }
 #fd-line-yaw { stroke: #ffd184; }
-#fd-rate-roll { color: #74e6c6; }
-#fd-rate-pitch { color: #82bcff; }
-#fd-rate-yaw { color: #ffd184; }
-@media (max-width: 1080px) {
-  .fd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fd-rates { grid-column: auto; }
-}
+#fd-chart-empty { position: absolute; padding: 3px 6px; font-size: 11px; background: #151b1e; }
+#fd-chart-note { margin: 0; color: #45463e; font-size: 11px; }
 @media (max-width: 680px) {
-  .fd-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .fd-cockpit { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .fd-instruments { grid-template-rows: minmax(245px, 62vw) minmax(132px, 36vw); }
+  .fd-cockpit > .fd-map { min-height: 300px; }
   .fd-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fd-strip > div:last-child { grid-column: 1 / -1; }
-  .fd-shell { gap: 10px; }
-  .fd-card { padding: 12px; }
+  .fd-connection { margin-inline-start: 0; }
 }
-.fd-receiver {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 15px;
-  padding: 8px 12px; border: 1px solid var(--fd-line); border-radius: 10px; background: #102634;
-}
-.fd-receiver > div { display: flex; flex: 1 0 auto; gap: 6px; align-items: baseline; }
-.fd-receiver span { color: var(--fd-muted); font-size: 11px; }
-.fd-receiver > span { color: var(--fd-accent); font-weight: 700; }
-.fd-receiver strong { font-size: 12px; font-variant-numeric: tabular-nums; }
-.flight-data-vehicle-scene { border: 1px solid var(--fd-line); border-radius: 12px; background: #091520; }
-.flight-data-vehicle-controls { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
-.flight-data-vehicle-controls button {
-  min-height: 34px; padding: 6px 10px; border-radius: 8px; border: 1px solid #3d657a; cursor: pointer;
-  background: #153243; color: var(--fd-ink); font-size: 12px; font-weight: 700;
-}
-.flight-data-vehicle-controls button:hover { background: #214659; }
-.flight-data-vehicle-controls button:focus-visible { outline: 2px solid var(--fd-accent); outline-offset: 2px; }
-.flight-data-vehicle-controls button[aria-pressed="true"] { border-color: var(--fd-accent); color: var(--fd-accent); }
-.flight-data-vehicle-caption { margin: 0; color: var(--fd-muted); font-size: 11px; line-height: 1.45; }

@@ -1,0 +1,77 @@
+.fd-system-health {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2px, .3vw, 5px);
+  min-inline-size: 0;
+  min-block-size: 104px;
+  padding: clamp(3px, .45vw, 7px);
+  border: 2px ridge #94918a;
+  background: #35312a;
+  box-shadow: inset 0 0 0 1px #0f0c08;
+  color: #fff;
+}
+
+.fd-system-health h2 {
+  margin: 0;
+  border-block: 1px solid #817d74;
+  background: linear-gradient(#8b857a, #4b463c);
+  color: #fff;
+  font: 700 clamp(8px, 5cqi, 15px)/1.2 Arial, sans-serif;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.fd-system-health-row {
+  display: flex;
+  flex: 1 0 auto;
+  gap: clamp(2px, 1.8cqi, 5px);
+}
+
+.fd-system-health-row button {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: clamp(13px, 9.6cqi, 26px);
+  padding: 0 clamp(1px, 1.1cqi, 3px);
+  border: 1px solid #dedbd2;
+  border-radius: 2px;
+  background: #241a12;
+  box-shadow: inset 0 0 0 1px #080601, 0 1px 1px #16130f;
+  color: #efebe3;
+  font: 700 clamp(7px, 5.2cqi, 14px)/1.15 "Arial Narrow", Arial, sans-serif;
+  letter-spacing: -.02em;
+  text-align: center;
+  cursor: pointer;
+}
+
+.fd-system-health-row button[data-tone="good"] {
+  background: #087d08;
+}
+
+.fd-system-health-row button[data-tone="warning"] {
+  background: #a94a00;
+}
+
+.fd-system-health-row button[data-tone="error"] {
+  background: #a80b15;
+}
+
+.fd-system-health-row button:hover,
+.fd-system-health-row button[aria-pressed="true"] {
+  border-color: #fff;
+  box-shadow: inset 0 0 0 1px #fff;
+}
+
+.fd-system-health-row button:focus-visible {
+  outline: 2px solid #fbdf83;
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.fd-system-health-detail {
+  padding: 3px;
+  background: #161410;
+  color: #fff;
+  font: 400 clamp(9px, 5.1cqi, 14px)/1.25 Arial, sans-serif;
+  overflow-wrap: anywhere;
+}
