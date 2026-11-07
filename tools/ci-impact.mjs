@@ -12,7 +12,9 @@ const compiledTools=new Set(['VERSION.txt','js/pid-profiles.js',
  'tools/firmware_compile_time.py']);
 const releaseMeta=/^(?:FlightCore_Firmware\/(?:bench\/|[^/]+\.(?:bin|json)$)|firmware-(?:catalog|latest)\.json$)/;
 const android=/^(?:mobile-android\/|mobile-apk\/|android-native-bridge\.js$|companion(?:-[^/]+)?\.js$|companion\.(?:html|css)$)/;
-const web=/^(?:js\/|vendor\/|(?:index|lab|tripod|companion|pairing|remote|flight|firmware|sw)[^/]*\.(?:html|css|js|mjs|json)$)|^[^/]+\.(?:html|css|js|mjs|glb|png|jpg|jpeg|svg|webp|wasm)$)/;
+const webPath=p=>p.startsWith('js/')||p.startsWith('vendor/')||
+ /^(?:index|lab|tripod|companion|pairing|remote|flight|firmware|sw)[^/]*\.(?:html|css|js|mjs|json)$/.test(p)||
+ /^[^/]+\.(?:html|css|js|mjs|glb|png|jpg|jpeg|svg|webp|wasm)$/.test(p);
 const tests=/^(?:tools\/|\.github\/workflows\/)/;
 const docs=/^(?:docs\/|README(?:\..*)?$|[^/]+\.(?:md|txt)$)/;
 
@@ -24,7 +26,7 @@ export function classifyChanges(paths){
   if(compiled.test(p)||compiledTools.has(p)){sections.firmware.push(p);classified=true}
   if(releaseMeta.test(p)){sections.releaseMetadata.push(p);classified=true}
   if(android.test(p)){sections.android.push(p);classified=true}
-  if(web.test(p)){sections.webapp.push(p);classified=true}
+  if(webPath(p)){sections.webapp.push(p);classified=true}
   if(tests.test(p)){sections.testsAndCI.push(p);classified=true}
   if(docs.test(p)){sections.docs.push(p);classified=true}
   if(!classified)sections.other.push(p);
