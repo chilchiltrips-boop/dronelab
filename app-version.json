@@ -1,5 +1,5 @@
 {
-  "version": "1.60",
+  "version": "1.61",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -15,7 +15,7 @@
     "Aerof450 Quad X and Quad + PID profiles, unified Rate and Angle editor, and disarmed preview on supported A2 firmware",
     "Firmware Flash can explicitly load the verified A2 1.7.20 Experimental PPM Rate APP or Factory image. Physical acceptance remains pending."
   ],
-  "buildCommit": "6c1c978bb572",
-  "publishedAt": "2026-11-07T10:38:12.011706+00:00",
-  "buildNumber": 493
+  "buildCommit": "d06b5f3f234b",
+  "publishedAt": "2026-11-07T12:50:24.390808+00:00",
+  "buildNumber": 494
 }
