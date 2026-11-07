@@ -1,7 +1,7 @@
 name: Verify STA discovery and identity recovery
 on:
   push:
-    branches: [main, fix/sta-discovery-20261018]
+    branches: [main]
     paths:
       - 'js/classroom-kits.js'
       - 'js/firmware-connect.js'

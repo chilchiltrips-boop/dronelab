@@ -2,7 +2,7 @@ name: Verify Accordion Initialization and Visibility
 
 on:
   push:
-    branches: [fix/android-178-acceptance-release-20261016, main]
+    branches: [main]
     paths:
       - 'vendor/peerjs*'
       - 'tools/android-menu-browser.mjs'

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,existsSync} from 'node:fs';
+import {readFileSync,existsSync,readdirSync} from 'node:fs';
 import {domainTests,domains} from './run-domain-tests.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('focused checks retain a full PR/main suite and exact-source APK release prerequisite',()=>{
@@ -32,4 +32,17 @@ test('Pages publishes only a tested artifact and serializes production deploymen
  assert.match(ci,/verify-live-site.mjs/);
  assert.doesNotMatch(ci,/force-push|git push.*--force/);
  assert.equal(existsSync(new URL('../.github/workflows/version-stamp.yml',import.meta.url)),false);
+});
+test('automatic branch checks target main and the retired connectivity job remains covered',()=>{
+ for(const file of readdirSync(new URL('../.github/workflows/',import.meta.url)).filter(f=>f.endsWith('.yml'))){
+  const source=read('.github/workflows/'+file);
+  for(const match of source.matchAll(/^    branches: (.+)$/gm))assert.equal(match[1],'[main]',file);
+ }
+ const full=read('.github/workflows/v2-safe-fixes.yml');
+ assert.match(full,/node tools\/v2-layout-browser\.mjs/);
+ assert.match(full,/node tools\/legacy-connectivity-browser\.mjs/);
+ assert.equal(existsSync(new URL('../.github/workflows/legacy-connectivity-browser.yml',import.meta.url)),false);
+ const publisher=read('.github/workflows/publish-flightcore-bench.yml');
+ assert.match(publisher,/if: github.ref == 'refs\/heads\/main'/);
+ assert.doesNotMatch(publisher,/refs\/heads\/feat\//);
 });

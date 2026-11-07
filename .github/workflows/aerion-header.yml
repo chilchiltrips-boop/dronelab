@@ -1,7 +1,7 @@
 name: Aerion horizontal header and version
 on:
   push:
-    branches: [fix/a2-output-calibration-stability-20261104, main, fix/a2-esc-guidance-20261104, feat/aerion-horizontal-header-20261026, feat/aerion-header-alignment-20261026, feat/aerion-spacious-header-20261027]
+    branches: [main]
     paths:
       - 'index.html'
       - 'lab.html'

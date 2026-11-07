@@ -68,7 +68,7 @@ on:
       - 'live-inputs.css'
       - '.github/workflows/authoritative-status.yml'
   pull_request:
-    branches: [feat/compact-desktop-header-20261026, feat/unified-input-status-20261026, main]
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

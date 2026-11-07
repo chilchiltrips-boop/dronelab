@@ -1,7 +1,7 @@
 name: AP UDP Streaming Regression
 on:
   push:
-    branches: [work/ap-ack-free-stream-20261020, main]
+    branches: [main]
     paths:
       - 'companion-network.js'
       - 'companion-flight.js'
