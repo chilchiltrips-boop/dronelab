@@ -37,7 +37,7 @@ jobs:
       - run: python3 tools/android_release_needed.py
   browser:
     needs: source
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
