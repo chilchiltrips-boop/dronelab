@@ -180,6 +180,7 @@ function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
 function boardById(id){return catalog?.boards?.find(b=>b.id===id)||null}
 function releaseForBoard(id,track=releaseTrack){
+ if(id!=='ZFC-A2')return null;
  return (track==='experimental'?experimentalCatalog?.boards.find(b=>b.id===id):track==='bench'?benchCatalog?.boards.find(b=>b.id===id):boardById(id))?.latest;
 }
 function mapHardwareSignature(raw){const s=String(raw||'').toUpperCase();if(/\bUNKNOWN\b/.test(s))return'';const chips=Array.from(s.matchAll(/\bESP32[-_\s]*(C6(?:FH[48])?|[A-Z]\d+)\b/g),m=>'ESP32'+m[1].replace(/FH[48]$/,''));for(const b of catalog?.boards||[])for(const match of b.usbMatch||[]){const alias=String(match).toUpperCase(),compact=alias.replace(/[-_\s]+/g,'');if(compact.startsWith('ESP32')?chips.includes(compact):s.includes(alias))return b.id}return''}
@@ -306,11 +307,7 @@ async function autoLoad(choice=releaseChoice){
  try{
   releaseChoice=choice;
   if(choice==='latest'){
-   // Auto Load Latest resolves the verified board before choosing a package.
-   // A2 uses the verified versioned BENCH image. Historical A1 is archive-only.
-   // Nothing is flashed by this selection.
-   const id=await targetBoardId(false);
-   if(id!=='ZFC-A2')throw Error('Only A2 firmware is supported');
+   // Auto Load Latest prepares the verified bench package for A2.
    releaseTrack='bench';
   }else if(choice==='bench'||choice==='published')releaseTrack=choice;
   else throw Error('Unknown firmware release selection');
@@ -326,8 +323,9 @@ async function loadFirmwarePackage(){
  let id='',type=$('#fwImageType')?.value||'app';
  const bench=releaseTrack==='bench';
  try{
-  if(bench)await loadBenchCatalog();
   id=await targetBoardId(true);
+  if(id!=='ZFC-A2')throw Error('Only A2 firmware is supported');
+  if(bench)await loadBenchCatalog();
   const release=releaseForBoard(id),pkg=release?.[type];
   if(!pkg?.available||!pkg.file)throw Error('The selected board image has not been published');
   const cached=await loadCached(id,type);
@@ -395,6 +393,7 @@ async function importFile(file){
 function kitStatus(){
  const schoolApi=school(),d=schoolApi?.getSelectedDevice?.(),kit=globalThis.ZebjusKits?.getState?.(),wifiOnline=!!d?.online||!!kit?.connected&&['sta','ap'].includes(kit.transport);
  const running=!!monitorPort&&!!usbRuntimeInfo&&!usbRomDownload;
+ const retired=running&&usbRuntimeInfo.boardId==='ZFC-A1';
  const bootloader=verifiedUsbConnection(),serial=!!monitorPort;
  const usbConnected=bootloader||serial;
  // Physical USB presence takes precedence: an unrelated Wi-Fi kit is not this USB controller.
@@ -403,17 +402,17 @@ function kitStatus(){
  const version=running?usbRuntimeInfo.version:bootloader?(prior?'Last verified '+prior.version+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for firmware ID':wifiOnline?(kit?.version||d?.firmware||d?.version||'--'):'--';
  const build=running?formatBuildTime(usbRuntimeInfo.buildStamp):bootloader?(prior?'Last verified '+formatBuildTime(prior.buildStamp)+' • not live':'Unknown • ROM bootloader'):serial?'Waiting for ZJINFO':wifiOnline?formatBuildTime(kit?.firmwareBuiltAt||d?.firmwareBuiltAt||d?.buildDateTime||d?.buildTime||liveFirmwareBuiltAt):'--';
  const name=running?usbRuntimeInfo.boardName:bootloader?boardName(board):serial?'USB serial • identifying…':wifiOnline?(kit?.kitName||d?.deviceName||d?.name||'--'):'--';
- const state=usbRomDownload&&serial?'ROM DOWNLOAD • APP NOT RUNNING':running?'USB FIRMWARE RUNNING':bootloader?'USB BOOTLOADER VERIFIED':serial?'USB SERIAL • IDENTIFYING':wifiOnline?'ONLINE • MOTORS DISABLED':'OFFLINE';
+ const state=usbRomDownload&&serial?'ROM DOWNLOAD • APP NOT RUNNING':retired?'UNSUPPORTED BOARD • A1 RETIRED':running?'USB FIRMWARE RUNNING':bootloader?'USB BOOTLOADER VERIFIED':serial?'USB SERIAL • IDENTIFYING':wifiOnline?'ONLINE • MOTORS DISABLED':'OFFLINE';
  const profile=board?boardName(board):serial?'Reading firmware board ID…':wifiOnline?(boardName(kit?.board||d?.boardId)||'Detecting…'):'--';
  text('#fwCurrentVersion',version);textTitle('#fwCurrentBuildTime',build);
  text('#fwDeviceId',name);text('#fwKitState',state);text('#fwLiveBoard',profile);
  text('#fwConnectionType',running?'USB • Running firmware':bootloader?'USB • ROM bootloader':serial?'USB • Serial':wifiOnline?(kit?.transport?kit.transport.toUpperCase()+' • Kit verified':'Wi-Fi / WebRTC'):'Not connected');
- text('#fwFirmwareEvidence',running?'Verified from live ZJINFO':bootloader?(prior?'Previously verified • not currently readable':'ROM has no firmware version'):serial?'Waiting for running firmware data':wifiOnline?'Reported by online kit':'Not connected');
+ text('#fwFirmwareEvidence',retired?'A1 identity read from USB • A2 required':running?'Verified from live ZJINFO':bootloader?(prior?'Previously verified • not currently readable':'ROM has no firmware version'):serial?'Waiting for running firmware data':wifiOnline?'Reported by online kit':'Not connected');
  const rel=boardById(board||usbBoardId||usbRuntimeInfo?.boardId);
  text('#fwPublishedVersion',rel?.latest?.version?'Published '+rel.latest.version+' (not installed proof)':'No verified board package');
  text('#fwPreviouslyVerified',running?'v'+usbRuntimeInfo.version+' • live':prior?'v'+prior.version+' • last observed':'None this session');
  const kb=$('#fwKitBadge');
- if(kb){kb.textContent=running?'USB FIRMWARE ACTIVE':bootloader?'USB BOOTLOADER READY':serial?(usbRomDownload?'ROM DOWNLOAD':'USB SERIAL OPEN'):wifiOnline?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(running||bootloader||wifiOnline?'online':'offline')}
+ if(kb){kb.textContent=retired?'A1 RETIRED':running?'USB FIRMWARE ACTIVE':bootloader?'USB BOOTLOADER READY':serial?(usbRomDownload?'ROM DOWNLOAD':'USB SERIAL OPEN'):wifiOnline?'KIT ONLINE':'KIT OFFLINE';kb.className='firmware-badge '+(!retired&&(running||bootloader||wifiOnline)?'online':'offline')}
  if(typeof syncFirmwareControls==='function')syncFirmwareControls();
  if(wifiOnline&&!busy&&firmwareTargetMethod==='wifi')void prepareConnectedFirmware().catch(e=>log('Firmware auto-detect: '+String(e?.message||e)));
  text('#fwUsbSensor',serial?usbSensorState:'--');text('#fwUsbPins',serial?usbBusPins:'--');text('#fwUsbLed',serial?usbLedState:'--');text('#fwUsbMode',serial?usbBusMode:'--');
@@ -753,10 +752,10 @@ function matchingUsbPort(port){const p=usbPortInfo(port);return !usbLastInfo||!p
 function serialBaud(){const n=Number($('#fwSerialBaud')?.value||115200);return Number.isFinite(n)&&n>=300&&n<=2000000?n:115200}
 function serialUi(on,msg){
  try{window.dispatchEvent(new CustomEvent('dronelab:usb-state',{detail:{connected:!!on,reason:String(msg||'')}}))}catch{}
- const rate=serialBaud();text('#fwSerialStatus',msg||(on?'Listening • '+rate+' baud':'Disconnected'));
+ const rate=serialBaud(),canWrite=on&&usbRuntimeInfo?.boardId==='ZFC-A2'&&!serialSending;
+ text('#fwSerialStatus',on&&usbRuntimeInfo?.boardId==='ZFC-A1'?'A1 retired • read-only capture':msg||(on?'Listening • '+rate+' baud':'Disconnected'));
  text('#fwSerialMonitorBtn',on?'Close Serial Port':'Open Serial Port');
- const send=$('#fwSerialSendBtn');if(send)send.disabled=!on||serialSending;
- for(const id of ['#fwLedTestBtn','#fwI2cScanBtn']){const el=$(id);if(el)el.disabled=!on||serialSending}
+ for(const id of ['#fwSerialSendBtn','#fwLedTestBtn','#fwI2cScanBtn','#fwTelRate']){const el=$(id);if(el)el.disabled=!canWrite}
  syncFirmwareControls();
 }
 function selectSerialView(view){
@@ -827,11 +826,23 @@ function readUsbTelemetry(line){
  }else if(value.startsWith('ZJINFO,FW,')){
   const fields=value.split(',');
   if(fields.length>=7&&/^ZFC-A[12]$/.test(fields[2])&&/^\d+\.\d+\.\d+$/.test(fields[3])){
+   const previousBoard=usbRuntimeInfo?.boardId;
    usbRuntimeInfo={boardId:fields[2],version:fields[3],buildStamp:fields[4]+' '+fields[5],boardName:fields.slice(6).join(',')};
-   lastVerifiedRuntime={...usbRuntimeInfo};lastVerifiedAt=Date.now();
-   text('#fwUsbState','Running firmware verified: v'+usbRuntimeInfo.version);
    usbRomDownload=false;
-   syncUsbBoardSelection(usbRuntimeInfo.boardId,'Live firmware identity (USB Serial)');
+   if(usbRuntimeInfo.boardId==='ZFC-A2'){
+    lastVerifiedRuntime={...usbRuntimeInfo};lastVerifiedAt=Date.now();
+    text('#fwUsbState','Running A2 firmware verified: v'+usbRuntimeInfo.version);
+    syncUsbBoardSelection(usbRuntimeInfo.boardId,'Live firmware identity (USB Serial)');
+    if(monitorPort&&previousBoard!=='ZFC-A2'){
+     serialUi(true,'A2 firmware verified');
+     // Refresh the physical pairing even when a Wi-Fi Kit is selected.
+     void writePythonSerialLine('ZJNET,PAIR\n').catch(()=>{});
+     void setUsbTelemetryRate($('#fwTelRate')?.value||20);
+    }
+   }else{
+    text('#fwUsbState','A1 is retired • connect an A2 controller');
+    if(monitorPort&&previousBoard!=='ZFC-A1')serialUi(true,'A1 retired • read-only capture');
+   }
   }
  }else if(value.startsWith('ZJI2C,PINS,')){
   const parts=value.split(',');if(parts.length>=6)usbBusPins='SDA GPIO'+parts[3]+' • SCL GPIO'+parts[4]+' • expected '+parts[5];
@@ -849,6 +860,7 @@ function readUsbTelemetry(line){
  kitStatus();
  if(!busy&&monitorPort&&!monitorPendingScan){
   if(usbRomDownload)badge('#fwOverallBadge','ROM DOWNLOAD • NOT RUNNING','warn');
+  else if(usbRuntimeInfo?.boardId==='ZFC-A1')badge('#fwOverallBadge','UNSUPPORTED BOARD','warn');
   else if(usbRuntimeInfo)badge('#fwOverallBadge','USB FIRMWARE RUNNING','good');
  }
 }
@@ -895,7 +907,7 @@ function appendSerialOutput(value){
  pushSerialLines(value);
  // Random boot bytes are not scanner confirmation. This build has no board/version banner.
  if(monitorPendingScan)monitorBootText=(monitorBootText+value).slice(-8192);
- if(monitorPendingScan&&usbRuntimeInfo&&!usbRomDownload&&/ZJSCAN,|Scanning I2C bus\.\.\./.test(monitorBootText)){
+ if(monitorPendingScan&&usbRuntimeInfo?.boardId==='ZFC-A2'&&!usbRomDownload&&/ZJSCAN,|Scanning I2C bus\.\.\./.test(monitorBootText)){
   const expected=usbFlashExpected;
   if(expected&&(usbRuntimeInfo.boardId!==expected.boardId||usbRuntimeInfo.version!==expected.version||
     expected.buildStamp&&usbRuntimeInfo.buildStamp!==expected.buildStamp)){
@@ -954,6 +966,7 @@ async function nativeUsbRunFlash(t){
 }
 async function resetSerialBoard(automatic=false){
  if(!monitorPort){if(!automatic)log('Open a USB serial port to reset the board.');return false}
+ if(usbRuntimeInfo?.boardId==='ZFC-A1'){if(!automatic)log('A1 is retired • connect an A2 controller.');return false}
  try{
   if(isEspNativeUsbPort(monitorPort)){
    await monitorPort.setSignals({dataTerminalReady:false,requestToSend:false});await sleep(100);
@@ -1031,7 +1044,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   monitorTask=(async()=>{
    try{
     while(monitorPort===port){
-     const {value,done}=await reader.read();if(done)break;
+     const {value,done}=await reader.read();if(done||monitorPort!==port)break;
      if(value?.length){
       monitorReceivedBytes+=value.length;
       clearMonitorTimer();
@@ -1051,11 +1064,7 @@ async function openSerialMonitor({port:givenPort=null,allowPrompt=true}={}){
   // Same physical USB connection is shared with MY KITS: request kit code and AP/STA status.
   void writePythonSerialLine('ZJKIT,GET\n').catch(()=>{});
   void writePythonSerialLine('ZJNET,GET\n').catch(()=>{});
-  // Read Running Firmware must refresh physical pairing even when MY KITS
-  // still has an AP/STA connection and therefore does not auto-select USB.
-  void writePythonSerialLine('ZJNET,PAIR\n').catch(()=>{});
   telRxSeq=null;telMissed=0;telDeviceDrops=0;telRateActual=0;
-  void setUsbTelemetryRate($('#fwTelRate')?.value||20);
  }finally{monitorStarting=false}
 }
 async function toggleSerialMonitor(){
@@ -1071,9 +1080,16 @@ async function reconnectSerialMonitor(){
 // Serialize interactive serial writes and Python LED writes on one port lock.
 let serialWriteTail=Promise.resolve();
 function writePythonSerialLine(line){
+ const port=monitorPort,generation=monitorGeneration;
  const operation=serialWriteTail.then(async()=>{
-  if(!monitorPort||busy||!monitorPort.writable)throw Error('USB Serial not connected or firmware flash in progress');
-  const writer=monitorPort.writable.getWriter();
+  if(!port||port!==monitorPort||generation!==monitorGeneration||busy||!port.writable)throw Error('USB Serial not connected, connection changed or firmware flash in progress');
+  const command=line.trim();
+  // Identification and STOP stay available while the current port is being verified.
+  const readOnly=/^(?:ZJINFO,GET|ZJKIT,GET|ZJNET,GET|ZJFLIGHT,STATUS)$/.test(command);
+  const stop=command==='ZJRC,STOP'||/^ZJMOTOR,ZFC-A2-[0-9a-f]{12},[a-z0-9-]+,STOP,[a-z0-9-]+,-,-,-$/i.test(command);
+  if(usbRuntimeInfo?.boardId!=='ZFC-A2'&&!readOnly&&!stop)
+   throw Error(usbRuntimeInfo?.boardId==='ZFC-A1'?'A1 is retired • connect an A2 controller.':'Read Running Firmware to verify the A2 USB controller first.');
+  const writer=port.writable.getWriter();
   try{await writer.write(new TextEncoder().encode(line));}
   finally{writer.releaseLock();}
  });

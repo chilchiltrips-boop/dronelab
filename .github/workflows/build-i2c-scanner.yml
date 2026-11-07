@@ -74,6 +74,8 @@ jobs:
           python3 tools/verify_release.py
           if [ -f FlightCore_Firmware/bench-release-policy.json ]; then python3 tools/bench_release_gate.py --compiled; fi
           sha256sum FlightCore_Firmware/catalog.json FlightCore_Firmware/build-report.json # exact-image provenance for approval
+      - name: Check WebApp against the verified firmware catalog
+        run: |
           npm test
           npm run check
           node --check firmware-updater.js

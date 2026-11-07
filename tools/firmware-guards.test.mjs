@@ -4,11 +4,11 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import * as imageTools from '../js/firmware-image.js';
 const root=new URL('../',import.meta.url),source=readFileSync(new URL('firmware-updater.js',root),'utf8');
-const board=JSON.parse(readFileSync(new URL('firmware-catalog.json',root))).boards[0];
+const board=JSON.parse(readFileSync(new URL('firmware-catalog.json',root))).boards.find(b=>b.id==='ZFC-A2');
 const factory=new Uint8Array(readFileSync(new URL('FlightCore_Firmware/'+board.latest.factory.file,root)));
 function flashRuntime(kind='app',corrupt=false,confirm=true){
  const writes=[],logs=[],elements=new Map([['#fwEraseUsb',{checked:false}]]);
- const loader={chip:{IMAGE_CHIP_ID:5},readFlash:async(address,len)=>corrupt?new Uint8Array(len):factory.slice(address,address+len),writeFlash:async plan=>writes.push(plan),after:async()=>{},eraseFlash:async()=>writes.push('erase')};
+ const loader={chip:{IMAGE_CHIP_ID:13},readFlash:async(address,len)=>corrupt?new Uint8Array(len):factory.slice(address,address+len),writeFlash:async plan=>writes.push(plan),after:async()=>{},eraseFlash:async()=>writes.push('erase')};
  const ctx={Uint8Array,parseInt,Number,Error,console,fw:{type:kind,boardId:board.id,name:'scanner.bin',version:'1.0.1',bytes:kind==='app'?factory.slice(0x10000,0x10000+board.latest.app.size):factory},loader,usbBoardId:board.id,busy:false,usbFlashReadiness:()=>({ready:true,message:'mock validated'}),monitorPendingScan:false,logs,writes,$:id=>elements.get(id),targetBoardId:async()=>board.id,stopPostFlashWatch(){},boardById:()=>board,boardName:()=>board.name,confirmInLab:async()=>confirm,setBusy:v=>ctx.busy=v,log:v=>logs.push(v),resetStages(){},stage(){},progress(){},badge(){},prettyBytes:String,usbMd5Hex:()=>'',sleep:async()=>{},disconnectUsb:async()=>{},openSerialMonitor:async()=>{},getImageTools:async()=>imageTools};
  const code=source.slice(source.indexOf('async function usbFlash(){'),source.indexOf('async function disconnectUsb(')).replace("import('./js/firmware-image.js')",'getImageTools()');vm.runInNewContext(code+';globalThis.flash=usbFlash;',ctx);return {ctx,elements,run:()=>ctx.flash(),writes,logs};
 }
@@ -35,6 +35,9 @@ test('ROM boot output and scanner-only text cannot claim firmware startup withou
  ctx.append('=== I2C Address Scanner ===\nScanning I2C bus...\n');
  assert.equal(ctx.monitorPendingScan,true);
  ctx.usbRuntimeInfo={boardId:'ZFC-A1',version:'1.2.1'};
+ ctx.append('Scanning I2C bus...\n');
+ assert.equal(ctx.monitorPendingScan,true);
+ ctx.usbRuntimeInfo={boardId:'ZFC-A2',version:'1.2.1'};
  ctx.append('Scanning I2C bus...\n');
  assert.equal(ctx.monitorPendingScan,false);assert.ok(ctx.logs[0].includes('Live USB firmware identity verified'));
 });

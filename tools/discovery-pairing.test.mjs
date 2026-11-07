@@ -11,6 +11,8 @@ test('reference-inspired discovery probes bounded kit names and AP, deduplicates
   calls.push(url);
   if(url==='http://192.168.4.1/api/identify')return reply('ZFC-A2-ABCDEF123456','526624','ZFC-A2','AERION A2');
   if(url==='http://zebjus-drone-2.local/api/identify')return reply('ZFC-A1-FEDCBA987654','136625','ZFC-A1','AERION A1');
+  if(url==='http://zebjus-drone-3.local/api/identify')return reply('ZFC-A2-FEDCBA987654','136625','ZFC-A2','AERION A2 STA');
+  if(url==='http://zebjus-drone-4.local/api/identify')return reply('ZFC-A2-FEDCBA987654','136625','ZFC-A2','AERION A2 STA');
   return {ok:false};
  };
  const win={addEventListener(){},dispatchEvent(){},DroneLabSerial:null};
@@ -23,6 +25,8 @@ test('reference-inspired discovery probes bounded kit names and AP, deduplicates
  assert.equal(items.length,2);
  assert.equal(items.find(x=>x.kitCode==='526624').transport,'ap');
  assert.equal(items.find(x=>x.kitCode==='136625').transport,'sta');
+ assert.ok(items.every(x=>x.board==='ZFC-A2'),'Retired A1 replies cannot become connection candidates');
+ assert.equal(win.ZebjusKits.getDiscoveryReport().invalidIdentity,1);
  assert.ok(calls.some(url=>url.includes('zebjus-drone-1.local')));
  assert.ok(calls.some(url=>url.includes('zebjus_drone_1.local')));
  assert.ok(calls.length<=110,'No unbounded LAN scan');

@@ -22,6 +22,8 @@ try{
  // A2 is the offline default; A1 is retained only in historical download archives.
  await showing('fwFileVersion',version);
  assert.equal(await field('fwBoardProfile').locator('option[value="ZFC-A1"]').count(),0);
+ await field('fwBoardProfile').selectOption('auto');
+ await showing('fwBuildId',release.app.buildId);
  await field('fwBoardProfile').selectOption('ZFC-A2');
  await showing('fwFileVersion',version);
  await showing('fwBuildId',release.app.buildId);

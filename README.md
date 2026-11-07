@@ -4,6 +4,8 @@ The 1.7.20 source adds an explicitly imported **experimental PPM Rate** build wi
 
 ## Current releases and verification
 
+Active board support is A2 only (Seeed XIAO ESP32-C6). The firmware picker, Kit connection and Android controller target A2. Older A1 images and evidence remain archives at their existing paths.
+
 | Component | Published source metadata | Hardware/deployment status |
 | --- | --- | --- |
 | WebApp | Live build in `app-version.json` | GitHub Pages CI verification; iframe Local Network Access depends on host/browser |
@@ -66,7 +68,7 @@ Local QR/WebRTC simulator pairing may use host and STUN ICE candidates. **No TUR
 
 `FlightCore_Firmware/catalog.json`, `firmware-catalog.json` and `build-report.json` retain archived A1/A2 versions and publish new A2-only builds with version, SHA-256, `builtAt` (build start) and `compiledAt` (individually embedded sketch compilation timestamp). `tools/verify_release.py` rejects stale precompiled dates, nonmatching source hash, wrong chip/partition, and APP/FACTORY mismatch. USB `ZJINFO,GET` and signed Wi-Fi `/api/status` report the **running** firmware timestamp; the Firmware Center separately shows the **loaded** image date.
 
-For first installation use the matching board-specific Factory image at `0x0`; APP updates at `0x10000` require the existing verified dual-OTA layout. APP OTA must preserve Wi-Fi/pairing; Factory erase may not. OTA transfer validation is not publisher signing or Secure Boot. Always bench-test both boards, disconnected motors and propellers, before school rollout. See `docs/SCHOOL_PRODUCTION_FIRMWARE_SECURITY.md` and `docs/FLIGHTCORE_PPM_RECEIVER.md`.
+For first installation use the matching board-specific Factory image at `0x0`; APP updates at `0x10000` require the existing verified dual-OTA layout. APP OTA must preserve Wi-Fi/pairing; Factory erase may not. OTA transfer validation is not publisher signing or Secure Boot. Bench-test the A2 with motors and propellers disconnected before school rollout. See `docs/SCHOOL_PRODUCTION_FIRMWARE_SECURITY.md` and `docs/FLIGHTCORE_PPM_RECEIVER.md`.
 
 ## Runtime and validation
 
@@ -83,7 +85,7 @@ For first installation use the matching board-specific Factory image at `0x0`; A
 
 Run `npm run check`, `npm test`, and `npm run verify:firmware`. Browser CI separately tests real WebRTC, Python execution, responsive rendering and offline cache. Test-only Playwright is installed by CI; there are no production npm dependencies. Physical cameras, handset installation, USB flashes and campus Wi-Fi require device verification.
 
-Android updates preserve `in.zebjus.dronelab.companion` and the pinned signing certificate. The Android source version and versionCode are in `mobile-android/app/build.gradle`. Check `mobile-apk/ANDROID_RELEASE_META.txt` and `SHA256SUMS.txt` for the installed package candidate or published APK. Promotion must pass signed APK identity, versionCode monotonicity, native emulator gates and separate real-phone acceptance. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the six mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
+Android updates preserve `in.zebjus.dronelab.companion` and the pinned signing certificate. The Android source version and versionCode are in `mobile-android/app/build.gradle`. Check `mobile-apk/ANDROID_RELEASE_META.txt` and `SHA256SUMS.txt` for the installed package candidate or published APK. Promotion must pass signed APK identity, versionCode monotonicity, native emulator gates and separate real-phone acceptance. The [reference cockpit](docs/flight-training/ANDROID_REFERENCE_COCKPIT.md) adds circular silver/coral sticks, compact ARM/CONNECT, real applied attitude/RPM and immersive Android layout. Signing secrets stay in GitHub Actions. A review candidate is built on the feature branch; main publication requires native acceptance and the mandatory browser/regression workflows, including the shared PID shell for the exact source commit. See `ANDROID_SIGNING_SETUP.md` and the [1.6.1 release evidence](docs/flight-training/RELEASE_EVIDENCE.md). Metadata-only version stamps do not rebuild the Android APK.
 
 ## Historical Python Lab toolbar work (WebApp 1.4.6)
 
@@ -110,5 +112,3 @@ The main DroneLab shell now includes one `PID TUNING` tab. Its existing Tripod s
 ## Repository and deployment checks
 
 See [the project map](AGENTS.md) and [lean update guide](docs/AI_UPDATE_GUIDE.md). Run `npm run audit:repo`, `npm run impact -- --base origin/main --head HEAD`, and `npm run build:site`. Pages uploads only the verified `_site` directory; historical firmware download URLs remain intact.
-
-Active board support is **A2 only**. New firmware builds and the firmware selector target XIAO ESP32-C6. A1 binary URLs and evidence records remain compatibility archives; they are not offered for flashing, rebuilt or required for A2 qualification. A2 physical acceptance and safety interlocks are unchanged.

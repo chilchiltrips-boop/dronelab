@@ -10,6 +10,7 @@ const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
+const supportedKitId=id=>typeof id==='string'&&/^ZFC-A2-[A-Fa-f0-9]{12}$/.test(id);
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',imu:null,imuObservedAt:0,flightMode:null,flightModeState:null,rc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
  ip:'',key:'',relaySessionId:'',setupAuthorized:false,otaAuthorized:false,owner:false,usbInfo:{},lastError:'',tone:'offline',since:0,controller:'none'};
@@ -301,6 +302,7 @@ async function networkStatusWithFallback(access,ip){
  }
 }
 function acceptUsbPairing(id,key){
+ if(!supportedKitId(id))return;
  const changed=(pairedKeys.get(id)||pairing()?.fromSession?.(id)||'')!==key||rejectedPairings.has(id);
  secureIds.delete(id);localStorage.setItem('zebjus.kit.v2.ids',JSON.stringify([...secureIds]));
  pairedKeys.set(id,key);pairing()?.saveSession?.(id,key);rejectedPairings.delete(id);
@@ -340,7 +342,7 @@ async function resolveKitAccess(code,ip,expectedId=''){
 async function rememberBrowserPairing(){
  const id=state.kitId||usbCandidate.kitId;
  const secret=id&&(pairedKeys.get(id)||pairing()?.fromSession?.(id));
- if(!id||!secret)throw Error('Connect physical USB once to authorize remembered STA/settings access. Simple AP diagnostics needs no saved credential.');
+ if(!supportedKitId(id)||!secret)throw Error('Connect a physical A2 Kit over USB once to authorize remembered STA/settings access. Simple AP diagnostics needs no saved credential.');
  await pairing()?.remember?.(id,secret);
  tone('This personal browser now remembers '+id+' for AP/STA without USB. Clear site data or Forget this browser to revoke the saved local copy.','good');
  audit('Trusted browser pairing saved for '+id+' (no credential printed)','success');
@@ -358,13 +360,25 @@ async function forgetBrowserPairing(){
 function checkIdentity(d,transport,code,expected=''){
  const kitId=String(d.kitId||''),got=String(d.kitCode||'');
  const board=String(d.board||'');
- // Do not silently accept an A2 running app on an A1 kit label or vice versa.
- if(board&&/^ZFC-A[12]$/.test(board)&&!kitId.startsWith(board+'-'))throw Error('Firmware board does not match physical kit identity');
- if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(kitId)||!codePattern.test(got)||got!==code)throw Error('Kit identity mismatch: verify the 6-digit code and physical hardware');
+ if(/^ZFC-A1-/.test(kitId)||board==='ZFC-A1')throw Error('A1 is retired. Connect a FlightCore A2 Kit.');
+ if(board!=='ZFC-A2'||!supportedKitId(d.kitId))throw Error('Firmware board does not match physical kit identity');
+ if(!codePattern.test(got)||got!==code)throw Error('Kit identity mismatch: verify the 6-digit code and physical hardware');
  if(expected&&kitId!==expected)throw Error('Different hardware detected: Device ID mismatch');
- return {kitId,kitCode:got,kitName:String(d.kitName||d.name||d.board||'ZEBJUS AERION').slice(0,36),board:String(d.board||'').slice(0,24),version:String(d.version||'').slice(0,24),transport};
+ return {kitId,kitCode:got,kitName:String(d.kitName||d.name||board).slice(0,36),board,version:String(d.version||'').slice(0,24),transport};
 }
-function recordKnown(){if(!state.kitId)return;
+function knownActiveKits(){
+ try{
+  const records=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]');
+  return Array.isArray(records)?records.filter(kit=>supportedKitId(kit?.id)):[];
+ }catch{return []}
+}
+function lastActiveKit(){
+ try{
+  const kit=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null');
+  return supportedKitId(kit?.id)?kit:null;
+ }catch{return null}
+}
+function recordKnown(){if(!supportedKitId(state.kitId))return;
  try{const key='zebjus.classroom.known.v1',list=JSON.parse(localStorage.getItem(key)||'[]');
  const entry={id:state.kitId,code:state.kitCode,name:state.kitName,board:state.board,ip:state.staIp||state.usbInfo?.staIp||state.ip||'',hostname:state.hostname||nameHosts(state.kitName)[0]||'',at:Date.now()};
  const next=[entry,...list.filter(v=>v.id!==entry.id)].slice(0,20);localStorage.setItem(key,JSON.stringify(next));
@@ -374,7 +388,7 @@ function recordKnown(){if(!state.kitId)return;
 }
 function showKnown(){
  const box=$('kitKnown');if(!box)return;box.replaceChildren();
- let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+ const known=knownActiveKits();
  if(!known.length){box.textContent='No previously verified kits on this browser.';return;}
  const seen=new Map();for(const v of known)seen.set(v.code,(seen.get(v.code)||0)+1);
  for(const v of known.slice(0,20)){
@@ -443,7 +457,7 @@ async function connectUSB(code,ticket=reconnectTicket){
  root.addEventListener('dronelab:serial-line',listener);
  try{
   await usbWrite('ZJKIT,GET');await usbWrite('ZJINFO,GET');await usbWrite('ZJNET,GET');
-  for(let i=0;i<18&&(!identity.kitId||!identity.kitCode);i++)await sleep(140);
+  for(let i=0;i<18&&(!identity.kitId||!identity.kitCode||!identity.board);i++)await sleep(140);
  }finally{root.removeEventListener('dronelab:serial-line',listener);}
  if(ticket!==reconnectTicket)throw Error('Connection cancelled before USB identity verification');
  Object.assign(state,checkIdentity(identity,'usb',code||identity.kitCode),networkInfo,{rc:null,rcAccess:networkInfo.rcAccess,ppm:null,rcObservedAt:0});
@@ -630,8 +644,7 @@ async function connectNetwork(code,mode,ticket=reconnectTicket,expectedId=''){
 async function findSaved(){
  const code=selectedCode();if(!codePattern.test(code))throw Error('Enter a 6-digit code first');
  if(state.working)return;
- let list=[];try{list=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
- const known=list.filter(k=>k.code===code&&safeKitHost(k.ip)).slice(0,10);
+ const known=knownActiveKits().filter(k=>k.code===code&&safeKitHost(k.ip)).slice(0,10);
  if(!known.length)throw Error('No saved IP for this code; join the kit AP and choose Connect Kit, or enter its STA IP');
  const seen=new Set(known.map(k=>k.id));if(seen.size>1)throw Error('Duplicate six-digit kit code in saved devices; teacher must resolve via USB');
  state.working=true;render();tone('Checking previously verified kit IP(s)…','info');
@@ -655,9 +668,9 @@ async function connect(expectedId=''){
   if(mode==='usb'&&usbCandidate.kitCode)code=usbCandidate.kitCode;
   else if(mode!=='usb'){const live=await probeIdentity(($('kitIpInput')?.value||'').trim()||'192.168.4.1',3000);if(ticket!==reconnectTicket)return;if(live){code=live.kitCode;if($('kitCodeInput'))$('kitCodeInput').value=code;}}
  }
- if(mode!=='usb'){try{const known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]');
+ if(mode!=='usb'){const known=knownActiveKits();
   if(new Set(known.filter(k=>k.code===code).map(k=>k.id)).size>1&&!expectedId){state.working=false;tone('Duplicate Kit Code detected in known classroom kits • choose an exact Device ID or use physical USB admin to assign a unique code','error');return;}
- }catch{}}
+ }
  if(mode!=='usb'&&!codePattern.test(code)){state.working=false;tone('Kit not detected. Join its Wi-Fi or enter its address, then Connect Kit.','warn');return}
  if(state.owner)await releaseRc().catch(()=>{});
  state.working=true;state.connected=false;render();tone('Verifying hardware identity…','info');
@@ -1258,7 +1271,7 @@ function onSerial(e){
    root.ZebjusSerialRcDecoder?.parseSerialRc?.(line)?.kind==='frame')usbMonitorPacketAt=Date.now();
  if(line.startsWith('ZJKIT,ID,')){if(usbCandidate.serialGeneration!==root.DroneLabSerial?.generation?.()){delete usbCandidate.statusRecord;delete usbCandidate.statusAt;}usbMonitorPacketAt=0;if(usbCandidate.kitId!==line.slice(9))for(const key of Object.keys(usbCandidate))delete usbCandidate[key];usbCandidate.kitId=line.slice(9);usbCandidate.identityAt=Date.now();usbCandidate.serialGeneration=root.DroneLabSerial?.generation?.();}
  if(line.startsWith('ZJNET,PAIR,')){
-  const f=line.split(',');if(/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
+  const f=line.split(',');if(supportedKitId(f[2])&&/^[a-fA-F0-9]{32}$/.test(f[3])&&
     (f[2]===state.kitId||f[2]===usbCandidate.kitId)){
    acceptUsbPairing(f[2],f[3]);
    audit('Private USB session paired for '+f[2]+'; secret never shown in UI','success');
@@ -1446,8 +1459,7 @@ async function probeIdentity(ip,timeoutMs=1550,report=null,signal){
    if(!response.ok){count('httpErrors');return null;}
    d=await response.json();
   }
-  if(!/^ZFC-A[12]-[A-Fa-f0-9]{12}$/.test(String(d.kitId||''))||!/^\d{6}$/.test(String(d.kitCode||''))||
-     !String(d.kitId).startsWith(String(d.board||'')+'-')){count('invalidIdentity');return null;}
+  if(!supportedKitId(d.kitId)||d.board!=='ZFC-A2'||!codePattern.test(String(d.kitCode||''))){count('invalidIdentity');return null;}
   count('verified');
   return {kitId:d.kitId,kitCode:d.kitCode,kitName:String(d.name||'ZEBJUS AERION').slice(0,36),
    simpleConnection:!!d.simpleConnection,adminSessions:!!d.adminSessions,exclusiveWifi:!!d.exclusiveWifi,hostname:d.hostname||'',board:d.board,ip:ip,transport:ip==='192.168.4.1'?'ap':'sta',lastSeen:Date.now()};
@@ -1512,24 +1524,24 @@ async function scanKitCandidates(){
  }
  discovering=true;render();showDiscovered();
  try{
-  let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
+  const known=knownActiveKits();
   const candidates=new Set([$('fwKitNameInput')?.value?.trim().toLowerCase(),$('kitIpInput')?.value?.trim().toLowerCase()].filter(safeKitHost));
   candidates.add('192.168.4.1');
   for(const k of known){
    if(privateIPv4(k.ip))candidates.add(k.ip);
-   const id=String(k.id||'').match(/^ZFC-A([12])-([0-9A-F]{12})$/i);
-   if(id)candidates.add('zebjus-a'+id[1]+'-'+id[2].slice(-6).toLowerCase()+'.local');
+   candidates.add('zebjus-a2-'+k.id.slice(-6).toLowerCase()+'.local');
    if(k.name&&/^[a-zA-Z0-9_-]{3,31}$/.test(k.name))candidates.add(k.name.toLowerCase().replace(/_/g,'-')+'.local');
    if(safeKitHost(k.hostname))candidates.add(k.hostname);
   }
-  if(usbCandidate.staIp&&privateIPv4(usbCandidate.staIp))candidates.add(usbCandidate.staIp);
+  if(supportedKitId(usbCandidate.kitId)&&privateIPv4(usbCandidate.staIp))candidates.add(usbCandidate.staIp);
   for(const ip of await discoverBridgeHosts())candidates.add(ip);
   for(let n=1;n<=30;n++){
    candidates.add('zebjus-drone-'+n+'.local');
    candidates.add('zebjus_drone_'+n+'.local'); // legacy firmware hostname pattern
   }
-  const codes=new Set([selectedCode(),usbCandidate.kitCode,...known.map(v=>v.code)].filter(v=>/^\d{6}$/.test(String(v||''))));
-  for(const code of codes)for(const board of ['a1','a2'])candidates.add('zebjus-'+board+'-'+code+'.local');
+  const usbCode=supportedKitId(usbCandidate.kitId)?usbCandidate.kitCode:'';
+  const codes=new Set([selectedCode(),usbCode,...known.map(v=>v.code)].filter(v=>codePattern.test(String(v||''))));
+  for(const code of codes)candidates.add('zebjus-a2-'+code+'.local');
   const addresses=[...candidates];let cursor=0;const found=new Map();
   await Promise.all(Array.from({length:8},async()=>{
    while(cursor<addresses.length){
@@ -1560,8 +1572,7 @@ async function offerRememberedConnection(){
  offerPending=(async()=>{
   if(!autoReconnectAllowed||state.working||reconnectOffer||state.connected&&!pendingNetworkTarget)return;
   const ticket=reconnectTicket;
-  let last;try{last=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
-  const preferred=pendingNetworkTarget?.kitId||last?.id;
+  const preferred=pendingNetworkTarget?.kitId||lastActiveKit()?.id;
   for(const kit of discoveredKits){
    if(preferred&&kit.kitId!==preferred)continue;
    if(pendingNetworkTarget&&kit.transport!==pendingNetworkTarget.transport&&!(pendingNetworkTarget.transport==='sta'&&kit.transport==='ap'&&Date.now()-pendingNetworkTarget.requestedAt>1000))continue;
@@ -1708,7 +1719,7 @@ async function reconnectSelected(){
 }
 async function restoreLastKit(){
  if(!autoReconnectAllowed||state.connected||state.working)return;
- let last=null;try{last=JSON.parse(localStorage.getItem('zebjus.classroom.last.v1')||'null')}catch{}
+ const last=lastActiveKit();
  if(last&&codePattern.test(last.code)&&!document.hidden){
   // A cached STA address speeds up *discovery*, not authenticated connection.
   // Pairing stays in the protected vault, and every new page asks Connect/Later.
@@ -2131,10 +2142,9 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  if(!/^\d+\.\d+\.\d+$/.test(version||''))throw Error('Read a valid application version from the image before OTA.');
  if(!(bytes instanceof Uint8Array)||bytes.length<32768||bytes[0]!==0xe9)
   throw Error('Only a verified application firmware image can be flashed via Wi-Fi');
- if(!/\.bin$/i.test(name||'')||!/^(ZFC-A1|ZFC-A2)$/.test(boardId||'')||!state.kitId.startsWith(boardId+'-'))
+ if(!/\.bin$/i.test(name||'')||boardId!=='ZFC-A2'||state.board!=='ZFC-A2'||!supportedKitId(state.kitId))
   throw Error('Firmware board or image name does not match the selected physical kit');
- const expectedChip=boardId==='ZFC-A2'?13:5;
- if((bytes[12]|bytes[13]<<8)!==expectedChip)throw Error('ESP chip ID mismatch. Image was NOT uploaded.');
+ if((bytes[12]|bytes[13]<<8)!==13)throw Error('ESP chip ID mismatch. Image was NOT uploaded.');
  const target=connectionTarget(),ticket=reconnectTicket;
  const expectedBuild=Array.from(bytes.slice(176,208),b=>b.toString(16).padStart(2,'0')).join('');
  const deviceId=state.kitId,kitCode=state.kitCode,ip=state.ip,key=state.key,transport=state.transport;
@@ -2217,13 +2227,12 @@ async function uploadAppFirmware({bytes,name,boardId,version,onProgress=()=>{}}=
  }
 }
 async function connectDiscoveredKit(kit){
- if(!kit?.kitId||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified Kit from discovery.');
+ if(!supportedKitId(kit?.kitId)||!kit?.kitCode||!safeKitHost(kit.ip))throw Error('Choose a verified A2 Kit from discovery.');
  const ticket=reconnectTicket;
  // A hostname/IP can stop responding or be reassigned by DHCP after discovery.
  // Retry only addresses associated with the selected immutable Device ID, and
  // verify that ID + selector again before opening any authenticated session.
- let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
- const related=known.filter(k=>k.id===kit.kitId);
+ const related=knownActiveKits().filter(k=>k.id===kit.kitId);
  const aliases=[kit.ip,...related.map(k=>k.ip),kit.hostname,...related.map(k=>k.hostname),...identityHosts(kit)];
  const addresses=[...new Set(aliases.filter(safeKitHost))]
   .filter(host=>kit.transport!=='sta'||host!=='192.168.4.1')
@@ -2257,8 +2266,7 @@ async function connectNamedKit(name){
  const matches=discoveredKits.filter(k=>k.kitName.toLowerCase()===requested);
  if(matches.length>1)throw Error('Duplicate Kit Names. Select the matching Device ID from Available Kits.');
  if(matches.length===1)return connectDiscoveredKit(matches[0]);
- let known=[];try{known=JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')||'[]')}catch{}
- const matching=known.filter(k=>String(k.name||'').toLowerCase()===requested);
+ const matching=knownActiveKits().filter(k=>String(k.name||'').toLowerCase()===requested);
  const candidates=new Set([...matching.map(k=>k.ip),...matching.map(k=>k.hostname),$('kitIpInput')?.value?.trim()].filter(safeKitHost));
  candidates.add('192.168.4.1'); // AP has no mDNS; still verify name and full Device ID.
  candidates.add(requested.replace(/[ _]+/g,'-')+'.local');

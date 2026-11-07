@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""ZEBJUS FlightCore A1/A2 gyro via USB Serial in desktop Python/PyCharm.
+"""ZEBJUS FlightCore A2 gyro via USB Serial in desktop Python/PyCharm.
 
 Install: python -m pip install pyserial
 Run: python PC_GYRO_SERIAL_EXAMPLE.py COM5
      python PC_GYRO_SERIAL_EXAMPLE.py /dev/cu.usbmodemXXXX
 
 Board      Sensor         I2C address       Pins
-ZFC-A1     LSM6DS3        0x6B              SDA GPIO4, SCL GPIO5
 ZFC-A2     MPU6050        0x68              SDA GPIO22, SCL GPIO23
 
 Other I2C devices remain on the same bus and can be discovered by the
@@ -18,12 +17,9 @@ import math
 from contextlib import contextmanager
 import serial
 
-GYROS = {"A1": ("LSM6DS3", "0x6B"), "A2": ("MPU6050", "0x68")}
-
-
 @contextmanager
 def safe_serial(path):
-    # Set USB Serial/JTAG control lines before opening: avoid keeping C3 in
+    # Set USB Serial/JTAG control lines before opening: avoid keeping A2 in
     # ROM DOWNLOAD mode due to DTR/RTS auto-reset behavior.
     port = serial.Serial()
     port.port = path
@@ -37,6 +33,20 @@ def safe_serial(path):
     finally:
         port.close()
 
+
+
+def require_a2(port):
+    port.reset_input_buffer()
+    port.write(b"ZJINFO,GET\n")
+    until = time.monotonic() + 3
+    while time.monotonic() < until:
+        fields = port.readline().decode("utf-8", errors="replace").strip().split(",", 6)
+        if len(fields) != 7 or fields[:2] != ["ZJINFO", "FW"]:
+            continue
+        if fields[2] != "ZFC-A2":
+            raise SystemExit("Unsupported controller. Connect a FlightCore A2.")
+        return
+    raise SystemExit("A2 identity unavailable. Open the running firmware serial port and retry.")
 
 
 def decode_gyro(line):
@@ -55,7 +65,7 @@ def decode_gyro(line):
     if len(fields) not in (12, 20) or fields[:2] != ["ZJTEL", "1"]:
         return None
     board = fields[2]
-    if board not in GYROS or fields[5].upper() != GYROS[board][1].upper():
+    if board != "A2" or fields[5].lower() != "0x68":
         return None
     try:
         sequence = int(fields[3])
@@ -69,7 +79,7 @@ def decode_gyro(line):
     if fields[6] != "READY":
         return {"board": board, "status": fields[6], "address": fields[5].upper()}
     return {
-        "board": board, "sensor": GYROS[board][0], "address": fields[5].upper(),
+        "board": board, "sensor": "MPU6050", "address": fields[5].upper(),
         "status": "READY", "RateRoll": RateRoll, "RatePitch": RatePitch,
         "RateYaw": RateYaw, "sequence": sequence, "uptime_ms": uptime_ms,
         "deviceDrops": drops,
@@ -77,17 +87,17 @@ def decode_gyro(line):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Read gyro rates from ZEBJUS A1/A2 USB firmware")
+    parser = argparse.ArgumentParser(description="Read gyro rates from ZEBJUS A2 USB firmware")
     parser.add_argument("port", help="COM5 or /dev/cu.usbmodemXXXX")
     parser.add_argument("--rate", type=int, choices=[10, 20, 50], default=20)
     args = parser.parse_args()
 
     with safe_serial(args.port) as port:
-        port.write(b"ZJINFO,GET\n")
+        require_a2(port)
         port.write(f"ZJTEL,RATE,{args.rate}\n".encode("ascii"))
         last_print = 0
         identified = None
-        print("Reading A1/A2 gyro: RateRoll, RatePitch, RateYaw (deg/s). Ctrl+C to stop.")
+        print("Reading A2 gyro: RateRoll, RatePitch, RateYaw (deg/s). Ctrl+C to stop.")
         try:
             while True:
                 line = port.readline().decode("utf-8", errors="replace").strip()

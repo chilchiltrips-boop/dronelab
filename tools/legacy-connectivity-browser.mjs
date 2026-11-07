@@ -13,7 +13,7 @@ try{
   await context.addInitScript(()=>{
    const native=window.fetch.bind(window);
    window.fetch=async(url,options)=>{
-    if(String(url)==='http://192.168.4.1/api/identify')return new Response(JSON.stringify({kitId:'ZFC-A1-012345ABCDEF',kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true}));
+    if(String(url)==='http://192.168.4.1/api/identify')return new Response(JSON.stringify({kitId:'ZFC-A2-012345ABCDEF',kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A2',simpleConnection:true}));
     if(/^http:\/\/(?:zebjus|192\.168\.|127\.0\.0\.1:8766)/.test(String(url)))return new Response('',{status:404});
     return native(url,options);
    };
@@ -21,14 +21,14 @@ try{
   const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:8765/'+entry);await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusFirmwareConnect);
   await page.evaluate(()=>{
-   const id='ZFC-A1-012345ABCDEF',baseFetch=window.fetch;
+   const id='ZFC-A2-012345ABCDEF',baseFetch=window.fetch;
    let owned=false,network='ap';
-   const status=transport=>({kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A1',version:'1.4.5',
+   const status=transport=>({kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A2',version:'1.4.5',
     requestTransport:transport,mode:'auto',setupAuthorized:transport==='AP',otaAuthorized:false,controlAuthorized:transport==='AP',
     apActive:true,apIp:'192.168.4.1',apSsid:'zebjus_drone_2',staConnected:true,ip:'192.168.1.20',ssid:'Classroom',rssi:-51,
     firmwareBuiltAt:'Oct 13 2026 16:00:00',rc:{claimed:owned,active:owned,source:owned?'WEB':'NONE',ownerId:owned?'browser-owner':''}});
    window.fetch=async function(url,options){
-    if(String(url)==='http://192.168.4.1/api/identify'&&network==='ap'||/^http:\/\/(?:192\.168\.1\.20|zebjus-drone-2\.local)\/api\/identify$/.test(String(url))&&network==='sta')return new Response(JSON.stringify({kitId:id,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true}));
+    if(String(url)==='http://192.168.4.1/api/identify'&&network==='ap'||/^http:\/\/(?:192\.168\.1\.20|zebjus-drone-2\.local)\/api\/identify$/.test(String(url))&&network==='sta')return new Response(JSON.stringify({kitId:id,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A2',simpleConnection:true}));
     if(/^http:\/\/(?:zebjus|192\.168\.|127\.0\.0\.1:8766)/.test(String(url)))return new Response('',{status:404});
     return baseFetch.call(this,url,options);
    };
@@ -47,7 +47,7 @@ try{
   await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="connection"]').click();await page.locator('#fwDiscoverKits').click();
   await page.waitForFunction(()=>document.querySelector('#fwKitNameInput').value==='zebjus_drone_2');
   await page.locator('#fwKitConnectSelected').click();await page.waitForFunction(()=>window.ZebjusKits.getState().connected);
-  assert.equal(await page.locator('#fwDetailId').textContent(),'ZFC-A1-012345ABCDEF');
+  assert.equal(await page.locator('#fwDetailId').textContent(),'ZFC-A2-012345ABCDEF');
   assert.equal(await page.locator('#fwApIndicator').textContent(),'ACTIVE');assert.equal(await page.locator('#fwStaIndicator').textContent(),'CONNECTED');
   assert.equal(await page.locator('#fwNetworkSimple').textContent(),'AP');assert.equal(await page.locator('#fwWifiState').textContent(),'STA + AP');
   assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.4.1');

@@ -12,7 +12,8 @@ const hash='11'.repeat(32),bootA='0'.repeat(32),bootB='1'.repeat(32);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 function harness(mode,board='ZFC-A2'){
- const id=board+'-012345ABCDEF';
+ const id=board+'-012345ABCDEF',nativeRoutes=[];
+ let enrollments=0;
  const listeners=new Map(),elements=new Map();
  const el=name=>{
   if(!elements.has(name))elements.set(name,{value:'',disabled:false,checked:false,dataset:{},textContent:'',
@@ -54,11 +55,13 @@ function harness(mode,board='ZFC-A2'){
   }
   throw Error('Unexpected route '+route);
  }};
+ const enroll=async()=>{enrollments++;return session;};
  const window={ZfcCrypto:{sha256:()=>new Uint8Array(32).fill(0x11)},
   ZebjusKitAuth:{label:()=>({deviceId:id,secret:'private'}),diagnosticKey:()=> 'diagnostic',
-   open:async()=>session},dispatchEvent(){},addEventListener(){}};
- window.ZebjusNative={requestSecure(requestId){
-  queueMicrotask(()=>window.zebjusNativeResult({id:requestId,ok:true,status:200,text:JSON.stringify({kitId:id}),proof:''}));
+   open:enroll,local:enroll},dispatchEvent(){},addEventListener(){}};
+ window.ZebjusNative={requestSecure(requestId,ip,method,route){
+  nativeRoutes.push(route);
+  queueMicrotask(()=>window.zebjusNativeResult({id:requestId,ok:true,status:200,text:JSON.stringify({kitId:id,authVersion:2,simpleConnection:true}),proof:''}));
  },cancelRequest(){},requestWifiPermission(id){queueMicrotask(()=>window.zebjusNativeWifiPermissionResult({id,granted:true}))},openWifiSettings(){}};
  const document={readyState:'loading',hidden:false,getElementById:el,addEventListener(name,fn){listeners.set('document:'+name,fn)}};
  const catalog={version:'1.7.4',boards:[{id:board,latest:{app:{available:true,file:file.name,size:bytes.length,sha256:hash}}}]};
@@ -67,7 +70,7 @@ function harness(mode,board='ZFC-A2'){
   Option:class {},CustomEvent:class{constructor(type,options){this.type=type;this.detail=options?.detail}}});
  listeners.get('document:DOMContentLoaded')();
  const invoke=(name,type='click',event)=>{const fn=listeners.get(name+':'+type);assert.ok(fn,name+' '+type);return fn(event)};
- return {window,el,invoke,file,get calls(){return calls},get aborts(){return aborts},get ends(){return ends}};
+ return {window,el,invoke,file,nativeRoutes,get enrollments(){return enrollments},get calls(){return calls},get aborts(){return aborts},get ends(){return ends}};
 }
 async function connectAndUpload(h){
  h.invoke('kitConnect');
@@ -121,20 +124,38 @@ test('rejects oversized APP before calling file.arrayBuffer or writing flash',as
  assert.match(outcome,/Firmware size does not match/);
  assert.equal(fullReads,0);assert.equal(h.calls.length,0);assert.equal(h.ends,0);
 });
-test('rejects disallowed MIME and malformed ESP header before full read',async()=>{
- for(const issue of ['mime','header']){
+test('rejects disallowed MIME, malformed ESP header and A1 image before full read',async()=>{
+ for(const issue of ['mime','header','A1']){
   const h=harness('normal');
   h.invoke('kitConnect');
   for(let i=0;i<80&&!h.window.ZebjusNetwork.isConnected();i++)await wait(10);
   let fullReads=0;
   h.file.arrayBuffer=async()=>{fullReads++;throw Error('FULL READ NOT ALLOWED')};
   if(issue==='mime')h.file.type='text/plain';
-  else h.file.slice=()=>({arrayBuffer:async()=>new Uint8Array(208).buffer});
+  else if(issue==='header')h.file.slice=()=>({arrayBuffer:async()=>new Uint8Array(208).buffer});
+  else{
+   const header=new Uint8Array(await h.file.slice(0,208).arrayBuffer());
+   header[12]=5;
+   h.file.slice=()=>({arrayBuffer:async()=>header.buffer});
+  }
   h.el('kitOtaAdminKey').value='a'.repeat(32);
   h.invoke('kitOtaFile','change',{target:{files:[h.file],value:''}});
   const message=await completion(h,'OTA stopped:');
   assert.match(message,issue==='mime'?/MIME type unsupported/:/ESP header or physical board mismatch/);
   assert.equal(fullReads,0);assert.equal(h.calls.length,0);
+ }
+});
+
+test('retired A1 is rejected before private-label or AP-local enrollment',async()=>{
+ for(const label of ['private-label','']){
+  const h=harness('normal','ZFC-A1');
+  h.el('kitKey').value=label;
+  h.invoke('kitConnect');
+  assert.match(await completion(h,'Only ZEBJUS A2 FlightCore'),/Only ZEBJUS A2 FlightCore/);
+  assert.deepEqual(h.nativeRoutes,label?[]:['/api/identify']);
+  assert.equal(h.window.ZebjusNetwork.isConnected(),false);
+  assert.equal(h.enrollments,0);
+  assert.equal(h.calls.length,0);
  }
 });
 test('foreground pause resumes only after verifying signed controller offset',async()=>{
@@ -171,11 +192,4 @@ test('native + JS timers, cancellation and OTA progress contract agree',()=>{
  assert.match(network,/zjAuthAdmin&&zjRequestSession>=0/);
  assert.match(network,/zjSecureOtaSession==zjSessions\[zjRequestSession\]\.id/);
  assert.match(read('companion.html'),/id="kitOtaCancel"/);
-});
-
-test('retired A1 never receives an A2 OTA upload',async()=>{
- const h=harness('normal','ZFC-A1');await connectAndUpload(h);
- const message=await completion(h,'OTA stopped:');
- assert.match(message,/Only A2 firmware updates are supported/);
- assert.equal(h.calls.length,0);assert.equal(h.ends,0);
 });

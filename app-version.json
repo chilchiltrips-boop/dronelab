@@ -1,5 +1,5 @@
 {
-  "version": "1.59",
+  "version": "1.60",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -7,14 +7,14 @@
     "Header switch changes the physical kit Wi-Fi mode before rediscovery",
     "One USB pairing is remembered securely; each discovered reconnect asks Connect or Later",
     "Enrollment failure and cooldown preserve scoped monitoring without repeated invalid proofs",
-    "FlightCore 1.7.15 verified bench-diagnostic A1/A2 APP and FACTORY packages with per-board embedded UTC compile timestamps",
+    "A2-only Kit connection and flashing, with FlightCore 1.7.19 Bench on Auto Load and verified FlightCore 1.7.15 A2 rollback",
     "Local AP/STA and USB Kit control; no TURN relay or internet physical Kit control in scope",
     "Aerion A2 IMU XYZ calibration, automatic stored ESC controller result without tone ticks, Output Calibration and final Report; saved requests survive leaving the page",
     "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing",
     "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check",
     "Aerof450 Quad X and Quad + PID profiles, unified Rate and Angle editor, and disarmed preview on supported A2 firmware"
   ],
-  "buildCommit": "d218de4aff12",
-  "publishedAt": "2026-11-07T05:52:05.502318+00:00",
-  "buildNumber": 492
+  "buildCommit": "6c1c978bb572",
+  "publishedAt": "2026-11-07T10:38:12.011706+00:00",
+  "buildNumber": 493
 }

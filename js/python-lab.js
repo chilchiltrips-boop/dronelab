@@ -302,7 +302,7 @@ const ERROR_DESCRIPTIONS={
  KeyError:'The dictionary does not contain this key.',
  ModuleNotFoundError:'This Python module is unavailable in the browser.',
  ImportError:'Check the requested Python import.',
- PinConflictError:'A1 GPIO8 conflicts with the old sensor SDA wiring. Use SDA GPIO4 and SCL GPIO5, then flash the compatible firmware.',
+ PinConflictError:'The LED command conflicts with the sensor bus. Verify the A2 firmware and wiring.',
  USBDisconnectedError:'USB Serial disconnected. Reconnect the controller before running hardware code.',
  SensorNotFoundError:'Check sensor power, I2C address, SDA and SCL connections.'
 };
@@ -835,7 +835,7 @@ function bind(){
    const parts=line.split(',');
    if(parts[2]!=='0')terminal('[LED] '+(parts[3]==='OK'?'Controller acknowledged command '+parts[2]:'Controller rejected command '+parts[2]+': '+parts[3])+'\n',parts[3]==='OK'?'out':'error');
    if(parts[2]!=='0'&&parts[3]!=='OK'){
-    if(parts[3]==='PIN_CONFLICT')abortPythonWithHardwareError('PinConflictError','Controller rejected LED command '+parts[2]+': PIN_CONFLICT (GPIO8 SDA). Rewire A1 LSM6DS3 to SDA GPIO4/SCL GPIO5.');
+    if(parts[3]==='PIN_CONFLICT')abortPythonWithHardwareError('PinConflictError','Controller rejected LED command '+parts[2]+': PIN_CONFLICT. Verify the A2 firmware and sensor wiring.');
     else if(parts[3]==='BAD_ARGS'||parts[3]==='UNKNOWN')abortPythonWithHardwareError('ValueError','Controller rejected LED command '+parts[2]+': '+parts[3]);
    }
   }else if(/^ZJGYRO,STATUS,/.test(line)){

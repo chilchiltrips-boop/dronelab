@@ -123,7 +123,7 @@ if(executed){
   if(!operators||typeof operators!=='object'||Array.isArray(operators))throw Error('Invalid trusted operator keyring');
   const r=validateEvidence(report,{strict,operators,release:strict?releaseIdentity():null});
   console.log('Hardware/deployment acceptance: '+JSON.stringify(r.totals)+'; mode='+(strict?'STRICT':'SCHEMA ONLY'));
-  if(!strict)console.log('CI schema checks DO NOT prove real A1/A2/Android/deployment acceptance.');
+  if(!strict)console.log('CI schema checks DO NOT prove real A2/Android/deployment acceptance.');
   for(const err of r.errors)console.error('BLOCKED: '+err);
   if(!r.passed)process.exitCode=1;
  }catch(err){console.error('Acceptance evidence invalid: '+err.message);process.exitCode=1}

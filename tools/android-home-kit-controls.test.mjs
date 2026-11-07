@@ -8,7 +8,7 @@ const networkSource=read('companion-network.js');
 const html=read('companion.html');
 const css=read('companion.css');
 const native=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java');
-const kitId='ZFC-A1-012345ABCDEF';
+const kitId='ZFC-A2-012345ABCDEF';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 function harness(){
@@ -25,7 +25,7 @@ function harness(){
  };
  const response=(route,method,args)=>{
   sent.push({route,method,args});
-  if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',mode:'ap',
+  if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',mode:'ap',
    apActive:true,staConnected:false,requestTransport:'AP',apSsid:expectedSsid,
    radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},bootId:'same-boot',rc:{...observedRc},staCredentialsSaved:true,apIp:'192.168.4.1',ip:'',ledOn:appliedLed};
   if(route==='/api/rc/snapshot')return {...observedRc};

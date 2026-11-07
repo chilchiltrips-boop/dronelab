@@ -18,13 +18,13 @@ function runtime(){
  activate:()=>new Promise((resolve,reject)=>events.activate({waitUntil:p=>p.then(resolve,reject)})),
  request:url=>new Promise((resolve,reject)=>events.fetch({request:new Request(key(url)),respondWith:p=>p.then(resolve,reject)}))};
 }
-test('APP binaries precached, FACTORY images fetched only when explicitly needed',async()=>{
+test('active A2 APP is precached while archived A1 and FACTORY images load on demand',async()=>{
  const r=runtime();await r.install();r.setOffline();
  const catalog=JSON.parse(readFileSync(new URL('FlightCore_Firmware/catalog.json',root),'utf8'));
  assert.equal((await r.request('./FlightCore_Firmware/catalog.json?v='+catalog.version)).ok,true);
  for(const board of catalog.boards){
   const app=board.latest.app;
-  if(app.available)assert.equal((await r.request('./FlightCore_Firmware/'+app.file+'?v='+board.latest.version)).ok,true);
+  if(app.available)assert.equal((await r.request('./FlightCore_Firmware/'+app.file+'?v='+board.latest.version)).ok,board.id==='ZFC-A2');
   const factory=board.latest.factory;
   if(factory.available)assert.equal((await r.request('./FlightCore_Firmware/'+factory.file+'?v='+board.latest.version)).ok,false,'Factory requires an explicit online download');
  }

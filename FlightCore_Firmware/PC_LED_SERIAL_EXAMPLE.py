@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PyCharm/desktop Python LED test for FlightCore A1 and A2.
+"""PyCharm/desktop Python LED test for FlightCore A2.
 Install: python -m pip install pyserial
 Run: python PC_LED_SERIAL_EXAMPLE.py /dev/cu.usbmodemXXXX
 or:  python PC_LED_SERIAL_EXAMPLE.py COM5
@@ -21,8 +21,25 @@ def listen(port, duration=0.2):
         if line and line.startswith(("ZJINFO,","ZJLED,","ZJI2C,","ZJGYRO,STATUS")):
             print("RX",line)
 
+
+def require_a2(port):
+    port.reset_input_buffer()
+    send(port, "ZJINFO,GET")
+    until = time.monotonic() + 3
+    while time.monotonic() < until:
+        line = port.readline().decode("utf-8", errors="replace").strip()
+        fields = line.split(",", 6)
+        if len(fields) != 7 or fields[:2] != ["ZJINFO", "FW"]:
+            continue
+        if fields[2] != "ZFC-A2":
+            raise SystemExit("Unsupported controller. Connect a FlightCore A2.")
+        print("RX", line)
+        return
+    raise SystemExit("A2 identity unavailable. Open the running firmware serial port and retry.")
+
+
 def main():
-    p=argparse.ArgumentParser(description="Blink A1/A2 onboard LED through USB Serial at 115200 baud")
+    p=argparse.ArgumentParser(description="Blink the A2 onboard LED through USB Serial at 115200 baud")
     p.add_argument("port",help="Serial device, e.g. COM5 or /dev/cu.usbmodemXXXX")
     args=p.parse_args()
     ser=serial.Serial()
@@ -31,9 +48,7 @@ def main():
     ser.open()
     try:
         time.sleep(1)
-        send(ser,"ZJINFO,GET")
-        listen(ser,1)
-        print("If RX shows waiting for download, release BOOT and press RESET before retrying.")
+        require_a2(ser)
         seq=1
         try:
             while True:
