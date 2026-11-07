@@ -7,7 +7,7 @@ const src=read('companion-network.js');
 const activity=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
 const wifi=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreWifiLink.java');
 const html=read('companion.html');
-const id='ZFC-A1-012345ABCDEF';
+const id='ZFC-A2-012345ABCDEF';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 function harness(){
@@ -21,7 +21,7 @@ function harness(){
  const win={dispatchEvent(){},addEventListener(){},ZebjusKitAuth:{
   label:()=>({deviceId:id,secret:'private-secret'}),diagnosticKey:()=> 'diagnostic',
   open:async()=>({expiresAt:Date.now()+60000,request:async route=>route==='/api/status'?{
-    kitId:id,board:'ZFC-A1',mode:'ap',requestTransport:'AP',apActive:true,staConnected:false,
+    kitId:id,board:'ZFC-A2',mode:'ap',requestTransport:'AP',apActive:true,staConnected:false,
     apSsid:'ZEBJUS-test',ip:'',rc:{claimed:false},motorsArmed:false,firmwareControl:false
    }:{}})
  }};

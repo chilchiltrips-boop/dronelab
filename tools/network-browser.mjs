@@ -6,7 +6,7 @@ import {createHmac,createDecipheriv,randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
 
-const id='ZFC-A1-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16);
+const id='ZFC-A2-012345ABCDEF',secret='a7'.repeat(32),boot='b8'.repeat(16);
 const mac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map(),calls=[];
 const maintenanceKey='f1'.repeat(16);
@@ -20,7 +20,7 @@ function snapshot(){
 function handle(host,path,method,args={},headers={}){
  const h=Object.fromEntries(Object.entries(headers).map(([k,v])=>[k.toLowerCase(),v]));
  const result=(body,status=200,key='',seq='')=>{const text=JSON.stringify(body);return {status,text,proof:key?mac(key,`response|${seq}|${status}|${text}`):''}};
- if(path==='/api/identify')return result({kitId:id,kitCode:'123456',name:'Test fixture A1',board:'ZFC-A1',authVersion:2,labelInstalled:true,simpleConnection:true});
+ if(path==='/api/identify')return result({kitId:id,kitCode:'123456',name:'Test fixture A2',board:'ZFC-A2',authVersion:2,labelInstalled:true,simpleConnection:true});
  if(path==='/api/auth/local'){
   const sta=host==='192.168.1.42';assert.ok(sta||host==='192.168.4.1');
   assert.equal(args.deviceId,id);assert.match(args.client,/^[0-9a-f]{32}$/);
@@ -50,7 +50,7 @@ function handle(host,path,method,args={},headers={}){
  if(s.localSta&&!['/api/status','/api/telemetry','/api/rc/snapshot'].includes(path))
   return result({error:'sta_observer_read_only'},403,s.key,seq);
  let body;
- if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A1',board:'ZFC-A1',version:'1.4.10',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,inputArmSupported:true,controlAuthorized:!s.localSta,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
+ if(path==='/api/status')body={kitId:id,kitCode:'123456',kitName:'Test fixture A2',board:'ZFC-A2',version:'1.4.10',bootId:boot,mode:'auto',phase:'ap_sta_ready',requestTransport:host==='192.168.4.1'?'AP':'STA',staConnected:true,apActive:true,apIp:'192.168.4.1',ip:'192.168.1.42',ssid:'Mock classroom',setupAuthorized:s.setup||(s.local&&!s.localSta),otaAuthorized:false,inputArmSupported:true,controlAuthorized:!s.localSta,motorsDisabled:true,firmwareControl:false,motorsArmed:false,rc:snapshot(),wifiTestState:tested?'saved':'idle',staCredentialsSaved:tested};
  else if(path==='/api/wifi/scan')body={state:'ready',networks:[{ssid:'Mock classroom',rssi:-45,secure:true}]};
  else if(path==='/api/wifi/test'){assert.ok(s.setup||s.local&&!s.localSta);assert.equal(args.ssid,'Mock classroom');assert.equal(args.password,'fixture-password');tested=true;body={state:'testing'}}
  else if(path==='/api/rc/claim'){assert.equal(owner,'');assert.equal(host,'192.168.4.1');assert.equal(args.source,'ANDROID');owner=randomBytes(16).toString('hex');frame=null;body={kitId:id,session:owner};}
@@ -62,7 +62,7 @@ function handle(host,path,method,args={},headers={}){
   body={kitId:id,received:true,seq:frame.seq,receivedAtMs:frame.at,inputArmed:frame.inputArmed==='true',motorsDisabled:true};
  }else if(path==='/api/rc/release'||path==='/api/rc/stop'){owner='';body={released:true}}
  else if(path==='/api/rc/snapshot')body=snapshot();
- else if(path==='/api/telemetry')body={kitId:id,board:'ZFC-A1',millis:Date.now(),gyroReady:true,address:0x6a,roll:0,pitch:0,yaw:0,scanner:[],scannerRunning:false,scanSequence:1,rc:snapshot()};
+ else if(path==='/api/telemetry')body={kitId:id,board:'ZFC-A2',millis:Date.now(),gyroReady:true,address:0x68,roll:0,pitch:0,yaw:0,scanner:[],scannerRunning:false,scanSequence:1,rc:snapshot()};
  else if(path==='/api/command')body={ok:true};
  else throw Error('Unexpected route '+path);
  return result(body,200,s.key,seq);

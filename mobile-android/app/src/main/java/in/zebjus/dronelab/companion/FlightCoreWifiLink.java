@@ -134,7 +134,7 @@ final class FlightCoreWifiLink {
         return selected;
     }
     synchronized void pin(String id,String ip,String transport,String expectedSsid){
-        if(!id.matches("ZFC-A[12]-[0-9A-F]{12}")||!privateIp(ip)||
+        if(id==null||!id.matches("ZFC-A2-[0-9A-F]{12}")||!privateIp(ip)||
            !("AP".equals(transport)||"STA".equals(transport))||expectedSsid==null||expectedSsid.isEmpty())
             throw new IllegalArgumentException("Invalid verified kit link");
         Network n=matchingWifi(expectedSsid);
@@ -203,8 +203,8 @@ final class FlightCoreWifiLink {
         }
     }
     void discover(String kitId){
-        if(nsd==null||kitId==null||!kitId.matches("ZFC-A[12]-[0-9A-F]{12}")){
-            listener.discovery(kitId,"","A verified Device ID is required");return;
+        if(nsd==null||kitId==null||!kitId.matches("ZFC-A2-[0-9A-F]{12}")){
+            listener.discovery(kitId,"","A verified A2 Device ID is required");return;
         }
         if(!discoveryFinished.compareAndSet(true,false)){listener.discovery(kitId,"","Discovery already running");return;}
         final AtomicBoolean delivered=new AtomicBoolean(false);

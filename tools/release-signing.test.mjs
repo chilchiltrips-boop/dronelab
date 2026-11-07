@@ -15,7 +15,7 @@ test('stable Android source matches the published release or advances its versio
   'equal codes are valid only for the already published version, not a new upgrade');
  // A new APK build must still strictly advance the installed/published code.
  assert.ok(read('tools/verify_signed_android_release.py').includes('int(version_code) > int(old_package[2])'));
- assert.match(gradle,/versionName '1\.8\.38-rate-status'/);
+ assert.match(gradle,/versionName '1\.8\.39-a2-only'/);
  assert.match(gradle,/signingConfig signingConfigs\.zebjusRelease/);
  assert.match(gradle,/debuggable false/);
  assert.match(gradle,/storeType 'pkcs12'/);
@@ -68,4 +68,22 @@ test('staging API30 consumes the same review artifact as signing and never weake
  assert.match(publish,/needs: \[android, native_touch, legacy_api30\]/);
  assert.match(publish,/if: github.ref == 'refs\/heads\/main'/);
  assert.ok(yaml.includes("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}"));
+});
+
+test('trusted review builds produce both signed artifacts before native gates consume them',()=>{
+ const yaml=read('.github/workflows/build-qr-android.yml');
+ const candidate=yaml.slice(yaml.indexOf('  release_candidate:'),yaml.indexOf('  android:'));
+ assert.match(candidate,/github\.event_name != 'pull_request' \|\| github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
+ const build=yaml.slice(yaml.indexOf('  android:'),yaml.indexOf('  native_touch:'));
+ assert.match(build,/needs: release_candidate/);
+ assert.match(build,/if: needs\.release_candidate\.outputs\.build == 'true'/);
+ // An obsolete branch allowlist used to report build success while skipping
+ // signing/upload, leaving both mandatory native jobs without their inputs.
+ assert.doesNotMatch(build,/^        if:/m);
+ assert.match(build,/name: ZEBJUS_PERMANENTLY_SIGNED_RELEASE_APK_/);
+ assert.match(build,/name: ZEBJUS_NATIVE_TOUCH_TEST_BUNDLE/);
+ assert.match(build,/if-no-files-found: error/);
+ const publish=yaml.slice(yaml.indexOf('  publish:'));
+ assert.match(publish,/if: github.ref == 'refs\/heads\/main'/);
+ assert.match(publish,/wait-release-checks\.mjs/);
 });

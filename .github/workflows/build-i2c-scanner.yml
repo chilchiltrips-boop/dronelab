@@ -1,7 +1,7 @@
-name: Build and verify FlightCore A1/A2 AP/STA Firmware
+name: Build and verify FlightCore A2 AP/STA Firmware
 on:
   push:
-    branches: [feat/a2-acro-readiness-bench-20261106, feat/a2-rate-flight-recorder-20261106, feat/a2-aerof450-pid-profiles-20261105, release/flightcore-1.7.15-bench-safe-20261105, feat/a2-flight-safety-acceptance-20261105, feat/a2-unified-rate-pid-20261105, fix/a2-output-calibration-stability-20261104, feat/a2-esc-auto-result-no-tone-ticks-20261104, feat/a2-auto-esc-20261104, feat/a2-imu-manual-xyz-offsets-live-visual-20261104, feat/a2-page-save-20261104, feat/a2-complete-wizard-20261104, fix/imu-diagnostic-freshness-20261103,feat/a2-timing-250hz-foundation,fix/wizard-single-toolbar-20261103, fix/radio-handover-ppm-arm-diagnostics-20261102, feat/ppm-yaw-arm-status-20261102, fix/ppm-bench-capture-20261102, fix/motor-link-stability-20261102, feat/setup-wizard-controls-20261101, feat/a2-motor-setup-20261030, feat/a2-gyro-calibration-20261028, feat/coordinated-handover-20261027, feat/unified-input-status-20261026, feature/rc-access-maintenance-20261024, fix/udp-management-20261018, fix/firmware-one-line-rc-imu-20261017, fix/kit-control-20261017, feature/legacy-connectivity-port-20261013,feature/simple-kit-connection-v1-4-1, work/sta-ap-diagnostics-20261012, main, fix/usb-rom-runtime-identity-single-line-telemetry, feature/ap-sta-transport-v1, feature/classroom-my-kits-webapp-v1-4-1, feature/authoritative-status-integration-20261021]
+    branches: [main]
     # Compile only when compiled C++/Arduino inputs or build provenance change.
     # UI/JS/HTML/README edits have independent WebApp regression workflows.
     paths:
@@ -20,21 +20,22 @@ on:
       - 'tools/verify_release.py'
       - 'tools/firmware_compile_time.py'
       - '.github/workflows/build-i2c-scanner.yml'
+      - '.github/actions/setup-flightcore/**'
   workflow_dispatch:
 permissions:
   contents: write
 concurrency:
   group: scanner-release-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
-      - name: Detect already verified exact-source A1/A2 images
+      - name: Detect already verified exact-source A2 images
         id: firmware_integrity
         run: |
           if test -f FlightCore_Firmware/publication-hold.json; then
@@ -52,22 +53,22 @@ jobs:
             echo 'Verified APP/FACTORY SHA-256 and source manifest: no firmware rebuild needed'
           else
             echo 'rebuild=true' >> "$GITHUB_OUTPUT"
-            echo 'Source or firmware changed; compile both boards and refresh manifest'
+            echo 'Source or firmware changed; compile A2 and refresh manifest'
           fi
-      # Prevent wasting A1/A2 compile resources on stale Android release test
+      # Prevent wasting A2 compile resources on stale Android release test
       # expectations. This also keeps the versioned firmware publication gated.
       - name: Preflight source and release regression contracts
         if: steps.firmware_integrity.outputs.rebuild == 'true'
         run: |
           node --test tools/ack-diagnostics.test.mjs tools/android-camera-permission.test.mjs tools/connection-freshness-recovery.test.mjs tools/poco-x2-network-compat.test.mjs
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: ./.github/actions/setup-flightcore
         if: steps.firmware_integrity.outputs.rebuild == 'true'
-      - name: Compile board-specific FlightCore A1/A2 (Scanner, LED, Gyro, USB CDC)
+      - name: Compile board-specific FlightCore A2 (Scanner, LED, Gyro, USB CDC)
         if: steps.firmware_integrity.outputs.rebuild == 'true'
         run: |
           python3 tools/embed_setup_portal.py
           git diff --exit-code -- FlightCore_Firmware/FlightCoreSetupPortal.h
-          python3 tools/build_scanner.py
+          python3 tools/build_scanner.py --skip-core-install
       - name: Validate both APP and Factory binaries
         run: |
           python3 tools/verify_release.py
@@ -76,14 +77,14 @@ jobs:
           npm test
           npm run check
           node --check firmware-updater.js
-      - name: Upload A1/A2 APP and Factory firmware artifacts
+      - name: Upload A2 APP and Factory firmware artifacts
         if: steps.firmware_integrity.outputs.rebuild == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: zebjus-flightcore-a1-a2-ap-sta-${{ github.run_id }}
+          name: zebjus-flightcore-a2-ap-sta-${{ github.run_id }}
           path: |
-            FlightCore_Firmware/*_APP.bin
-            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin
+            FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
             FlightCore_Firmware/build-report.json
             FlightCore_Firmware/catalog.json
             FlightCore_Firmware/latest.json
@@ -93,7 +94,7 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          outputs=(FlightCore_Firmware/*_APP.bin FlightCore_Firmware/*_FACTORY.bin
+          outputs=(FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_APP.bin FlightCore_Firmware/ZEBJUS_FLIGHTCORE_A2_FACTORY.bin
             FlightCore_Firmware/build-report.json FlightCore_Firmware/catalog.json
             FlightCore_Firmware/latest.json firmware-catalog.json firmware-latest.json)
           git add -- "${outputs[@]}" app-version.json

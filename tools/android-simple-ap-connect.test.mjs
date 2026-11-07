@@ -6,7 +6,7 @@ import {createHmac} from 'node:crypto';
 
 const source=readFileSync(new URL('../js/kit-auth.js',import.meta.url),'utf8');
 const java=readFileSync(new URL('../mobile-android/app/src/main/java/in/zebjus/dronelab/companion/FlightCoreNativeBridge.java',import.meta.url),'utf8');
-const sessionKey='ab'.repeat(32),kitId='ZFC-A1-012345ABCDEF',bootId='cc'.repeat(16),sid='dd'.repeat(16);
+const sessionKey='ab'.repeat(32),kitId='ZFC-A2-012345ABCDEF',bootId='cc'.repeat(16),sid='dd'.repeat(16);
 const hmac=(key,message)=>createHmac('sha256',Buffer.from(key,'utf8')).update(message).digest('hex');
 
 test('native bridge accepts only explicit public local enrollment and signed access for subsequent routes',()=>{
@@ -74,7 +74,7 @@ test('Android auto-connects after joining Wi-Fi; private label and OWNER not req
    return {local:true,deviceId:id,expiresAt:Date.now()+60000,request:async route=>{
     if(rejectNextStatus){rejectNextStatus=false;const err=Error('local session expired');err.status=401;throw err;}
     if(route==='/api/status')return {kitId,requestTransport:'AP',apActive:true,staConnected:false,
-      apSsid:'zebjus_drone_1',apIp:'192.168.4.1',board:'ZFC-A1',kitCode:'123456',mode:'ap'};
+      apSsid:'zebjus_drone_1',apIp:'192.168.4.1',board:'ZFC-A2',kitCode:'123456',mode:'ap'};
     throw Error('Unexpected route '+route);
    }};
   }

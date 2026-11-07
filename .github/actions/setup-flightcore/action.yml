@@ -1,0 +1,24 @@
+name: Pinned FlightCore toolchain
+description: Cache the pinned Arduino ESP32 toolchain, never compiled firmware
+runs:
+  using: composite
+  steps:
+    - uses: arduino/setup-arduino-cli@v2
+    - uses: actions/cache@v4
+      id: core
+      with:
+        path: ~/.arduino15
+        key: flightcore-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/build_scanner.py') }}
+    - shell: bash
+      if: steps.core.outputs.cache-hit != 'true'
+      run: python3 tools/build_scanner.py --install-only
+    - shell: bash
+      run: |
+        python3 - <<'PY'
+        import json,subprocess,sys
+        sys.path.insert(0,'tools')
+        from build_scanner import CORE_VERSION
+        platforms=json.loads(subprocess.check_output(['arduino-cli','core','list','--format','json']))
+        entries=platforms.get('platforms',[]) if isinstance(platforms,dict) else platforms
+        assert any(p.get('id')=='esp32:esp32' and p.get('installed_version')==CORE_VERSION for p in entries), 'Pinned ESP32 core missing from toolchain'
+        PY

@@ -117,6 +117,50 @@ test('desktop Python reads 12/20-field frames and startup progress without doubl
  const r=spawnSync('python3',['-c',code],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/PASS/);
 });
 
+test('desktop Python examples write only identification until an A2 replies',()=>{
+ const code=String.raw`import itertools, runpy, sys, time, types
+clock = itertools.count()
+time.monotonic = lambda: next(clock) / 10
+time.sleep = lambda _: None
+probe = b"ZJINFO,GET\n"
+
+class Port:
+    def __init__(self, board):
+        self.identity = f"ZJINFO,FW,{board},1.7.20,Nov 7 2026,12:00:00,FlightCore\n".encode() if board else b""
+        self.commands = []
+        self.closed = False
+    def open(self): pass
+    def close(self): self.closed = True
+    def flush(self): pass
+    def reset_input_buffer(self): pass
+    def write(self, data): self.commands.append(data)
+    def readline(self):
+        if len(self.commands) == 2:
+            raise KeyboardInterrupt
+        identity, self.identity = self.identity, b""
+        return identity
+
+for example, expected in [
+    ("LED", [b"ZJLED,1,SET,100\n", b"ZJLED,2,STOP\n"]),
+    ("GYRO", [b"ZJTEL,RATE,20\n"]),
+]:
+    path = f"FlightCore_Firmware/PC_{example}_SERIAL_EXAMPLE.py"
+    for board in ("ZFC-A1", None, "ZFC-A2"):
+        port = Port(board)
+        sys.modules["serial"] = types.SimpleNamespace(Serial=lambda: port)
+        sys.argv = [path, "test-port"]
+        try:
+            runpy.run_path(path, run_name="__main__")
+        except SystemExit as exc:
+            assert board != "ZFC-A2" and "A2" in str(exc)
+        else:
+            assert board == "ZFC-A2"
+        assert port.commands == ([probe] + expected if board == "ZFC-A2" else [probe])
+        assert port.closed
+`;
+ const r=spawnSync('python3',['-c',code],{encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+});
+
 test('timing diagnostics preserve unknown rates, USB compatibility and immediate unhealthy states',()=>{
  const {d,advance}=diagnostics();
  const timing={...ready,controlTargetHz:250,controlActualHz:247.5,controlIntervalUs:4010,controlJitterUs:10,controlMaxExecutionUs:38,controlMissedTicks:3,controlHealth:'HEALTHY',controlActuating:false,imuTargetHz:250,imuActualHz:249.2,imuSampleAgeUs:700,imuErrors:0,imuValid:true,accelG:[1,-2,0.5],escPwmHz:50,telemetryConfiguredHz:20,telemetryActualHz:19.8,telemetryDrops:2};

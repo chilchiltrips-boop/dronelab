@@ -91,7 +91,7 @@
   $('dwTopKitName').textContent=kit;
   $('dwTopKitMeta').textContent=linked||ota?
     [state.board,mode,state.version||'Version unknown'].filter(Boolean).join(' • '):
-    'Find a verified A1/A2 kit in Kit Connection';
+    'Find a verified A2 kit in Kit Connection';
   $('dwTopStatus').textContent=status;
   $('dwTopStatus').dataset.tone=linked?'good':ota?'warn':'offline';
   $('dwSidebarConnection').textContent=kit;

@@ -1,3 +1,5 @@
+> Active product: A2 (XIAO ESP32-C6 + MPU6050). A1 details below document historical packages only; new builds and the Firmware Center are A2-only.
+
 # ZEBJUS FlightCore — Hardware / USB / Python Lab
 
 ## Current supported hardware (IMPORTANT)

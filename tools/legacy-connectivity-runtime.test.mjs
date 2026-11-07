@@ -4,14 +4,14 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 const code=readFileSync(new URL('../js/classroom-kits.js',import.meta.url),'utf8');
-const id='ZFC-A1-012345ABCDEF',other='ZFC-A1-FFFFFFFFFFFF',key='a1'.repeat(16);
-const setupFields=()=>({expectedId:id,name:'Room A1',prefix:'',password:'',teacher:'TeacherPrivate#123',enrollConsent:true});
+const id='ZFC-A2-012345ABCDEF',other='ZFC-A2-FFFFFFFFFFFF',key='a1'.repeat(16);
+const setupFields=()=>({expectedId:id,name:'Room A2',prefix:'',password:'',teacher:'TeacherPrivate#123',enrollConsent:true});
 test('Smart USB Kit rename restarts the default name-based AP only after its firmware acknowledgment',async()=>{
  const f=fixture({mode:'usb',initialize:true});try{
   const device=f.smartUsb({enrolled:true});await f.api.connectSetupUsb();
-  const result=await f.api.saveUsbSetup({...setupFields(),name:'A1 Renamed'});
-  assert.equal(result.rebooting,true);assert.equal(result.verified,false);assert.equal(result.expectedSsid,'A1 Renamed');
-  assert.equal(device.apActual,'A1 Renamed');
+  const result=await f.api.saveUsbSetup({...setupFields(),name:'A2 Renamed'});
+  assert.equal(result.rebooting,true);assert.equal(result.verified,false);assert.equal(result.expectedSsid,'A2 Renamed');
+  assert.equal(device.apActual,'A2 Renamed');
   assert.ok(f.requests.some(r=>r.route==='USB:ZJADMIN,AP_APPLY,CONFIRM'));
   assert.ok(!f.requests.some(r=>r.route.startsWith('USB:ZJADMIN,APNAME,')||r.route.startsWith('USB:ZJADMIN,APPASS,')));
  }finally{f.dispose()}
@@ -20,8 +20,8 @@ test('Smart USB Setup enrolls first Teacher, saves only requested AP fields and 
  const f=fixture({mode:'usb',initialize:true});try{
   const device=f.smartUsb();await f.api.connectSetupUsb();
   assert.equal(f.api.usbSetupState().enrolled,false);assert.equal(f.api.usbSetupState().available,true);
-  const result=await f.api.saveUsbSetup({...setupFields(),prefix:'ZEBJUS-A1-LAB',password:'ApPrivate#987'});
-  assert.equal(result.rebooting,true);assert.equal(result.verified,false);assert.equal(result.expectedSsid,'ZEBJUS-A1-LAB-123456');
+  const result=await f.api.saveUsbSetup({...setupFields(),prefix:'ZEBJUS-A2-LAB',password:'ApPrivate#987'});
+  assert.equal(result.rebooting,true);assert.equal(result.verified,false);assert.equal(result.expectedSsid,'ZEBJUS-A2-LAB-123456');
   assert.equal(device.staSsid,'SavedRouter');assert.equal(device.kitCode,'123456');assert.equal(device.pass,'ApPrivate#987');
   const commands=f.requests.map(r=>r.route);
   assert.ok(commands.includes('USB:ZJADMIN,ENROLL,TeacherPrivate#123'));
@@ -35,7 +35,7 @@ test('Smart USB Setup unlocks existing Teacher, rejects wrong passphrase and nev
  const f=fixture({mode:'usb',initialize:true});try{
   const device=f.smartUsb({enrolled:true,prefix:'SavedPrefix',apActual:'SavedPrefix-123456'});await f.api.connectSetupUsb();
   await assert.rejects(f.api.saveUsbSetup({...setupFields(),name:'Room Renamed',teacher:'IncorrectPass#123'}),/INVALID_ADMIN_PASSPHRASE/);
-  assert.equal(device.kitName,'Room A1');assert.equal(device.teacher,'TeacherPrivate#123');
+  assert.equal(device.kitName,'Room A2');assert.equal(device.teacher,'TeacherPrivate#123');
   const saved=await f.api.saveUsbSetup({...setupFields(),name:'Room Renamed'});
   assert.equal(saved.verified,true);assert.equal(saved.rebooting,false);assert.equal(device.kitName,'Room Renamed');
   assert.ok(!f.requests.some(r=>r.route.startsWith('USB:ZJADMIN,ENROLL,')));
@@ -43,10 +43,10 @@ test('Smart USB Setup unlocks existing Teacher, rejects wrong passphrase and nev
 });
 test('Smart USB Setup re-verifies an expired Teacher lease and preserves custom AP identity for name-only changes',async()=>{
  const f=fixture({mode:'usb',initialize:true});try{
-  const device=f.smartUsb({enrolled:true,prefix:'A1-Custom',apActual:'A1-Custom-123456'});await f.api.connectSetupUsb();
+  const device=f.smartUsb({enrolled:true,prefix:'A2-Custom',apActual:'A2-Custom-123456'});await f.api.connectSetupUsb();
   f.advance(60001);await f.api.read();assert.equal(f.api.usbSetupState().unlocked,false);
-  await f.api.saveUsbSetup({...setupFields(),name:'A1 New Room'});
-  assert.equal(device.prefix,'A1-Custom');assert.equal(device.apActual,'A1-Custom-123456');
+  await f.api.saveUsbSetup({...setupFields(),name:'A2 New Room'});
+  assert.equal(device.prefix,'A2-Custom');assert.equal(device.apActual,'A2-Custom-123456');
   assert.ok(!f.requests.some(r=>/^USB:ZJADMIN,(?:APNAME|APPASS|AP_APPLY),/.test(r.route)));
  }finally{f.dispose()}
 });
@@ -54,11 +54,11 @@ test('Smart USB Setup stops on expiration between writes and requires fresh veri
  const f=fixture({mode:'usb',initialize:true});try{
   const device=f.smartUsb({enrolled:true});await f.api.connectSetupUsb();
   device.onCommand=cmd=>{if(cmd.startsWith('ZJADMIN,NAME,'))f.advance(60001)};
-  await assert.rejects(f.api.saveUsbSetup({...setupFields(),name:'A1 New Room',password:'ApPrivate#987'}),/ADMIN_LOCKED|verification expired/);
+  await assert.rejects(f.api.saveUsbSetup({...setupFields(),name:'A2 New Room',password:'ApPrivate#987'}),/ADMIN_LOCKED|verification expired/);
   assert.equal(device.pass,'ExistingAp#123');assert.ok(!f.requests.some(r=>r.route==='USB:ZJADMIN,AP_APPLY,CONFIRM'));
  }finally{f.dispose()}
 });
-test('Smart USB Setup rejects disconnected/replaced USB and binds A1/A2 settings to immutable ID and port generation',async()=>{
+test('Smart USB Setup rejects disconnected/replaced USB and binds A2 settings to immutable ID and port generation',async()=>{
  const f=fixture({mode:'usb',initialize:true});try{
   const device=f.smartUsb({enrolled:true});await f.api.connectSetupUsb();
   device.open=false;assert.equal(f.api.usbSetupState().available,false);
@@ -77,6 +77,15 @@ test('Smart USB Setup reports controller-active Save restriction without releasi
   assert.equal(f.api.getState().owner,true);
  }finally{f.dispose()}
 });
+test('Retired A1 USB identity cannot enter active Kit setup or receive pairing commands',async()=>{
+ const f=fixture({mode:'usb',initialize:true});try{
+  f.smartUsb({kitId:'ZFC-A1-012345ABCDEF',board:'ZFC-A1'});
+  await assert.rejects(f.api.connectSetupUsb(),/verify the physical USB Kit/i);
+  assert.equal(f.api.getState().connected,false);
+  assert.match(f.elements.get('kitMessage').textContent,/A1 is retired/);
+  assert.ok(!f.requests.some(r=>/^USB:(?:ZJNET,PAIR|ZJADMIN)/.test(r.route)));
+ }finally{f.dispose()}
+});
 function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclusive=false}={}){
  const elements=new Map(),timers=new Set(),events=[],requests=[],storage=new Map(),listeners=new Map(),sessions=[],diagnostics=[];let ready,disposed=false;
  let savedKey=paired?key:'',enrollmentError='',enrollmentGate=null,authAttempts=0,now=Date.now();
@@ -88,7 +97,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
  elements.get('kitRememberBrowser').checked=true;
  const ip=mode==='ap'?'192.168.4.1':'192.168.1.20';
  for(const [name,value] of Object.entries({kitCodeInput:'123456',kitTransport:mode,kitIpInput:ip,kitKeyInput:''}))elements.get(name).value=value;
- let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A1',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
+ let status={kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',board:'ZFC-A2',version:encrypted?'1.4.5':'1.4.4',bootId:'b1'.repeat(16),encryptedOta:encrypted,appElfSha256:'0'.repeat(64),
   requestTransport:mode==='android-relay'?'AP':mode.toUpperCase(),mode:exclusive?mode:'auto',exclusiveWifi:exclusive,apActive:!exclusive||mode==='ap',staConnected:mode==='sta',ip:mode==='sta'?ip:'',apIp:'192.168.4.1',apSsid:'zebjus_drone_2',
   hostname:'zebjus-drone-2.local',setupAuthorized:mode==='ap',otaAuthorized:false,controlAuthorized:mode==='ap',firmwareControl:false,motorsArmed:false,otaAppOnly:true,
   radioHandover:{version:1,lastStaInput:'ANDROID_WEBRTC',state:'IDLE'},rcAccess:{version:1,pathVersion:1,controlPath:'AUTO',selection:'AUTO',paused:false,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}},
@@ -153,7 +162,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    if(reachableHosts&&!reachableHosts.has(u.hostname))throw Error('Device is not reachable on this network');
    if(identityGate)await identityGate;
    const mismatch=identityOverride||(uploaded&&u.hostname===ip?other:id);
-   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A1',simpleConnection:true,adminSessions:encrypted,exclusiveWifi:exclusive})};
+   return {ok:true,json:async()=>({kitId:mismatch,kitCode:'123456',name:'zebjus_drone_2',board:'ZFC-A2',simpleConnection:true,adminSessions:encrypted,exclusiveWifi:exclusive})};
   }
   if(opts.headers?.['X-ZJ-Key']===key)status={...status,setupAuthorized:true,otaAuthorized:true,controlAuthorized:true};
   return {ok:true,json:()=>handler(u.pathname,Object.fromEntries(new URLSearchParams(opts.body||'')))};
@@ -174,7 +183,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
   enrollmentError:value=>enrollmentError=value,blockEnrollment:p=>enrollmentGate=p,authAttempts:()=>authAttempts,savedKey:()=>savedKey,
   expireSessions:()=>{for(const s of sessions)s.expiresAt=now-1},advance:ms=>now+=ms,
   usbPair:k=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+k}}),
-  enableUsb:({usbId=id,usbCode='123456',usbBoard='ZFC-A1'}={})=>{
+  enableUsb:({usbId=id,usbCode='123456',usbBoard='ZFC-A2'}={})=>{
    window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,writeLine:async line=>{
     const cmd=String(line).trim();
     requests.push({route:'USB:'+cmd});
@@ -186,7 +195,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
    }};
   },
   smartUsb:(options={})=>{
-   const device={kitId:id,board:'ZFC-A1',kitCode:'123456',kitName:'Room A1',prefix:'',apActual:'Room A1',enrolled:false,teacher:'TeacherPrivate#123',pass:'ExistingAp#123',generation:1,open:true,unlockedAt:0,staSsid:'SavedRouter',...options};
+   const device={kitId:id,board:'ZFC-A2',kitCode:'123456',kitName:'Room A2',prefix:'',apActual:'Room A2',enrolled:false,teacher:'TeacherPrivate#123',pass:'ExistingAp#123',generation:1,open:true,unlockedAt:0,staSsid:'SavedRouter',...options};
    const emit=line=>listeners.get('dronelab:serial-line')?.({detail:{transport:'usb',line}});
    window.DroneLabSerial={isOpen:()=>device.open,isFlashing:()=>false,generation:()=>device.generation,writeLine:async line=>{
     const cmd=String(line).trim();requests.push({route:'USB:'+cmd});
@@ -197,7 +206,7 @@ function fixture({mode='sta',paired=false,initialize=false,encrypted=false,exclu
     else if(cmd==='ZJNET,PAIR')emit('ZJNET,PAIR,'+device.kitId+','+key);
     else if(cmd==='ZJNET,GET'){emit('ZJNET,AP,ON,'+device.apActual);emit('ZJNET,STA,CONNECTED,192.168.1.20,'+device.staSsid);}
     else if(cmd==='ZJADMIN,GET'){
-     emit('ZJADMIN,NAME,'+device.kitName);emit('ZJADMIN,APNAME,'+(device.prefix||'ZEBJUS-AERION-A1'));
+     emit('ZJADMIN,NAME,'+device.kitName);emit('ZJADMIN,APNAME,'+(device.prefix||'ZEBJUS-AERION-A2'));
      emit('ZJADMIN,AUTH,'+(!device.enrolled?'ENROLL_REQUIRED':device.unlockedAt&&now-device.unlockedAt<60000?'UNLOCKED':'LOCKED'));
     }else if(cmd.startsWith('ZJADMIN,ENROLL,')){
      if(device.enrolled)emit('ZJADMIN,ERR,ALREADY_ENROLLED');else{device.enrolled=true;device.teacher=cmd.slice(15);device.unlockedAt=now;emit('ZJADMIN,ACK,ENROLLED');}
@@ -225,6 +234,18 @@ test('WebApp status forwards firmware release reason and time to the diagnostic 
   const event=f.diagnostics.filter(e=>e.event==='web_status').at(-1);
   assert.equal(event.data.releaseReason,'PPM_SIGNAL_LOST');
   assert.equal(event.data.lastReleaseAtMs,12345);
+ }finally{f.dispose()}
+});
+test('Saved A1 with the same Kit Code is ignored for A2 connection and retained in storage',async()=>{
+ const f=fixture({mode:'sta',paired:true,encrypted:true});try{
+  const archived={id:'ZFC-A1-012345ABCDEF',board:'ZFC-A1',code:'123456',name:'Old A1',ip:'192.168.1.22'};
+  const storageKey='zebjus.classroom.known.v1';
+  f.storage.set(storageKey,JSON.stringify([archived,{id,board:'ZFC-A2',code:'123456',name:'A2',ip:'192.168.1.20'}]));
+  await f.api.connect();
+  assert.equal(f.api.getState().connected,true);
+  assert.equal(f.api.getState().kitId,id);
+  assert.ok(JSON.parse(f.storage.get(storageKey)).some(k=>k.id===archived.id));
+  assert.ok(!f.requests.some(r=>r.host===archived.ip));
  }finally{f.dispose()}
 });
 test('rejected saved pairing falls back to verified STA monitoring and never replays that credential',async()=>{
@@ -290,7 +311,7 @@ test('exclusive Test & Save clears the old AP link and waits for verified redisc
 test('late physical USB telemetry cannot bypass the pending Wi-Fi reconnect permission',async()=>{
  const f=fixture({mode:'ap',paired:true,encrypted:true,exclusive:true,initialize:true});try{
   f.reachable(['192.168.4.1']);await f.api.connect();await f.api.switchNetworkMode('sta');f.enableUsb();
-  for(const line of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJINFO,FW,ZFC-A1,1.4.6'])f.serialLine(line);
+  for(const line of ['ZJKIT,ID,'+id,'ZJKIT,CODE,123456','ZJINFO,FW,ZFC-A2,1.4.6'])f.serialLine(line);
   assert.equal(f.api.getState().connected,false);assert.equal(f.api.getState().pendingNetworkMode,'sta');
  }finally{f.dispose()}
 });
@@ -454,10 +475,20 @@ test('Disconnect cancels late STA handover and header discovery replies',async()
 });
 test('legacy multipart OTA is rejected; encrypted OTA remains the upgrade path',async()=>{
  const f=fixture({paired:true});try{
-  await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=5;
-  await assert.rejects(f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A1',version:'1.4.6'}),/Legacy raw-key multipart OTA is disabled/);
+  await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=13;
+  await assert.rejects(f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A2',version:'1.4.6'}),/Legacy raw-key multipart OTA is disabled/);
   assert.equal(f.api.getState().owner,false);
   assert.ok(!f.requests.some(r=>r.route==='/api/ota'));
+ }finally{f.dispose()}
+});
+test('Direct OTA rejects retired A1 packages before beginning a verified A2 upload',async()=>{
+ const f=fixture({paired:true,encrypted:true});try{
+  await f.api.connect();
+  assert.equal(f.api.getState().otaAuthorized,true);
+  const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=5;
+  await assert.rejects(f.api.uploadAppFirmware({bytes,name:'A1_APP.bin',boardId:'ZFC-A1',version:'1.7.15'}),/Firmware board/);
+  await assert.rejects(f.api.uploadAppFirmware({bytes,name:'A2_APP.bin',boardId:'ZFC-A2',version:'1.7.15'}),/ESP chip ID mismatch/);
+  assert.ok(!f.requests.some(r=>r.route==='/api/firmware/begin'));
  }finally{f.dispose()}
 });
 test('selection rejects changed hardware before trusting discovery or sending a saved key',async()=>{
@@ -469,8 +500,8 @@ test('selection rejects changed hardware before trusting discovery or sending a 
 });
 test('new firmware uses ordered encrypted OTA commands and verifies full SHA-256 before reconnect',async()=>{
  const f=fixture({paired:true,encrypted:true});try{
-  await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=5;
-  const result=await f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A1',version:'1.4.6'});
+  await f.api.connect();const bytes=new Uint8Array(32768);bytes[0]=0xe9;bytes[12]=13;
+  const result=await f.api.uploadAppFirmware({bytes,name:'APP.bin',boardId:'ZFC-A2',version:'1.4.6'});
   assert.equal(result.verified,true);
   assert.equal(f.requests.filter(r=>r.route==='/api/firmware/chunk').length,Math.ceil(bytes.length/384));
   assert.equal(f.requests.find(r=>r.route==='/api/firmware/begin').args.sha256,createHash('sha256').update(bytes).digest('hex'));
@@ -512,11 +543,11 @@ test('same physical USB Kit can switch a verified STA link to AP without unavail
 });
 
 test('wrong USB Device ID or board is rejected before STA authorization and mode writes',async()=>{
- for(const usb of [{usbId:other},{usbBoard:'ZFC-A2'},{usbCode:'999999'}]){
+ for(const usb of [{usbId:other},{usbBoard:'ZFC-A1'},{usbCode:'999999'}]){
   const f=fixture({mode:'sta',paired:false,encrypted:true,exclusive:true,initialize:true});try{
    await f.api.connect();f.enableUsb(usb);
-   await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/mismatch|differs|identity/i);
-   await assert.rejects(f.api.switchNetworkMode('ap'),/mismatch|differs|identity/i);
+   await assert.rejects(f.api.pairAndAuthorizeSelectedKit(),/mismatch|differs|identity|retired/i);
+   await assert.rejects(f.api.switchNetworkMode('ap'),/mismatch|differs|identity|retired/i);
    assert.equal(f.requests.some(v=>v.route==='USB:ZJNET,PAIR'),false);
    assert.equal(f.requests.some(v=>v.route.startsWith('USB:ZJNET,MODE,ap')),false);
    assert.equal(f.api.getState().connected,true);

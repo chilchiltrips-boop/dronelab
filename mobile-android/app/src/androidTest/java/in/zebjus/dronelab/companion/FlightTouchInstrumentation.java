@@ -41,7 +41,7 @@ public final class FlightTouchInstrumentation extends Instrumentation {
     private int touchCalls;
     private boolean fullscreenHelpDismissed;
     private String lastTouch="";
-    private static final String FIXTURE_ID="ZFC-A1-000000000001";
+    private static final String FIXTURE_ID="ZFC-A2-000000000001";
     private static final String FIXTURE_DIAGNOSTIC="0123456789abcdef0123456789abcdef";
     @Override public void onCreate(Bundle arguments) { super.onCreate(arguments); args=arguments; start(); }
     @Override public void callActivityOnResume(Activity resumed) {

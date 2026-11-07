@@ -197,7 +197,7 @@ export function createGyroBridge({host=window,acceptEvent=()=>true}={}){
    const entry={resolve,reject,timer:null};
    entry.timer=setTimeout(()=>{
     waiting.delete(entry);
-    reject(new Error(['SETTLING','CALIBRATING'].includes(parser.getStatus())?'GyroCalibrationTimeoutError: Keep the A2 board still; gyro calibration has not finished within '+timeout+' ms.':'No live gyro frame within '+timeout+' ms. Check USB Serial, firmware version, and A1 0x6B / A2 0x68 wiring.'));
+    reject(new Error(['SETTLING','CALIBRATING'].includes(parser.getStatus())?'GyroCalibrationTimeoutError: Keep the A2 board still; gyro calibration has not finished within '+timeout+' ms.':'No live gyro frame within '+timeout+' ms. Check USB Serial, firmware version, and A2 MPU6050 0x68 wiring.'));
    },timeout);
    waiting.add(entry);
   });

@@ -37,7 +37,7 @@ def validate(compiled=False, publish_source=False):
             assert item.get('flightOutputQualified') is False and item.get('physicalAcceptance')=='NOT_RUN'
         assert report['hardwareFlashingTested'] is False
         assert report['buildProfile']=='BENCH_DIAGNOSTIC' and report['compilerFlags']==['-fstack-usage']
-        assert {b['boardId'] for b in report['boards']}=={'ZFC-A1','ZFC-A2'}
+        assert {b['boardId'] for b in report['boards']}=={'ZFC-A2'}
         for board in catalog['boards']:
             image=(fw/board['latest']['app']['file']).read_bytes()
             assert b'ZJ_OUTPUT=BENCH_DIAGNOSTIC\0' in image

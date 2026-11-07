@@ -35,6 +35,9 @@ test('every mandatory exact-source signed APK gate fires on every APK source tri
  }
  const gate=read('tools/wait-release-checks.mjs');
  for(const [name] of gates)assert.ok(gate.includes("'"+name+"'"),'release gate must require '+name);
+ const v2=read('.github/workflows/v2-safe-fixes.yml');
+ assert.match(v2,/push:\s+branches: \[main\]/,'full suite must run on main');
+ assert.ok(gate.includes("'DroneLab V2 Safe Fixes — Nonhardware Regression'"));
  assert.match(gate,/x\.head_sha===GITHUB_SHA&&x\.event==='push'/,'no branch/SHA bypass');
  assert.match(release,/verify_signed_android_release\.py/,'signer verification required');
  assert.match(release,/sha256sum -c mobile-apk\/SHA256SUMS\.txt/,'artifact checksum required');

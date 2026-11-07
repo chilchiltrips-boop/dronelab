@@ -28,7 +28,7 @@ test('AP Find Kit discovers public code but never treats discovery as authorizat
  let probes=0;
  const fakeFetch=async (url)=>{
   assert.equal(url,'http://192.168.4.1/api/identify');probes++;
-  return {ok:true,json:async()=>({kitId:'ZFC-A1-012345ABCDEF',kitCode:'432198',board:'ZFC-A1',name:'AERION A1'})};
+  return {ok:true,json:async()=>({kitId:'ZFC-A2-012345ABCDEF',kitCode:'432198',board:'ZFC-A2',name:'AERION A2'})};
  };
  const window={
   ZebjusKitPairingStore:{fromSession:()=>'',restore:async()=>''},
@@ -41,7 +41,7 @@ test('AP Find Kit discovers public code but never treats discovery as authorizat
   fetch:fakeFetch,setTimeout,clearTimeout,AbortController,URLSearchParams,console});
  const found=await window.ZebjusKits.findKitAp();
  assert.equal(probes,1);
- assert.equal(found.kitId,'ZFC-A1-012345ABCDEF');
+ assert.equal(found.kitId,'ZFC-A2-012345ABCDEF');
  assert.equal(elements.kitCodeInput.value,'432198');
  assert.equal(elements.kitTransport.value,'ap');
  assert.equal(elements.kitIpInput.value,'192.168.4.1');
@@ -63,10 +63,10 @@ test('No unsafe 6-digit key, Wi-Fi password, or AP discovery shortcut was added 
 });
 
 test('stale remembered key cannot override an available direct AP local session',async()=>{
- const kitId='ZFC-A1-012345ABCDEF',code='432198',ip='192.168.4.1';
+ const kitId='ZFC-A2-012345ABCDEF',code='432198',ip='192.168.4.1';
  const elements={kitCodeInput:{value:''},kitTransport:{value:'sta'},kitIpInput:{value:''},kitKeyInput:{value:''}};
  let opened=0,signedRequests=0,identifies=0;
- const status={kitId,kitCode:code,kitName:'AERION A1',board:'ZFC-A1',version:'1.4.3',
+ const status={kitId,kitCode:code,kitName:'AERION A2',board:'ZFC-A2',version:'1.4.3',
   requestTransport:'AP',mode:'auto',setupAuthorized:true,otaAuthorized:false,apActive:true,
   staConnected:false,ip:'',rc:{claimed:false,motorsDisabled:true}};
  const window={
@@ -80,7 +80,7 @@ test('stale remembered key cannot override an available direct AP local session'
   addEventListener(){},dispatchEvent(){}
  };
  const fetch=async url=>{assert.equal(url,'http://192.168.4.1/api/identify');identifies++;
-  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A1',name:'AERION A1',simpleConnection:true})};
+  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A2',name:'AERION A2',simpleConnection:true})};
  };
  const doc={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
  const storage={getItem:()=> '[]',setItem(){}};
@@ -95,10 +95,10 @@ test('stale remembered key cannot override an available direct AP local session'
 });
 
 test('one signed 401 can reverify kit identity and renew the local AP session',async()=>{
- const kitId='ZFC-A1-012345ABCDEF',code='432198';
+ const kitId='ZFC-A2-012345ABCDEF',code='432198';
  const elements={kitCodeInput:{value:''},kitTransport:{value:'sta'},kitIpInput:{value:''},kitKeyInput:{value:''}};
  let opened=0,identifies=0;
- const status={kitId,kitCode:code,kitName:'AERION A1',board:'ZFC-A1',version:'1.4.3',
+ const status={kitId,kitCode:code,kitName:'AERION A2',board:'ZFC-A2',version:'1.4.3',
   requestTransport:'AP',mode:'auto',setupAuthorized:true,otaAuthorized:false,apActive:true,staConnected:false,
   ip:'',rc:{claimed:false,motorsDisabled:true}};
  const window={
@@ -112,7 +112,7 @@ test('one signed 401 can reverify kit identity and renew the local AP session',a
   }},addEventListener(){},dispatchEvent(){}
  };
  const fetch=async url=>{assert.equal(url,'http://192.168.4.1/api/identify');identifies++;
-  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A1',simpleConnection:true})};
+  return {ok:true,json:async()=>({kitId,kitCode:code,board:'ZFC-A2',simpleConnection:true})};
  };
  const doc={readyState:'loading',addEventListener(){},getElementById:id=>elements[id]||null,querySelectorAll:()=>[],querySelector:()=>null};
  vm.runInNewContext(read('js/classroom-kits.js'),{window,document:doc,localStorage:{getItem:()=> '[]',setItem(){}},fetch,
