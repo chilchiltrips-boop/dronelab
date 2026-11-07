@@ -731,18 +731,19 @@ async function readFlightTelemetry(){
    const line=await reply;data=JSON.parse(line.slice(prefix.length));
   }else data=await deviceRequest('/api/flight/telemetry','GET',{},()=>{if(!current())throw Error('Telemetry connection changed');});
   if(!current())return;
-  if(binding.transport==='usb'&&/^[a-f0-9]{32}$/i.test(data?.bootId||'')&&data.kitId===binding.kitId){
-   // Token + current USB connection bind the first boot observation. A changed
-   // boot invalidates every queued control operation before adopting telemetry.
-   if(binding.bootId&&binding.bootId!==data.bootId){
-    advanceConnectionGeneration();++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId='';
-    state.flightTelemetry=null;clearImuObservation();lastRecoveryReason='BOOT_CHANGED';
-   }
-   state.bootId=binding.bootId=data.bootId;binding.connectionGeneration=reconnectTicket;
-  }
+  const usb=binding.transport==='usb';
+  const changedBoot=usb&&binding.bootId&&binding.bootId!==data?.bootId;
+  const observedBinding=usb?{...binding,bootId:data?.bootId,connectionGeneration:reconnectTicket+(changedBoot?1:0)}:binding;
   const now=Date.now();
-  const observation=root.ZebjusFlightTelemetry?.normalize(data,binding,state.flightTelemetry,now,now-started);
+  const observation=(!usb||/^[a-f0-9]{32}$/i.test(data?.bootId||''))&&
+   root.ZebjusFlightTelemetry?.normalize(data,observedBinding,state.flightTelemetry,now,now-started);
   if(!observation)throw Error('Invalid FlightCore telemetry');
+  // Validate the complete observation before adopting a first/new USB boot.
+  if(changedBoot){
+   advanceConnectionGeneration();++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId='';
+   adminUnlockedUntil=0;clearImuObservation();lastRecoveryReason='BOOT_CHANGED';
+  }
+  if(usb)state.bootId=observation.bootId;
   state.flightTelemetry=observation;
   root.dispatchEvent(new CustomEvent('dronelab:flight-telemetry'));
  }catch{nextFlightDataReadAt=Date.now()+1500}

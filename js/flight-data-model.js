@@ -269,6 +269,11 @@ export function buildFlightData(kit = {}, now = Date.now()) {
     imuAgeMs, imuSequence, sample, rc, output, flight, timing,
     health: {attitude: tilt?.fused ? healthRow(tilt.levelCalibrated ? 'good' : 'warning',
         tilt.levelCalibrated ? 'FC attitude · level calibrated' : 'FC attitude · save Quick Level') : healthRow('unknown', 'FC attitude unavailable'),
+      stabilization: connected && kit.flightModeState?.stabilizationSupported === true && output.fresh
+        ? healthRow(flight?.state === 'FAILSAFE' ? 'error' : 'warning',
+          (kit.flightModeState.active === 'angle' ? 'Angle cascade' : 'Acro Rate PID') + (flight?.authorized ? ' active' : ' · disarmed'),
+          'Experimental controller capability. Physical acceptance is separate.')
+        : healthRow('unknown', 'Stabilization capability unconfirmed'),
       link: linkHealth, imu: imuHealth, input: inputHealth, timing: timingHealth,
       output: outputHealth, setup: setupHealth, qualification: qualificationHealth},
     unsupported

@@ -26,6 +26,8 @@ test('A1 qualification cases are archived without dropping an existing A2 case',
  const ledger=JSON.parse(readFileSync('docs/release-acceptance.evidence.json'));
  assert.deepEqual(archivedIds,[...ledger.cases.filter(c=>c.id.startsWith('A1_')).map(c=>c.id)]);
  assert.deepEqual(requiredIds,[...ledger.cases.filter(c=>!c.id.startsWith('A1_')).map(c=>c.id)]);
- assert.equal(requiredIds.length,25);
+ assert.equal(requiredIds.length,29);
+ for(const id of ['A2_ANGLE_LEVEL_REBOOT','A2_ANGLE_CORRECTIONS','A2_COMPACT_ATTITUDE_LATENCY','A2_ANDROID_ANGLE_LOSS'])
+  assert.ok(requiredIds.includes(id),'Required physical acceptance case: '+id);
  assert.equal(archivedIds.length,6);
 });

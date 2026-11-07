@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.20",
+  "candidateVersion": "1.7.21",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "Published 1.7.19 remains the verified bench package. Source 1.7.20 also supports a separately built experimental PPM Rate candidate; hardware acceptance NOT_RUN.",
+  "note": "Published 1.7.19 remains the verified bench package. Source 1.7.21 supports a separate experimental Acro/Angle candidate; physical acceptance NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,

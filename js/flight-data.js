@@ -71,6 +71,7 @@ function render() {
     else if (flight.state === 'DISARMED') flightLabel = 'Flight disarmed';
   }
   set('flight', flightLabel);
+  set('mode', data.modeState ? 'Saved ' + data.modeState.saved.toUpperCase() + ' · active ' + data.modeState.active.toUpperCase() + (data.modeState.pending ? ' · pending ' + data.modeState.pending.toUpperCase() : '') : 'Saved mode unavailable');
   set('output', output.label.startsWith('Last observed')
     ? output.label + ' · ' + fixed(output.observedAgeMs, ' ms ago') : output.label);
   set('loop', fixed(timing.measuredHz, ' Hz', 1));

@@ -529,17 +529,20 @@ if(root){
    const data=usb?await readUsbReadiness(guard):await window.ZebjusKits.requestBound(k,'/api/flight/readiness','GET',{},guard);
    guard();
    const flight=window.ZebjusKitAccessPolicy?.flightState(data?.flight);
+   const flightModeState=window.ZebjusFlightTelemetry?.modeState(data?.flightModeState);
    const flags=['flightOutputEnabled','setupComplete','pidSaved','ppmFresh','inputArmed','gyroFresh','timingHealthy',
     'outputsOffAck','benchActive','escCalibrationActive'];
    const reason=value=>typeof value==='string'&&/^[A-Z_]{1,40}$/.test(value);
    if(data?.schema!==1||!['ACRO_READINESS','FLIGHT_READINESS'].includes(data.mode)||data.board!==k.board||data.kitId!==k.kitId||data.bootId!==bootId||
     !flight||flight.enabled!==data.flightOutputEnabled||!flags.every(flag=>typeof data[flag]==='boolean')||
     !reason(data.blockReason)||!reason(data.softwareBlockReason)||!Number.isSafeInteger(data.setupRevision)||data.setupRevision<0||
-    typeof data.firmwareVersion!=='string'||!data.firmwareVersion||k.version&&data.firmwareVersion!==k.version)
+    typeof data.firmwareVersion!=='string'||!data.firmwareVersion||k.version&&data.firmwareVersion!==k.version||
+    data.mode==='FLIGHT_READINESS'&&(!flightModeState||
+     !['receiverFresh','attitudeReady','levelCalibrated'].every(flag=>typeof data[flag]==='boolean')))
     throw Error('The A2 returned an invalid or mismatched readiness snapshot.');
    readiness={key,bootId,serialGeneration,startedAt,readAt:new Date().toISOString(),data:{
     kitId:k.kitId,bootId,firmwareVersion:data.firmwareVersion,firmwareBuiltAt:k.firmwareBuiltAt||null,
-    ...Object.fromEntries(flags.map(flag=>[flag,data[flag]])),receiverFresh:data.receiverFresh,attitudeReady:data.attitudeReady,levelCalibrated:data.levelCalibrated,flightModeState:data.flightModeState,setupRevision:data.setupRevision,
+    ...Object.fromEntries(flags.map(flag=>[flag,data[flag]])),receiverFresh:data.receiverFresh,attitudeReady:data.attitudeReady,levelCalibrated:data.levelCalibrated,flightModeState,setupRevision:data.setupRevision,
     blockReason:data.blockReason,softwareBlockReason:data.softwareBlockReason,flight,
     inputSource:['PPM','ANDROID','WEB'].includes(data.inputSource)?data.inputSource:'NONE',
     inputAgeMs:Number.isSafeInteger(data.inputAgeMs)&&data.inputAgeMs>=0?data.inputAgeMs:null,
@@ -576,14 +579,14 @@ if(root){
    const off=d.outputsOffAck&&!d.benchActive&&!d.escCalibrationActive&&d.flight.state!=='ARMED';
    const blocker=d.flight.authorized?d.flight.blockReason:d.blockReason;
    rows=[
-    ['Running firmware',`${d.firmwareVersion} · ${d.flightOutputEnabled?'Experimental Acro / Angle':'Bench · flight output locked'}${d.firmwareBuiltAt?' · '+d.firmwareBuiltAt:''}`,'neutral'],
+    ['Running firmware',`${d.firmwareVersion} · ${d.flightOutputEnabled?d.flight.inputScope==='LOCAL_ACRO_ANGLE'?'Experimental Acro / Angle':'Experimental PPM Rate':'Bench · flight output locked'}${d.firmwareBuiltAt?' · '+d.firmwareBuiltAt:''}`,'neutral'],
     ['Flight mode',d.flightModeState?`Saved ${d.flightModeState.saved.toUpperCase()} · Active ${d.flightModeState.active.toUpperCase()}`:'Not reported','neutral'],
     ['Angle estimator',d.attitudeReady?d.levelCalibrated?'Ready · level saved':'Ready · save Quick Level':'Not ready',d.attitudeReady&&d.levelCalibrated?'ok':'warn'],
     ['Saved setup',`${d.setupComplete?'Complete':'Incomplete'} · revision ${d.setupRevision}`,d.setupComplete?'ok':'warn'],
     ['Rate PID',d.pidSaved?'Active gains saved on FC':'Save or restore the active gains on FC',d.pidSaved?'ok':'warn'],
     ['Receiver',ppm?`${d.inputSource} fresh · ${d.inputAgeMs} ms at FC · Input ${d.inputArmed?'armed':'disarmed'}`:
      d.inputSource==='PPM'?'PPM not fresh':`Accepted source ${d.inputSource}`,ppm?'ok':'warn'],
-    ['Throttle',ppm&&d.throttleUs!==null?`${d.throttleUs} µs · ${low?'LOW':'above '+RATE_LOW_THROTTLE_US+' µs'}`:'No verified PPM throttle',low?'ok':'warn'],
+    ['Throttle',ppm&&d.throttleUs!==null?`${d.throttleUs} µs · ${low?'LOW':'above '+RATE_LOW_THROTTLE_US+' µs'}`:'No verified receiver throttle',low?'ok':'warn'],
     ['IMU / scheduler',`${d.gyroFresh?'Gyro fresh':'Gyro unavailable'} · ${d.timingHealthy?'Timing healthy':'Timing not ready'}${d.controlHz!==null?' · '+d.controlHz.toFixed(1)+' Hz':''}`,
      d.gyroFresh&&d.timingHealthy?'ok':'error'],
     ['PWM output',`${off?'OFF acknowledged':d.benchActive?'Bench active':d.escCalibrationActive?'ESC calibration active':'OFF unconfirmed'}${signal?.hz?' · '+signal.hz+' Hz':''}`,off?'ok':'warn'],
