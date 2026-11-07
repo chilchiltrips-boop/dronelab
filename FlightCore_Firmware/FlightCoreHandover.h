@@ -12,12 +12,12 @@ static bool zjHandoverDiagnosticArmReleased=false;
 static bool zjPpmDiagnosticRadioSafe(){
  return zjRcOwned&&zjRcSource=="PPM"&&!zjRcNetwork&&
   zjPpmSignalFresh(millis())&&
-  !zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed&&
+  !zjMotorSessionActive&&zjMotorOutputsDisabled()&&
   zjRcThrottle<=1050&&zjPpmAccessSafe();
 }
 static const char* zjHandoverBlocker(){
  if(zjHandoverPending)return "HANDOVER_PENDING";
- if(zjMotorSessionActive||zjMotorEnabled||zjMotorArmed)return "MOTOR_OUTPUT_ACTIVE";
+ if(zjMotorSessionActive||!zjMotorOutputsDisabled())return "MOTOR_OUTPUT_ACTIVE";
  if(zjMaintenanceActive)return "MAINTENANCE_ACTIVE";
  if(zjRcOwned&&zjRcSource!="PPM")return "OTHER_CONTROLLER_ACTIVE";
  if(zjRcThrottle>1050)return "RC_THROTTLE_HIGH";
@@ -85,7 +85,7 @@ static const char* zjPrepareRadioHandover(const String& mode,const String& curre
 }
 static bool zjRadioHandoverMayApply(){
  if(!zjHandoverPending)return zjAccessCanSwitchRadio();
- if(!zjMotorSessionActive&&!zjMotorEnabled&&!zjMotorArmed&&!zjRcInputArmed&&zjRcThrottle<=1050&&zjPpmAccessSafe())return true;
+ if(!zjMotorSessionActive&&zjMotorOutputsDisabled()&&!zjRcInputArmed&&zjRcThrottle<=1050&&zjPpmAccessSafe())return true;
  zjHandoverPending=false;zjHandoverState="FAILED";zjHandoverError="CONTROLS_CHANGED";
  zjMode=zjHandoverPreviousMode;return false; // RC stays paused; no blind resume.
 }
@@ -109,7 +109,7 @@ static String zjRadioHandoverStatus(){
   "\",\"preflightBlocker\":\""+zjHandoverBlocker()+"\",\"lastReject\":\""+zjHandoverLastReject+
   "\",\"ppmPresent\":"+(ppmFresh?"true":"false")+",\"ppmThrottleUs\":"+String(ppmFresh?zjPpmValues[zjPpmMap[2]]:0)+
   ",\"rcSource\":\""+zjRcSource+"\",\"rcInputArmed\":"+(zjRcInputArmed?"true":"false")+
-  ",\"rcThrottleUs\":"+String(zjRcThrottle)+",\"motorsDisabled\":"+(zjMotorEnabled?"false":"true")+
+  ",\"rcThrottleUs\":"+String(zjRcThrottle)+",\"motorsDisabled\":"+(zjMotorOutputsDisabled()?"true":"false")+
   ",\"motorSessionActive\":"+(zjMotorSessionActive?"true":"false")+
   ",\"diagnosticArmReleased\":"+(zjHandoverDiagnosticArmReleased?"true":"false")+"}";
 }

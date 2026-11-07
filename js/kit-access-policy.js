@@ -38,5 +38,24 @@
     !access.stationary?'Keep the Kit still; fresh IMU rates must remain below 3°/s for 500 ms.':
     'Maintenance pauses RC input only. Hardware PID and IMU calibration are not supported by this firmware.'};
  }
- root.ZebjusKitAccessPolicy={normalize,describe};
+ function flightState(value){
+  if(value?.version!==1||typeof value.enabled!=='boolean'||typeof value.authorized!=='boolean'||
+   typeof value.canArm!=='boolean'||!['DISARMED','ARMED','FAILSAFE'].includes(value.state)||
+   value.authorized&&(!value.enabled||value.state!=='ARMED')||value.canArm&&(!value.enabled||value.authorized))return null;
+  const reason=v=>typeof v==='string'&&/^[A-Z_]{1,40}$/.test(v)?v:'UNKNOWN';
+  return {version:1,enabled:value.enabled,authorized:value.authorized,canArm:value.canArm,
+   state:value.state,setupComplete:value.setupComplete===true,pidSaved:value.pidSaved===true,
+   inputScope:value.inputScope==='PPM_RATE'?'PPM_RATE':'UNSUPPORTED',
+   blockReason:reason(value.blockReason),lastArmReason:reason(value.lastArmReason)};
+ }
+ function outputLabel(kit={},now=Date.now()){
+  if(kit.connected!==true||!kit.heartbeatAt||now-kit.heartbeatAt>1500)return 'OUTPUT UNKNOWN';
+  const flight=flightState(kit.flight);
+  if(flight?.authorized&&kit.motorsArmed===true&&kit.motorsDisabled===false)return 'RATE FLIGHT ARMED';
+  if(kit.motorsDisabled===true)return flight?.state==='FAILSAFE'?'FAILSAFE • OUTPUT OFF':'OUTPUT DISABLED';
+  // A command ACK says nothing about physical rotation. Unknown ownership is
+  // never labelled BENCH, and an old observation never promises output OFF.
+  return kit.motorsDisabled===false?'OUTPUT ENABLED':'OUTPUT UNKNOWN';
+ }
+ root.ZebjusKitAccessPolicy={normalize,describe,flightState,outputLabel};
 })(globalThis);

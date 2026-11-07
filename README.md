@@ -1,5 +1,7 @@
 # ZEBJUS DroneLab
 
+The 1.7.20 source adds an explicitly imported **experimental PPM Rate** build with saved-Setup/PID gates and a single receiver ARM gesture. Standard bench releases remain flight-disabled. WebApp and Android display firmware-reported output state. See [Setup to Rate ARM](docs/A2_SETUP_RATE_FLOW.md) for build profiles, controls and remaining physical tests.
+
 ## Current releases and verification
 
 | Component | Published source metadata | Hardware/deployment status |

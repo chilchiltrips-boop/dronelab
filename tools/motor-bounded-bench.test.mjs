@@ -33,11 +33,12 @@ static uint32_t duties[4];
 static int ledc_stop(int,int channel,int){duties[channel]=0;return 0;}
 static int ledc_set_duty(int,int channel,uint32_t duty){duties[channel]=duty;return 0;}
 static int ledc_update_duty(int,int){return 0;}
+static std::atomic<bool> zjMotorPwmOffAck{true};
+static bool zjMotorDriverReady=true,zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false,zjMotorInputTest=false;
 ${watch}
 static ZjMotorSafety zjMotor;
 struct Mapping {uint16_t physicalPulse(int n,const uint16_t* p) const{return p[n];}} zjMotorConfig,zjWizardBenchConfig;
 static bool zjWizardBench=false,zjWizardCalSlider=false;
-static bool zjMotorDriverReady=true,zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false,zjMotorInputTest=false;
 static std::string zjMotorToken,zjMotorOwner;
 ${apply}
 static void begin(){zjMotor.disable();zjMotorWatchTripped=false;assert(zjMotor.prepare(clockMs,true,true,true));zjMotorApply();}

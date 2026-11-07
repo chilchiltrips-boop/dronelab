@@ -65,6 +65,7 @@ static void zjLoadFlightMode(Preferences& prefs){
 }
 static bool zjSaveFlightMode(Preferences& prefs,const String& next){
  if(next!="angle"&&next!="acro")return false;
+ if(zjMotorEnabled||zjMotorArmed)return false; // no flash writes during physical actuation
  if(next!=zjSavedFlightMode){
   if(prefs.putString("flightMode",next)!=next.length()||prefs.getString("flightMode","")!=next)return false;
   zjSavedFlightMode=next;

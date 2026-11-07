@@ -10,9 +10,10 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.19";
+constexpr const char* FW_VERSION="1.7.20";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
+static constexpr const char* ZJ_OUTPUT_BUILD=ZJ_FLIGHT_OUTPUT_ENABLED?"ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL":"ZJ_OUTPUT=BENCH_DIAGNOSTIC";
 static constexpr char ZJ_BUILD_STAMP[]="ZJ_BUILD_UTC=" __DATE__ " " __TIME__;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 constexpr uint8_t BUS_SDA=22,BUS_SCL=23; // XIAO ESP32-C6 D4/D5
@@ -53,6 +54,7 @@ void printFirmwareInfo(){
  Serial.print(FW_VERSION);Serial.print(',');Serial.print(__DATE__);Serial.print(',');
  Serial.print(__TIME__);Serial.print(',');Serial.println(FC_LABEL);
  Serial.println(ZJ_BUILD_STAMP);
+ Serial.println(ZJ_OUTPUT_BUILD);
  Serial.print("ZJI2C,PINS,");Serial.print(FC_BOARD);Serial.print(',');
  Serial.print(activeSda);Serial.print(',');Serial.print(activeScl);Serial.print(",0x");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -411,6 +413,7 @@ static bool zjAccessStationary(){
  if(!zjStationarySince)zjStationarySince=now;
  return uint32_t(now-zjStationarySince)>=500;
 }
+static String zjFlightStatusJson();
 static String zjFlightReadinessJson(); // read-only A2 snapshot; no flight ARM or PWM operation
 #include "FlightCoreNetwork.h"
 static String zjControlRadio(){return WiFi.status()==WL_CONNECTED?String("STA"):zjApStarted?String("AP"):String("");}
@@ -467,35 +470,64 @@ static ZjFlightConditions zjFlightMainConditions(){
   zjOtaAuthorized||zjSecureOtaActive||zjOtaRebootAt||zjImuMaintenanceBusy();
  conditions.wiringVerified=zjPidLayoutMatches(ZJ_PID_PROFILES[zjPidActive.profile].plus)&&
   zjWizardRecordVerified&&!zjPidStorageCorrupt&&!zjPidStorageUncertain;
- if(flight||ZJ_FLIGHT_HARDWARE_QUALIFIED)
+ if(flight||ZJ_FLIGHT_OUTPUT_ENABLED)
   for(unsigned n=0;n<4;n++)conditions.wiringVerified=conditions.wiringVerified&&zjMotorConfig.rotation[n]==n%2;
  conditions.driverReady=zjMotorDriverReady;
- // Explicit operator-saved ESC confirmation, not merely a completed HIGH/LOW timer.
+ conditions.setupComplete=zjWizardSetupComplete();
+ conditions.pidSaved=zjPidSettings.persisted&&!zjPidPreview&&zjPidSame(zjPidActive,zjPidSettings);
+ conditions.escSequenceComplete=zjAutoEscStoredResult();
+ // Existing Wizard records supply ESC readiness; PWM cannot detect endpoint acceptance.
  conditions.escOperatorConfirmed=zjMotorCalibrationSaved&&zjWizardRecordVerified;
  return conditions;
 }
 #endif
 #if defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZJ_TIMING_SYNCHRONOUS_TEST)
+// Common status for WebApp/Android. It reads firmware state, never claims an
+// output lease. Setup completion and readiness survive disarm independently.
+static ZjFlightConditions zjFlightObservedConditions(){
+ auto c=zjFlightMainConditions();
+ const auto imu=zjReadImu(millis());const auto control=zjReadControl();
+ const auto driver=zjFlightDriverRead();const uint32_t at=micros();
+ c.nowMs=millis();c.inputDeadlineMs=ZJ_PPM_LOST_MS;
+ c.imuFresh=imu.gyroReady&&imu.sample.fresh(at,12000)&&
+  std::isfinite(imu.RateRoll)&&std::isfinite(imu.RatePitch)&&std::isfinite(imu.RateYaw);
+ c.timingHealthy=zjControlRuntimeReady&&control.healthy(at)&&control.intervalUs>=1000&&control.intervalUs<=8000;
+ c.outputOffAck=driver.offAck&&!driver.lease;
+ return c;
+}
+static String zjFlightStatusJson(){
+ auto c=zjFlightObservedConditions();
+ const auto driver=zjFlightDriverRead();
+ portENTER_CRITICAL(&zjTimingMux);
+ const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reason;
+ portEXIT_CRITICAL(&zjTimingMux);
+ const bool authorized=driver.lease&&state==ZjFlightState::ARMED;
+ // Pre-arm readiness should be useful BEFORE the operator performs ARM.
+ c.input.inputArmed=true;
+ ZjFlightOutputGate preflight;
+ const bool ready=preflight.arm(c,ZJ_FLIGHT_OUTPUT_ENABLED,true);
+ const auto block=authorized?ZjFlightFault::NONE:preflight.reason;
+ return String("{\"version\":1,\"enabled\":")+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+
+  ",\"qualified\":false,\"physicalAcceptance\":\"NOT_RUN\",\"inputScope\":\"PPM_RATE\""+
+  ",\"setupComplete\":"+(c.setupComplete?"true":"false")+",\"pidSaved\":"+(c.pidSaved?"true":"false")+
+  ",\"authorized\":"+(authorized?"true":"false")+",\"canArm\":"+(!authorized&&ready?"true":"false")+
+  ",\"state\":"+zjJson(authorized?"ARMED":state==ZjFlightState::FAILSAFE?"FAILSAFE":"DISARMED")+
+  ",\"blockReason\":"+zjJson(zjFlightFaultName(block))+",\"lastArmReason\":"+zjJson(zjFlightFaultName(reason))+"}";
+}
 // A2 read-only Acro preflight. All motor corrections are *mathematical predictions*.
 // It never claims a lease, arms, changes throttle, or writes PWM.
 static String zjFlightReadinessJson(){
- auto c=zjFlightMainConditions();
+ auto c=zjFlightObservedConditions();
  const auto imu=zjReadImu(millis());
  const auto control=zjReadControl();
  const auto shadow=zjReadRateShadow();
  const auto driver=zjFlightDriverRead();
  const uint32_t at=micros();
- c.nowMs=millis();
- c.inputDeadlineMs=c.input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
- c.imuFresh=imu.gyroReady&&imu.sample.fresh(at,12000)&&
-  std::isfinite(imu.RateRoll)&&std::isfinite(imu.RatePitch)&&std::isfinite(imu.RateYaw);
- c.timingHealthy=zjControlRuntimeReady&&control.healthy(at)&&
-  control.intervalUs>=1000&&control.intervalUs<=8000;
- c.outputOffAck=driver.offAck&&!driver.lease;
  const bool receiverFresh=c.input.source==ZjReceiverSource::PPM&&c.input.fresh(c.nowMs,ZJ_PPM_LOST_MS);
  // Evaluate each software precondition without claiming hardware qualification.
  // This is a checklist; a green software check is NEVER physical-flight approval.
- const auto softwareFault=ZjFlightOutputGate{}.fault(c,true);
+ auto prearm=c;prearm.input.inputArmed=true;
+ const auto softwareFault=ZjFlightOutputGate{}.fault(prearm,true);
  const char* softwareBlock=zjFlightFaultName(softwareFault);
  if(softwareFault==ZjFlightFault::NONE){
   if(!zjFlightLowThrottle(c.input.channels[2]))softwareBlock="THROTTLE_HIGH";
@@ -503,7 +535,7 @@ static String zjFlightReadinessJson(){
   else softwareBlock="NONE";
  }
  const auto gyroFresh=c.imuFresh;
- const bool readyForAnyFlight=ZJ_FLIGHT_HARDWARE_QUALIFIED&&softwareFault==ZjFlightFault::NONE&&
+ const bool readyForAnyFlight=ZJ_FLIGHT_OUTPUT_ENABLED&&softwareFault==ZjFlightFault::NONE&&
   zjFlightLowThrottle(c.input.channels[2])&&c.outputOffAck;
  // P-only 1500us fixed-reference geometry prediction, NOT a dynamic PID output
  // and NEVER a real ESC request. Body rotation sign must be physically checked.
@@ -518,10 +550,11 @@ static String zjFlightReadinessJson(){
  out=String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"kitId\":")+zjJson(zjKitId)+
   ",\"bootId\":"+zjJson(zjBootId)+",\"firmwareVersion\":"+zjJson(FW_VERSION)+
   ",\"board\":"+zjJson(FC_BOARD)+",\"flightQualified\":"+(ZJ_FLIGHT_HARDWARE_QUALIFIED?"true":"false")+
+  ",\"flightOutputEnabled\":"+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+",\"flight\":"+zjFlightStatusJson()+
   ",\"physicalAcceptance\":\"NOT_RUN\",\"setupComplete\":"+(zjWizardSetupComplete()?"true":"false")+
   ",\"setupRevision\":"+String(zjWizardSaved.revision)+",\"flightOutputAuthorized\":"+(shadow.outputAuthorized?"true":"false")+
   ",\"controlActuating\":"+(shadow.actuating?"true":"false")+
-  ",\"blockReason\":"+zjJson(ZJ_FLIGHT_HARDWARE_QUALIFIED?softwareBlock:"UNQUALIFIED")+
+  ",\"blockReason\":"+zjJson(ZJ_FLIGHT_OUTPUT_ENABLED?softwareBlock:"UNQUALIFIED")+
   ",\"softwareBlockReason\":"+zjJson(softwareBlock)+
   ",\"acroSelected\":"+(c.acro?"true":"false")+
   ",\"inputArmed\":"+(c.input.inputArmed?"true":"false")+
@@ -529,6 +562,8 @@ static String zjFlightReadinessJson(){
   ",\"gyroFresh\":"+(gyroFresh?"true":"false")+
   ",\"wiringVerified\":"+(c.wiringVerified?"true":"false")+
   ",\"escOperatorConfirmed\":"+(c.escOperatorConfirmed?"true":"false")+
+  ",\"escSequenceComplete\":"+(c.escSequenceComplete?"true":"false")+
+  ",\"pidSaved\":"+(c.pidSaved?"true":"false")+
   ",\"driverReady\":"+(c.driverReady?"true":"false")+
   ",\"timingHealthy\":"+(c.timingHealthy?"true":"false")+
   ",\"outputsOffAck\":"+(c.outputOffAck?"true":"false")+
@@ -565,6 +600,7 @@ static String zjFlightReadinessJson(){
  return out;
 }
 #else
+static String zjFlightStatusJson(){return "{\"version\":1,\"enabled\":false,\"qualified\":false,\"authorized\":false,\"canArm\":false,\"state\":\"DISARMED\",\"blockReason\":\"UNSUPPORTED_A2_ONLY\"}";}
 static String zjFlightReadinessJson(){
  return String("{\"schema\":1,\"mode\":\"ACRO_READINESS\",\"board\":")+zjJson(FC_BOARD)+
   ",\"flightQualified\":false,\"canArm\":false,\"blockReason\":\"UNSUPPORTED_A2_ONLY\"}";

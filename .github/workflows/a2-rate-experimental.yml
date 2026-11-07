@@ -1,0 +1,48 @@
+name: A2 Setup and Experimental Rate Candidate
+on:
+  pull_request:
+    paths: ['FlightCore_Firmware/**', 'tools/**', 'VERSION.txt', '.github/workflows/a2-rate-experimental.yml']
+  push:
+    branches: [fix/a2-setup-arm-flow-20261107]
+    paths: ['FlightCore_Firmware/**', 'tools/**', 'VERSION.txt', '.github/workflows/a2-rate-experimental.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: a2-rate-candidate-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Compile and verify ordinary A1 and A2 bench firmware
+        run: |
+          python3 tools/build_scanner.py
+          python3 tools/verify_release.py
+          python3 tools/bench_release_gate.py --compiled
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flightcore-1.7.20-bench-${{ github.sha }}
+          path: |
+            FlightCore_Firmware/*_APP.bin
+            FlightCore_Firmware/*_FACTORY.bin
+            FlightCore_Firmware/build-report.json
+            FlightCore_Firmware/catalog.json
+          if-no-files-found: error
+      - name: Compile and verify explicit experimental PPM Rate output candidate
+        run: |
+          python3 tools/build_scanner.py --skip-core-install --board ZFC-A2 --experimental-rate-flight --output-dir "$RUNNER_TEMP/a2-rate-experimental"
+          python3 tools/verify_experimental_rate.py "$RUNNER_TEMP/a2-rate-experimental"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: a2-1.7.20-PPM-RATE-EXPERIMENTAL-${{ github.sha }}
+          path: ${{ runner.temp }}/a2-rate-experimental/
+          if-no-files-found: error
