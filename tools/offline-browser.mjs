@@ -24,7 +24,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('pythonInlinePlot').naturalWidth>10,null,{timeout:120000});
  await page.waitForFunction(async path=>!!await caches.match(new URL(path,location.href)),firmwareUrl,{timeout:30000});
  await ctx.setOffline(true);await page.goto(base+'#firmware');await page.locator('#tab-firmware.active').waitFor();
- await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A1_APP.bin'),null,{timeout:30000});
+ await page.waitForFunction(()=>document.getElementById('fwFileName').textContent.includes('A2_APP.bin'),null,{timeout:30000});
  const fw=await page.evaluate(async path=>{const r=await fetch(path);return {ok:r.ok,bytes:(await r.arrayBuffer()).byteLength}},firmwareUrl);
  if(!fw.ok||fw.bytes!==a2Factory.size)throw Error('Offline firmware mismatch '+JSON.stringify(fw));
  await page.locator('[data-tab=python]').click();await page.locator('#pythonMonaco .monaco-editor').waitFor({state:'visible',timeout:30000});

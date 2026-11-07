@@ -283,7 +283,11 @@ async function targetBoardId(updateUi=true){
  if(!id&&manual!=='auto'&&boardById(manual)){id=manual;source='Manual selection'}
  if(!id&&expectedUsbBoard()){id=expectedUsbBoard();source='USB hardware / firmware auto-detect'}
  if(!id){const info=await onlineBoardInfo();if(info?.boardId){id=info.boardId;source='Online kit auto-detect'}}
- if(!id){id=catalog.defaultBoardId;source='Default profile'}
+ if(!id){
+  // With no verified Kit or manual selection, prefer the active A2 board.
+  id=boardById('ZFC-A2')?.id||catalog.defaultBoardId;
+  source='Default profile';
+ }
  if(updateUi){
   text('#fwDetectedBoard',boardName(id));text('#fwBoardSource',source);
   const release=releaseForBoard(id),pkg=release?.[$('#fwImageType')?.value||'app'];

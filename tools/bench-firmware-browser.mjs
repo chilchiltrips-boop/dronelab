@@ -19,8 +19,12 @@ const showing=async (id,label)=>field(id).filter({hasText:label}).waitFor({state
 try{
  await page.goto('http://127.0.0.1:8765/index.html#firmware',{waitUntil:'domcontentloaded'});
  await page.locator('[data-dw-view="firmware"]').click();
- // Default to A1 published package until an A2 board is selected.
- await showing('fwFileVersion',published.version);
+ // Reproduce an unconnected browser with Board profile left on Auto.
+ assert.equal(await field('fwBoardProfile').inputValue(),'auto');
+ await showing('fwBuildId',release.app.buildId);
+ const a1=published.boards.find(board=>board.id==='ZFC-A1');
+ await field('fwBoardProfile').selectOption(a1.id);
+ await showing('fwBuildId',a1.latest.app.buildId);
  await field('fwBoardProfile').selectOption('ZFC-A2');
  await showing('fwFileVersion',version);
  await showing('fwBuildId',release.app.buildId);
@@ -61,9 +65,7 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true}})));
  await showing('fwFileVersion',published.version);
  await page.evaluate(()=>{window.ZebjusKits.getState=window.restoreBenchKit;});
- // Re-select the offline A2 board: without a connected Kit, Auto detection
- // intentionally falls back to the published A1 default rather than guessing.
- await field('fwBoardProfile').selectOption('ZFC-A2');
+ await field('fwBoardProfile').selectOption('auto');
  await showing('fwFileVersion',version);
  await field('fwAutoLoadBtn').click();
  await showing('fwFileVersion',version);
@@ -83,5 +85,5 @@ try{
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  assert.deepEqual(writes,[]);
  assert.deepEqual(errors,[]);
- console.log(`PASS A2 defaults to verified ${version} bench, A1 published fallback, explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
+ console.log(`PASS offline Auto loads A2 ${version} bench, manual A1 and explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
 }finally{await browser.close();}
