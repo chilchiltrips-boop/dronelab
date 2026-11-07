@@ -1,5 +1,5 @@
 {
-  "version": "1.62",
+  "version": "1.63",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -16,7 +16,7 @@
     "Flight Data places the primary instruments above 3D and System Health beside a full-height offline map, with verified telemetry details. Setup Wizard Report checks flight readiness.",
     "Firmware Flash can explicitly load the verified A2 1.7.20 Experimental PPM Rate APP or Factory image. Physical acceptance remains pending."
   ],
-  "buildCommit": "d29284d527c2",
-  "publishedAt": "2026-11-07T14:43:32.145918+00:00",
-  "buildNumber": 495
+  "buildCommit": "d177c404e5d6",
+  "publishedAt": "2026-11-07T15:48:15.439633+00:00",
+  "buildNumber": 496
 }
