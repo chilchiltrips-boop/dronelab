@@ -402,8 +402,10 @@ try{
     window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line:'ZJFLIGHT,STATUS,'+JSON.stringify(f.readinessResponse())}}));
    }
   }};
+  // Click before the next Wizard poll can observe the new transport.
+  document.querySelector('[data-action="read-readiness"]').click();
  });
- await readStatus();await expectText('.a2-readiness-status','· USB');
+ await expectText('.a2-readiness-status','· USB');
  await expectText(readiness,'UNQUALIFIED');
  assert.deepEqual(await fixture(()=>__wizard.usbLines.filter(line=>line.startsWith('ZJFLIGHT'))),['ZJFLIGHT,STATUS\n']);
  await fixture(()=>{

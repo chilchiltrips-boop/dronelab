@@ -499,6 +499,9 @@ if(root){
   });
  }
  async function readFlightReadiness(){
+  // Adopt a transport or boot transition before capturing this read's binding.
+  // A click can arrive before the next periodic Wizard render.
+  refreshIdentity();
   const k=kit(),bootId=verifiedBoot(k),key=kitIdentity(k),run=operation;
   const serial=window.DroneLabSerial,usb=k.transport==='usb',serialGeneration=usb?serial?.generation?.():null;
   if(readingReadiness||working||motorClient.busy||!live()||step!==REPORT||!readinessPath(k))return;
