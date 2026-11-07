@@ -158,7 +158,7 @@ export function buildFlightData(kit = {}, now = Date.now()) {
       imuObservedAt: compact.observedAt, imuSampleObservedAt: raw.sampleObservedAt,
       imuSampleAgeAtObservationMs: compact.ageUs / 1000,
       imuTimingObservedAt: compact.observedAt, outputObservedAt: compact.observedAt,
-      motorsDisabled: compact.offAck, motorsArmed: compact.owner === 2,
+      motorsDisabled: compact.offAck, motorsArmed: compact.owner === 2 || compact.owner === 3 && compact.authorized,
       flight: {...kit.flight, state: compact.state, authorized: compact.authorized, lastArmReason: compact.reason},
       flightMode: compact.flightModeState.active, flightModeState: compact.flightModeState};
   }

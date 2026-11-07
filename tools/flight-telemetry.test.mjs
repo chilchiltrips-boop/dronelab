@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
 import '../js/flight-telemetry.js';
+import '../js/kit-access-policy.js';
 import {buildFlightData,appendFlightSample} from '../js/flight-data-model.js';
 const {normalize}=globalThis.ZebjusFlightTelemetry;
 const binding={kitId:'ZFC-A2-012345ABCDEF',bootId:'a'.repeat(32),connectionGeneration:1,transport:'sta'};
@@ -45,6 +48,22 @@ test('compact output fault and saved pending mode appear immediately, without au
  const data=buildFlightData(k,1050);
  assert.equal(data.health.output.state,'error');assert.equal(data.modeState.pending,'angle');
  assert.equal(k.motorsDisabled,undefined); // presentation never mutates Kit authorization
+});
+test('compact FLIGHT owner remains armed in WebApp and Android while BENCH remains separate',()=>{
+ const k=kit('ap');Object.assign(k.flightTelemetry,{owner:3,authorized:true,offAck:false,state:'ARMED',applied:[1000,1000,1000,1000]});
+ k.flight={version:1,enabled:true,authorized:false,canArm:false,state:'DISARMED'};
+ const data=buildFlightData(k,1050);
+ assert.equal(data.output.armed,true);assert.equal(data.health.output.label,'Angle flight armed');
+ const source=readFileSync('companion-network.js','utf8');
+ const getter=source.slice(source.indexOf('function getState(){'),source.indexOf('function selectedInputAllowsAndroid()'));
+ const context=vm.createContext({flightTelemetry:k.flightTelemetry,verifiedKitId:k.kitId,kitSnapshot:k,linkEpoch:1,link:'ap',
+  online:true,onKitLink:true,controlLinkFresh:()=>true,window:{ZebjusKitAccessPolicy:globalThis.ZebjusKitAccessPolicy},
+  rcSession:'active',controlAuthorized:true,connecting:false,controlPathBusy:false,otaBusy:false,kitSnapshotAt:1000,
+  lastStatus:1000,statusFailures:0,Date:{now:()=>1050}});
+ const current=vm.runInContext(getter+';getState()',context);
+ assert.equal(current.motorsArmed,true);
+ assert.equal(globalThis.ZebjusKitAccessPolicy.outputLabel(current,1050),'ANGLE FLIGHT ARMED');
+ assert.equal(k.motorsArmed,undefined,'presentation must not mutate authorization state');
 });
 test('ten Hz rate chart retains a full sixty-second history, bounded to 1200 points',()=>{
  let history=[];

@@ -1,6 +1,6 @@
 /* Native Android-to-FlightCore AP/STA input transport.
- * Physical output state comes only from signed FC status. The experimental
- * Rate flight path is PPM-only; Android input ARM remains diagnostic. */
+ * Physical output state comes only from signed FC status. Experimental local
+ * Android AP input ARM requests the independently gated Acro/Angle flight path. */
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
@@ -19,7 +19,7 @@ function getState(){
  const fresh=flightTelemetry&&flightTelemetry.kitId===verifiedKitId&&flightTelemetry.bootId===kitSnapshot.bootId&&
   flightTelemetry.generation===linkEpoch&&flightTelemetry.transport===link&&Date.now()-flightTelemetry.observedAt<500;
  const compact=fresh?{flightTelemetry,outputObservedAt:flightTelemetry.observedAt,
-  motorsDisabled:flightTelemetry.offAck,motorsArmed:flightTelemetry.owner===2,
+  motorsDisabled:flightTelemetry.offAck,motorsArmed:flightTelemetry.owner===2||flightTelemetry.owner===3&&flightTelemetry.authorized,
   flight:{...kitSnapshot.flight,state:flightTelemetry.state,authorized:flightTelemetry.authorized,lastArmReason:flightTelemetry.reason},
   flightModeState:flightTelemetry.flightModeState}:{};
  return {...kitSnapshot,...compact,rcAccess:window.ZebjusKitAccessPolicy?.normalize?.(kitSnapshot.rcAccess)||null,
@@ -847,9 +847,18 @@ async function armControls(){
  if(!canArm())throw Error(inputArmSupported?'Verify Kit control permission first':'Update FlightCore firmware for direct ARM');
  if(rcSession)await releaseRc();
  await claimRc();
- rcInputArmed=true;
+ const session=rcSession,epoch=rcEpoch;
+ const neutral={throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'};
  try{
-  await previewControls({throttle:1000,axes:{roll:0,pitch:0,yaw:0},responseMode:'Medium'},true);
+  // HTTP must establish a fresh DISARM frame in this ownership generation.
+  // Native UDP sends its bounded neutral prefix before transmitting ARM.
+  if(!udpActive){
+   await previewControls(neutral,true);
+   if(session!==rcSession||epoch!==rcEpoch||!firmwareAck||firmwareAck.inputArmed!==false)
+    throw Error('Kit did not acknowledge disarmed input before ARM');
+  }
+  rcInputArmed=true;
+  await previewControls(neutral,true);
   if(!rcInputArmed||!apStreaming()&&!firmwareAck?.inputArmed)throw Error('Kit did not acknowledge ARM');
  }catch(error){await releaseRc();throw error;}
  return firmwareAck;
@@ -892,7 +901,7 @@ function previewControls(m,critical=false){
   throttle:Math.max(1000,Math.min(2000,Math.round(m.throttle))),roll:clamp(m.axes.roll),pitch:clamp(m.axes.pitch),yaw:clamp(m.axes.yaw)})
  .then(d=>{
   if(session!==rcSession||epoch!==rcEpoch)return;
-  if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||rcInputArmed&&d.inputArmed!==true)throw Error('Invalid firmware receive ACK');
+  if(!d.received||d.kitId!==verifiedKitId||d.seq!==frameSeq||d.inputArmed!==rcInputArmed)throw Error('Invalid firmware receive ACK');
   lastStatus=Date.now();statusFailures=0;
   firmwareAck={seq:d.seq,at:Date.now(),rtt:Math.round(performance.now()-at),inputArmed:d.inputArmed===true};
   trace('rc_ack',{transport:link,source:'ANDROID',seq:d.seq,roundTripMs:firmwareAck.rtt,

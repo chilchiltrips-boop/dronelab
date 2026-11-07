@@ -43,6 +43,12 @@ loops and mixer feedback and requests 1000 µs while armed. DISARM, STOP, source
 loss, stale IMU, deadline fault or failed driver update turn PWM OFF. A failed ARM
 attempt is consumed: holding ARM cannot re-enable outputs after recovery.
 
+Android HTTP confirms a neutral disarmed frame before its armed frame. Native
+UDP starts each new claim with three neutral disarmed sequences (40 ms span),
+then sends the latest explicitly requested ARM. If all neutral frames are lost,
+the FC cannot see a fresh edge and remains disarmed; repeat an explicit ARM
+attempt. Missing feedback never counts as confirmed physical ARM.
+
 ## Setup Wizard and inputs
 
 The existing Inputs step now has source and saved flight-mode selectors. Saving
@@ -105,3 +111,22 @@ modes, PWM frequency/pulse widths, output OFF response, receiver/native Android
 loss, and fresh-arm recovery. Verify loaded build ID/hash and saved mode before
 powered testing. Preserve the published/bench rollback images. Physical evidence
 must identify the tested artifact; setup completion alone cannot certify flight.
+
+## Downloadable 1.7.21 candidate
+
+Firmware Center's **Load 1.7.21 Acro + Angle** action selects the separately
+verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
+The 1.7.15 published images and 1.7.20 experimental download URLs remain intact.
+
+- Compiled source: `6c668b7f22530b5d0374373bdec18e6909931688`
+- Build workflow: [42410735204](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42410735204)
+- APP build ID: `1.7.21-ZFC-A2-32d3a756696d`
+- APP SHA-256: `32d3a756696d4c89b53c78bda265323753c83e21f0be1a710d68eae52f4cda0b`
+- APP: 1,366,464 bytes; Factory: 4,194,304 bytes; both exact hashes verified.
+- Experimental compile: 69% of APP slot; globals 133,000 bytes (40%), before dynamic task/heap allocation.
+- Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
+
+Host regression, source/asset validation, Wizard/PID/Android control browsers,
+16-width layout checks and actual binary import/download tests are software
+evidence only. The acceptance ledger adds Angle level/reboot, correction signs,
+compact telemetry latency and Android Angle loss cases; it does not mark them PASS.
