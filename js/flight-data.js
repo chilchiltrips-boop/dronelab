@@ -101,7 +101,10 @@ function refreshVisibility() {
       vehicle = createFlightDataVehicle(byId('vehicle'));
     }
     render();
-    timer = window.setInterval(render, 250);
+    timer = window.setInterval(() => {
+      render();
+      void window.ZebjusKits?.observeFlightData?.();
+    }, 250);
   } else if (!visible && timer) {
     window.clearInterval(timer);
     timer = undefined;

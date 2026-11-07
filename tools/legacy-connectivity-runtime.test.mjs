@@ -620,6 +620,34 @@ test('a verified new Kit boot resets the RC sequence baseline instead of rejecti
  }finally{f.dispose();}
 });
 
+test('Flight Data refreshes verified disarmed status faster only on the active cockpit',async()=>{
+ const f=fixture({exclusive:true});try{
+  const disarmed={version:1,enabled:true,authorized:false,canArm:false,state:'DISARMED'};
+  f.status({flight:disarmed,motorsArmed:false,motorsDisabled:true});
+  await f.api.connect();
+  assert.equal(f.api.getState().flight?.state,'DISARMED');
+  const reads=()=>f.requests.filter(r=>r.route==='/api/status').length;
+  const before=reads();
+  f.advance(749);await f.api.observeFlightData();
+  assert.equal(reads(),before);
+  f.advance(1);await Promise.all([f.api.observeFlightData(),f.api.observeFlightData()]);
+  assert.equal(reads(),before+1,'concurrent cockpit ticks share the status read');
+  f.elements.get('tab-telemetry').classList.contains=()=>false;
+  f.advance(750);await f.api.observeFlightData();
+  assert.equal(reads(),before+1,'other tabs do not poll at the cockpit cadence');
+  f.elements.get('tab-telemetry').classList.contains=()=>true;
+  f.status({motorsArmed:true,motorsDisabled:false});await f.api.read();
+  const armedReads=reads();
+  f.advance(750);await f.api.observeFlightData();
+  assert.equal(reads(),armedReads,'active motor output does not get additional polling');
+  f.status({motorsArmed:false,motorsDisabled:true,rc:{source:'PPM',claimed:true,active:true,inputArmed:true}});
+  await f.api.read();
+  const controlReads=reads();
+  f.advance(750);await f.api.observeFlightData();
+  assert.equal(reads(),controlReads,'active receiver does not get additional polling');
+ }finally{f.dispose();}
+});
+
 test('PPM loss and reacquisition between polls immediately adopts the new sequence',async()=>{
  const f=fixture({exclusive:true});try{
   const rc={kitId:id,source:'PPM',ownerId:'PPM',claimed:true,active:true,inputValid:true,seq:16000,accepted:18000,ageMs:25,inputArmed:false,throttle:1000};

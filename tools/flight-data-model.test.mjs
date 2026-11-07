@@ -36,6 +36,7 @@ test('verified A2 status keeps diagnostic arm, output, qualification and physica
   assert.deepEqual(data.rates, [0, 0.2, -0.1]);
   assert.deepEqual(data.accel, [0, 0, 1]);
   assert.equal(data.tilt.roll, 0);
+  assert.equal(data.tilt.stationary, true);
   assert.equal(Math.abs(data.tilt.pitch), 0);
   assert.equal(data.imuAgeMs, 54);
   assert.equal(data.rc.inputArmed, true);
@@ -66,12 +67,10 @@ test('offline, unverified and retired boards expose no prior flight data', () =>
   }
 });
 
-test('tilt requires a current gyro sample, a valid gravity magnitude and firmware stationary state', () => {
+test('tilt requires a current gyro sample and a plausible gravity magnitude', () => {
   const fixture = connected();
   for (const overrides of [
     {imu: {...fixture.imu, accelG: [1, 1, 1]}},
-    {imu: {...fixture.imu, corrected: [3, 0, 0]}},
-    {rcAccess: {...fixture.rcAccess, stationary: false}},
     {imuSampleAgeAtObservationMs: 13},
     {imuSampleObservedAt: now + 1},
     {imuSampleObservedAt: now - 4000},
@@ -85,6 +84,38 @@ test('tilt requires a current gyro sample, a valid gravity magnitude and firmwar
   assert.equal(Math.abs(tilted.tilt.pitch), 0);
 });
 
+test('motion tilt follows disarmed AP/STA samples even with no active PPM input', () => {
+  const fixture = connected();
+  const overrides = {
+    rcAccess: {...fixture.rcAccess, stationary: false},
+    ppm: {present: false},
+    rc: {source: 'NONE', active: false, inputArmed: false},
+    imu: {...fixture.imu, accelG: [-0.8525, -0.3031, 0.4497], corrected: [4.6491, -2.7708, 1.5083]}
+  };
+  for (const transport of ['sta', 'ap']) {
+    const data = buildFlightData(connected({...overrides, transport}), now);
+    assert.equal(data.rc.state, 'waiting');
+    assert.equal(data.tilt.stationary, false);
+    assert.ok(Math.abs(data.tilt.roll + 34) < 0.1);
+    assert.ok(Math.abs(data.tilt.pitch - 57.5) < 0.1);
+  }
+  // A current moving frame takes precedence over the maintenance quiet flag.
+  const moving = buildFlightData(connected({...overrides, rcAccess: fixture.rcAccess}), now);
+  assert.equal(moving.tilt.stationary, false);
+});
+
+test('motion tilt rejects stale output, armed outputs and non-direct transports', () => {
+  const fixture = connected();
+  const moving = {imu: {...fixture.imu, accelG: [0, 0.6, 0.8], corrected: [7, 0, 0]}};
+  for (const overrides of [
+    {transport: 'usb'}, {transport: 'android-relay'}, {linkState: 'delayed'},
+    {outputObservedAt: now - 3200}, {motorsDisabled: false}, {motorsArmed: true}, {flight: null},
+    {flight: {...fixture.flight, state: 'ARMED', authorized: true}}
+  ]) {
+    assert.equal(buildFlightData(connected({...moving, ...overrides}), now).tilt, null);
+  }
+});
+
 test('delay keeps the last source label and expires data, without reporting a PPM failsafe', () => {
   const kit = connected();
   const normalCadence = buildFlightData(kit, now + 2200);
@@ -92,9 +123,9 @@ test('delay keeps the last source label and expires data, without reporting a PP
   assert.equal(normalCadence.rc.ageMs, 2265);
   assert.equal(normalCadence.rc.boardAgeMs, 15);
   assert.equal(normalCadence.output.disabled, true);
-  assert.equal(normalCadence.output.fresh, false);
-  assert.match(normalCadence.output.label, /Last observed/);
-  assert.equal(normalCadence.health.output.state, 'warning');
+  assert.equal(normalCadence.output.fresh, true);
+  assert.equal(normalCadence.output.label, 'Output disabled');
+  assert.equal(normalCadence.health.output.state, 'good');
   const recentDelay = buildFlightData(kit, now + 2800);
   assert.equal(recentDelay.rc.source, 'PPM');
   assert.equal(recentDelay.rc.state, 'delayed');
@@ -110,6 +141,26 @@ test('delay keeps the last source label and expires data, without reporting a PP
   assert.equal(stale.output.disabled, null);
 });
 
+test('output display covers the network poll cycle and distinguishes delayed status from a reported fault', () => {
+  const kit = connected();
+  const delayed = buildFlightData(kit, now + 3000);
+  assert.equal(delayed.output.fresh, false);
+  assert.match(delayed.output.label, /Last observed · Output disabled/);
+  assert.equal(delayed.health.output.state, 'warning');
+  const linkDelayed = buildFlightData({...kit, linkState: 'delayed'}, now);
+  assert.equal(linkDelayed.output.fresh, false);
+  assert.equal(linkDelayed.health.output.state, 'warning');
+
+  const failsafe = {...kit, flight: {...kit.flight, state: 'FAILSAFE', lastArmReason: 'IMU_STALE'}};
+  assert.equal(buildFlightData(failsafe, now).health.output.state, 'error');
+  const delayedFailsafe = buildFlightData(failsafe, now + 3000);
+  assert.equal(delayedFailsafe.output.fresh, false);
+  assert.equal(delayedFailsafe.health.output.state, 'error');
+  assert.match(delayedFailsafe.output.label, /Last observed · Failsafe/);
+  assert.match(delayedFailsafe.health.output.detail, /IMU_STALE/);
+  assert.equal(buildFlightData(failsafe, now + 3500).health.output.state, 'unknown');
+});
+
 test('only explicit reported loss makes missing PPM red, and recovery replaces it', () => {
   const absent = {rc: {source: 'NONE', active: false}, ppm: {present: false}};
   const waiting = buildFlightData(connected(absent), now);
@@ -122,6 +173,20 @@ test('only explicit reported loss makes missing PPM red, and recovery replaces i
   const recovered = buildFlightData(connected(), now);
   assert.equal(recovered.health.input.state, 'good');
   assert.equal(recovered.rc.state, 'fresh');
+});
+
+test('AUTO with no PPM frames displays waiting without a receiver fault or output warning', () => {
+  const kit = connected();
+  const data = buildFlightData(connected({
+    rcAccess: {...kit.rcAccess, controlPath: 'AUTO'},
+    rc: {source: 'NONE', claimed: false, active: false, inputArmed: false, failsafe: true, lastReleaseReason: 'NONE'},
+    ppm: {present: false}
+  }), now);
+  assert.equal(data.rc.state, 'waiting');
+  assert.equal(data.rc.channels, null);
+  assert.equal(data.health.input.label, 'PPM no signal');
+  assert.equal(data.health.input.state, 'warning');
+  assert.equal(data.health.output.state, 'good');
 });
 
 test('IMU, deadline, and flight failsafe use reported faults and never invent values', () => {
@@ -166,6 +231,9 @@ test('USB rates are available without tilt or driver OFF ACK, and bench status u
   const bench = buildFlightData({...usb, usbStatus: {kitId, rc: {...usb.usbStatus.rc, motorsDisabled: false}}}, now);
   assert.equal(bench.output.disabled, null);
   assert.match(bench.output.label, /Bench output active/);
+  const delayedBench = buildFlightData({...usb, usbStatus: {kitId, rc: {...usb.usbStatus.rc, motorsDisabled: false}}}, now + 1500);
+  assert.equal(delayedBench.output.fresh, false);
+  assert.match(delayedBench.output.label, /Last observed · Bench output active/);
   // Timing reports must not renew old measured gyro rates.
   const stale = buildFlightData({...usb, imuSampleObservedAt: now - 3000}, now);
   assert.equal(stale.rates, null);

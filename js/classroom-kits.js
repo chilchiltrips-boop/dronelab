@@ -717,6 +717,22 @@ function read(){
  if(statusPending)return statusPending;
  statusPending=readStatus().finally(()=>{statusPending=null});return statusPending;
 }
+let nextFlightDataReadAt=0;
+async function observeFlightData(){
+ // Share the authenticated status read with the regular heartbeat. Extra
+ // observations are only for the visible, disarmed bench display.
+ const now=Date.now();
+ if(document.hidden||!$('tab-telemetry')?.classList.contains('active')||
+    !linkFresh()||state.linkState!=='connected'||state.board!=='ZFC-A2'||!['ap','sta'].includes(state.transport)||
+    state.working||headerModePending||otaActive||wifiTesting||accessBusy||motorTrafficBusy()||
+    state.owner||state.rc?.claimed||state.rc?.active||state.rc?.inputArmed||state.rcAccess?.paused||
+    state.flight?.state!=='DISARMED'||state.flight.authorized!==false||
+    state.motorsArmed!==false||state.motorsDisabled!==true||now-state.outputObservedAt>3000||
+    statusPending||now<nextFlightDataReadAt||now-state.heartbeatAt<750)return;
+ nextFlightDataReadAt=now+750;
+ try{await read()}
+ catch{nextFlightDataReadAt=Date.now()+2200}
+}
 function statusReadFailed(error){
  if(error?.code==='STATUS_SUPERSEDED')return {fatal:false,state:state.linkState};
  const health=root.ZebjusControlPaths?.failureState({error,heartbeatAt:state.heartbeatAt})||{fatal:true,state:'stale'};
@@ -2471,7 +2487,7 @@ function getUsbMonitorState(){
 }
 root.ZebjusKits={
  changeRcAccess,selectControlPath,
- connect,disconnect,read,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
+ connect,disconnect,read,observeFlightData,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  setFlightMode,pidExchange,openFlightTraceReader,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({requestQueue:requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,ppmObservedAt:state.ppmObservedAt||0,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,

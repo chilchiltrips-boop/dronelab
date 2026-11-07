@@ -96,6 +96,31 @@ export async function testFlightData(page, width) {
     await telemetry.locator('.fd-window').screenshot({path: `test-output/v2/flight-data-${width}.png`});
     assert.ok(await telemetry.evaluate(e => e.scrollWidth <= e.clientWidth + 1), 'Flight Data fits the viewport');
 
+    const previousHorizon = await telemetry.locator('#fd-horizon-world').getAttribute('transform');
+    await page.evaluate(() => {
+      const snapshot = window.__flightDataFixture;
+      const now = Date.now();
+      snapshot.outputObservedAt = now - 2200;
+      snapshot.rcAccess = {...snapshot.rcAccess, stationary: false, controlPath: 'AUTO'};
+      snapshot.telemetryRc = {
+        rc: {source: 'NONE', claimed: false, active: false, inputArmed: false, failsafe: true},
+        observedAt: now, bootId: snapshot.bootId
+      };
+      snapshot.ppm = {present: false, observedAt: now};
+      snapshot.imuSampleObservedAt = now;
+      snapshot.imu.sampleSequence++;
+      snapshot.imu.corrected = [4.65, 0, 0];
+      snapshot.imu.accelG = [-0.8525, -0.3031, 0.4497];
+      dispatchEvent(new CustomEvent('dronelab:kit-link'));
+    });
+    assert.equal(await telemetry.locator('.fd-pfd-main').getAttribute('data-tilt'), 'accel-reference');
+    assert.notEqual(await telemetry.locator('#fd-horizon-world').getAttribute('transform'), previousHorizon);
+    assert.match(await telemetry.locator('[data-vehicle-caption]').textContent(), /Accel reference/);
+    assert.equal(await telemetry.locator('[data-pfd-status="input"]').textContent(), 'PPM WAIT');
+    assert.equal(await telemetry.locator('[data-health="input"]').getAttribute('data-tone'), 'warning');
+    assert.equal(await telemetry.locator('[data-health="output"]').getAttribute('data-tone'), 'good');
+    assert.equal(await telemetry.locator('[data-pfd-status="output"]').textContent(), 'PWM OFF');
+
     await page.evaluate(() => {
       const snapshot = window.__flightDataFixture;
       snapshot.imu.flightDeadlineFault = true;

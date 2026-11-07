@@ -1,7 +1,10 @@
 import {isOlderReceiverCounter, parseReceiverSnapshot, PPM_OBSERVATION_MS} from './input-monitor.js';
 
 const usbObservationMs = 2500;
-const outputObservationMs = 1500; // Same freshness window as the Hardware Center.
+// Presentation windows only. Network status is polled every 2200 ms; motor
+// interlocks and Hardware Center keep their independent freshness policy.
+const usbOutputDisplayMs = 1500;
+const networkOutputDisplayMs = 3000;
 const firmwareImuAgeMs = 12;
 const supportedTransports = ['usb', 'ap', 'sta', 'android-relay'];
 const controllerSources = ['PPM', 'WEB', 'ANDROID'];
@@ -81,9 +84,9 @@ function inputSnapshot(kit, connected, now) {
   } else if (active || observationAgeMs !== null && !within(observationAgeMs, limit)) {
     state = 'delayed';
     health = healthRow('warning', 'Input observation delayed', 'Browser observation age does not confirm receiver loss.');
-  } else if (selectedPath === 'PPM' && ppmPresent === false) {
+  } else if (ppmPresent === false && (selectedPath === 'PPM' || selectedPath === 'AUTO' && !source && !rc?.claimed)) {
     state = 'waiting';
-    health = healthRow('warning', 'PPM signal absent', 'Waiting for a physical receiver signal.');
+    health = healthRow('warning', 'PPM no signal', 'Waiting for PPM frames. FlightCore has no live receiver channels.');
   } else if (within(observationAgeMs, limit)) {
     state = 'idle';
     health = healthRow('unknown', 'No active input', 'FlightCore has no active accepted receiver frame.');
@@ -104,7 +107,8 @@ function outputSnapshot(kit, connected, now) {
   const observedAt = usb ? kit.usbStatusObservedAt : kit.outputObservedAt;
   const observedAgeMs = connected ? observationAge(observedAt, now) : null;
   const observed = within(observedAgeMs, usb ? usbObservationMs : PPM_OBSERVATION_MS);
-  const fresh = within(observedAgeMs, outputObservationMs);
+  const fresh = kit.linkState === 'connected' &&
+    within(observedAgeMs, usb ? usbOutputDisplayMs : networkOutputDisplayMs);
   const flight = observed && !usb ? kit.flight ?? null : null;
   const flags = usb ? usbFlags : kit;
   const benchArmed = observed ? bool(flags?.motorsArmed) : null;
@@ -128,7 +132,9 @@ function outputSnapshot(kit, connected, now) {
     health = healthRow('warning', 'Output OFF unconfirmed', 'FlightCore has not acknowledged that PWM is off.');
   }
   if (!fresh && health.state !== 'unknown') {
-    health = healthRow('warning', 'Last observed · ' + health.label, 'Waiting for an updated FlightCore output status.');
+    const state = health.state === 'error' ? 'error' : 'warning';
+    const detail = [health.detail, 'Waiting for an updated FlightCore output status.'].filter(Boolean).join(' ');
+    health = healthRow(state, 'Last observed · ' + health.label, detail);
   }
   return {output: {label: health.label, armed, disabled, fresh, observedAgeMs}, flight, health};
 }
@@ -152,14 +158,20 @@ export function buildFlightData(kit = {}, now = Date.now()) {
   // Network status binds gyro and acceleration to a single observation. The
   // USB diagnostic stream currently reports rates without acceleration.
   const accel = rates && transport !== 'usb' ? vector(imu.accelG, 8) : null;
-  const stationary = kit.rcAccess?.stationary === true && rates?.every(n => Math.abs(n) < 3);
-  const magnitude = accel ? Math.hypot(...accel) : null;
-  const tilt = stationary && accel && magnitude >= 0.9 && magnitude <= 1.1 ? {
-    roll: Math.atan2(accel[1], accel[2]) * 180 / Math.PI,
-    pitch: Math.atan2(-accel[0], Math.hypot(accel[1], accel[2])) * 180 / Math.PI
-  } : null;
   const {rc, health: inputHealth} = inputSnapshot(kit, connected, now);
   const {output, flight, health: outputHealth} = outputSnapshot(kit, connected, now);
+  const stationary = kit.rcAccess?.stationary === true && rates?.every(n => Math.abs(n) < 3);
+  // The maintenance quiet-window remains strict. While disarmed, a current
+  // acceleration vector can also serve as a labeled reference during motion.
+  const disarmedPreview = (transport === 'sta' || transport === 'ap') &&
+    output.fresh && output.disabled === true && output.armed === false &&
+    flight?.state === 'DISARMED' && flight.authorized === false;
+  const magnitude = accel ? Math.hypot(...accel) : null;
+  const tilt = (stationary || disarmedPreview) && accel && magnitude >= 0.9 && magnitude <= 1.1 ? {
+    roll: Math.atan2(accel[1], accel[2]) * 180 / Math.PI,
+    pitch: Math.atan2(-accel[0], Math.hypot(accel[1], accel[2])) * 180 / Math.PI,
+    stationary: stationary === true
+  } : null;
   const timingFresh = imu && within(observationAge(kit.imuTimingObservedAt, now), limit);
   const timing = {
     health: timingFresh ? imu.controlHealth ?? null : null,
