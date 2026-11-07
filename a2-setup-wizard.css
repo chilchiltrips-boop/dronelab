@@ -27,6 +27,18 @@
 .a2-identity dl>div,.a2-report dl>div{display:grid;grid-template-columns:100px minmax(0,1fr);gap:12px;border-bottom:1px solid #20394a;padding:9px 0;font-size:12px;line-height:1.4}
 .a2-identity dl>div:last-child,.a2-report dl>div:last-child{border:0}
 .a2-content dt{color:#87a6ba}.a2-content dd{margin:0;color:#d5e7f2;overflow-wrap:anywhere}
+.a2-check-card{margin:12px 0;padding:12px;border:1px solid #29485b;border-radius:8px;background:#102434}
+.a2-check-card p{margin:6px 0 0}
+.a2-ppm-mapping{font-variant-numeric:tabular-nums}
+.a2-readiness-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.a2-readiness-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:6px;margin:10px 0}
+.a2-readiness-grid:empty{display:none}
+.a2-readiness-grid>div{min-width:0;padding:7px 8px;border:1px solid #29485b;border-radius:6px;background:#0d1e2c}
+.a2-readiness-grid dt{font-size:11px}
+.a2-readiness-grid dd{font-size:12px;font-weight:600;line-height:1.35;margin-top:3px}
+.a2-check-card [data-tone=ok],.a2-readiness-grid [data-tone=ok] dd{color:#8ae7ca}
+.a2-check-card [data-tone=warn],.a2-readiness-grid [data-tone=warn] dd,.a2-readiness-physical strong{color:#ffbf8c}
+.a2-check-card [data-tone=error],.a2-readiness-grid [data-tone=error] dd{color:#ffa9a6}
 .a2-layout-field{display:flex!important;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .a2-layout-field select{flex:1;max-width:270px;font-weight:650}
 .a2-table-wrap{overflow:auto}

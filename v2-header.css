@@ -110,6 +110,8 @@
 }
 @media(min-width:736px) and (max-width:1023px){
  #app .topbar-main .tabs :is(.tab,.nav-shop){padding-inline:3px!important;font-size:14px!important}
+ #app .topbar-main .wide-tab-label{display:none}
+ #app .topbar-main .compact-tab-label{display:inline}
 }
 @media(max-width:735px){
  #app .topbar-primary,#app .topbar-main{height:auto;min-height:48px!important;flex-wrap:wrap!important;gap:10px!important;padding:10px 16px!important}
