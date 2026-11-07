@@ -32,7 +32,7 @@ Wizard ESC readiness accepts the existing persisted automatic sequence or legacy
 ## Build and qualification boundary
 
 ```sh
-python3 tools/build_scanner.py                         # ordinary A1/A2 bench
+python3 tools/build_scanner.py                         # ordinary A2 bench
 python3 tools/build_scanner.py --skip-core-install --board ZFC-A2 \
   --experimental-rate-flight --output-dir /tmp/a2-rate-experimental
 python3 tools/verify_experimental_rate.py /tmp/a2-rate-experimental

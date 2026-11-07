@@ -13,7 +13,7 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
   await page.goto('http://127.0.0.1:8765/'+(index===5?'lab.html':'index.html')+'#firmware');
   await page.waitForFunction(()=>window.ZebjusKits&&window.DroneLabSerial&&window.ZebjusDevicesWorkspace);
   await page.evaluate(({index})=>{
-   const board=index%2?'ZFC-A2':'ZFC-A1',kitId=board+'-012345ABCDEF';
+   const board='ZFC-A2',kitId=board+'-012345ABCDEF';
    const device=window.__setupDevice={board,kitId,code:'123456',name:'Fixture '+board.slice(4),prefix:'Original-'+board.slice(4),
     ap:'Original-'+board.slice(4)+'-123456',pass:'FixtureAp#12345',teacher:'FixtureTeacher#12345',enrolled:index%2===1,unlockedAt:0,open:false,generation:1,commands:[],connectCalls:0};
    const emit=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line}}));
@@ -45,9 +45,9 @@ for(const [index,[width,height]] of [[1920,1080],[1366,768],[1024,768],[768,900]
   assert.equal(await page.locator('#smartSave').isDisabled(),true);
   await page.locator('#smartConnectUsb').click();
   await page.waitForFunction(()=>document.getElementById('smartKitConnection').textContent.includes('USB VERIFIED')&&document.getElementById('smartApPrefix').value.startsWith('Original-'));
-  const expectedPrefix='ZEBJUS-'+(index%2?'A2':'A1')+'-LAB';
+  const expectedPrefix='ZEBJUS-A2-LAB';
   await page.locator('#smartApPrefix').fill(expectedPrefix);
-  await page.locator('#smartKitName').fill('Classroom '+(index%2?'A2':'A1'));
+  await page.locator('#smartKitName').fill('Classroom A2');
   await page.locator('#smartGeneratePassword').click();
   assert.equal(await page.locator('#smartApPassword').evaluate(el=>el.value.length),24);
   await page.locator('#smartApPassword').fill('NewFixtureAp#98765');

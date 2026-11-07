@@ -5,7 +5,7 @@ import {browserOptions,configureContext} from './browser-harness.mjs';
 import {createHmac,createDecipheriv,randomBytes} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
-const id='ZFC-A1-012345ABCDEF',key='a1'.repeat(16),oldKey='b2'.repeat(16),boot='c3'.repeat(16);
+const id='ZFC-A2-012345ABCDEF',key='a1'.repeat(16),oldKey='b2'.repeat(16),boot='c3'.repeat(16);
 const hmac=(key,msg)=>createHmac('sha256',key).update(msg).digest('hex');
 const challenges=new Map(),sessions=new Map();let mode='ap',computer='ap',proofFailures=0,adminEnrollments=0,statusRequests=0,mdnsUnavailable=false;
 let inputPath='AUTO',lastStaInput='ANDROID_WEBRTC',revision=0,ppm=false,seqNo=0,acceptedNo=0;
@@ -17,7 +17,7 @@ function device(url,options={}){
  if(mdnsUnavailable&&u.hostname.endsWith('.local'))return result({error:'simulated_mdns_unavailable'},404);
  if(computer!==mode||ap!==(mode==='ap'))return result({error:'unreachable'},404);
  const route=u.pathname,args=Object.fromEntries(new URLSearchParams(options.body||'')),headers=options.headers||{};
- if(route==='/api/identify')return result({kitId:id,kitCode:'123456',name:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A1',simpleConnection:true,adminSessions:true,exclusiveWifi:true});
+ if(route==='/api/identify')return result({kitId:id,kitCode:'123456',name:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A2',simpleConnection:true,adminSessions:true,exclusiveWifi:true});
  if(route==='/api/auth/local'){
   const session=randomBytes(16).toString('hex'),secret=randomBytes(32).toString('hex');
   sessions.set(session,{secret,seq:0,admin:false,mode});
@@ -45,7 +45,7 @@ function device(url,options={}){
  }
  if(route==='/api/status'){
   statusRequests++;
-  return result({kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A1',version:'1.4.6',bootId:boot,
+  return result({kitId:id,kitCode:'123456',kitName:'zebjus_drone_2',hostname:'zebjus-drone-2.local',board:'ZFC-A2',version:'1.4.6',bootId:boot,
    exclusiveWifi:true,mode,requestTransport:mode.toUpperCase(),apActive:ap,apIp:ap?'192.168.4.1':'0.0.0.0',apSsid:'zebjus_drone_2',staConnected:!ap,ip:ap?'':'192.168.1.20',ssid:ap?'':'Classroom',
    setupAuthorized:s.admin||ap,controlAuthorized:s.admin||ap,otaAuthorized:s.admin,firmwareControl:false,motorsArmed:false,radioHandover:{version:1,profileSaved:revision>0,revision,state:'WAITING_CONTROLLER',mode,targetInput:inputPath,lastStaInput},rcAccess:access(),ppm:{present:ppm,losses:0},rc:rc()},200,s.secret,seq);
  }
@@ -86,8 +86,8 @@ try{
  assert.equal(proofFailures,1);assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().connected),true);
  // The serial bridge response represents an explicitly connected physical USB kit.
  await page.evaluate(({id,key})=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'usb',line:'ZJNET,PAIR,'+id+','+key}})),{id,key});
- await wait(()=>window.ZebjusKitPairingStore.fromSession('ZFC-A1-012345ABCDEF')==='a1'.repeat(16));
- await page.waitForFunction(async()=>{sessionStorage.removeItem('zebjus.kit.session.v1:ZFC-A1-012345ABCDEF');return await window.ZebjusKitPairingStore.restore('ZFC-A1-012345ABCDEF')==='a1'.repeat(16)});
+ await wait(()=>window.ZebjusKitPairingStore.fromSession('ZFC-A2-012345ABCDEF')==='a1'.repeat(16));
+ await page.waitForFunction(async()=>{sessionStorage.removeItem('zebjus.kit.session.v1:ZFC-A2-012345ABCDEF');return await window.ZebjusKitPairingStore.restore('ZFC-A2-012345ABCDEF')==='a1'.repeat(16)});
  await page.locator('#kitTopNetworkSwitch').click();await wait(()=>!window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().pendingNetworkMode==='sta');
  assert.equal(mode,'sta');assert.equal(await page.locator('#fwStaIndicator').textContent(),'--');
  computer='sta';await page.evaluate(()=>window.ZebjusKits.discoverKits());await page.locator('#kitReconnectDialog').waitFor({state:'visible'});
@@ -109,7 +109,7 @@ try{
  await page.locator('#fwKitConnectSelected').click();
  await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'sta');
- assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().kitId),'ZFC-A1-012345ABCDEF');
+ assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().kitId),'ZFC-A2-012345ABCDEF');
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
  assert.equal(await page.locator('#fwKitCachedIp').inputValue(),'192.168.1.20');
  await page.screenshot({path:output+'/sta-ip-without-mdns.png',fullPage:true});

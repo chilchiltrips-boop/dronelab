@@ -37,21 +37,53 @@ test('firmware UI uses generic USB serial tools for future programs',()=>{
  assert.ok(!code.includes('── USB Serial connected'));
  assert.ok(code.includes("nl:'\\n',cr:'\\r',crlf:'\\r\\n'"));
 });
-test('Read Running Firmware refreshes the physical pairing even while an AP session is selected',async()=>{
+test('Read Running Firmware refreshes physical pairing only after A2 identity, even with AP selected',async()=>{
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  const start=source.indexOf('async function openSerialMonitor('),end=source.indexOf('async function toggleSerialMonitor(',start);
- const commands=[],selected={connected:true,transport:'ap',kitId:'ZFC-A1-012345ABCDEF'};
+ const decode=source.slice(source.indexOf('function readUsbTelemetry('),source.indexOf('function pushSerialLines('));
+ const commands=[],rates=[],selected={connected:true,transport:'ap',kitId:'ZFC-A2-012345ABCDEF'};
  const port={open:async()=>{},setSignals:async()=>{},readable:{getReader:()=>({read:()=>new Promise(()=>{}),releaseLock(){}})}};
  const context={monitorGeneration:0,monitorStarting:false,monitorPort:null,usbLastPort:null,loader:null,usbLastInfo:null,navigator:{serial:{}},isSecureContext:true,
   window:{ZebjusKits:{getState:()=>selected}},usbPortInfo:()=>({}),serialBaud:()=>115200,serialUi(){},kitStatus(){},TextDecoder,
-  serialIdleWatch(){},setUsbTelemetryRate:async()=>{},$:()=>({value:20}),writePythonSerialLine:async line=>{commands.push(line)}};
- vm.runInNewContext(source.slice(start,end)+';globalThis.open=openSerialMonitor;',context);
+  busy:false,monitorPendingScan:false,text(){},badge(){},syncUsbBoardSelection(){},
+  serialIdleWatch(){},setUsbTelemetryRate:async rate=>rates.push(rate),$:()=>({value:20}),writePythonSerialLine:async line=>{commands.push(line)}};
+ vm.runInNewContext(source.slice(start,end)+decode+';globalThis.open=openSerialMonitor;globalThis.read=readUsbTelemetry;',context);
  await context.open({port});
- for(const command of ['ZJINFO,GET\n','ZJKIT,GET\n','ZJNET,GET\n','ZJNET,PAIR\n'])assert.ok(commands.includes(command),command);
+ assert.deepEqual(commands,['ZJINFO,GET\n','ZJKIT,GET\n','ZJNET,GET\n']);
+ context.read('ZJINFO,FW,ZFC-A1,1.2.2,Oct 10 2026,14:38:30,ZEBJUS FlightCore A1 SuperMini');
+ assert.equal(commands.length,3);
+ assert.deepEqual(rates,[]);
+ const a2='ZJINFO,FW,ZFC-A2,1.2.2,Oct 10 2026,14:41:00,ZEBJUS FlightCore A2 C6';
+ context.read(a2);
+ context.read(a2);
+ assert.equal(commands.at(-1),'ZJNET,PAIR\n');
+ assert.equal(commands.length,4);
+ assert.deepEqual(rates,[20]);
  assert.equal(selected.transport,'ap');assert.equal(selected.connected,true);
 });
 
-test('native ESP32-C3 Web Serial selects guarded ROM recovery plans',()=>{
+test('serial writes require current A2 identity, with read-only preflight and STOP available',async()=>{
+ const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
+ const start=source.indexOf('let serialWriteTail='),end=source.indexOf('async function runUsbDiagnostic(',start);
+ const sent=[];
+ const port={writable:{getWriter:()=>({write:async bytes=>sent.push(new TextDecoder().decode(bytes)),releaseLock(){}})}};
+ const ctx={monitorPort:port,monitorGeneration:1,busy:false,usbRuntimeInfo:null,TextEncoder};
+ vm.runInNewContext(source.slice(start,end)+';globalThis.write=writePythonSerialLine;',ctx);
+ await ctx.write('ZJINFO,GET\n');
+ await ctx.write('ZJRC,STOP\n');
+ await assert.rejects(ctx.write('ZJNET,PAIR\n'),/verify the A2/);
+ await assert.rejects(ctx.write('ZJINFO,GET\nZJNET,PAIR\n'),/verify the A2/);
+ ctx.usbRuntimeInfo={boardId:'ZFC-A1'};
+ await assert.rejects(ctx.write('ZJNET,PAIR\n'),/A1 is retired/);
+ ctx.usbRuntimeInfo={boardId:'ZFC-A2'};
+ await ctx.write('ZJNET,PAIR\n');
+ const stale=ctx.write('ZJNET,MODE,sta,USB\n');
+ ++ctx.monitorGeneration;
+ await assert.rejects(stale,/connection changed/);
+ assert.deepEqual(sent,['ZJINFO,GET\n','ZJRC,STOP\n','ZJNET,PAIR\n']);
+});
+
+test('native ESP32 Web Serial selects guarded ROM recovery plans',()=>{
  const src=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  const start=src.indexOf('function isEspNativeUsbPort('),end=src.indexOf('async function connectUsb(){',start);
  assert.ok(start>0&&end>start);
@@ -142,7 +174,7 @@ test('native C3/C6 port duplicates must not be auto-selected by same VID/PID',()
  const source=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  assert.ok(source.includes('Multiple matching ESP controllers are connected'));
  assert.ok(source.includes('Never guess between them')||source.includes('Never guess'));
- assert.ok(source.includes('select A1 or A2'));
+ assert.ok(source.includes('select the A2 controller'));
 });
 
 
@@ -161,6 +193,8 @@ test('Step 3 reflects physical USB chip separately from firmware identity and Wi
  assert.equal(ui.get('#fwConnectionType').textContent,'USB • ROM bootloader');
  ctx.loader=null;ctx.usbBoardId='';ctx.monitorPort={};ctx.runStatus();
  assert.equal(ui.get('#fwKitState').textContent,'USB SERIAL • IDENTIFYING');
+ ctx.usbRuntimeInfo={boardId:'ZFC-A1',boardName:'ZEBJUS FlightCore A1 SuperMini',version:'1.2.2',buildStamp:'Oct 10 2026 15:00'};
+ ctx.runStatus();assert.equal(ui.get('#fwKitState').textContent,'UNSUPPORTED BOARD • A1 RETIRED');
  ctx.usbRuntimeInfo={boardId:'ZFC-A2',boardName:'ZEBJUS FlightCore A2 C6',version:'1.2.2',buildStamp:'Oct 10 2026 15:00'};
  ctx.runStatus();assert.equal(ui.get('#fwCurrentVersion').textContent,'1.2.2');
  assert.equal(ui.get('#fwLiveBoard').textContent,'ZEBJUS FlightCore A2 C6');
@@ -181,10 +215,10 @@ test('Downloaded firmware is not counted as flashed and both pages expose USB ch
  }
 });
 
-test('Serial monitor shows dedicated A1 I2C and A2 XIAO wiring labels',()=>{
+test('Serial monitor retains legacy parsing and advertises active A2 XIAO wiring',()=>{
  const updater=readFileSync(new URL('../firmware-updater.js',import.meta.url),'utf8');
  for(const token of ['ZJI2C,MODE,','Dedicated SDA4/SCL5','XIAO D4/D5','fwUsbMode'])assert.ok(updater.includes(token),token);
- for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('LED GPIO8'));}
+ for(const page of ['index.html','lab.html']){const html=readFileSync(new URL('../'+page,import.meta.url),'utf8');assert.ok(html.includes('id="fwUsbMode"'));assert.ok(html.includes('MPU6050 SDA GPIO22 / SCL GPIO23'));}
 });
 
 

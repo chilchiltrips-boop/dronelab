@@ -12,8 +12,9 @@ const sha=b=>createHash('sha256').update(b).digest('hex');
 const sourceVersion=readFileSync(new URL('./VERSION.txt',root),'utf8').trim();
 test('I2C Scanner is retained alongside safe, nonblocking LED control',()=>{
  assert.equal(catalog.product,'ZEBJUS_FLIGHTCORE');assert.match(catalog.version,/^1\.\d+\.\d+$/);
- assert.equal(catalog.boards.length,2);assert.deepEqual(catalog.boards.map(b=>b.name),['ZEBJUS AERION A1','ZEBJUS AERION A2']);
- assert.equal(catalog.boards[0].build.fqbn,'esp32:esp32:esp32c3:CDCOnBoot=cdc');
+ const a2Only=catalog.boardPolicy==='A2_ONLY';
+ assert.deepEqual(catalog.boards.map(b=>b.name),a2Only?['ZEBJUS AERION A2']:['ZEBJUS AERION A1','ZEBJUS AERION A2']);
+ assert.equal(catalog.boards.find(b=>b.id==='ZFC-A2').build.fqbn,'esp32:esp32:XIAO_ESP32C6');
  for(const token of ['#include <Wire.h>','Serial.begin(115200);','Wire.begin(BUS_SDA,BUS_SCL);','ZJSCAN,','scanAddress<127','Wire.endTransmission()','if(!scanRequested)return;','scanAddresses[scanCount++]'])assert.ok(sketch.includes(token),token);
  for(const token of ['AsyncWebServer','ESPAsyncWebServer','ledc_set_duty','ledc_update_duty','FlightControl'])assert.ok(!sketch.includes(token),token);
  for(const token of ['readLedCommands()','updateLedEffect(now)','ledcAttach','ledcWrite','LED_LEASE_MS=4000','LED_PATTERN','LED_WARNING','LED_SAFE','LED_SOS'])assert.ok(sketch.includes(token),token);
@@ -24,7 +25,7 @@ test('Board-specific gyro never replaces the I2C scanner or LED protocol',()=>{
  assert.ok(!sketch.includes('delay(20)'),'Do not block USB scanner or LED for 20ms');
 });
 test('USB auto-detect and compact serial monitor page contract',()=>{
- assert.deepEqual(catalog.boards.map(b=>[b.id,b.imageChipIds[0]]),[['ZFC-A1',5],['ZFC-A2',13]]);
+ assert.deepEqual(catalog.boards.map(b=>[b.id,b.imageChipIds[0]]),catalog.boardPolicy==='A2_ONLY'?[['ZFC-A2',13]]:[['ZFC-A1',5],['ZFC-A2',13]]);
  for(const token of ['navigator.serial.requestPort','probeUsbFlash','mapHardwareSignature','openSerialMonitor','closeSerialMonitor','monitorReader','read()','writeFlash','0x10000'])assert.ok(updater.includes(token),token);
  for(const token of ['id="fwSerialMonitorBtn"','id="fwSerialOutput"','id="fwImageType"','id="fwBoardProfile"','id="fwUsbFlashBtn"'])assert.ok(page.includes(token),token);
  assert.ok(!page.includes('id="fwUpgradeBtn"'));assert.ok(!page.includes('id="fwUpgradeEraseBtn"'));

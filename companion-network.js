@@ -47,6 +47,10 @@ const apStreaming=()=>udpActive&&link==='ap'&&native?.apStreamingVersion===1;
 const controlLinkFresh=()=>Date.now()-lastStatus<12000||apStreaming();
 let ledOn=false,ledSequence=100,ledBusy=false,savedProfilesFor='',handoverExpectedKit='',handoverTimer=null,handoverAttempts=0,staObserverTimer=null;
 const validHost=v=>/^(?:10|192|172)\./.test(v)&&/^(?:\d{1,3}\.){3}\d{1,3}$/.test(v);
+const isA2KitId=id=>/^ZFC-A2-[0-9A-F]{12}$/.test(id);
+function requireA2KitId(id){
+ if(!isA2KitId(id))throw Error('Only ZEBJUS A2 FlightCore is supported. Enter the exact A2 Device ID or label.');
+}
 const policy=window.ZebjusKitNetworkPolicy;
 const udpFeedback=data=>({
  ackRequired:data?.ackRequired!==false,requestedInputArmed:data?.requestedInputArmed===true,sentSeq:Number(data?.sentSeq)||0,
@@ -153,6 +157,7 @@ window.zebjusNativeVaultResult=data=>{
  data.ok?waiter.resolve(data.credential||''):waiter.reject(Error(data.error||'Saved diagnostic credential unavailable'));
 };
 function vaultCall(op,id,credential){
+ if(op!=='forgetDiagnostic')requireA2KitId(id);
  if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(id)||typeof native?.[op]!=='function')
   return Promise.reject(Error('Android Keystore enrollment not available on this APK'));
  return new Promise((resolve,reject)=>{
@@ -203,13 +208,12 @@ window.zebjusNativeDiscoveryResult=data=>{
 };
 async function discoverKit(idOverride=''){
  const labelText=el('kitKey')?.value.trim()||'';
- let id=typeof idOverride==='string'&&/^ZFC-A[12]-[0-9A-F]{12}$/.test(idOverride)?idOverride:verifiedKitId;
+ const savedId=(el('kitSavedId')?.value||'').trim().toUpperCase();
+ let id=idOverride||verifiedKitId;
  if(labelText&&!idOverride)id=window.ZebjusKitAuth.label(labelText).deviceId;
- if(!id){
-  const savedId=(el('kitSavedId')?.value||'').trim().toUpperCase();
-  if(/^ZFC-A[12]-[0-9A-F]{12}$/.test(savedId))id=savedId;
- }
+ if(!id)id=savedId;
  if(!id)throw Error('Enter saved Kit Device ID or private label for mDNS discovery.');
+ requireA2KitId(id);
  if(link!=='sta')throw Error('mDNS discovery requires the Android phone and Kit on the same router (STA).');
  await ensureWifiPermission();
  let found='';
@@ -256,11 +260,12 @@ async function request(route,method='GET',args={}){
 async function connectKit(automatic=false){
  if(otaBusy||connecting)throw Error('Another Kit operation is in progress');connecting=true;syncHeaderTransport();
  try{
+  const value=el('kitKey').value.trim();
+  const p=value?window.ZebjusKitAuth.label(value):null;
+  if(p)requireA2KitId(p.deviceId);
   // Wait until the system permission dialog returns before signed Kit auth.
   await ensureWifiPermission(automatic);
-  const value=el('kitKey').value.trim();
-  if(value){
-   const p=window.ZebjusKitAuth.label(value);
+  if(p){
    // A cached address is a candidate only; identify + HMAC enrollment + signed
    // status are always repeated. Never carry permissions from the old link.
    if(link==='sta'&&!validHost(ip)){
@@ -294,8 +299,8 @@ async function connectKit(automatic=false){
    const raw=await nativeTransport('/api/identify');
    if(raw.status!==200)throw Error('No FlightCore Kit on the selected AP network');
    let identity;try{identity=JSON.parse(raw.text)}catch{throw Error('Invalid Kit identification response')}
-   if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(identity.kitId||'')||
-       identity.authVersion!==2||identity.simpleConnection!==true)
+   requireA2KitId(identity.kitId);
+   if(identity.authVersion!==2||identity.simpleConnection!==true)
     throw Error('Kit does not support label-free AP setup; update FlightCore firmware');
    if(automatic&&verifiedKitId&&verifiedKitId!==identity.kitId)throw Error('Fallback AP belongs to a different Kit; connection rejected');
    if(verifiedKitId&&verifiedKitId!==identity.kitId)forgetGrants();
@@ -314,7 +319,7 @@ async function connectKit(automatic=false){
 async function connectSavedKit(){
  if(link!=='sta')throw Error('Saved diagnostic credentials work only on STA; AP setup requires private label.');
  const id=(el('kitSavedId')?.value||'').trim().toUpperCase();
- if(!/^ZFC-A[12]-[0-9A-F]{12}$/.test(id))throw Error('Enter exact saved Kit Device ID');
+ requireA2KitId(id);
  if(otaBusy||connecting)throw Error('Another Kit operation is in progress');
  connecting=true;syncHeaderTransport();
  try{
@@ -548,6 +553,12 @@ async function status(){
  const data=await request('/api/status');
  if(epoch!==linkEpoch)throw Error('Kit link changed during status');
  if(verifiedKitId&&verifiedKitId!==data.kitId){online=false;dropInput('Wrong kit: input released');throw Error('Kit hardware ID changed — reconnect and verify physical board')}
+ if(!isA2KitId(data.kitId)||data.board&&data.board!=='ZFC-A2'){
+  online=onKitLink=controlAuthorized=inputArmSupported=false;
+  verifiedKitId=diagnosticKey='';auth=null;forgetGrants();forgetNativePin();
+  dropInput('Unsupported FlightCore identity • connect an A2 Kit');
+  throw Error('Unsupported FlightCore identity; only A2 is supported.');
+ }
  verifiedKitId=data.kitId||'';mode=data.mode||mode;
  // Saved/active/pending are firmware-owned metadata, never Wi-Fi mode.
  kitModeState=modeStatus(data);
@@ -921,6 +932,7 @@ const otaSleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 // Older firmware without ota.offset stays fail-closed on uncertain writes.
 async function uploadAdminApp(file){
  if(otaBusy||!online||!onKitLink||!verifiedKitId||!['ap','sta'].includes(link))throw Error('Connect and verify the same Kit over AP/STA first.');
+ requireA2KitId(verifiedKitId);
  if(rcSession)throw Error('Release Android diagnostic control before OTA.');
  const credential=el('kitOtaAdminKey')?.value.trim()||'';
  if(el('kitOtaAdminKey'))el('kitOtaAdminKey').value='';
@@ -931,8 +943,8 @@ async function uploadAdminApp(file){
  if(el('kitOtaProgress'))el('kitOtaProgress').value=0;
  show('OTA preflight • verifying official APP image size, board and SHA-256');
  try{native?.setOtaKeepAwake?.(true)}catch{}
- const id=verifiedKitId,host=ip,transport=link;
- let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,board='',result=null;
+ const id=verifiedKitId,host=ip,transport=link,board='ZFC-A2';
+ let admin=null,beginAttempted=false,endAttempted=false,pre=null,hash='',bytes,result=null;
  const checkTarget=(allowCancellation=false)=>{
   if(ip!==host||link!==transport||verifiedKitId!==id)throw Error('Selected Kit or Wi-Fi link changed during firmware upload.');
   if(otaCancelRequested&&!allowCancellation)throw Error('OTA cancelled: no further firmware writes will be sent.');
@@ -972,9 +984,8 @@ async function uploadAdminApp(file){
   const catalogResponse=await fetch('./firmware-catalog.json',{cache:'no-store'});
   if(!catalogResponse.ok)throw Error('Official firmware catalog is unavailable in this Android release.');
   const catalog=await catalogResponse.json();
-  const target=policy?.otaTarget?.({method:'wifi',kit:{connected:online&&onKitLink,transport:link,kitId:id,board:id.slice(0,6)}});
-  board=target?.boardId||(id.startsWith('ZFC-A2-')?'ZFC-A2':'ZFC-A1');
-  if(target&&target.kitId!==id)throw Error('Selected Wi-Fi Kit is not verified for OTA');
+  const target=policy?.otaTarget?.({method:'wifi',kit:{connected:online&&onKitLink,transport:link,kitId:id,board}});
+  if(target&&(target.kitId!==id||target.boardId!==board))throw Error('Selected Wi-Fi Kit is not verified for A2 OTA');
   const entry=catalog.boards?.find(v=>v.id===board),release=entry?.latest?.app;
   if(!release?.available||!release.sha256||file.name!==release.file)throw Error('Choose the official '+board+' APP firmware from the currently bundled release.');
   // Reject oversized, wrong type and board image before allocating whole firmware.
@@ -988,7 +999,7 @@ async function uploadAdminApp(file){
   const header=new Uint8Array(await file.slice(0,208).arrayBuffer());
   const hChip=header[12]|(header[13]<<8),hDescriptor=(header[32]|header[33]<<8|header[34]<<16|header[35]<<24)>>>0;
   if(header.length!==208||header[0]!==0xe9||header[1]<1||header[1]>16||
-     hChip!==(board==='ZFC-A2'?13:5)||hDescriptor!==0xabcd5432)
+     hChip!==13||hDescriptor!==0xabcd5432)
    throw Error('ESP header or physical board mismatch; full image not allocated');
   const buffer=await file.arrayBuffer();
   if(buffer.byteLength!==advertisedSize)throw Error('Firmware file changed size during read');
@@ -999,7 +1010,7 @@ async function uploadAdminApp(file){
   if(bytes.length<32768||bytes.length>0x1e0000||bytes[0]!==0xe9||bytes[1]<1||bytes[1]>16)
    throw Error('Invalid ESP32 application image.');
   const chip=bytes[12]|(bytes[13]<<8),descriptor=(bytes[32]|bytes[33]<<8|bytes[34]<<16|bytes[35]<<24)>>>0;
-  if(chip!==(board==='ZFC-A2'?13:5)||descriptor!==0xabcd5432)throw Error('Firmware header does not match this physical board.');
+  if(chip!==13||descriptor!==0xabcd5432)throw Error('Firmware header does not match this physical board.');
   const expectedBuild=firmwareHex(bytes.slice(176,208));
   show('Authenticating USB-paired OWNER code for '+id+'…');
   admin=await window.ZebjusKitAuth.open(nativeTransport,id,credential,'admin');

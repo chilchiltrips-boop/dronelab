@@ -108,14 +108,14 @@ try{
  // USB mode handover uses the original serial handler and changes the active
  // badge only after its ACK and fresh network report.
  await page.evaluate(async()=>{
-  const id='ZFC-A1-ABCDEF012345',f=window.__wifiUsb={mode:'ap',writes:[]};
+  const id='ZFC-A2-ABCDEF012345',f=window.__wifiUsb={mode:'ap',writes:[]};
   const emit=line=>dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
   const handover=()=>({kitId:id,mode:f.mode,radioHandover:{version:1,profileSaved:true,revision:1,state:'PREPARED',mode:f.mode,targetInput:f.mode==='ap'?'ANDROID_AP':'ANDROID_WEBRTC',lastStaInput:'ANDROID_WEBRTC'},rcAccess:{version:1,pathVersion:1,controlPath:f.mode==='ap'?'ANDROID_AP':'ANDROID_WEBRTC',selection:'ANDROID',paused:true,handoverPaused:true,stationary:true,maintenance:{active:false,owned:false,leaseRemainingMs:0}}});
-  f.report=()=>{emit('ZJNET,HANDOVER,'+JSON.stringify(handover()));emit('ZJNET,MODE,'+f.mode);emit('ZJNET,AP,'+(f.mode==='ap'?'ON,Kit-A1':'OFF'));emit(f.mode==='sta'?'ZJNET,STA,CONNECTED,192.168.1.21,Classroom':'ZJNET,STA,OFFLINE')};
+  f.report=()=>{emit('ZJNET,HANDOVER,'+JSON.stringify(handover()));emit('ZJNET,MODE,'+f.mode);emit('ZJNET,AP,'+(f.mode==='ap'?'ON,Kit-A2':'OFF'));emit(f.mode==='sta'?'ZJNET,STA,CONNECTED,192.168.1.21,Classroom':'ZJNET,STA,OFFLINE')};
   window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>88,writeLine:async line=>{
    line=String(line).trim();
-   if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB network')}
-   else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A1,1.5.11');
+   if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A2 USB network')}
+   else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A2,1.5.11');
    else if(line==='ZJNET,PAIR')emit('ZJNET,PAIR,'+id+','+'b2'.repeat(16));
    else if(line==='ZJNET,GET'){f.report();dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{transport:'sta',line:'ZJNET,STA,CONNECTED,10.1.2.3,Wrong Kit Network'}}))}
    else if(line.startsWith('ZJNET,MODE,')){f.writes.push(line);f.mode=line.split(',')[2];emit('ZJNET,HANDOVER,'+JSON.stringify(handover()));emit('ZJNET,ACK,MODE,'+f.mode)}
@@ -125,7 +125,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('wifiActualMode').textContent==='AP');
  await page.evaluate(()=>window.__wifiFixture.releaseSaved());
  await page.waitForFunction(()=>/Selected [Kk]it changed/.test(document.getElementById('kitWifiStatus').textContent));
- assert.equal(await page.locator('.wifi-saved-choice').count(),0,'Late A2 profile response must not populate the newly verified A1');
+ assert.equal(await page.locator('.wifi-saved-choice').count(),0,'Late A2 profile response must not populate the newly verified A2');
  assert.equal(await page.locator('[data-wifi-mode="ap"]').getAttribute('aria-pressed'),'true');
  assert.equal(await page.locator('#fwWifiName').textContent(),'Router not connected','New USB Kit must not inherit the previous STA SSID');
  await page.locator('[data-wifi-mode="sta"]').click();

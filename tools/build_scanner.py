@@ -113,7 +113,7 @@ def write_metadata(catalog,version,built_at):
 
 def main():
     ap=argparse.ArgumentParser(description='Build board-specific FlightCore USB firmware with scanner, LED, and gyro support with stable replace-in-place filenames.')
-    ap.add_argument('--board',default='all',help='Board profile ID from catalog.json, or all')
+    ap.add_argument('--board',default='ZFC-A2',choices=['ZFC-A2'],help='Active A2 profile; A1 builds are archived in Git history')
     setup=ap.add_mutually_exclusive_group()
     setup.add_argument('--skip-core-install',action='store_true')
     setup.add_argument('--install-only',action='store_true',help='Install the pinned core without compiling or changing firmware files')
@@ -135,6 +135,9 @@ def main():
     version=source_version()
     built_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
     catalog=sync_catalog_version(json.loads(CAT.read_text()),version)
+    catalog['boards']=[b for b in catalog['boards'] if b['id']=='ZFC-A2']
+    catalog.update(defaultBoardId='ZFC-A2',boardPolicy='A2_ONLY')
+    if len(catalog['boards'])!=1: raise SystemExit('Exactly one A2 profile is required')
     flags=['-fstack-usage']+(['-DZJ_A2_EXPERIMENTAL_RATE_FLIGHT=1'] if experimental else [])
     if experimental:
         catalog['boards']=[b for b in catalog['boards'] if b['id']=='ZFC-A2']

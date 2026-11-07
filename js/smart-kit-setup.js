@@ -22,8 +22,8 @@
   }
   set('smartKitConnection',s.verified?s.board+' • '+s.version+' • USB VERIFIED':'USB verification required');
   set('smartKitId',s.verified?s.kitId:'—');set('smartCurrentAp',s.verified?s.apSsid||'Read current Kit settings':'—');
-  set('smartNetworkState',s.verified?'AP '+(s.apActive?'ON':'OFF')+' • STA '+(s.staConnected?s.staIp||'CONNECTED':'OFFLINE'):'Connect the intended A1/A2 board.');
-  $('smartApPrefix').placeholder=s.board==='ZFC-A2'?'Example: ZEBJUS-A2-LAB':'Example: ZEBJUS-A1-LAB';
+  set('smartNetworkState',s.verified?'AP '+(s.apActive?'ON':'OFF')+' • STA '+(s.staConnected?s.staIp||'CONNECTED':'OFFLINE'):'Connect the intended A2 board.');
+  $('smartApPrefix').placeholder='Example: ZEBJUS-A2-LAB';
   const first=s.enrolled===false;$('smartFirstEnrollment').hidden=!first;
   $('smartTeacher').autocomplete=first?'new-password':'current-password';
   set('smartTeacherLabel',first?'Create Teacher Passphrase':'Teacher Passphrase');

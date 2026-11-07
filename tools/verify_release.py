@@ -28,22 +28,28 @@ if bench:
   assert metadata.get('releaseScope')=='BENCH_DIAGNOSTIC' and metadata.get('flightOutputQualified') is False and metadata.get('physicalAcceptance')=='NOT_RUN', 'Bench qualification metadata is invalid'
 if held and not bench:
  hold=json.loads(hold_path.read_text()) if hold_path.exists() else {}
- assert hold.get('schema')==1 and hold.get('candidateVersion')==source_version and hold.get('publishedVersion')==CAT['version'], 'Source/catalog version mismatch: rebuild both profiles'
+ assert hold.get('schema')==1 and hold.get('candidateVersion')==source_version and hold.get('publishedVersion')==CAT['version'], 'Source/catalog version mismatch: rebuild the A2 profile'
 
 assert json.loads((OUT/'catalog.json').read_text())==CAT
-assert len(CAT['boards'])==2
-assert [b['name'] for b in CAT['boards']]==['ZEBJUS AERION A1','ZEBJUS AERION A2']
-assert CAT['boards'][0]['build']['fqbn']=='esp32:esp32:esp32c3:CDCOnBoot=cdc'
+# Historical published packages retain both boards and exact checksums. New
+# source builds must contain A2 only; no stale A1 image is relabelled.
+expected_boards=['ZFC-A2'] if CAT.get('boardPolicy')=='A2_ONLY' else ['ZFC-A1','ZFC-A2']
+assert [b['id'] for b in CAT['boards']]==expected_boards
+if not held: assert expected_boards==['ZFC-A2'], 'New builds must be A2-only'
+for b in CAT['boards']:
+ assert b['name']=='ZEBJUS AERION '+b['id'].split('-')[1]
+ assert b['build']['fqbn']==('esp32:esp32:XIAO_ESP32C6' if b['id']=='ZFC-A2' else 'esp32:esp32:esp32c3:CDCOnBoot=cdc')
 sketch=(SOURCE/'I2C_ADDRESS_SCANNER.ino').read_text()
 assert f'FW_VERSION="{source_version}"' in sketch, 'Sketch/catalog version mismatch'
 report=json.loads((OUT/'build-report.json').read_text())
 assert report['version']==CAT['version'], 'Build report/catalog version mismatch'
-assert report.get('sourceCommit') and report.get('sourceSha256'), 'Compile provenance required; rebuild both profiles'
+assert {b['boardId'] for b in report['boards']}==set(expected_boards), 'Build report board set differs'
+assert report.get('sourceCommit') and report.get('sourceSha256'), 'Compile provenance required; rebuild the A2 profile'
 if bench:
  assert report['sourceCommit']==approved['sourceCommit'], 'Wrong source commit for the approved bench artifact'
  assert hashlib.sha256(catalog_path.read_bytes()).hexdigest()==approved['catalogSha256'], 'Bench catalog differs from the approved artifact'
  assert hashlib.sha256((OUT/'build-report.json').read_bytes()).hexdigest()==approved['reportSha256'], 'Bench report differs from the approved artifact'
- assert report['hardwareFlashingTested'] is False and {b['boardId'] for b in report['boards']}=={'ZFC-A1','ZFC-A2'}
+ assert report['hardwareFlashingTested'] is False and {b['boardId'] for b in report['boards']}==set(expected_boards)
  commit=report['sourceCommit']
  assert len(commit)==40 and all(c in '0123456789abcdef' for c in commit), 'Bench source must be a full Git SHA'
  subprocess.run(['git','merge-base','--is-ancestor',commit,'HEAD'],cwd=ROOT,check=True)

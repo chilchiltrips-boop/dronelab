@@ -7,7 +7,7 @@ import {createBridgeServer} from './classroom-discovery-bridge.mjs';
 import {requestUdp} from './flightcore-udp-rpc.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync,writeFileSync} from 'node:fs';
-const fixture=await startFirmwareHost(),seen=[];
+const fixture=await startFirmwareHost({board:'ZFC-A2'}),seen=[];
 const server=createBridgeServer({kits:()=>[{ip:'192.168.4.1',hostname:'zebjus-drone-1.local'}],
  request:async(ip,method,route,form,headers,options)=>{
   if(ip!=='192.168.4.1')throw Error('No fixture Kit at this address');
@@ -23,7 +23,7 @@ try{
  await page.waitForFunction(()=>window.ZebjusKits&&window.ZebjusKitUdp&&window.DroneLabNetwork);
  const result=await page.evaluate(async()=>{
   if(!await window.ZebjusKitUdp.available())throw Error('UDP helper not available');
-  await window.ZebjusKits.connectDiscoveredKit({kitId:'ZFC-A1-012345ABCDEF',kitCode:'123456',ip:'192.168.4.1',transport:'ap'});
+  await window.ZebjusKits.connectDiscoveredKit({kitId:'ZFC-A2-012345ABCDEF',kitCode:'123456',ip:'192.168.4.1',transport:'ap'});
   const state=window.ZebjusKits.getState(),telemetry=await window.DroneLabNetwork.getTelemetry();
   const {parseNetworkGyroTelemetry}=await import('/js/usb-i2c-bridge.js');
   return {state,telemetry,pythonGyro:parseNetworkGyroTelemetry(telemetry,state.kitId)};

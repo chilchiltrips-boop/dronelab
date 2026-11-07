@@ -49,6 +49,6 @@ test('Preferred saved Wi-Fi first with bounded reason-aware STA retries',()=>{
 test('Service Worker does not pre-download factory images and plotting/CV wheels',()=>{
  const sw=read('sw.js');
  assert.match(sw,/const essential=core\.filter/);
- assert.match(sw,/kind==='app'&&image\?\.available/);
+ assert.match(sw,/const image=board\.latest\.app/);
  assert.match(sw,/vendor\\\/pyodide/);
 });

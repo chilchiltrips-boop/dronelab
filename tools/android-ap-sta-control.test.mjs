@@ -13,10 +13,10 @@ test('Android claims diagnostic input over verified STA and refuses a mismatched
    addEventListener(type,fn){listeners.set(id+':'+type,fn)},replaceChildren(){},add(){}});
   return elements.get(id);
  };
- const kitId='ZFC-A1-012345ABCDEF';
+ const kitId='ZFC-A2-012345ABCDEF';
  let reportedTransport='STA';
  const response=route=>{
-  if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A1',version:'1.4.0',mode:'auto',
+  if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',version:'1.4.0',mode:'auto',
    inputArmSupported:true,controlAuthorized:true,requestTransport:reportedTransport,apActive:true,staConnected:true,ip:'192.168.1.42',apIp:'192.168.4.1'};
   if(route==='/api/rc/claim')return {kitId,session:'owned-sta'};
   if(route==='/api/rc/preview')return {kitId,received:true,seq:1,inputArmed:true};

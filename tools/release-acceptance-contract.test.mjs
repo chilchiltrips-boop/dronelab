@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {createHash,generateKeyPairSync,sign} from 'node:crypto';
 import {join} from 'node:path';
-import {evidenceSigningPayload,validateEvidence,requiredIds} from './release-acceptance.mjs';
+import {evidenceSigningPayload,validateEvidence,requiredIds,archivedIds} from './release-acceptance.mjs';
 import {requirePublicHttps,probeAdminDeployment} from './remote-deployment-smoke.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('canonical release labels and binary date come from independent sources',()=>{
@@ -29,13 +29,13 @@ test('canonical release labels and binary date come from independent sources',()
 });
 test('recorded evidence may progress, but strict mode cannot pass without complete operator proof',()=>{
  const e=JSON.parse(read('docs/release-acceptance.evidence.json'));
- assert.equal(e.cases.length,requiredIds.length);
+ assert.equal(e.cases.length,requiredIds.length+archivedIds.length);
  assert.equal(validateEvidence(e).passed,true,'recorded results must retain valid evidence metadata');
  // Exercise incomplete evidence independently of the real ledger, which an
  // operator must be able to update after performing physical tests.
  const empty={...e,sourceCommit:null,cases:e.cases.map(c=>({...c,status:'NOT_RUN',
   observedAt:null,operator:null,deviceId:null,firmwareVersion:null,evidenceRef:null,notes:null}))};
- assert.deepEqual(validateEvidence(empty).totals,{PASS:0,FAIL:0,NOT_RUN:requiredIds.length});
+ assert.deepEqual(validateEvidence(empty).totals,{PASS:0,FAIL:0,NOT_RUN:requiredIds.length+archivedIds.length});
  assert.equal(validateEvidence(empty,{strict:true}).passed,false);
  // Production tagging must fail closed on this still-unwitnessed evidence set.
  const commands=JSON.parse(read('package.json')).scripts;
@@ -81,6 +81,10 @@ test('strict gate rejects unsigned synthetic evidence and requires the pinned op
   const signed=report(key);
   assert.equal(validateEvidence(signed,{strict:true,release}).passed,false);
   assert.equal(validateEvidence(signed,strict).passed,true);
+  const archived={...signed,cases:[...signed.cases,...archivedIds.map(id=>({id,status:'NOT_RUN'}))]};
+  assert.equal(validateEvidence(archived,strict).passed,true,'Retired A1 records are retained without blocking A2');
+  const pending=structuredClone(archived);pending.cases.find(c=>c.id==='A2_IMU_FAILSAFE').status='NOT_RUN';
+  assert.equal(validateEvidence(pending,strict).passed,false,'Every existing A2 physical requirement remains mandatory');
   writeFileSync(logRef,'Changed after signature');
   assert.equal(validateEvidence(signed,strict).passed,false);
  }finally{rmSync(dir,{recursive:true,force:true});}

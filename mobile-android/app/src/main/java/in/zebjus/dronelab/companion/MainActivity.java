@@ -219,6 +219,9 @@ public class MainActivity extends Activity {
     private void vaultOperation(String op,JSONArray args){
         String id=arg(args,1),requestId=arg(args,0);
         if(!requestId.matches("[a-zA-Z0-9_-]{1,32}")||!id.matches("ZFC-A[12]-[0-9A-F]{12}"))return;
+        if(!op.equals("forgetDiagnostic")&&!id.startsWith("ZFC-A2-")){
+            respondVault(requestId,id,"Only A2 diagnostic enrollment is supported");return;
+        }
         String credential=arg(args,2);
         if(op.equals("saveDiagnostic")&&
           (args.length()!=3||!credential.matches("[a-fA-F0-9]{32}"))){

@@ -12,7 +12,7 @@ try{
  await page.goto('http://127.0.0.1:8765/index.html#python');
  await page.waitForFunction(()=>window.monaco?.editor?.getModels().length&&window.ZebjusKits,null,{timeout:45000});
  await page.evaluate(()=>{
-  const f=window.__connectedLed={board:'A1',transport:'ap',kitId:'ZFC-A1-012345ABCDEF',commands:[],requests:[],value:0};
+  const f=window.__connectedLed={board:'A2',transport:'ap',kitId:'ZFC-A2-012345ABCDEF',commands:[],requests:[],value:0};
   const native=window.fetch;
   const status=()=>({kitId:f.kitId,kitCode:'123456',kitName:'Connected '+f.board,board:'ZFC-'+f.board,version:'1.5.10',bootId:'boot-'+f.board+'-'+f.transport,
    requestTransport:f.transport.toUpperCase(),mode:f.transport,setupAuthorized:true,controlAuthorized:true,otaAuthorized:false,motorsDisabled:true,motorsArmed:false,
@@ -39,7 +39,8 @@ try{
   window.ZebjusKitPairingStore={fromSession:()=>f.transport==='sta'?'a1'.repeat(16):'',restore:async()=>f.transport==='sta'?'a1'.repeat(16):'',saveSession(){},remember:async()=>{}};
  });
  assert.equal(await page.locator('#pythonTarget option[value=auto]').count(),0);
- for(const board of ['A1','A2'])for(const transport of ['ap','sta']){
+ const board='A2';
+ for(const transport of ['ap','sta']){
   await page.evaluate(async({board,transport})=>{
    await window.ZebjusKits.disconnect();const f=window.__connectedLed;Object.assign(f,{board,transport,kitId:'ZFC-'+board+'-012345ABCDEF',commands:[],value:0,ppm:board==='A2'&&transport==='sta'});
    document.getElementById('kitTransport').value=transport;document.getElementById('kitCodeInput').value='123456';document.getElementById('kitIpInput').value=transport==='ap'?'192.168.4.1':'192.168.1.20';
@@ -74,6 +75,6 @@ try{
  assert.equal(await page.evaluate(()=>window.__connectedLed.commands.length),writes);
  assert.ok(!(await page.evaluate(()=>window.__connectedLed.requests)).some(r=>/\/api\/rc\/(claim|preview|release|stop)/.test(r.route)));
  writeFileSync(out+'/evidence.json',JSON.stringify({results,isolatedSelectionPreserved:true,noOwnershipWrites:true,physicalHardware:'NOT TESTED'},null,2));
- console.log('PASS actual Python blink: detected AP/STA on A1/A2, ordered ON/OFF/STOP, explicit isolation, no RC ownership');
+ console.log('PASS actual Python blink: detected AP/STA on A2, ordered ON/OFF/STOP, explicit isolation, no RC ownership');
 }catch(error){await page.screenshot({path:out+'/error.png'}).catch(()=>{});console.error(await page.locator('#pythonTerminal').textContent().catch(()=>''));throw error;}
 finally{await browser.close()}

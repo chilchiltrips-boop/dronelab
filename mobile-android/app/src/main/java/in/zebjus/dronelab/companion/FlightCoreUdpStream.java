@@ -175,7 +175,7 @@ final class FlightCoreUdpStream {
         channels[0]=channels[4]=channels[5]=1000;
         channels[1]=channels[2]=channels[3]=1500;
         if((feedback!=1&&feedback!=2)||id==null||!id.matches("[a-zA-Z0-9_-]{1,32}")||
-           device==null||!device.matches("ZFC-A[12]-[A-F0-9]{12}")||
+           device==null||!device.matches("ZFC-A2-[A-F0-9]{12}")||
            claim==null||!claim.matches("[a-fA-F0-9]{32}")||
            keyHex==null||!keyHex.matches("[a-fA-F0-9]{64}")){
             report("error","UDP_SESSION_INVALID");return;

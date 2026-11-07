@@ -106,14 +106,14 @@ try{
  // Real USB frontend path, including teacher unlock while PPM owns input and
  // correlated ACKs. Device double only; native tests enforce the firmware side.
  await page.evaluate(async()=>{
-  const id='ZFC-A1-ABCDEF012345',f=window.__usbAccess={unlocked:false,paused:false,selection:'PPM',actions:[]};
+  const id='ZFC-A2-ABCDEF012345',f=window.__usbAccess={unlocked:false,paused:false,selection:'PPM',actions:[]};
   const emit=line=>window.dispatchEvent(new CustomEvent('dronelab:serial-line',{detail:{line,transport:'usb'}}));
   const access=()=>({version:1,selection:f.selection,paused:f.paused,stationary:true,maintenance:{active:f.paused,owned:f.paused,leaseRemainingMs:f.paused?30000:0}});
   f.publish=()=>{emit('ZJSTATE,1,'+id+',angle,angle,none,1000,1500,1500,1500,1000,1500,0,1,0,1,0,0,PPM,PPM,1');emit('ZJACCESS,STATE,'+id+',PPM,0,1,0,0,0')};
   window.DroneLabSerial={isOpen:()=>true,isFlashing:()=>false,generation:()=>71,writeLine:async line=>{
    line=String(line).trim();const p=line.split(',');
-   if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A1 USB maintenance')}
-   else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A1,1.5.11');
+   if(line==='ZJKIT,GET'){emit('ZJKIT,ID,'+id);emit('ZJKIT,CODE,123456');emit('ZJKIT,NAME,A2 USB maintenance')}
+   else if(line==='ZJINFO,GET')emit('ZJINFO,FW,ZFC-A2,1.5.11');
    else if(line==='ZJNET,PAIR')emit('ZJNET,PAIR,'+id+','+'b2'.repeat(16));
    else if(line==='ZJADMIN,GET')emit('ZJADMIN,AUTH,'+(f.unlocked?'UNLOCKED':'LOCKED'));
    else if(p[0]==='ZJADMIN'&&p[1]==='UNLOCK'){f.unlocked=true;emit('ZJADMIN,ACK,UNLOCKED_60S')}
@@ -130,7 +130,7 @@ try{
   document.getElementById('kitTransport').value='usb';await window.ZebjusKits.connect();
  });
  let usb=await page.evaluate(()=>window.ZebjusKits.getState());
- assert.equal(usb.kitId,'ZFC-A1-ABCDEF012345');assert.equal(usb.rc,null,'USB identity must not inherit previous network RC');
+ assert.equal(usb.kitId,'ZFC-A2-ABCDEF012345');assert.equal(usb.rc,null,'USB identity must not inherit previous network RC');
  assert.equal(usb.rcAccess,null,'USB identity must not inherit previous network maintenance');
  await page.evaluate(()=>window.__usbAccess.publish());
  assert.equal(await page.locator('#kitRcAccess').textContent(),'RC PPM');

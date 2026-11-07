@@ -96,7 +96,7 @@ final class FlightCoreNativeBridge {
             if(!publicRoute) {
                 if(headers.length()!=4||!headers.has("X-ZJ-Device")||!headers.has("X-ZJ-Session")||
                    !headers.has("X-ZJ-Seq")||!headers.has("X-ZJ-Proof"))throw new IllegalArgumentException();
-                if(!headers.getString("X-ZJ-Device").matches("ZFC-A[12]-[A-F0-9]{12}")||
+                if(!headers.getString("X-ZJ-Device").matches("ZFC-A2-[A-F0-9]{12}")||
                    !headers.getString("X-ZJ-Session").matches("[a-fA-F0-9]{32}")||
                    !headers.getString("X-ZJ-Seq").matches("[1-9][0-9]{0,9}")||
                    !headers.getString("X-ZJ-Proof").matches("[a-fA-F0-9]{64}"))throw new IllegalArgumentException();

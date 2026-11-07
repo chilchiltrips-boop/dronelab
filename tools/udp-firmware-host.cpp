@@ -45,16 +45,19 @@ static String zjPpmStatus(){return "{\"active\":false}";}
 static String zjUdpStatistics(){return "{\"protocol\":\"ZJUDP1\",\"active\":false}";}
 struct AppDesc {uint8_t app_elf_sha256[32]={};} appDesc;
 static AppDesc* esp_app_get_description(){return &appDesc;}
-static String zjImuStatus(){return String("{\"version\":1,\"board\":\"A1\",\"enabled\":false,\"state\":\"READY\"}");}
 static bool gyroReady=true,scanActive=false;static const char* GYRO_BOARD="A1";
+static String zjImuStatus(){return String("{\"version\":1,\"board\":\"")+GYRO_BOARD+"\",\"enabled\":false,\"state\":\"READY\"}";}
 static uint32_t gyroSampleSeq=1,lastGyroSample=0,zjLastScanSeq=0;
-static constexpr int GYRO_ADDR=0x6b;static float RateRoll=1.25,RatePitch=-2.5,RateYaw=3;
+static int GYRO_ADDR=0x6b;static float RateRoll=1.25,RatePitch=-2.5,RateYaw=3;
 static uint8_t scanCount=1,scanAddresses[1]={0x6b};
 #include "../FlightCore_Firmware/FlightCoreHandover.h"
 static String zjFlightStatusJson(){return "{\"version\":1,\"enabled\":false,\"authorized\":false}";}
 #include "udp-network-extract.h"
-int main(){
- zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjKitName="zebjus_drone_1";clockMs=1000;zjEnrollmentInit();
+int main(int argc,char** argv){
+ if(argc>1&&String(argv[1])=="ZFC-A2"){
+  FC_BOARD="ZFC-A2";GYRO_BOARD="A2";GYRO_ADDR=0x68;scanAddresses[0]=0x68;
+ }
+ zjKitId=String(FC_BOARD)+"-012345ABCDEF";zjKitCode="123456";zjKitName="zebjus_drone_1";clockMs=1000;zjEnrollmentInit();
  zjSetupEnrollmentHttp();zjSetupSecureOtaHttp();
  zjHttp.on("/api/status",HTTP_GET,[](){if(zjAllow())zjReply(200,zjStatus());});
  setupHostTelemetry();int commands=0;

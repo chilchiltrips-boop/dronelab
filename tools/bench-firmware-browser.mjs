@@ -19,12 +19,11 @@ const showing=async (id,label)=>field(id).filter({hasText:label}).waitFor({state
 try{
  await page.goto('http://127.0.0.1:8765/index.html#firmware',{waitUntil:'domcontentloaded'});
  await page.locator('[data-dw-view="firmware"]').click();
- // Reproduce an unconnected browser with Board profile left on Auto.
- assert.equal(await field('fwBoardProfile').inputValue(),'auto');
+ // A2 is the offline default; A1 is retained only in historical download archives.
+ await showing('fwFileVersion',version);
+ assert.equal(await field('fwBoardProfile').locator('option[value="ZFC-A1"]').count(),0);
+ await field('fwBoardProfile').selectOption('auto');
  await showing('fwBuildId',release.app.buildId);
- const a1=published.boards.find(board=>board.id==='ZFC-A1');
- await field('fwBoardProfile').selectOption(a1.id);
- await showing('fwBuildId',a1.latest.app.buildId);
  await field('fwBoardProfile').selectOption('ZFC-A2');
  await showing('fwFileVersion',version);
  await showing('fwBuildId',release.app.buildId);
@@ -53,6 +52,8 @@ try{
  await showing('fwBuildId',release.app.buildId);
  await field('fwImageType').selectOption('factory');
  await showing('fwBuildId',release.factory.buildId);
+ await page.waitForTimeout(1200); // exercise the status poll that used to overwrite explicit Factory
+ await showing('fwBuildId',release.factory.buildId);
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  await field('fwImageType').selectOption('app');
  await showing('fwBuildId',release.app.buildId);
@@ -65,7 +66,9 @@ try{
  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:true}})));
  await showing('fwFileVersion',published.version);
  await page.evaluate(()=>{window.ZebjusKits.getState=window.restoreBenchKit;});
- await field('fwBoardProfile').selectOption('auto');
+ // Re-select the offline A2 board: without a connected Kit, Auto detection
+ // remains on the explicit A2 default.
+ await field('fwBoardProfile').selectOption('ZFC-A2');
  await showing('fwFileVersion',version);
  await field('fwAutoLoadBtn').click();
  await showing('fwFileVersion',version);
@@ -73,6 +76,13 @@ try{
  await showing('fwPackageState','VERIFIED IMPORT');
  await showing('fwBuildId',release.app.buildId);
 
+ const archived=published.boards.find(b=>b.id==='ZFC-A1');
+ if(archived){
+  await field('fwFileInput').setInputFiles(`FlightCore_Firmware/${archived.latest.app.file}`);
+  await showing('fwSourceMessage','Unsupported image chip');
+  assert.equal(await field('fwUsbFlashBtn').isDisabled(),true);
+  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
+ }
  const corrupt=Buffer.from(readFileSync(`${folder}/${release.app.file}`));
  corrupt[corrupt.length-1]^=1;
  await page.route(new RegExp(`/bench/[^/]+/${release.app.file}\\?`),route=>route.fulfill({body:corrupt}));
@@ -85,5 +95,8 @@ try{
  assert.equal(await field('fwNetworkFlashBtn').isDisabled(),true);
  assert.deepEqual(writes,[]);
  assert.deepEqual(errors,[]);
- console.log(`PASS offline Auto loads A2 ${version} bench, manual A1 and explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
+ console.log(`PASS A2 defaults to verified ${version} bench, explicit ${published.version} rollback, APP/FACTORY, import, OTA readiness and corrupted image rejection`);
+}catch(error){
+ console.error('Firmware state:',await field('fwBuildId').textContent(),await field('fwPackageState').textContent(),await field('fwSourceMessage').textContent(),await field('fwLog').textContent());
+ throw error;
 }finally{await browser.close();}

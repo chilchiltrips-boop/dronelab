@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {execFileSync,spawn} from 'node:child_process';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function section(source,start,end){const at=source.indexOf(start),to=source.indexOf(end,at);if(at<0||to<at)throw Error('Production source extraction failed: '+start);return source.slice(at,to);}
-export async function startFirmwareHost(){
+export async function startFirmwareHost({board='ZFC-A1'}={}){
  const directory=mkdtempSync(join(tmpdir(),'zj-udp-host-'));let child;
  const stop=()=>{child?.kill();rmSync(directory,{recursive:true,force:true})};
  try{
@@ -20,7 +20,7 @@ export async function startFirmwareHost(){
   writeFileSync(join(directory,'udp-network-extract.h'),extract);
   writeFileSync(join(directory,'udp-version.h'),'static const char* FW_VERSION="'+read('VERSION.txt').trim()+'";\n');
   execFileSync('g++',['-std=c++17','-Itools/host-stubs','-I'+directory,'tools/udp-firmware-host.cpp','-lcrypto','-o',join(directory,'firmware')],{stdio:'pipe',timeout:60000});
-  child=spawn(join(directory,'firmware'),[],{stdio:['ignore','pipe','pipe']});
+  child=spawn(join(directory,'firmware'),[board],{stdio:['ignore','pipe','pipe']});
   const port=await new Promise((resolve,reject)=>{
    const timer=setTimeout(()=>reject(Error('Firmware host startup timeout')),5000);
    child.once('error',reject);child.once('exit',code=>{clearTimeout(timer);reject(Error('Firmware host exited: '+code))});

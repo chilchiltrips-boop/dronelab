@@ -34,4 +34,4 @@ jobs:
           npm run verify:acceptance:strict
       - name: Record verification boundary
         run: |
-          echo 'Signed physical evidence requires independent real A1/A2 and handset observations.'
+          echo 'Signed physical evidence requires independent real A2 and handset observations.'
