@@ -1,5 +1,5 @@
 {
-  "version": "1.61",
+  "version": "1.62",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -16,7 +16,7 @@
     "Flight Data shows verified A2 telemetry with system health, a stationary level reference, a 3D airframe and live gyro trends. Setup Wizard Report checks flight readiness.",
     "Firmware Flash can explicitly load the verified A2 1.7.20 Experimental PPM Rate APP or Factory image. Physical acceptance remains pending."
   ],
-  "buildCommit": "d06b5f3f234b",
-  "publishedAt": "2026-11-07T12:50:24.390808+00:00",
-  "buildNumber": 494
+  "buildCommit": "d29284d527c2",
+  "publishedAt": "2026-11-07T14:43:32.145918+00:00",
+  "buildNumber": 495
 }
