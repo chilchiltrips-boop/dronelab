@@ -1,40 +1,27 @@
-# DroneLab — Lean updates, CI and deployment guide
+# Lean updates and release boundaries
 
-## Use this context first (smallest useful read)
+Read the root `AGENTS.md` map first. Use `npm run impact -- --base origin/main --head HEAD` and `npm run audit:repo` to inspect changed paths and tracked sizes without reading binary contents. The impact report is advisory, not a replacement for release checks.
 
-Before any GitHub change, inspect the current **main SHA**, the user's exact failing screen/log, and **only the related paths**. Avoid fetching the entire 100+ MB tree or all workflow logs.
+## One tested Pages artifact
 
-Run `npm run impact -- --base <known-commit> --head HEAD` after a change (or use `--json`). This is **advisory**; it classifies changed paths and recommends scope-specific checks without running tests or modifying hardware. It does not replace release gates.
+`npm run build:site` copies the explicit allowlist in `tools/site-package.mjs` into `_site`. It verifies static references, assembly assets, APK checksum and every firmware catalog before producing a content-hashed `site-build.json`. Both `index.html` and its source alias `lab.html` are materialized as ordinary files. Never upload the repository root.
 
-| Change | Start with | Test |
-| --- | --- | --- |
-| WebApp interface | `index.html`, `lab.html`, `js/`, `firmware-updater.js`, relevant CSS | Focused Node tests, `npm run check`, browser smoke for edited page |
-| Physical A1/A2 firmware | `FlightCore_Firmware/*.h`, `I2C_ADDRESS_SCANNER.ino`, `VERSION.txt` | Host safety tests, Arduino A1/A2 compilation, checksums and held release gates |
-| Firmware availability | `bench-release-policy.json`, `FlightCore_Firmware/bench/<version>/`, `firmware-updater.js` | Verify exact build source, APP/FACTORY SHA-256, catalog and Firmware Center |
-| Android | `mobile-android/`, companion and pairing modules | Exact-source Android signing and acceptance workflows |
-| Documentation | `docs/` | Link/content review; no unrelated C++ compile |
+Preserved: Python workers, Pyodide/Monaco and all wheels, simulator models, service worker, APK, current stable/bench/candidate firmware and historical download paths. Excluded: C++ source, Android source, tools/tests, docs, CI and local artifacts. Historical `.bin` files remain deployed because removing them would break existing download URLs; they are compatibility archives, not unused junk. Git history and existing releases are unchanged.
 
-## Changes made to reduce unnecessary GitHub Actions work
+`.github/workflows/pages.yml` tests the exact `_site` over HTTP, including offline Python, before uploading it. Production uses GitHub Pages **Source: GitHub Actions**. It compares rendered content to the live manifest; identical content does not redeploy. WebApp version stamping happens in this same run, not in a competing workflow. Firmware/APK-only publication deploys without changing the WebApp version. Main must still match the tested source before metadata is committed. A stale run yields to the newer queued run; active production file sync is not cancelled. A manual `force` dispatch allows recovery without a content change.
 
-- WebApp version stamping no longer runs when **only** docs, tests/tools, CI workflows, firmware or APK files change. Real WebApp assets still advance the version. A WebApp change may still create a second Pages deployment because the repository uses an automatic source-branch Pages deployment; this is **not** eliminated yet.
-- The main A1/A2 source-image builder now triggers only for firmware inputs, release policies and compiler/validator changes, not HTML/CSS/JS-only changes.
-- The immutable bench-package publisher now runs on release policy and verifier edits (or explicit manual dispatch), not every Firmware Center UI change. Never relabel an older binary with a new source version.
-- The all-PR V2 workflow keeps ordinary UI/protocol tests, but skips its expensive Arduino compile and artifact upload when C++/firmware inputs did not change. Missing diff ancestry fails **toward** compiling.
+APK/firmware publishers use `GITHUB_TOKEN`, whose commits do not trigger new push workflows. Successful publisher `workflow_run` events therefore check the latest main package. No changed assets means no upload/deployment. This deliberately uses a content comparison, not commit-message guesses. An unavailable live digest conservatively requests verification/deployment.
 
-## Deployment size and next safe step
+## CI scope
 
-At the audit, 658 tracked blobs totaled approximately 112 MB (raw file sizes). The GitHub Pages build uploaded an approximately 52.8 MB ZIP, including non-web materials. **GitHub Pages uses the built-in branch deployment** (`dynamic/pages/pages-build-deployment`), so editing CI path filters does **not** make that site artifact smaller.
+The V2 workflow owns one full Node suite on PRs and main. Domain workflows keep their integration/browser coverage and run focused host tests (`node tools/run-domain-tests.mjs <domain>`). Signed Android publication also waits for the exact-source V2 result, alongside its existing native/signature/integration gates. Branch-specific one-off build workflows were removed; manual firmware builds remain available.
 
-The next optimization should be a **reviewed, site-only GitHub Actions Pages build**. Preserve all actually loaded JavaScript/CSS, Pyodide + Monaco runtime wheels/modules, source maps needed for debugging, service worker/offline files, WebApp assets, release metadata, *published stable* and *currently approved bench* APP/FACTORY firmware, and the downloadable signed APK. Exclude Git history, tests, C++ headers/source, obsolete firmware candidate images and documentation from **deployed assets only** (retain them in Git). Build and test an exact-path allowlist, all referenced asset URLs, offline behavior, and OTA/USB downloads **before** changing GitHub Pages Settings → Build and deployment → Source to **GitHub Actions**. Do not activate a competing Pages workflow while source-branch deployment remains enabled.
+PRs compile ordinary A1/A2 once plus the separately verified A2 experimental candidate when compiled inputs or build infrastructure change. UI-only edits skip compilation. Main source publication remains separately verified. The pinned Arduino toolchain is cached; compiled firmware is never reused by a broad cache key. Browser evidence expires after seven days; firmware/release artifacts retain their existing retention.
 
-Compression of real `.bin`, `.wasm`, `.whl` or `.apk` files is not interchangeable with delivering them unchanged: preserve binary SHA-256, boot images and flash offsets. Let the Pages transport handle ordinary HTTP compression; only minify JS/CSS after browser tests and measured output.
+`lab.html` aliases the canonical `index.html` in Git. Consumers that do not resolve Git symlinks should use `index.html` or `npm run build:site`, which emits both full HTML files. The live URL remains compatible.
 
-## Safety and release boundaries
+## Qualification and reporting
 
-- WebApp UI test passes are **not** physical-flight acceptance. `flightQualified=false` remains until separately documented physical qualification.
-- Never bypass PPM ARM/DISARM, STOP, failsafe, RC/OTA ownership, independent motor watchdog, or signed firmware release provenance to save CI minutes.
-- Do not make an unattended firmware publish trigger on every WebApp commit. A release must pin exact source SHA, built image digests and board identity.
+Do not infer physical acceptance from software tests or a successful flash. Qualification records bind an operator, board, timestamp, actual case observations and exact tested image/source. Preserve STOP, receiver loss, disarm, motor watchdog, output ownership and release holds. General motor bench success is not evidence for every physical case.
 
-## Communication when ChatGPT updates the repository
-
-Return only: changed files and reason; branch/PR or merged SHA; focused test results; whether WebApp Pages was **actually deployed**; whether **new binaries** were **actually published**; and any physical acceptance still missing. Reuse a failing run ID/log rather than repeating full-repository scans. Fewer GitHub jobs may indirectly reduce ChatGPT troubleshooting tool calls, but do **not** directly increase or reset ChatGPT plan usage limits.
+Report the starting/final SHA, PR, tests, actual Pages result, whether binaries were published and remaining evidence gaps. Fewer CI jobs can reduce troubleshooting work; they do not change ChatGPT account usage limits.

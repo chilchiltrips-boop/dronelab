@@ -2,13 +2,12 @@ name: DroneLab V2 Safe Fixes — Nonhardware Regression
 
 on:
   push:
-    branches:
-      - feature/unified-connection-admin-v2
-      - feature/simple-kit-connection-v1-4-1
-      - feature/unified-connection-admin-v2-safe-fixes-20261013
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md', 'app-version.json', 'mobile-apk/**']
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md', 'app-version.json', 'mobile-apk/**']
+  workflow_dispatch:
 
 concurrency:
   group: v2-validation-${{ github.event.pull_request.head.ref || github.ref_name }}
@@ -20,7 +19,7 @@ permissions:
 jobs:
   source-and-regression:
     name: Nonhardware source and regression tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -71,11 +70,12 @@ jobs:
         with:
           name: v2-browser-evidence
           path: test-output/
+          retention-days: 7
 
   firmware-build:
     name: Compile A1 and A2 review firmware
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +90,10 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+          if [ '${{ github.event_name }}' = push ]; then
+            echo 'compile=false' >> "$GITHUB_OUTPUT"
+            echo 'Main firmware publication workflow owns exact-source production build'
+          elif ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
             echo "compile=true" >> "$GITHUB_OUTPUT"
             echo "Base SHA unavailable; conservatively compile both boards"
           elif git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
@@ -103,18 +106,22 @@ jobs:
             'js/pid-profiles.js' 'tools/sync-pid-profiles.mjs' \
             'tools/build_scanner.py' 'tools/embed_setup_portal.py' \
             'tools/setup-portal.html' 'tools/bench_release_gate.py' \
-            'tools/verify_release.py' 'tools/firmware_compile_time.py'; then
+            'tools/verify_release.py' 'tools/firmware_compile_time.py' \
+            'tools/verify_experimental_rate.py' '.github/actions/setup-flightcore/**' \
+            '.github/workflows/v2-safe-fixes.yml' '.github/workflows/build-i2c-scanner.yml'; then
             echo "compile=false" >> "$GITHUB_OUTPUT"
             echo "No compiled firmware input changed; use existing verified package"
           else
             echo "compile=true" >> "$GITHUB_OUTPUT"
             echo "Compiled firmware input changed; run both-board review build"
           fi
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: ./.github/actions/setup-flightcore
         if: steps.firmware_changes.outputs.compile == 'true'
       - run: python3 tools/embed_setup_portal.py
         if: steps.firmware_changes.outputs.compile == 'true'
-      - run: python3 tools/build_scanner.py
+      - run: python3 tools/build_scanner.py --skip-core-install
+        if: steps.firmware_changes.outputs.compile == 'true'
+      - run: python3 tools/bench_release_gate.py --compiled
         if: steps.firmware_changes.outputs.compile == 'true'
       - run: python3 tools/verify_release.py
         if: steps.firmware_changes.outputs.compile == 'true'
@@ -127,4 +134,23 @@ jobs:
             FlightCore_Firmware/*_FACTORY.bin
             FlightCore_Firmware/build-report.json
             FlightCore_Firmware/catalog.json
+          if-no-files-found: error
+      - name: Compile and verify separate experimental PPM Rate candidate
+        if: steps.firmware_changes.outputs.compile == 'true'
+        run: |
+          python3 tools/build_scanner.py --skip-core-install --board ZFC-A2 --experimental-rate-flight --output-dir "$RUNNER_TEMP/a2-rate-experimental"
+          python3 tools/verify_experimental_rate.py "$RUNNER_TEMP/a2-rate-experimental"
+      - name: Verify candidate import without physical flashing
+        if: steps.firmware_changes.outputs.compile == 'true'
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/rate-http.log 2>&1 &
+          for attempt in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8765/ > /dev/null && break; sleep 0.5; done
+          A2_RATE_ARTIFACT_DIR="$RUNNER_TEMP/a2-rate-experimental" node tools/experimental-rate-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: steps.firmware_changes.outputs.compile == 'true'
+        with:
+          name: a2-PPM-RATE-EXPERIMENTAL-${{ github.sha }}
+          path: ${{ runner.temp }}/a2-rate-experimental/
           if-no-files-found: error

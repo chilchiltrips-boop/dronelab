@@ -35,4 +35,5 @@ jobs:
         with:
           name: legacy-connectivity-browser-evidence
           path: test-output/
+          retention-days: 7
           if-no-files-found: warn

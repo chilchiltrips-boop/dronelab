@@ -129,7 +129,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
+      - run: node tools/run-domain-tests.mjs release
       - run: python3 tools/verify_release.py
       - run: npm run check
       - run: node --check firmware-updater.js

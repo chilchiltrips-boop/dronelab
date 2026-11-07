@@ -30,3 +30,7 @@ GitHub Actions performs these browser tests on the dedicated testing branch. QR 
 The Android workflow compiles debug only for validation, then builds a permanently signed non-debug release review artifact. `tools/verify_signed_android_release.py` checks the pinned certificate, APK v2 signature, app identity, the Gradle versionCode, non-debuggable flag and compatibility against the prior published APK. Only main publishes the stable APK URL.
 
 Software verification does not demonstrate physical Android upgrade installation, camera autofocus/density performance, board flashes, Wi-Fi roaming, campus firewall reachability or real transmitter latency. Those remain explicit release review checks.
+
+## Repository and deployment checks
+
+See [the project map](AGENTS.md) and [lean update guide](docs/AI_UPDATE_GUIDE.md). Run `npm run audit:repo`, `npm run impact -- --base origin/main --head HEAD`, and `npm run build:site`. Pages uploads only the verified `_site` directory; historical firmware download URLs remain intact.

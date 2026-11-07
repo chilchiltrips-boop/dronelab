@@ -68,3 +68,4 @@ jobs:
         with:
           name: a2-setup-browser
           path: test-output/
+          retention-days: 7

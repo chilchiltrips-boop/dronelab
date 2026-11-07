@@ -116,7 +116,7 @@ jobs:
           node --check js/tripod-experiments.js
           node --test tools/tripod-physics.test.mjs
           npm run check
-          npm test
+          node tools/run-domain-tests.mjs pid
       - name: Install isolated Chromium test environment
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
@@ -136,4 +136,5 @@ jobs:
         with:
           name: tripod-simulator-desktop-mobile
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

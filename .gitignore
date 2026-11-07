@@ -20,3 +20,9 @@ node_modules/
 test-output/
 
 /node_modules
+
+# Reproducible local/CI site packages
+/_site/
+/site-test-output/
+__pycache__/
+*.py[cod]

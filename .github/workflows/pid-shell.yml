@@ -89,7 +89,7 @@ jobs:
           node --check pairing-host-bridge.js
           node --check pairing-web.js
           node --check js/ui-controls.js
-          npm test
+          node tools/run-domain-tests.mjs pid
           npm run check
       - name: Install Chromium
         run: |
@@ -106,4 +106,5 @@ jobs:
         with:
           name: pid-shell-visuals
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

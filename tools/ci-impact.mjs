@@ -10,7 +10,7 @@ const compiledTools=new Set(['VERSION.txt','js/pid-profiles.js',
  'tools/sync-pid-profiles.mjs','tools/build_scanner.py','tools/embed_setup_portal.py',
  'tools/setup-portal.html','tools/bench_release_gate.py','tools/verify_release.py',
  'tools/firmware_compile_time.py']);
-const releaseMeta=/^(?:FlightCore_Firmware\/(?:bench\/|[^/]+\.(?:bin|json)$)|firmware-(?:catalog|latest)\.json$)/;
+const releaseMeta=/^(?:FlightCore_Firmware\/(?:(?:bench|experimental)\/|[^/]+\.(?:bin|json)$)|firmware-(?:catalog|latest)\.json$)/;
 const android=/^(?:mobile-android\/|mobile-apk\/|android-native-bridge\.js$|companion(?:-[^/]+)?\.js$|companion\.(?:html|css)$)/;
 const webPath=p=>p.startsWith('js/')||p.startsWith('vendor/')||
  /^(?:index|lab|tripod|companion|pairing|remote|flight|firmware|sw)[^/]*\.(?:html|css|js|mjs|json)$/.test(p)||

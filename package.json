@@ -12,6 +12,8 @@
     "verify:acceptance": "node tools/release-acceptance.mjs",
     "verify:admin-deployment": "node tools/remote-deployment-smoke.mjs",
     "verify:acceptance:strict": "node tools/release-acceptance.mjs --strict",
-    "impact": "node tools/ci-impact.mjs"
+    "impact": "node tools/ci-impact.mjs",
+    "build:site": "node tools/site-package.mjs",
+    "audit:repo": "node tools/repository-audit.mjs"
   }
 }

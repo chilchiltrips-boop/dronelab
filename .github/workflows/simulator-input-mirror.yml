@@ -35,7 +35,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm test && npm run check
+      - run: node tools/run-domain-tests.mjs input && npm run check
       - name: Install Chromium
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
@@ -54,4 +54,5 @@ jobs:
         with:
           name: readonly-ap-mirror-evidence
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

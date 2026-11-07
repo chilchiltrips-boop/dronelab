@@ -117,4 +117,5 @@ jobs:
         with:
           name: python-lab-browser-screenshots
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

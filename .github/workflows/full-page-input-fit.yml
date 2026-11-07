@@ -33,7 +33,7 @@ jobs:
       - name: Run project validation and unit tests
         run: |
           node --check tools/full-page-input-fit-browser.mjs
-          npm test
+          node tools/run-domain-tests.mjs ui
           npm run check
       - name: Install Chromium
         run: |

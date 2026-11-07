@@ -18,7 +18,7 @@ test('Real A1/A2 compiled inputs require both-board verification',()=>{
 
 test('Published binaries are release artifacts, not source compile triggers',()=>{
  const report=classifyChanges(['FlightCore_Firmware/bench/1.7.19/ZEBJUS_FLIGHTCORE_A2_APP.bin',
-  'FlightCore_Firmware/bench/1.7.19/catalog.json']);
+  'FlightCore_Firmware/experimental/1.7.20/catalog.json']);
  assert.equal(report.sections.firmware.length,0);
  assert.equal(report.sections.releaseMetadata.length,2);
 });

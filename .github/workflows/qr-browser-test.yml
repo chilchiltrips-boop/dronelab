@@ -119,7 +119,7 @@ jobs:
           python3 -m http.server 8765 --bind 127.0.0.1 > /tmp/qr-pairing-http.log 2>&1 &
           sleep 3
           npm run check
-          npm test
+          node tools/run-domain-tests.mjs pairing
           npm run verify:firmware
           node tools/accordion-browser.mjs
           node tools/qr-pairing-browser.mjs
@@ -137,4 +137,5 @@ jobs:
         with:
           name: qr-webapp-android-ui-browser-screenshots
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore

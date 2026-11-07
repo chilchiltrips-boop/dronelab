@@ -23,7 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: npm test
+      - run: node tools/run-domain-tests.mjs setup
       - run: npm run check
       - run: npm run verify:firmware
   browser:
@@ -63,3 +63,4 @@ jobs:
         with:
           name: smart-setup-python-auto-browser-evidence
           path: test-output/
+          retention-days: 7

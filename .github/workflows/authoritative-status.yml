@@ -115,3 +115,4 @@ jobs:
         with:
           name: authoritative-status-browser-evidence
           path: test-output/
+          retention-days: 7

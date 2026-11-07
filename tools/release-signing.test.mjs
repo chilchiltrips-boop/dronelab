@@ -39,8 +39,9 @@ test('release workflow only distributes certificate-pinned signed release APKs',
 });
 
 test('production web version stamping advances major/minor independently of build metadata',()=>{
- const workflow=read('.github/workflows/version-stamp.yml');
- assert.match(workflow,/python3 tools\/stamp_webapp_version\.py/);
+ const workflow=read('.github/workflows/pages.yml');
+ assert.match(workflow,/node tools\/prepare-pages\.mjs/);
+ assert.match(read('tools/prepare-pages.mjs'),/stamp_webapp_version\.py/);
  const stamp=read('tools/stamp_webapp_version.py');
  assert.match(stamp,/int\(current\[2\]\) \+ 1/);
  assert.match(stamp,/buildNumber=int\(build_number\)/);

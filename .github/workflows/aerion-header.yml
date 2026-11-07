@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm test
+      - run: node tools/run-domain-tests.mjs ui
       - run: npm run check
       - run: python3 tools/android_release_needed.py
   browser:
@@ -67,3 +67,4 @@ jobs:
         with:
           name: aerion-horizontal-header-evidence
           path: test-output/
+          retention-days: 7

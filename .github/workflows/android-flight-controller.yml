@@ -91,7 +91,7 @@ jobs:
           node --check pairing-web.js
           node --check js/classroom-kits.js
           node --test tools/flight-input.test.mjs
-          npm test
+          node tools/run-domain-tests.mjs android
           npm run check
       - name: Install Chromium
         run: |
@@ -111,4 +111,5 @@ jobs:
         with:
           name: android-flight-landscape-webrtc
           path: test-output/
+          retention-days: 7
           if-no-files-found: ignore
