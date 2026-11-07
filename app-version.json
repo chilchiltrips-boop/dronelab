@@ -13,8 +13,8 @@
     "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing",
     "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check",
     "Aerof450 Quad X and Quad + PID profiles, unified Rate and Angle editor, and disarmed preview on supported A2 firmware",
-    "Flight Data places the primary instruments above 3D and System Health beside a full-height offline map, with verified telemetry details and quicker disarmed bench tilt updates. Setup Wizard Report checks flight readiness.",
-    "Firmware Flash can explicitly load the verified A2 1.7.20 Experimental PPM Rate APP or Factory image. Physical acceptance remains pending."
+    "Flight Data uses compact authenticated USB/AP/STA telemetry, fused roll/pitch animation, sample age and latency, and saved/active flight mode. Setup Wizard saves input source and mode and reuses IMU Quick Level calibration.",
+    "Firmware Flash can explicitly load the verified A2 1.7.21 Experimental Acro + Angle APP or Factory image. PPM and local Android AP use setup-gated output; WebRTC remains simulator-only. Physical acceptance for this integration is NOT_RUN."
   ],
   "buildCommit": "a5f2d702505d",
   "publishedAt": "2026-11-07T20:42:51.963981+00:00",
