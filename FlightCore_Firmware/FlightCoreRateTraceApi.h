@@ -107,18 +107,9 @@ static bool zjFlightSerialCommand(char* line){
   const String capture=strtok_r(nullptr,",",&rest),offset=strtok_r(nullptr,",",&rest);
   error=strtok_r(nullptr,",",&rest)?"INVALID_TRACE_REQUEST":zjFlightTracePage(boot,capture,offset,ZJ_TRACE_USB_PAGE,reply);
  }else if(!trace&&action=="ARM"){
-  static uint32_t lastArmNonce=0;
-  uint32_t nonce=0;
-  const String value=strtok_r(nullptr,",",&rest);
-  if(!zjAdminAuthorized())error="ADMIN_LOCKED";
-  else if(boot!=zjBootId)error="BOOT_CHANGED";
-  else if(strtok_r(nullptr,",",&rest)||!zjPidUnsigned(value,UINT32_MAX,nonce)||nonce<=lastArmNonce)error="INVALID_OR_REPLAYED_ARM";
-  else{
-   lastArmNonce=nonce;
-   const auto fault=zjControlArmFlight();
-   if(fault!=ZjFlightFault::NONE)error=zjFlightFaultName(fault);
-   else reply="ARMED";
-  }
+  // Old bench firmware always rejected this command. Use the selected
+  // receiver's DISARM -> ARM gesture; USB must not rearm a still-held RC input.
+  error="USE_PPM_ARM_GESTURE";
  }else error="UNSUPPORTED_ACTION";
  Serial.print(trace?"ZJTRACE,":"ZJFLIGHT,");
  Serial.print(error?"NACK,":"ACK,");

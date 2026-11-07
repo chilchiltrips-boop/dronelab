@@ -11,6 +11,7 @@ const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 const BENCH_VERSION='1.7.19',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
 let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
+let experimentalCatalog=null;
 let benchCatalog=null,releaseTrack='published',releaseChoice='latest'; // A2 defaults to verified bench; explicit published rollback remains available.
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
 let lastVerifiedRuntime=null,lastVerifiedAt=0,liveDiagnostic=null;
@@ -21,6 +22,7 @@ let firmwareTargetMethod='wifi'; // Switching mode NEVER writes the controller.
 let preparingConnectedFirmware=false,preparedConnectedFirmwareKey='';
 async function prepareConnectedFirmware(){
  const kit=globalThis.ZebjusKits?.getState?.();
+ if(releaseChoice==='experimental')return; // keep an explicitly imported candidate; no implicit download/overwrite
  if(busy||preparingConnectedFirmware||firmwareTargetMethod!=='wifi'||!kit?.connected||!['sta','ap'].includes(kit.transport)||!kit.kitId||!kit.board)return;
  await loadCatalog();
  if(busy||preparingConnectedFirmware)return;
@@ -174,7 +176,7 @@ function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
 function boardById(id){return catalog?.boards?.find(b=>b.id===id)||null}
 function releaseForBoard(id,track=releaseTrack){
- return (track==='bench'?benchCatalog?.boards.find(b=>b.id===id):boardById(id))?.latest;
+ return (track==='experimental'?experimentalCatalog?.boards.find(b=>b.id===id):track==='bench'?benchCatalog?.boards.find(b=>b.id===id):boardById(id))?.latest;
 }
 function mapHardwareSignature(raw){const s=String(raw||'').toUpperCase();if(/\bUNKNOWN\b/.test(s))return'';const chips=Array.from(s.matchAll(/\bESP32[-_\s]*(C6(?:FH[48])?|[A-Z]\d+)\b/g),m=>'ESP32'+m[1].replace(/FH[48]$/,''));for(const b of catalog?.boards||[])for(const match of b.usbMatch||[]){const alias=String(match).toUpperCase(),compact=alias.replace(/[-_\s]+/g,'');if(compact.startsWith('ESP32')?chips.includes(compact):s.includes(alias))return b.id}return''}
 function boardName(id){return boardById(id)?.name||id||'Unknown board'}
@@ -235,7 +237,7 @@ async function fetchBundledFirmware(file,version){
  throw new Error(`Firmware package file is not present (${last||'not found'}).`);
 }
 async function openDb(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains(STORE))r.result.createObjectStore(STORE)};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
-function cacheKey(boardId,type,track=releaseTrack){return`${track==='bench'?BENCH_VERSION+':':''}${boardId||'unknown'}:${type||'app'}`}
+function cacheKey(boardId,type,track=releaseTrack){return`${track==='experimental'?'experimental:'+experimentalCatalog?.version+':':track==='bench'?BENCH_VERSION+':':''}${boardId||'unknown'}:${type||'app'}`}
 async function cacheFirmware(){if(!fw)return;try{const db=await openDb();await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put({...fw,bytes:fw.bytes.buffer},cacheKey(fw.boardId,fw.type,fw.track));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(e){log('Could not cache firmware: '+e.message)}}
 async function loadCached(boardId,type='app'){try{const db=await openDb(),v=await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readonly'),r=tx.objectStore(STORE).get(cacheKey(boardId,type));r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});db.close();if(v?.bytes){
  const release=releaseForBoard(boardId),pkg=release?.[type],bytes=new Uint8Array(v.bytes),hash=await sha256(bytes);
@@ -258,7 +260,7 @@ async function setFirmware(bytes,name,opt={}){if(!(bytes instanceof Uint8Array))
 function renderFirmware(){const has=!!fw;textTitle('#fwFileName',has?fw.name:'No firmware loaded');text('#fwFileVersion',has?fw.version:'--');textTitle('#fwBuildTime',has?(fw.compiledAt?formatBuildTime(fw.compiledAt):'Not reported in firmware image'):'--');
  const stampEl=$('#fwBuildTime');if(stampEl)stampEl.title=has?
   'UTC compile timestamp embedded in verified .bin: '+(fw.compiledIso||'unavailable')+' • Catalog build start: '+(fw.builtAt||'not reported'):
-  'Select a firmware file to read its embedded compile date';textTitle('#fwBuildId',has?(fw.buildId||'Imported / custom'):'--');text('#fwFileSize',has?prettyBytes(fw.bytes.length):'--');textTitle('#fwFileHash',has?(fw.hash?fw.hash.slice(0,18)+'…':'Unavailable'):'--');badge('#fwSourceBadge',has?(fw.track==='bench'?'BENCH LOADED':'LOADED'):'NO FILE',has?(fw.track==='bench'?'warn':'good'):'');const t=$('#fwImageType');if(t&&has)t.value=fw.type;const erase=$('#fwEraseUsb');if(erase){erase.disabled=(t?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}syncFirmwareControls()}
+  'Select a firmware file to read its embedded compile date';textTitle('#fwBuildId',has?(fw.buildId||'Imported / custom'):'--');text('#fwFileSize',has?prettyBytes(fw.bytes.length):'--');textTitle('#fwFileHash',has?(fw.hash?fw.hash.slice(0,18)+'…':'Unavailable'):'--');badge('#fwSourceBadge',has?(fw.track==='experimental'?'EXPERIMENTAL RATE LOADED':fw.track==='bench'?'BENCH LOADED':'LOADED'):'NO FILE',has?(['bench','experimental'].includes(fw.track)?'warn':'good'):'');const t=$('#fwImageType');if(t&&has)t.value=fw.type;const erase=$('#fwEraseUsb');if(erase){erase.disabled=(t?.value||fw?.type)==='app';if(erase.disabled)erase.checked=false}syncFirmwareControls()}
 async function onlineBoardInfo(){
  const kit=globalThis.ZebjusKits?.getState?.();
  if(kit?.connected&&['sta','ap'].includes(kit.transport)&&boardById(kit.board)){
@@ -290,6 +292,7 @@ async function targetBoardId(updateUi=true){
  return id;
 }
 async function autoLoad(choice=releaseChoice){
+ if(choice==='experimental'){text('#fwSourceMessage','Import the verified experimental .bin again, or choose Auto Load Latest for bench firmware.');return;}
  if(busy)return;
  setBusy(true);
  try{
@@ -353,12 +356,24 @@ async function importFile(file){
    await loadBenchCatalog().catch(()=>{});
    track='bench';release=releaseForBoard(id,track);
   }
+  if(!matches(release?.[type])&&id==='ZFC-A2'){
+   const response=await fetch(`${BASE}/experimental-rate-catalog.json`,{cache:'no-store'});
+   if(response.ok){
+    const candidate=await response.json();
+    const {experimentalRateRelease}=await import('./js/firmware-image.js');
+    const verified=experimentalRateRelease(candidate,id);
+    if(matches(verified[type])){
+     if(!new TextDecoder().decode(bytes).includes('ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL'))throw Error('Experimental output profile marker missing.');
+     experimentalCatalog=candidate;track='experimental';release=verified;
+    }
+   }
+  }
   const pkg=release?.[type];
   if(!matches(pkg))throw Error('Imported .bin does not match a verified FlightCore package for '+boardName(id)+'.');
   if(chosen==='auto'&&!connected&&$('#fwBoardProfile'))$('#fwBoardProfile').value=id;
   releaseTrack=track;releaseChoice=track;
   await setFirmware(bytes,file.name,{boardId:id,type,version:release.version,builtAt:pkg.builtAt,compiledAt:pkg.compiledAt,buildId:pkg.buildId,source:'Verified FlightCore import'});
-  await targetBoardId(true);text('#fwSourceMessage',`Verified FlightCore ${release.version} image imported for ${boardName(id)}.${track==='bench'?' Bench diagnostics only. Flight outputs locked.':''}`);
+  await targetBoardId(true);text('#fwSourceMessage',`Verified FlightCore ${release.version} image imported for ${boardName(id)}.${track==='experimental'?' Experimental PPM Rate: saved setup + explicit ARM can enable motors. Physical tests NOT_RUN.':track==='bench'?' Bench diagnostics only. Flight outputs locked.':''}`);
   text('#fwPackageState','VERIFIED IMPORT');markPackagePrepared('Imported firmware verified');
  }catch(error){
   text('#fwPackageState','IMPORT REJECTED');text('#fwSourceMessage',error.message);
@@ -406,21 +421,22 @@ function renderAcroReadiness(data){
  const missed=Number.isFinite(data.controlMissedTicks)?' • missed '+data.controlMissedTicks:'';
  text('#fwAcroLoop',loopHz+' / 250 Hz target'+missed);
  text('#fwAcroSetup',data.setupComplete===true?'SETUP SAVED • REV '+String(data.setupRevision??'--'):'SETUP INCOMPLETE');
- text('#fwAcroFlight',data.flightQualified===true?'QUALIFICATION DATA REQUIRES PHYSICAL EVIDENCE':'BLOCKED • FLIGHT DISABLED');
- text('#fwAcroBlocker',String(data.softwareBlockReason||data.blockReason||'UNKNOWN'));
+ const flight=window.ZebjusKitAccessPolicy?.flightState?.(data.flight);
+ text('#fwAcroFlight',flight?.authorized?'RATE FLIGHT ARMED':flight?.enabled?'EXPERIMENTAL • PPM / ACRO':'BENCH • FLIGHT OUTPUT DISABLED');
+ text('#fwAcroBlocker',flight?.authorized?'NONE':flight?.lastArmReason&&flight.lastArmReason!=='NONE'?flight.lastArmReason:String(data.softwareBlockReason||data.blockReason||'UNKNOWN'));
  text('#fwAcroPPM',(data.ppmFresh?'PPM FRESH':'PPM NOT FRESH')+' • '+(data.inputArmed?'INPUT ARMED':'INPUT DISARMED')+
   ' • '+String(data.inputSource||'NONE'));
  text('#fwAcroIMU',(data.gyroFresh?'GYRO OK':'GYRO NOT READY')+' • '+(data.timingHealthy?'TIMING OK':'TIMING CHECK')+
   ' • '+(Number.isFinite(data.controlHz)?data.controlHz.toFixed(1)+' Hz':'--'));
- text('#fwAcroESC',(data.escOperatorConfirmed?'Operator confirmed':'ESC unconfirmed')+' • '+
+ text('#fwAcroESC',(data.escOperatorConfirmed?'Operator confirmed':data.escSequenceComplete?'Controller sequence saved':'ESC not ready')+' • '+
   (data.wiringVerified?'Wiring profile OK':'Wiring not verified')+' • '+(data.outputsOffAck?'PWM OFF ACK':'OFF unverified'));
  text('#fwAcroIdle',String(data.armedIdlePulseUs||1000)+' µs armed low • '+String(data.disarmedOutput||'PWM_OFF')+' on STOP');
  text('#fwAcroRates',Array.isArray(data.gyroRateDegS)?data.gyroRateDegS.map(x=>Number.isFinite(x)?x.toFixed(2):'--').join(' / '):'--');
  text('#fwAcroMix',Array.isArray(data.geometryPredictionUs)?data.geometryPredictionUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
  text('#fwAcroPidShadow',Array.isArray(data.pidShadowPulseUs)?data.pidShadowPulseUs.map(x=>Number.isFinite(x)?x.toFixed(1):'--').join(' / '):'--');
- text('#fwAcroStatusText','P-only 1500 µs motor geometry prediction — NEVER ESC PWM. Physical flight '+(data.flightQualified?'requires measured hardware acceptance':'is disabled')+
-  '. STOP/disarm = PWM OFF. Actual outputs: '+(Array.isArray(data.actualMotorPulseUs)?data.actualMotorPulseUs.join('/'):'unknown')+
-  '. Flight ARM is independent of PPM/WebApp/Android input ARM.');
+ text('#fwAcroStatusText',(flight?.enabled?'Complete Setup Wizard, save the PID profile and select Acro + PPM. A fresh low-throttle PPM ARM gesture requests Rate flight.':'This bench build cannot enable flight output.')+
+  ' STOP/disarm = PWM OFF. Applied driver pulses: '+(Array.isArray(data.actualMotorPulseUs)?data.actualMotorPulseUs.join('/'):'unknown')+
+  '. Physical acceptance NOT_RUN. Motor geometry predictions are calculations, not measured motor rotation.');
 }
 async function checkAcroReadiness(){
  if(busy){text('#fwAcroStatusText','Firmware operation in progress. Acro read is paused.');return;}

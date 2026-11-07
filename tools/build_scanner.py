@@ -118,12 +118,30 @@ def main():
     setup.add_argument('--skip-core-install',action='store_true')
     setup.add_argument('--install-only',action='store_true',help='Install the pinned core without compiling or changing firmware files')
     ap.add_argument('--config-file',help='Optional Arduino CLI configuration file')
+    ap.add_argument('--experimental-rate-flight',action='store_true',help='Explicit A2 PPM Rate output candidate; never publishes to the normal catalog')
+    ap.add_argument('--output-dir',type=Path,help='Required separate artifact directory for the experimental candidate')
     args=ap.parse_args()
+    experimental=args.experimental_rate_flight
+    if experimental and (args.board!='ZFC-A2' or not args.output_dir):
+        ap.error('Experimental Rate output requires --board ZFC-A2 and a separate --output-dir')
+    if args.output_dir and not experimental:
+        ap.error('--output-dir is only supported for the explicit experimental build')
+    destination=args.output_dir.resolve() if experimental else OUT
+    if experimental and (destination==OUT or destination in (ROOT,ROOT/'mobile-apk') or OUT in destination.parents):
+        ap.error('Experimental outputs must stay outside published firmware directories')
+    destination.mkdir(parents=True,exist_ok=True)
     if not SRC.exists(): raise SystemExit(f'Missing source: {SRC}')
     if not CAT.exists(): raise SystemExit(f'Missing catalog: {CAT}')
     version=source_version()
     built_at=datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
     catalog=sync_catalog_version(json.loads(CAT.read_text()),version)
+    flags=['-fstack-usage']+(['-DZJ_A2_EXPERIMENTAL_RATE_FLIGHT=1'] if experimental else [])
+    if experimental:
+        catalog['boards']=[b for b in catalog['boards'] if b['id']=='ZFC-A2']
+        catalog.update(defaultBoardId='ZFC-A2',releaseScope='EXPERIMENTAL_PPM_RATE',flightOutputEnabled=True,flightOutputQualified=False,physicalAcceptance='NOT_RUN')
+        for b in catalog['boards']:
+            for kind in ('app','factory'):
+                b['latest'][kind]['file']=f'ZEBJUS_FLIGHTCORE_A2_{kind.upper()}_RATE_EXPERIMENTAL.bin'
     ids=[b['id'] for b in catalog.get('boards',[]) if b.get('build',{}).get('builder')=='arduino-cli']
     if args.board!='all' and args.board not in ids: raise SystemExit(f'Unknown/non-buildable board profile: {args.board}. Available: {", ".join(ids)}')
     cli=shutil.which('arduino-cli')
@@ -140,7 +158,9 @@ def main():
     sources=[SRC,OUT/'partitions.csv',*sorted(OUT.glob('*.h'))]
     report={'version':version,'builtAt':built_at,'sourceCommit':source_commit,
             'sourceSha256':{str(p.relative_to(ROOT)):sha(p) for p in sources},
-            'arduinoEsp32':CORE_VERSION,'hardwareFlashingTested':False,'boards':[]}
+            'arduinoEsp32':CORE_VERSION,'hardwareFlashingTested':False,'boards':[],
+            'buildProfile':'EXPERIMENTAL_PPM_RATE' if experimental else 'BENCH_DIAGNOSTIC',
+            'compilerFlags':flags}
     for b in targets:
         cfg=b['build']; pkg=b['latest']['app']; filename=pkg['file']
         with tempfile.TemporaryDirectory(prefix='zfc-build-') as td:
@@ -150,30 +170,37 @@ def main():
             shutil.copy2(OUT/'partitions.csv',sketch/'partitions.csv')
             build=td/'build'; build.mkdir()
             print(f'\n=== BUILD {b["id"]} • {b["name"]} • {cfg["fqbn"]} ===',flush=True)
-            run(command+['compile','--jobs','2','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags=-fstack-usage','--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
+            run(command+['compile','--jobs','2','--fqbn',cfg['fqbn'],'--warnings','all','--build-path',str(build),'--build-property','upload.maximum_size=1966080','--build-property','compiler.cpp.extra_flags='+' '.join(flags),'--output-dir',str(build),str(sketch)], f'{b["id"]} ({cfg["fqbn"]}) compile')
             verified=verify_build(build,b,version)
             srcbin=find_app_bin(build)
             embedded_compiled_at=check_compiled_at(srcbin.read_bytes(),built_at,require_marker=True)
             verified['compiledAt']=embedded_compiled_at
             report['boards'].append(verified)
-            dst=OUT/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
+            marker=b'ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL' if experimental else b'ZJ_OUTPUT=BENCH_DIAGNOSTIC'
+            if marker not in srcbin.read_bytes(): raise RuntimeError('Compiled output profile differs from requested build')
+            dst=destination/filename; shutil.copy2(srcbin,dst); digest=sha(dst)
             build_id=f'{version}-{b["id"]}-{digest[:12]}'
             pkg.update({'available':True,'sha256':digest,'size':dst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':build_id}); b['latest']['builtAt']=built_at; b['latest']['compiledAt']=embedded_compiled_at
             factory_pkg=b['latest'].get('factory',{}); merged=find_factory_bin(build)
             if merged and factory_pkg.get('file'):
                 if check_compiled_at(merged.read_bytes(),built_at,offset=int(b['appAddress'],0),require_marker=True)!=embedded_compiled_at:
                     raise RuntimeError('Merged FACTORY image compile date differs from its APP')
-                fdst=OUT/factory_pkg['file']; shutil.copy2(merged,fdst); fdigest=sha(fdst)
+                fdst=destination/factory_pkg['file']; shutil.copy2(merged,fdst); fdigest=sha(fdst)
                 factory_pkg.update({'available':True,'sha256':fdigest,'size':fdst.stat().st_size,'builtAt':built_at,'compiledAt':embedded_compiled_at,'buildId':f'{version}-{b["id"]}-FACTORY-{fdigest[:12]}'})
                 print(f'{b["name"]}: {fdst.name} {fdst.stat().st_size} bytes SHA256 {fdigest}')
             else:
                 if factory_pkg.get('file'):
-                    stale=OUT/factory_pkg['file']
+                    stale=destination/factory_pkg['file']
                     if stale.exists(): stale.unlink()
                 factory_pkg.update({'available':False,'sha256':'','size':0,'builtAt':built_at,'compiledAt':'','buildId':''})
             print(f'{b["name"]}: {dst.name} {dst.stat().st_size} bytes SHA256 {digest} buildId {build_id} COMPILED_AT={embedded_compiled_at}')
-    write_metadata(catalog,version,built_at)
-    (OUT/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
+    if experimental:
+        catalog['sourceCommit']=source_commit
+        catalog['builtAt']=built_at
+        (destination/'catalog.json').write_text(json.dumps(catalog,indent=2)+'\n')
+    else:
+        write_metadata(catalog,version,built_at)
+    (destination/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(f'Updated firmware metadata for {version}; Arduino-ESP32 core {CORE_VERSION}')
 
 

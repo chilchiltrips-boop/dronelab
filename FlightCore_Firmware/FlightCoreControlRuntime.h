@@ -114,7 +114,7 @@ static void zjControlRevoke(const char* reason){
  portEXIT_CRITICAL(&zjTimingMux);
 }
 static ZjFlightFault zjControlArmFlight(){
- if(!ZJ_FLIGHT_HARDWARE_QUALIFIED)return ZjFlightFault::UNQUALIFIED;
+ if(!ZJ_FLIGHT_OUTPUT_ENABLED)return ZjFlightFault::UNQUALIFIED;
  auto conditions=zjFlightMainConditions();
  portENTER_CRITICAL(&zjTimingMux);
  const uint32_t at=micros();
@@ -125,7 +125,7 @@ static ZjFlightFault zjControlArmFlight(){
  conditions.outputOffAck=zjFlightDriverRead().offAck;
  auto result=ZjFlightFault::OUTPUT_RESERVED;
  if(!zjFlightLease){
-  if(zjFlightOutputGate.arm(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED,true)){
+  if(zjFlightOutputGate.arm(conditions,ZJ_FLIGHT_OUTPUT_ENABLED,true)){
    if(!++zjFlightRevokeEpoch)++zjFlightRevokeEpoch;
    if(zjFlightDriverClaim(zjFlightRevokeEpoch)){
     zjFlightLease=zjFlightRevokeEpoch;zjFlightArmAt=at;
@@ -290,7 +290,7 @@ static void zjControlTask(void*){
    if(profileChanged&&fault==ZjFlightFault::NONE)fault=ZjFlightFault::PROFILE_CHANGED;
    conditions.nowMs=millis();
    conditions.imuFresh=conditions.imuFresh&&imuSample.fresh(micros(),12000);
-   if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_HARDWARE_QUALIFIED))
+   if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_OUTPUT_ENABLED))
     fault=zjFlightOutputGate.reason;
    if(fault==ZjFlightFault::NONE){
     const auto driver=zjFlightDriverSubmit(lease,trace.requested,control.nextDueUs);
@@ -397,17 +397,22 @@ static void zjControlRuntimeSetup(){
   // No fallback claims 250Hz. Existing bench authorization remains separate.
  }
 }
-static bool zjFlightPpmArmEdgeSeen=false;
+static ZjFlightArmEdge zjFlightPpmArmEdge;
 // PPM yaw-right held with low throttle is the deliberate ARM gesture. It can
 // claim a flight output lease only once per fresh disarm/arm cycle. Failed
 // qualification or failed readiness must not retry while sticks stay ARMED.
 // Receiver loss, DISARM and STOP still revoke through the independent path.
 static void zjControlPpmArmEdge(){
- const bool ppmArmed=zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed;
- if(!ppmArmed){zjFlightPpmArmEdgeSeen=false;return;}
- if(zjFlightPpmArmEdgeSeen)return;
- zjFlightPpmArmEdgeSeen=true;
- if(ZJ_FLIGHT_HARDWARE_QUALIFIED)(void)zjControlArmFlight();
+ const auto input=zjRcReceiver();
+ if(input.source!=ZjReceiverSource::PPM){zjFlightPpmArmEdge={};return;}
+ if(zjFlightPpmArmEdge.accept(input,millis(),ZJ_PPM_LOST_MS)){
+  // A failed attempt is visible in readiness; recovery requires another gesture.
+  const auto fault=zjControlArmFlight();
+  portENTER_CRITICAL(&zjTimingMux);
+  if(fault!=ZjFlightFault::NONE)zjFlightOutputGate.reason=fault;
+  portEXIT_CRITICAL(&zjTimingMux);
+ }
+
 }
 static void zjPublishControlInput(){
  const auto conditions=zjFlightMainConditions();

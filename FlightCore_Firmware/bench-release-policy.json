@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.19",
+  "candidateVersion": "1.7.20",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "FlightCore 1.7.19 verified A1/A2 bench diagnostics and PPM ARM/DISARM source, source-hash pinned. Physical flight output remains disabled (NOT_RUN acceptance); no flight-qualified package.",
+  "note": "Published 1.7.19 remains the verified bench package. Source 1.7.20 also supports a separately built experimental PPM Rate candidate; hardware acceptance NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,

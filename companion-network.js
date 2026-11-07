@@ -1,6 +1,6 @@
-/* Native Android-to-FlightCore AP/STA transport (bench diagnostics only).
- * The per-device key never crosses the WebRTC relay and is not stored in site data.
- * Received RC frames are preview-only; motor arming is deliberately unsupported. */
+/* Native Android-to-FlightCore AP/STA input transport.
+ * Physical output state comes only from signed FC status. The experimental
+ * Rate flight path is PPM-only; Android input ARM remains diagnostic. */
 (function(){
 'use strict';
 const el=id=>document.getElementById(id),native=window.ZebjusNative;
@@ -565,7 +565,7 @@ async function status(){
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
  const newer=!!kitSnapshot.bootId&&kitSnapshot.bootId===data.bootId&&(kitRcReadStartedAt>started||!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,data.rc)),previousRc=kitSnapshot.rc;
- online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
+ online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,outputObservedAt:lastStatus,...(newer?{rc:previousRc}:{})};
  if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
  window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});
@@ -794,8 +794,8 @@ async function claimRc(){
   }
   trace('rc_claim',{transport:link,source:'ANDROID',outcome:'ok'});
   window.dispatchEvent(new CustomEvent('zebjus:diagnostic-control',{detail:{active:true}}));
-  show(udpActive?'SECURE UDP 50 Hz • Android owns diagnostic input • motors disabled':
-   'SIGNED HTTP diagnostic input • latency-sensitive fallback • motors disabled','good');
+  show(udpActive?'SECURE UDP 50 Hz • Android owns diagnostic input • check reported output state':
+   'SIGNED HTTP diagnostic input • check reported output state','good');
  }catch(error){
   if(/controller_locked/.test(error.message)){
    // Read the owner; never stop or reclaim someone else's active session.

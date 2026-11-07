@@ -18,6 +18,7 @@ int main(){
  assert(!ZJ_FLIGHT_HARDWARE_QUALIFIED);
  ZjFlightConditions c;
  c.nowMs=1000;c.inputDeadlineMs=150;c.acro=true;c.imuFresh=true;c.timingHealthy=true;
+ c.setupComplete=c.pidSaved=true;
  c.outputOffAck=true;c.wiringVerified=true;c.driverReady=true;c.escOperatorConfirmed=true;
  c.input.source=ZjReceiverSource::PPM;c.input.sequence=3;c.input.selected=true;c.input.valid=true;
  c.input.inputArmed=true;c.input.generation=1;c.input.availableMask=15;c.input.receivedAtMs=990;
@@ -86,9 +87,9 @@ test('Firmware and WebApp expose read-only Acro readiness while preserving actua
  assert.match(source('FlightCore_Firmware/FlightCoreMotor.h'),/static bool zjWizardSetupComplete\(\)/);
  assert.match(firmware,/setupComplete/);
  assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_FLIGHT_HARDWARE_QUALIFIED=false/);
- assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_A2_FLIGHT_ACCEPTANCE_RELEASE/);
+ assert.match(source('FlightCore_Firmware/FlightCoreFlightOutput.h'),/ZJ_A2_EXPERIMENTAL_RATE_FLIGHT/);
  assert.match(source('FlightCore_Firmware/FlightCoreControlRuntime.h'),/static void zjControlPpmArmEdge\(\)/);
- assert.match(source('FlightCore_Firmware/FlightCoreControlRuntime.h'),/if\(zjFlightPpmArmEdgeSeen\)return/);
+ assert.match(source('FlightCore_Firmware/FlightCoreControlRuntime.h'),/zjFlightPpmArmEdge.accept\(input,millis\(\),ZJ_PPM_LOST_MS\)/);
  assert.match(source('FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino'),/zjControlPpmArmEdge\(\)/);
  assert.match(source('FlightCore_Firmware/FlightCorePpm.h'),/zjFlightRevoke\("INPUT_DISARMED"\)/);
  assert.match(source('FlightCore_Firmware/FlightCoreMotor.h'),/ledc_stop\(LEDC_LOW_SPEED_MODE,ledc_channel_t\(n\),0\)/);
@@ -108,29 +109,31 @@ test('acceptance-gated A2 ARM permits outputs only after valid PPM ARM and DISAR
  try{
   const cpp=`#include <cassert>
 #define CONFIG_IDF_TARGET_ESP32C6 1
-#define ZJ_A2_FLIGHT_ACCEPTANCE_RELEASE 1
+#define ZJ_A2_EXPERIMENTAL_RATE_FLIGHT 1
 #include "${process.cwd()}/FlightCore_Firmware/FlightCoreFlightOutput.h"
 int main(){
- static_assert(ZJ_FLIGHT_HARDWARE_QUALIFIED,"opt-in acceptance build expected");
+ static_assert(ZJ_FLIGHT_OUTPUT_ENABLED,"opt-in experimental build expected");
+ static_assert(!ZJ_FLIGHT_HARDWARE_QUALIFIED,"build flag is not physical evidence");
  ZjFlightConditions c;
  c.nowMs=1000;c.inputDeadlineMs=150;
  c.acro=c.imuFresh=c.timingHealthy=c.outputOffAck=true;
+ c.setupComplete=c.pidSaved=true;
  c.wiringVerified=c.driverReady=c.escOperatorConfirmed=true;
  c.input.source=ZjReceiverSource::PPM;c.input.sequence=1;c.input.selected=c.input.valid=true;
  c.input.inputArmed=true;c.input.generation=5;c.input.availableMask=15;c.input.receivedAtMs=990;
  c.input.channels[2]=1000;
  ZjFlightOutputGate gate;
  assert(!gate.arm(c,false,true)&&gate.reason==ZjFlightFault::UNQUALIFIED);
- assert(gate.arm(c,ZJ_FLIGHT_HARDWARE_QUALIFIED,true));
- assert(gate.permit(c,ZJ_FLIGHT_HARDWARE_QUALIFIED));
+ assert(gate.arm(c,ZJ_FLIGHT_OUTPUT_ENABLED,true));
+ assert(gate.permit(c,ZJ_FLIGHT_OUTPUT_ENABLED));
  c.input.inputArmed=false;
- assert(!gate.permit(c,ZJ_FLIGHT_HARDWARE_QUALIFIED));
+ assert(!gate.permit(c,ZJ_FLIGHT_OUTPUT_ENABLED));
  assert(gate.state==ZjFlightState::OUTPUT_OFF);
  assert(gate.reason==ZjFlightFault::INPUT_DISARMED);
  gate={};c.input.inputArmed=true;
- assert(gate.arm(c,ZJ_FLIGHT_HARDWARE_QUALIFIED,true));
+ assert(gate.arm(c,ZJ_FLIGHT_OUTPUT_ENABLED,true));
  c.input.receivedAtMs=800;
- assert(!gate.permit(c,ZJ_FLIGHT_HARDWARE_QUALIFIED));
+ assert(!gate.permit(c,ZJ_FLIGHT_OUTPUT_ENABLED));
  assert(gate.state==ZjFlightState::FAILSAFE);
  assert(gate.reason==ZjFlightFault::INPUT_STALE);
  return 0;

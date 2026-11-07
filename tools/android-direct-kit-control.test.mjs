@@ -376,3 +376,13 @@ test('legacy firmware actual mode overrides local defaults while writes require 
  await assert.rejects(b.network.setSavedFlightMode('angle'),/firmware update/);
  b.network.networkChanged();assert.equal(b.network.savedFlightMode(),null);
 });
+
+test('direct input ACK refreshes connection without refreshing old motor status',async()=>{
+ const b=bench();await b.connect();const before=b.network.getState();
+ assert.ok(before.outputObservedAt>0);
+ b.advance(1600);await b.network.armControls();
+ const after=b.network.getState();
+ assert.ok(after.heartbeatAt>before.heartbeatAt);
+ assert.equal(after.outputObservedAt,before.outputObservedAt);
+ await b.network.releaseRc();
+});

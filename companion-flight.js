@@ -114,7 +114,7 @@ function render(){
  $('flightFeedback').textContent=lastAckSeq?'ACK #'+lastAckSeq+' • '+(performance.now()-lastAckAt>400?'STALE':$('flightLatency').textContent)+(a?' • APPLIED '+a.throttle+' µs': ' • DISARMED'):'INPUT PREVIEW • NO FLIGHT COMMAND';
  const diagnostic=window.ZebjusNetwork?.feedback?.();
  const motorState=window.ZebjusNetwork?.getState?.();
- const outputLabel=motorState?.connected&&Date.now()-(motorState.heartbeatAt||0)<1500?(motorState.motorsDisabled===true?'OUTPUT DISABLED':motorState.motorsDisabled===false?'BENCH OUTPUT ENABLED':'OUTPUT UNKNOWN'):'OUTPUT UNKNOWN';
+ const outputLabel=window.ZebjusKitAccessPolicy?.outputLabel?.(motorState)||'OUTPUT UNKNOWN';
  if(diagnostic){
   if(diagnostic.ackRequired===false){
    $('flightFeedback').textContent='AP STREAM TX #'+(diagnostic.sentSeq||0)+' • RX '+(diagnostic.seq?'#'+diagnostic.seq:'unconfirmed')+' • '+kitInputState()+' • '+outputLabel;
@@ -140,7 +140,7 @@ function render(){
    (window.ZebjusNetwork?.savedFlightMode?.()?'ACTIVE '+window.ZebjusNetwork.savedFlightMode().toUpperCase()+' • UPDATE FIRMWARE FOR MODE CHANGES':'KIT MODE UNSUPPORTED • UPDATE FIRMWARE');
  }
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
- if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • MOTOR OUTPUTS OFF':'KIT INPUT DISARMED • PRESS ARM';
+ if(directKit())$('flightAppliedControls').textContent=diagnostic?(diagnostic.ackRequired===false?kitInputState()+' • TX #'+(diagnostic.sentSeq||0):'KIT RECEIVED #'+diagnostic.seq+' • '+(diagnostic.inputArmed?'INPUT ARMED':'DISARMED'))+' • '+outputLabel:'KIT INPUT DISARMED • '+outputLabel;
  if(!peer?.status().connected){$('flightAttitude').dataset.source='preview';$('flightAttitudeLabel').textContent='INPUT PREVIEW'}
  for(const side of ['left','right'])stickRender(side,drag[side]);
  for(const side of ['flightLeftZone','flightRightZone'])$(side).setAttribute('aria-disabled',String(inputLocked()));
