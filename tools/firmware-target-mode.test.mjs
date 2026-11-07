@@ -73,7 +73,7 @@ test('PPM OTA uses firmware-enforced maintenance pause and independent safe read
  const access=readFileSync(new URL('../FlightCore_Firmware/FlightCoreAccess.h',import.meta.url),'utf8');
  const ota=readFileSync(new URL('../FlightCore_Firmware/FlightCoreOta.h',import.meta.url),'utf8');
  assert.match(access,/zjRcPaused=true;zjRcHandoverPaused=false;zjRcRelease/);
- assert.match(ota,/if\(zjRcOwned\|\|zjNetTesting\|\|zjUsbScanning/);
+ assert.match(ota,/if\(!zjMotorOutputsDisabled\(\)\|\|zjMotorSessionActive\|\|zjRcOwned\|\|zjNetTesting\|\|zjUsbScanning/);
 });
 test('OTA image guard and USB factory erase confirmation remain active',()=>{
  assert.match(src,/if\(erase&&type!=='factory'\)/);

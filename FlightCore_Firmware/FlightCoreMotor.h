@@ -26,7 +26,6 @@ static portMUX_TYPE zjMotorMux=portMUX_INITIALIZER_UNLOCKED;
 static volatile bool zjMotorWatchActive=false,zjMotorWatchTripped=false;
 static volatile uint32_t zjMotorServicedAt=0;
 static volatile uint32_t zjMotorWatchAt=0,zjMotorWatchLimit=100;
-static volatile bool zjMotorPwmOffAck=false;
 static volatile ZjMotorSafety::Reason zjMotorWatchReason=ZjMotorSafety::DEADLINE_MISSED;
 static esp_timer_handle_t zjMotorWatchTimer=nullptr;
 static ZjFlightDriverState zjFlightDriver;
@@ -47,6 +46,7 @@ static void zjFlightDriverStopLocked(ZjFlightFault fault){
  zjFlightDriver={};
  zjFlightDriver.fault=fault;zjFlightDriver.faultAtUs=micros();
  zjFlightDriver.appliedKnown=zjFlightDriver.offAck=zjMotorPwmStopLocked();
+ zjMotorEnabled=zjMotorArmed=zjMotorSessionActive=false;
 }
 static void zjFlightDriverStop(uint32_t lease,ZjFlightFault fault){
  portENTER_CRITICAL(&zjMotorMux);
@@ -63,13 +63,14 @@ static ZjFlightDriverState zjFlightDriverRead(){
 }
 static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4],uint32_t deadlineUs){
  portENTER_CRITICAL(&zjMotorMux);
- if(ZJ_FLIGHT_HARDWARE_QUALIFIED&&lease&&zjFlightDriver.lease==lease){
+ if(ZJ_FLIGHT_OUTPUT_ENABLED&&lease&&zjFlightDriver.lease==lease){
   const uint32_t at=micros();
   if(int32_t(at-deadlineUs)>=0||uint32_t(at-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US){
    zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
   }else{
    bool ok=true;
    for(auto value:pulse)ok=ok&&value>=1000&&value<=2000;
+   zjMotorPwmOffAck=false;
    for(int n=0;n<4&&ok;n++){
     const auto duty=ZJ_ESC_PROFILE.duty(zjFlightDriverWiring.physicalPulse(n,pulse));
     ok=duty&&ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)==ESP_OK&&
@@ -195,7 +196,7 @@ static String zjMotorOwner,zjMotorToken,zjMotorPath,zjMotorProducer,zjMotorRadio
 static bool zjMotorDriverReady=false;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static bool zjFlightDriverClaim(uint32_t lease){
- if(!ZJ_FLIGHT_HARDWARE_QUALIFIED||!lease||!zjMotorDriverReady||zjMotorEnabled||zjMotorSessionActive||zjMotorArmed)return false;
+ if(!ZJ_FLIGHT_OUTPUT_ENABLED||!lease||!zjMotorDriverReady||zjMotorSessionActive||!zjMotorOutputsDisabled())return false;
  portENTER_CRITICAL(&zjMotorMux);
  const bool available=!zjFlightDriver.lease&&!zjMotorWatchActive&&!zjAutoEscSequence.active()&&zjMotorPwmOffAck;
  if(available){
@@ -238,14 +239,16 @@ static void zjMotorApply(){
   if(zjMotorWatchReason==ZjMotorSafety::DEADLINE_MISSED)zjMotor.fault(zjMotorWatchReason);
   else zjMotor.disable(zjMotorWatchReason);
  }
- if(zjMotorDriverReady){
+ if(zjMotorDriverReady&&(zjMotor.benchEnabled||!zjMotorPwmOffAck)){
   const uint32_t started=micros();
-  zjMotorPwmOffAck=false;
-  for(int n=0;n<4;n++){
-   const auto& wiring=zjWizardBench?zjWizardBenchConfig:zjMotorConfig;
-   const uint32_t duty=zjMotor.benchEnabled?ZJ_ESC_PROFILE.duty(wiring.physicalPulse(n,zjMotor.pulses)):0;
-   if(ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)!=ESP_OK||
-      ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))!=ESP_OK)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
+  if(zjMotor.benchEnabled){
+   zjMotorPwmOffAck=false;
+   for(int n=0;n<4&&zjMotor.benchEnabled;n++){
+    const auto& wiring=zjWizardBench?zjWizardBenchConfig:zjMotorConfig;
+    const uint32_t duty=ZJ_ESC_PROFILE.duty(wiring.physicalPulse(n,zjMotor.pulses));
+    if(ledc_set_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),duty)!=ESP_OK||
+       ledc_update_duty(LEDC_LOW_SPEED_MODE,ledc_channel_t(n))!=ESP_OK)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
+   }
   }
   if(!zjMotor.benchEnabled){
    if(!zjMotorPwmStopLocked())zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
@@ -321,18 +324,19 @@ static bool zjAutoEscOutputsOff(){
 // Controller-side proof only: the one-use HIGH/LOW/OFF sequence completed,
 // was stored in NVS, still belongs to this board/wiring and has PWM OFF.
 // This cannot prove any individual ESC accepted its throttle endpoints.
-static bool zjAutoEscSequenceReady(){
+static bool zjAutoEscStoredResult(){
  portENTER_CRITICAL(&zjMotorMux);const bool running=zjAutoEscSequence.active();portEXIT_CRITICAL(&zjMotorMux);
  return !running&&zjWizardRecordVerified&&zjAutoEscRecordVerified&&!zjAutoEscStorageError&&
-  zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&zjAutoEscCompatible()&&zjAutoEscOutputsOff();
+  zjAutoEscRecord.state==ZjAutoEscRecord::COMPLETE&&zjAutoEscCompatible();
 }
+static bool zjAutoEscSequenceReady(){return zjAutoEscStoredResult()&&zjAutoEscOutputsOff();}
 // Persistent setup completeness is a read-only configuration fact, NOT a flight-output authorization.
 // A saved Wizard revision, four recorded motor minimums and the existing ESC record
 // are enough to show Setup complete after a reboot, without repeating calibration.
 static bool zjWizardSetupComplete(){
  if(!zjMotorConfigValid||!zjWizardSaved.revision||!zjWizardRecordVerified||!zjWizardSaved.accel.valid())return false;
  for(const auto pulse:zjWizardSaved.motor.minimumUs)if(pulse<1000||pulse>1500)return false;
- return zjMotorCalibrationSaved||zjAutoEscSequenceReady();
+ return zjMotorCalibrationSaved||zjAutoEscStoredResult();
 }
 // Called with zjMotorMux held, from the timer task or startup/STOP. No flash,
 // network, allocations, input claims or application sessions in this path.
@@ -511,6 +515,7 @@ static String zjWizardStatus(uint32_t requestSequence=0){
   ",\"autoEsc\":"+zjAutoEscStatus()+
   ",\"configVerified\":"+(zjWizardRecordVerified?"true":"false")+
   ",\"setupComplete\":"+(zjWizardSetupComplete()?"true":"false")+
+  ",\"flightOutputEnabled\":"+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+
   ",\"accelModel\":"+zjJson(saved)+",\"imu\":"+zjImuStatus()+
   ",\"escConfirmationStaged\":"+(zjWizardEscConfirmed?"true":"false")+
   ",\"imuRequestSequence\":"+String(requestSequence)+",\"capture\":{\"sequence\":"+String(imu.maintenanceSequence)+
@@ -524,7 +529,6 @@ static String zjWizardStatus(uint32_t requestSequence=0){
 // A single handler serves USB and authenticated network requests. Tokens never
 // appear in broadcast status. STOP invalidates the token before any new output.
 static String zjMotorCommand(const String& action,const String& caller,const String& token,const String& a,const String& b,const String& c,bool authorized){
- zjMotorLoop();
  auto error=[](const char* e){return String("{\"error\":\"")+e+"\"}";};
  if(action=="STATUS")return zjMotorStatus();
  if(action=="STOP"){
@@ -543,7 +547,9 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   if(autoPendingCancel||autoCompleteUnconfirmed){
    zjWizardEscConfirmed=zjMotorCalibrationPending=false;zjWizardEscOwner="";
   }
+  if(zjWizardCalSlider&&zjMotor.mode==ZjMotorSafety::SLIDER_TEST)zjMotor.update(millis(),{});
   const bool stoppedSlider=zjWizardCalSlider&&zjMotor.mode==ZjMotorSafety::SLIDER_TEST&&
+   !zjAccessBusy()&&!zjMaintenanceActive&&!zjMotorPwmOffAck.load()&&
    token.length()&&token==zjMotorToken&&caller==zjMotorOwner;
   const uint8_t stoppedMask=zjMotor.sliderMask;
   uint16_t stoppedPulse=0;
@@ -551,6 +557,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   const auto stoppedConfig=zjWizardBenchConfig;
 #endif
   zjMotorStop();
+  if(!zjMotorOutputsDisabled())return error("output_off_unverified");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(stoppedSlider){
    if(a=="CAPTURE_OUTPUT"){
@@ -567,6 +574,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #endif
   return zjMotorStatus();
  }
+ zjMotorLoop();
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
  if(action=="WIZARD_STATUS")return zjWizardStatus();
  if(zjFlightDriverRead().lease)return error("flight_output_reserved");
@@ -765,6 +773,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   if(!authorized)return error("unlock_usb_teacher_or_authorize_network_control");
   if(!zjMotorConfigValid)return error("saved_motor_config_invalid_factory_reset_required");
   if(zjMotor.benchEnabled)return error("motor_setup_already_owned");
+  if(!zjMotorOutputsDisabled())return error("output_off_unverified");
   const bool wizard=action=="WIZARD_BEGIN";
   if(a!="PROPS_REMOVED"||b!="PINS_VERIFIED"||(!wizard&&c!="PWM_50HZ_1000_2000"&&c!="PWM_50HZ_1000_2000_TIMED"))return error("confirm_props_pins_and_esc_profile");
   if(zjAccessBusy()||zjMaintenanceActive||zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return error("stop_maintenance_lower_throttle_and_disarm_input");
@@ -921,8 +930,7 @@ static void zjMotorSetup(){
  ok=(esp_timer_create(&args,&zjMotorWatchTimer)==ESP_OK)&&ok;
  if(ok)ok=esp_timer_start_periodic(zjMotorWatchTimer,5000)==ESP_OK;
  zjMotorDriverReady=ok;
- zjMotorPwmOffAck=ok;
- if(!ok){for(int n=0;n<4;n++)ledc_stop(LEDC_LOW_SPEED_MODE,ledc_channel_t(n),0);zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);}
+ if(!zjMotorPwmStopLocked()||!ok)zjMotor.fault(ZjMotorSafety::OUTPUT_ERROR);
 #endif
  zjHttp.on("/api/motor",HTTP_POST,[](){
   if(!zjAllow())return;

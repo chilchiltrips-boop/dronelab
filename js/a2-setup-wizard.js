@@ -465,6 +465,8 @@ if(root){
    ['ESC acceptance','Not directly measurable through standard PWM ESC wiring'],
    ['ESC',autoSequenceReady()?'Controller sequence stored · ESC endpoint acceptance unverified':compatibleEsc()?'Legacy confirmation saved':escCleared()?'Cleared · pending reset':'Not completed'],
    ...motors.map((n,i)=>[`M${n} minimum`,minimums[i]!==null?`${pulseText(values[i])} · Pending (board ${pulseText(stored[i])})`:values[i]>1500?`${pulseText(values[i])} · Recalibration required`:values[i]?`${pulseText(values[i])} · Saved on board`:'Not calibrated']),
+   ['Setup',saved?.setupComplete===true?'Complete · saved on FC':'Incomplete · finish page saves'],
+   ['Rate flight',saved?.flightOutputEnabled===true?'Experimental PPM + Acro · save PID, throttle LOW, then a fresh ARM gesture':'Bench firmware · physical flight output disabled'],
    ['Physical acceptance','Not verified by software']
   ];
  }

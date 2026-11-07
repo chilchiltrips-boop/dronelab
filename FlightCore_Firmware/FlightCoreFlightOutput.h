@@ -1,17 +1,18 @@
 #pragma once
 #include "FlightCoreReceiverSnapshot.h"
 
-// Bench firmware is always non-actuating. A separately reviewed A2 release may
-// define this build-time acceptance switch only after matching physical evidence
-// is recorded. Saving the Setup Wizard, RC ARM or network calls cannot set it.
-#if defined(ZJ_A2_FLIGHT_ACCEPTANCE_RELEASE)
+// Output capability and measured hardware qualification are different facts.
+// The explicit experimental build permits setup-gated PPM Rate control. Ordinary
+// bench packages remain non-actuating. Neither build flag asserts physical PASS.
+#if defined(ZJ_A2_EXPERIMENTAL_RATE_FLIGHT)
  #if !defined(CONFIG_IDF_TARGET_ESP32C6)
-  #error "Flight acceptance release must target the A2 ESP32-C6 board"
+  #error "Experimental Rate flight must target the A2 ESP32-C6 board"
  #endif
- static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=true;
+ static constexpr bool ZJ_FLIGHT_OUTPUT_ENABLED=true;
 #else
- static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
+ static constexpr bool ZJ_FLIGHT_OUTPUT_ENABLED=false;
 #endif
+static constexpr bool ZJ_FLIGHT_HARDWARE_QUALIFIED=false;
 static constexpr uint16_t ZJ_FLIGHT_STOP_THROTTLE_US=1050;
 // Acro armed LOW throttle sends ESC minimum (not spin-idle). Disarm/STOP/failsafe sends PWM OFF.
 static constexpr uint16_t ZJ_FLIGHT_ARMED_IDLE_US=1000;
@@ -24,17 +25,20 @@ struct ZjFlightConditions {
  bool acro=false,imuFresh=false,timingHealthy=false,outputOffAck=false;
  bool emergency=false,escCalibration=false,benchActive=false,maintenance=false;
  bool wiringVerified=false,driverReady=false,escOperatorConfirmed=false;
+ bool setupComplete=false,pidSaved=false,escSequenceComplete=false;
 };
 
 enum class ZjFlightState : uint8_t {OUTPUT_OFF,ARMED,FAILSAFE};
 enum class ZjFlightFault : uint8_t {NONE,UNQUALIFIED,EMERGENCY_STOP,OUTPUT_RESERVED,
  INPUT_STALE,INPUT_DISARMED,SOURCE_CHANGED,IMU_STALE,DEADLINE_MISSED,MODE_UNSUPPORTED,EXPLICIT_ARM_REQUIRED,THROTTLE_HIGH,OFF_UNVERIFIED,
- SOURCE_UNSUPPORTED,WIRING_UNVERIFIED,OUTPUT_ERROR,PID_INVALID,LOW_THROTTLE,PROFILE_CHANGED,PPM_SIGNAL_LOST,ESC_UNCONFIRMED};
+ SOURCE_UNSUPPORTED,WIRING_UNVERIFIED,OUTPUT_ERROR,PID_INVALID,LOW_THROTTLE,PROFILE_CHANGED,PPM_SIGNAL_LOST,ESC_UNCONFIRMED,
+ SETUP_INCOMPLETE,PID_NOT_SAVED};
 
 inline const char* zjFlightFaultName(ZjFlightFault fault){
  const char* const names[]={"NONE","UNQUALIFIED","EMERGENCY_STOP","OUTPUT_RESERVED","INPUT_STALE","INPUT_DISARMED",
   "SOURCE_CHANGED","IMU_STALE","DEADLINE_MISSED","MODE_UNSUPPORTED","EXPLICIT_ARM_REQUIRED","THROTTLE_HIGH","OFF_UNVERIFIED",
-  "SOURCE_UNSUPPORTED","WIRING_UNVERIFIED","OUTPUT_ERROR","PID_INVALID","LOW_THROTTLE","PROFILE_CHANGED","PPM_SIGNAL_LOST","ESC_UNCONFIRMED"};
+  "SOURCE_UNSUPPORTED","WIRING_UNVERIFIED","OUTPUT_ERROR","PID_INVALID","LOW_THROTTLE","PROFILE_CHANGED","PPM_SIGNAL_LOST","ESC_UNCONFIRMED",
+  "SETUP_INCOMPLETE","PID_NOT_SAVED"};
  return names[static_cast<unsigned>(fault)];
 }
 
@@ -65,14 +69,16 @@ struct ZjFlightOutputGate {
    state=fault==ZjFlightFault::INPUT_DISARMED?ZjFlightState::OUTPUT_OFF:ZjFlightState::FAILSAFE;
   reason=fault;
  }
- ZjFlightFault fault(const ZjFlightConditions& c,bool qualified)const{
+ ZjFlightFault fault(const ZjFlightConditions& c,bool enabled)const{
   if(c.emergency)return ZjFlightFault::EMERGENCY_STOP;
   if(c.escCalibration||c.benchActive||c.maintenance)return ZjFlightFault::OUTPUT_RESERVED;
-  if(!qualified)return ZjFlightFault::UNQUALIFIED;
+  if(!enabled)return ZjFlightFault::UNQUALIFIED;
   if(!c.acro)return ZjFlightFault::MODE_UNSUPPORTED;
   if(!c.driverReady)return ZjFlightFault::OUTPUT_ERROR;
+  if(!c.setupComplete)return ZjFlightFault::SETUP_INCOMPLETE;
+  if(!c.pidSaved)return ZjFlightFault::PID_NOT_SAVED;
   if(!c.wiringVerified)return ZjFlightFault::WIRING_UNVERIFIED;
-  if(!c.escOperatorConfirmed)return ZjFlightFault::ESC_UNCONFIRMED;
+  if(!c.escOperatorConfirmed&&!c.escSequenceComplete)return ZjFlightFault::ESC_UNCONFIRMED;
   if(!c.timingHealthy)return ZjFlightFault::DEADLINE_MISSED;
   if(!c.imuFresh)return ZjFlightFault::IMU_STALE;
   if(!c.input.fresh(c.nowMs,c.inputDeadlineMs))return ZjFlightFault::INPUT_STALE;
@@ -97,5 +103,25 @@ struct ZjFlightOutputGate {
    faultNow=ZjFlightFault::SOURCE_CHANGED;
   if(faultNow!=ZjFlightFault::NONE){revoke(faultNow);return false;}
   return true;
+ }
+};
+
+// One accepted, fresh DISARM -> ARM edge per receiver generation. A failed
+// attempt is consumed: holding the sticks ARMED cannot retry when a condition
+// later becomes healthy. A reboot/new source already reporting ARM is ignored.
+struct ZjFlightArmEdge {
+ uint32_t generation=0,sequence=0;
+ ZjReceiverSource source=ZjReceiverSource::NONE;
+ bool seen=false,disarmed=false,armed=false;
+ bool accept(const FlightReceiverSnapshot& input,uint32_t now,uint32_t deadline){
+  if(!input.fresh(now,deadline)){*this={};return false;}
+  if(!seen||generation!=input.generation||source!=input.source){
+   *this={};seen=true;generation=input.generation;source=input.source;
+  }
+  if(sequence&&int32_t(input.sequence-sequence)<=0)return false;
+  sequence=input.sequence;
+  if(!input.inputArmed){disarmed=true;armed=false;return false;}
+  const bool edge=disarmed&&!armed;
+  disarmed=false;armed=true;return edge;
  }
 };

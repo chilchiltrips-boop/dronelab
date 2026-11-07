@@ -19,7 +19,7 @@ static bool zjSecureOtaAccess(bool owner=false){
 static void zjSetupSecureOtaHttp(){
  zjHttp.on("/api/firmware/begin",HTTP_POST,[](){
   if(!zjSecureOtaAccess())return;
-  if(zjRcOwned||zjNetTesting||zjUsbScanning||zjOtaAuthorized||zjOtaRebootAt){zjReply(409,"{\"error\":\"controller_or_network_busy\"}");return;}
+  if(!zjMotorOutputsDisabled()||zjMotorSessionActive||zjRcOwned||zjNetTesting||zjUsbScanning||zjOtaAuthorized||zjOtaRebootAt){zjReply(409,"{\"error\":\"controller_or_network_busy\"}");return;}
   long size=0;String digest=zjArg("sha256");digest.toLowerCase();
   if(zjArg("boardId")!=FC_BOARD||!parseNumber(zjArg("size").c_str(),32768,0x1e0000,size)||!zjHex(digest,64)){zjReply(400,"{\"error\":\"invalid_ota_board_size_or_digest\"}");return;}
   if(!Update.begin(size,U_FLASH)){zjReply(400,"{\"error\":\"ota_partition_unavailable_use_usb_factory\"}");return;}

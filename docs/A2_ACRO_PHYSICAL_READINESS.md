@@ -2,8 +2,8 @@
 
 ## What this change implements
 
-- Separate PPM input ARM (receiver gesture) from Physical Flight ARM (explicit teacher-authorized USB command). **No auto-ARM** from PPM/WebApp/Android.
-- Explicit operator-saved ESC endpoint confirmation required by physical flight policy, **distinct** from a persisted automatic ESC timing sequence. It is an *operator record*, not verified electrical acceptance.
+- The explicit experimental PPM Rate build evaluates the receiver DISARM → ARM gesture once against saved Setup/PID and runtime checks. There is no second USB ARM command. Standard bench builds remain non-actuating; Android/Web input ARM does not authorize physical flight.
+- ESC readiness accepts the existing persisted automatic HIGH/LOW/OFF sequence or legacy operator record. Neither proves physical ESC endpoint acceptance.
 - Fail-closed flight gate with explicit `ESC_UNCONFIRMED`, wiring, 250 Hz scheduling, IMU freshness, PPM-only input, LOW throttle, PWM-OFF acknowledgement, STOP and watchdog requirements.
 - Armed low throttle is the ESC's **1000 µs minimum**, not a spin-idle promise; failsafe/STOP/disarm use PWM OFF. `ZJ_FLIGHT_ARMED_IDLE_US` centralizes the value. Motor start thresholds are not assumed valid until measured.
 - Authenticated `GET /api/flight/readiness` and physical USB `ZJFLIGHT,STATUS` return per-condition diagnostic evidence. P-only motor geometry predictions are at an artificial 1500 µs reference and **never** submitted to the ESC driver.
@@ -21,4 +21,4 @@ The above is a **mathematical contract**, not proof of the actual mounted IMU ax
 
 Collect signed board- and source-hash-bound physical evidence for ESC 1000–2000 µs pulse widths at 50 Hz; motor mapping/rotation, MPU mounting/orientation, ESC minimum start thresholds, PPM receiver loss, emergency STOP/ISR watchdog under stalled main loop, IMU loss, PID invalid, deadline misses and all output-off latencies. Only subsequently consider a separate physically qualified Acro release.
 
-`ZJ_FLIGHT_HARDWARE_QUALIFIED=false` remains immutable in all current builds. A software check or `inputArmed=true` **cannot** authorize real-flight actuation.
+`ZJ_FLIGHT_HARDWARE_QUALIFIED=false` remains the evidence status. The separately built `ZJ_A2_EXPERIMENTAL_RATE_FLIGHT` candidate enables setup-gated output without claiming qualification. [Setup to Rate ARM](A2_SETUP_RATE_FLOW.md) describes this explicit test build and its PPM-only scope.
