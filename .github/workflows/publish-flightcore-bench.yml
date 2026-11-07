@@ -2,19 +2,13 @@ name: Verify and publish approved FlightCore bench package
 on:
   push:
     branches: [main, feat/a2-rate-flight-recorder-20261106, release/flightcore-1.7.16-bench-20261105, fix/a2-default-latest-bench-1716-20261105]
+    # A pinned release policy or verifier update can promote a new artifact.
+    # Ordinary WebApp/firmware UI edits should not republish an unchanged binary.
     paths:
       - 'FlightCore_Firmware/bench-release-policy.json'
-      - 'firmware-updater.js'
-      - 'index.html'
-      - 'lab.html'
-      - 'sw.js'
-      - 'tools/firmware-compile-time.test.mjs'
-      - 'tools/offline-cache.test.mjs'
-      - 'tools/connectivity-state-regression.test.mjs'
-      - 'tools/ap-admin-settings.test.mjs'
-      - 'tools/serial-readable-monitor.test.mjs'
-      - 'tools/bench-firmware-browser.mjs'
+      - 'tools/bench_release_gate.py'
       - 'tools/verify_release.py'
+      - 'tools/bench-firmware-browser.mjs'
       - '.github/workflows/publish-flightcore-bench.yml'
   workflow_dispatch:
 permissions:
@@ -25,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify-and-publish:
-    # Playwright 1.56.1 supports this OS; ubuntu-latest moved to 26.04.
+    # Playwright 1.56.1 does not support ubuntu-latest (Ubuntu 26.04).
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:

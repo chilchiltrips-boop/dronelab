@@ -11,6 +11,7 @@
     "discover:lan": "node tools/classroom-discovery-bridge.mjs",
     "verify:acceptance": "node tools/release-acceptance.mjs",
     "verify:admin-deployment": "node tools/remote-deployment-smoke.mjs",
-    "verify:acceptance:strict": "node tools/release-acceptance.mjs --strict"
+    "verify:acceptance:strict": "node tools/release-acceptance.mjs --strict",
+    "impact": "node tools/ci-impact.mjs"
   }
 }

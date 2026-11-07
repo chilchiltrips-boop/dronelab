@@ -138,7 +138,7 @@ def main():
     flags=['-fstack-usage']+(['-DZJ_A2_EXPERIMENTAL_RATE_FLIGHT=1'] if experimental else [])
     if experimental:
         catalog['boards']=[b for b in catalog['boards'] if b['id']=='ZFC-A2']
-        catalog.update(releaseScope='EXPERIMENTAL_PPM_RATE',flightOutputEnabled=True,flightOutputQualified=False,physicalAcceptance='NOT_RUN')
+        catalog.update(defaultBoardId='ZFC-A2',releaseScope='EXPERIMENTAL_PPM_RATE',flightOutputEnabled=True,flightOutputQualified=False,physicalAcceptance='NOT_RUN')
         for b in catalog['boards']:
             for kind in ('app','factory'):
                 b['latest'][kind]['file']=f'ZEBJUS_FLIGHTCORE_A2_{kind.upper()}_RATE_EXPERIMENTAL.bin'
