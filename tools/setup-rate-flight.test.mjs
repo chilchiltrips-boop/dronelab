@@ -140,7 +140,7 @@ int main(int argc,char** argv){
 
 test('WebApp and Android output labels follow fresh firmware state, never input ARM',()=>{
  const policy=globalThis.ZebjusKitAccessPolicy;
- const kit={connected:true,heartbeatAt:1000,motorsDisabled:true,motorsArmed:false,rc:{inputArmed:true}};
+ const kit={connected:true,heartbeatAt:1000,outputObservedAt:1000,motorsDisabled:true,motorsArmed:false,rc:{inputArmed:true}};
  assert.equal(policy.outputLabel(kit,1001),'OUTPUT DISABLED');
  kit.motorsDisabled=false;
  assert.equal(policy.outputLabel(kit,1001),'OUTPUT ENABLED');
@@ -148,6 +148,8 @@ test('WebApp and Android output labels follow fresh firmware state, never input 
  kit.motorsArmed=true;
  assert.equal(policy.outputLabel(kit,1001),'RATE FLIGHT ARMED');
  assert.equal(policy.outputLabel(kit,2501),'OUTPUT UNKNOWN');
+ kit.heartbeatAt=2501;
+ assert.equal(policy.outputLabel(kit,2501),'OUTPUT UNKNOWN','input ACKs must not refresh old output observations');
  kit.flight.enabled=false;
  assert.equal(policy.flightState(kit.flight),null);
  kit.flight={version:1,enabled:true,authorized:false,canArm:false,state:'FAILSAFE'};

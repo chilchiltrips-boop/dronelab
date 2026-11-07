@@ -66,7 +66,7 @@ let savedNetworks=[];
 function adoptNetworkStatus(d){
  Object.assign(state,{setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
   radioHandover:d.radioHandover?.version===1?{...d.radioHandover}:null,rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,ppm:d.ppm&&typeof d.ppm.present==='boolean'?{...d.ppm}:null,
-  ppmObservedAt:Date.now(),flight:root.ZebjusKitAccessPolicy?.flightState?.(d.flight)||null,
+  ppmObservedAt:Date.now(),outputObservedAt:Date.now(),flight:root.ZebjusKitAccessPolicy?.flightState?.(d.flight)||null,
   controlAuthorized:d.controlAuthorized===true||(d.controlAuthorized===undefined&&(state.transport==='ap'||!!state.key)),
   flightModeState:root.ZebjusKitData?.flightModeState?.(d)||null,mode:d.mode||state.mode,flightMode:['angle','acro'].includes(d.flightMode)?d.flightMode:null,version:d.version||state.version,kitName:d.kitName||d.name||state.kitName,
   apActive:!!d.apActive,apIp:d.apIp||'',apSsid:d.apSsid||'',staConnected:!!d.staConnected,staIp:d.ip||'',ssid:d.ssid||'',
@@ -397,7 +397,7 @@ async function disconnect(reason='Disconnected',{automatic=false}={}){
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
  state.connected=false;state.imu=null;state.imuObservedAt=0;state.ppm=null;state.radioHandover=null;state.rc=null;state.rcAccess=null;state.key='';state.relaySessionId='';state.rcSession='';state.owner=false;state.working=false;state.rcSource='';state.transport='none';state.ip='';state.kitId='';state.kitCode='';state.kitName='';state.board='';state.version='';
- Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,flight:null,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:null});
+ Object.assign(state,{setupAuthorized:false,otaAuthorized:false,controlAuthorized:false,flightMode:null,flightModeState:null,flight:null,outputObservedAt:0,exclusiveWifi:false,apActive:false,staConnected:false,staIp:'',apIp:'',apSsid:'',ssid:'',hostname:'',bootId:'',firmwareBuiltAt:'',ledOn:null,motorsArmed:null,motorsDisabled:null});
  audit(reason);tone(reason,'offline');root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:false,transport:'none'}})); // USB Serial remains open for Firmware/Python; never steal its port.
 }
 function waitSerial(pattern,timeout=2300){
@@ -597,6 +597,7 @@ async function deviceRequestCore(route,method='GET',args={},guard=null){
   state.heartbeatAt=Date.now();state.linkState='connected';pollErrors=0;
   if(typeof data.motorsDisabled==='boolean')state.motorsDisabled=data.motorsDisabled;
   if(typeof data.motorsArmed==='boolean')state.motorsArmed=data.motorsArmed;
+  if(typeof data.motorsDisabled==='boolean'&&typeof data.motorsArmed==='boolean'){state.outputObservedAt=Date.now();state.flight=null;}
  }
  guard?.();return data;
 }
@@ -1318,6 +1319,7 @@ function onSerial(e){
   if(statusRecord.kitId!==state.kitId||usbCandidate.kitId!==state.kitId||usbCandidate.serialGeneration!==serial()?.generation?.())return;
   state.flightModeState={...statusRecord.flightModeState};state.flightMode=statusRecord.flightModeState.active;
   state.ledOn=statusRecord.ledOn;state.motorsArmed=statusRecord.rc.motorsArmed;state.motorsDisabled=statusRecord.rc.motorsDisabled;
+  state.outputObservedAt=Date.now();state.flight=null; // compact USB state has no flight-owner field
   if(!state.rc||statusRecord.rc.seq>=state.rc.seq||statusRecord.rc.active===false){
    // Compact ZJSTATE carries the authoritative source, including a reserved
    // producer before its first frame; it has no separate claimed field.
@@ -2421,7 +2423,7 @@ root.ZebjusKits={
  setFlightMode,pidExchange,openFlightTraceReader,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,
  getState:()=>({requestQueue:requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,adminUnlocked:state.transport==='usb'&&Date.now()<adminUnlockedUntil,rcAccess:linkFresh()&&state.rcAccess?{...state.rcAccess,maintenance:{...state.rcAccess.maintenance}}:null,ppm:state.ppm?{...state.ppm}:null,ppmObservedAt:state.ppmObservedAt||0,usbStatus:usbCandidate.kitId===state.kitId&&Date.now()-(usbCandidate.statusAt||0)<1000?usbCandidate.statusRecord:null,connected:linkFresh(),linkVerified:state.connected,connectionGeneration:reconnectTicket,usbAvailable:!!serial()?.isOpen?.()&&!serial()?.isFlashing?.(),otaInProgress:otaActive,linkState:state.connected&&!linkFresh()&&!otaActive?'stale':state.linkState,relaySessionId:state.relaySessionId,heartbeatAt:state.heartbeatAt,internet:state.internet,transport:state.transport,kitId:state.kitId,kitCode:state.kitCode,
   networkBusy:!!(wifiTesting||headerModePending),authorizationNotice:authorizationNotice(state.kitId),authorizationRetryAt:enrollmentCooldowns.get(state.kitId)||0,exclusiveWifi:!!state.exclusiveWifi,pendingNetworkMode:pendingNetworkTarget?.transport||'',
-  kitName:state.kitName,board:state.board,flight:state.flight?{...state.flight}:null,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  kitName:state.kitName,board:state.board,outputObservedAt:state.outputObservedAt||0,flight:state.flight?{...state.flight}:null,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,requestBound:(binding,route,method='GET',args={},operationGuard=null)=>deviceRequest(route,method,args,()=>{operationGuard?.();return root.ZebjusKitData.assertBoundSession(binding,root.ZebjusKits.getState(),{allowDelayed:route==='/api/status'||route==='/api/motor'&&['STATUS','STOP'].includes(args.action)||/,(?:STOP)\s*$/.test(args.line||'')})}),pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

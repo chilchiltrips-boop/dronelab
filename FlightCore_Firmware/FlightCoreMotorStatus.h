@@ -1,7 +1,8 @@
 #pragma once
 #include <atomic>
 // Shared authoritative output state; diagnostic input ARM is a separate field.
-static bool zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false;
+// The control worker, watchdog and main task share these output flags.
+static std::atomic<bool> zjMotorEnabled{false},zjMotorArmed{false},zjMotorSessionActive{false};
 static bool zjMotorInputTest=false;
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static std::atomic<bool> zjMotorPwmOffAck{false};

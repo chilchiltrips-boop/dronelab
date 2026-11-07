@@ -565,7 +565,7 @@ async function status(){
  await pinVerifiedStatus(data);
  if(epoch!==linkEpoch)throw Error('Kit link changed during Wi-Fi verification');
  const newer=!!kitSnapshot.bootId&&kitSnapshot.bootId===data.bootId&&(kitRcReadStartedAt>started||!window.ZebjusControlPaths.acceptRcObservation(kitSnapshot.rc,data.rc)),previousRc=kitSnapshot.rc;
- online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,...(newer?{rc:previousRc}:{})};
+ online=true;lastStatus=Date.now();statusFailures=0;kitSnapshot={...data,outputObservedAt:lastStatus,...(newer?{rc:previousRc}:{})};
  if(!newer){kitSnapshotAt=lastStatus;kitRcReadStartedAt=started;}
  window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});

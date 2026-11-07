@@ -17,7 +17,7 @@ try{
   };
   Object.defineProperty(window,'ZebjusKitAuth',{get:()=>api,set(value){
    api=value;api.local=async()=>({local:true,expiresAt:Date.now()+1800000,request:async(route,method,args={})=>{
-    if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',mode:'ap',requestTransport:'AP',apActive:true,apSsid:'zebjus_drone_1',inputArmSupported:true,controlAuthorized:true};
+    if(route==='/api/status')return {kitId,kitCode:'123456',board:'ZFC-A2',mode:'ap',requestTransport:'AP',apActive:true,apSsid:'zebjus_drone_1',inputArmSupported:true,controlAuthorized:true,...window.__motorStatus};
     if(route==='/api/rc/claim'){active=true;return {kitId,session:'touch-session-'+(++seq)}}
     if(route==='/api/rc/release'){active=false;return {released:true}}
     if(route==='/api/rc/preview'){if(!active)throw Error('not owned');window.__kitFrames.push({...args});return {kitId,received:true,seq:args.seq,inputArmed:args.inputArmed==='true'}}
@@ -43,6 +43,18 @@ try{
  await cdp.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
  await page.locator('#flightArm').tap();await page.waitForFunction(()=>window.ZebjusNetwork.inputArmed());
  await page.locator('#flightArm').tap();await page.waitForFunction(()=>!window.ZebjusNetwork.inputArmed());
+ await page.evaluate(async()=>{
+  window.__motorStatus={motorsDisabled:false,motorsArmed:true,
+   flight:{version:1,enabled:true,authorized:true,canArm:false,state:'ARMED',inputScope:'PPM_RATE'}};
+  await window.ZebjusNetwork.pollConnection();
+ });
+ await page.waitForFunction(()=>document.getElementById('flightAppliedControls').textContent.includes('RATE FLIGHT ARMED'));
+ await page.evaluate(async()=>{
+  window.__motorStatus={motorsDisabled:true,motorsArmed:false,
+   flight:{version:1,enabled:true,authorized:false,canArm:false,state:'FAILSAFE',inputScope:'PPM_RATE'}};
+  await window.ZebjusNetwork.pollConnection();
+ });
+ await page.waitForFunction(()=>document.getElementById('flightAppliedControls').textContent.includes('FAILSAFE • OUTPUT OFF'));
  assert.equal(errors.length,0,errors.join('\n'));
- console.log('PASS direct AP cockpit: no extra enable toggle, ARM ACK, two real joystick touches, all four channels, third-finger STOP, DISARM');
+ console.log('PASS direct AP cockpit: ARM ACK, four-channel touch, STOP/DISARM and signed Rate flight/failsafe output status');
 }finally{await browser.close()}

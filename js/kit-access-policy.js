@@ -49,7 +49,8 @@
    blockReason:reason(value.blockReason),lastArmReason:reason(value.lastArmReason)};
  }
  function outputLabel(kit={},now=Date.now()){
-  if(kit.connected!==true||!kit.heartbeatAt||now-kit.heartbeatAt>1500)return 'OUTPUT UNKNOWN';
+  const observed=kit.outputObservedAt;
+  if(kit.connected!==true||!Number.isFinite(observed)||observed<=0||now<observed||now-observed>1500)return 'OUTPUT UNKNOWN';
   const flight=flightState(kit.flight);
   if(flight?.authorized&&kit.motorsArmed===true&&kit.motorsDisabled===false)return 'RATE FLIGHT ARMED';
   if(kit.motorsDisabled===true)return flight?.state==='FAILSAFE'?'FAILSAFE • OUTPUT OFF':'OUTPUT DISABLED';

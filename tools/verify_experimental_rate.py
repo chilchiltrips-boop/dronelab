@@ -11,7 +11,7 @@ from firmware_compile_time import check_compiled_at
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def verify(directory):
+def verify(directory, pinned=False):
     catalog = json.loads((directory / 'catalog.json').read_text())
     report = json.loads((directory / 'build-report.json').read_text())
     assert catalog['releaseScope'] == report['buildProfile'] == 'EXPERIMENTAL_PPM_RATE'
@@ -19,17 +19,30 @@ def verify(directory):
     assert catalog['flightOutputQualified'] is False and catalog['physicalAcceptance'] == 'NOT_RUN'
     assert report['hardwareFlashingTested'] is False
     assert report['compilerFlags'] == ['-fstack-usage', '-DZJ_A2_EXPERIMENTAL_RATE_FLIGHT=1']
-    assert report['sourceCommit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    assert catalog['version'] == report['version'] == (ROOT / 'VERSION.txt').read_text().strip()
+    assert catalog['sourceCommit'] == report['sourceCommit']
+    if pinned:
+        pin = ROOT / 'FlightCore_Firmware/experimental-rate-catalog.json'
+        assert pin.read_bytes() == (directory / 'catalog.json').read_bytes(), 'Candidate differs from reviewed catalog'
+        provenance = json.loads((directory / 'provenance.json').read_text())
+        assert provenance['sourceCommit'] == report['sourceCommit']
+        assert provenance['reportSha256'] == hashlib.sha256((directory / 'build-report.json').read_bytes()).hexdigest()
+        assert provenance['catalogSha256'] == hashlib.sha256(pin.read_bytes()).hexdigest()
+        assert provenance['physicalAcceptance'] == 'NOT_RUN'
+    else:
+        assert report['sourceCommit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        assert catalog['version'] == (ROOT / 'VERSION.txt').read_text().strip()
+    assert catalog['version'] == report['version']
     expected = {'FlightCore_Firmware/I2C_ADDRESS_SCANNER.ino', 'FlightCore_Firmware/partitions.csv'}
     expected.update(str(p.relative_to(ROOT)) for p in (ROOT / 'FlightCore_Firmware').glob('*.h'))
     assert set(report['sourceSha256']) == expected
     for name, digest in report['sourceSha256'].items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
+        if not pinned:
+            assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
         committed = subprocess.check_output(['git', 'show', f'{report["sourceCommit"]}:{name}'], cwd=ROOT)
         assert hashlib.sha256(committed).hexdigest() == digest, 'Uncommitted compiled source: ' + name
     assert len(catalog['boards']) == len(report['boards']) == 1
     board, built = catalog['boards'][0], report['boards'][0]
+    assert catalog['defaultBoardId'] == 'ZFC-A2'
     assert board['id'] == built['boardId'] == 'ZFC-A2'
     assert built['chipId'] == 13 and built['fqbn'] == board['build']['fqbn']
     assert built['otaSlots'] == [{'address': 0x10000, 'bytes': 0x1e0000}, {'address': 0x1f0000, 'bytes': 0x1e0000}]
@@ -56,4 +69,6 @@ def verify(directory):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
-    verify(parser.parse_args().directory)
+    parser.add_argument('--pinned', action='store_true', help='Verify the separately reviewed candidate against its compiled source, not a later publish commit')
+    args = parser.parse_args()
+    verify(args.directory, args.pinned)
