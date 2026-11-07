@@ -2,7 +2,7 @@
 // the measured gravity tilt, and the propellers stay fixed in both views.
 const centerX = 280;
 const centerY = 108;
-const defaultOrbit = -144;
+const defaultOrbit = -112;
 const radians = degrees => degrees * Math.PI / 180;
 const axes = ['roll', 'pitch', 'orbit'];
 
@@ -69,8 +69,8 @@ function projection(roll, pitch, orbit) {
   const pitchSin = Math.sin(radians(pitch));
   const orbitCos = Math.cos(radians(orbit));
   const orbitSin = Math.sin(radians(orbit));
-  const elevationCos = Math.cos(radians(29));
-  const elevationSin = Math.sin(radians(29));
+  const elevationCos = Math.cos(radians(13));
+  const elevationSin = Math.sin(radians(13));
   return ([x, y, z], vehicle) => {
     if (vehicle) {
       [x, y] = [rollCos * x + rollSin * y, rollCos * y - rollSin * x];
@@ -90,14 +90,14 @@ function point({ x, y }) {
 
 export function createFlightDataVehicle(container) {
   container.innerHTML = `
-    <svg class="flight-data-vehicle-scene" viewBox="0 0 560 250" style="display:block;width:100%;height:auto;max-height:300px" role="img" aria-label="Schematic 3D Quad X airframe. Coral arms mark the front.">
+    <svg class="flight-data-vehicle-scene" viewBox="0 32 560 152" role="img" aria-label="Schematic 3D Quad X airframe. Coral arms mark the front.">
       <g data-vehicle-grid fill="none" stroke="#295064" stroke-width="1"></g>
       <g data-vehicle-frame stroke="#102834" stroke-width=".65" stroke-linejoin="round"></g>
     </svg>
     <div class="flight-data-vehicle-controls">
-      <button type="button" data-vehicle-preview aria-pressed="false">Orbit preview</button>
-      <button type="button" data-vehicle-left aria-label="Rotate preview left" hidden>↶</button>
-      <button type="button" data-vehicle-right aria-label="Rotate preview right" hidden>↷</button>
+      <button type="button" class="viewer-allowed" data-vehicle-preview aria-pressed="false">Orbit preview</button>
+      <button type="button" class="viewer-allowed" data-vehicle-left aria-label="Rotate preview left" hidden>↶</button>
+      <button type="button" class="viewer-allowed" data-vehicle-right aria-label="Rotate preview right" hidden>↷</button>
     </div>
     <p class="flight-data-vehicle-caption" data-vehicle-caption></p>`;
 
@@ -159,8 +159,8 @@ export function createFlightDataVehicle(container) {
     const nextCaption = preview
       ? 'Interactive airframe preview · use the arrow buttons to orbit.'
       : live
-        ? `Stationary gravity tilt estimate · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}° · Heading unavailable`
-        : 'Level airframe reference · stationary tilt unavailable';
+        ? `Stationary tilt · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
+        : 'Reference airframe · no tilt data';
     if (caption.textContent !== nextCaption) caption.textContent = nextCaption;
     const next = { roll: live ? tilt.roll : 0, pitch: live ? tilt.pitch : 0, orbit: preview ? orbit : defaultOrbit };
     if (!snap && axes.every(axis => next[axis] === target[axis])) return;

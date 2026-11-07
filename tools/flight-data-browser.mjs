@@ -8,7 +8,43 @@ export async function testFlightData(page, width) {
   await nav.click();
   assert.equal(await nav.getAttribute('aria-selected'), 'true');
   assert.equal(await telemetry.locator('#fd-link').getAttribute('data-tone'), 'unknown');
-  assert.match(await telemetry.locator('.fd-navigation').innerText(), /GPS position\s+Unavailable/);
+  await telemetry.locator('.fd-map-canvas image').waitFor({state: 'attached'});
+  assert.match(await telemetry.locator('.fd-map-footer').innerText(), /No GPS/);
+  const mapAsset = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = document.querySelector('.fd-map-canvas image').getAttribute('href');
+    await image.decode();
+    return image.naturalWidth;
+  });
+  assert.ok(mapAsset > 0, 'Offline map SVG decodes');
+  const bounds = await telemetry.locator('.fd-cockpit').evaluate(element => {
+    const rect = selector => element.querySelector(selector).getBoundingClientRect().toJSON();
+    return {pfd: rect('#fd-pfd'), map: rect('#fd-map'), vehicle: rect('#fd-vehicle'),
+      health: rect('#fd-health'), left: rect('.fd-instruments')};
+  });
+  const {pfd, map, vehicle, health, left} = bounds;
+  assert.ok(Math.abs(vehicle.top - health.top) < 1 && vehicle.right <= health.left);
+  assert.ok(pfd.bottom <= vehicle.top, 'Instruments sit above the vehicle and health tray');
+  if (width > 680) {
+    assert.ok(left.right <= map.left && Math.abs(pfd.top - map.top) < 1);
+    assert.ok(Math.abs(left.bottom - map.bottom) < 1, 'Map spans both left rows');
+    assert.ok(Math.abs(left.width / (left.width + map.width) - 0.44) < 0.01);
+  } else {
+    assert.ok(left.bottom <= map.top && Math.abs(left.width - map.width) < 1);
+  }
+  const mapCanvas = telemetry.locator('.fd-map-canvas');
+  const overview = await mapCanvas.getAttribute('viewBox');
+  await telemetry.locator('[data-map-zoom-in]').click();
+  assert.notEqual(await mapCanvas.getAttribute('viewBox'), overview);
+  await telemetry.locator('[data-map-reset]').click();
+  assert.equal(await mapCanvas.getAttribute('viewBox'), overview);
+  const detailsToggle = telemetry.locator('#fd-details-toggle');
+  assert.equal(await detailsToggle.getAttribute('aria-expanded'), 'false');
+  assert.equal(await telemetry.locator('#fd-details').isVisible(), false);
+  await detailsToggle.click();
+  assert.equal(await telemetry.locator('#fd-details').isVisible(), true);
+  await detailsToggle.click();
+  assert.equal(await telemetry.locator('#fd-details').isVisible(), false);
   assert.equal(await telemetry.locator('#fd-rate-roll').textContent(), '—');
 
   const preview = telemetry.locator('[data-vehicle-preview]');
@@ -47,8 +83,8 @@ export async function testFlightData(page, width) {
     assert.equal(await telemetry.locator('#fd-kit').textContent(), 'Test A2');
     assert.equal(await telemetry.locator('#fd-input').textContent(), 'Input armed');
     assert.equal(await telemetry.locator('#fd-flight').textContent(), 'Flight disarmed');
-    assert.equal(await telemetry.locator('[data-health="setup"] .fd-pill').getAttribute('data-tone'), 'good');
-    assert.equal(await telemetry.locator('[data-health="qualification"] .fd-pill').getAttribute('data-tone'), 'warning');
+    assert.equal(await telemetry.locator('[data-health="setup"]').getAttribute('data-tone'), 'good');
+    assert.equal(await telemetry.locator('[data-health="qualification"]').getAttribute('data-tone'), 'warning');
     assert.equal(await telemetry.locator('#fd-horizon-world').getAttribute('visibility'), 'visible');
     await page.evaluate(() => {
       const snapshot = window.__flightDataFixture;
@@ -57,7 +93,7 @@ export async function testFlightData(page, width) {
       snapshot.imu.corrected = [2, 1, -0.5];
     });
     await page.waitForFunction(() => document.querySelector('#fd-line-roll').getAttribute('points').split(' ').length === 2);
-    await page.screenshot({path: `test-output/v2/flight-data-${width}.png`, fullPage: true});
+    await telemetry.locator('.fd-window').screenshot({path: `test-output/v2/flight-data-${width}.png`});
     assert.ok(await telemetry.evaluate(e => e.scrollWidth <= e.clientWidth + 1), 'Flight Data fits the viewport');
 
     await page.evaluate(() => {
@@ -68,8 +104,8 @@ export async function testFlightData(page, width) {
       snapshot.outputObservedAt = Date.now();
       snapshot.imuSampleObservedAt -= 10000;
     });
-    await page.waitForFunction(() => document.querySelector('[data-health="timing"] .fd-pill').dataset.tone === 'error');
-    assert.equal(await telemetry.locator('[data-health="output"] .fd-pill').getAttribute('data-tone'), 'error');
+    await page.waitForFunction(() => document.querySelector('[data-health="timing"]').dataset.tone === 'error');
+    assert.equal(await telemetry.locator('[data-health="output"]').getAttribute('data-tone'), 'error');
     assert.equal(await telemetry.locator('#fd-rate-roll').textContent(), '—');
     assert.equal(await telemetry.locator('#fd-horizon-world').getAttribute('visibility'), 'hidden');
     assert.equal(await telemetry.locator('#fd-line-roll').getAttribute('points'), '');
@@ -88,5 +124,5 @@ export async function testFlightData(page, width) {
   await page.goto('http://127.0.0.1:8765/lab.html#telemetry');
   await page.waitForFunction(() => document.querySelector('#tab-telemetry').classList.contains('active'));
   assert.equal(await page.locator('[data-tab="telemetry"]').getAttribute('aria-selected'), 'true');
-  console.log('PASS Flight Data verified snapshot, faults, stale data and navigation', width);
+  console.log('PASS Flight Data cockpit layout, map, verified snapshot, faults, stale data and navigation', width);
 }

@@ -13,7 +13,7 @@
     "Output Calibration uses one acknowledged slider pump, a fresh startup lease and board-side calibration lease renewal; diagnostics retain Wizard saves, ESC results and request queue timing",
     "App actions use on-page confirmations, inputs and status messages; connection settings open as a full page and Output Calibration retains its safety check",
     "Aerof450 Quad X and Quad + PID profiles, unified Rate and Angle editor, and disarmed preview on supported A2 firmware",
-    "Flight Data shows verified A2 telemetry with system health, a stationary level reference, a 3D airframe and live gyro trends. Setup Wizard Report checks flight readiness.",
+    "Flight Data places the primary instruments above 3D and System Health beside a full-height offline map, with verified telemetry details. Setup Wizard Report checks flight readiness.",
     "Firmware Flash can explicitly load the verified A2 1.7.20 Experimental PPM Rate APP or Factory image. Physical acceptance remains pending."
   ],
   "buildCommit": "d29284d527c2",
