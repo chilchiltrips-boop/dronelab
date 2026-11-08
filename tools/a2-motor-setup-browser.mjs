@@ -24,7 +24,7 @@ try{
    board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,calibrationSlideKeepsSession:true,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
     inputArmed:false,ppm:{present:true,ageMs:2,seq:12,map:[2,1,4,3,5],channels:[1510,1530,1000,1350],captureHz:50},
     imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
-    ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false}}
+    ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false,mask:0}}
   };
   const stop=(reason='USER_STOP')=>Object.assign(f.board,{mode:'DISABLED',reason,pulseUs:[0,0,0,0]});
   const setWiring=encoded=>{
@@ -58,9 +58,24 @@ try{
      if(a.a==='GYRO'){
       Object.assign(b.imu,{state:'CALIBRATING',manualGyro:true,imuValid:false,samples:512});
       setTimeout(()=>Object.assign(b.imu,{state:'READY',manualGyro:false,imuValid:true,samples:2000,sampleSequence:b.imu.sampleSequence+1}),550);
+     }else if(a.a==='CLEAR_ACCEL'){
+      setTimeout(()=>{b.capture={sequence,state:'IDLE',ready:false,mask:0};},240);
+     }else if(a.a==='FACE'){
+      const mask=b.capture.mask,face=Number(a.b),failure=f.faceFailure;
+      f.faceFailure='';
+      const finish=()=>{
+       const accepted=mask|(1<<face),complete=accepted===63;
+       b.capture=failure?{sequence,state:failure,ready:false,mask,samples:0}:
+        {sequence,state:complete?'CAPTURED':'FACE_CAPTURED',ready:complete,mask:accepted,samples:128,
+         model:complete?'1:0:0:0:0:1000:1000:1000:0:0:0':undefined};
+      };
+      if(f.delayFace)f.finishFace=finish;
+      else setTimeout(finish,380);
      }else if(a.a==='LEVEL'){
-      b.capture={sequence,state:'CAPTURING',running:true,ready:false,samples:16};
-      setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,samples:128,model:'0:1:0:0:0:1000:1000:1000:42:0:0'};},550);
+      b.capture={sequence,state:'CAPTURING',running:true,ready:false,mask:0,samples:16};
+      const model=b.accelModel.split(':');
+      model[1]='1';model[8]='42';
+      setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,mask:0,samples:128,model:model.join(':')};},550);
      }
      break;
     }
@@ -198,14 +213,53 @@ try{
  assert.equal(await nav(1).isDisabled(),true,'Next waits for manual gyro calibration');
  await expectText('.a2-gyro-status','Gyro ready for this boot');
  assert.equal(await fixture(()=>__wizard.writes),1,'gyro bias is recalculated without a persistent write');
- await check('a2Still');await button('imu-level').click();
- await expectText('.a2-capture-status','CAPTURING');
+ const guideStatus='.a2-imu-guide-status',poseTitle='[data-pose-title]';
+ await page.setViewportSize({width:390,height:844});
+ await button('imu-start').click();await expectText(poseTitle,'Pose 1 of 6');
+ assert.equal(await fixture(()=>__wizard.calls.filter(c=>c.action==='WIZARD_IMU'&&c.a==='CLEAR_ACCEL').length),0,
+  'starting from an empty FC buffer does not require ownership of an earlier calibration session');
+ assert.equal(await button('imu-level').isDisabled(),true,'level trim waits for the guided fit');
+ await fixture(()=>{__wizard.faceFailure='WRONG_ORIENTATION';});
+ await button('imu-face').click();await expectText(guideStatus,'Point the requested sensor axis up');
+ assert.match(await wizard.locator(poseTitle).textContent(),/Pose 1 of 6/);
+ assert.equal(await wizard.locator('[data-pose-state="captured"]').count(),0);
+ await fixture(()=>{__wizard.delayFace=true;});
+ await button('imu-face').click();await expectText(guideStatus,'Collecting samples');
+ assert.match(await wizard.locator(poseTitle).textContent(),/Pose 1 of 6/);
+ assert.equal(await button('imu-face').isDisabled(),true,'an older FC observation cannot complete a new pose');
+ await fixture(()=>{__wizard.delayFace=false;__wizard.finishFace();});
+ await expectText(poseTitle,'Pose 2 of 6');
+ await button('imu-clear').click();await expectText(guideStatus,'Start when the gyro is ready');
+ assert.equal(await wizard.locator('[data-pose-state="captured"]').count(),0);
+ assert.equal(await fixture(()=>__wizard.writes),1,'cancelling captures preserves flash settings');
+ await button('imu-start').click();await expectText(poseTitle,'Pose 1 of 6');
+ const callAt=await fixture(()=>__wizard.calls.length);
+ const poseOrder=[4,2,3,1,0,5];
+ for(let i=0;i<poseOrder.length;i++){
+  await expectText(poseTitle,'Pose '+(i+1)+' of 6');
+  assert.equal(await wizard.locator('[aria-current="step"][data-pose-face]').getAttribute('data-pose-face'),String(poseOrder[i]));
+  await button('imu-face').click();
+ }
+ await expectText(guideStatus,'6 / 6 captured');
+ assert.equal(await wizard.locator('[data-pose-state="captured"]').count(),6);
+ assert.deepEqual(await page.evaluate(at=>__wizard.calls.slice(at).filter(c=>c.action==='WIZARD_IMU'&&c.a==='FACE').map(c=>Number(c.b)),callAt),poseOrder);
+ assert.equal(await fixture(()=>__wizard.writes),1,'collecting poses does not persist the fit');
+ assert.equal(await nav(1).isDisabled(),true,'the fit must be saved separately from Level Horizon');
+ assert.equal(await button('save-page').textContent(),'Save six-position fit');
+ assert.equal(await wizard.locator('.a2-imu-guide [data-action="save-page"]').isVisible(),true);
+ await button('save-page').click();await expectText(guideStatus,'Six-position fit saved on FC');
+ await expectText('[data-save-page="3"]','Quick Level required for Angle');
+ assert.match(await fixture(()=>__wizard.board.accelModel),/^1:0:/);
+ assert.equal(await fixture(()=>__wizard.writes),2);
+ await page.setViewportSize({width:1366,height:900});
+ await check('a2LevelStill');await button('imu-level').click();
+ await expectText('.a2-capture-status','Collecting level samples');
  assert.equal(await nav(1).isDisabled(),true,'Next waits for a fresh capture result');
  await expectText('.a2-capture-status','Unsaved accelerometer settings');await expectSaved(3,false);
  assert.equal(await button('save-page').textContent(),'Save ACC calibration');
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="4"]').isVisible(),true);
- await fixture(()=>{if(__wizard.board.accelModel!=='0:1:0:0:0:1000:1000:1000:42:0:0')throw Error('IMU page not saved');});
- assert.equal(await fixture(()=>__wizard.writes),2);
+ await fixture(()=>{if(__wizard.board.accelModel!=='1:1:0:0:0:1000:1000:1000:42:0:0')throw Error('Level save did not preserve the six-position fit');});
+ assert.equal(await fixture(()=>__wizard.writes),3);
  await step(3).click();
  await page.waitForFunction(()=>document.querySelector('[data-imu-orient-status]')?.textContent.includes('FRESH'));
  await expectText('[data-save-page="3"]','Quick Level saved on FC');
@@ -225,15 +279,15 @@ try{
  assert.equal(await button('save-page').isDisabled(),true,'invalid manual offset must block saves');
  await wizard.locator('#a2ManualX').fill('0.030');
  await button('save-page').click();await expectSaved(3);
- assert.equal(await fixture(()=>__wizard.board.accelModel),'0:1:0:0:0:1000:1000:1000:42:0:0:M:30:-10:80');
- assert.equal(await fixture(()=>__wizard.writes),3);
+ assert.equal(await fixture(()=>__wizard.board.accelModel),'1:1:0:0:0:1000:1000:1000:42:0:0:M:30:-10:80');
+ assert.equal(await fixture(()=>__wizard.writes),4);
  await button('imu-zero-manual').click();await expectSaved(3,false);
  assert.equal(await wizard.locator('#a2ManualX').inputValue(),'0.000');
  await button('imu-restore-manual').click();await expectSaved(3);
  assert.equal(await wizard.locator('#a2ManualX').inputValue(),'0.030');
  assert.equal(await wizard.locator('#a2ManualY').inputValue(),'-0.010');
  assert.equal(await wizard.locator('#a2ManualZ').inputValue(),'0.080');
- assert.equal(await fixture(()=>__wizard.writes),3,'Restore Saved never writes hardware');
+ assert.equal(await fixture(()=>__wizard.writes),4,'Restore Saved never writes hardware');
  await step(4).click();
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="5"] h3').textContent(),'Automatic ESC Calibration');
  for(const id of ['a2EscProps','a2PowerOff','a2ReadProcedure','a2Tones','a2EscDisconnected'])
@@ -286,7 +340,7 @@ try{
  assert.match(await wizard.locator('.a2-auto-result').textContent(),/Acceptance not measured/);
  assert.equal(await button('confirm-cal').count(),0);
  assert.equal(await button('save-page').isVisible(),false);
- assert.equal(await fixture(()=>__wizard.writes),3,'automatic controller result requires no app-side ESC Save');
+ assert.equal(await fixture(()=>__wizard.writes),4,'automatic controller result requires no app-side ESC Save');
  assert.equal(await nav(1).isDisabled(),false,'stored controller result allows next stage');
  mkdirSync('test-output',{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:'test-output/a2-auto-esc-desktop.png',fullPage:true});
@@ -465,5 +519,5 @@ try{
  await expectText('.a2-readiness-status','Observation is stale');
  assert.equal(await wizard.locator(readiness).textContent(),'','expired observation cannot supply a ready or OFF claim');
  assert.deepEqual(errors,[]);
- console.log('PASS ACC / Gyro navigation, authorization, gyro and level capture, verified ACC saves, ESC prepare, output calibration, PPM mapping and readiness');
+ console.log('PASS guided ACC / Gyro, six poses and Level Horizon, verified saves, ESC prepare, output calibration, PPM mapping and readiness');
 }finally{await browser.close();}
