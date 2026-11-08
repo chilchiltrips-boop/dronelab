@@ -182,6 +182,7 @@ try{
  await expectText('.a2-gyro-status','Gyro ready for this boot');
  await expectText('[data-save-page="3"]','Quick Level required for Angle');
  assert.equal(await wizard.locator('#a2AdvancedAccel').getAttribute('open'),null);
+ assert.equal(await wizard.locator('[data-panel="3"] [data-action="save-page"]').isVisible(),true,'ACC Save is beside Quick Level');
  assert.equal(await button('save-page').isDisabled(),true,'runtime gyro bias is not persisted as accelerometer calibration');
  assert.equal(await button('imu-gyro').isDisabled(),true,'stationary confirmation is required');
  await fixture(()=>{__wizard.kit.controlAuthorized=false;});

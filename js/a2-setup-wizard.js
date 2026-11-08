@@ -848,6 +848,9 @@ if(root){
   if(next!==step){$('#a2OutputSafety').checked=false;$('#a2Still').checked=false;}
   if(next!==REPORT){readiness=null;readinessError='';}
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
+  const saveButton=$('[data-action="save-page"]');
+  if(step===IMU)$('[data-action="imu-level"]').after(saveButton);
+  else $('[data-nav="1"]').before(saveButton);
   if(step===OUTPUT)setCalPulse(currentResult());
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
   root.querySelectorAll('[data-step]').forEach(b=>{
