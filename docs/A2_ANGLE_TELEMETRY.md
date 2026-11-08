@@ -166,18 +166,18 @@ loads board status, and Setup/PID writes require an explicit action. The
 Android AP controller keeps its independent 20 ms signed UDP stream and
 500 ms firmware input deadline.
 
-## Downloadable 1.7.23 candidate
+## Downloadable 1.7.24 candidate
 
-Firmware Center's **Load 1.7.23 Acro + Angle** action selects the separately
+Firmware Center's **Load 1.7.24 Acro + Angle** action selects the separately
 verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
-The 1.7.15 published images and 1.7.20 through 1.7.22 experimental download URLs
+The 1.7.15 published images and 1.7.20 through 1.7.23 experimental download URLs
 remain available.
 
-- Compiled source `da1c4e0da94f0458f5d83385683a1efb0af5495d`
-- Build workflow [42517855677](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42517855677)
-- APP build ID `1.7.23-ZFC-A2-ae5eb39af86f`
-- APP SHA-256 `ae5eb39af86fc3f8a68d1a0110dca9d9c5d32823ff59ba80e4212df64e417eb0`
-- Verified APP and Factory sizes are 1,366,624 and 4,194,304 bytes respectively.
+- Compiled source `0367d2e5eebb0b7c1f8466a9abd00e900c708e85`
+- Build workflow [42523987273](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42523987273)
+- APP build ID `1.7.24-ZFC-A2-3d050967c7fe`
+- APP SHA-256 `3d050967c7fed5dc65d1d4b4e87d398b1172c928acb4336c8384e6295b514c5a`
+- Verified APP and Factory sizes are 1,367,872 and 4,194,304 bytes respectively.
 - Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
 
 The control worker derives its first expected tick from timer activation. A
