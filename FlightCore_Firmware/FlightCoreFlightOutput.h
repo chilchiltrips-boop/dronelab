@@ -62,14 +62,18 @@ inline uint16_t zjFlightMixThrottle(uint16_t throttle){
 struct ZjFlightOutputGate {
  ZjFlightState state=ZjFlightState::OUTPUT_OFF;
  ZjFlightFault reason=ZjFlightFault::NONE;
+ ZjFlightFault cutoff=ZjFlightFault::NONE;
  uint32_t generation=0;
  ZjReceiverSource source=ZjReceiverSource::NONE;
 
  void revoke(ZjFlightFault fault){
-  if(state==ZjFlightState::ARMED)
+  if(state==ZjFlightState::ARMED){
    state=fault==ZjFlightFault::INPUT_DISARMED?ZjFlightState::OUTPUT_OFF:ZjFlightState::FAILSAFE;
+   cutoff=state==ZjFlightState::FAILSAFE?fault:ZjFlightFault::NONE;
+  }
   reason=fault;
  }
+ ZjFlightFault reportedReason()const{return state==ZjFlightState::FAILSAFE?cutoff:reason;}
  ZjFlightFault fault(const ZjFlightConditions& c,bool enabled)const{
   if(c.emergency)return ZjFlightFault::EMERGENCY_STOP;
   if(c.escCalibration||c.benchActive||c.maintenance)return ZjFlightFault::OUTPUT_RESERVED;
@@ -96,7 +100,7 @@ struct ZjFlightOutputGate {
   if(reason==ZjFlightFault::NONE&&!zjFlightLowThrottle(c.input.channels[2]))reason=ZjFlightFault::THROTTLE_HIGH;
   if(reason==ZjFlightFault::NONE&&!c.outputOffAck)reason=ZjFlightFault::OFF_UNVERIFIED;
   if(reason!=ZjFlightFault::NONE)return false;
-  source=c.input.source;generation=c.input.generation;state=ZjFlightState::ARMED;
+  source=c.input.source;generation=c.input.generation;state=ZjFlightState::ARMED;cutoff=ZjFlightFault::NONE;
   return true;
  }
  bool permit(const ZjFlightConditions& c,bool qualified){

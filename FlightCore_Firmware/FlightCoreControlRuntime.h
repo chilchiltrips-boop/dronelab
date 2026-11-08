@@ -36,7 +36,7 @@ static bool zjPidLayoutMatches(bool plus);
 static ZjFlightConditions zjFlightMainConditions();
 static ZjFlightDriverState zjFlightDriverRead();
 static bool zjFlightDriverClaim(uint32_t lease);
-static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4],uint32_t deadlineUs);
+static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4]);
 static void zjFlightDriverStop(uint32_t lease,ZjFlightFault fault);
 static ZjFlightOutputGate zjFlightOutputGate;
 static ZjFlightConditions zjFlightPolicy;
@@ -124,7 +124,10 @@ static void zjControlRevoke(const char* reason){
   zjTracePendingFault=fault;zjTraceFaultAt=at;zjTraceFaultInput=zjFlightPolicy.input;
  }
  zjFlightOutputGate.revoke(fault);
- if(zjFlightLease)zjFlightDriverStop(zjFlightLease,fault);
+ if(zjFlightLease){
+  zjFlightDriverStop(zjFlightLease,fault);
+  zjPpmUnbindFlight(zjFlightLease);
+ }
  zjFlightLease=0;zjFlightPolicy.input={};zjShadowRequested=false;
  portEXIT_CRITICAL(&zjTimingMux);
 }
@@ -140,9 +143,13 @@ static ZjFlightFault zjControlArmFlight(){
  conditions.outputOffAck=zjFlightDriverRead().offAck;
  auto result=ZjFlightFault::OUTPUT_RESERVED;
  if(!zjFlightLease){
-  if(zjFlightOutputGate.arm(conditions,ZJ_FLIGHT_OUTPUT_ENABLED,true)){
+  auto gate=zjFlightOutputGate;
+  if(gate.arm(conditions,ZJ_FLIGHT_OUTPUT_ENABLED,true)){
    if(!++zjFlightRevokeEpoch)++zjFlightRevokeEpoch;
-   if(zjFlightDriverClaim(zjFlightRevokeEpoch)){
+   if(conditions.input.source==ZjReceiverSource::PPM)
+    gate.reason=zjPpmBindFlight(zjFlightRevokeEpoch,conditions.input,conditions.nowMs);
+   if(gate.reason==ZjFlightFault::NONE&&zjFlightDriverClaim(zjFlightRevokeEpoch)){
+    zjFlightOutputGate=gate;
     zjFlightLease=zjFlightRevokeEpoch;zjFlightArmAt=at;
     zjFlightPolicy=conditions;zjShadowRequested=true;
     if(zjFlightTrace.active){
@@ -150,9 +157,12 @@ static ZjFlightFault zjControlArmFlight(){
      zjFlightTrace.flightArm(arm);
     }
     result=ZjFlightFault::NONE;
-   }else zjFlightOutputGate.revoke(ZjFlightFault::OFF_UNVERIFIED);
+   }else{
+    zjPpmUnbindFlight(zjFlightRevokeEpoch);
+    if(gate.reason==ZjFlightFault::NONE)gate.reason=ZjFlightFault::OFF_UNVERIFIED;
+   }
   }
-  if(!zjFlightLease)result=zjFlightOutputGate.reason;
+  if(!zjFlightLease)result=zjFlightOutputGate.reason=gate.reason;
  }
  portEXIT_CRITICAL(&zjTimingMux);
  return result;
@@ -203,7 +213,7 @@ static void zjControlTask(void*){
    portEXIT_CRITICAL(&zjTimingMux);
    control.start(started);
   }
-  const auto previousWorst=control.maxIntervalUs,previousMissed=control.missedTicks;
+  const auto previousWorst=control.maxIntervalUs;
   if(!control.begin(micros()))continue;
 
   ZjRateGains gains[ZJ_PID_GAIN_COUNT/3];
@@ -228,7 +238,13 @@ static void zjControlTask(void*){
   next.angle=zjShadowAngle;plus=zjShadowPlus;preview=zjShadowPreview;
   portEXIT_CRITICAL(&zjTimingMux);
 
-  const auto& input=conditions.input;
+  auto fault=ZjFlightFault::NONE;
+  auto& input=conditions.input;
+  if(lease&&input.source==ZjReceiverSource::PPM&&input.valid&&input.selected&&input.inputArmed){
+   const auto captured=zjPpmFlightReceiver(lease);
+   if(captured.source==input.source&&captured.generation==input.generation)input=captured;
+   else{next.reason="SOURCE_CHANGED";fault=ZjFlightFault::SOURCE_CHANGED;}
+  }
   conditions.nowMs=millis();
   conditions.inputDeadlineMs=input.source==ZjReceiverSource::PPM?ZJ_PPM_LOST_MS:ZJ_RC_DEADMAN_MS;
   const bool inputFresh=input.fresh(conditions.nowMs,conditions.inputDeadlineMs);
@@ -241,7 +257,9 @@ static void zjControlTask(void*){
   std::copy_n(rates,3,next.rates);std::copy_n(gravity,3,next.gravity);
   next.sampleSequence=imuSample.sequence;next.sampleAtUs=imuSample.atUs;next.sampleValid=conditions.imuFresh;
   conditions.attitudeReady=next.attitude.valid;conditions.levelCalibrated=level;
-  conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000&&control.missedTicks==previousMissed;
+  // PID uses measured dt. Nominal release misses remain diagnostic while
+  // dt is usable and the motor driver can renew its separate output lease.
+  conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000;
   const unsigned phase=uint32_t(at-started)<1000000?0:!imuReady?1:lease?4:requested?3:2;
   const char* const labels[]={"STARTUP","IMU_CALIBRATION","DISARMED","RC_DIAGNOSTIC","RATE_FLIGHT"};
   next.maxIntervalPhase=control.maxIntervalUs>previousWorst?labels[phase]:previous.maxIntervalPhase;
@@ -267,8 +285,7 @@ static void zjControlTask(void*){
    previous.mix={};
   }
 
-  auto fault=ZjFlightFault::NONE;
-  if(requested){
+  if(requested&&fault==ZjFlightFault::NONE){
    const float angles[2]={next.attitude.roll,next.attitude.pitch};
    if(!preview&&!inputFresh){
     next.reason="INPUT_STALE";
@@ -323,18 +340,16 @@ static void zjControlTask(void*){
    if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_OUTPUT_ENABLED))
     fault=zjFlightOutputGate.reason;
    if(fault==ZjFlightFault::NONE){
-    const auto driver=zjFlightDriverSubmit(lease,trace.requested,control.nextDueUs);
+    const auto driver=zjFlightDriverSubmit(lease,trace.requested);
     if(driver.lease!=lease)fault=driver.fault==ZjFlightFault::NONE?ZjFlightFault::OUTPUT_ERROR:driver.fault;
    }
   }
-  const auto deadlines=control.deadlineMisses;
   control.finish(micros());
-  if(requested&&control.deadlineMisses!=deadlines)fault=ZjFlightFault::DEADLINE_MISSED;
   if(fault==ZjFlightFault::DEADLINE_MISSED){
    next.deadlineFault=true;next.reason="TIMING_FAULT";
   }
   if(lease&&fault!=ZjFlightFault::NONE){
-   zjFlightOutputGate.revoke(fault);zjFlightDriverStop(lease,fault);zjFlightLease=0;
+   zjFlightOutputGate.revoke(fault);zjFlightDriverStop(lease,fault);zjPpmUnbindFlight(lease);zjFlightLease=0;
    next.mix={};
   }
   next.outputAuthorized=zjFlightLease!=0;

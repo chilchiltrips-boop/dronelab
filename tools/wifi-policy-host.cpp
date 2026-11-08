@@ -25,6 +25,8 @@ static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
 // Radio safety is supplied by FlightCoreAccess in production; access-host.cpp
 // executes that real PPM/disarm policy. This fixture isolates radio behavior.
 static bool zjHandoverPending=false;static String zjHandoverState="IDLE";
+static bool outputsOff=true;
+static bool zjMotorOutputsDisabled(){return outputsOff;}
 static bool zjRadioHandoverMayApply(){return !zjRcOwned;}
 static void zjRadioHandoverApplied(const String&){}
 static void zjRadioHandoverFailed(const String&){}
@@ -35,7 +37,8 @@ int main(){
  assert(WiFi.ap&&WiFi.getMode()==WIFI_AP&&WiFi.attempts.empty());
  zjMode="sta";zjScheduleMode("sta");tick(399);assert(WiFi.ap);
  tick(1);assert(!WiFi.ap&&WiFi.getMode()==WIFI_STA&&WiFi.attempts.size()==1);
- tick(20001);assert(!WiFi.ap&&WiFi.attempts.size()==2&&WiFi.attempts.back()=="Router2");
+ outputsOff=false;tick(20001);assert(!WiFi.ap&&WiFi.attempts.size()==1);
+ outputsOff=true;tick(1);assert(!WiFi.ap&&WiFi.attempts.size()==2&&WiFi.attempts.back()=="Router2");
  WiFi.link=WL_CONNECTED;tick(1);assert(!WiFi.ap&&zjPhase=="sta_connected");
  // A lost router tries all saved profiles before AP fallback. Profiles remain.
  WiFi.link=0;tick(1);tick(20001);tick(20001);

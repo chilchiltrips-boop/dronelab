@@ -1,5 +1,5 @@
 #pragma once
-// FlightCore PPM-SUM diagnostic receiver. 3.3V-only signal; NO MOTOR OUTPUTS.
+// FlightCore PPM-SUM receiver. 3.3V-only signal. No direct motor writes.
 // A1 ESP32-C3 Super Mini = GPIO10. A2 XIAO ESP32-C6 D10 = GPIO18.
 // Rising-to-rising 8 channel PPM frame; 3.2ms+ sync gap, 850..2150us pulses.
 // All ISR operations stay in IRAM and copy fixed-size integers, not String/Serial.
@@ -13,6 +13,7 @@ static constexpr uint8_t ZJ_PPM_PIN=18;
 static constexpr uint8_t ZJ_PPM_PIN=10;
 #endif
 #include "FlightCorePpmArm.h"
+#include "FlightCoreFlightOutput.h"
 #include "FlightCoreSettingsChecksum.h"
 static constexpr uint8_t ZJ_PPM_CHANNELS=8;
 static constexpr uint32_t ZJ_PPM_SYNC_US=3200,ZJ_PPM_MAX_GAP_US=30000;
@@ -66,6 +67,12 @@ static ZjPpmConfig zjPpmCurrentConfig(){
  memcpy(config.minimum,zjPpmMin,sizeof(zjPpmMin));memcpy(config.middle,zjPpmMid,sizeof(zjPpmMid));
  memcpy(config.maximum,zjPpmMax,sizeof(zjPpmMax));memcpy(config.map,zjPpmMap,sizeof(zjPpmMap));
  return config;
+}
+static uint16_t zjPpmScale(uint16_t raw,uint16_t minimum,uint16_t middle,uint16_t maximum){
+ if(raw<=minimum)return 1000;
+ if(raw>=maximum)return 2000;
+ if(raw<middle)return uint16_t(1000L+(long(raw)-minimum)*500/(middle-minimum));
+ return uint16_t(1500L+(long(raw)-middle)*500/(maximum-middle));
 }
 static bool zjPpmDecodeConfig(const String& record,ZjPpmConfig& config){
  if(record.length()!=104||record.substring(0,2)!="1|"||record[7]!='|'||
@@ -160,6 +167,71 @@ static void IRAM_ATTR zjPpmPublish(const volatile uint16_t* channels,uint32_t at
  zjPpmCaptureAt=zjPpmReadyAt=at;zjPpmFrameReady=true;++zjPpmIsrFrames;
 }
 
+// The authorized PPM lease uses a separate snapshot from the RMT task. The
+// main loop owns selection and ARM; network and telemetry only consume its
+// diagnostic copy. The lease freezes calibration and retains stick DISARM.
+struct ZjPpmFlightInput {
+ uint32_t lease=0;
+ FlightReceiverSnapshot frame;
+ ZjPpmConfig config;
+ ZjPpmArmGesture gesture;
+
+ void accept(const volatile uint16_t* raw,uint32_t at){
+  if(!frame.valid||!frame.inputArmed||int32_t(at-frame.receivedAtMs)<=0)return;
+  if(uint32_t(at-frame.receivedAtMs)>ZJ_PPM_LOST_MS){frame.valid=false;return;}
+  uint16_t channels[8];
+  for(unsigned n=0;n<8;n++)channels[n]=zjPpmScale(raw[n],config.minimum[n],config.middle[n],config.maximum[n]);
+  zjMapPpmChannels(channels,config.map,frame.channels);
+  gesture.accept(frame.channels[2],frame.channels[3],at);
+  frame.inputArmed=gesture.armed;
+  frame.receivedAtMs=at;
+  if(!++frame.sequence)++frame.sequence;
+  ++frame.accepted;
+ }
+};
+static ZjPpmFlightInput zjPpmFlight;
+static bool zjPpmFlightDisarmPending=false;
+static uint32_t zjPpmFlightDisarmGeneration=0;
+
+// Called only after the main-loop preflight and explicit input ARM edge.
+static ZjFlightFault zjPpmBindFlight(uint32_t lease,FlightReceiverSnapshot& input,uint32_t now){
+ portENTER_CRITICAL(&zjPpmMux);
+ ZjFlightFault fault=ZjFlightFault::PPM_SIGNAL_LOST;
+ if(zjPpmCaptureLosses==zjPpmSeenCaptureLosses&&uint32_t(now-zjPpmCaptureAt)<=ZJ_PPM_LOST_MS){
+  ZjPpmFlightInput next{lease,input,zjPpmCurrentConfig(),zjPpmArm};
+  if(zjPpmIsrFrames!=zjPpmFrameSeq)next.accept(zjPpmReady,zjPpmReadyAt);
+  if(next.frame.fresh(now,ZJ_PPM_LOST_MS)){
+   if(!next.frame.inputArmed)fault=ZjFlightFault::INPUT_DISARMED;
+   else if(!zjFlightLowThrottle(next.frame.channels[2]))fault=ZjFlightFault::THROTTLE_HIGH;
+   else{zjPpmFlight=next;input=next.frame;fault=ZjFlightFault::NONE;}
+  }
+ }
+ portEXIT_CRITICAL(&zjPpmMux);
+ return fault;
+}
+static FlightReceiverSnapshot zjPpmFlightReceiver(uint32_t lease){
+ portENTER_CRITICAL(&zjPpmMux);
+ const auto frame=lease&&zjPpmFlight.lease==lease?zjPpmFlight.frame:FlightReceiverSnapshot{};
+ portEXIT_CRITICAL(&zjPpmMux);
+ return frame;
+}
+static void zjPpmUnbindFlight(uint32_t lease){
+ portENTER_CRITICAL(&zjPpmMux);
+ if(zjPpmFlight.lease==lease)zjPpmFlight.lease=0;
+ portEXIT_CRITICAL(&zjPpmMux);
+}
+static void zjPpmPublishRmtFrame(const uint16_t (&channels)[8],uint32_t at){
+ portENTER_CRITICAL(&zjPpmMux);
+ zjPpmPublish(channels,at);
+ if(zjPpmFlight.lease&&zjPpmFlight.frame.inputArmed){
+  zjPpmFlight.accept(channels,at);
+  if(!zjPpmFlight.frame.inputArmed){
+   zjPpmFlightDisarmPending=true;zjPpmFlightDisarmGeneration=zjPpmFlight.frame.generation;
+  }
+ }
+ portEXIT_CRITICAL(&zjPpmMux);
+}
+
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static rmt_channel_handle_t zjPpmRx=nullptr;
 static rmt_symbol_word_t zjPpmSymbols[48];
@@ -183,10 +255,12 @@ static void zjPpmReceiveTask(void*){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
   uint16_t channels[8];const size_t count=zjPpmSymbolCount;
   const bool good=zjDecodePpm(zjPpmSymbols,count,channels);
-  portENTER_CRITICAL(&zjPpmMux);
-  if(good)zjPpmPublish(channels,zjPpmCompletedAt);
-  else if(count>=5)++zjPpmFaults; // Empty/no-signal captures are not invalid frames.
-  portEXIT_CRITICAL(&zjPpmMux);
+  if(good)zjPpmPublishRmtFrame(channels,zjPpmCompletedAt);
+  else if(count>=5){ // Empty/no-signal captures are not invalid frames.
+   portENTER_CRITICAL(&zjPpmMux);
+   ++zjPpmFaults;
+   portEXIT_CRITICAL(&zjPpmMux);
+  }
  }
 }
 static void zjPpmCaptureSetup(){
@@ -219,11 +293,7 @@ static void IRAM_ATTR zjPpmInterrupt(){
  portEXIT_CRITICAL_ISR(&zjPpmMux);
 }
 static uint16_t zjPpmScaled(uint16_t raw,uint8_t ch){
- const long minimum=zjPpmMin[ch],middle=zjPpmMid[ch],maximum=zjPpmMax[ch];
- if(raw<=minimum)return 1000;
- if(raw>=maximum)return 2000;
- if(raw<middle)return uint16_t(1000L+(long(raw)-minimum)*500/(middle-minimum));
- return uint16_t(1500L+(long(raw)-middle)*500/(maximum-middle));
+ return zjPpmScale(raw,zjPpmMin[ch],zjPpmMid[ch],zjPpmMax[ch]);
 }
 static void zjPpmSetup(){
  for(uint8_t i=0;i<ZJ_PPM_CHANNELS;i++){
@@ -302,7 +372,13 @@ static void zjPpmLoop(uint32_t now){
   zjPpmFrameReady=false;newFrame=true;
  }
  capturedFrames=zjPpmIsrFrames;captureLosses=zjPpmCaptureLosses;
+ const bool flightDisarmed=zjPpmFlightDisarmPending&&zjPpmFlightDisarmGeneration==zjRcGeneration;
+ zjPpmFlightDisarmPending=false;
  portEXIT_CRITICAL(&zjPpmMux);
+ if(flightDisarmed&&zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed){
+  zjFlightRevoke("INPUT_DISARMED");
+  zjPpmArm.reset();zjRcInputArmed=false;zjApplyPendingFlightMode();
+ }
  now=millis();
  if(newFrame){const uint32_t count=capturedFrames-zjPpmConsumedFrames;if(count>1)zjPpmCoalescedFrames+=count-1;zjPpmConsumedFrames=capturedFrames;}
  const bool captureGap=captureLosses!=zjPpmSeenCaptureLosses;

@@ -59,6 +59,7 @@ static void zjWifiPolicyLoop(uint32_t now){
  }
  if(zjPhase=="sta_connecting"){
   if(int32_t(now-zjNetAttempt)<=int32_t(zjSavedAttemptTimeoutMs(zjStaDisconnectReason)))return;
+  if(!zjMotorOutputsDisabled())return; // Defer radio restart and fallback while outputs are owned.
   const int count=zjWifiCount?zjWifiCount:1;
   if(++zjWifiTried<count){zjWifiAttemptIndex=(zjWifiAttemptIndex+1)%count;zjConnectSaved(false);return;}
   zjEnsureAP();zjPhase="sta_failed_ap_fallback";zjRadioHandoverFailed("STA_UNAVAILABLE");

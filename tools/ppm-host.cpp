@@ -76,6 +76,62 @@ static void verifyPpmTransactions(){
  zjPpmSetup();assert(zjPpmMap[0]==1&&zjPpmMin[1]==920);
  zjAdminUnlocked=false;
 }
+static void verifyFlightInput(){
+ zjRcRelease("test");zjPpmLastEdge=clockUs;zjPpmIndex=0;
+ acquire();arm();
+ auto input=zjRcReceiver();
+ const uint16_t throttleUp[8]={1500,1500,1628,1500,1000,1500,1500,1500};
+ waitMs(20);zjPpmPublishRmtFrame(throttleUp,clockMs);
+ assert(zjPpmBindFlight(11,input,clockMs)==ZjFlightFault::THROTTLE_HIGH);
+ assert(!zjPpmFlightReceiver(11).valid);
+
+ const uint16_t neutral[8]={1500,1500,1000,1500,1000,1500,1500,1500};
+ waitMs(20);zjPpmPublishRmtFrame(neutral,clockMs);zjPpmLoop(clockMs);
+ input=zjRcReceiver();
+ assert(zjPpmBindFlight(12,input,clockMs)==ZjFlightFault::NONE);
+ const uint32_t generation=zjRcGeneration,accepted=zjRcAccepted;
+ for(unsigned n=0;n<100;n++){waitMs(20);zjPpmPublishRmtFrame(throttleUp,clockMs);}
+ auto live=zjPpmFlightReceiver(12);
+ assert(live.fresh(clockMs,150)&&live.inputArmed&&live.generation==generation);
+ assert(live.channels[2]==1628&&live.accepted==accepted+100&&zjRcAccepted==accepted);
+ assert(!zjPpmFlightReceiver(11).valid);
+ const IPAddress peer(192,168,4,2);
+ assert(!zjRcClaim("ANDROID",zjKitCode,true,peer,"AP"));
+ assert(!zjRcFrame(1,1000,1500,1500,1500,"ANDROID","observer",true,peer));
+ char release[]="ZJRC,RELEASE";
+ assert(zjRcSerialCommand(release));
+ zjRcLoop(clockMs);
+ assert(zjRcOwned&&zjRcSource=="PPM"&&zjRcInputArmed&&zjRcGeneration==generation);
+
+ // The flight lease sees the same low-throttle yaw DISARM even if the
+ // main loop has not consumed any frame of the gesture.
+ const uint16_t yawLeft[8]={1500,1500,1000,1100,2000,1500,1500,1500};
+ for(unsigned n=0;n<=100;n++){waitMs(20);zjPpmPublishRmtFrame(yawLeft,clockMs);}
+ assert(!zjPpmFlightReceiver(12).inputArmed&&zjRcInputArmed);
+ zjPpmUnbindFlight(12);zjPpmLoop(clockMs);
+ assert(!zjRcInputArmed&&zjRcGeneration==generation);
+
+ // Map and calibrate the isolated stream using the stored PPM profile.
+ auto config=zjPpmCurrentConfig();
+ config.map[0]=1;config.map[1]=0;config.middle[1]=1600;
+ zjPpmApplyConfig(config);
+ const uint16_t yawRight[8]={1500,1600,1000,1950,1000,1500,1500,1500};
+ waitMs(20);zjPpmPublishRmtFrame(neutral,clockMs);zjPpmLoop(clockMs);
+ for(unsigned n=0;n<=100;n++){waitMs(20);zjPpmPublishRmtFrame(yawRight,clockMs);zjPpmLoop(clockMs);}
+ input=zjRcReceiver();assert(input.inputArmed);
+ assert(zjPpmBindFlight(13,input,clockMs)==ZjFlightFault::NONE);
+ const uint16_t mapped[8]={1600,1900,1628,1500,1000,1500,1500,1500};
+ waitMs(20);zjPpmPublishRmtFrame(mapped,clockMs);
+ live=zjPpmFlightReceiver(13);
+ assert(live.channels[0]==1875&&live.channels[1]==1600&&live.channels[2]==1628);
+ waitMs(151);assert(!zjPpmFlightReceiver(13).fresh(clockMs,150));
+ zjPpmPublishRmtFrame(neutral,clockMs);
+ waitMs(20);zjPpmPublishRmtFrame(neutral,clockMs);
+ assert(!zjPpmFlightReceiver(13).valid); // Recovery cannot restore the old lease.
+ zjPpmUnbindFlight(13);zjPpmLoop(clockMs);
+ assert(!zjRcOwned&&zjRcLastReleaseReason=="PPM_SIGNAL_LOST");
+ zjPpmSetup();
+}
 int main(){
  clockMs=1000;zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjPpmSetup();
  zjKitPrefs.putUShort("ppm1lo",910);
@@ -126,6 +182,7 @@ int main(){
  frame(2000,false);zjPpmLoop(clockMs-1);
  assert(zjRcInputArmed&&zjPpmSignalFresh(clockMs));
  waitMs(151);zjPpmLoop(clockMs);assert(!zjRcOwned&&!zjRcInputArmed);
+ verifyFlightInput();
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
  frame(1000);frame(1000);frame(1000);
  assert(zjRcOwned&&zjRcSource=="ANDROID"&&!zjRcInputArmed);

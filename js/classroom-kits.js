@@ -9,7 +9,7 @@ const $=id=>document.getElementById(id), sleep=ms=>new Promise(r=>setTimeout(r,m
 const trace=(event,data)=>root.ZebjusAckDiagnostics?.record(event,data);
 const classify=error=>root.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const diagnosticClock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
-const RC_TIMEOUT=500,RC_INTERVAL=110,codePattern=/^\d{6}$/;
+const RC_TIMEOUT=500,RC_INTERVAL=100,codePattern=/^\d{6}$/;
 const supportedKitId=id=>typeof id==='string'&&/^ZFC-A2-[A-Fa-f0-9]{12}$/.test(id);
 const state={connected:false,working:false,transport:'none',mode:'usb',board:'',kitId:'',kitCode:'',kitName:'',
  version:'',flightTelemetry:null,flightTelemetryVersion:0,imu:null,imuObservedAt:0,imuSampleObservedAt:0,imuSampleAgeAtObservationMs:null,imuTimingObservedAt:0,imuGeneration:0,flightMode:null,flightModeState:null,rc:null,telemetryRc:null,rcAccess:null,rcObservedAt:0,rcReadStartedAt:0,radioHandover:null,udp:null,managementProtocol:'',rcSession:'',rcSource:'',seq:0,sent:0,rejected:0,ackAt:0,frameAt:0,
@@ -777,6 +777,7 @@ async function connect(expectedId='',discovery=null){
   if(mode==='usb')await connectUSB(code,ticket);else await connectNetwork(code,mode,ticket,expectedId,discovery);
   if(ticket!==reconnectTicket)return;
   state.connected=true;state.heartbeatAt=Date.now();state.linkState='connected';recoveryTarget=null;pollErrors=0;state.since=Date.now();state.owner=false;state.seq=0;state.rcSession='';state.rcSource='';
+  nextStatusReadAt=state.heartbeatAt+FC_STATUS_INTERVAL_MS;
   state.working=false;if(state.transport==='ap'||state.transport==='sta')headerNetworkChoice=state.transport;
  audit('Device verified • '+state.kitId+' • '+state.transport,'success');
   if(state.transport==='usb')state.controlAuthorized=true;
@@ -789,8 +790,11 @@ async function connect(expectedId='',discovery=null){
   if(mode!=='usb'&&!discovery)await read().catch(e=>audit(e.message,'warn'));
  }catch(e){if(ticket!==reconnectTicket)return;state.working=false;state.connected=false;state.linkState='disconnected';state.key='';audit(e.message,'error');tone(e.message,'error')}
 }
+const FC_MONITOR_INTERVAL_MS=100,FC_STATUS_INTERVAL_MS=2200;
+let nextStatusReadAt=0;
 function read(){
  if(statusPending)return statusPending;
+ nextStatusReadAt=Date.now()+FC_STATUS_INTERVAL_MS;
  statusPending=readStatus().finally(()=>{statusPending=null});return statusPending;
 }
 let nextFlightDataReadAt=0,flightTelemetryPending=false;
@@ -833,10 +837,11 @@ async function observeFlightData(){
  const compact=state.flightTelemetryVersion===1||state.transport==='usb'&&/^1\.7\.(2[1-9]|[3-9]\d)$/.test(state.version);
  if(compact){
   if(document.hidden||!$('tab-telemetry')?.classList.contains('active')||!linkFresh()||
-    !['usb','ap','sta'].includes(state.transport)||state.working||headerModePending||otaActive||wifiTesting||accessBusy||
+    !['usb','ap','sta'].includes(state.transport)||state.working||headerModePending||otaActive||wifiTesting||accessBusy||state.owner||
     motorTrafficBusy()||flightTelemetryPending||statusPending||now<nextFlightDataReadAt||
     (requestScheduler?.metrics?.().requestQueueDepth||0)>0)return;
-  nextFlightDataReadAt=now+100;
+  if(!beginMonitorRead('flight',now))return;
+  nextFlightDataReadAt=now+FC_MONITOR_INTERVAL_MS;
   return readFlightTelemetry();
  }
  if(document.hidden||!$('tab-telemetry')?.classList.contains('active')||
@@ -846,6 +851,7 @@ async function observeFlightData(){
     state.flight?.state!=='DISARMED'||state.flight.authorized!==false||
     state.motorsArmed!==false||state.motorsDisabled!==true||now-state.outputObservedAt>3000||
     statusPending||now<nextFlightDataReadAt||now-state.heartbeatAt<750)return;
+ if(!beginMonitorRead('flight',now))return;
  nextFlightDataReadAt=now+750;
  try{await read()}
  catch{nextFlightDataReadAt=Date.now()+2200}
@@ -872,19 +878,33 @@ function adoptRcObservation(rc,at,started,bootId=state.bootId){
  state.rc=rc;state.rcObservedAt=at;state.rcReadStartedAt=started;
  return true;
 }
-const RC_MONITOR_INTERVAL_MS=160,RC_OBSERVER_BACKOFF_MS=2400;
+const RC_OBSERVER_BACKOFF_MS=2400;
 let rcReadPending=false,nextRcReadAt=0,rcReadFailures=0,rcObserverBinding='';
+let nextMonitorReadAt=0,lastMonitorStream='rc';
+// All periodic observers share one slot. Manual reads and control commands
+// retain their own authenticated queue priority.
+function beginMonitorRead(stream,now){
+ if(now<nextMonitorReadAt||statusPending||rcReadPending||flightTelemetryPending)return false;
+ nextMonitorReadAt=now+FC_MONITOR_INTERVAL_MS;
+ if(stream!=='status')lastMonitorStream=stream;
+ return true;
+}
+function observeMonitor(){
+ if(lastMonitorStream==='rc'){void observeFlightData();void observeController();}
+ else{void observeController();void observeFlightData();}
+}
 async function observeController(){
  if(document.hidden||motorTrafficBusy()||!linkFresh()||!['ap','sta','android-relay'].includes(state.transport)||
     state.working||headerModePending||otaActive||wifiTesting||accessBusy||state.owner||rcReadPending||statusPending)return;
- const visible=!$('fwKitDemoMode')?.checked&&($('tab-pid')?.classList.contains('active')||
+ const visible=!$('fwKitDemoMode')?.checked&&($('tab-pid')?.classList.contains('active')||$('tab-telemetry')?.classList.contains('active')||
   $('tab-firmware')?.classList.contains('active')&&root.ZebjusDevicesWorkspace?.active?.()==='inputs');
  if(!visible&&!state.rc?.active&&state.rcAccess?.controlPath!=='PPM')return;
  const started=Date.now(),id=state.kitId,boot=state.bootId,transport=state.transport,ticket=reconnectTicket,control=controlTicket;
  const binding=[id,boot,transport,ticket,control].join('|');
  if(binding!==rcObserverBinding){rcObserverBinding=binding;nextRcReadAt=0;rcReadFailures=0;}
- const interval=visible?RC_MONITOR_INTERVAL_MS:state.rc?.active?250:500;
+ const interval=visible?FC_MONITOR_INTERVAL_MS:state.rc?.active?250:500;
  if(started<nextRcReadAt||state.rcObservedAt<=started&&started-state.rcObservedAt<interval)return;
+ if(!beginMonitorRead('rc',started))return;
  const current=()=>ticket===reconnectTicket&&control===controlTicket&&id===state.kitId&&boot===state.bootId&&transport===state.transport;
  rcReadPending=true;nextRcReadAt=started+interval;
  try{
@@ -2310,7 +2330,8 @@ function init(){
  pollTimer=setInterval(async()=>{
   if(!state.connected||state.working||otaActive||wifiTesting||pollBusy||motorTrafficBusy())return;
   const now=Date.now(),policy=backgroundLinkPolicy(document.hidden,now,lastBackgroundStatusAt,foregroundResumedAt);
-  if(!policy.poll||document.hidden&&state.transport==='usb')return;
+  if(now<nextStatusReadAt||!policy.poll||document.hidden&&state.transport==='usb'){observeMonitor();return;}
+  if(!beginMonitorRead('status',now))return;
   if(document.hidden)lastBackgroundStatusAt=now;
   pollBusy=true;const ticket=reconnectTicket,usb=state.transport==='usb';
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
@@ -2332,8 +2353,7 @@ function init(){
     }
    }
   }finally{pollBusy=false}
- },2200);
- setInterval(()=>void observeController(),80);
+ },FC_MONITOR_INTERVAL_MS);
  rcTimer=setInterval(webControls,RC_INTERVAL);
  // Recheck verified LAN hostnames and AP once per minute only when page is visible.
  setTimeout(()=>{if(!document.hidden)void restoreLastKit().catch(e=>audit('Saved kit reconnect: '+e.message,'warn')).finally(()=>{if(!state.connected&&!discovering)void discoverKits().catch(()=>{})})},450);
