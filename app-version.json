@@ -1,5 +1,5 @@
 {
-  "version": "1.65",
+  "version": "1.66",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -16,7 +16,7 @@
     "Flight Data uses compact authenticated USB/AP/STA telemetry, fused roll/pitch animation, sample age and latency, and saved/active flight mode. Setup Wizard opens ACC / Gyro Calibration from Inputs and Report and shows gyro readiness and verified Quick Level saves separately.",
     "Firmware Flash can explicitly load the verified A2 1.7.21 Experimental Acro + Angle APP or Factory image. PPM and local Android AP use setup-gated output; WebRTC remains simulator-only. Physical acceptance for this integration is NOT_RUN."
   ],
-  "buildCommit": "a5f2d702505d",
-  "publishedAt": "2026-11-07T20:42:51.963981+00:00",
-  "buildNumber": 498
+  "buildCommit": "9416053c05b7",
+  "publishedAt": "2026-11-08T03:59:42.462174+00:00",
+  "buildNumber": 499
 }
