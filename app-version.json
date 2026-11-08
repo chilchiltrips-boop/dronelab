@@ -1,5 +1,5 @@
 {
-  "version": "1.71",
+  "version": "1.72",
   "channel": "release",
   "previousStable": "e3370b4111dde50d1f9d5bb555d6501412970190",
   "features": [
@@ -21,7 +21,7 @@
     "Header FC Kits lists remembered and detected A2 profiles. Explicit Connect rechecks the selected Device ID with a fast saved IP probe and bounded alias fallback.",
     "Setup report downloads request fresh read-only Flight Readiness when needed and include the reported ARM or failsafe reason."
   ],
-  "buildCommit": "0e2aeb90dfd1",
-  "publishedAt": "2026-11-08T20:17:11.204417+00:00",
-  "buildNumber": 504
+  "buildCommit": "fa773f991713",
+  "publishedAt": "2026-11-08T21:24:39.273529+00:00",
+  "buildNumber": 505
 }
