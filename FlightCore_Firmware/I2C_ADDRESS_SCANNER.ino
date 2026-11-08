@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.22";
+constexpr const char* FW_VERSION="1.7.23";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr const char* ZJ_OUTPUT_BUILD=ZJ_FLIGHT_OUTPUT_ENABLED?"ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL":"ZJ_OUTPUT=BENCH_DIAGNOSTIC";

@@ -71,10 +71,18 @@ static uint32_t zjQueueImuAction(ZjImuAction action,uint8_t face){
 }
 static TaskHandle_t zjControlTaskHandle=nullptr,zjImuTaskHandle=nullptr;
 static esp_timer_handle_t zjControlTimer=nullptr,zjImuTimer=nullptr;
-static uint32_t zjControlTimerStartedUs=0;
-// TASK dispatch, never ISR: notify only. Both callbacks share esp_timer with
-// the motor watchdog, so I2C and all computation run in separate workers.
-static void zjControlWake(void*){xTaskNotifyGive(zjControlTaskHandle);}
+static uint32_t zjControlTimerStartedUs=0,zjControlTimerDueUs=0;
+// ESP Timer can shift a periodic timer's phase when it skips expired alarms.
+// Rearm one alarm on the original 250 Hz grid and notify once after a stall.
+// Control math and I2C stay in the workers. If rearm fails, the independent
+// motor watchdog expires the lease without another output update.
+static void zjControlWake(void*){
+ const uint32_t now=micros();
+ const uint32_t releases=ZjControlScheduler::releasesDue(zjControlTimerDueUs,now);
+ zjControlTimerDueUs+=releases*ZjControlScheduler::PERIOD_US;
+ if(esp_timer_start_once(zjControlTimer,uint32_t(zjControlTimerDueUs-now))==ESP_OK&&releases)
+  xTaskNotifyGive(zjControlTaskHandle);
+}
 static void zjImuWake(void*){xTaskNotifyGive(zjImuTaskHandle);}
 static bool zjTryI2c(){return zjI2cMutex&&xSemaphoreTake(zjI2cMutex,0)==pdTRUE;}
 static void zjReleaseI2c(){xSemaphoreGive(zjI2cMutex);}
@@ -403,7 +411,7 @@ static void zjControlRuntimeSetup(){
  bool ok=zjI2cMutex!=nullptr;
  if(ok)ok=xTaskCreate(zjControlTask,"zj-shadow-250",4096,nullptr,3,&zjControlTaskHandle)==pdPASS;
  if(ok)ok=xTaskCreate(zjImuTask,"zj-imu",6144,nullptr,3,&zjImuTaskHandle)==pdPASS;
- esp_timer_create_args_t tick={};tick.callback=zjControlWake;tick.name="zj-shadow";tick.skip_unhandled_events=true;
+ esp_timer_create_args_t tick={};tick.callback=zjControlWake;tick.name="zj-shadow";
  esp_timer_create_args_t imu={};imu.callback=zjImuWake;imu.name="zj-imu-wake";imu.skip_unhandled_events=true;
  if(ok)ok=esp_timer_create(&tick,&zjControlTimer)==ESP_OK;
  if(ok)ok=esp_timer_create(&imu,&zjImuTimer)==ESP_OK;
@@ -412,7 +420,8 @@ static void zjControlRuntimeSetup(){
   // timer activation to keep that setup time out of every tick's budget.
   portENTER_CRITICAL(&zjTimingMux);
   zjControlTimerStartedUs=micros();
-  ok=esp_timer_start_periodic(zjControlTimer,ZjControlScheduler::PERIOD_US)==ESP_OK;
+  zjControlTimerDueUs=zjControlTimerStartedUs+ZjControlScheduler::PERIOD_US;
+  ok=esp_timer_start_once(zjControlTimer,ZjControlScheduler::PERIOD_US)==ESP_OK;
   portEXIT_CRITICAL(&zjTimingMux);
  }
  if(ok)ok=esp_timer_start_periodic(zjImuTimer,1000)==ESP_OK;
