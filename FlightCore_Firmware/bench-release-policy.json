@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.21",
+  "candidateVersion": "1.7.22",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "Published 1.7.19 remains the verified bench package. Source 1.7.21 supports a separate experimental Acro/Angle candidate; physical acceptance NOT_RUN.",
+  "note": "The verified bench package is 1.7.19. Candidate 1.7.22 aligns the control scheduler with timer activation. Physical acceptance is NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,
