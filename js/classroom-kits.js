@@ -1996,14 +1996,14 @@ async function changeRcAccess(action,source='',controlPath=''){
   throw error;
  }finally{accessBusy=false;render();}
 }
-async function selectControlPath(path){
+async function selectControlPath(path,{claimJoystick=true}={}){
  const item=root.ZebjusControlPaths?.find(path);if(!item)throw Error('Choose a supported control input');
  const view=root.ZebjusControlPaths.describe({kit:root.ZebjusKits.getState(),peer:relay()?.status?.()||{},client:'web'});
  const option=view.paths.find(p=>p.id===path);if(!option?.selectable)throw Error(option?.reason||'Input unavailable');
  await changeRcAccess('SELECT',item.source,path);
  // Source selection never arms input. The selected browser may reserve its
  // own diagnostic joystick session; other controllers must claim their own.
- if(path==='WEB_STA'&&$('kitHardwareTarget')?.checked)await claim('WEB');
+ if(claimJoystick&&path==='WEB_STA'&&$('kitHardwareTarget')?.checked)await claim('WEB');
  return state.rcAccess;
 }
 async function maintainRcPause(){

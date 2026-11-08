@@ -7,11 +7,34 @@ import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','ACC / Gyro Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
- const IMU=3,ESC=5,OUTPUT=6,REPORT=7;
+ const INPUTS=2,IMU=3,ESC=5,OUTPUT=6,REPORT=7;
  const RATE_LOW_THROTTLE_US=1050,READINESS_MAX_AGE_MS=10000;
  const shortSteps=['Board','Wiring','Inputs','ACC/Gyro','Signal','ESC Cal.','Output Cal.','Report'];
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
+ const inputSources=[
+  {id:'PPM',title:'PPM',detail:'One cable · AP / STA',icon:'receiver'},
+  {id:'ANDROID_AP',title:'Android AP',detail:'Kit hotspot',icon:'phone'},
+  {id:'WEB_STA',title:'WebApp Joystick',detail:'Router Wi-Fi · STA',icon:'screen'},
+  {id:'ANDROID_WEBRTC',title:'Android WebRTC',detail:'Simulator · STA',icon:'phone'}
+ ];
+ const otherReceivers=['DSM Sat','SRXL','HoTT','EX.Bus','iBus'];
+ function inputCardIcon(icon){
+  const paths={
+   receiver:'<rect x="7" y="12" width="26" height="16" rx="3"/><path d="m14 12-5-6m17 6 5-6M20 28v7m-7-15h.1m7 0h.1m7 0h.1"/>',
+   pwm:'<rect x="6" y="11" width="28" height="17" rx="3"/><path d="m14 11-5-5m17 5 5-5M10 28v7m5-7v7m5-7v7m5-7v7m5-7v7M12 20h16"/>',
+   phone:'<rect x="10" y="5" width="20" height="30" rx="4"/><path d="M17 10h6m-8 11 3-3 4 4 3-3m-7 11h4"/>',
+   screen:'<rect x="4" y="7" width="32" height="21" rx="3"/><path d="M20 28v6m-7 0h14M12 18h16m-8-8v16"/>'
+  };
+  return `<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[icon]}</svg>`;
+ }
+ function inputCard({id,title,detail,icon='receiver'}){
+  return `<button class="a2-input-card" type="button" ${id?`data-input-card="${id}" aria-pressed="false"`:'disabled'}>
+   <span class="a2-input-card-icon">${inputCardIcon(icon)}</span>
+   <strong>${title}</strong><span class="a2-input-card-detail">${detail}</span>
+   <small class="a2-input-card-status">${id?'Preview settings':'Unsupported on A2'}</small>
+  </button>`;
+ }
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
  const accelPoses=[
   {face:4,label:'Level',hint:'Rest the frame upright on a flat surface.'},
@@ -82,28 +105,52 @@ if(root){
   <div class="a2-actions"><button class="btn" data-action="load-pid-profile" type="button">Load &amp; Save PID Profile</button></div>
   <p class="a2-pid-status" role="status">Provisional Rate and Angle gains · bench tuning.</p>
  </div></section>
- <section data-panel="2"><h3>Input &amp; flight mode</h3>
- <div class="a2-flight-options">
-  <div class="a2-check-card"><label for="a2InputSource">Controller input</label>
-   <select id="a2InputSource"><option value="PPM">PPM receiver · AP / STA</option><option value="ANDROID_AP">Android joystick · AP</option><option value="WEB_STA">WebApp joystick · STA</option><option value="ANDROID_WEBRTC">Android WebRTC · STA</option></select>
-   <button class="btn" type="button" data-action="select-input">Save input source</button><p class="a2-source-status" role="status"></p>
+ <section data-panel="${INPUTS}" class="a2-input-page">
+  <h3>Input Signal Configuration</h3>
+  <p>Choose the receiver or controller that matches your setup. Its settings appear below. A connected A2 loads its saved source automatically.</p>
+  <h4 class="a2-input-group-title">Receiver signals</h4>
+  <div class="a2-input-card-grid" role="group" aria-label="Receiver signals">
+   ${inputCard({title:'PWM',detail:'One cable per channel',icon:'pwm'})}
+   ${inputCard(inputSources[0])}
+   ${inputCard({title:'S.Bus',detail:'Serial receiver'})}
   </div>
+  <details class="a2-input-details a2-other-receivers">
+   <summary>More receiver protocols</summary>
+   <div class="a2-input-card-grid">${otherReceivers.map(title=>inputCard({title,detail:'Serial receiver'})).join('')}</div>
+  </details>
+  <h4 class="a2-input-group-title">Network controllers</h4>
+  <div class="a2-input-card-grid" role="group" aria-label="Network controllers">${inputSources.slice(1).map(inputCard).join('')}</div>
+  <section class="a2-check-card a2-input-settings" aria-labelledby="a2InputSettingsTitle">
+   <div class="a2-input-settings-head"><h4 id="a2InputSettingsTitle">PPM settings</h4><span class="a2-input-link"></span></div>
+   <p class="a2-source-status" role="status"></p>
+   <div class="a2-input-source-values"></div>
+   <div class="a2-ppm-settings">
+    <p>Connect the receiver to the RX / PPM header with a 3.3 V signal. With outputs off, move one stick at a time to check direction and travel near 1000–2000 µs. Center roll, pitch and yaw near 1500 µs, then lower throttle to its minimum.</p>
+    <p class="a2-ppm-mapping"></p><p class="a2-ppm-throttle"></p>
+    <details class="a2-input-details"><summary>PPM signal details</summary><div class="a2-input-health" role="status"></div></details>
+   </div>
+   <div class="a2-input-monitor">
+    <p class="a2-input">No selected input</p>
+    <div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Auxiliary','Auxiliary','Auxiliary','Auxiliary'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div>
+   </div>
+   <div class="a2-actions">
+    <button class="btn" type="button" data-action="select-input">Save input source</button>
+    <button class="btn ghost" type="button" data-action="input-settings-link">Open Kit Connection</button>
+   </div>
+   <p class="a2-input-save-status" role="status"></p>
+  </section>
+ <div class="a2-flight-options">
   <div class="a2-check-card"><label for="a2FlightMode">Flight mode</label>
    <select id="a2FlightMode"><option value="acro">Acro · Rate PID</option><option value="angle">Angle · self-level + Rate PID</option></select>
    <button class="btn" type="button" data-action="save-flight-mode">Save flight mode</button><p class="a2-flight-mode-status" role="status"></p>
   </div>
+  <div class="a2-check-card">
+   <h4>ACC / Gyro Calibration</h4>
+   <p>Angle requires a fresh gyro and a saved Quick Level. Calibrate with the frame level and the board pointing forward.</p>
+   <button class="btn ghost" type="button" data-action="open-imu">Open ACC / Gyro Calibration</button>
+  </div>
  </div>
- <div class="a2-check-card">
-  <h4>ACC / Gyro Calibration</h4>
-  <p>Angle requires a fresh gyro and a saved Quick Level. Calibrate with the frame level and the board pointing forward.</p>
-  <button class="btn ghost" type="button" data-action="open-imu">Open ACC / Gyro Calibration</button>
- </div>
- <p>AP: PPM / Android AP. STA: PPM / WebApp / Android WebRTC. WebApp and WebRTC joystick input are for simulation. Input selection and mode saves leave the outputs disarmed.</p><p class="a2-input">No selected input</p><div class="a2-channel-list">${['Roll','Pitch','Throttle','Yaw','Auxiliary','Auxiliary','Auxiliary','Auxiliary'].map((name,i)=>`<div class="a2-channel" data-channel="${i}"><span>CH${i+1} <b>${name}</b></span><div class="a2-channel-track"><i></i></div><output>—</output></div>`).join('')}</div>
- <div class="a2-check-card"><h4>PPM receiver check</h4>
-  <p>Select PPM and leave outputs disarmed. Move one stick at a time. Check direction and travel near 1000–2000 µs. CH1 Roll, CH2 Pitch, and CH4 Yaw should center near 1500 µs. Return CH3 Throttle to its lowest position.</p>
-  <p class="a2-ppm-mapping"></p><p class="a2-ppm-throttle"></p>
-  <p>CH5 is auxiliary. Flight ARM is a separate firmware check. Receiver bars are observations and may lag.</p>
- </div><details class="a2-input-details"><summary>Signal details</summary><div class="a2-input-health" role="status"></div></details></section>
+ </section>
  <section data-panel="${IMU}" class="a2-imu-page">
  <div class="a2-imu-heading"><h3>ACC / Gyro Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>
  <p class="a2-imu-access" role="status"></p>
@@ -213,11 +260,12 @@ if(root){
   map.every(n=>Number.isInteger(n)&&n>=1&&n<=8)?map:null;
  function selectedInput(){
   const s=state||{},k=kit();
-  if(s.selectedInput==='ANDROID_WEBRTC'&&k.connected){
+  const input=setupMonitorSample(state,lastStateAt,k);
+  const path=k.rcAccess?.controlPath||s.selectedInput;
+  if(path==='ANDROID_WEBRTC'&&s.selectedInput===path&&k.connected){
    const p=window.ZebjusSimulatorInputs?.snapshot?.(),sample=p?.sample;
-   if(p?.fresh&&p.ageMs<=300&&p.peer?.approved&&(!sample?.kitId||sample.kitId===k.kitId))return {source:'Android WebRTC · paired phone',reported:true,monitoring:true,valid:true,age:p.ageMs,channels:sample?.channels?[sample.channels.roll,sample.channels.pitch,sample.channels.throttle,sample.channels.yaw,sample.aux?.ch5,sample.aux?.ch6,null,null]:[]};
+   if(p?.fresh&&p.ageMs<=300&&p.peer?.approved&&(!sample?.kitId||sample.kitId===k.kitId))return {...input,source:'Android WebRTC · paired phone',reported:true,monitoring:true,monitorDelayed:false,valid:true,age:p.ageMs,ageUpperBound:false,channels:sample?.channels?[sample.channels.roll,sample.channels.pitch,sample.channels.throttle,sample.channels.yaw,sample.aux?.ch5,sample.aux?.ch6,null,null]:[]};
   }
-  const input=setupMonitorSample(state,lastStateAt,k),path=k.rcAccess?.controlPath||s.selectedInput;
   const ppmSelected=path==='PPM'||path==='AUTO'&&(!s.inputValid||s.inputSource==='PPM');
   if(!ppmSelected)return input;
   // The receiver diagnostics carry calibrated channels in physical order.
@@ -412,10 +460,10 @@ if(root){
    ?wizardVisual(step,{mode:safe.mode,autoEsc:safe.autoEsc,escAttempt})
    :stepVisual(step===REPORT?5:motorStep?4:step,{kit:kit(),state:motorStep?{...safe,...draft}:safe,draft,input,history,selectedMask,interactive:false});
   $('.a2-visual-title').textContent=v.title;
-  if(visualStep!==step||!motorStep&&step!==1&&step!==2&&visualMarkup!==v.html){
+  if(visualStep!==step||!motorStep&&step!==1&&step!==INPUTS&&visualMarkup!==v.html){
    scene.innerHTML=v.html;visualMarkup=v.html;
   }
-  if(step===2){
+  if(step===INPUTS){
    const values=input.channels||[],thr=values[2],roll=values[0],pitch=values[1];
    const throttle=scene.querySelector('[data-input-throttle]'),sticks=scene.querySelector('[data-input-sticks]');
    scene.querySelector('[data-input-source] text').textContent=input.source||'NO SIGNAL';
@@ -787,47 +835,106 @@ if(root){
    ['Physical acceptance','Not verified by software']
   ];
  }
- let inputBinding="",modeObserved="",pathObserved="";
+ let inputBinding='',modeObserved='',pathObserved='',inputChoice='PPM',inputSaveError='';
+ function inputPathView(k,peer){
+  return window.ZebjusControlPaths?.describe({kit:k,peer,virtual:window.ZebjusVirtualControl||{},client:'web'});
+ }
+ function inputSaveBlocker(k,info){
+  if(!k.connected||k.board!=='ZFC-A2')return 'Connect a verified A2 to save this source.';
+  const path=info?.paths.find(p=>p.id===inputChoice);
+  if(!path?.selectable)return path?.reason||'This source is unavailable on the current connection.';
+  if(!observedOff())return 'Wait for verified PWM OFF before saving.';
+  return '';
+ }
  function renderInputOptions(){
-  const k=kit(),m=k.flightModeState,policy=window.ZebjusControlPaths;
-  const info=policy?.describe({kit:k,peer:window.ZebjusDeviceRelay?.status?.()||{},client:'web'});
-  const choice=$('#a2InputSource'),mode=$('#a2FlightMode');
-  const binding=[k.kitId,k.bootId,k.connectionGeneration].join(':');
-  if(binding!==inputBinding){inputBinding=binding;modeObserved=pathObserved='';}
-  if(m?.saved&&m.saved!==modeObserved){mode.value=modeObserved=m.saved;}
-  if(info?.selected&&info.selected!==pathObserved){choice.value=pathObserved=info.selected;}
-
-  for(const option of choice.options){
-   const state=info?.paths.find(p=>p.id===option.value);
-   option.disabled=!state?.selectable&&option.value!==info?.selected;
+  const k=kit(),m=k.flightModeState,peer=window.ZebjusDeviceRelay?.status?.()||{};
+  const info=inputPathView(k,peer),mode=$('#a2FlightMode');
+  const confirmed=k.connected?info?.selected:null;
+  const binding=[kitIdentity(k),k.relaySessionId].join(':');
+  if(binding!==inputBinding){
+   inputBinding=binding;modeObserved=pathObserved=inputSaveError='';
+   inputChoice=confirmed||'PPM';
   }
-  const selected=info?.paths.find(p=>p.id===choice.value);
-  $('[data-action="select-input"]').disabled=!!working||!selected?.selectable||k.rc?.inputArmed===true;
+  if(m?.saved&&m.saved!==modeObserved){mode.value=modeObserved=m.saved;}
+  if(confirmed&&confirmed!==pathObserved)inputChoice=pathObserved=confirmed;
+  for(const card of root.querySelectorAll('[data-input-card]')){
+   const id=card.dataset.inputCard,path=info?.paths.find(p=>p.id===id),saved=confirmed===id;
+   card.setAttribute('aria-pressed',String(inputChoice===id));
+   card.dataset.saved=String(saved);
+   card.disabled=!!working;
+   const status=card.querySelector('.a2-input-card-status'),text=saved?'Saved on FC':path?.status||'Preview settings';
+   if(status.textContent!==text)status.textContent=text;
+  }
+  const selected=info?.paths.find(p=>p.id===inputChoice),savedChoice=confirmed===inputChoice;
+  const blocker=inputSaveBlocker(k,info);
+  $('[data-action="select-input"]').disabled=!!working||savedChoice||!!blocker;
+  const result=$('.a2-input-save-status');
+  const saveText=working==='select-input'?'Saving and verifying input on FC…':
+   inputSaveError||(savedChoice?'Input source saved on FC.':blocker||'Preview selected. Save input source to apply it on the A2.');
+  if(result.textContent!==saveText)result.textContent=saveText;
+  result.dataset.tone=inputSaveError?'error':savedChoice?'ok':'warn';
   $('[data-action="save-flight-mode"]').disabled=!!working||!k.connected||!m||k.motorsDisabled!==true||k.rc?.inputArmed===true||
     !(k.transport==='usb'?k.adminUnlocked:k.controlAuthorized);
-  $('.a2-source-status').textContent=(info?.selectedLabel?'FC selected: '+info.selectedLabel+'. ':'')+(selected?.reason||'Connect a verified A2.');
+  const status=$('.a2-source-status');
+  const sourceText=(k.connected?'FC source: '+(info?.selectedLabel||'Unverified')+'. ':'FC disconnected. ')+(selected?.reason||'Preview settings.');
+  if(status.textContent!==sourceText)status.textContent=sourceText;
   const angleLabel=m?.stabilizationSupported===false?'Angle · setup setting':'Angle · self-level + Rate PID';
   if(mode.options[1].textContent!==angleLabel)mode.options[1].textContent=angleLabel;
   $('.a2-flight-mode-status').textContent=m?'Saved '+m.saved.toUpperCase()+' · Active '+m.active.toUpperCase()+
    (m.pending?' · Pending '+m.pending.toUpperCase():'')+(m.stabilizationSupported===false?' · Angle stabilization unavailable on this firmware.':''):
    'Read a verified FC to see its saved mode.';
   mode.disabled=!!working||!k.connected;
+  return {k,info,peer,selected,confirmed};
+ }
+ function inputSettingRows(k,info,peer,ppm){
+  if(inputChoice==='PPM'){
+   const pin=Number.isInteger(ppm?.pin)?`GPIO${ppm.pin}`:'RX / PPM header';
+   const signal=ppm?.present===true?'Receiver signal present':ppm?.present===false?'Receiver signal absent':'Waiting for verified receiver status';
+   return [['Input','PPM-SUM · one signal wire'],['Signal pin',pin],['Receiver',signal]];
+  }
+  if(inputChoice==='ANDROID_AP')return [
+   ['Connection','Android local joystick · AP'],
+   ['Kit hotspot',k.connected&&info?.mode==='ap'?k.apSsid||'AP connected':'Connect the A2 in AP mode'],
+   ['Controller',info?.active==='ANDROID_AP'?'Android input observed':'Join the Kit hotspot in the Android app']
+  ];
+  if(inputChoice==='WEB_STA')return [
+   ['Connection','WebApp joystick · STA'],
+   ['Kit network',k.connected&&info?.mode==='sta'?k.hostname||k.staIp||'Router connected':'Connect the A2 to router Wi-Fi'],
+   ['Target','Simulator and authorized Kit diagnostics']
+  ];
+  return [['Connection','Android WebRTC · STA'],
+   ['Phone',peer.connected&&(peer.approved||peer.paired)?'Paired phone connected':'Pair Android in Mobile Controller'],
+   ['Target','Virtual simulator']];
  }
  function renderInputs(){
-  renderInputOptions();
-  const m=state||{},input=selectedInput(),ppm=input.receiver;
+  const {k,info,peer,selected,confirmed}=renderInputOptions();
+  const m=state||{},input=selectedInput(),ppm=k.connected?input.receiver:null;
+  const title=inputSources.find(source=>source.id===inputChoice).title+' settings';
+  $('#a2InputSettingsTitle').textContent=title;
+  $('.a2-input-link').textContent=info?.connection||'Offline';
+  const values=$('.a2-input-source-values'),html=view(title,inputSettingRows(k,info,peer,ppm));
+  if(values.innerHTML!==html)values.innerHTML=html;
+  $('.a2-ppm-settings').hidden=inputChoice!=='PPM';
+  const observed=k.connected?(confirmed||m.selectedInput):null;
+  $('.a2-input-monitor').hidden=inputChoice!==observed&&!(inputChoice==='PPM'&&observed==='AUTO'&&input.ppmMap);
+  const link=$('[data-action="input-settings-link"]');
+  const destination=!k.connected?['connection','Open Kit Connection']:
+   selected?.radio&&selected.radio!==info?.mode?['wifi','Open Wi-Fi & Network']:
+   ['ANDROID_AP','ANDROID_WEBRTC'].includes(inputChoice)?['mobile','Open Mobile Controller']:['inputs','Open Live Inputs'];
+  link.dataset.view=destination[0];
+  link.textContent=destination[1];
   const age=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';
-  const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':kit().connected?'WAITING FOR INPUT':'KIT OFFLINE';
-  const armObserved=kit().connected&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
+  const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':k.connected?'WAITING FOR INPUT':'KIT OFFLINE';
+  const armObserved=k.connected&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
   $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${armObserved?(m.inputArmed?'armed':'disarmed'):'arm state unverified'}`;
   const map=verifiedPpmMap(ppm?.map);
   $('.a2-ppm-mapping').textContent=map?`Receiver channels → Roll ${map[0]} · Pitch ${map[1]} · Throttle ${map[2]} · Yaw ${map[3]} · Aux ${map[4]}`:'Saved PPM mapping unverified.';
-  const ppmSelected=(kit().rcAccess?.controlPath||m.selectedInput)==='PPM';
+  const ppmSelected=observed==='PPM';
   const throttle=input.channels?.[2],freshThrottle=ppmSelected&&input.ppmMap&&input.valid&&!input.monitorDelayed&&Number.isInteger(throttle);
   const throttleStatus=$('.a2-ppm-throttle');
   throttleStatus.dataset.tone=freshThrottle&&throttle<=RATE_LOW_THROTTLE_US?'ok':ppmSelected&&ppm?.present===false?'error':'warn';
   throttleStatus.textContent=freshThrottle?`PPM throttle ${throttle} µs · ${throttle<=RATE_LOW_THROTTLE_US?'LOW':'lower to '+RATE_LOW_THROTTLE_US+' µs or below'}`:
-   !ppmSelected?'Select PPM to verify its throttle.':input.monitorDelayed?'Monitor delayed · throttle unverified.':
+   !ppmSelected?'Save PPM as the input source to verify its throttle.':input.monitorDelayed?'Monitor delayed · throttle unverified.':
    ppm?.present===false?'A2 reported no PPM signal.':!map?'Throttle unverified until the PPM mapping is read.':'Waiting for a fresh PPM throttle observation.';
   root.querySelectorAll('[data-channel]').forEach(row=>{
    const value=input.channels?.[Number(row.dataset.channel)],reported=Number.isFinite(value)&&value>=1000&&value<=2000;
@@ -838,7 +945,7 @@ if(root){
   $('.a2-input-health').textContent=(input.receiverHealth||'PPM signal diagnostics are not verified yet.')+
    (ppm?` · ${ppm.captureBackend||'receiver'} · ${ppm.captureHz??'—'} Hz (target 50 Hz) · frame ${ppm.seq??'—'} · ${ppm.captureReady===false?'capture unavailable · ':''}losses ${ppm.losses||0} · invalid intervals ${ppm.faults||0}`:'')+
    (readError?' · Status refresh delayed.':'')+(m.selectedInput==='ANDROID_AP'?' · Android AP owns input.':'');
-  if(step===2&&input.monitoring&&Number.isFinite(input.channels?.[2])&&lastStateAt!==historyAt){
+  if(input.monitoring&&Number.isFinite(input.channels?.[2])&&lastStateAt!==historyAt){
    historyAt=lastStateAt;history.push(input.channels[2]);if(history.length>48)history.shift();
   }
  }
@@ -911,7 +1018,8 @@ if(root){
   $('.a2-wiring-validation').textContent=wiringValid()?'':'Use each D0–D3 pin once.';
   $('.a2-wiring-validation').dataset.valid=String(wiringValid());
   $('.a2-save-state').textContent=wiringCompatible()?'Wiring saved on board':'Unsaved wiring · Save before output calibration';
-  renderInputs();renderImu();renderEsc();renderOutputs();
+  if(step===INPUTS)renderInputs();
+  renderImu();renderEsc();renderOutputs();
   const signal=saved?.outputSignal;
   $('.a2-signal-status').innerHTML=view('Verified signal',[
    ['Active profile',signal?.profile||'Waiting for board'],['Period',signal?.hz?1000/signal.hz+' ms':'—'],
@@ -1171,6 +1279,26 @@ if(root){
    message(profile.label+' · Rate and Angle gains saved and verified on FC.');return;
   }
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
+  if(name==='select-input'){
+   inputSaveError='';
+   const before=kit(),choice=inputChoice,policy=window.ZebjusControlPaths;
+   const blocker=inputSaveBlocker(before,inputPathView(before,window.ZebjusDeviceRelay?.status?.()||{}));
+   if(step!==INPUTS||blocker)throw Error(blocker||'Open Input Signal Configuration before saving.');
+   const savedPath=await window.ZebjusKits.selectControlPath(choice,{claimJoystick:false});
+   ensureOperation(run);
+   const current=kit();
+   if(!current.connected||!policy?.sameBinding(before,current)||savedPath?.pathVersion!==1||
+    savedPath.controlPath!==choice||current.rcAccess?.controlPath!==choice)
+    throw Error('The saved source was not verified on this A2. Read its current input before retrying.');
+   message('FlightCore confirmed the saved input source.');
+   return;
+  }
+  if(name==='save-flight-mode'){
+   await window.ZebjusKits.setFlightMode($('#a2FlightMode').value);
+   ensureOperation(run);
+   message('FlightCore confirmed the saved flight mode.');
+   return;
+  }
   if(name==='detect'||name==='auto-read'){
    if(conflict)resetContext();
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
@@ -1295,6 +1423,7 @@ if(root){
   const run=operation;working=name;operationError='';render();
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
+   if(name==='select-input')inputSaveError=e.message;
    operationError=e.message;message(e.message);
    if(['cal-slider'].includes(name)){
     activeRun=null;escAttempt=false;
@@ -1305,15 +1434,15 @@ if(root){
  }
  root.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;cues.unlock();
+  if(b.dataset.inputCard){
+   if(!working&&inputSources.some(source=>source.id===b.dataset.inputCard)){
+    inputChoice=b.dataset.inputCard;inputSaveError='';render();
+   }
+   return;
+  }
   const action=b.dataset.action;
   if(action==='open-imu'){void navigate(IMU).catch(e=>message(e.message));return;}
-  if(action==='select-input'||action==='save-flight-mode'){
-   if(working)return;
-   working=action;render();
-   const operation=action==='select-input'?window.ZebjusKits.selectControlPath($('#a2InputSource').value):window.ZebjusKits.setFlightMode($('#a2FlightMode').value);
-   Promise.resolve(operation).then(()=>message('FlightCore confirmed the saved '+(action==='select-input'?'input source':'flight mode')+'.'))
-    .catch(error=>message(error.message)).finally(()=>{working='';render();});return;
-  }
+  if(action==='input-settings-link'){window.ZebjusDevicesWorkspace?.open(b.dataset.view);return;}
   if(action==='read-readiness'){void readFlightReadiness();return;}
   if(action==='sound'){
    cues.setEnabled(!cues.enabled);
@@ -1368,7 +1497,7 @@ if(root){
   if(!kit().connected||polling||motorClient.busy||working||Date.now()<nextPollAt)return;
   polling=true;const started=Date.now();
   const imuPolling=step===IMU||!!captureRequest;
-  const inputPolling=step===2&&!imuPolling;
+  const inputPolling=step===INPUTS&&!imuPolling;
   const read=inputPolling?motorClient.status():motorClient.wizardStatus();
   read.then(()=>{readFailures=0;nextPollAt=Math.max(Date.now(),started+(imuPolling?300:inputPolling?100:850));})
    .catch(e=>{readError=e.message;readFailures=Math.min(5,readFailures+1);nextPollAt=Date.now()+Math.min(2400,100*2**readFailures);render();})

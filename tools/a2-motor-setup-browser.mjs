@@ -18,11 +18,13 @@ try{
   ['Board','Wiring','Inputs','ACC / Gyro Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
   const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.21',controlAuthorized:true,
+   rcAccess:{version:1,pathVersion:1,controlPath:'PPM',selection:'PPM',paused:false},
+   rc:{inputArmed:false,throttle:1000},hostname:'a2-fixture.local',
    flightModeState:{supported:true,stabilizationSupported:true,saved:'angle',active:'angle',pending:null}};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
-  const f=window.__wizard={kit,calls:[],readinessReads:0,writes:0,run:0,imuSequence:3,candidates:{},
+  const f=window.__wizard={kit,calls:[],inputSaves:[],readinessReads:0,writes:0,run:0,imuSequence:3,candidates:{},
    board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,calibrationSlideKeepsSession:true,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
-    inputArmed:false,ppm:{present:true,ageMs:2,seq:12,map:[2,1,4,3,5],channels:[1510,1530,1000,1350],captureHz:50},
+    inputArmed:false,ppm:{pin:18,present:true,ageMs:2,seq:12,map:[2,1,4,3,5],channels:[1510,1530,1000,1350],captureHz:50},
     imu:{state:'READY',imuValid:true,accelG:[0.120,-0.010,1.080],accelRawG:[0.120,-0.010,1.080],raw:[0,0,0],bias:[0,0,0],corrected:[0,0,0],samples:2000,sampleSequence:50},
     ...savedBoard,bootId:boot,mode:'DISABLED',reason:'USER_STOP',pulseUs:[0,0,0,0],capture:{sequence:3,state:'IDLE',ready:false,mask:0}}
   };
@@ -41,7 +43,14 @@ try{
     ppmFresh:true,inputArmed:false,inputSource:'PPM',inputAgeMs:2,throttleUs:blocker==='THROTTLE_HIGH'?1350:1000,
     gyroFresh:true,timingHealthy:true,controlHz:249.8,outputsOffAck:true,benchActive:false,escCalibrationActive:false};
   };
-  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),requestBound:async(_,route,method,a,guard)=>{
+  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),selectControlPath:async(path,options)=>{
+   f.inputSaves.push({path,options});
+   if(f.rejectInputSave)throw Error('Simulated input save rejection');
+   const source=path==='PPM'?'PPM':path==='WEB_STA'?'WEB':'ANDROID';
+   kit.rcAccess={...kit.rcAccess,controlPath:path,selection:source};
+   Object.assign(f.board,{selectedInput:path,inputSource:path==='PPM'?'PPM':'NONE',inputValid:path==='PPM'});
+   return kit.rcAccess;
+  },requestBound:async(_,route,method,a,guard)=>{
    guard?.();
    if(route==='/api/flight/readiness'&&method==='GET'){
     f.readinessReads++;
@@ -179,6 +188,14 @@ try{
  assert.match(await savedBadge(1).textContent(),/✓ Saved on board/);
  assert.equal(await fixture(()=>__wizard.writes),1);
  await nav(1).click();assert.equal(await button('save-page').isVisible(),false);
+ assert.equal(await wizard.getByRole('heading',{name:'Input Signal Configuration'}).isVisible(),true);
+ const inputCard=path=>wizard.locator(`[data-input-card="${path}"]`);
+ const inputSave=button('select-input');
+ assert.equal(await inputCard('PPM').getAttribute('aria-pressed'),'true');
+ assert.equal(await inputCard('PPM').getAttribute('data-saved'),'true');
+ assert.equal(await wizard.getByRole('button',{name:/^PWM .*Unsupported on A2/}).isDisabled(),true);
+ assert.equal(await wizard.getByRole('button',{name:/^S\.Bus .*Unsupported on A2/}).isDisabled(),true);
+ await expectText('.a2-input-source-values','GPIO18');
  assert.match(await wizard.locator('[data-channel="4"] b').textContent(),/^Auxiliary$/);
  await expectText('.a2-ppm-mapping','Roll 2 · Pitch 1 · Throttle 4 · Yaw 3');
  await expectText('.a2-ppm-throttle','1350 µs · lower');
@@ -189,6 +206,38 @@ try{
  await expectText('[data-channel="2"] output','—');
  await fixture(()=>{__wizard.board.ppm.map=[2,1,4,3,5];__wizard.board.ppm.channels[3]=1000;});
  await expectText('.a2-ppm-throttle','1000 µs · LOW');
+ await inputCard('ANDROID_AP').click();
+ await expectText('#a2InputSettingsTitle','Android AP settings');
+ await expectText('.a2-input-source-values','Kit hotspot');
+ await expectText('.a2-input-save-status','Unavailable in STA mode');
+ assert.equal(await inputSave.isDisabled(),true);
+ assert.equal(await wizard.locator('.a2-input-monitor').isVisible(),false,'preview must not relabel the saved source’s channel bars');
+ assert.equal(await button('input-settings-link').textContent(),'Open Wi-Fi & Network');
+ await inputCard('ANDROID_WEBRTC').click();
+ await expectText('.a2-input-source-values','Virtual simulator');
+ assert.equal(await button('input-settings-link').textContent(),'Open Mobile Controller');
+ assert.deepEqual(await fixture(()=>__wizard.inputSaves),[],'preview cards never write FC settings');
+ await inputCard('WEB_STA').click();
+ await expectText('.a2-input-source-values','a2-fixture.local');
+ await fixture(()=>{__wizard.rejectInputSave=true;});
+ await inputSave.click();await expectText('.a2-input-save-status','Simulated input save rejection');
+ assert.equal(await inputCard('PPM').getAttribute('data-saved'),'true');
+ assert.equal(await inputCard('WEB_STA').getAttribute('data-saved'),'false');
+ await fixture(()=>{__wizard.rejectInputSave=false;});
+ await inputSave.click();await expectText('.a2-input-save-status','Input source saved on FC');
+ assert.equal(await inputCard('WEB_STA').getAttribute('data-saved'),'true');
+ assert.deepEqual(await fixture(()=>__wizard.inputSaves.at(-1)),{path:'WEB_STA',options:{claimJoystick:false}});
+ await inputCard('ANDROID_WEBRTC').click();
+ await fixture(()=>{__wizard.kit.connectionGeneration++;});
+ await expectText('#a2InputSettingsTitle','WebApp Joystick settings');
+ assert.equal(await inputCard('WEB_STA').getAttribute('aria-pressed'),'true','reconnect loads the verified saved source');
+ await inputCard('PPM').click();await inputSave.click();
+ await expectText('.a2-ppm-throttle','1000 µs · LOW');
+ assert.equal(await inputCard('PPM').getAttribute('data-saved'),'true');
+ await page.setViewportSize({width:390,height:844});
+ const inputBounds=await wizard.locator('[data-panel="2"] .a2-input-card-grid').first().boundingBox();
+ assert.ok(inputBounds.x>=0&&inputBounds.x+inputBounds.width<=390,'receiver cards fit the mobile Wizard');
+ await page.setViewportSize({width:1366,height:900});
  await fixture(()=>{__wizard.kit.flightModeState.stabilizationSupported=false;});
  await expectText('.a2-flight-mode-status','Angle stabilization unavailable on this firmware');
  assert.equal(await wizard.locator('#a2FlightMode option[value="angle"]').textContent(),'Angle · setup setting');
