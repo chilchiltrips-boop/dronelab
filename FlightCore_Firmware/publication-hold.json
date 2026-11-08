@@ -3,6 +3,6 @@
   "publishedVersion": "1.7.15",
   "publishedSourceCommit": "002a8edaf3855d574dcad4ef082912e2d4c2bee4",
   "publishedBuildReportSha256": "285bde7f949ba14c96a76a58221ed1661cea1216badbf29b019720df81d01fad",
-  "candidateVersion": "1.7.21",
+  "candidateVersion": "1.7.22",
   "reason": "Physical acceptance pending"
 }

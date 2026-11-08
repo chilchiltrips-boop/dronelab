@@ -29,6 +29,7 @@ static uint8_t zjShadowProfile=0;
 static bool zjShadowAngle=false,zjShadowPlus=false,zjShadowPreview=false,zjShadowRequested=true;
 static ZjFlightConditions zjFlightPolicy;
 static bool zjControlRuntimeReady=true;
+static uint32_t zjControlTimerStartedUs=0;
 static ZjFlightConditions zjFlightMainConditions(){return zjFlightPolicy;}
 static ZjFlightOutputGate zjFlightOutputGate;
 static ZjRateTrace zjFlightTrace;
@@ -43,6 +44,7 @@ static bool angleMode=false;
 static std::function<void(unsigned)> inject;
 static void ulTaskNotifyTake(bool,uint32_t){
  if(ticks==limit)throw End{};
+ if(ticks==0)clockMs+=1; // worker creation precedes timer activation
  clockMs+=4;++ticks;
  zjFlightPolicy.input.receivedAtMs=clockMs;++zjFlightPolicy.input.sequence;
  zjImuMailbox.sample.accept(micros());
@@ -89,7 +91,9 @@ int main(int argc,char** argv){
  zjFlightOutputGate={};zjFlightPolicy=c;zjShadowRequested=false;
  for(unsigned i=0;i<ZJ_PID_GAIN_COUNT/3;i++)zjShadowGains[i]=zjPidActive.axis(i);
  zjFlightRevokeHandler=zjControlRevoke;
+ zjControlTimerStartedUs=micros()+1000;
  inject=[&](unsigned n){
+  if(n==2)assert(zjControl.jitterUs==0);
   if(n<=2)return; // warm scheduler before ARM, as the real firmware requires
   if(n==3){assert(zjControlArmFlight()==ZjFlightFault::NONE);}
   n-=2;

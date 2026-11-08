@@ -25,6 +25,19 @@ int main(){
  assert(!c.healthy(24501));assert(c.begin(24501));c.finish(24520);
  assert(c.missedTicks==3&&c.jitterUs==501&&c.maxJitterUs==12000);
  assert(!c.begin(24521));assert(c.ticks==3);
+ // Replay the measured 6,433 us wake interval and 1,120 us work window.
+ // Model a 900 us gap between worker creation and timer activation.
+ for(const uint32_t epoch:{0u,900u}){
+  c.start(epoch);
+  assert(c.begin(4953));c.finish(5353);
+  assert(c.begin(11386)&&c.intervalUs==6433&&c.missedTicks==0);
+  assert(c.nextDueUs-11386==614+epoch);
+  c.finish(12506);
+  assert(c.deadlineMisses==(epoch==0?1u:0u));
+ }
+ assert(c.begin(13200));
+ c.finish(c.nextDueUs);
+ assert(c.deadlineMisses==1); // an actual deadline still trips
  // An isolated 120.6 ms interval drops ticks and revokes a mocked flight owner.
  c.start(0);assert(c.begin(4000));c.finish(4020);
  ZjFlightConditions flight;
