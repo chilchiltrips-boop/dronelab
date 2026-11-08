@@ -2,7 +2,7 @@
 import {chromium} from 'playwright';
 import {browserOptions,configureContext} from './browser-harness.mjs';
 import assert from 'node:assert/strict';
-import {mkdirSync} from 'node:fs';
+import {mkdirSync,readFileSync} from 'node:fs';
 
 const browser=await chromium.launch(browserOptions);
 try{
@@ -486,6 +486,18 @@ try{
  await readStatus();await expectText('.a2-readiness-status','mismatched readiness snapshot');
  assert.equal(await wizard.locator(readiness).textContent(),'');
  assert.equal(await fixture(()=>__wizard.readinessReads),4);
+ await fixture(()=>{
+  const f=__wizard,previous=f.readinessResponse;f.wrongBoot=false;
+  f.readinessResponse=()=>{const response=previous();return {...response,
+   flight:{...response.flight,state:'FAILSAFE',lastArmReason:'DEADLINE_MISSED'}};};
+ });
+ const download=page.waitForEvent('download');
+ await button('download').click();
+ const report=JSON.parse(readFileSync(await (await download).path(),'utf8'));
+ assert.equal(report.flightReadiness.flight.state,'FAILSAFE');
+ assert.equal(report.flightReadiness.flight.lastArmReason,'DEADLINE_MISSED');
+ assert.equal(report.flightReadinessError,null);
+ assert.equal(await fixture(()=>__wizard.readinessReads),5,'report fetches a fresh read-only readiness snapshot');
  await nav(-1).click();await expectText('.a2-cal-target','Motor 4 of 4');await expectSaved(6);
  assert.equal(await pulse.inputValue(),'1110');
  assert.equal(await safety.isChecked(),false,'returning from Report requires a new page confirmation');

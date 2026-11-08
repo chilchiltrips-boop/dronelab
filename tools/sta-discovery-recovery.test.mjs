@@ -16,7 +16,7 @@ function fixture({known=[],ip='',name='',reply=()=>null}={}){
   const u=new URL(url),key=u.hostname+u.pathname;calls.push({host:u.hostname,path:u.pathname,options});
   if(u.pathname==='/api/identify'){
    const count=(counts.get(key)||0)+1;counts.set(key,count);
-   const d=await reply(u.hostname,count);
+   const d=await reply(u.hostname,count,options);
    if(d instanceof Error)throw d;
    return {ok:!!d,json:async()=>d};
   }
@@ -25,6 +25,7 @@ function fixture({known=[],ip='',name='',reply=()=>null}={}){
    ip:u.hostname,hostname:'zebjus-drone-1.local',rc:{claimed:false}})};
   return {ok:false};
  };
+ vm.runInNewContext(read('js/control-path-policy.js'),window);
  vm.runInNewContext(read('js/classroom-kits.js'),{window,document,fetch,AbortController,URLSearchParams,
   localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   setTimeout,clearTimeout,CustomEvent:class{},console});
@@ -43,6 +44,27 @@ test('STA hostname failure reconnects the same Device ID using its remembered nu
  assert.equal(live.ip,'192.168.1.70');assert.equal(f.api.getState().connected,true);
  assert.equal(f.api.getState().kitId,id);assert.equal(f.api.getState().owner,false);
  assert.ok(!f.calls.some(c=>c.host==='zebjus-drone-1.local'));
+ assert.equal(f.calls.filter(c=>c.path==='/api/identify').length,1,'Reuse the just-verified public identity');
+ assert.equal(f.calls.filter(c=>c.path==='/api/status').length,1,'One authenticated status completes connection');
+});
+test('a silent saved STA IP cannot delay a matching alias behind its timeout',async()=>{
+ let primary,aliasStartedBeforeTimeout=false;
+ const f=fixture({reply:(host,_,options)=>{
+  if(host==='192.168.1.70'){
+   primary=options.signal;
+   return new Promise((_,reject)=>primary.addEventListener('abort',()=>reject(primary.reason),{once:true}));
+  }
+  if(host==='zebjus-drone-1.local'){
+   aliasStartedBeforeTimeout=primary&&!primary.aborted;
+   return identity();
+  }
+  return null;
+ }});
+ const live=await f.api.connectDiscoveredKit(kit());
+ assert.equal(live.ip,'zebjus-drone-1.local');
+ assert.equal(aliasStartedBeforeTimeout,true);
+ assert.equal(primary.aborted,true,'Cancel the losing public probe');
+ assert.ok(f.calls.filter(c=>c.path!=='/api/identify').every(c=>c.host===live.ip));
 });
 test('DHCP-reassigned IP is never authenticated; a same-ID hostname can safely recover the moved Kit',async()=>{
  const f=fixture({reply:host=>host==='192.168.1.70'?identity({kitId:other}):host==='zebjus-drone-1.local'?identity():null});

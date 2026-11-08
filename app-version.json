@@ -16,7 +16,9 @@
     "Setup Wizard Input Signal Configuration shows receiver and controller cards, source-specific settings, verified PPM mapping, and the saved input source on the connected A2.",
     "Flight Data uses compact authenticated USB/AP/STA telemetry, fused roll/pitch animation, sample age and latency, and saved/active flight mode. Setup Wizard guides ACC / Gyro calibration through stationary gyro bias, six verified accelerometer poses, and a separate Level Horizon save.",
     "Firmware Flash can explicitly load the verified A2 1.7.22 Experimental Acro + Angle APP or Factory image, with corrected flight scheduler deadline tracking. Physical acceptance for this build is NOT_RUN.",
-    "Live Inputs shares one authenticated RC reader with the Kit header. PPM receiver loss, waiting for signal and delayed observations have separate states. Flight Data shows the reported failsafe reason."
+    "Live Inputs shares one authenticated RC reader with the Kit header. PPM receiver loss, waiting for signal and delayed observations have separate states. Flight Data shows the reported failsafe reason.",
+    "Header FC Kits lists remembered and detected A2 profiles. Explicit Connect rechecks the selected Device ID with a fast saved IP probe and bounded alias fallback.",
+    "Setup report downloads request fresh read-only Flight Readiness when needed and include the reported ARM or failsafe reason."
   ],
   "buildCommit": "f65fb703fb32",
   "publishedAt": "2026-11-08T18:59:24.008346+00:00",

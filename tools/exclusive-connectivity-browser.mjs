@@ -94,11 +94,28 @@ try{
  const before=statusRequests;await page.waitForTimeout(200);assert.equal(statusRequests,before,'Discovery permission must precede authenticated reads');
  await page.locator('#kitReconnectLater').click();assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().connected),false);
  await page.evaluate(()=>window.ZebjusKits.discoverKits());assert.equal(await page.locator('#kitReconnectDialog').isVisible(),false);
- // A manual Connect action is also explicit consent.
- await page.evaluate(()=>window.ZebjusKits.connectDiscoveredKit(window.ZebjusKits.getDiscovered().find(k=>k.transport==='sta')));
+ // The header lists the discovered FC and Connect is the explicit consent.
+ await page.locator('.v2-connection-details>summary').click();
+ const profile=page.locator('#kitTopProfile'),beforeProfile=statusRequests;
+ await profile.selectOption(id);
+ assert.match(await page.locator('#kitTopProfileStatus').textContent(),/ZFC-A2-012345ABCDEF.*Verify over STA/);
+ assert.equal(statusRequests,beforeProfile,'Selecting a profile does not authenticate');
+ await page.evaluate(()=>{
+  const serial=window.DroneLabSerial,hardware=serial.isHardwareBusy,loading=serial.isFlashing;
+  const refresh=()=>document.getElementById('kitTopProfile').dispatchEvent(new Event('change'));
+  window.__resumeProfileTest=()=>{serial.isHardwareBusy=hardware;serial.isFlashing=()=>true;refresh()};
+  window.__finishProfileTest=()=>{serial.isFlashing=loading;refresh()};
+  serial.isHardwareBusy=()=>true;refresh();
+ });
+ assert.equal(await page.locator('#kitTopWifiConnect').isDisabled(),true,'Hardware update blocks switching');
+ await page.evaluate(()=>window.__resumeProfileTest());
+ await page.locator('#kitTopWifiConnect').click();
  await wait(()=>window.ZebjusKits.getState().connected);assert.equal(await page.locator('#fwStaIndicator').textContent(),'CONNECTED');
+ await page.evaluate(()=>window.__finishProfileTest());
  assert.equal(await page.locator('#fwApIndicator').textContent(),'OFF');assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),true);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
+ assert.match(await page.locator('#kitTopProfileStatus').textContent(),/STA connected/);
+ await page.locator('.v2-connection-popover [data-header-close]').click();
  await page.screenshot({path:output+'/sta-only.png',fullPage:true});
  // The radio remains on STA while hostname resolution fails. Editing the
  // visible field must beat the stale dropdown and connect using signed status.
@@ -125,7 +142,9 @@ try{
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().owner),false);
  // New tab has no sessionStorage key; the encrypted IndexedDB pairing survives.
  await page.close();page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
- const prior=statusRequests;await page.goto('http://127.0.0.1:8765/');await page.locator('#kitReconnectDialog').waitFor({state:'visible',timeout:45000});
+ const prior=statusRequests;await page.goto('http://127.0.0.1:8765/');
+ await page.waitForFunction(deviceId=>document.getElementById('kitTopProfile').value===deviceId,id);
+ await page.locator('#kitReconnectDialog').waitFor({state:'visible',timeout:45000});
  assert.equal(statusRequests,prior);await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().otaAuthorized),true);
  await page.locator('#kitTopNetworkSwitch').click();await wait(()=>window.ZebjusKits.getState().pendingNetworkMode==='ap');assert.equal(mode,'ap');
@@ -133,6 +152,7 @@ try{
  computer='ap';await page.evaluate(()=>window.ZebjusKits.discoverKits());await page.locator('#kitReconnectDialog').waitFor({state:'visible'});
  await page.locator('#kitReconnectAccept').click();await wait(()=>window.ZebjusKits.getState().connected);
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().transport),'ap');assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().staConnected),false);
+ assert.equal(await page.evaluate(deviceId=>JSON.parse(localStorage.getItem('zebjus.classroom.known.v1')).find(k=>k.id===deviceId).ip,id),'192.168.1.20','AP connection preserves the same Kit’s saved STA IP');
  await page.locator('[data-tab="firmware"]').click();await page.locator('[data-dw-view="wifi"]').click();await page.locator('#fwAuthorizeUpdates').click();await wait(()=>window.ZebjusKits.getState().otaAuthorized);
  assert.equal(proofFailures,1,'The rejected saved key must never be replayed');
  await page.locator('#kitTopNetworkSwitch').click();await wait(()=>window.ZebjusKits.getState().pendingNetworkMode==='sta');
@@ -141,7 +161,21 @@ try{
  assert.equal(await page.evaluate(()=>window.ZebjusKits.getState().rcAccess.controlPath),'PPM');
  await page.setViewportSize({width:360,height:900});await page.screenshot({path:output+'/ap-only-360.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
+ // Offline reload still lists all saved A2 profiles, even with duplicate names.
+ const secondId='ZFC-A2-000000FEDCBA';
+ await page.evaluate(deviceId=>{
+  const key='zebjus.classroom.known.v1',saved=JSON.parse(localStorage.getItem(key));
+  saved.push({...saved[0],id:deviceId,ip:'192.168.1.30'});
+  saved.push({...saved[0],id:'ZFC-A1-000000000000',board:'ZFC-A1'});
+  localStorage.setItem(key,JSON.stringify(saved));
+ },secondId);
+ computer='ap';const beforeReload=statusRequests;
+ await page.reload();await page.locator('.v2-connection-details>summary').click();
+ assert.deepEqual(await page.locator('#kitTopProfile option').evaluateAll(options=>options.map(o=>o.value).filter(Boolean)),[id,secondId]);
+ await page.locator('#kitTopProfile').selectOption(secondId);
+ assert.match(await page.locator('#kitTopProfileStatus').textContent(),new RegExp(secondId));
+ assert.equal(statusRequests,beforeReload);
  assert.deepEqual(errors,[]);writeFileSync(output+'/result.json',JSON.stringify({result:'PASS',proofFailures,adminEnrollments,statusRequests,persistentPairing:true,reconnectConsent:true,exclusiveModes:true,manualStaIpWithoutMdns:true,errors},null,2));
  console.log('PASS exclusive AP/STA UI: rejected key recovery, encrypted mode commands, saved pairing across tabs, Connect/Later consent, no automatic ownership');
-}catch(e){await page.screenshot({path:output+'/failure.png',fullPage:true}).catch(()=>{});console.error(e);console.error('Kit state',await page.evaluate(()=>window.ZebjusKits?.getState()).catch(()=>null));console.error('Page errors',errors);process.exitCode=1}
+}catch(e){await page.screenshot({path:output+'/failure.png',fullPage:true}).catch(()=>{});console.error(e);console.error('Kit message',await page.locator('#kitMessage').textContent({timeout:1000}).catch(()=>null));console.error('Kit state',await page.evaluate(()=>window.ZebjusKits?.getState()).catch(()=>null));console.error('Page errors',errors);process.exitCode=1}
 finally{await browser.close()}
