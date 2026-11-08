@@ -22,7 +22,8 @@ test('fast saved-kit discovery requires fresh Connect/Later approval and verifie
  assert.match(startup,/await offerRememberedConnection\(\)/);
  assert.match(kit,/root\.AerionDialogs\.mount\(dialog\)/);
  assert.match(kit,/return connectDiscoveredKit\(kit\)/,'Only the explicit Connect action may authenticate the offered kit');
- assert.match(kit,/if\(state\.owner\)throw Error\('Release diagnostic control/);
+ assert.match(kit,/if\(state\.owner\|\|linkFresh\(\)&&\(state\.rc\?\.inputArmed===true/);
+ assert.match(kit,/if\(profileLookup\|\|blocker\)throw Error\(blocker/);
  assert.match(kit,/for\(const delay of \[250,700,1600,3000,5000\]\)/);
 });
 test('OTA security and proof remain mandatory while repaint and restart wait reduce',()=>{

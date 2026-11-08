@@ -786,6 +786,7 @@ if(root){
   if(status.textContent!==hint)status.textContent=hint;
   status.dataset.tone=readinessError?'error':snapshot?'neutral':'warn';
   button.disabled=readingReadiness||!!working||motorClient.busy||!readinessPath(k);
+  $('[data-action="download"]').disabled=readingReadiness||!!working||k.connected&&motorClient.busy;
   const d=snapshot?.data,signal=saved?.outputSignal;
   let rows=[];
   if(d){
@@ -811,7 +812,7 @@ if(root){
    if(!d.flight.authorized&&d.softwareBlockReason!==blocker&&d.softwareBlockReason!=='NONE')
     rows.push(['Software check',d.softwareBlockReason,'warn']);
    if(d.flight.lastArmReason!=='NONE'&&d.flight.lastArmReason!=='UNKNOWN')
-    rows.push(['Last ARM / fault reason',d.flight.lastArmReason,'neutral']);
+    rows.push(['Last ARM / fault reason',d.flight.lastArmReason,d.flight.state==='FAILSAFE'?'error':'neutral']);
   }
   const grid=$('.a2-readiness-grid'),markup=rows.map(([label,value,tone])=>`<div data-tone="${tone}"><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('');
   if(grid.innerHTML!==markup)grid.innerHTML=markup;
@@ -1307,15 +1308,6 @@ if(root){
    if(conflict)resetContext();
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
-  if(name==='download'){
-   const snapshot=currentReadiness(kit());
-   const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,
-    flightReadiness:snapshot?{readAt:snapshot.readAt,...snapshot.data}:null,
-    escResultSource:compatibleEsc()?'LEGACY_OPERATOR':autoSequenceReady()?'CONTROLLER_SEQUENCE_ONLY':'NOT_VERIFIED',
-    escAcceptanceVerified:false,physicalAcceptance:'NOT_VERIFIED'};
-   const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
-   a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;
-  }
   if(name==='save-page'||name==='save-next'){
    const scope=pageScope();
    if(scope&&(canSaveScope(scope)||ambiguousSave))await save(scope);
@@ -1420,10 +1412,24 @@ if(root){
    sliderRun.rampPulse=1000;sliderRun.target=sliderRun.resume;setCalPulse(sliderRun.resume);return;
   }
  }
+ async function downloadReport(){
+  if(working||readingReadiness||step!==REPORT)return;
+  const k=kit(),key=kitIdentity(k),run=operation;
+  if(!currentReadiness(k)&&readinessPath(k))await readFlightReadiness();
+  if(run!==operation||step!==REPORT||!live()||key!==kitIdentity(kit()))return;
+  const snapshot=currentReadiness(kit());
+  const data={at:new Date().toISOString(),review:Object.fromEntries(reportRows()),autoEsc:saved?.autoEsc||null,
+   flightReadiness:snapshot?{readAt:snapshot.readAt,...snapshot.data}:null,
+   flightReadinessError:snapshot?null:readinessError||'No fresh verified FlightCore status available.',
+   escResultSource:compatibleEsc()?'LEGACY_OPERATOR':autoSequenceReady()?'CONTROLLER_SEQUENCE_ONLY':'NOT_VERIFIED',
+   escAcceptanceVerified:false,physicalAcceptance:'NOT_VERIFIED'};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'})),a=document.createElement('a');
+  a.href=url;a.download='a2-setup-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
  function perform(name){
   if(working&&name!=='stop')return;
   if(name==='stop'&&working==='stop')return;
-  if(name!=='download')readiness=null;
+  readiness=null;
   const run=operation;working=name;operationError='';render();
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
@@ -1448,6 +1454,7 @@ if(root){
   if(action==='open-imu'){void navigate(IMU).catch(e=>message(e.message));return;}
   if(action==='input-settings-link'){window.ZebjusDevicesWorkspace?.open(b.dataset.view);return;}
   if(action==='read-readiness'){void readFlightReadiness();return;}
+  if(action==='download'){void downloadReport().catch(e=>message(e.message));return;}
   if(action==='sound'){
    cues.setEnabled(!cues.enabled);
    try{localStorage.setItem('zebjus.setup.sound',cues.enabled?'on':'off');}catch{}

@@ -11,7 +11,7 @@ const $=s=>document.querySelector(s),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const VERSION='1.4.12',BASE='./FlightCore_Firmware',DB='zebjus-i2c-scanner-only-v1',STORE='images';
 const BENCH_VERSION='1.7.19',BENCH_BASE=`${BASE}/bench/${BENCH_VERSION}`;
 const EXPERIMENTAL_NOTICE='Experimental flight firmware. Saved setup and a fresh Flight ARM can enable motors. Physical tests NOT_RUN. Test with propellers removed.';
-let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
+let catalog=null,fw=null,serialPort=null,transport=null,loader=null,usbSignature='',usbBoardId='',busy=false,hardwareBusy=false,catalogSource='',liveFirmwareBuiltAt='',postFlashWatchTimer=null,usbLastPort=null,monitorPort=null,monitorReader=null,monitorTask=null,monitorPendingScan=false,monitorStarting=false;
 let experimentalCatalog=null;
 let benchCatalog=null,releaseTrack='published',releaseChoice='latest'; // A2 defaults to verified bench; explicit published rollback remains available.
 let usbRuntimeInfo=null,usbSensorState='Waiting for sensor status',usbBusPins='--',usbLedState='--',usbRomDownload=false,usbBusMode='--';
@@ -177,7 +177,7 @@ function syncFirmwareControls(){
  const published=$('#fwLoadPublishedBtn');if(published){published.disabled=busy;published.setAttribute('aria-pressed',String(releaseChoice==='published'));}
  for(const id of ['#fwTargetWifiTab','#fwTargetUsbTab']){const tab=$(id);if(tab)tab.disabled=busy;}
 }
-function setBusy(on){busy=!!on;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
+function setBusy(on,hardware=false){busy=!!on;hardwareBusy=busy&&hardware;['#fwReadRunningBtn','#fwSerialMonitorBtn','#fwSerialReconnectBtn','#fwSerialResetBtn','#fwSerialBaud','#fwAutoLoadBtn','#fwUsbFlashBtn','#fwNetworkFlashBtn','#fwRebootBtn','#fwConnectUsbBtn','#fwDisconnectUsbBtn','#fwRefreshKitBtn','#fwReconnectBtn','#fwForgetBtn','#fwDownloadBinBtn','#fwBoardProfile','#fwImageType','#fwFileInput','#fwUsbBaud','#fwUsbManualBoot','#fwEraseUsb','#fwTargetWifiTab','#fwTargetUsbTab'].forEach(s=>{const e=$(s);if(e)e.disabled=busy});syncFirmwareControls();const page=$('#tab-firmware'),label=$('.firmware-file-label');if(page)page.classList.toggle('firmware-busy',busy);if(label)label.setAttribute('aria-disabled',busy?'true':'false')}
 async function sha256(bytes){const hashes=await import('./js/firmware-hashes.js');return hashes.sha256(bytes)}
 function inferType(name){return/factory|merged|merge\.bin/i.test(String(name||''))?'factory':'app'}
 function inferVersion(name){const m=String(name||'').match(/(?:v|_)(\d+)[._-](\d+)[._-](\d+)/i);return m?`${m[1]}.${m[2]}.${m[3]}`:'Custom'}
@@ -515,7 +515,7 @@ async function flashNetworkApp(){
   ' to '+kit.kitName+' ('+kit.kitId+')?\n\n'+(fw.track==='experimental'?EXPERIMENTAL_NOTICE+' ':'')+
   'APP image only. OTA firmware is unsigned. Keep propellers removed and ESC power disconnected. Never disconnect controller power during update. Continue?');
  if(!ok)return;
- setBusy(true);resetStages();stage('Prepare','done');stage('Flash','active');
+ setBusy(true,true);resetStages();stage('Prepare','done');stage('Flash','active');
  progress(3,'Preparing selected '+kit.transport.toUpperCase()+' kit for OTA');badge('#fwOverallBadge','NETWORK OTA • UPDATING','warn');
  try{
   if(ppmPause.needed){
@@ -562,7 +562,7 @@ async function wifiFlash(){
    log(`OTA target verified: ${info.boardName||boardName(actual)} • current ${info.firmware||'--'}`)
  }catch(e){log(e.message);badge('#fwOverallBadge','BLOCKED','warn');return}
  if(!await confirmInLab(`Flash ${fw.name} to ${s.getSelectedDevice().deviceName||'selected kit'} over Wi-Fi?\n\nKeep the drone DISARMED and powered until reboot completes.`))return;
- setBusy(true);resetStages();stage('Prepare','done');stage('Flash','active');progress(2,'Uploading firmware to kit…');badge('#fwOverallBadge','UPDATING','warn');
+ setBusy(true,true);resetStages();stage('Prepare','done');stage('Flash','active');progress(2,'Uploading firmware to kit…');badge('#fwOverallBadge','UPDATING','warn');
  const c=s.client;
  try{
    const result=await c.uploadFirmware(fw.bytes,fw.name,fw.boardId||'');if(result.ok===false)throw new Error(result.message||'Firmware update failed.');
@@ -639,7 +639,7 @@ async function connectUsb(){
  if(busy)return;
  if(!('serial'in navigator)){log('Web Serial is not available in this browser. Use desktop Chrome/Edge on HTTPS or localhost.');return}
  usbFlashPhase='idle';usbFlashExpected=null;resetStages();progress(0,'Connecting USB • no flash started');
- setBusy(true);badge('#fwOverallBadge','USB CONNECT','warn');
+ setBusy(true,true);badge('#fwOverallBadge','USB CONNECT','warn');
  let port=null;
  try{
   port=await navigator.serial.requestPort();
@@ -720,7 +720,7 @@ async function usbFlash(){
  const bp=boardById(target);if(!bp)return log('Selected board profile is not available.');
  const address=type==='factory'?0:parseInt(bp.appAddress||'0x10000'),limit=parseInt(bp.flashSize||'4MB',10)*1048576;
  if(!Number.isFinite(address)||address<0||address+fw.bytes.length>limit)return log('Blocked: firmware exceeds the selected board flash capacity.');
- setBusy(true);
+ setBusy(true,true);
  try{
  if(type==='app'){const {inspectUsbLayout}=await import('./js/firmware-image.js');inspectUsbLayout(new Uint8Array(await loader.readFlash(0,4096)),new Uint8Array(await loader.readFlash(0x8000,4096)),bp);log('Matching bootloader and dual application partitions verified.')}
  if(!await confirmInLab(`Flash firmware over USB?\n${fw.name} v${fw.version}${fw.track==='bench'?' (bench diagnostics)':fw.track==='experimental'?'\n'+EXPERIMENTAL_NOTICE:''}\nBoard: ${boardName(target)}\nOffset: ${type==='factory'?'0x0 (factory)':'0x10000 (application)'}${type==='factory'?'\nExisting flash configuration will be replaced.':''}\n\nContinue?`)){setBusy(false);return}
@@ -1132,6 +1132,7 @@ function initSerialTools(){
    isOpen:()=>!!monitorPort,
    generation:()=>monitorGeneration,
    isFlashing:()=>!!busy,
+   isHardwareBusy:()=>hardwareBusy,
    baud:()=>serialBaud(),
    status:()=>monitorPort?'connected':busy?'busy':'disconnected',
    firmwareInfo:()=>({...usbRuntimeInfo,romDownload:usbRomDownload,sensor:usbSensorState,pins:usbBusPins,led:usbLedState}),
@@ -1186,7 +1187,7 @@ function initSerialTools(){
 async function rebootKit(){
  const kit=window.ZebjusKits;if(!kit?.getState().connected)return log('Connect and verify the kit first.');
  if(!await confirmInLab('Reboot the selected Kit and verify the same Device ID after reconnect?'))return;
- setBusy(true);resetStages();stage('Reboot','active');progress(45,'Requesting kit reboot…');badge('#fwOverallBadge','REBOOTING','warn');
+ setBusy(true,true);resetStages();stage('Reboot','active');progress(45,'Requesting kit reboot…');badge('#fwOverallBadge','REBOOTING','warn');
  try{const ok=await kit.reboot();if(!ok)throw Error('Reboot acknowledged; reconnect remains pending');stage('Reboot','done');stage('Reconnect','done');progress(100,'Same Kit rebooted and reconnected');badge('#fwOverallBadge','ONLINE','good')}
  catch(e){badge('#fwOverallBadge','RECONNECT PENDING','warn');log(e.message)}finally{setBusy(false);kitStatus()}
 }

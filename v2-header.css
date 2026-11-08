@@ -49,10 +49,16 @@
 #app .topbar-primary button.btn,#app .topbar .v2-connection-details>summary{min-width:28px;min-height:32px!important;height:32px;padding:5px 5px!important;font-size:11px!important;line-height:20px;border-radius:7px;white-space:nowrap}
 #app .topbar #kitTopRefresh{display:inline-flex;flex:none;align-items:center;justify-content:center;width:28px;padding:2px!important;font-size:18px!important}
 #app .topbar .v2-connection-details{position:relative;flex:none}
-#app .topbar .v2-connection-details>summary{display:flex;align-items:center;justify-content:center;width:28px;list-style:none;border:1px solid #365364;color:#d3e5ee;font-size:16px!important;cursor:pointer}
+#app .topbar .v2-connection-details>summary{display:flex;align-items:center;justify-content:center;gap:4px;list-style:none;border:1px solid #365364;color:#d3e5ee;cursor:pointer}
 #app .topbar .v2-connection-details>summary::-webkit-details-marker{display:none}
 .v2-connection-popover{position:absolute;left:0;top:calc(100% + 8px);z-index:1000;display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:340px;max-width:calc(100vw - 24px);padding:14px;border:1px solid #3a596a;border-radius:10px;background:#102230;box-shadow:0 16px 50px #0009}
 .v2-connection-details:not([open])>.v2-connection-popover{display:none}
+.v2-kit-profiles{display:grid;gap:6px;width:100%;min-width:0}
+.v2-kit-profiles label{font-size:12px;font-weight:700;color:#dbeaf4}
+.v2-kit-profiles select{width:100%;min-width:0;padding:7px;border:1px solid #3c5d74;border-radius:6px;background:#102637;color:#ecf8ff;font:inherit}
+#kitTopProfileStatus{color:#bed0dd;min-height:16px;overflow-wrap:anywhere}
+#kitTopProfileStatus[data-tone="good"]{color:#89e4be}
+#kitTopProfileStatus[data-tone="error"]{color:#ffc0c7}
 .v2-diagnostic{display:grid;grid-template-columns:120px minmax(0,1fr);width:100%;gap:9px;font-size:11px;line-height:1.4;color:#9fb5c8}
 .v2-diagnostic b,.v2-diagnostic small{color:#e2eff6;overflow-wrap:anywhere}
 #app #headerInputSlot{flex:none;min-width:0}
@@ -100,6 +106,10 @@
  #app .workspace-file-menu>summary{padding-inline:6px}
  #app #headerInputSlot .control-path-inline>select{width:110px}
  #app #headerInputSlot .control-path-inline>[data-control-active]{width:50px;min-width:50px;max-width:50px}
+}
+@media(min-width:736px) and (max-width:1599px){
+ #app .topbar .v2-connection-details>summary{width:30px}
+ #app .v2-kit-summary-wide{display:none}
 }
 @media(min-width:736px) and (max-width:1279px){
  #app .topbar-primary{overflow-x:auto!important;overflow-y:hidden!important;overscroll-behavior-x:contain;scroll-padding-inline:20px;scrollbar-width:thin;scrollbar-color:#50758b #142b3e}

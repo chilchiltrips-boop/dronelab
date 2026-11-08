@@ -43,8 +43,9 @@ test('opt-in remembered browser restores sealed 32-character device credential w
  assert.equal(await vault.restore(id),'');
 });
 test('AP is identity-verified before authenticated access and never treats the AP password as a protected-settings key',()=>{
- assert.match(main,/const found=await probeIdentity\(ip,2900\)/);
+ assert.match(main,/const found=discovery\?\.identity\|\|await probeIdentity\(ip,2900\)/);
  assert.match(main,/if\(found\.kitCode!==code\)/);
+ assert.match(main,/if\(expectedId&&found\.kitId!==expectedId\)/);
  assert.match(main,/pairedKeys\.get\(found\.kitId\)/);
  assert.match(main,/await pairing\(\)\?\.restore\?\.\(found\.kitId\)/);
  assert.match(main,/if\(!\/\^\[a-fA-F0-9\]\{32\}\$\/\.test\(key\)\)/);
