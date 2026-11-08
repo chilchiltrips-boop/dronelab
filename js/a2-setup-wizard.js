@@ -818,12 +818,13 @@ if(root){
  }
  function reportRows(){
   const k=kit(),signal=saved?.outputSignal,values=pulses(),stored=saved?.observedMinimumUs||[];
+  const input=selectedInput();
   const pulseText=p=>p?p+' µs':'Not calibrated';
   return [
    ['Kit',`${k.kitId||'Offline'} · ${k.board||'—'} · ${k.version||'—'} · ${k.transport||'—'}`],
    ['Frame',`${layouts[draft.layout].name} · ${wiringCompatible()?'Saved on board':'Pending'}`],
    ...motors.map((n,i)=>[`M${n} wiring`,`${draft.layoutPins[i]} · ${draft.rotations[i]}${wiringCompatible()?'':` · pending (board ${saved?.layoutPins?.[i]||'—'} · ${saved?.rotations?.[i]||'—'})`}`]),
-   ['Inputs',`${selectedInput().source||'—'} · live observation`],
+   ['Inputs',`${input.source||'—'} · ${input.receiverLost?'receiver loss reported':input.monitorDelayed?'monitor delayed':input.monitoring?'observed':'unverified'}`],
    ['ACC / Gyro',gyroStatus()+' · '+accelStatus()],
    ['Output signal',signal?`${signal.hz} Hz · ${signal.minUs}–${signal.maxUs} µs`:'Unverified'],
    ['ESC controller attempt',`${saved?.autoEsc?.attemptId||'None'} · ${saved?.autoEsc?.state||'No automatic result'}`],
@@ -886,10 +887,11 @@ if(root){
   mode.disabled=!!working||!k.connected;
   return {k,info,peer,selected,confirmed};
  }
- function inputSettingRows(k,info,peer,ppm){
+ function inputSettingRows(k,info,peer,ppm,receiverLost){
   if(inputChoice==='PPM'){
    const pin=Number.isInteger(ppm?.pin)?`GPIO${ppm.pin}`:'RX / PPM header';
-   const signal=ppm?.present===true?'Receiver signal present':ppm?.present===false?'Receiver signal absent':'Waiting for verified receiver status';
+   const signal=receiverLost?'Receiver loss reported':ppm?.present===true?'Receiver signal present':
+    ppm?.present===false?'Waiting for receiver':'Waiting for verified receiver status';
    return [['Input','PPM-SUM · one signal wire'],['Signal pin',pin],['Receiver',signal]];
   }
   if(inputChoice==='ANDROID_AP')return [
@@ -912,7 +914,7 @@ if(root){
   const title=inputSources.find(source=>source.id===inputChoice).title+' settings';
   $('#a2InputSettingsTitle').textContent=title;
   $('.a2-input-link').textContent=info?.connection||'Offline';
-  const values=$('.a2-input-source-values'),html=view(title,inputSettingRows(k,info,peer,ppm));
+  const values=$('.a2-input-source-values'),html=view(title,inputSettingRows(k,info,peer,ppm,input.receiverLost));
   if(values.innerHTML!==html)values.innerHTML=html;
   $('.a2-ppm-settings').hidden=inputChoice!=='PPM';
   const observed=k.connected?(confirmed||m.selectedInput):null;
@@ -924,28 +926,30 @@ if(root){
   link.dataset.view=destination[0];
   link.textContent=destination[1];
   const age=Number.isFinite(input.age)?(input.ageUpperBound?'≤ ':'')+Math.round(input.age)+' ms':'unknown';
-  const monitoring=input.monitorDelayed?'MONITOR DELAYED':input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':k.connected?'WAITING FOR INPUT':'KIT OFFLINE';
-  const armObserved=k.connected&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
+  const monitoring=input.receiverLost?'PPM SIGNAL LOST':input.monitorDelayed?'MONITOR DELAYED':
+   input.monitoring?'MONITORING':input.reported?'LAST SAMPLE':k.connected?'WAITING FOR INPUT':'KIT OFFLINE';
+  const armObserved=k.connected&&!input.receiverLost&&input.monitoring&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
   $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${armObserved?(m.inputArmed?'armed':'disarmed'):'arm state unverified'}`;
   const map=verifiedPpmMap(ppm?.map);
   $('.a2-ppm-mapping').textContent=map?`Receiver channels → Roll ${map[0]} · Pitch ${map[1]} · Throttle ${map[2]} · Yaw ${map[3]} · Aux ${map[4]}`:'Saved PPM mapping unverified.';
   const ppmSelected=observed==='PPM';
   const throttle=input.channels?.[2],freshThrottle=ppmSelected&&input.ppmMap&&input.valid&&!input.monitorDelayed&&Number.isInteger(throttle);
   const throttleStatus=$('.a2-ppm-throttle');
-  throttleStatus.dataset.tone=freshThrottle&&throttle<=RATE_LOW_THROTTLE_US?'ok':ppmSelected&&ppm?.present===false?'error':'warn';
+  throttleStatus.dataset.tone=input.receiverLost?'error':freshThrottle&&throttle<=RATE_LOW_THROTTLE_US?'ok':'warn';
   throttleStatus.textContent=freshThrottle?`PPM throttle ${throttle} µs · ${throttle<=RATE_LOW_THROTTLE_US?'LOW':'lower to '+RATE_LOW_THROTTLE_US+' µs or below'}`:
-   !ppmSelected?'Save PPM as the input source to verify its throttle.':input.monitorDelayed?'Monitor delayed · throttle unverified.':
+   !ppmSelected?'Save PPM as the input source to verify its throttle.':input.receiverLost?'FlightCore reported receiver loss.':
+   input.monitorDelayed?'Monitor delayed · throttle unverified.':
    ppm?.present===false?'A2 reported no PPM signal.':!map?'Throttle unverified until the PPM mapping is read.':'Waiting for a fresh PPM throttle observation.';
   root.querySelectorAll('[data-channel]').forEach(row=>{
    const value=input.channels?.[Number(row.dataset.channel)],reported=Number.isFinite(value)&&value>=1000&&value<=2000;
-   row.dataset.fresh=String(reported&&input.monitoring);
+   row.dataset.fresh=String(reported&&input.monitoring&&!input.monitorDelayed);
    row.querySelector('output').textContent=reported?value+' µs':'—';
    row.querySelector('i').style.width=reported?(value-1000)/10+'%':'0%';
   });
   $('.a2-input-health').textContent=(input.receiverHealth||'PPM signal diagnostics are not verified yet.')+
    (ppm?` · ${ppm.captureBackend||'receiver'} · ${ppm.captureHz??'—'} Hz (target 50 Hz) · frame ${ppm.seq??'—'} · ${ppm.captureReady===false?'capture unavailable · ':''}losses ${ppm.losses||0} · invalid intervals ${ppm.faults||0}`:'')+
    (readError?' · Status refresh delayed.':'')+(m.selectedInput==='ANDROID_AP'?' · Android AP owns input.':'');
-  if(input.monitoring&&Number.isFinite(input.channels?.[2])&&lastStateAt!==historyAt){
+  if(input.monitoring&&!input.monitorDelayed&&Number.isFinite(input.channels?.[2])&&lastStateAt!==historyAt){
    historyAt=lastStateAt;history.push(input.channels[2]);if(history.length>48)history.shift();
   }
  }

@@ -6,10 +6,10 @@ import {createInputStore,createSimulatorInput} from '../js/simulator-input.js';
 import {createSimulator} from '../js/tripod-physics.js';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-function usbBench(){
+function monitorBench(transport='usb'){
  let at=1000;const listeners=new Map(),ticks=[],nodes=new Map();
  const mode={supported:true,stabilizationSupported:false,saved:'angle',active:'angle',pending:null};
- const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Runtime fixture',transport:'usb',physicalLink:'usb',
+ const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'Runtime fixture',transport,physicalLink:transport,
   bootId:'boot-1',flightMode:'angle',flightModeState:mode,ledOn:true,motorsDisabled:true,motorsArmed:false};
  const store=createInputStore({now:()=>at}),s=createSimulator(),input=createSimulatorInput(s,store);
  const node=id=>{
@@ -23,8 +23,8 @@ function usbBench(){
   document:{hidden:false,readyState:'complete',getElementById:node,addEventListener(){}},
   ZebjusDevicesWorkspace:{active:()=> 'inputs'},
   ZebjusKits:{getState:()=>({...kit}),getMonitorPaths:()=>kit.connected?
-   [{kitId:kit.kitId,transport:'usb',verified:true,available:true,lastPacketAt:at}]:[],
-   request:()=>{throw Error('USB monitor must not issue network/control requests')}}};
+   [{kitId:kit.kitId,transport,verified:true,available:true,fresh:true,lastPacketAt:at}]:[],
+   request:()=>assert.fail('Live Inputs must use the shared observation')}};
  context.window=context;context.globalThis=context;vm.createContext(context);
  vm.runInContext(read('js/serial-rc-decoder.js'),context);
  vm.runInContext(read('js/kit-data-interface.js'),context);
@@ -42,10 +42,10 @@ function usbBench(){
   listeners.get('dronelab:serial-line')({detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId:kit.kitId,flightModeState:mode,ledOn:true,rc})}});
   tick();
  }
- return {kit,store,s,input,frame,tick,link:detail=>listeners.get('dronelab:kit-link')({detail})};
+ return {kit,store,s,input,frame,tick,node,now:()=>at,advance:ms=>{at+=ms;tick()},link:detail=>listeners.get('dronelab:kit-link')({detail})};
 }
 test('link notification for unchanged verified USB path cannot discard fresh input or cancel virtual Run',()=>{
- const b=usbBench();b.frame(1);assert.equal(b.input.start().accepted,true);
+ const b=monitorBench();b.frame(1);assert.equal(b.input.start().accepted,true);
  b.link({connected:true,kitId:b.kit.kitId,transport:'usb'});
  assert.equal(b.s.running,true,'unchanged selected path must retain its accepted input');
  b.link({connected:false,kitId:'ZFC-A1-FFFFFFFFFFFF',transport:'sta'});
@@ -54,7 +54,7 @@ test('link notification for unchanged verified USB path cannot discard fresh inp
  b.frame(2);assert.equal(b.s.running,true);assert.equal(b.input.snapshot().seq,2);
 });
 test('real selected USB disconnect and reboot still stop and require a new frame plus explicit Run',()=>{
- const b=usbBench();b.frame(1);b.input.start();
+ const b=monitorBench();b.frame(1);b.input.start();
  b.kit.connected=false;b.kit.linkState='stale';b.tick();
  assert.equal(b.s.running,false);assert.equal(b.store.snapshot().kit.fresh,false);
  b.kit.connected=true;b.link({connected:true,kitId:b.kit.kitId,transport:'usb'});
@@ -63,4 +63,36 @@ test('real selected USB disconnect and reboot still stop and require a new frame
  b.kit.bootId='boot-2';b.link({connected:true,kitId:b.kit.kitId,transport:'usb'});
  assert.equal(b.s.running,false);assert.equal(b.store.snapshot().kit.fresh,false);
  b.frame(1);assert.equal(b.s.running,false);assert.equal(b.input.start().accepted,true);
+});
+test('PPM browser delay keeps the source, while a real loss clears channels and expires the simulator input',()=>{
+ const b=monitorBench('sta'),{kit}=b;
+ kit.rcAccess={controlPath:'PPM'};
+ const live={kitId:kit.kitId,source:'PPM',transport:'PPM',active:true,seq:50,accepted:50,ageMs:10,
+  roll:1510,pitch:1520,throttle:1000,yaw:1540,inputArmed:true};
+ const label=id=>b.node(id).textContent;
+ kit.rc=live;kit.rcAt=b.now();b.tick();
+ assert.equal(label('liLiveState'),'LIVE');
+ assert.equal(b.input.start().accepted,true);
+ b.advance(450);
+ kit.ppm={present:true,captureHz:50,channels:[1610,1620,1000,1640,1500,1500,1700,1800]};
+ kit.ppmObservedAt=b.now();b.tick();
+ assert.equal(label('liLiveState'),'MONITOR DELAYED');
+ assert.equal(label('liInputSource'),'PPM');
+ assert.equal(label('liInputArm'),'UNVERIFIED');
+ assert.equal(label('liRoll'),'1510');
+ assert.equal(label('liCh1'),'1610','raw receiver order stays distinct from accepted Roll');
+ assert.equal(b.store.snapshot().kit.ageMs,460,'raw PPM ACK did not renew the accepted sample');
+ b.advance(10);
+ kit.rc={...live,source:'NONE',active:false,lastReleaseReason:'PPM_SIGNAL_LOST'};
+ kit.rcAt=b.now();b.tick();
+ assert.equal(label('liLiveState'),'PPM SIGNAL LOST');
+ assert.equal(label('liRoll'),'—');
+ assert.equal(label('liCh1'),'—');
+ assert.equal(b.store.snapshot().kit.fresh,false);
+ assert.equal(b.s.running,false);
+ b.advance(20);kit.rc={...live,seq:1,accepted:55,inputArmed:false};kit.rcAt=b.now();b.tick();
+ assert.equal(label('liLiveState'),'LIVE');
+ assert.equal(b.s.running,false,'recovery requires a fresh explicit Run');
+ kit.bootId='boot-2';kit.rc=null;kit.rcAt=0;kit.ppm=null;b.tick();
+ assert.equal(label('liRoll'),'—');
 });

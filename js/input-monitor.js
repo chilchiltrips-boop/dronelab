@@ -23,6 +23,19 @@ export function parseReceiverSnapshot(rc){
 // or renew the firmware/RC/simulator input freshness deadlines.
 export const PPM_OBSERVATION_MS=3500;
 
+export function ppmMonitorEvidence(kit,rc=kit?.rc,rcAt=kit?.rcAt,now=Date.now()){
+ const recent=at=>Number.isFinite(at)&&at>0&&at<=now&&now-at<=PPM_OBSERVATION_MS;
+ const observedAt=kit?.ppm?.observedAt??kit?.ppmObservedAt;
+ const ppm=kit?.connected===true&&recent(observedAt)&&typeof kit.ppm?.present==='boolean'?kit.ppm:null;
+ const rcKnown=kit?.connected===true&&recent(rcAt);
+ const acceptedPpm=rcKnown&&rc?.source==='PPM'&&rc.active===true&&rc.inputValid!==false&&rc.failsafe!==true;
+ const absent=ppm?.present===false&&(!acceptedPpm||observedAt>=rcAt);
+ const releaseObservedAt=rc?.releaseObservedAt??rcAt;
+ const released=rcKnown&&recent(releaseObservedAt)&&rc?.active!==true&&rc?.lastReleaseReason==='PPM_SIGNAL_LOST';
+ const recovered=ppm?.present===true&&observedAt>releaseObservedAt;
+ return {ppm,absent,lost:released&&!recovered||absent&&(ppm.signalLost===true||ppm.losses>0)};
+}
+
 export function setupInputSample(state,observedAt,at=Date.now()){
  const s=state||{},elapsed=Math.max(0,at-observedAt),source=s.selectedInput==='AUTO'?'AUTO → '+(s.inputSource||'NONE'):(s.selectedInput||'Not selected');
  const monitor=s.ppm&&['PPM','AUTO'].includes(s.selectedInput)&&(!s.inputValid||s.inputSource==='PPM');
@@ -48,16 +61,18 @@ export function setupMonitorSample(state,observedAt,kit={},at=Date.now()){
  if(!matching||!samePath)return empty;
  // Prefer the newer conservative observation, including a newer ABSENT
  // report. An old motor-status reply must not override fresh receiver loss.
- const observations=[{ppm:s.ppm,at:observedAt-transit,transitKnown:true},{ppm:kit.ppm,at:Number(kit.ppmObservedAt),transitKnown:false}]
+ const observations=[{ppm:s.ppm,at:observedAt-transit,transitKnown:true},{ppm:kit.ppm,at:kit.ppm?.observedAt??kit.ppmObservedAt,transitKnown:false}]
   .filter(o=>o.ppm&&typeof o.ppm.present==='boolean'&&Number.isFinite(o.at)&&o.at>0&&o.at<=at)
   .sort((a,b)=>b.at-a.at);
  const receiver=observations[0],known=receiver&&at-receiver.at<=PPM_OBSERVATION_MS;
+ const receiverKit={...kit,ppm:known?receiver.ppm:null,ppmObservedAt:known?receiver.at:0};
+ const evidence=ppmMonitorEvidence(receiverKit,kit.rc,kit.rcAt,at);
  const ppmSelected=['PPM','AUTO'].includes(path)&&(!s.inputValid||s.inputSource==='PPM'||path==='PPM');
  const physical=ppmSelected&&!!receiver;
  const packet=physical?{valid:known&&receiver.ppm.present,channels:receiver.ppm.channels,ageMs:receiver.ppm.ageMs}: {valid:s.inputValid===true,channels:s.channels,ageMs:s.inputAgeMs};
  const elapsed=physical?at-receiver.at:age+transit;
  const values=Array.isArray(packet.channels)&&packet.channels.length>0&&packet.channels.length<=8&&packet.channels.some(Number.isInteger)&&packet.channels.every(v=>v==null||Number.isInteger(v)&&v>=1000&&v<=2000);
- const reported=packet.valid&&values&&elapsed<=PPM_OBSERVATION_MS;
+ const reported=packet.valid&&values&&elapsed<=PPM_OBSERVATION_MS&&!(ppmSelected&&(evidence.lost||evidence.absent));
  const packetAge=Number.isFinite(packet.ageMs)&&packet.ageMs>=0?packet.ageMs:null;
  const boardFresh=packetAge!==null&&packetAge<=(physical||s.inputSource==='PPM'?150:300);
  return {...strict,reported,channels:reported?packet.channels:[],
@@ -69,8 +84,9 @@ export function setupMonitorSample(state,observedAt,kit={},at=Date.now()){
   source:physical?'PPM · receiver monitor':strict.source,
   observationAgeMs:elapsed,captureHz:known?receiver.ppm.captureHz:null,
   receiver:known?receiver.ppm:null,receiverObservedAt:known?receiver.at:0,
+  receiverLost:ppmSelected&&evidence.lost,
   monitorDelayed:reported&&elapsed>=1000,
-  receiverHealth:describePpmMonitorHealth({...kit,ppm:known?receiver.ppm:null,ppmObservedAt:known?receiver.at:0},
+  receiverHealth:describePpmMonitorHealth(receiverKit,
    {source:ppmSelected?'PPM':s.inputSource,state:'stale'},{now:at,monitorOnly:true})};
 }
 
@@ -78,15 +94,15 @@ export function setupMonitorSample(state,observedAt,kit={},at=Date.now()){
 // Receiver health is the most recent authenticated FlightCore /api/status
 // observation, explicitly age bounded. Never use this health label to make
 // an old controller frame LIVE, ARM a motor, or refresh simulator inputs.
-export function describePpmMonitorHealth(kit,input,{now=Date.now(),monitorOnly=false}={}){
+export function describePpmMonitorHealth(kit,input,{now=Date.now(),monitorOnly=false,rc=kit?.rc,rcAt=kit?.rcAt}={}){
  if(kit?.connected!==true)return 'KIT LINK OFFLINE • PPM UNVERIFIED';
  const staleRc=input?.source==='PPM'&&input?.state==='stale';
- const ppm=kit.ppm,observedAt=Number(kit.ppmObservedAt);
- const known=ppm&&typeof ppm.present==='boolean'&&Number.isFinite(observedAt)&&observedAt>0&&
-  now>=observedAt&&now-observedAt<=PPM_OBSERVATION_MS;
- if(!known)return staleRc?'PPM UNVERIFIED • RC TELEMETRY DELAYED':'PPM SIGNAL NOT VERIFIED';
- if(!ppm.present)return 'PPM SIGNAL ABSENT • CHECK RX/POWER/WIRING';
- const measured=Number(ppm.captureHz),hz=Number.isFinite(measured)&&measured>0?' '+Math.round(measured)+' Hz':'';
+ const {ppm,absent,lost}=ppmMonitorEvidence(kit,rc,rcAt,now);
+ if(lost)return 'PPM SIGNAL LOST • FLIGHTCORE REPORTED';
+ if(absent)return 'PPM SIGNAL ABSENT • WAITING FOR RECEIVER';
+ const measured=ppm?.captureHz,hz=Number.isFinite(measured)&&measured>0?' '+Math.round(measured)+' Hz':'';
+ if(!ppm?.present)return input?.source==='PPM'&&input.state==='live'?'PPM INPUT LIVE':
+  staleRc?'PPM UNVERIFIED • RC TELEMETRY DELAYED':'PPM SIGNAL NOT VERIFIED';
  if(monitorOnly)return 'PPM LAST VERIFIED'+hz;
  if(input?.source==='PPM'&&input?.state==='live')return 'PPM INPUT LIVE'+hz;
  if(staleRc)return 'PPM LAST VERIFIED'+hz+' • RC TELEMETRY DELAYED';

@@ -3,27 +3,71 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
-test('Live Inputs runs bounded 5–10Hz when visible, not the 2.2-second Kit health check',()=>{
- const live=read('js/live-inputs.js'),kit=read('js/classroom-kits.js');
- assert.match(kit,/\},2200\)/);
- assert.match(live,/const NETWORK_POLL_MS=140, UI_TICK_MS=70/);
- assert.match(live,/!inFlight&&Date\.now\(\)>=nextPollAt/);
- assert.match(live,/const interval=pidVisible\(\)\?NETWORK_POLL_MS/);
- assert.match(live,/current\.rc\?\.active===true\?ACTIVE_CONTROL_POLL_MS:NETWORK_POLL_MS/);
- assert.match(live,/nextPollAt=Math\.max\(at,startedAt\+interval\)/);
- assert.match(live,/if\(!monitoring\(\)\|\|!kit\.connected/);assert.match(live,/const monitoring=\(\)=>visible\(\)\|\|pidVisible\(\)/);
- assert.match(live,/readFailures=Math\.min\(5,readFailures\+1\)/);
- assert.match(live,/MAX_RETRY_BACKOFF_MS=2400/);
- assert.doesNotMatch(live,/\/api\/rc\/claim|\/api\/rc\/preview/);
+function rcObserver(){
+ const source=read('js/classroom-kits.js');
+ const start=source.indexOf('function adoptRcObservation('),end=source.indexOf('async function readStatus()',start);
+ let now=10000,pending=[];
+ const ctx={Date:class extends Date{static now(){return now;}},document:{hidden:false},
+  state:{transport:'sta',kitId:'ZFC-A2-123456ABCDEF',bootId:'boot-1',rcAccess:{controlPath:'PPM'}},
+  reconnectTicket:1,controlTicket:1,accessBusy:false,headerModePending:false,otaActive:false,
+  wifiTesting:false,statusPending:null,motorTrafficBusy:()=>ctx.busy===true,linkFresh:()=>ctx.link!==false,
+  $:id=>({classList:{contains:()=>id==='tab-firmware'&&ctx.visible!==false}}),
+  deviceRequest:route=>new Promise((resolve,reject)=>{
+   assert.equal(route,'/api/rc/snapshot');pending.push({resolve,reject});
+  })
+ };
+ vm.createContext(ctx);
+ vm.runInContext(read('js/control-path-policy.js'),ctx);
+ ctx.root={ZebjusControlPaths:ctx.ZebjusControlPaths,ZebjusDevicesWorkspace:{active:()=> 'inputs'}};
+ vm.runInContext(source.slice(start,end),ctx);
+ return {ctx,state:ctx.state,pending,advance:ms=>{now+=ms},read:()=>ctx.observeController(),
+  reply:(rc,index=0)=>pending.splice(index,1)[0].resolve({kitId:ctx.state.kitId,...rc,__observedAt:now})};
+}
+test('one shared RC reader is bounded and skips motor traffic, hidden tabs and status reads',async()=>{
+ const b=rcObserver();
+ const first=b.read();
+ b.advance(300);await b.read();assert.equal(b.pending.length,1);
+ b.reply({source:'PPM',active:true,seq:1,accepted:1});await first;
+ await b.read();assert.equal(b.pending.length,0,'use the recent verified observation');
+ b.advance(160);
+ b.ctx.busy=true;await b.read();b.ctx.busy=false;
+ b.ctx.document.hidden=true;await b.read();b.ctx.document.hidden=false;
+ b.ctx.statusPending={};await b.read();b.ctx.statusPending=null;
+ assert.equal(b.pending.length,0);
+ const second=b.read();
+ assert.equal(b.pending.length,1);
+ b.reply({source:'PPM',active:true,seq:8,accepted:8});await second;
+ assert.equal(b.state.rc.seq,8);
+ assert.match(read('js/classroom-kits.js'),/\},2200\)/);
+ assert.doesNotMatch(read('js/live-inputs.js'),/\/api\/rc\/(?:snapshot|claim|preview)/);
 });
-test('Link loss and AP/STA/Android Relay changes invalidate old input before a fresh same-kit snapshot',()=>{
- const live=read('js/live-inputs.js'),kit=read('js/classroom-kits.js');
- assert.match(live,/identity!==lastKit\|\|kit\.transport!==lastTransport\|\|kit\.physicalLink!==lastPhysicalLink/);
- assert.match(live,/token!==requestGeneration/);
- assert.match(live,/current\.physicalLink!==physicalLink\|\|reply\?\.kitId!==id/);
- assert.match(live,/SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800/);
- assert.doesNotMatch(live,/if\(document\.hidden\)wipe\(\)/);
- assert.match(live,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate\.reset\(\);display\(\)/);
+test('inactive selected PPM keeps observing recovery, with bounded backoff after a dropped read',async()=>{
+ const b=rcObserver();b.ctx.visible=false;
+ const lost=b.read();
+ b.reply({active:false,source:'NONE',lastReleaseReason:'PPM_SIGNAL_LOST',lastReleaseAtMs:900});await lost;
+ const releaseAt=b.state.rc.releaseObservedAt;
+ b.advance(500);
+ const repeat=b.read();
+ b.reply({active:false,source:'NONE',lastReleaseReason:'PPM_SIGNAL_LOST',lastReleaseAtMs:900});await repeat;
+ assert.equal(b.state.rc.releaseObservedAt,releaseAt,'polls do not turn a historical release into another event');
+ b.advance(500);
+ const dropped=b.read();b.pending.shift().reject(Error('dropped response'));await dropped;
+ b.advance(999);await b.read();assert.equal(b.pending.length,0);
+ b.advance(1);
+ const recovered=b.read();
+ b.reply({active:true,source:'PPM',seq:1,accepted:10});await recovered;
+ assert.equal(b.state.rc.source,'PPM');
+});
+test('late RC replies cannot cross boot, source, or connection generations',async()=>{
+ for(const change of [b=>{b.state.bootId='boot-2'},b=>{b.ctx.controlTicket++},
+  b=>{b.ctx.reconnectTicket++},b=>{b.state.transport='ap'},b=>{b.state.kitId='ZFC-A2-FFFFFFFFFFFF'}]){
+  const b=rcObserver(),old=b.read(),id=b.state.kitId;change(b);
+  b.reply({kitId:id,source:'PPM',active:true,seq:100});await old;
+  assert.equal(b.state.rc,undefined);
+  const next=b.read();b.reply({source:'PPM',active:true,seq:1});await next;
+  assert.equal(b.state.rc.seq,1);
+ }
+ const kit=read('js/classroom-kits.js');
  assert.match(kit,/if\(!linkFresh\(\)\|\|state\.working\|\|state\.owner\|\|state\.rc\?\.claimed\|\|wifiTesting\)/);
  assert.match(kit,/await beginNetworkHandover\(target/);
  assert.match(kit,/result\.kitId!==target\.kitId/);
@@ -98,7 +142,6 @@ test('minimized STA tab does not tear down selected Kit on throttled network pol
  assert.match(kit,/const HEARTBEAT_MAX_AGE=6500/);
  const inputs=read('js/live-inputs.js');
  assert.doesNotMatch(inputs,/visibilitychange',\(\)=>\{if\(document.hidden\)wipe\(\)/);
- assert.match(inputs,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate.reset\(\);display\(\)/);
  assert.match(inputs,/\['stale','reconnecting'\].includes\(kit.linkState\)/);
  assert.match(inputs,/SNAPSHOT_TTL_MS=900, INPUT_MAX_AGE_MS=400, SEQUENCE_TTL_MS=800/);
 });

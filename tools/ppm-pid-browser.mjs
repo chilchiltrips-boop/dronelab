@@ -21,26 +21,27 @@ try{
     const kitId='ZFC-'+board+'-012345ABCDEF';
     const mode={supported:true,stabilizationSupported:false,saved:'angle',active:'angle',pending:null};
     const kit={kitId,kitName:'PPM fixture '+board,board:'ZFC-'+board,version:'1.5.10',bootId:'boot-1',connected:true,
-     transport,physicalLink:transport,flightMode:'angle',flightModeState:mode,owner:false,
+     transport,physicalLink:transport,rcAccess:{controlPath:'PPM'},flightMode:'angle',flightModeState:mode,owner:false,
      motorsDisabled:true,motorsArmed:false,working:false,usbAvailable:transport==='usb'};
     const f=window.__ppmFixture={kit,seq:0,present:true,delay:false,requests:[],
      values:{throttle:1000,roll:1650,pitch:1400,yaw:1550}};
     const rc=()=>({kitId,seq:++f.seq,accepted:f.seq,source:f.present?'PPM':'NONE',transport:'PPM',ownerId:'PPM',
      active:f.present,inputValid:f.present,failsafe:!f.present,ageMs:0,inputArmed:false,
+     lastReleaseReason:f.present?'NONE':'PPM_SIGNAL_LOST',
      motorsDisabled:true,motorsArmed:false,ch5:1000,ch6:1500,...f.values,
      channels:f.present?[f.values.roll,f.values.pitch,f.values.throttle,f.values.yaw,1000,1500,1500,1500]:null});
     window.ZebjusKits.getState=()=>({...kit,heartbeatAt:Date.now()});
     window.ZebjusKits.getMonitorPaths=()=>kit.connected?[{kitId,transport,verified:true,available:true,fresh:true,permitted:true,lastPacketAt:Date.now()}]:[];
     window.ZebjusKits.request=async(path,method='GET')=>{
-     f.requests.push({path,method});
-     if(path!=='/api/rc/snapshot'||method!=='GET')throw Error('Unexpected Kit write or route '+method+' '+path);
-     if(f.delay)throw Error('Simulated temporary telemetry delay');
-     return rc();
+     f.requests.push({path,method});throw Error('Unexpected monitor request '+method+' '+path);
     };
-    if(transport==='usb')setInterval(()=>{
-     if(kit.connected&&!f.delay)window.dispatchEvent(new CustomEvent('dronelab:serial-line',{
-      detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId,flightModeState:mode,ledOn:false,rc:rc()})}}));
-    },80);
+    setInterval(()=>{
+     if(!kit.connected||f.delay)return;
+     const packet=rc();
+     if(transport==='usb')window.dispatchEvent(new CustomEvent('dronelab:serial-line',{
+      detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId,flightModeState:mode,ledOn:false,rc:packet})}}));
+     else Object.assign(kit,{rc:packet,rcAt:Date.now()});
+    },120);
    },{board,transport});
    const sim=page.frameLocator('#pidFrame');
    await sim.locator('#tpFallback').waitFor({state:'visible'});
@@ -97,7 +98,7 @@ try{
    check(await page.evaluate(()=>window.ZebjusTraining.snapshot().throttle===1000),'Polling loss cannot hold PPM throttle indefinitely');
    const result=await page.evaluate(()=>({requests:window.__ppmFixture.requests,hardwareInput:window.ZebjusTraining.hardwareInput(),reason:window.ZebjusTraining.snapshot().lastStopReason}));
    check(result.hardwareInput===null,'Simulator cannot expose a hardware output interface');
-   check(result.requests.every(r=>r.path==='/api/rc/snapshot'&&r.method==='GET'),'PPM simulator must issue only read-only snapshots');
+   check(result.requests.length===0,'PPM simulator must use shared RC observations');
    check(errors.length===0,'Browser errors: '+errors.join(' | '));
    evidence.push({board,transport,requests:result.requests.length,hardwareWrites:0,lastStop:result.reason,errors});
    console.log('PASS '+board+' PPM '+transport+': Auto/explicit source, low-throttle Run, TRPY, live PID, Stop, receiver/poll loss and no Kit writes');

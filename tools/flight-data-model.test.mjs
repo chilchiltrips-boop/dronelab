@@ -175,6 +175,27 @@ test('only explicit reported loss makes missing PPM red, and recovery replaces i
   assert.equal(recovered.rc.state, 'fresh');
 });
 
+test('a new receiver loss outranks older raw present, and repeated RC reads cannot revive a recovered loss', () => {
+  const rc = {source: 'NONE', active: false, lastReleaseReason: 'PPM_SIGNAL_LOST', releaseObservedAt: now - 20};
+  const data = buildFlightData(connected({rc, rcAt: now - 5, ppmObservedAt: now - 30}), now);
+  assert.equal(data.rc.state, 'lost');
+  assert.equal(data.rc.channels, null);
+  const recovered = buildFlightData(connected({rc, rcAt: now - 5, ppmObservedAt: now - 10}), now);
+  assert.equal(recovered.rc.state, 'idle', 'receiver presence does not grant ownership or ARM');
+  assert.equal(recovered.health.input.state, 'unknown');
+});
+
+test('fresh OFF status retains the reported failsafe reason for its own bounded observation window', () => {
+  const kit = connected({flight: {state: 'FAILSAFE', lastArmReason: 'DEADLINE_MISSED'},
+    flightObservedAt: now - 2600, outputObservedAt: now - 5});
+  const data = buildFlightData(kit, now);
+  assert.equal(data.output.fault, 'DEADLINE_MISSED');
+  assert.equal(data.output.disabled, true);
+  const expired = buildFlightData({...kit, outputObservedAt: now + 1000}, now + 1000);
+  assert.equal(expired.output.fault, null);
+  assert.equal(expired.health.output.state, 'good');
+});
+
 test('AUTO with no PPM frames displays waiting without a receiver fault or output warning', () => {
   const kit = connected();
   const data = buildFlightData(connected({

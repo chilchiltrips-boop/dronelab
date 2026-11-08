@@ -19,18 +19,22 @@ try{
   const mode={supported:true,stabilizationSupported:false,saved:'angle',active:'angle',pending:null};
   window.ZebjusKits.getState=()=>({kitId,kitName:'zebjus_drone_1',connected:true,transport:'sta',board:'ZFC-A2',
    version:f.legacy?'1.5.9':'1.5.10',heartbeatAt:Date.now(),flightMode:'angle',
-   ...(f.legacy?{}:{flightModeState:mode}),motorsDisabled:true,motorsArmed:false,ledOn:true});
+   ...(f.legacy?{}:{flightModeState:mode}),motorsDisabled:true,motorsArmed:false,ledOn:true,rc:f.rc,rcAt:f.rcAt});
   window.ZebjusKits.getMonitorPaths=()=>[{kitId,transport:'sta',verified:true,available:true,fresh:true,permitted:true,lastPacketAt:Date.now()}];
   window.ZebjusKits.request=async(route,method='GET')=>{
    f.requests.push({route,method});
-   if(route!=='/api/rc/snapshot'||method!=='GET')throw Error('Layout test attempted a hardware mutation');
-   return {kitId,seq:++f.seq,source:f.source,transport:'STA',ownerId:'layout-owner',active:f.source!=='NONE',
+   throw Error('Layout test attempted a transport request');
+  };
+  const observe=()=>{
+   f.rc={kitId,seq:++f.seq,source:f.source,transport:'STA',ownerId:'layout-owner',active:f.source!=='NONE',
     inputValid:true,failsafe:false,ageMs:f.source==='NONE'?5000:0,
     throttle:1000,roll:1500,pitch:1650,yaw:1400,ch5:1700,ch6:1200,
     ...(f.source==='PPM'?{channels:[1500,1650,1000,1400,1700,1200,1800,1300]}:{}),
     inputArmed:false,flightMode:'angle',...(f.legacy?{}:{flightModeState:mode}),
     motorsDisabled:true,motorsArmed:false,ledOn:true,accepted:f.seq,rejected:0};
+   f.rcAt=Date.now();
   };
+  observe();setInterval(observe,160);
   window.ZebjusDevicesWorkspace.open('inputs');
  });
  await page.waitForFunction(()=>document.getElementById('liKitIdentity').textContent==='ZFC-A2-41FEFF63B0E4');
@@ -100,7 +104,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('dw-body-inputs').scrollTop>0);
  await page.locator('#dw-body-inputs').evaluate(el=>el.scrollTop=el.scrollHeight);
  assert.ok(await page.locator('#liMotors').isVisible());
- assert.ok((await page.evaluate(()=>window.__monitorLayout.requests)).every(r=>r.method==='GET'&&r.route==='/api/rc/snapshot'));
+ assert.ok((await page.evaluate(()=>window.__monitorLayout.requests)).length===0);
  assert.deepEqual(errors,[]);
  console.log('PASS short-laptop wheel scrolling and read-only monitoring');
 }catch(error){await page.screenshot({path:'test-output/live-inputs/error.png',fullPage:true}).catch(()=>{});throw error}

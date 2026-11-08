@@ -60,7 +60,7 @@ function backgroundLinkPolicy(hidden,now,lastHiddenStatusAt,visibleResumedAt){
   penalize:!hidden&&(!visibleResumedAt||now-visibleResumedAt>=FOREGROUND_SETTLE_MS)};
 }
 state.heartbeatAt=0;state.linkState='disconnected';state.internet='unknown';
-state.controlAuthorized=false;state.ppm=null;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
+state.controlAuthorized=false;state.ppm=null;state.ppmObservedAt=0;state.flightObservedAt=0;state.apIp='';state.apSsid='';state.ssid='';state.hostname='';state.bootId='';state.firmwareBuiltAt='';
 let discoveryPending=null,ownOwnerId='',controlTicket=0,autoReconnectAllowed=true;
 let reconnectAttempts=0,lastRecoveryReason='NONE';
 let savedNetworks=[];
@@ -76,11 +76,18 @@ function adoptImuSample(imu,observedAt){
  state.imuSampleObservedAt=observedAt;
  state.imuSampleAgeAtObservationMs=ageMs;
 }
+function adoptPpmObservation(ppm,at){
+ if(at<state.ppmObservedAt)return;
+ state.ppm=typeof ppm?.present==='boolean'?{...ppm}:null;
+ state.ppmObservedAt=state.ppm?at:0;
+}
 function adoptNetworkStatus(d){
- if(d.bootId&&d.bootId!==state.bootId)clearImuObservation();
+ if(d.bootId&&d.bootId!==state.bootId){clearImuObservation();state.ppmObservedAt=0;}
+ const at=d.__observedAt||Date.now(),flight=root.ZebjusKitAccessPolicy?.flightState?.(d.flight)||null;
+ adoptPpmObservation(d.ppm,at);
  Object.assign(state,{flightTelemetryVersion:d.flightTelemetryVersion===1?1:0,setupAuthorized:!!d.setupAuthorized,otaAuthorized:d.otaAuthorized===true,
-  radioHandover:d.radioHandover?.version===1?{...d.radioHandover}:null,rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,ppm:d.ppm&&typeof d.ppm.present==='boolean'?{...d.ppm}:null,
-  ppmObservedAt:Date.now(),outputObservedAt:Date.now(),flight:root.ZebjusKitAccessPolicy?.flightState?.(d.flight)||null,
+  radioHandover:d.radioHandover?.version===1?{...d.radioHandover}:null,rcAccess:root.ZebjusKitAccessPolicy?.normalize?.(d.rcAccess)||null,
+  outputObservedAt:at,flight,flightObservedAt:flight?at:0,
   controlAuthorized:d.controlAuthorized===true||(d.controlAuthorized===undefined&&(state.transport==='ap'||!!state.key)),
   flightModeState:root.ZebjusKitData?.flightModeState?.(d)||null,mode:d.mode||state.mode,flightMode:['angle','acro'].includes(d.flightMode)?d.flightMode:null,version:d.version||state.version,kitName:d.kitName||d.name||state.kitName,
   apActive:!!d.apActive,apIp:d.apIp||'',apSsid:d.apSsid||'',staConnected:!!d.staConnected,staIp:d.ip||'',ssid:d.ssid||'',
@@ -488,7 +495,9 @@ async function connectUSB(code,ticket=reconnectTicket){
 const form=args=>new URLSearchParams(args||{});
 function advanceConnectionGeneration(){
  reconnectTicket++;
- clearImuObservation();state.telemetryRc=null;
+ clearImuObservation();
+ state.telemetryRc=null;state.rcObservedAt=0;state.rcReadStartedAt=0;
+ state.ppm=null;state.ppmObservedAt=0;state.flight=null;state.flightObservedAt=0;state.outputObservedAt=0;
  requestScheduler?.retire?.(reconnectTicket);
  readScheduler?.clear();
  return reconnectTicket;
@@ -546,7 +555,12 @@ async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,si
   const stop=route==='/api/rc/stop'||route==='/api/motor'&&args.action==='STOP';
   if(method==='POST'&&!stop&&boot&&session.bootId&&session.bootId!==boot)
    throw Object.assign(Error('Kit boot changed before the write; refresh verified status'),{code:'KIT_BOOT_CHANGED'});
-  try{return await session.request(route,method,args,{signal})}
+  const request=current=>{
+   if(route==='/api/rc/snapshot'&&boot&&current.bootId&&current.bootId!==boot)
+    throw Object.assign(Error('Kit rebooted; waiting for verified status'),{code:'KIT_BOOT_CHANGED'});
+   return current.request(route,method,args,{signal});
+  };
+  try{return await request(session)}
   catch(e){
    if(e.status===401)authSessions.delete(slot);
    if(e.status!==401||!local&&!admin||method!=='GET'&&!stop)throw e;
@@ -558,7 +572,7 @@ async function wifiDirectRequest(ip,key,route,method,args,expected,guard=null,si
    const renewed=await openNetworkSession(ip,expected,key,local,admin,signal);
    if(signal?.aborted)throw signal.reason||Error('Kit observation cancelled');guard?.();
    authSessions.set(slot,renewed);
-   return renewed.request(route,method,args,{signal});
+   return request(renewed);
   }
  }
  if(!safeKitHost(ip))throw Error('Use a verified private IP or safe .local host for your kit');
@@ -631,10 +645,19 @@ async function deviceRequestCore(route,method='GET',args={},guard=null){
  // A signed motor ACK from the same boot is also a hardware heartbeat. The
  // slower status poll must not disconnect an actively acknowledged bench test.
  if(route==='/api/motor'&&!data.error&&boot&&data.bootId===boot&&data.kitId===expected&&transport===state.transport){
-  state.heartbeatAt=Date.now();state.linkState='connected';pollErrors=0;
+  const at=Date.now();
+  state.heartbeatAt=at;state.linkState='connected';pollErrors=0;
+  // The raw receiver observation has its own clock. Motor replies carry no
+  // accepted RC sequence and cannot renew the accepted-stick snapshot.
+  if(typeof data.ppm?.present==='boolean')adoptPpmObservation(data.ppm,at);
   if(typeof data.motorsDisabled==='boolean')state.motorsDisabled=data.motorsDisabled;
   if(typeof data.motorsArmed==='boolean')state.motorsArmed=data.motorsArmed;
-  if(typeof data.motorsDisabled==='boolean'&&typeof data.motorsArmed==='boolean'){state.outputObservedAt=Date.now();state.flight=null;}
+  if(typeof data.motorsDisabled==='boolean'&&typeof data.motorsArmed==='boolean'){
+   state.outputObservedAt=at;
+   if(state.flight?.state!=='FAILSAFE'||data.motorsDisabled!==true){
+    state.flight=null;state.flightObservedAt=0;
+   }
+  }
  }
  guard?.();return data;
 }
@@ -786,22 +809,42 @@ function statusReadFailed(error){
 function adoptRcObservation(rc,at,started,bootId=state.bootId){
  if(!rc||started<state.rcReadStartedAt)return false;
  const previous=state.telemetryRc?.bootId===bootId?state.telemetryRc:null;
+ if(rc.lastReleaseReason==='PPM_SIGNAL_LOST'&&Number.isInteger(rc.lastReleaseAtMs)){
+  const sameRelease=previous?.rc?.lastReleaseReason===rc.lastReleaseReason&&previous.rc.lastReleaseAtMs===rc.lastReleaseAtMs;
+  rc={...rc,releaseObservedAt:sameRelease?(previous.rc.releaseObservedAt??previous.observedAt):at};
+ }
  if(started>=(previous?.started||0)&&root.ZebjusControlPaths.acceptRcObservation(previous?.rc,rc))
   state.telemetryRc={rc,observedAt:at,bootId,started};
  if(!root.ZebjusControlPaths.acceptRcObservation(state.rc,rc))return false;
  state.rc=rc;state.rcObservedAt=at;state.rcReadStartedAt=started;
  return true;
 }
-let rcReadPending=false,nextRcReadAt=0;
+const RC_MONITOR_INTERVAL_MS=160,RC_OBSERVER_BACKOFF_MS=2400;
+let rcReadPending=false,nextRcReadAt=0,rcReadFailures=0,rcObserverBinding='';
 async function observeController(){
- if(document.hidden||motorTrafficBusy()||!linkFresh()||!['ap','sta','android-relay'].includes(state.transport)||state.working||headerModePending||otaActive||wifiTesting||state.owner||rcReadPending||Date.now()<nextRcReadAt||!state.rc?.active)return;
+ if(document.hidden||motorTrafficBusy()||!linkFresh()||!['ap','sta','android-relay'].includes(state.transport)||
+    state.working||headerModePending||otaActive||wifiTesting||accessBusy||state.owner||rcReadPending||statusPending)return;
+ const visible=!$('fwKitDemoMode')?.checked&&($('tab-pid')?.classList.contains('active')||
+  $('tab-firmware')?.classList.contains('active')&&root.ZebjusDevicesWorkspace?.active?.()==='inputs');
+ if(!visible&&!state.rc?.active&&state.rcAccess?.controlPath!=='PPM')return;
  const started=Date.now(),id=state.kitId,boot=state.bootId,transport=state.transport,ticket=reconnectTicket,control=controlTicket;
- rcReadPending=true;nextRcReadAt=started+250;
+ const binding=[id,boot,transport,ticket,control].join('|');
+ if(binding!==rcObserverBinding){rcObserverBinding=binding;nextRcReadAt=0;rcReadFailures=0;}
+ const interval=visible?RC_MONITOR_INTERVAL_MS:state.rc?.active?250:500;
+ if(started<nextRcReadAt||state.rcObservedAt<=started&&started-state.rcObservedAt<interval)return;
+ const current=()=>ticket===reconnectTicket&&control===controlTicket&&id===state.kitId&&boot===state.bootId&&transport===state.transport;
+ rcReadPending=true;nextRcReadAt=started+interval;
  try{
   const rc=await deviceRequest('/api/rc/snapshot');
-  if(ticket!==reconnectTicket||control!==controlTicket||id!==state.kitId||boot!==state.bootId||transport!==state.transport||rc?.kitId!==id)return;
+  if(!current()||rc?.kitId!==id)return;
+  rcReadFailures=0;
   if(adoptRcObservation(rc,rc.__observedAt||Date.now(),started)){root.ZebjusAckDiagnostics?.observeInput?.(rc,{...state,rcAt:state.rcObservedAt});root.ZebjusControlUI?.refresh();}
- }catch{}finally{rcReadPending=false;}
+ }catch(error){
+  if(current()&&error?.code!=='SAFETY_CANCELLED'){
+   rcReadFailures=Math.min(4,rcReadFailures+1);
+   nextRcReadAt=Date.now()+Math.min(RC_OBSERVER_BACKOFF_MS,interval*2**rcReadFailures);
+  }
+ }finally{rcReadPending=false;}
 }
 async function readStatus(){
  if(!state.connected)return;
@@ -854,7 +897,7 @@ async function readStatus(){
   state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId='';
   lastRecoveryReason='BOOT_CHANGED';
  }
- adoptRcObservation(d.rc,Date.now(),statusStarted,d.bootId||state.bootId);state.version=d.version||state.version;state.mode=d.mode||state.mode;
+ adoptRcObservation(d.rc,d.__observedAt||Date.now(),statusStarted,d.bootId||state.bootId);state.version=d.version||state.version;state.mode=d.mode||state.mode;
  const wasSetupAuthorized=state.setupAuthorized;
  state.setupAuthorized=!!d.setupAuthorized;state.otaAuthorized=!!d.otaAuthorized;
  if(!wasSetupAuthorized&&state.setupAuthorized&&state.transport==='ap')setupHint('Ready: Scan Wi-Fi → select router → Test & Save → join classroom router → Scan Kits.');
@@ -1354,8 +1397,8 @@ function onSerial(e){
    state.imu=imu;root.ZebjusAckDiagnostics.observeImu(imu,state);render();
   }
   const ppm=root.ZebjusSerialRcDecoder?.parsePpmChannels?.(line);
-  if(ppm)state.ppm={present:true,ageMs:0,observedAt:Date.now()};
-  else if(line.startsWith('ZJPPM,1,LOST,'))state.ppm={present:false,signalLost:true,ageMs:null,observedAt:Date.now()};
+  if(ppm)adoptPpmObservation({present:true,ageMs:0,seq:ppm.seq,channels:ppm.channels},Date.now());
+  else if(line.startsWith('ZJPPM,1,LOST,'))adoptPpmObservation({present:false,signalLost:true,ageMs:null},Date.now());
  }
  const extension=root.ZebjusSerialRcDecoder?.parseSerialStatus?.(line);
  if(extension&&extension.kitId===usbCandidate.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()){
@@ -2224,7 +2267,7 @@ function init(){
    }
   }finally{pollBusy=false}
  },2200);
- setInterval(()=>void observeController(),100);
+ setInterval(()=>void observeController(),80);
  rcTimer=setInterval(webControls,RC_INTERVAL);
  // Recheck verified LAN hostnames and AP once per minute only when page is visible.
  setTimeout(()=>{if(!document.hidden)void restoreLastKit().catch(e=>audit('Saved kit reconnect: '+e.message,'warn')).finally(()=>{if(!state.connected&&!discovering)void discoverKits().catch(()=>{})})},450);
@@ -2540,7 +2583,7 @@ root.ZebjusKits={
   imuSampleAgeAtObservationMs:state.imuSampleAgeAtObservationMs,imuGeneration:state.imuGeneration,
   usbStatusObservedAt:usbCandidate.kitId===state.kitId&&usbCandidate.serialGeneration===serial()?.generation?.()?usbCandidate.statusAt||0:0,
   usbStatusOutputExplicit:usbCandidate.statusOutputExplicit===true,
-  telemetryRc:linkFresh()&&state.telemetryRc?.bootId===state.bootId?state.telemetryRc:null,outputObservedAt:state.outputObservedAt||0,flight:state.flight?{...state.flight}:null,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
+  telemetryRc:linkFresh()&&state.telemetryRc?.bootId===state.bootId?state.telemetryRc:null,outputObservedAt:state.outputObservedAt||0,flightObservedAt:state.flightObservedAt||0,flight:state.flight?{...state.flight}:null,owner:linkFresh()&&state.owner,rcSource:state.rcSource,rc:state.rc,radioHandover:state.radioHandover?{...state.radioHandover}:null,udp:state.udp,managementProtocol:state.managementProtocol,rcAt:state.transport==='usb'||state.owner?state.ackAt:state.rcObservedAt,physicalLink:state.physicalLink||'',mode:state.mode,flightMode:state.flightMode,flightModeState:state.flightModeState?{...state.flightModeState}:null,version:state.version,working:state.working||headerModePending,apActive:linkFresh()&&!!state.apActive,staConnected:linkFresh()&&!!state.staConnected,staIp:state.staIp||'',ip:state.ip||'',apIp:state.apIp||'',apSsid:state.apSsid||'',ssid:state.ssid||'',hostname:state.hostname||'',bootId:state.bootId||'',firmwareBuiltAt:state.firmwareBuiltAt||'',networkState:state.networkState||'',partitionLayout:state.partitionLayout||'',otaMaxBytes:state.otaMaxBytes||0,otaChunkMaxBytes:state.otaChunkMaxBytes||384,rssi:state.rssi,ledOn:state.ledOn,motorsArmed:state.motorsArmed,motorsDisabled:state.motorsDisabled,setupAuthorized:linkFresh()&&!!state.setupAuthorized,controlAuthorized:linkFresh()&&!!state.controlAuthorized,otaAuthorized:linkFresh()&&!!state.otaAuthorized,paired:pairedKeys.has(state.kitId)}),
  request:deviceRequest,requestBound:(binding,route,method='GET',args={},operationGuard=null)=>deviceRequest(route,method,args,()=>{operationGuard?.();return root.ZebjusKitData.assertBoundSession(binding,root.ZebjusKits.getState(),{allowDelayed:route==='/api/status'||route==='/api/motor'&&['STATUS','STOP'].includes(args.action)||/,(?:STOP)\s*$/.test(args.line||'')})}),pairAndAuthorizeSelectedKit,targetHardware:()=>!!$('kitHardwareTarget')?.checked,
  active:linkFresh,isConnected:linkFresh,view:goKits
 };

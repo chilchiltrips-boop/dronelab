@@ -56,7 +56,13 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    if(session===s&&(action==='KEEP'||action==='SLIDE'&&s.slideKeepsSession))s.keepAt=at;
    if(s&&session===s&&!activeModes.has(r.mode)){clearPumps();session=null;}
    return publish(value);
-  }catch(e){diagnostic('motor_error',k,action,{reason:globalThis.ZebjusAckDiagnostics?.reasonClass?.(e),__requestTiming:{queueMs:e?.queueMs,responseWaitMs:e?.responseWaitMs}},Math.max(0,now()-at),args);throw e;}
+  }catch(e){
+   // The request scheduler logs intentional STOP cancellation. A cancelled
+   // slider write did not receive a motor fault from FlightCore.
+   if(e?.code!=='SAFETY_CANCELLED')
+    diagnostic('motor_error',k,action,{reason:globalThis.ZebjusAckDiagnostics?.reasonClass?.(e),__requestTiming:{queueMs:e?.queueMs,responseWaitMs:e?.responseWaitMs}},Math.max(0,now()-at),args);
+   throw e;
+  }
   finally{inFlight--;}
  }
  async function stop(owner,{captureCalibration=false}={}){

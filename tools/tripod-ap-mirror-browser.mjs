@@ -22,12 +22,16 @@ try{
     verified:true,available:true,fresh:true}]:[];
   window.ZebjusKits.request=async(path,method='GET')=>{
    window.__pidTest.requests.push({path,method});
-   if(path!=='/api/rc/snapshot'||method!=='GET')throw Error('Unexpected hardware request '+method+' '+path);
-   if(!kit.connected)throw Error('Kit link lost');
-   const s=window.__pidTest;if(s.delay)throw Error('Read-only telemetry delayed');return {kitId:kit.kitId,source:'ANDROID',transport:'ap',
-    seq:++s.seq,active:true,inputValid:true,failsafe:false,inputArmed:s.inputArmed!==false,flightMode:s.kit.flightMode,ageMs:15,
-    ...s.channels,__observedAt:Date.now()};
+   throw Error('Unexpected monitor request '+method+' '+path);
   };
+  setInterval(()=>{
+   const s=window.__pidTest;
+   if(!kit.connected||s.delay)return;
+   kit.rc={kitId:kit.kitId,source:'ANDROID',transport:'ap',
+    seq:++s.seq,active:true,inputValid:true,failsafe:false,inputArmed:s.inputArmed!==false,flightMode:s.kit.flightMode,ageMs:15,
+    ...s.channels};
+   kit.rcAt=Date.now();
+  },160);
  });
  await page.waitForFunction(()=>window.ZebjusSimulatorInputs?.snapshot().kit?.fresh===true,null,{timeout:15000});
  const iframe=page.frameLocator('#pidFrame');
@@ -107,8 +111,8 @@ try{
   hardwareInput:window.ZebjusTraining.hardwareInput()
  }));
  check(evidence.hardwareInput===null,'PID simulator must have no hardware output interface');
- check(evidence.requests.length>2&&evidence.requests.every(r=>r.path==='/api/rc/snapshot'&&r.method==='GET'),
-  'Only authenticated diagnostic GET is allowed: '+JSON.stringify(evidence.requests));
+ check(evidence.requests.length===0,
+  'Live Inputs must not issue transport requests: '+JSON.stringify(evidence.requests));
  check(!errors.length,'Browser errors: '+errors.join(' | '));
  writeFileSync('test-output/pid-ap-mirror-evidence.json',JSON.stringify({
   requests:evidence.requests.length,lastVirtualStatus:evidence.sim.reason,
