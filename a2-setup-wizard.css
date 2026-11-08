@@ -324,3 +324,100 @@
 
 /* Input and mode remain in the existing Inputs step. */
 .a2-flight-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.a2-flight-options .a2-check-card{display:grid;gap:10px;align-content:start}.a2-flight-options select{width:100%;min-width:0}.a2-flight-options p{margin:0;overflow-wrap:anywhere}@media(max-width:680px){.a2-flight-options{grid-template-columns:1fr}}
+
+.a2-input-page .a2-input-group-title { margin:16px 0 7px; color:#b7d2df; font-size:13px; }
+.a2-input-card-grid {
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:8px;
+}
+.a2-input-card {
+ display:flex;
+ flex-direction:column;
+ align-items:center;
+ justify-content:center;
+ gap:5px;
+ min-width:0;
+ min-height:113px;
+ padding:9px 6px;
+ border:1px solid #345363;
+ border-radius:9px;
+ background:#102434;
+ color:#dbeaf0;
+ text-align:center;
+ overflow-wrap:anywhere;
+ cursor:pointer;
+}
+.a2-input-card-icon {
+ display:grid;
+ place-items:center;
+ width:42px;
+ height:42px;
+ border-radius:8px;
+ background:#1a3648;
+ color:#92d1ed;
+}
+.a2-input-card-icon svg { width:31px; height:31px; }
+.a2-input-card strong { font-size:13px; }
+.a2-input-card-detail { font-size:11px; color:#a7c2ce; }
+.a2-input-card-status { font-size:10px; color:#a0bbcb; }
+.a2-input-card:not(:disabled):hover { border-color:#71bdc7; }
+.a2-input-card[aria-pressed=true] {
+ border-color:#68d0c4;
+ box-shadow:inset 0 0 0 1px #68d0c4;
+ background:#133643;
+}
+.a2-input-card[data-saved=true] .a2-input-card-status { color:#90e7c6; }
+.a2-input-card:focus-visible { outline:2px solid #82ded9; outline-offset:2px; }
+.a2-input-card:disabled { cursor:default; }
+.a2-input-card:disabled:not([data-input-card]) {
+ opacity:1;
+ border-color:#314450;
+ background:#131f2b;
+ color:#a8bdc7;
+}
+.a2-input-card:disabled:not([data-input-card]) .a2-input-card-icon {
+ background:#23313d;
+ color:#9aaebc;
+}
+.a2-other-receivers .a2-input-card-grid { margin-top:8px; }
+.a2-input-settings-head {
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ flex-wrap:wrap;
+ gap:8px;
+}
+.a2-input-settings-head h4 { margin:0; }
+.a2-input-link {
+ padding:4px 7px;
+ border:1px solid #39566a;
+ border-radius:6px;
+ color:#b6d3e2;
+ font-size:11px;
+}
+.a2-input-source-values dl {
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:8px;
+ margin:11px 0;
+}
+.a2-input-source-values dl>div {
+ padding:8px;
+ border:1px solid #294658;
+ border-radius:6px;
+ background:#0e202e;
+}
+.a2-input-source-values dt { color:#9fbac8; font-size:11px; }
+.a2-input-source-values dd { margin:4px 0 0; overflow-wrap:anywhere; font-size:12px; }
+.a2-input-settings .a2-actions { flex-wrap:wrap; }
+@media(min-width:1000px) {
+ #a2SetupRoot[data-step="2"] .a2-columns {
+  grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);
+  align-items:start;
+ }
+ .a2-other-receivers .a2-input-card-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+}
+@media(max-width:560px) {
+ .a2-input-source-values dl { grid-template-columns:1fr; }
+}
