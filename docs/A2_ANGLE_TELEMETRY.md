@@ -128,19 +128,25 @@ loss, and fresh-arm recovery. Verify loaded build ID/hash and saved mode before
 powered testing. Preserve the published/bench rollback images. Physical evidence
 must identify the tested artifact; setup completion alone cannot certify flight.
 
-## Downloadable 1.7.21 candidate
+## Downloadable 1.7.22 candidate
 
-Firmware Center's **Load 1.7.21 Acro + Angle** action selects the separately
+Firmware Center's **Load 1.7.22 Acro + Angle** action selects the separately
 verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
-The 1.7.15 published images and 1.7.20 experimental download URLs remain intact.
+The 1.7.15 published images and 1.7.20 and 1.7.21 experimental download URLs remain available.
 
-- Compiled source: `6c668b7f22530b5d0374373bdec18e6909931688`
-- Build workflow: [42410735204](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42410735204)
-- APP build ID: `1.7.21-ZFC-A2-32d3a756696d`
-- APP SHA-256: `32d3a756696d4c89b53c78bda265323753c83e21f0be1a710d68eae52f4cda0b`
-- APP: 1,366,464 bytes; Factory: 4,194,304 bytes; both exact hashes verified.
-- Experimental compile: 69% of APP slot; globals 133,000 bytes (40%), before dynamic task/heap allocation.
+- Compiled source `1f689f83ff1656f25b8812c72d41deb14e0670b8`
+- Build workflow [42508189181](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42508189181)
+- APP build ID `1.7.22-ZFC-A2-e36353d2230b`
+- APP SHA-256 `e36353d2230b6539d8a95457eed1234c8c01f635787dfd3ac8e8f30f82c27404`
+- Verified APP and Factory sizes are 1,366,480 and 4,194,304 bytes respectively.
 - Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
+
+The control worker derives its first expected tick from timer activation. A
+missed period enters failsafe without replaying old ticks. Live Inputs and the
+Kit header share the accepted RC observation. Motor replies can update raw PPM
+health during calibration without refreshing accepted stick values. The monitor
+distinguishes delayed observations, waiting for a receiver and FlightCore-reported
+receiver loss. Flight Data shows the reported flight fault beside the output state.
 
 Host regression, source/asset validation, Wizard/PID/Android control browsers,
 16-width layout checks and actual binary import/download tests are software

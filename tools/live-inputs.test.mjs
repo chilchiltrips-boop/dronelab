@@ -71,26 +71,13 @@ test('a current HTTP reply cannot resurrect a stale firmware RC packet or frozen
  assert.equal(linkDown.state,'offline');
  assert.equal(linkDown.values,null);
 });
-test('visible polling is 5-10Hz capped, single-flight, and exponential backoff on failures',()=>{
- const js=read('js/live-inputs.js');
- const period=Number(/NETWORK_POLL_MS=(\d+)/.exec(js)?.[1]);
- assert.ok(period>=100&&period<=200,'fast monitor poll cap expected 5-10Hz');
- assert.match(js,/!inFlight&&Date\.now\(\)>=nextPollAt/);
- assert.match(js,/current\.physicalLink!==physicalLink/);
- assert.match(js,/token!==requestGeneration/);
- assert.match(js,/Math\.min\(MAX_RETRY_BACKOFF_MS,NETWORK_POLL_MS\*2\*\*readFailures\)/);
- assert.doesNotMatch(js,/if\(document\.hidden\)wipe\(\)/);
- assert.match(js,/\+\+requestGeneration;nextPollAt=0;readFailures=0;rate\.reset\(\);display\(\)/);
- assert.match(js,/sequenceAt:seqChanged\?at:prev\.sequenceAt\?\?prev\.at/);
- assert.doesNotMatch(js,/\/api\/rc\/claim|\/api\/rc\/preview/);
-});
 test('monitor can display accepted RC from a newer verified status without claiming input',()=>{
  const display=read('js/live-inputs.js'),kits=read('js/classroom-kits.js');
  assert.match(display,/function reuseVerifiedStatus\(kit\)/);
  assert.match(display,/rc\.kitId!==kit\.kitId/);
  assert.match(display,/now-at>SNAPSHOT_TTL_MS/);
  assert.match(display,/at<=Number\(sample\?\.at\|\|0\)/);
- assert.match(kits,/state\.rcObservedAt=Date\.now\(\)/);
+ assert.match(kits,/state\.rcObservedAt=at/);
  assert.match(kits,/rcAt:state\.transport==='usb'\|\|state\.owner\?state\.ackAt:state\.rcObservedAt/);
  assert.doesNotMatch(display,/\/api\/rc\/claim|\/api\/rc\/preview/);
 });
@@ -111,7 +98,7 @@ test('PPM 50 Hz receiver status remains distinct from a stale network RC snapsho
  assert.equal(describePpmMonitorHealth({...kitPpm,connected:false},stale,{now:1100}),
   'KIT LINK OFFLINE • PPM UNVERIFIED','offline link cannot claim receiver health');
  assert.equal(describePpmMonitorHealth({...kitPpm,ppm:{...kitPpm.ppm,present:false}},stale,{now:1200}),
-  'PPM SIGNAL ABSENT • CHECK RX/POWER/WIRING');
+  'PPM SIGNAL ABSENT • WAITING FOR RECEIVER');
  assert.equal(describePpmMonitorHealth(kitPpm,normalizeAcceptedInput(kitPpm,null,{now:1200}),{now:1200}),
   'PPM PRESENT 50 Hz • RC NOT SELECTED/ACCEPTED');
 });
@@ -133,8 +120,8 @@ test('Live Inputs is a standalone workspace, read-only, responsive and reachable
   'liInputArm','liLed','liMotors','liHelp'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.ok(workspace.includes("relocate('.fw-live-inputs-card','inputs')"));
  assert.ok(workspace.includes("relocate('#kitAckDiagnostics','diagnostics')"));
- assert.match(script,/request\('\/api\/rc\/snapshot'\)/);
- assert.match(script,/reply\?\.kitId!==id/);
+ assert.doesNotMatch(script,/\/api\/rc\/snapshot/);
+ assert.match(script,/rc\.kitId!==kit\.kitId/);
  assert.match(script,/ZebjusSerialRcDecoder/);
  assert.doesNotMatch(script,/\.claim\(|\.sendFrame\(|\/api\/rc\/preview|\.toggleControl\(/);
  assert.match(style,/@media\(max-width:580px\)/);

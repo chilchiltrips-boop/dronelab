@@ -72,14 +72,14 @@ function render() {
   }
   set('flight', flightLabel);
   set('mode', data.modeState ? 'Saved ' + data.modeState.saved.toUpperCase() + ' · active ' + data.modeState.active.toUpperCase() + (data.modeState.pending ? ' · pending ' + data.modeState.pending.toUpperCase() : '') : 'Saved mode unavailable');
-  set('output', output.label.startsWith('Last observed')
-    ? output.label + ' · ' + fixed(output.observedAgeMs, ' ms ago') : output.label);
+  const outputAge = output.label.startsWith('Last observed') ? fixed(output.observedAgeMs, ' ms ago') : '';
+  set('output', [output.label, output.fault, outputAge].filter(Boolean).join(' · '));
   set('loop', fixed(timing.measuredHz, ' Hz', 1));
   set('loop-detail', timing.targetHz
     ? 'Target ' + fixed(timing.targetHz, ' Hz') + (timing.dtUs ? ' · ' + fixed(timing.dtUs, ' µs') : '') + (data.telemetry ? ' · link ' + fixed(data.telemetry.roundTripMs, ' ms') : '')
     : 'Timing unavailable');
   const inputChannels = rc.channels;
-  set('rc-caption', inputChannels ? 'Accepted input · ' + fixed(rc.ageMs, ' ms ago') : 'Accepted input');
+  set('rc-caption', inputChannels ? (rc.state === 'delayed' ? 'Last accepted input' : 'Accepted input') + ' · ' + fixed(rc.ageMs, ' ms ago') : 'Accepted input');
   for (const [i, channel] of ['roll', 'pitch', 'throttle', 'yaw'].entries()) {
     set('rc-' + channel, fixed(inputChannels?.[i], ' µs'));
   }

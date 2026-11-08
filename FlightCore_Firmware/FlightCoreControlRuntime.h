@@ -71,6 +71,7 @@ static uint32_t zjQueueImuAction(ZjImuAction action,uint8_t face){
 }
 static TaskHandle_t zjControlTaskHandle=nullptr,zjImuTaskHandle=nullptr;
 static esp_timer_handle_t zjControlTimer=nullptr,zjImuTimer=nullptr;
+static uint32_t zjControlTimerStartedUs=0;
 // TASK dispatch, never ISR: notify only. Both callbacks share esp_timer with
 // the motor watchdog, so I2C and all computation run in separate workers.
 static void zjControlWake(void*){xTaskNotifyGive(zjControlTaskHandle);}
@@ -172,8 +173,8 @@ static void zjTraceDriver(ZjRateTraceSample& trace,const ZjFlightDriverState& dr
  }
 }
 static void zjControlTask(void*){
- const uint32_t started=micros();
- ZjControlScheduler control;control.start(started);
+ uint32_t started=0;
+ ZjControlScheduler control;
  ZjRatePidState pid[3]={};
  ZjAnglePidState outer[2]={};
  ZjRateShadowResult previous;
@@ -188,6 +189,12 @@ static void zjControlTask(void*){
  };
  for(;;){
   ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+  if(!control.started){
+   portENTER_CRITICAL(&zjTimingMux);
+   started=zjControlTimerStartedUs;
+   portEXIT_CRITICAL(&zjTimingMux);
+   control.start(started);
+  }
   const auto previousWorst=control.maxIntervalUs,previousMissed=control.missedTicks;
   if(!control.begin(micros()))continue;
 
@@ -400,7 +407,14 @@ static void zjControlRuntimeSetup(){
  esp_timer_create_args_t imu={};imu.callback=zjImuWake;imu.name="zj-imu-wake";imu.skip_unhandled_events=true;
  if(ok)ok=esp_timer_create(&tick,&zjControlTimer)==ESP_OK;
  if(ok)ok=esp_timer_create(&imu,&zjImuTimer)==ESP_OK;
- if(ok)ok=esp_timer_start_periodic(zjControlTimer,4000)==ESP_OK;
+ if(ok){
+  // The worker can start before timer setup completes. Take the epoch at
+  // timer activation to keep that setup time out of every tick's budget.
+  portENTER_CRITICAL(&zjTimingMux);
+  zjControlTimerStartedUs=micros();
+  ok=esp_timer_start_periodic(zjControlTimer,ZjControlScheduler::PERIOD_US)==ESP_OK;
+  portEXIT_CRITICAL(&zjTimingMux);
+ }
  if(ok)ok=esp_timer_start_periodic(zjImuTimer,1000)==ESP_OK;
  zjControlRuntimeReady=ok;
  if(ok)zjFlightRevokeHandler=zjControlRevoke;

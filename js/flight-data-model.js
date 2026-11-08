@@ -1,5 +1,5 @@
 import './flight-telemetry.js';
-import {isOlderReceiverCounter, parseReceiverSnapshot, PPM_OBSERVATION_MS} from './input-monitor.js';
+import {isOlderReceiverCounter, parseReceiverSnapshot, ppmMonitorEvidence, PPM_OBSERVATION_MS} from './input-monitor.js';
 
 const usbObservationMs = 2500;
 // Presentation windows only. Network status is polled every 2200 ms; motor
@@ -53,13 +53,9 @@ function inputSnapshot(kit, connected, now) {
   const observationAgeMs = connected ? observationAge(observedAt, now) : null;
   const frame = parseReceiverSnapshot(rc);
   const source = controllerSources.includes(rc?.source) ? rc.source : null;
-  const ppmObservedAt = kit.ppm?.observedAt ?? kit.ppmObservedAt;
-  const ppmAge = observationAge(ppmObservedAt, now);
-  const ppm = connected && within(ppmAge, PPM_OBSERVATION_MS) ? kit.ppm : null;
-  const ppmPresent = bool(ppm?.present);
-  const newPpmLoss = ppm?.signalLost === true && (!observedAt || ppmObservedAt >= observedAt);
+  const ppm = ppmMonitorEvidence({...kit, connected}, rc, observedAt, now);
   const active = source !== null && rc.active === true && rc.inputValid !== false &&
-    rc.failsafe !== true && (!rc.receiver || frame?.valid === true) && !(source === 'PPM' && newPpmLoss);
+    rc.failsafe !== true && (!rc.receiver || frame?.valid === true) && !(source === 'PPM' && (ppm.lost || ppm.absent));
   const boardAgeMs = number(rc?.ageMs);
   const ageMs = active && boardAgeMs !== null && observationAgeMs !== null ? boardAgeMs + observationAgeMs : null;
   const sequence = counter(frame?.sequence ?? rc?.seq) && active ? frame?.sequence ?? rc.seq : null;
@@ -69,10 +65,9 @@ function inputSnapshot(kit, connected, now) {
   ] : null;
   if (frame?.valid && channels) channels = [...frame.channels];
   if (channels?.slice(0, 4).includes(null)) channels = null;
-  const releaseReason = newPpmLoss ? 'PPM_SIGNAL_LOST'
+  const releaseReason = ppm.lost ? 'PPM_SIGNAL_LOST'
     : within(observationAgeMs, limit) ? reason(rc?.lastReleaseReason) : null;
-  const lost = releaseReason === 'PPM_SIGNAL_LOST' &&
-    ppmPresent !== true && !active && [null, 'AUTO', 'PPM'].includes(selectedPath);
+  const lost = ppm.lost && !active && [null, 'AUTO', 'PPM'].includes(selectedPath);
   let state = 'unknown';
   let health = healthRow('unknown', 'Input unconfirmed');
   if (lost) {
@@ -82,18 +77,18 @@ function inputSnapshot(kit, connected, now) {
     within(observationAgeMs, usb ? 1000 : 2500)) {
     state = 'fresh';
     health = healthRow('good', source + ' accepted', 'FlightCore reported a valid receiver frame in the latest observation.');
+  } else if (ppm.absent && (selectedPath === 'PPM' || selectedPath === 'AUTO' && !source && !rc?.claimed)) {
+    state = 'waiting';
+    health = healthRow('warning', 'PPM no signal', 'Waiting for PPM frames. FlightCore has no live receiver channels.');
   } else if (active || observationAgeMs !== null && !within(observationAgeMs, limit)) {
     state = 'delayed';
     health = healthRow('warning', 'Input observation delayed', 'Browser observation age does not confirm receiver loss.');
-  } else if (ppmPresent === false && (selectedPath === 'PPM' || selectedPath === 'AUTO' && !source && !rc?.claimed)) {
-    state = 'waiting';
-    health = healthRow('warning', 'PPM no signal', 'Waiting for PPM frames. FlightCore has no live receiver channels.');
   } else if (within(observationAgeMs, limit)) {
     state = 'idle';
     health = healthRow('unknown', 'No active input', 'FlightCore has no active accepted receiver frame.');
   }
-  const inputArmed = lost || newPpmLoss && source === 'PPM' ? false
-    : within(observationAgeMs, limit) ? bool(rc?.inputArmed) : null;
+  const inputArmed = lost ? false
+    : !(source === 'PPM' && ppm.absent) && within(observationAgeMs, limit) ? bool(rc?.inputArmed) : null;
   return {
     rc: {selectedPath, source, state, ageMs, boardAgeMs, observationAgeMs, sequence, channels,
       inputArmed, releaseReason},
@@ -108,9 +103,11 @@ function outputSnapshot(kit, connected, now) {
   const observedAt = usb ? kit.usbStatusObservedAt : kit.outputObservedAt;
   const observedAgeMs = connected ? observationAge(observedAt, now) : null;
   const observed = within(observedAgeMs, usb ? usbObservationMs : PPM_OBSERVATION_MS);
+  const flightAge = connected ? observationAge(kit.flightObservedAt ?? kit.outputObservedAt, now) : null;
+  const flight = observed && !usb && within(flightAge, PPM_OBSERVATION_MS) ? kit.flight ?? null : null;
+  const displayAge = flight ? Math.max(observedAgeMs, flightAge) : observedAgeMs;
   const fresh = kit.linkState === 'connected' &&
-    within(observedAgeMs, usb ? usbOutputDisplayMs : networkOutputDisplayMs);
-  const flight = observed && !usb ? kit.flight ?? null : null;
+    within(displayAge, usb ? usbOutputDisplayMs : networkOutputDisplayMs);
   const flags = usb ? usbFlags : kit;
   const benchArmed = observed ? bool(flags?.motorsArmed) : null;
   const flightArmed = flight?.state === 'ARMED' && flight.authorized === true;
@@ -118,9 +115,10 @@ function outputSnapshot(kit, connected, now) {
   // Compact USB fields describe the bench session. They omit both flight
   // ownership and the driver's PWM OFF acknowledgement.
   const disabled = observed && !usb ? bool(flags?.motorsDisabled) : null;
+  const fault = flight?.state === 'FAILSAFE' && flight.lastArmReason !== 'NONE' ? reason(flight.lastArmReason) : null;
   let health = healthRow('unknown', 'Output unconfirmed', 'Waiting for a fresh FlightCore output status.');
   if (flight?.state === 'FAILSAFE') {
-    health = healthRow('error', disabled ? 'Failsafe · output off' : 'Failsafe', reason(flight.lastArmReason) || '');
+    health = healthRow('error', disabled ? 'Failsafe · output off' : 'Failsafe', fault || '');
   } else if (armed === true && disabled === true) {
     health = healthRow('error', 'Conflicting output status', 'FlightCore reported simultaneous arm and output disabled.');
   } else if (flightArmed) {
@@ -137,7 +135,7 @@ function outputSnapshot(kit, connected, now) {
     const detail = [health.detail, 'Waiting for an updated FlightCore output status.'].filter(Boolean).join(' ');
     health = healthRow(state, 'Last observed · ' + health.label, detail);
   }
-  return {output: {label: health.label, armed, disabled, fresh, observedAgeMs}, flight, health};
+  return {output: {label: health.label, armed, disabled, fresh, observedAgeMs:displayAge, fault}, flight, health};
 }
 
 export function buildFlightData(kit = {}, now = Date.now()) {
@@ -148,7 +146,13 @@ export function buildFlightData(kit = {}, now = Date.now()) {
   if (compact) {
     // Only this read-only presentation copy is enriched. Motor/maintenance
     // authorization continues to consume the original verified Kit state.
-    kit = {...kit, compactFlightObservation: true,
+    const output = compact.observedAt >= (kit.outputObservedAt || 0) ? {
+      compactFlightObservation: true, outputObservedAt: compact.observedAt, flightObservedAt: compact.observedAt,
+      motorsDisabled: compact.offAck, motorsArmed: compact.owner === 2 || compact.owner === 3 && compact.authorized,
+      flight: {...kit.flight, state: compact.state, authorized: compact.authorized, lastArmReason: compact.reason},
+      flightMode: compact.flightModeState.active, flightModeState: compact.flightModeState
+    } : {};
+    kit = {...kit, ...output,
       imu: {...kit.imu, board: 'A2', state: compact.valid ? 'READY' : kit.imu?.state || 'READY',
         configValid: compact.valid, dataReady: compact.valid, imuValid: compact.valid,
         sampleSequence: compact.sampleSequence, corrected: compact.rates, accelG: compact.gravity,
@@ -157,10 +161,7 @@ export function buildFlightData(kit = {}, now = Date.now()) {
         controlHealth: compact.deadlineFault ? 'LATE' : compact.dtUs >= 1000 && compact.dtUs <= 8000 ? 'HEALTHY' : 'STARTING'},
       imuObservedAt: compact.observedAt, imuSampleObservedAt: raw.sampleObservedAt,
       imuSampleAgeAtObservationMs: compact.ageUs / 1000,
-      imuTimingObservedAt: compact.observedAt, outputObservedAt: compact.observedAt,
-      motorsDisabled: compact.offAck, motorsArmed: compact.owner === 2 || compact.owner === 3 && compact.authorized,
-      flight: {...kit.flight, state: compact.state, authorized: compact.authorized, lastArmReason: compact.reason},
-      flightMode: compact.flightModeState.active, flightModeState: compact.flightModeState};
+      imuTimingObservedAt: compact.observedAt};
   }
   const connected = kit.connected === true && kit.linkVerified === true && kit.board === 'ZFC-A2' &&
     /^ZFC-A2-[A-Fa-f0-9]{12}$/.test(kit.kitId) && supportedTransports.includes(kit.transport);

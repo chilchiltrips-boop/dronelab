@@ -45,9 +45,15 @@ try{
    flightMode:kit.flightMode,flightModeState:{...mode},motorsDisabled:true,motorsArmed:false});
   window.ZebjusKits.getState=()=>({...kit,heartbeatAt:Date.now()});
   window.ZebjusKits.getMonitorPaths=()=>kit.connected?[{kitId,transport:kit.transport,verified:true,available:true,fresh:true,permitted:true,lastPacketAt:Date.now()}]:[];
-  window.ZebjusKits.request=async(route,method='GET')=>{f.requests.push({route,method});if(route!=='/api/rc/snapshot'||method!=='GET')throw Error('Unexpected hardware operation');return rc()};
-  setInterval(()=>{if(kit.connected&&kit.transport==='usb')window.dispatchEvent(new CustomEvent('dronelab:serial-line',{
-   detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId,flightModeState:{...mode},ledOn:true,ledEffect:1,rc:rc()})}}))},80);
+  window.ZebjusKits.request=async(route,method='GET')=>{f.requests.push({route,method});throw Error('Unexpected monitor request');};
+  // Simulate observations from the Kit's shared authenticated reader.
+  setInterval(()=>{
+   if(!kit.connected)return;
+   const packet=rc();
+   if(kit.transport==='usb')window.dispatchEvent(new CustomEvent('dronelab:serial-line',{
+    detail:{transport:'usb',line:'ZJSTATE,1,'+JSON.stringify({kitId,flightModeState:{...mode},ledOn:true,ledEffect:1,rc:packet})}}));
+   else Object.assign(kit,{rc:packet,rcAt:Date.now()});
+  },120);
  });
  const sim=page.frameLocator('#pidFrame');
  await sim.locator('#tpFallback').waitFor({state:'visible'});
@@ -142,7 +148,7 @@ try{
  await page.waitForFunction(()=>!window.ZebjusTraining.snapshot().armed,null,{timeout:5000});
  await page.evaluate(()=>window.__statusFixture.kit.connected=true);
  check(!(await page.evaluate(()=>window.ZebjusTraining.snapshot().armed)),'Telemetry restarted virtual motors');
- check((await page.evaluate(()=>window.__statusFixture.requests)).every(r=>r.method==='GET'),'Simulator wrote to hardware');
+ check((await page.evaluate(()=>window.__statusFixture.requests)).length===0,'Live Inputs must consume shared observations without transport requests');
  check(errors.length===0,'Browser errors: '+errors.join(' | '));
  await page.screenshot({path:outputDir+'/usb.png',fullPage:true});
  const trace=await page.evaluate(()=>window.__inputTrace||[]);
