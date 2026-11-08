@@ -239,9 +239,60 @@
 .a2-imu-offset-grid input[aria-invalid=true]{border-color:#e38c8f}
 .a2-imu-manual-note{font-size:11px;line-height:1.45;color:#93afbe;margin:5px 0}
 .a2-imu-manual-warning{color:#f1af9a!important;min-height:0;margin:3px 0;font-size:11px!important}
-.a2-imu-face-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
-.a2-imu-face-row label{flex:1;min-width:130px}
-.a2-imu-face-row select{width:100%;margin-top:4px}
+.a2-imu-pose-list {
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:6px;
+ list-style:none;
+ padding:0;
+ margin:10px 0;
+}
+.a2-imu-pose-list li {
+ display:flex;
+ align-items:center;
+ gap:7px;
+ min-width:0;
+ padding:7px;
+ border:1px solid #294a5e;
+ border-radius:7px;
+ color:#b5d6df;
+ font-size:12px;
+}
+.a2-imu-pose-list li[data-pose-state=current] {
+ background:#153b47;
+ border-color:#67c7d5;
+ color:#e2f9ff;
+}
+.a2-imu-pose-list li[data-pose-state=captured] {
+ background:#113a31;
+ border-color:#408f76;
+ color:#92e8c6;
+}
+.a2-imu-pose-number { font:600 12px ui-monospace,monospace; }
+.a2-imu-pose-list small { display:block; margin-top:2px; color:#9ec0ce; }
+.a2-imu-pose-done { margin-left:auto; font-weight:700; }
+.a2-imu-pose-target {
+ display:flex;
+ align-items:center;
+ gap:12px;
+ padding:9px;
+ border-radius:8px;
+ background:#0c1f2d;
+}
+.a2-imu-axis-up {
+ flex:none;
+ padding:8px;
+ border:1px solid #407c8a;
+ border-radius:6px;
+ color:#85e1e6;
+ font:700 14px ui-monospace,monospace;
+}
+.a2-imu-pose-target strong { font-size:13px; color:#e3f0f5; }
+.a2-imu-pose-target p { margin-bottom:0; }
+.a2-imu-guide-status { font-size:12px; color:#c5e7ee; }
+@media(max-width:760px) {
+ .a2-imu-pose-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 .a2-imu-page details.a2-input-details{margin-top:8px}
 .a2-imu-page .a2-page-save{margin:6px 0}
 .a2-imu-viz-root{display:flex;flex-direction:column;gap:8px;align-items:stretch;width:100%}

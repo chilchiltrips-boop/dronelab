@@ -13,6 +13,15 @@ if(root){
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const defaults=()=>({layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW']});
  const axes=['+X','−X','+Y','−Y','+Z','−Z'];
+ const accelPoses=[
+  {face:4,label:'Level',hint:'Rest the frame upright on a flat surface.'},
+  {face:2,label:'+Y side',hint:'Rest the frame on its side with the sensor’s +Y axis pointing up.'},
+  {face:3,label:'−Y side',hint:'Turn to the opposite side with the sensor’s −Y axis pointing up.'},
+  {face:1,label:'Nose down',hint:'Point the sensor’s −X axis up. With +X facing forward, the nose points down.'},
+  {face:0,label:'Nose up',hint:'Point the sensor’s +X axis up. With +X facing forward, the nose points up.'},
+  {face:5,label:'Upside down',hint:'Turn the frame over with the sensor’s −Z axis pointing up.'}
+ ];
+ const allAccelPoses=0x3f;
  const manualAxis=['X','Y','Z'];
  const modelParts=record=>{
   const code=String(record||''),[base,manualSuffix]=code.split(':M:');
@@ -51,6 +60,7 @@ if(root){
  let lastStateAt=0,historyAt=0,polling=false,working='',readError='',operationError='',nextPollAt=0,readFailures=0;
  let calMotor=1,calAll=false,calTarget=1000,activeRun=null,operation=0;
  let escDraft=false,escAttempt=false,accelAction='KEEP',captureRequest=null,saveState='',ambiguousSave=null,conflict=false;
+ let accelGuide=null;
  let manualOffsets=[0,0,0],manualEditing=false,manualLoadedModel='',manualError='',imuHistory=[],imuHistorySeq=0;
  let visualStep=-1,visualMarkup='',autoPrepareIntent=null,lastAutoAttempt='',loadedPid=null;
  let readiness=null,readinessError='',readingReadiness=false;
@@ -97,24 +107,40 @@ if(root){
  <section data-panel="${IMU}" class="a2-imu-page">
  <div class="a2-imu-heading"><h3>ACC / Gyro Calibration</h3><span class="a2-imu-badge">MPU6050 · 0x68 · 250 Hz target</span></div>
  <p class="a2-imu-access" role="status"></p>
- <label class="a2-check"><input type="checkbox" id="a2Still"> Board stationary for calibration / capture</label>
  <div class="a2-imu-card">
   <div class="a2-imu-card-head"><strong>1. Gyroscope zero-bias</strong><small>Automatic on boot · 2000 samples</small></div>
   <p class="a2-imu-manual-note">Keep the board still until the gyro is ready. Recalibrate here if the board moved at power-on. The FC measures the bias again at each boot.</p>
+  <label class="a2-check"><input type="checkbox" id="a2Still" data-imu-still> Frame is stationary</label>
   <progress class="a2-gyro-progress" max="2000" value="0" aria-label="Gyroscope calibration progress"></progress>
   <p class="a2-gyro-status" role="status">Waiting for verified IMU</p>
   <table class="a2-imu-table" aria-label="Gyroscope values in degrees per second"><thead><tr><th>Axis</th><th>Raw °/s</th><th>Bias °/s</th><th>Corrected °/s</th></tr></thead>
    <tbody>${['X / Roll','Y / Pitch','Z / Yaw'].map((axis,i)=>`<tr><td>${axis}</td><td data-gyro-raw="${i}">—</td><td data-gyro-bias="${i}">—</td><td data-gyro-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
   <div class="a2-actions"><button class="btn" data-action="imu-gyro">Calibrate Gyro</button><button class="btn ghost" data-action="imu-cancel">Cancel</button><button class="btn ghost" data-action="imu-reset">Clear gyro bias</button></div>
  </div>
+ <div class="a2-imu-card a2-imu-guide">
+  <div class="a2-imu-card-head"><strong>2. Accelerometer calibration</strong><small>Guided six-position fit</small></div>
+  <p class="a2-imu-manual-note">Remove propellers before turning the frame. Hold each pose still and capture it. Save the fit after the FC accepts all six poses.</p>
+  <ol class="a2-imu-pose-list" aria-label="Accelerometer calibration poses">${accelPoses.map((pose,i)=>`<li data-pose-face="${pose.face}"><span class="a2-imu-pose-number">${i+1}</span><span>${pose.label}<small>${axes[pose.face]} up</small></span><span class="a2-imu-pose-done" hidden aria-label="Captured">✓</span></li>`).join('')}</ol>
+  <div class="a2-imu-pose-target" hidden>
+   <span class="a2-imu-axis-up" aria-hidden="true">↑ <b data-pose-axis></b></span>
+   <div><strong data-pose-title></strong><p class="a2-imu-manual-note" data-pose-hint></p></div>
+  </div>
+  <p class="a2-imu-guide-status" role="status"></p>
+  <div class="a2-actions">
+   <button class="btn" data-action="imu-start">Start six-position calibration</button>
+   <button class="btn" data-action="imu-face" hidden>Capture pose</button>
+   <button class="btn ghost" data-action="imu-clear" hidden>Cancel captures</button>
+  </div>
+ </div>
  <div class="a2-imu-card">
-  <div class="a2-imu-card-head"><strong>2. Accelerometer Quick Level</strong><small>Required for Angle</small></div>
-  <p class="a2-imu-manual-note">Put the frame on a level surface with +Z up. Confirm it is stationary, capture Quick Level, then save the ACC calibration to the FC.</p>
+  <div class="a2-imu-card-head"><strong>3. Level Horizon</strong><small>Quick Level trim · required for Angle</small></div>
+  <p class="a2-imu-manual-note">Put the assembled frame in its level flying position with +Z up. Capture level and save the trim on the FC. Repeat after saving a new six-position fit.</p>
+  <label class="a2-check"><input type="checkbox" id="a2LevelStill" data-imu-still> Frame is level and still</label>
   <div class="a2-actions"><button class="btn" data-action="imu-level">Quick Level (+Z)</button></div>
   <p class="a2-capture-status" role="status"></p>
   ${pageStatus(IMU)}
  </div>
- <details class="a2-input-details" id="a2AdvancedAccel"><summary>Advanced ACC calibration · manual offsets and six faces</summary>
+ <details class="a2-input-details" id="a2AdvancedAccel"><summary>Advanced ACC calibration · manual offsets</summary>
  <div class="a2-imu-card">
   <div class="a2-imu-card-head"><strong>Accelerometer XYZ</strong><small>Manual offset · g</small></div>
   <p class="a2-imu-manual-note">Enter the bias to subtract in g, from −0.250 to +0.250. After changing offsets, capture and save Quick Level for Angle.</p>
@@ -126,13 +152,6 @@ if(root){
   <tbody>${['X','Y','Z'].map((axis,i)=>`<tr><td>Acc${axis}</td><td data-accel-raw="${i}">—</td><td data-accel-fitted="${i}">—</td><td data-accel-corrected="${i}">—</td></tr>`).join('')}</tbody></table>
   <div class="a2-actions"><button class="btn ghost" data-action="imu-zero-manual">Zero manual offsets</button><button class="btn ghost" data-action="imu-restore-manual">Restore saved</button></div>
   <p class="a2-imu-manual-note" data-imu-manual-status>Edited values are a preview until the FC verifies the save.</p>
- </div>
- <div class="a2-imu-card">
-  <div class="a2-imu-card-head"><strong>Full six-position calibration</strong><small>Optional axis fit</small></div>
-  <p class="a2-imu-manual-note">Capture all six faces to fit axis offsets and scale. Save the fit, then capture and save Quick Level again for Angle.</p>
-  <div class="a2-imu-face-row"><label for="a2Face">Face up <select id="a2Face">${axes.map((axis,i)=>`<option value="${i}" ${i===4?'selected':''}>${axis} up</option>`).join('')}</select></label>
-   <div class="a2-actions"><button class="btn" data-action="imu-face">Capture face</button><button class="btn ghost" data-action="imu-clear">Clear captures</button></div>
-  </div>
  </div>
  </details>
  <details class="a2-input-details"><summary>Advanced IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
@@ -258,7 +277,7 @@ if(root){
   draft=defaults();minimums=[null,null,null,null];loadedPid=null;loadWiring();
   calMotor=1;calAll=false;setCalPulse(1000);
   lastStateAt=historyAt=nextPollAt=readFailures=0;history.length=0;
-  activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=null;
+  activeRun=null;escDraft=escAttempt=false;accelAction='KEEP';captureRequest=accelGuide=null;
   manualOffsets=[0,0,0];manualEditing=false;manualLoadedModel='';manualError='';imuHistory=[];imuHistorySeq=0;
   conflict=false;saveState=readError=operationError='';ambiguousSave=null;autoPrepareIntent=null;lastAutoAttempt='';
   visited.clear();visited.add(0);
@@ -274,7 +293,7 @@ if(root){
    // Preserve editable values for the same boot. Retire transport-bound
    // proofs and do not enable any write until a new verified status arrives.
    ++operation;state=saved=null;lastStateAt=nextPollAt=0;activeRun=null;
-   escAttempt=false;captureRequest=null;
+   escAttempt=false;captureRequest=accelGuide=null;
    if(escDraft===true)escDraft=false;
    if(accelAction.startsWith('CAPTURED:'))accelAction='KEEP';
    root.querySelectorAll('input[type="checkbox"]').forEach(input=>input.checked=false);
@@ -329,15 +348,58 @@ if(root){
   if(ambiguousSave&&s.wizardVersion===1&&!working)checkSaveReadback(s);
   render();
  }
+ function nextAccelPose(){
+  if(!accelGuide||accelGuide.restart)return null;
+  return accelPoses.find(pose=>!(accelGuide.mask&(1<<pose.face)))||null;
+ }
+ function startAccelGuide(){
+  accelAction='KEEP';
+  accelGuide={mask:0,error:'',restart:false};
+ }
+ function captureFailure(state){
+  const reasons={
+   WRONG_ORIENTATION:'Point the requested sensor axis up and retry this pose.',
+   MOVING_OR_INVALID:'Motion or invalid samples detected. Hold the frame still and retry.',
+   UNSTABLE:'Samples varied during capture. Rest the frame securely and retry.',
+   GRAVITY_OUT_OF_RANGE:'Gravity check failed. Rest the frame still and retry.',
+   FIT_OUT_OF_RANGE:'The six-position fit is outside the allowed range.',
+   FIT_RESIDUAL:'The six-position readings do not agree.',
+   IMU_NOT_READY:'Wait for fresh gyro and accelerometer readings before retrying.',
+   TIMEOUT:'Capture timed out. Hold the frame still and retry.'
+  };
+  return reasons[state]||'The FC did not verify this capture.';
+ }
  function updateCapture(capture){
-  if(!captureRequest?.sequence)return;
-  if(capture?.sequence!==captureRequest.sequence){
-   if(Date.now()-captureRequest.at>7000)captureRequest=null;
+  const request=captureRequest;
+  if(!request||capture?.sequence!==request.sequence||capture.running)return;
+  captureRequest=null;
+  if(request.action==='imu-start'||request.action==='imu-clear'){
+   if(capture.state!=='IDLE'||capture.mask!==0||capture.ready){
+    operationError='The FC did not confirm that the temporary captures were cleared.';
+    return;
+   }
+   if(request.action==='imu-start')startAccelGuide();
+   else{accelAction='KEEP';accelGuide=null;}
    return;
   }
-  if(capture.running)return;
-  if(capture.ready&&capture.model&&capture.state==='CAPTURED')accelAction='CAPTURED:'+capture.model;
-  captureRequest=null;
+  const model=modelParts(capture.model);
+  const fitted=capture.state==='CAPTURED'&&capture.ready===true&&model;
+  if(request.action==='imu-level'){
+   if(fitted&&model.level)accelAction='CAPTURED:'+capture.model;
+   else operationError=captureFailure(capture.state);
+   return;
+  }
+  if(!accelGuide)return;
+  const mask=accelGuide.mask|(1<<request.face),complete=mask===allAccelPoses;
+  const accepted=complete?fitted&&model.six&&!model.level:capture.state==='FACE_CAPTURED'&&capture.ready===false;
+  if(capture.mask===mask&&accepted){
+   accelGuide.mask=mask;
+   accelGuide.error='';
+   if(complete)accelAction='CAPTURED:'+capture.model;
+  }else{
+   accelGuide.error=captureFailure(capture.state);
+   accelGuide.restart=capture.mask!==accelGuide.mask;
+  }
  }
  function renderVisual(){
   const scene=$('.a2-visual-scene'),input=selectedInput();
@@ -367,7 +429,8 @@ if(root){
    const model=modelParts(saved?.accelModel),fresh=imuFresh(),imu=saved?.imu||{};
    const sample=fresh?correctedAcceleration(imu.accelRawG,model,manualOffsets):null;
    const history=imuHistory.map(raw=>correctedAcceleration(raw,model,manualOffsets)).filter(Boolean);
-   updateImuCalibrationVisual(scene,sample,Number($('#a2Face').value),saved?.capture?.mask||0,history);
+   const mask=accelGuide?.mask??(model?.six&&boardReady()?allAccelPoses:0);
+   updateImuCalibrationVisual(scene,sample,nextAccelPose()?.face??4,mask,history);
   }
   if(step===1||motorStep)updateMotorDiagram(scene,draft,motorStep?safe.pulseUs:[],motorStep&&testing,{
    selectedMask:motorStep?selectedMask:0,preview:step===1,interactive:false,locked:!!working||motorClient.busy,
@@ -378,6 +441,15 @@ if(root){
  }
  function imuFresh(){
   return saved?.imu?.imuValid===true&&Date.now()-(saved.receivedAt||0)<1600;
+ }
+ function gyroCalibrating(){
+  return saved?.imu?.manualGyro||['SETTLING','CALIBRATING'].includes(saved?.imu?.state);
+ }
+ function imuCaptureReady(){
+  return imuFresh()&&!gyroCalibrating()&&!saved?.capture?.running&&!captureRequest;
+ }
+ function clearImuConfirmations(){
+  root.querySelectorAll('[data-imu-still]').forEach(input=>input.checked=false);
  }
  function gyroStatus(){
   const state=saved?.imu?.state;
@@ -408,9 +480,49 @@ if(root){
    return 'Disarm the input and lower throttle before calibrating.';
   return '';
  }
+ function renderAccelGuide(capture,model,ready,put){
+  const pose=nextAccelPose(),confirmedFit=model?.six&&boardReady()&&saved.configValid;
+  const mask=accelGuide?.mask??(confirmedFit?allAccelPoses:0);
+  const count=accelPoses.filter(item=>mask&(1<<item.face)).length;
+  for(const item of accelPoses){
+   const row=$('[data-pose-face="'+item.face+'"]'),done=!!(mask&(1<<item.face));
+   row.dataset.poseState=done?'captured':item===pose?'current':'waiting';
+   row.setAttribute('aria-current',item===pose?'step':'false');
+   row.querySelector('.a2-imu-pose-done').hidden=!done;
+  }
+  $('.a2-imu-pose-target').hidden=!pose;
+  if(pose){
+   put('[data-pose-axis]',axes[pose.face]);
+   put('[data-pose-title]',`Pose ${count+1} of 6 · ${pose.label}`);
+   put('[data-pose-hint]',pose.hint+' Hold it still, then capture.');
+  }
+  const start=$('[data-action="imu-start"]'),face=$('[data-action="imu-face"]'),cancel=$('[data-action="imu-clear"]');
+  const canCapture=ready&&imuCaptureReady(),busy=!!captureRequest||capture.running;
+  put('[data-action="imu-start"]',accelGuide?'Restart poses':'Start six-position calibration');
+  start.classList.toggle('ghost',!!pose);
+  start.disabled=!canCapture||accelAction!=='KEEP'&&!accelGuide;
+  face.hidden=!pose;
+  face.disabled=!canCapture||!pose||accelAction!=='KEEP';
+  cancel.hidden=!accelGuide;
+  cancel.disabled=!ready||busy;
+  let status=confirmedFit?'Six-position fit saved on FC.':'Start when the gyro is ready and the outputs are off.';
+  if(captureRequest?.action==='imu-start'||captureRequest?.action==='imu-clear'){
+   status='Waiting for the FC to clear the temporary captures…';
+  }else if(captureRequest?.action==='imu-face'){
+   const samples=capture.sequence===captureRequest.sequence?capture.samples??0:0;
+   status=`Collecting samples · ${samples} / ${capture.target||128}`;
+  }else if(accelGuide?.restart){
+   status=accelGuide.error+' Restart the six poses.';
+  }else if(pose){
+   status=`${count} / 6 captured`+(accelGuide.error?' · '+accelGuide.error:'');
+  }else if(accelGuide){
+   status='6 / 6 captured. Save the fit before Level Horizon.';
+  }
+  put('.a2-imu-guide-status',status);
+ }
  function renderImu(){
   const imu=saved?.imu||{},capture=saved?.capture||{},model=modelParts(saved?.accelModel);
-  const gyroActive=imu.manualGyro||['SETTLING','CALIBRATING'].includes(imu.state);
+  const gyroActive=gyroCalibrating();
   const blocker=imuWriteBlocker(),ready=!blocker&&!working,still=$('#a2Still').checked;
   const fresh=imuFresh(),fmt=n=>Number.isFinite(n)?Number(n).toFixed(3):'—';
   const xyz=v=>Array.isArray(v)?v.map(fmt).join(' / '):'—';
@@ -418,19 +530,29 @@ if(root){
   const raw=fresh&&Array.isArray(imu.accelRawG)&&imu.accelRawG.length===3?imu.accelRawG:null;
   const fitted=raw&&model?correctedAcceleration(raw,model,[0,0,0]):null;
   const preview=raw&&model?correctedAcceleration(raw,model,manualOffsets):null;
-  put('.a2-imu-access',blocker||(still?'PWM OFF verified · stationary pose confirmed.':'Confirm the board is stationary to start a calibration.'));
-  $('[data-action="imu-gyro"]').disabled=!ready||gyroActive||capture.running||!!captureRequest||!still;
-  $('[data-action="imu-cancel"]').disabled=!ready||!gyroActive;
-  $('[data-action="imu-reset"]').disabled=!ready||gyroActive;
-  for(const a of ['imu-face','imu-level'])$('[data-action="'+a+'"]').disabled=!ready||!fresh||gyroActive||!still||capture.running||!!captureRequest||accelAction!=='KEEP';
-  $('[data-action="imu-clear"]').disabled=!ready;
-  $('[data-action="imu-zero-manual"]').disabled=!!working||!model||accelAction.startsWith('CAPTURED:');
-  $('[data-action="imu-restore-manual"]').disabled=!!working||!manualEditing;
-  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=!!working||!!ambiguousSave||accelAction.startsWith('CAPTURED:'));
+  put('.a2-imu-access',blocker||operationError||'PWM OFF verified · keep the frame still during each capture.');
+  const gyroControls=ready&&!accelGuide&&!capture.running&&!captureRequest;
+  $('[data-action="imu-gyro"]').disabled=!gyroControls||gyroActive||!still;
+  $('[data-action="imu-cancel"]').disabled=!gyroControls||!gyroActive;
+  $('[data-action="imu-reset"]').disabled=!gyroControls||gyroActive;
+  renderAccelGuide(capture,model,ready,put);
+  const levelReady=ready&&!accelGuide&&imuCaptureReady()&&accelAction==='KEEP';
+  $('#a2LevelStill').disabled=!levelReady;
+  $('[data-action="imu-level"]').disabled=!levelReady||!$('#a2LevelStill').checked;
+  const manualLocked=!!working||!!ambiguousSave||!!accelGuide||!!captureRequest||accelAction.startsWith('CAPTURED:');
+  $('[data-action="imu-zero-manual"]').disabled=manualLocked||!model;
+  $('[data-action="imu-restore-manual"]').disabled=manualLocked||!manualEditing;
+  root.querySelectorAll('[data-manual-axis]').forEach(input=>input.disabled=manualLocked);
   const progress=Math.max(0,Math.min(2000,Number(imu.samples)||0));
   $('.a2-gyro-progress').value=progress;
   put('.a2-gyro-status',`${gyroStatus()} · ${imu.samples??'—'} / 2000 samples${imu.error&&imu.error!=='NONE'?' · '+imu.error:''}`);
-  put('.a2-capture-status',`${capture.state||'Waiting for IMU'} · ${capture.samples??0} / 128 samples · Faces ${axes.filter((_,i)=>capture.mask&(1<<i)).join(', ')||'—'}${accelAction.startsWith('CAPTURED:')?' · Unsaved accelerometer settings · select Save ACC calibration':''}${saved?.configValid===false?' · Invalid setup record, identity correction active':''}`);
+  let levelStatus='Capture the level position to set the horizon trim.';
+  if(accelGuide)levelStatus='Finish the six-position fit before capturing Level Horizon.';
+  else if(captureRequest?.action==='imu-level'){
+   const samples=capture.sequence===captureRequest.sequence?capture.samples??0:0;
+   levelStatus=`Collecting level samples · ${samples} / ${capture.target||128}`;
+  }else if(accelAction.startsWith('CAPTURED:'))levelStatus='Unsaved accelerometer settings · select Save ACC calibration.';
+  put('.a2-capture-status',levelStatus);
   for(let i=0;i<3;i++){
    put('[data-gyro-raw="'+i+'"]',fresh?fmt(imu.raw?.[i]):'—');
    put('[data-gyro-bias="'+i+'"]',fmt(imu.bias?.[i]));
@@ -752,7 +874,7 @@ if(root){
  }
  function canAdvance(){
   if([1,ESC,OUTPUT].includes(step))return pageSaved(step);
-  return step!==IMU||accelAction==='KEEP'&&!captureRequest&&!saved?.capture?.running&&!saved?.imu?.manualGyro;
+  return step!==IMU||accelAction==='KEEP'&&!accelGuide&&!captureRequest&&!saved?.capture?.running&&!saved?.imu?.manualGyro;
  }
  function renderPageSaves(){
   root.querySelectorAll('[data-save-page]').forEach(node=>{
@@ -804,15 +926,25 @@ if(root){
   $('[data-nav="-1"]').disabled=step===0||!!working;
   const scope=pageScope(),next=$('[data-nav="1"]'),saveButton=$('[data-action="save-page"]');
   const retry=!!ambiguousSave&&ambiguousSave.scope===scope;
+  const guiding=step===IMU&&!!accelGuide;
+  const fitPending=guiding&&accelGuide.mask===allAccelPoses;
+  if(step===IMU){
+   const anchor=$('[data-action="'+(fitPending?'imu-face':'imu-level')+'"]');
+   if(saveButton.previousElementSibling!==anchor)anchor.after(saveButton);
+  }else if(saveButton.nextElementSibling!==next){
+   next.before(saveButton);
+  }
   saveButton.hidden=!scope;
+  if(guiding&&!fitPending)saveButton.hidden=true;
   saveButton.disabled=!!working||(!retry&&(!canSaveScope(scope)||pageSaved(step)));
-  const saveLabel=step===IMU?(scope==='ACCEL_MANUAL'?'Save ACC offsets':'Save ACC calibration'):'Save';
+  const saveLabel=fitPending?'Save six-position fit':
+   step===IMU?(scope==='ACCEL_MANUAL'?'Save ACC offsets':'Save ACC calibration'):'Save';
   saveButton.textContent=['save-page','save-next'].includes(working)?'Saving…':retry?'Verify save':saveLabel;
   $('[data-action="verify-save"]').hidden=!ambiguousSave||retry;
   $('[data-action="verify-save"]').disabled=!!working;
   next.hidden=step===REPORT;
-  next.textContent=scope&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':step===ESC?'Next · Output Calibration':step===OUTPUT?'Next · Report':'Next';
-  next.disabled=!!working||step===REPORT||!(canAdvance()||canSaveScope(scope)||retry);
+  next.textContent=scope&&!guiding&&(canSaveScope(scope)||pageSaved(step))?'Save & Next':step===ESC?'Next · Output Calibration':step===OUTPUT?'Next · Report':'Next';
+  next.disabled=!!working||step===REPORT||guiding||!(canAdvance()||canSaveScope(scope)||retry);
   const pidProfile=getPidProfile($('#a2PidProfile').value);
   const [major,minor,patch]=String(k.version||'').split('.').map(Number);
   const profileFirmware=!k.version||major>1||major===1&&(minor>7||minor===7&&patch>=16);
@@ -845,12 +977,9 @@ if(root){
   renderVisual();
  }
  function show(next){
-  if(next!==step){$('#a2OutputSafety').checked=false;$('#a2Still').checked=false;}
+  if(next!==step){$('#a2OutputSafety').checked=false;clearImuConfirmations();}
   if(next!==REPORT){readiness=null;readinessError='';}
   step=next;root.dataset.step=String(step);visited.add(step);operationError='';
-  const saveButton=$('[data-action="save-page"]');
-  if(step===IMU)$('[data-action="imu-level"]').after(saveButton);
-  else $('[data-nav="1"]').before(saveButton);
   if(step===OUTPUT)setCalPulse(currentResult());
   root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==step);
   root.querySelectorAll('[data-step]').forEach(b=>{
@@ -979,13 +1108,14 @@ if(root){
    manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
   }
   if(intent.scope==='ACCEL'){
+   accelGuide=null;
    manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);
   }
   if(intent.scope==='ESC')escDraft=false;
   for(const motor of intent.motors)if(minimums[motor-1]===intent.pulse)minimums[motor-1]=null;
   if(intent.scope==='RESET_ALL'){draft=config(board);loadWiring();minimums=[null,null,null,null];accelAction='KEEP';escDraft=escAttempt=false;
-   manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
-  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
+   captureRequest=accelGuide=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
+  if(intent.scope==='RESET_ACCEL'){accelAction='KEEP';captureRequest=accelGuide=null;manualEditing=false;manualLoadedModel='';syncManualFields(board.accelModel);}
   if(intent.scope==='RESET_ESC'){escDraft=escAttempt=false;minimums=[null,null,null,null];}
   if(intent.scope==='RESET_OUTPUT')minimums=[null,null,null,null];
   ambiguousSave=null;saveState=intent.scope.startsWith('RESET_')?'Reset saved on board':'Saved on board';conflict=false;operationError='';
@@ -1081,21 +1211,43 @@ if(root){
   if(name.startsWith('imu-')){
    const blocker=imuWriteBlocker();
    if(blocker)throw Error(blocker);
-   const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO','imu-level':'LEVEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL'};
-   const capture=['imu-level','imu-face'].includes(name);
-   if((capture||name==='imu-gyro')&&!$('#a2Still').checked)throw Error('Confirm the board is stationary in the requested pose.');
-   if(name==='imu-clear'){
-    captureRequest=null;
-    if(accelAction.startsWith('CAPTURED:'))accelAction='KEEP';
+   const actions={'imu-gyro':'GYRO','imu-cancel':'CANCEL_GYRO','imu-reset':'RESET_GYRO',
+    'imu-start':'CLEAR_ACCEL','imu-face':'FACE','imu-clear':'CLEAR_ACCEL','imu-level':'LEVEL'};
+   const accelCommand=['imu-start','imu-face','imu-clear','imu-level'].includes(name);
+   if(captureRequest||saved?.capture?.running)throw Error('Wait for the FC capture result.');
+   if(accelCommand&&name!=='imu-clear'&&!imuCaptureReady())throw Error('Wait for fresh gyro and accelerometer readings.');
+   if(!accelCommand&&accelGuide)throw Error('Finish or cancel the six-position calibration.');
+   if(name==='imu-gyro'&&!$('#a2Still').checked)throw Error('Confirm the frame is stationary.');
+   if(name==='imu-level'&&(accelGuide||accelAction!=='KEEP'||!$('#a2LevelStill').checked))
+    throw Error('Finish pending ACC calibration and confirm the frame is level and still.');
+   if(name==='imu-start'&&accelAction!=='KEEP'&&!accelGuide)throw Error('Save or restore the pending ACC changes first.');
+   if(name==='imu-clear'&&!accelGuide)throw Error('Start the six-position calibration first.');
+   // A verified empty capture buffer needs no owner-bound clear command.
+   // The first FACE capture still establishes the owner on the FC.
+   if(name==='imu-start'&&saved.capture?.mask===0&&saved.capture.ready===false){
+    startAccelGuide();
+    clearImuConfirmations();
+    return;
    }
-   const ack=await motorClient.wizardCommand('WIZARD_IMU',[actions[name],Number($('#a2Face').value),base.bootId],base.bootId);
+   const pose=nextAccelPose();
+   if(name==='imu-face'&&(!pose||accelAction!=='KEEP'))throw Error('Start the guided poses before capturing.');
+   const face=name==='imu-face'?pose.face:4;
+   let ack;
+   try{
+    ack=await motorClient.wizardCommand('WIZARD_IMU',[actions[name],face,base.bootId],base.bootId);
+   }catch(error){
+    if(accelCommand&&String(error.message).includes('imu_calibration_owned'))
+     throw Error('Another connection owns these captures. Return to that connection or restart the A2 before starting again.');
+    throw error;
+   }
    ensureOperation(run);
-   if(capture){
-    if(accelAction.startsWith('CAPTURED:'))accelAction='KEEP';
-    captureRequest={sequence:ack.imuRequestSequence,at:Date.now()};
+   if(accelCommand){
+    const sequence=ack.imuRequestSequence;
+    if(!Number.isSafeInteger(sequence)||sequence<=0)throw Error('The FC did not confirm the calibration request.');
+    captureRequest={action:name,face,sequence,at:Date.now()};
     updateCapture(ack.capture);
    }
-   $('#a2Still').checked=false;return;
+   clearImuConfirmations();return;
   }
   if(name==='skip-output'){await navigate(REPORT,false,true);return;}
 
@@ -1193,13 +1345,12 @@ if(root){
  });
  root.addEventListener('change',e=>{
   if(e.target.id==='a2CalAll'&&!motorClient.busy){calAll=e.target.checked;setCalPulse(currentResult());}
-  if(e.target.id==='a2Face')$('#a2Still').checked=false;
   render();
  });
  window.addEventListener('zebjus:motor-state',e=>{if(live())receive(e.detail);});
  const observe=()=>{
   if(!live()){
-   $('#a2Still').checked=false;
+   clearImuConfirmations();
    if(!document.getElementById('tab-setup')?.classList.contains('active')){
     $('#a2OutputSafety').checked=false;readiness=null;readinessError='';
    }
@@ -1207,11 +1358,19 @@ if(root){
    if(motorClient.owner==='wizard'){++operation;activeRun=null;escAttempt=false;void motorClient.stop('wizard').catch(()=>{});}
    return;
   }
+  if(captureRequest&&Date.now()-captureRequest.at>7000){
+   const reason='The FC capture result timed out. Check the connection and retry.';
+   if(captureRequest.action==='imu-face'&&accelGuide)accelGuide.error=reason;
+   else operationError=reason;
+   captureRequest=null;
+  }
   render();
   if(!kit().connected||polling||motorClient.busy||working||Date.now()<nextPollAt)return;
   polling=true;const started=Date.now();
-  const read=step===2?motorClient.status():motorClient.wizardStatus();
-  read.then(()=>{readFailures=0;nextPollAt=Math.max(Date.now(),started+(step===2?100:step===3?300:850));})
+  const imuPolling=step===IMU||!!captureRequest;
+  const inputPolling=step===2&&!imuPolling;
+  const read=inputPolling?motorClient.status():motorClient.wizardStatus();
+  read.then(()=>{readFailures=0;nextPollAt=Math.max(Date.now(),started+(imuPolling?300:inputPolling?100:850));})
    .catch(e=>{readError=e.message;readFailures=Math.min(5,readFailures+1);nextPollAt=Date.now()+Math.min(2400,100*2**readFailures);render();})
    .finally(()=>{polling=false;});
  };

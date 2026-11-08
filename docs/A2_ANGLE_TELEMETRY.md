@@ -57,11 +57,22 @@ the previous lease. Boot restores the selection, never ownership or ARM. A PPM
 source can be selected with its transmitter OFF; it remains waiting for frames.
 Open **ACC / Gyro Calibration** at step 4 or from **Inputs** or **Report**.
 With the input disarmed and PWM OFF, confirm the frame is stationary and wait
-for gyro readiness. The gyro measures its bias at each boot. Place the frame
-level with +Z up, capture **Quick Level (+Z)**, and select **Save ACC calibration**.
-The Wizard confirms the FC readback. Advanced ACC calibration has manual offsets
-and a six-position fit. After changing offsets or saving a six-position fit,
-capture and save Quick Level before Angle.
+for gyro readiness. The gyro measures its bias at each boot. Use **Calibrate
+Gyro** to repeat the measurement if the frame moved at power-on.
+
+**Start six-position calibration** guides the user through +Z, +Y, −Y, −X, +X,
+and −Z pointing up. Hold the frame still before each **Capture pose**. The
+Wizard advances only after the FC verifies the requested capture. Select
+**Save six-position fit** after all six poses. The Wizard verifies the saved
+model by readback.
+
+In **Level Horizon**, place the assembled frame in its level flying position
+with +Z up. Confirm it is level and still, capture **Quick Level (+Z)**, and
+select **Save ACC calibration**. A new fit or a change to the manual offsets
+calls for a fresh Quick Level before Angle.
+
+References: [ArduPilot accelerometer and level calibration](https://ardupilot.org/copter/docs/common-accelerometer-calibration.html)
+and [PX4 Level Horizon](https://docs.px4.io/main/en/config/level_horizon_calibration.html).
 
 | Path | Available radio | Current physical behavior |
 | --- | --- | --- |
