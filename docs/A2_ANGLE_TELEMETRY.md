@@ -141,18 +141,43 @@ After a stall, the worker processes one observation and counts skipped releases.
 The scheduler reports an unhealthy tick when its execution crosses the next
 deadline. The output driver still stops on a real deadline miss or expired lease.
 
-## Downloadable 1.7.23 candidate
+## PPM flight isolation in 1.7.24
 
-Firmware Center's **Load 1.7.23 Acro + Angle** action selects the separately
+The 1.7.23 Angle trace stopped when the main-loop PPM snapshot was 152 ms old,
+past its 150 ms freshness limit. The receiver sequence later continued.
+The armed PPM lease now receives calibrated, mapped frames from the RMT task.
+It retains the low-throttle yaw DISARM gesture and rejects a hardware capture
+gap or expired frame. USB release and network controller claims are scoped to
+their own input paths. Radio restart and I²C scanning defer while outputs are in
+use. The original cutoff reason stays visible after a later ARM rejection or
+DISARM.
+
+The PID scheduler targets 250 Hz and uses a measured 1–8 ms interval. A missed
+nominal release increments timing counters. Flight output requires valid
+controller timing and a successful driver update within the existing 8 ms
+lease, checked both before and after writing PWM. STOP and receiver, IMU and
+driver fault protections continue to revoke output. The 50 Hz, 14-bit ESC signal
+has a separate 20 ms period.
+
+The WebApp shares one periodic read slot across Flight Data, receiver
+monitoring and full status. It starts at most one such read per 100 ms and
+waits for the outstanding read before starting another. Verified connection
+loads board status, and Setup/PID writes require an explicit action. The
+Android AP controller keeps its independent 20 ms signed UDP stream and
+500 ms firmware input deadline.
+
+## Downloadable 1.7.24 candidate
+
+Firmware Center's **Load 1.7.24 Acro + Angle** action selects the separately
 verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
-The 1.7.15 published images and 1.7.20 through 1.7.22 experimental download URLs
+The 1.7.15 published images and 1.7.20 through 1.7.23 experimental download URLs
 remain available.
 
-- Compiled source `da1c4e0da94f0458f5d83385683a1efb0af5495d`
-- Build workflow [42517855677](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42517855677)
-- APP build ID `1.7.23-ZFC-A2-ae5eb39af86f`
-- APP SHA-256 `ae5eb39af86fc3f8a68d1a0110dca9d9c5d32823ff59ba80e4212df64e417eb0`
-- Verified APP and Factory sizes are 1,366,624 and 4,194,304 bytes respectively.
+- Compiled source `0367d2e5eebb0b7c1f8466a9abd00e900c708e85`
+- Build workflow [42523987273](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42523987273)
+- APP build ID `1.7.24-ZFC-A2-3d050967c7fe`
+- APP SHA-256 `3d050967c7fed5dc65d1d4b4e87d398b1172c928acb4336c8384e6295b514c5a`
+- Verified APP and Factory sizes are 1,367,872 and 4,194,304 bytes respectively.
 - Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
 
 The control worker derives its first expected tick from timer activation. A

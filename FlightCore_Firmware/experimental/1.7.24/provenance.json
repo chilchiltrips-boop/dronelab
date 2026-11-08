@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "sourceCommit": "0367d2e5eebb0b7c1f8466a9abd00e900c708e85",
+  "runId": 42523987273,
+  "artifactId": 13634368766,
+  "archiveSha256": "cd345c0395da17093f4977f789eb6c7d886e694b54879df791bd04bbaa56f31c",
+  "catalogSha256": "269c0bd6b9e8328685bf2e3f1659afe68de7dae432450713b95ecf6d3185122c",
+  "reportSha256": "28f8f520c0e4d3ddbbe9fc4c78d9b68ca70ab76458bd32b303ea085a55bc3eef",
+  "physicalAcceptance": "NOT_RUN"
+}

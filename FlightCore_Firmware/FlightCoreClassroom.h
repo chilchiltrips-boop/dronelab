@@ -131,7 +131,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
  if((zjRcControlPath=="ANDROID_AP"&&(!network||String(transport)!="AP"||source!="ANDROID"))||
     (zjRcControlPath=="WEB_STA"&&(!network||String(transport)!="STA"||source!="WEB"))){++zjRcRejected;return false;}
  const uint32_t now=millis();
- if(zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS){++zjRcRejected;return false;}
+ if(zjRcOwned&&(zjRcSource=="PPM"||now-zjRcLeaseAt<=ZJ_RC_LEASE_MS)){++zjRcRejected;return false;}
  if(zjRcOwned)zjRcRelease("LEASE_EXPIRED");
  zjRcOwned=true;zjRcNetwork=network;zjRcSource=source;zjRcOwnerIP=ip;
  zjRcTransport=transport;zjRcSession=zjRcNewSession();zjRcOwnerId=zjRcNewSession().substring(0,12);zjRcSeq=0;
@@ -141,6 +141,7 @@ static bool zjRcClaim(const String& source,const String& code,bool network,const
 }
 static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,const String& session,bool network,const IPAddress& ip,bool inputArmed=false,int ch5=1000,int ch6=1000,uint8_t auxMask=0,uint32_t receivedAt=0){
  const uint32_t now=millis();
+ if(zjRcSource=="PPM"){++zjRcRejected;return false;} // PPM has its own hardware freshness check.
  // A late packet must never re-arm a timed-out input session. The user must
  // press ARM again, which obtains a fresh ownership token at low throttle.
  if(!zjRcUdpOwned&&zjRcInputArmed&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS)zjRcRelease("ARMED_INPUT_TIMEOUT");
@@ -165,7 +166,7 @@ static bool zjRcFrame(uint32_t seq,int t,int r,int p,int y,const String& source,
  return true;
 }
 static void zjRcLoop(uint32_t now){
- if(zjRcUdpOwned)return; // UDP worker/main check separate receive/apply ages.
+ if(zjRcUdpOwned||zjRcSource=="PPM")return; // UDP and wired PPM own their deadlines.
  if(zjRcHasFrame&&int32_t(now-zjRcLast)>=0&&uint32_t(now-zjRcLast)>ZJ_RC_DEADMAN_MS){
   if(zjRcInputArmed){zjRcRelease("ARMED_INPUT_TIMEOUT");return;}
   zjRcNeutral();
@@ -338,7 +339,7 @@ static bool zjRcSerialCommand(char* line){
  }
  if(!strcmp(line,"ZJRC,STOP")){zjMotorEmergencyStop();zjRcRelease("USB_STOP");return true;}
  if(!strcmp(line,"ZJRC,RELEASE")){
-  if(zjRcOwned&&!zjRcNetwork)zjRcRelease("USB_RELEASE");
+  if(zjRcOwned&&!zjRcNetwork&&zjRcSource!="PPM")zjRcRelease("USB_RELEASE");
   else Serial.println("ZJRC,ERR,NOT_USB_OWNER");
   return true;
  }

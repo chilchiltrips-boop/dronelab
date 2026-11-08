@@ -6,6 +6,22 @@ import '../js/flight-telemetry.js';
 
 const source=readFileSync('js/classroom-kits.js','utf8');
 const client=source.slice(source.indexOf('let nextFlightDataReadAt='),source.indexOf('async function observeFlightData()'));
+test('periodic flight, RC and status observations share a 100 ms read slot',()=>{
+ const code=source.slice(source.indexOf('let nextMonitorReadAt='),source.indexOf('async function observeController()'));
+ let now=1000;
+ const starts=[];
+ const ctx=vm.createContext({FC_MONITOR_INTERVAL_MS:100,statusPending:null,rcReadPending:false,flightTelemetryPending:false,
+  observeFlightData:()=>take('flight'),observeController:()=>take('rc')});
+ vm.runInContext(code,ctx);
+ function take(stream){if(ctx.beginMonitorRead(stream,now))starts.push([now,stream]);}
+ ctx.observeMonitor();
+ now+=99;take('status');ctx.observeMonitor();
+ now+=1;ctx.observeMonitor();
+ now+=100;ctx.rcReadPending=true;take('status');ctx.observeMonitor();
+ now+=200;ctx.rcReadPending=false;take('status');ctx.observeMonitor();
+ now+=100;ctx.observeMonitor();
+ assert.deepEqual(starts,[[1000,'flight'],[1100,'rc'],[1400,'status'],[1500,'flight']]);
+});
 function fixture(transport='sta',boot='a'.repeat(32)){
  const state={kitId:'ZFC-A2-012345ABCDEF',bootId:boot,transport,owner:false};
  const packet={version:1,kitId:state.kitId,bootId:'a'.repeat(32),sequence:1,sampleSequence:1,atUs:4000,ageUs:0,

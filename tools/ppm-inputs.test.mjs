@@ -30,7 +30,7 @@ test('PPM arbitration uses throttle-low and 2-second yaw gestures, never CH5 or 
  assert.match(f,/if\(zjRcOwned&&zjRcSource=="PPM"\)/);
  assert.match(f,/zjRcRelease\("PPM_SIGNAL_LOST"\)/);
  assert.match(f,/ZJ_PPM_LOST_MS=150/);
- assert.match(rc,/zjRcOwned&&now-zjRcLeaseAt<=ZJ_RC_LEASE_MS/);
+ assert.match(rc,/zjRcOwned&&\(zjRcSource=="PPM"\|\|now-zjRcLeaseAt<=ZJ_RC_LEASE_MS\)/);
  assert.doesNotMatch(f+gesture,/ledcWrite|motorArm|digitalWrite\(/);
 });
 test('physical USB administrator may calibrate PPM channels or remap roll/pitch/throttle/yaw/CH5 auxiliary',()=>{

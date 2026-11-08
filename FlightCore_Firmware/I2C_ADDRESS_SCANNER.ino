@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.23";
+constexpr const char* FW_VERSION="1.7.24";
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr const char* ZJ_OUTPUT_BUILD=ZJ_FLIGHT_OUTPUT_ENABLED?"ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL":"ZJ_OUTPUT=BENCH_DIAGNOSTIC";
@@ -37,7 +37,7 @@ LedMode ledMode=LED_OFF;
 bool ledCommandOk=false;
 LedStep pattern[16];uint8_t patternCount=0,manualBrightness=0;
 unsigned long effectStart=0,leaseStart=0,telLast=0;
-uint16_t telRateHz=20;
+uint16_t telRateHz=10;
 // COMBINED (default): one full IMU+RC line; RAW is the legacy two-stream protocol.
 // Defined once by FlightCoreClassroom.h; works in the standalone firmware-host build too.
 extern bool zjTelemetryRaw;
@@ -364,6 +364,7 @@ uint8_t scanAddress=1,scanCount=0,scanAddresses[126]={0};
 bool scanActive=false,scanRequested=true;
 void requestScan(){scanRequested=true;}
 void scanI2C(unsigned long now){
+ if(zjMotorSessionActive||zjMotorEnabled||zjMotorArmed)return;
  if(!scanActive){
   if(!scanRequested)return;
   scanRequested=false;scanActive=true;scanAddress=1;scanCount=0;
@@ -505,7 +506,7 @@ static String zjFlightStatusJson(){
  auto c=zjFlightObservedConditions();
  const auto driver=zjFlightDriverRead();
  portENTER_CRITICAL(&zjTimingMux);
- const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reason;
+ const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reportedReason();
  portEXIT_CRITICAL(&zjTimingMux);
  const bool authorized=driver.lease&&state==ZjFlightState::ARMED;
  // Pre-arm readiness should be useful BEFORE the operator performs ARM.
@@ -622,7 +623,7 @@ static String zjFlightTelemetryJson(){
  auto sample=zjReadRateShadow();const auto control=zjReadControl();
  const auto driver=zjFlightDriverRead();const uint32_t at=micros();
  portENTER_CRITICAL(&zjTimingMux);
- const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reason;
+ const auto state=zjFlightOutputGate.state;const auto reason=zjFlightOutputGate.reportedReason();
  portEXIT_CRITICAL(&zjTimingMux);
  const uint32_t age=uint32_t(at-sample.sampleAtUs);
  // Invalid sensor numbers must not prevent delivery of a failsafe observation.

@@ -60,7 +60,7 @@ int main(){
  assert(!flight.lease&&flight.offAck&&flight.fault==ZjFlightFault::DEADLINE_MISSED);
  for(auto duty:duties)assert(!duty);
  const uint16_t stale[]={1500,1500,1500,1500};
- assert(!zjFlightDriverSubmit(1,stale,micros()+4000).lease);
+ assert(!zjFlightDriverSubmit(1,stale).lease);
  for(auto duty:duties)assert(!duty);
  begin();assert(zjMotor.startSlider(clockMs,15,30000));assert(zjMotor.slide(clockMs,1800,1));zjMotorApply();
  clockMs+=3000;zjMotorWatch(nullptr);assert(!zjMotorWatchTripped&&duties[0]>0);

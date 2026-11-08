@@ -61,11 +61,11 @@ static ZjFlightDriverState zjFlightDriverRead(){
  portEXIT_CRITICAL(&zjMotorMux);
  return result;
 }
-static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4],uint32_t deadlineUs){
+static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&pulse)[4]){
  portENTER_CRITICAL(&zjMotorMux);
  if(ZJ_FLIGHT_OUTPUT_ENABLED&&lease&&zjFlightDriver.lease==lease){
   const uint32_t at=micros();
-  if(int32_t(at-deadlineUs)>=0||uint32_t(at-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US){
+  if(uint32_t(at-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US){
    zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
   }else{
    bool ok=true;
@@ -79,7 +79,7 @@ static ZjFlightDriverState zjFlightDriverSubmit(uint32_t lease,const uint16_t (&
    const uint32_t finished=micros();
    zjMotorUpdateMaxUs=std::max(zjMotorUpdateMaxUs.load(std::memory_order_relaxed),finished-at);
    if(!ok)zjFlightDriverStopLocked(ZjFlightFault::OUTPUT_ERROR);
-   else if(int32_t(finished-deadlineUs)>=0)zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
+   else if(uint32_t(finished-zjFlightDriverAtUs)>=ZJ_FLIGHT_OUTPUT_LEASE_US)zjFlightDriverStopLocked(ZjFlightFault::DEADLINE_MISSED);
    else{
     zjFlightDriverAtUs=finished;
     zjMotorPwmOffAck=zjFlightDriver.offAck=false;
