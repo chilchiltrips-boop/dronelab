@@ -37,7 +37,30 @@ int main(){
  }
  assert(c.begin(13200));
  c.finish(c.nextDueUs);
- assert(c.deadlineMisses==1); // an actual deadline still trips
+ assert(c.deadlineMisses==1&&!c.healthy(c.lastSuccessfulUs)); // an actual deadline still trips
+ // A2 1.7.22 capture 5. The wake interval looked nominal, but a shifted
+ // timer left only 693 us on the original scheduler grid.
+ const uint32_t faultTick=279736481,nominalDue=279733174;
+ c.start(nominalDue-2*c.PERIOD_US);
+ assert(c.begin(faultTick-3999));c.finish(faultTick-3999+240);
+ assert(c.begin(faultTick)&&c.intervalUs==3999&&c.jitterUs==3307);
+ assert(c.nextDueUs-faultTick==693);
+ c.finish(faultTick+1129);
+ assert(c.deadlineMisses==1&&!c.healthy(faultTick+1129));
+ // A delayed wake must rearm on the same grid. After recovery, the same
+ // 1,129 us update fits in the normal budget. The stall is still counted.
+ c.start(0);assert(c.begin(4000));c.finish(4240);
+ const uint32_t delayedWake=23307,alarm=8000;
+ const uint32_t nextAlarm=alarm+c.releasesDue(alarm,delayedWake)*c.PERIOD_US;
+ assert(nextAlarm==24000&&nextAlarm!=delayedWake+c.PERIOD_US);
+ assert(c.begin(delayedWake)&&c.nextDueUs==nextAlarm&&c.missedTicks==3);
+ c.finish(delayedWake+240);
+ assert(c.begin(nextAlarm+4));c.finish(nextAlarm+244);
+ assert(c.begin(nextAlarm+c.PERIOD_US+4)&&c.intervalUs==4000);
+ c.finish(c.lastTickUs+1129);
+ assert(c.deadlineMisses==3&&c.healthy(c.lastSuccessfulUs));
+ assert(c.releasesDue(0xfffffff0U,0xffffffe0U)==0);
+ assert(c.releasesDue(0xfffffff0U,16U)==1);
  // An isolated 120.6 ms interval drops ticks and revokes a mocked flight owner.
  c.start(0);assert(c.begin(4000));c.finish(4020);
  ZjFlightConditions flight;

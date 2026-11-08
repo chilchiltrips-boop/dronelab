@@ -9,12 +9,16 @@ test('production scheduler and ESC profile math with simulated microsecond clock
  try{const bin=join(dir,'host');execFileSync('g++',['-std=c++17','tools/timing-foundation-host.cpp','-o',bin]);assert.match(execFileSync(bin,{encoding:'utf8'}),/PASS production scheduler/);}
  finally{rmSync(dir,{recursive:true,force:true});}
 });
-test('timer callbacks notify workers; the tick uses only the fenced flight driver and RAM recorder',()=>{
+test('control alarm rearms on its original phase and the worker uses the fenced driver',()=>{
  const runtime=readFileSync('FlightCore_Firmware/FlightCoreControlRuntime.h','utf8');
  for(const name of ['zjControlWake','zjImuWake']){
   const body=runtime.match(new RegExp('static void '+name+'\\(void\\*\\)\\{([^}]+)\\}'))?.[1];
   assert.ok(body);assert.match(body,/xTaskNotifyGive/);assert.doesNotMatch(body,/Wire|Serial|ledc|motor|delay|String/);
  }
+ assert.match(runtime,/releasesDue\(zjControlTimerDueUs,now\)/);
+ assert.match(runtime,/zjControlTimerDueUs=zjControlTimerStartedUs\+ZjControlScheduler::PERIOD_US/);
+ assert.match(runtime,/esp_timer_start_once\(zjControlTimer,uint32_t\(zjControlTimerDueUs-now\)\)==ESP_OK&&releases\)\s*xTaskNotifyGive/);
+ assert.doesNotMatch(runtime,/esp_timer_start_periodic\(zjControlTimer,/);
  const tick=runtime.slice(runtime.indexOf('static void zjControlTask('),runtime.indexOf('static ZjControlScheduler zjReadControl'));
  assert.doesNotMatch(tick,/Wire|Serial|ledc|zjMotor|zjRcFrame|String|delay/);
  assert.match(tick,/zjFlightDriverSubmit\(lease,trace.requested,control.nextDueUs\)/);

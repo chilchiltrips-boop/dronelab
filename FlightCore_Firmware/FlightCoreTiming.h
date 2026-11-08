@@ -39,12 +39,17 @@ struct ZjControlScheduler {
  uint32_t executionUs=0,maxExecutionUs=0,missedTicks=0,deadlineMisses=0,overruns=0;
  bool started=false;
  ZjRateCounter rate;
+ static uint32_t releasesDue(uint32_t dueUs,uint32_t now){
+  const uint32_t late=now-dueUs;
+  return int32_t(late)<0?0:1+late/PERIOD_US;
+ }
  void start(uint32_t now){*this=ZjControlScheduler{};started=true;nextDueUs=now+PERIOD_US;rate.reset(now);}
  bool begin(uint32_t now){
   if(!started)start(now);
-  if(int32_t(now-nextDueUs)<0)return false;
-  const uint32_t late=now-nextDueUs,skipped=late/PERIOD_US;
-  missedTicks+=skipped;deadlineMisses+=skipped;nextDueUs+=(skipped+1)*PERIOD_US;
+  const uint32_t releases=releasesDue(nextDueUs,now);
+  if(!releases)return false;
+  const uint32_t late=now-nextDueUs,skipped=releases-1;
+  missedTicks+=skipped;deadlineMisses+=skipped;nextDueUs+=releases*PERIOD_US;
   jitterUs=late;if(late>maxJitterUs)maxJitterUs=late;
   if(ticks){intervalUs=now-lastTickUs;if(!minIntervalUs||intervalUs<minIntervalUs)minIntervalUs=intervalUs;if(intervalUs>maxIntervalUs){maxIntervalUs=intervalUs;maxIntervalAtUs=now;}}
   lastTickUs=now;++ticks;rate.event(now);return true;
@@ -55,5 +60,7 @@ struct ZjControlScheduler {
   if(int32_t(now-nextDueUs)>=0)++deadlineMisses;
   lastSuccessfulUs=now;
  }
- bool healthy(uint32_t now)const{return started&&ticks&&uint32_t(now-lastSuccessfulUs)<3*PERIOD_US&&executionUs<PERIOD_US;}
+ bool healthy(uint32_t now)const{
+  return started&&ticks&&uint32_t(now-lastSuccessfulUs)<3*PERIOD_US&&executionUs<PERIOD_US&&int32_t(lastSuccessfulUs-nextDueUs)<0;
+ }
 };
