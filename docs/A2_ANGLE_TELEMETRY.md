@@ -141,17 +141,18 @@ After a stall, the worker processes one observation and counts skipped releases.
 The scheduler reports an unhealthy tick when its execution crosses the next
 deadline. The output driver still stops on a real deadline miss or expired lease.
 
-## Downloadable 1.7.22 candidate
+## Downloadable 1.7.23 candidate
 
-Firmware Center's **Load 1.7.22 Acro + Angle** action selects the separately
+Firmware Center's **Load 1.7.23 Acro + Angle** action selects the separately
 verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
-The 1.7.15 published images and 1.7.20 and 1.7.21 experimental download URLs remain available.
+The 1.7.15 published images and 1.7.20 through 1.7.22 experimental download URLs
+remain available.
 
-- Compiled source `1f689f83ff1656f25b8812c72d41deb14e0670b8`
-- Build workflow [42508189181](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42508189181)
-- APP build ID `1.7.22-ZFC-A2-e36353d2230b`
-- APP SHA-256 `e36353d2230b6539d8a95457eed1234c8c01f635787dfd3ac8e8f30f82c27404`
-- Verified APP and Factory sizes are 1,366,480 and 4,194,304 bytes respectively.
+- Compiled source `da1c4e0da94f0458f5d83385683a1efb0af5495d`
+- Build workflow [42517855677](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42517855677)
+- APP build ID `1.7.23-ZFC-A2-ae5eb39af86f`
+- APP SHA-256 `ae5eb39af86fc3f8a68d1a0110dca9d9c5d32823ff59ba80e4212df64e417eb0`
+- Verified APP and Factory sizes are 1,366,624 and 4,194,304 bytes respectively.
 - Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
 
 The control worker derives its first expected tick from timer activation. A
