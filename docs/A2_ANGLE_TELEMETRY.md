@@ -141,6 +141,31 @@ After a stall, the worker processes one observation and counts skipped releases.
 The scheduler reports an unhealthy tick when its execution crosses the next
 deadline. The output driver still stops on a real deadline miss or expired lease.
 
+## PPM flight isolation in 1.7.24
+
+The 1.7.23 Angle trace stopped when the main-loop PPM snapshot was 152 ms old,
+past its 150 ms freshness limit. The receiver sequence later continued.
+The armed PPM lease now receives calibrated, mapped frames from the RMT task.
+It retains the low-throttle yaw DISARM gesture and rejects a hardware capture
+gap or expired frame. USB release and network controller claims are scoped to
+their own input paths. Radio restart and I²C scanning defer while outputs are in
+use. The original cutoff reason stays visible after a later ARM rejection or
+DISARM.
+
+The PID scheduler targets 250 Hz and uses a measured 1–8 ms interval. A missed
+nominal release increments timing counters. Flight output requires valid
+controller timing and a successful driver update within the existing 8 ms
+lease, checked both before and after writing PWM. STOP and receiver, IMU and
+driver fault protections continue to revoke output. The 50 Hz, 14-bit ESC signal
+has a separate 20 ms period.
+
+The WebApp shares one periodic read slot across Flight Data, receiver
+monitoring and full status. It starts at most one such read per 100 ms and
+waits for the outstanding read before starting another. Verified connection
+loads board status, and Setup/PID writes require an explicit action. The
+Android AP controller keeps its independent 20 ms signed UDP stream and
+500 ms firmware input deadline.
+
 ## Downloadable 1.7.23 candidate
 
 Firmware Center's **Load 1.7.23 Acro + Angle** action selects the separately

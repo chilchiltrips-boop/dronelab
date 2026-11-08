@@ -10,7 +10,8 @@ function rcObserver(){
  const ctx={Date:class extends Date{static now(){return now;}},document:{hidden:false},
   state:{transport:'sta',kitId:'ZFC-A2-123456ABCDEF',bootId:'boot-1',rcAccess:{controlPath:'PPM'}},
   reconnectTicket:1,controlTicket:1,accessBusy:false,headerModePending:false,otaActive:false,
-  wifiTesting:false,statusPending:null,motorTrafficBusy:()=>ctx.busy===true,linkFresh:()=>ctx.link!==false,
+  wifiTesting:false,statusPending:null,flightTelemetryPending:false,FC_MONITOR_INTERVAL_MS:100,
+  motorTrafficBusy:()=>ctx.busy===true,linkFresh:()=>ctx.link!==false,
   $:id=>({classList:{contains:()=>id==='tab-firmware'&&ctx.visible!==false}}),
   deviceRequest:route=>new Promise((resolve,reject)=>{
    assert.equal(route,'/api/rc/snapshot');pending.push({resolve,reject});
@@ -38,7 +39,7 @@ test('one shared RC reader is bounded and skips motor traffic, hidden tabs and s
  assert.equal(b.pending.length,1);
  b.reply({source:'PPM',active:true,seq:8,accepted:8});await second;
  assert.equal(b.state.rc.seq,8);
- assert.match(read('js/classroom-kits.js'),/\},2200\)/);
+ assert.match(read('js/classroom-kits.js'),/FC_STATUS_INTERVAL_MS=2200/);
  assert.doesNotMatch(read('js/live-inputs.js'),/\/api\/rc\/(?:snapshot|claim|preview)/);
 });
 test('inactive selected PPM keeps observing recovery, with bounded backoff after a dropped read',async()=>{
@@ -64,7 +65,7 @@ test('late RC replies cannot cross boot, source, or connection generations',asyn
   const b=rcObserver(),old=b.read(),id=b.state.kitId;change(b);
   b.reply({kitId:id,source:'PPM',active:true,seq:100});await old;
   assert.equal(b.state.rc,undefined);
-  const next=b.read();b.reply({source:'PPM',active:true,seq:1});await next;
+  b.advance(100);const next=b.read();b.reply({source:'PPM',active:true,seq:1});await next;
   assert.equal(b.state.rc.seq,1);
  }
  const kit=read('js/classroom-kits.js');

@@ -13,12 +13,12 @@ const section=(from,to)=>runtime.slice(runtime.indexOf(from),runtime.indexOf(to)
 test('real A2 control worker drives Rate PWM only after setup and one fresh ARM; faults stop it',()=>{
  const dir=mkdtempSync(join(tmpdir(),'a2-rate-worker-'));
  try{
-  const code='#define ZJ_A2_EXPERIMENTAL_RATE_FLIGHT 1\n'+a2MotorFixture(dir)+String.raw`
+  const code='#define ZJ_A2_EXPERIMENTAL_RATE_FLIGHT 1\n'+a2MotorFixture(dir,{ppm:true})+String.raw`
 #include "FlightCoreTiming.h"
 #include "FlightCoreRateTrace.h"
 #include "FlightCoreAttitude.h"
 #include <functional>
-constexpr uint32_t ZJ_PPM_LOST_MS=150,portMAX_DELAY=0xffffffff;
+constexpr uint32_t portMAX_DELAY=0xffffffff;
 constexpr bool pdTRUE=true;
 static ZjControlScheduler zjControl;
 static int zjTimingMux=0;
@@ -40,15 +40,22 @@ static struct {ZjSampleStamp sample;bool gyroReady=true;uint32_t gyroMaxReadUs=1
  float RateRoll=0,RatePitch=0,RateYaw=0,accelG[3]={0,0,1};ZjAccelModel accelModel;} zjImuMailbox;
 struct End {};
 static unsigned ticks=0,limit=10;
-static bool angleMode=false;
+static bool angleMode=false,mainPaused=false,ppmReceiving=true;
 static std::function<void(unsigned)> inject;
 static void ulTaskNotifyTake(bool,uint32_t){
  if(ticks==limit)throw End{};
  if(ticks==0)clockMs+=1; // worker creation precedes timer activation
  clockMs+=4;++ticks;
- zjFlightPolicy.input.receivedAtMs=clockMs;++zjFlightPolicy.input.sequence;
+ if(!mainPaused){zjFlightPolicy.input.receivedAtMs=clockMs;++zjFlightPolicy.input.sequence;}
  zjImuMailbox.sample.accept(micros());
  inject(ticks);
+ if(ppmReceiving&&(!mainPaused||ticks%5==0)){
+  uint16_t raw[8];
+  std::copy_n(zjFlightPolicy.input.channels,8,raw);
+  if(mainPaused)raw[2]=1628;
+  zjPpmPublishRmtFrame(raw,clockMs);
+  if(!mainPaused)zjPpmFrameSeq=zjPpmIsrFrames;
+ }
 }
 `+section('struct ZjRateShadowResult','\n#if defined(CONFIG_IDF_TARGET_ESP32C6)')+
 section('static ZjFlightFault zjControlReleaseReason','static ZjRateTraceEvent zjTraceTerminalEvent')+
@@ -67,6 +74,8 @@ static ZjFlightConditions conditions(){
 }
 int main(int argc,char** argv){
  const std::string scenario=argc>1?argv[1]:"normal";
+ const bool isolated=scenario=="isolated-ppm",jitter=scenario=="jitter";
+ if(isolated)limit=110;
  angleMode=argc>2;zjShadowAngle=angleMode;zjImuMailbox.accelModel.level=true;
  static_assert(ZJ_FLIGHT_OUTPUT_ENABLED&&!ZJ_FLIGHT_HARDWARE_QUALIFIED);
  zjKitId="ZFC-A2-012345ABCDEF";clockMs=100;zjMotorSetup();off();
@@ -89,12 +98,22 @@ int main(int argc,char** argv){
  assert(!edge.accept(c.input,clockMs,150));
  assert(zjFlightOutputGate.arm(c,ZJ_FLIGHT_OUTPUT_ENABLED,true));
  zjFlightOutputGate={};zjFlightPolicy=c;zjShadowRequested=false;
+ zjPpmSetup();zjPpmArm.armed=true;
  for(unsigned i=0;i<ZJ_PID_GAIN_COUNT/3;i++)zjShadowGains[i]=zjPidActive.axis(i);
  zjFlightRevokeHandler=zjControlRevoke;
  zjControlTimerStartedUs=micros()+1000;
  inject=[&](unsigned n){
   if(n==2)assert(zjControl.jitterUs==0);
   if(n<=2)return; // warm scheduler before ARM, as the real firmware requires
+  if(scenario=="claim-failure"){
+   if(n==3){
+    zjMotorWatchActive=true;
+    assert(zjControlArmFlight()==ZjFlightFault::OFF_UNVERIFIED);
+    zjMotorWatchActive=false;
+    assert(zjFlightOutputGate.state==ZjFlightState::OUTPUT_OFF&&!zjPpmFlight.lease);
+   }
+   return;
+  }
   if(n==3){assert(zjControlArmFlight()==ZjFlightFault::NONE);}
   n-=2;
   // Tick 1 is LOW; tick 2 computes real PID/mixer; 4 resets; 5 checks reset.
@@ -115,6 +134,31 @@ int main(int argc,char** argv){
    if(scenario=="pid")zjShadowGains[0].p=NAN;
    if(scenario=="watchdog"){clockMs+=9;zjMotorWatch(nullptr);off();}
    if(scenario=="driver")failDuty=true;
+   if(isolated)mainPaused=true;
+   if(jitter||scenario=="late-write"){clockMs+=3;zjImuMailbox.sample.accept(micros());}
+   if(scenario=="late-write")motorWriteDelayMs=1;
+  }
+  if(isolated){
+   if(n==43){
+    assert(clockMs-zjFlightPolicy.input.receivedAtMs>150&&zjFlightLease&&zjRateShadow.actuating);
+    assert(zjFlightTrace.last.channels[2]==1628&&zjFlightTrace.last.inputAgeMs<25);
+   }
+   if(n==63)ppmReceiving=false;
+   if(n==104){
+    off();assert(!zjFlightLease);
+    assert(zjFlightTrace.terminal.reason==ZjFlightFault::PPM_SIGNAL_LOST);
+    assert(zjFlightTrace.terminal.inputAgeMs>150&&(zjFlightTrace.terminal.flags&ZJ_TRACE_OFF_ACK));
+   }
+   return;
+  }
+  if(jitter){
+   if(n==4)motorWriteDelayMs=1;
+   if(n==5){
+    assert(zjControl.deadlineMisses&&zjFlightLease&&!zjRateShadow.deadlineFault);
+    motorWriteDelayMs=0;
+   }
+   if(n==6)assert(zjControl.missedTicks&&zjFlightLease);
+   return;
   }
   if(n==4&&scenario!="normal"){off();assert(!zjFlightLease);}
   if(n==4){zjFlightPolicy.input.channels[2]=1000;zjFlightPolicy.input.channels[0]=1500;}
@@ -125,9 +169,15 @@ int main(int argc,char** argv){
   if(n==6&&scenario=="normal"){for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1400));}
  };
  try{zjControlTask(nullptr);}catch(const End&){}
- if(scenario!="normal"){
+ if(scenario!="normal"&&!jitter){
   off();assert(!zjFlightLease&&!zjFlightOutputGate.permit(c,true));
   ++c.input.sequence;assert(!edge.accept(c.input,clockMs,150)); // held ARM never retries
+  if(isolated){
+   zjControlRevoke("INPUT_DISARMED");
+   assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::PPM_SIGNAL_LOST);
+  }
+  if(scenario=="late-write")assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::DEADLINE_MISSED);
+  if(scenario=="source")assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::SOURCE_CHANGED);
  }else{
   assert(zjFlightDriverRead().lease==zjFlightLease&&zjFlightLease!=0);
   failStop=true;
@@ -141,7 +191,7 @@ int main(int argc,char** argv){
 `;
   const file=join(dir,'worker.cpp'),bin=join(dir,'worker');writeFileSync(file,code);
   execFileSync('g++',['-std=c++17','-I'+dir,'-I'+resolve('tools'),'-I'+resolve('tools/host-stubs'),'-I'+resolve('FlightCore_Firmware'),file,'-lcrypto','-o',bin],{timeout:60000});
-  for(const scenario of ['normal','stop','disarm','loss','imu','timing','source','pid','watchdog','driver']){
+  for(const scenario of ['normal','stop','disarm','loss','imu','timing','source','pid','watchdog','driver','isolated-ppm','jitter','late-write','claim-failure']){
    for(const mode of [[],['angle']])assert.match(execFileSync(bin,[scenario,...mode],{encoding:'utf8',timeout:10000}),/PASS production worker/);
   }
  }finally{rmSync(dir,{recursive:true,force:true});}

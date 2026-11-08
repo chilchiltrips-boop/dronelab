@@ -21,7 +21,7 @@ test('control alarm rearms on its original phase and the worker uses the fenced 
  assert.doesNotMatch(runtime,/esp_timer_start_periodic\(zjControlTimer,/);
  const tick=runtime.slice(runtime.indexOf('static void zjControlTask('),runtime.indexOf('static ZjControlScheduler zjReadControl'));
  assert.doesNotMatch(tick,/Wire|Serial|ledc|zjMotor|zjRcFrame|String|delay/);
- assert.match(tick,/zjFlightDriverSubmit\(lease,trace.requested,control.nextDueUs\)/);
+ assert.match(tick,/zjFlightDriverSubmit\(lease,trace.requested\)/);
  assert.match(tick,/zjFlightLowThrottle[\s\S]*LOW_THROTTLE[\s\S]*zjStepRatePid/);
  assert.match(tick,/zjFlightTrace.freeze\(trace,zjTraceTerminalEvent\(fault\),fault\)/);
  const motor=readFileSync('FlightCore_Firmware/FlightCoreMotor.h','utf8');

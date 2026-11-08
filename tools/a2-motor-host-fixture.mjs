@@ -1,11 +1,24 @@
 import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 // Hardware doubles shared by the actual C6 command-header integration tests.
-export function a2MotorFixture(dir){
+export function a2MotorFixture(dir,{ppm=false}={}){
  mkdirSync(join(dir,'driver'));mkdirSync(join(dir,'freertos'));
  for(const name of ['driver/ledc.h','esp_timer.h','freertos/FreeRTOS.h'])writeFileSync(join(dir,name),'');
  const integration=readFileSync('tools/motor-integration-host.cpp','utf8');
- const common=integration.slice(0,integration.indexOf('#define DISABLED'));
+ let common=integration.slice(0,integration.indexOf('#define DISABLED'));
+ if(ppm)common=common.replace('static String zjPpmRcChannelsJson(){return "null";}\nstatic String zjPpmStatus(){return "{}";}\n','');
+ const ppmFixture=ppm?String.raw`
+// The host supplies decoded RMT frames to the same publisher used by A2.
+#undef CONFIG_IDF_TARGET_ESP32C6
+#define IRAM_ATTR
+static void portENTER_CRITICAL_ISR(int*){}static void portEXIT_CRITICAL_ISR(int*){}
+constexpr int INPUT_PULLDOWN=1,RISING=1;
+static void pinMode(int,int){}
+static int digitalPinToInterrupt(int pin){return pin;}
+static void attachInterrupt(int,void(*)(),int){}
+#include "FlightCorePpm.h"
+#define CONFIG_IDF_TARGET_ESP32C6 1
+`:'';
  return "#define CONFIG_IDF_TARGET_ESP32C6 1\n"+common+String.raw`
 #define CONFIG_IDF_TARGET_ESP32C6 1
 #define HIGH 1
@@ -18,14 +31,14 @@ constexpr int D0=0,D1=1,D2=2,D3=3,LEDC_LOW_SPEED_MODE=0,ESP_OK=0,LEDC_TIMER_3=3,
 struct ledc_timer_config_t {int speed_mode,duty_resolution,timer_num,freq_hz,clk_cfg;};
 struct ledc_channel_config_t {int gpio_num,speed_mode,channel,timer_sel,duty;};
 struct esp_timer_create_args_t {void (*callback)(void*);const char* name;};
-static uint32_t duty[4];static bool failDuty=false,failStop=false;
+static uint32_t duty[4],motorWriteDelayMs=0;static bool failDuty=false,failStop=false;
 static int ledc_timer_config(ledc_timer_config_t*){return 0;}
 static int ledc_channel_config(ledc_channel_config_t*){return 0;}
 static int esp_timer_create(esp_timer_create_args_t*,void**){return 0;}
 static int esp_timer_start_periodic(void*,int){return 0;}
 static int ledc_stop(int,int n,int){if(failStop)return 1;duty[n]=0;return 0;}
 static int ledc_set_duty(int,int n,uint32_t d){if(failDuty)return 1;duty[n]=d;return 0;}
-static int ledc_update_duty(int,int){return 0;}
+static int ledc_update_duty(int,int channel){if(channel==3)clockMs+=motorWriteDelayMs;return 0;}
 static uint32_t ledc_get_duty(int,int n){return duty[n];}
 enum class ZjImuAction {NONE,GYRO,CANCEL_GYRO,LEVEL,FACE,CLEAR_ACCEL};
 static ZjAccelModel applied;
@@ -36,6 +49,7 @@ static String zjImuStatus(){return "{}";}
 static void zjSetAccelModel(const ZjAccelModel& m){applied=m;}
 static bool zjImuMaintenanceBusy(){return false;}
 static uint32_t zjQueueImuAction(ZjImuAction a,uint8_t){queued=a;return ++imu.maintenanceSequence;}
+`+ppmFixture+String.raw`
 #include "FlightCoreMotor.h"
 `;
 }

@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.23",
+  "candidateVersion": "1.7.24",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "The verified bench package is 1.7.19. Candidate 1.7.23 keeps the control timer and scheduler on one 250 Hz phase after skipped wakes. Physical acceptance is NOT_RUN.",
+  "note": "The verified bench package is 1.7.19. Candidate 1.7.24 isolates armed PPM input from the network loop and distinguishes control jitter from expiry of the motor output lease. Physical acceptance is NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,
