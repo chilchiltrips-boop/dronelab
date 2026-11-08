@@ -55,8 +55,13 @@ The existing Inputs step now has source and saved flight-mode selectors. Saving
 an input stores a complete NVS radio/input profile, verifies readback, then revokes
 the previous lease. Boot restores the selection, never ownership or ARM. A PPM
 source can be selected with its transmitter OFF; it remains waiting for frames.
-The existing IMU step provides gyro calibration, manual offsets, Quick Level and
-six-position calibration. No duplicate calibration page was added.
+Open **ACC / Gyro Calibration** at step 4 or from **Inputs** or **Report**.
+With the input disarmed and PWM OFF, confirm the frame is stationary and wait
+for gyro readiness. The gyro measures its bias at each boot. Place the frame
+level with +Z up, capture **Quick Level (+Z)**, and select **Save ACC calibration**.
+The Wizard confirms the FC readback. Advanced ACC calibration has manual offsets
+and a six-position fit. After changing offsets or saving a six-position fit,
+capture and save Quick Level before Angle.
 
 | Path | Available radio | Current physical behavior |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 FlightCore 1.7.12 stores an APM/Pixhawk-style, one-use power-on request and its
 controller sequence result through the authenticated USB/AP/STA Wizard API.
-The Wizard order is Board, Wiring, Inputs, IMU Calibration, Output Signal,
+The Wizard order is Board, Wiring, Inputs, ACC / Gyro Calibration, Output Signal,
 ESC Calibration, Output Calibration, Report. Wiring, accelerometer settings
 and starting pulses retain their page Save actions. The automatic ESC result
 is stored by firmware; it needs no tone checkbox or separate ESC Save.

@@ -15,9 +15,10 @@ try{
  const wizard=page.locator('#a2SetupRoot');
  await wizard.locator('[data-step="0"]').waitFor();
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
-  ['Board','Wiring','Inputs','IMU Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
+  ['Board','Wiring','Inputs','ACC / Gyro Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
  const installFixture=({savedBoard={},boot='testboot'}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.20'};
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.21',controlAuthorized:true,
+   flightModeState:{supported:true,stabilizationSupported:true,saved:'angle',active:'angle',pending:null}};
   const identityModel='0:0:0:0:0:1000:1000:1000:0:0:0';
   const f=window.__wizard={kit,calls:[],readinessReads:0,writes:0,run:0,imuSequence:3,candidates:{},
    board:{autoEsc:{version:1,state:'NONE',phase:'OFF',attemptId:'00000000',reason:'NONE',compatible:true,outputsOff:true,resultPersisted:false,sequenceReady:false,toneDetectionSupported:false,escAcceptanceVerified:false},wizardVersion:1,pageSaveVersion:1,accelManualVersion:1,calibrationSlideKeepsSession:true,version:3,kitId:kit.kitId,configRevision:0,supported:true,configValid:true,configVerified:true,layout:'A2_QUAD_X',layoutPins:['D0','D1','D2','D3'],rotations:['CW','CCW','CW','CCW'],observedMinimumUs:[0,0,0,0],escCalibrationSaved:false,escCalibrationPending:false,escConfirmationStaged:false,accelModel:identityModel,timedBenchSupported:true,sliderDurationMaxMs:30000,remainingMs:0,selectedInput:'PPM',inputSource:'PPM',inputValid:true,inputAgeMs:0,channels:[1500,1500,1000,1500],outputSignal:{profile:'PWM_50HZ_1000_2000',hz:50,minUs:1000,maxUs:2000,timer:3,resolutionBits:14},
@@ -54,7 +55,14 @@ try{
    switch(a.action){
     case 'WIZARD_IMU':{
      const sequence=++f.imuSequence;extra={imuRequestSequence:sequence};
-     setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,samples:128,model:'0:1:0:0:0:1000:1000:1000:42:0:0'};},450);break;
+     if(a.a==='GYRO'){
+      Object.assign(b.imu,{state:'CALIBRATING',manualGyro:true,imuValid:false,samples:512});
+      setTimeout(()=>Object.assign(b.imu,{state:'READY',manualGyro:false,imuValid:true,samples:2000,sampleSequence:b.imu.sampleSequence+1}),550);
+     }else if(a.a==='LEVEL'){
+      b.capture={sequence,state:'CAPTURING',running:true,ready:false,samples:16};
+      setTimeout(()=>{b.capture={sequence,state:'CAPTURED',ready:true,samples:128,model:'0:1:0:0:0:1000:1000:1000:42:0:0'};},550);
+     }
+     break;
     }
     case 'WIZARD_BEGIN':
      f.run++;f.mapping=a.c;Object.assign(b,{mode:'READY',reason:'NONE'});extra={session:'fixture-token'};
@@ -166,15 +174,42 @@ try{
  await expectText('[data-channel="2"] output','—');
  await fixture(()=>{__wizard.board.ppm.map=[2,1,4,3,5];__wizard.board.ppm.channels[3]=1000;});
  await expectText('.a2-ppm-throttle','1000 µs · LOW');
- await nav(1).click();await expectText('.a2-gyro-status','2000 / 2000');
+ await fixture(()=>{__wizard.kit.flightModeState.stabilizationSupported=false;});
+ await expectText('.a2-flight-mode-status','Angle stabilization unavailable on this firmware');
+ assert.equal(await wizard.locator('#a2FlightMode option[value="angle"]').textContent(),'Angle · setup setting');
+ await fixture(()=>{__wizard.kit.flightModeState.stabilizationSupported=true;});
+ await wizard.locator('[data-panel="2"] [data-action="open-imu"]').click();
+ await expectText('.a2-gyro-status','Gyro ready for this boot');
+ await expectText('[data-save-page="3"]','Quick Level required for Angle');
+ assert.equal(await wizard.locator('#a2AdvancedAccel').getAttribute('open'),null);
+ assert.equal(await wizard.locator('[data-panel="3"] [data-action="save-page"]').isVisible(),true,'ACC Save is beside Quick Level');
  assert.equal(await button('save-page').isDisabled(),true,'runtime gyro bias is not persisted as accelerometer calibration');
+ assert.equal(await button('imu-gyro').isDisabled(),true,'stationary confirmation is required');
+ await fixture(()=>{__wizard.kit.controlAuthorized=false;});
+ await check('a2Still');await expectText('.a2-imu-access','Authorize this A2 connection');
+ assert.equal(await button('imu-gyro').isDisabled(),true);
+ assert.equal(await button('imu-level').isDisabled(),true);
+ await fixture(()=>{__wizard.kit.controlAuthorized=true;__wizard.board.ppm.channels[3]=1350;});
+ await expectText('.a2-imu-access','Disarm the input and lower throttle');
+ assert.equal(await button('imu-level').isDisabled(),true);
+ await fixture(()=>{__wizard.board.ppm.channels[3]=1000;});
+ await button('imu-gyro').click();
+ await expectText('.a2-gyro-status','Gyro calibrating');
+ assert.equal(await nav(1).isDisabled(),true,'Next waits for manual gyro calibration');
+ await expectText('.a2-gyro-status','Gyro ready for this boot');
+ assert.equal(await fixture(()=>__wizard.writes),1,'gyro bias is recalculated without a persistent write');
  await check('a2Still');await button('imu-level').click();
+ await expectText('.a2-capture-status','CAPTURING');
+ assert.equal(await nav(1).isDisabled(),true,'Next waits for a fresh capture result');
  await expectText('.a2-capture-status','Unsaved accelerometer settings');await expectSaved(3,false);
+ assert.equal(await button('save-page').textContent(),'Save ACC calibration');
  await nav(1).click();assert.equal(await wizard.locator('[data-panel="4"]').isVisible(),true);
  await fixture(()=>{if(__wizard.board.accelModel!=='0:1:0:0:0:1000:1000:1000:42:0:0')throw Error('IMU page not saved');});
  assert.equal(await fixture(()=>__wizard.writes),2);
  await step(3).click();
  await page.waitForFunction(()=>document.querySelector('[data-imu-orient-status]')?.textContent.includes('FRESH'));
+ await expectText('[data-save-page="3"]','Quick Level saved on FC');
+ await wizard.locator('#a2AdvancedAccel summary').click();
  assert.equal(await wizard.locator('[data-gyro-corrected="0"]').textContent(),'0.000');
  assert.equal(await wizard.locator('[data-accel-raw="0"]').textContent(),'0.120');
  assert.equal(await wizard.locator('[data-imu-cube]').count(),1,'three-dimensional IMU view exists');
@@ -384,6 +419,15 @@ try{
  await step(7).click();await wizard.locator('[data-panel="7"] summary').click();
  await button('reset-selected').click();await page.locator('[data-inline-accept]').click();await expectText('.a2-report-state','Reset saved on board');
  assert.match(await fixture(()=>__wizard.board.accelModel),/^0:0:/);
+ await expectText('.a2-report','Quick Level required for Angle');
+ await wizard.locator('[data-panel="7"] [data-action="open-imu"]').click();
+ assert.equal(await wizard.locator('[data-panel="3"] h3').isVisible(),true);
+ assert.equal(await wizard.locator('[data-step="3"] .a2-step-short').innerText(),'ACC/Gyro');
+ await wizard.locator('#a2AdvancedAccel summary').click();
+ await wizard.locator('#a2ManualX').fill('0.020');
+ await button('save-page').click();await expectSaved(3);
+ await expectText('[data-save-page="3"]','Quick Level required for Angle');
+ assert.equal(await step(3).getAttribute('data-saved'),'false','manual offsets alone do not complete Angle calibration');
  assert.deepEqual(await fixture(()=>__wizard.board.observedMinimumUs),[1150,1150,1150,1150]);assert.equal(await fixture(()=>__wizard.board.autoEsc.sequenceReady),true);
  await step(6).click();assert.equal(await wizard.locator('.a2-checks').count(),0);await step(7).click();
  await button('reset-all').click();await page.locator('[data-inline-accept]').click();await expectText('.a2-report-state','Reset saved on board');
@@ -421,5 +465,5 @@ try{
  await expectText('.a2-readiness-status','Observation is stale');
  assert.equal(await wizard.locator(readiness).textContent(),'','expired observation cannot supply a ready or OFF claim');
  assert.deepEqual(errors,[]);
- console.log('PASS simulated A2 one-click ESC prepare, cold-power auto result, persisted STOP, output calibration, reset, PPM mapping and read-only readiness');
+ console.log('PASS ACC / Gyro navigation, authorization, gyro and level capture, verified ACC saves, ESC prepare, output calibration, PPM mapping and readiness');
 }finally{await browser.close();}
