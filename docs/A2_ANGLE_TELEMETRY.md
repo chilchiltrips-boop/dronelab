@@ -128,6 +128,19 @@ loss, and fresh-arm recovery. Verify loaded build ID/hash and saved mode before
 powered testing. Preserve the published/bench rollback images. Physical evidence
 must identify the tested artifact; setup completion alone cannot certify flight.
 
+## Control timing recovery
+
+An A2 1.7.22 Angle capture recorded fresh PPM and IMU data at the first flight
+tick, with a 3,999 µs interval. The timer was waking 3,307 µs into the scheduler's
+4,000 µs period, leaving 693 µs before the software deadline. The driver reported
+`DEADLINE_MISSED` 1,129 µs into that tick and acknowledged PWM OFF.
+
+ESP Timer can move a periodic alarm to a new phase after skipping expired
+alarms. FlightCore 1.7.23 rearms a one-shot alarm on the original 250 Hz grid.
+After a stall, the worker processes one observation and counts skipped releases.
+The scheduler reports an unhealthy tick when its execution crosses the next
+deadline. The output driver still stops on a real deadline miss or expired lease.
+
 ## Downloadable 1.7.22 candidate
 
 Firmware Center's **Load 1.7.22 Acro + Angle** action selects the separately
