@@ -6,7 +6,9 @@
  const vector=(a,size,limit)=>Array.isArray(a)&&a.length===size&&a.every(n=>Number.isFinite(n)&&Math.abs(n)<=limit);
  function modeState(m){
   return m?.supported===true&&['acro','angle'].includes(m.saved)&&['acro','angle'].includes(m.active)&&
-   (m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active))?{...m}:null;
+   ((m.source==='PPM_CH5'&&m.ch5Supported===true&&['angle','acro'].includes(m.requested))
+    ?(m.pending===null||m.pending===m.requested)&&((m.pending===null)===(m.requested===m.active))
+    :(!m.source||m.source==='SAVED')&&(m.requested===undefined||m.requested===m.saved)&&(m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active)))?{...m}:null;
  }
  function normalize(value,binding,previous=null,now=Date.now(),roundTripMs=0){
   const v=value,m=modeState(v?.flightModeState);

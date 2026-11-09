@@ -97,3 +97,11 @@ test('ten Hz rate chart retains a full sixty-second history, bounded to 1200 poi
  assert.equal(history.length,1200);
  assert.ok(history.at(-1).at-history[0].at>=60000);
 });
+
+test('compact telemetry preserves CH5 active/requested modes independently of the saved default',()=>{
+ const mode={supported:true,saved:'angle',active:'acro',pending:null,source:'PPM_CH5',requested:'acro',ch5Supported:true};
+ assert.equal(normalize({...snapshot(),flightModeState:mode},binding).flightModeState.active,'acro');
+ assert.equal(normalize({...snapshot(),flightModeState:{...mode,requested:'angle',pending:'angle'}},binding).flightModeState.pending,'angle');
+ for(const change of [{pending:'angle'},{requested:'angle'},{source:'OTHER'},{ch5Supported:false}])
+  assert.equal(normalize({...snapshot(),flightModeState:{...mode,...change}},binding),null);
+});

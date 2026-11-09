@@ -10,7 +10,18 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.25";
+constexpr const char* FW_VERSION="1.7.26";
+static const esp_reset_reason_t zjBootResetReason=esp_reset_reason();
+static const char* zjBootResetName(){
+ switch(zjBootResetReason){
+  case ESP_RST_POWERON:return "POWERON";case ESP_RST_EXT:return "EXTERNAL";
+  case ESP_RST_SW:return "SOFTWARE";case ESP_RST_PANIC:return "PANIC";
+  case ESP_RST_INT_WDT:return "INT_WDT";case ESP_RST_TASK_WDT:return "TASK_WDT";
+  case ESP_RST_WDT:return "WDT";case ESP_RST_DEEPSLEEP:return "DEEPSLEEP";
+  case ESP_RST_BROWNOUT:return "BROWNOUT";case ESP_RST_SDIO:return "SDIO";
+  default:return "UNKNOWN";
+ }
+}
 // Sketch compile time in GitHub Actions UTC. The prebuilt ESP-IDF app descriptor
 // may retain its toolchain packaging date, so it must NOT label our release.
 static constexpr const char* ZJ_OUTPUT_BUILD=ZJ_FLIGHT_OUTPUT_ENABLED?"ZJ_OUTPUT=PPM_RATE_EXPERIMENTAL":"ZJ_OUTPUT=BENCH_DIAGNOSTIC";
@@ -55,6 +66,7 @@ void printFirmwareInfo(){
  Serial.print(__TIME__);Serial.print(',');Serial.println(FC_LABEL);
  Serial.println(ZJ_BUILD_STAMP);
  Serial.println(ZJ_OUTPUT_BUILD);
+ Serial.printf("ZJBOOT,1,%u,%lu,%s\n",unsigned(zjBootResetReason),(unsigned long)millis(),zjBootResetName());
  Serial.print("ZJI2C,PINS,");Serial.print(FC_BOARD);Serial.print(',');
  Serial.print(activeSda);Serial.print(',');Serial.print(activeScl);Serial.print(",0x");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
@@ -463,7 +475,7 @@ void emitTelemetry(unsigned long now){
 static ZjFlightConditions zjFlightMainConditions(){
  ZjFlightConditions conditions;
  conditions.input=zjRcReceiver();
- conditions.acro=zjFlightMode=="acro";conditions.angle=zjFlightMode=="angle";
+ conditions.acro=!strcmp(zjActiveFlightMode(),"acro");conditions.angle=!conditions.acro;
  const auto attitude=zjReadRateShadow().attitude;
  conditions.attitudeReady=attitude.valid&&uint32_t(micros()-attitude.atUs)<=12000;
  conditions.levelCalibrated=attitude.levelCalibrated;
@@ -699,11 +711,13 @@ void loop(){
  if(uint32_t(millis()-lastState)>=250&&Serial.availableForWrite()>=108){
   lastState=millis();
   // Compact record avoids repeating the large network JSON on a 115200-baud link.
-  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u,%u,%u\n",
-   zjKitId.c_str(),zjSavedFlightMode.c_str(),zjFlightMode.c_str(),zjFlightModePending?zjSavedFlightMode.c_str():"none",
+  const char* activeMode=zjActiveFlightMode();
+  Serial.printf("ZJSTATE,1,%s,%s,%s,%s,%d,%d,%d,%d,%d,%d,%u,%lu,%lu,%lu,%lu,%u,%s,%s,%u,%u,%u,%s,%s\n",
+   zjKitId.c_str(),zjSavedFlightMode.c_str(),activeMode,zjFlightModePendingName(activeMode),
    zjRcThrottle,zjRcRoll,zjRcPitch,zjRcYaw,zjRcCh5,zjRcCh6,unsigned(ledMode),
    (unsigned long)zjRcSeq,(unsigned long)(zjRcSeq?uint32_t(millis()-zjRcLast):0),(unsigned long)zjRcAccepted,(unsigned long)zjRcRejected,
-   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U,zjMotorEnabled?1U:0U,zjMotorArmed?1U:0U);
+   zjRcInputArmed?1U:0U,zjRcSource.c_str(),zjRcTransport,zjRcHasFrame?1U:0U,zjMotorEnabled?1U:0U,zjMotorArmed?1U:0U,
+   zjCh5ModeActive()?"PPM_CH5":"SAVED",(zjCh5ModeActive()?zjFlightMode:zjSavedFlightMode).c_str());
  }
  // Legacy ZJGYRO duplicates are disabled.
  static uint32_t lastAccess=0;

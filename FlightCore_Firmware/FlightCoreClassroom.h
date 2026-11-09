@@ -5,6 +5,8 @@
 #include "FlightCoreMotorStatus.h"
 #include "FlightCoreFlightOutput.h"
 #include "FlightCoreReceiverSnapshot.h"
+#include "FlightCorePpmMode.h"
+#include <atomic>
 #include "FlightCorePidSettings.h"
 #include <mbedtls/sha256.h>
 
@@ -26,7 +28,7 @@ static bool zjKitAutoName=false;
 bool zjTelemetryRaw=false;
 static constexpr uint32_t ZJ_RC_DEADMAN_MS=500,ZJ_RC_LEASE_MS=1800,ZJ_RC_LOG_MS=100;
 static String zjRcSource="NONE",zjRcSession="",zjRcOwnerId="",zjRcResponse="Medium";
-// Saved/active mode is applied only after disarm; experimental builds use it for control.
+// Saved mode is the fallback. Fresh PPM AUX1 can select the active flight mode.
 static String zjFlightMode="angle";
 static IPAddress zjRcOwnerIP;
 static bool zjRcOwned=false,zjRcHasFrame=false,zjRcNetwork=false,zjRcInputArmed=false;
@@ -56,13 +58,26 @@ static int zjRcCh5=1000,zjRcCh6=1000;
 static const char* zjRcTransport="NONE";
 static String zjSavedFlightMode="angle";
 static bool zjFlightModePending=false;
+static ZjPpmModeSwitch zjPpmMode;
+// 0 = no flight lease; 1 = Angle; 2 = Acro. Only the flight worker/STOP writes.
+static std::atomic<uint8_t> zjAppliedFlightMode{0};
+static const char* zjActiveFlightMode(){
+ const auto active=zjAppliedFlightMode.load(std::memory_order_relaxed);
+ return active==1?"angle":active==2?"acro":zjFlightMode.c_str();
+}
+static bool zjCh5ModeActive(){return zjRcOwned&&zjRcSource=="PPM"&&zjPpmMode.known;}
+static const char* zjFlightModePendingName(const char* active){
+ const char* requested=zjCh5ModeActive()?zjFlightMode.c_str():zjSavedFlightMode.c_str();
+ return strcmp(active,requested)?requested:"none";
+}
 static void zjApplyPendingFlightMode(){
- if(!zjRcInputArmed){zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;}
+ if(zjCh5ModeActive()){zjFlightMode=zjPpmMode.angle?"angle":"acro";zjFlightModePending=false;}
+ else if(!zjRcInputArmed){zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;}
 }
 static void zjLoadFlightMode(Preferences& prefs){
  zjSavedFlightMode=prefs.getString("flightMode","angle");
  if(zjSavedFlightMode!="angle"&&zjSavedFlightMode!="acro")zjSavedFlightMode="angle";
- zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;
+ zjFlightMode=zjSavedFlightMode;zjFlightModePending=false;zjPpmMode.reset(zjSavedFlightMode=="angle");
 }
 static bool zjSaveFlightMode(Preferences& prefs,const String& next){
  if(next!="angle"&&next!="acro")return false;
@@ -75,8 +90,11 @@ static bool zjSaveFlightMode(Preferences& prefs,const String& next){
  zjApplyPendingFlightMode();return true;
 }
 static String zjFlightModeState(){
+ const bool ch5=zjCh5ModeActive();const char* active=zjActiveFlightMode();
+ const String pending=zjFlightModePendingName(active);
  return String("{\"supported\":true,\"stabilizationSupported\":")+(ZJ_FLIGHT_OUTPUT_ENABLED?"true":"false")+",\"saved\":\""+zjSavedFlightMode+
-  "\",\"active\":\""+zjFlightMode+"\",\"pending\":"+(zjFlightModePending?String("\"")+zjSavedFlightMode+"\"":String("null"))+"}";
+  "\",\"active\":\""+active+"\",\"pending\":"+(pending!="none"?String("\"")+pending+"\"":String("null"))+
+  ",\"source\":\""+(ch5?"PPM_CH5":"SAVED")+"\",\"requested\":\""+(ch5?zjFlightMode:zjSavedFlightMode)+"\",\"ch5Supported\":true}";
 }
 
 static void zjKitInfo(){
@@ -115,6 +133,7 @@ static String zjRcNewSession(){
 }
 static void zjRcNeutral(){
  zjRcThrottle=1000;zjRcRoll=zjRcPitch=zjRcYaw=1500;zjRcHasFrame=false;zjRcInputArmed=false;
+ zjPpmMode.reset(zjSavedFlightMode=="angle");
  zjRcCh5=zjRcCh6=1000;zjRcAuxMask=0;zjRcReceivedAt=0;zjApplyPendingFlightMode();
 }
 static void zjRcRelease(const char* reason){
@@ -184,6 +203,7 @@ static FlightReceiverSnapshot zjRcReceiver(){
  frame.source=zjRcSource=="PPM"?ZjReceiverSource::PPM:zjRcSource=="ANDROID"?ZjReceiverSource::ANDROID:ZjReceiverSource::WEB;
  if(frame.source==ZjReceiverSource::PPM){
   memcpy(frame.channels,zjRcPpmChannels,sizeof(frame.channels));frame.availableMask=0xff;
+  frame.ch5Mode=zjPpmMode.known;frame.angleMode=zjPpmMode.angle;
  }else{
   frame.channels[0]=zjRcRoll;frame.channels[1]=zjRcPitch;
   frame.channels[2]=zjRcThrottle;frame.channels[3]=zjRcYaw;
@@ -209,7 +229,7 @@ static String zjPpmRcChannelsJson(); // implemented by FlightCorePpm.h
 static String zjRcState(){
  const uint32_t now=millis();zjRcLoop(now);const String age=zjRcSeq?String(uint32_t(now-zjRcLast)):String("null");
  return String("{")+zjMotorFlags()+",\"kitId\":\""+zjKitId+"\",\"ownerId\":\""+zjRcOwnerId+"\",\"responseMode\":\""+zjRcResponse+"\",\"inputValid\":"+(zjRcHasFrame?"true":"false")+",\"failsafe\":"+(zjRcHasFrame?"false":"true")+",\"receivedAtMs\":"+String(zjRcLast)+",\"claimed\":"+(zjRcOwned?"true":"false")+
-  ",\"flightModeState\":"+zjFlightModeState()+",\"ch5\":"+String(zjRcCh5)+",\"ch6\":"+String(zjRcCh6)+",\"flightMode\":\""+zjFlightMode+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
+  ",\"flightModeState\":"+zjFlightModeState()+",\"ch5\":"+String(zjRcCh5)+",\"ch6\":"+String(zjRcCh6)+",\"flightMode\":\""+zjActiveFlightMode()+"\",\"active\":"+(zjRcHasFrame?"true":"false")+",\"source\":\""+zjRcSource+
   "\",\"transport\":\""+zjRcTransport+"\",\"seq\":"+String(zjRcSeq)+
   ",\"ageMs\":"+age+",\"throttle\":"+String(zjRcThrottle)+
   ",\"roll\":"+String(zjRcRoll)+",\"pitch\":"+String(zjRcPitch)+

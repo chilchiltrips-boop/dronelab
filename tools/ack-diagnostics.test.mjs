@@ -204,7 +204,7 @@ test('both UIs expose diagnostics and Android implements user-approved SAF expor
  assert.match(read('js/classroom-kits.js'),/trace\('web_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('rc_ack_error'/);
  assert.match(read('companion-network.js'),/trace\('kit_status'/);
- assert.match(read('mobile-android/app/build.gradle'),/versionCode 80\s*versionName '1\.8\.41-a2-attitude'/);
+ assert.match(read('mobile-android/app/build.gradle'),/versionCode 81\s*versionName '1\.8\.42-a2-ch5'/);
 });
 
 test('AP native phase timings and firmware release reason are sanitized in CSV/JSON',()=>{
@@ -242,4 +242,26 @@ test('PPM capture and finite motor deadlines are exported without confusing comp
  assert.ok(!b.api.exportData('csv').includes('private-token'));
  b.api.record('motor_ack',{ppmCaptureBackend:'private-hostname',motorPolicy:'private-token',ppmCaptureHz:-1});
  assert.equal(b.events().at(-1).data.ppmCaptureBackend,undefined);
+});
+
+test('RX-loss disconnect is NETWORK; verified reboot and sticky STA evidence survive export without identifiers',()=>{
+ for(const client of ['web','android']){
+  const b=bench(client),kit={kitId:'PRIVATE_KIT',transport:'sta'};
+  assert.equal(b.api.reasonClass('Wi-Fi link lost • automatic identity-checked reconnect'),'NETWORK');
+  assert.equal(b.api.reasonClass('Device identity changed • verify the Kit again'),'IDENTITY');
+  const status={kitId:kit.kitId,bootId:'a'.repeat(32),uptimeMs:210000,resetReasonCode:1,resetReason:'POWERON',
+   staDisconnectCount:2,staLastDisconnectReason:200,staLastDisconnectAtMs:205000,
+   flightModeState:{source:'PPM_CH5',active:'acro',requested:'acro',pending:null}};
+  b.api.record('web_status',b.api.observeSystem(status,kit));
+  b.api.observeSystem(status,kit);assert.equal(b.events().filter(e=>e.event==='boot_changed').length,0);
+  b.api.record('web_status',b.api.observeSystem({...status,bootId:'b'.repeat(32),uptimeMs:1200,resetReasonCode:9,resetReason:'BROWNOUT'},kit));
+  const data=b.events().find(e=>e.event==='boot_changed').data;
+  assert.equal(data.bootEpoch,2);assert.equal(data.uptimeMs,1200);assert.equal(data.resetReason,'BROWNOUT');
+  assert.equal(data.staLastDisconnectReason,200);assert.equal(data.staLastDisconnectAtMs,205000);
+  assert.equal(data.flightMode,'acro');assert.equal(data.flightModeSource,'PPM_CH5');
+  assert.equal(Object.keys(b.api.observeSystem({...status,kitId:'wrong'},kit)).length,0);
+  b.api.record('boot_changed',{resetReason:'PRIVATE_REASON',uptimeMs:-1,bootEpoch:Infinity,staDisconnectCount:'secret',flightModeSource:'PRIVATE_MODE'});
+  assert.deepEqual(b.events().at(-1).data,{});
+  for(const format of ['csv','json'])for(const secret of ['PRIVATE_KIT','PRIVATE_REASON','PRIVATE_MODE','a'.repeat(32),'b'.repeat(32)])assert.ok(!b.api.exportData(format).includes(secret));
+ }
 });

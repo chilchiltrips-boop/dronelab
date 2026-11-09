@@ -79,6 +79,18 @@ jobs:
           npm test
           npm run check
           node --check firmware-updater.js
+      - name: Compile and verify CH5-capable experimental A2 flight candidate
+        if: steps.firmware_integrity.outputs.rebuild == 'true'
+        run: |
+          python3 tools/build_scanner.py --skip-core-install --board ZFC-A2 --experimental-rate-flight --output-dir "$RUNNER_TEMP/a2-rate-experimental"
+          python3 tools/verify_experimental_rate.py "$RUNNER_TEMP/a2-rate-experimental"
+      - name: Upload separate experimental flight firmware
+        if: steps.firmware_integrity.outputs.rebuild == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: a2-PPM-RATE-EXPERIMENTAL-${{ github.sha }}
+          path: ${{ runner.temp }}/a2-rate-experimental/
+          if-no-files-found: error
       - name: Upload A2 APP and Factory firmware artifacts
         if: steps.firmware_integrity.outputs.rebuild == 'true'
         uses: actions/upload-artifact@v4

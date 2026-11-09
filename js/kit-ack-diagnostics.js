@@ -68,6 +68,25 @@ const motorModes=new Set(['DISABLED','READY','INPUT_TEST','SINGLE_TEST','ALL_TES
 const motorReasons=new Set(['NONE','USER_STOP','SESSION_EXPIRED','INPUT_LOST','INPUT_CHANGED','ARM_REQUIRED','THROTTLE_HIGH','SWITCH_REQUIRED','TEST_FINISHED','CAL_TIMEOUT','CAL_FINISHED','OUTPUT_ERROR','DEADLINE_MISSED','CONFIG_ERROR','CONTROL_LOST',...reasons]);
 const ppmCaptureCounts=['ppmCaptureHz','ppmCaptureErrors'];
 fields.push('ppmCaptureBackend',...ppmCaptureCounts);
+const systemCounts=['bootEpoch','uptimeMs','resetReasonCode','staDisconnectCount','staLastDisconnectReason','staLastDisconnectAtMs'];
+const resetReasons=new Set(['UNKNOWN','POWERON','EXTERNAL','SOFTWARE','PANIC','INT_WDT','TASK_WDT','WDT','DEEPSLEEP','BROWNOUT','SDIO']);
+fields.push(...systemCounts,'resetReason','flightMode','flightModeSource','requestedFlightMode','pendingFlightMode');
+allowedEvents.add('boot_changed');
+// Boot IDs stay in memory only. Export a page-local epoch, never device IDs.
+const systemBoots=new Map();
+function observeSystem(status,kit={}){
+ if(!kit.kitId||status?.kitId!==kit.kitId||!/^[a-f0-9]{32}$/i.test(status.bootId||''))return {};
+ const previous=systemBoots.get(kit.kitId),changed=!!previous&&previous.id!==status.bootId;
+ const bootEpoch=(previous?.epoch||0)+(!previous||changed?1:0);
+ systemBoots.set(kit.kitId,{id:status.bootId,epoch:bootEpoch});
+ if(systemBoots.size>16)systemBoots.delete(systemBoots.keys().next().value);
+ const mode=status.flightModeState;
+ const data=clean({bootEpoch,uptimeMs:status.uptimeMs,resetReasonCode:status.resetReasonCode,resetReason:status.resetReason,
+  staDisconnectCount:status.staDisconnectCount,staLastDisconnectReason:status.staLastDisconnectReason,staLastDisconnectAtMs:status.staLastDisconnectAtMs,
+  flightMode:mode?.active,flightModeSource:mode?.source,requestedFlightMode:mode?.requested,pendingFlightMode:mode?.pending??'none'});
+ if(changed)record('boot_changed',{...data,transport:kit.transport});
+ return data;
+}
 const motorCounts=['motorRemainingMs','sliderMask','sessionRemainingMs','commandSequence','pulseM1','pulseM2','pulseM3','pulseM4',
  'stoppedMask','configRevision','autoEscRemainingMs','autoEscHighMs','autoEscLowMs'];
 const motorResultPulses=['savedMinimumM1','savedMinimumM2','savedMinimumM3','savedMinimumM4','stoppedPulseUs','autoEscPulseUs'];
@@ -202,6 +221,7 @@ function observeImu(value,kit={}){
 
 function reasonClass(error){
  const s=String(error?.message||error||'').slice(0,220).toLowerCase();
+ if(/^(?:wi.fi|usb) link lost\b/.test(s))return 'NETWORK';
  if(/motor_session_expired_or_not_owner/.test(s))return 'OWNER_STALE';
  if(error?.code==='KIT_DELAYED'||/heartbeat is delayed|networkdelayerror/.test(s))return 'TIMEOUT';
  if(/input_profile_save_failed/.test(s))return 'PROFILE_SAVE_FAILED';
@@ -238,6 +258,10 @@ function clean(data){
   else if(['handMotorDisabled','diagnosticArmReleased'].includes(key)){if(typeof v==='boolean')result[key]=v;}
   else if(key==='motorPolicy'){if(['TIMED_MANUAL','LIVE_LEASE'].includes(v))result[key]=v;}
   else if(ppmCaptureCounts.includes(key)){if(Number.isSafeInteger(v)&&v>=0)result[key]=Math.min(0xffffffff,v);}
+  else if(systemCounts.includes(key)){if(uint(v))result[key]=v;}
+  else if(key==='resetReason'){if(resetReasons.has(v))result[key]=v;}
+  else if(key==='flightModeSource'){if(['SAVED','PPM_CH5'].includes(v))result[key]=v;}
+  else if(['flightMode','requestedFlightMode','pendingFlightMode'].includes(key)){if(['angle','acro'].includes(v)||key==='pendingFlightMode'&&v==='none')result[key]=v;}
   else if(key==='motorAction'){if(motorActions.has(v))result[key]=v;}
   else if(key==='motorMode'){if(motorModes.has(v))result[key]=v;}
   else if(key==='motorReason'){if(motorReasons.has(v))result[key]=v;}
@@ -503,6 +527,6 @@ root.zebjusNativeDiagnosticSaveResult=data=>{
  const status=panel()?.querySelector('[data-diag-export-status]');
  if(status)status.textContent=data?.ok?'Diagnostic file saved in chosen location':data?.cancelled?'Export cancelled; local diagnostics retained':'Export failed; local diagnostics retained';
 };
-root.ZebjusAckDiagnostics=Object.freeze({record,observeInput,observeView,normalizeImu,parseImuLine,imuLabel,observeImu,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
+root.ZebjusAckDiagnostics=Object.freeze({record,observeSystem,observeInput,observeView,normalizeImu,parseImuLine,imuLabel,observeImu,reasonClass,exportData,flush,getEvents:()=>events.map(x=>({...x,data:{...x.data}})),summary});
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })(window);

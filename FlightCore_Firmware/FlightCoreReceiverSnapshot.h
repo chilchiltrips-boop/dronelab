@@ -11,6 +11,7 @@ struct FlightReceiverSnapshot {
  ZjReceiverSource source=ZjReceiverSource::NONE;
  uint8_t availableMask=0;
  bool valid=false,selected=false,inputArmed=false;
+ bool ch5Mode=false,angleMode=true;
 
  bool fresh(uint32_t now,uint32_t maximumAgeMs)const{
   return valid&&selected&&sequence&&(availableMask&0x0f)==0x0f&&uint32_t(now-receivedAtMs)<=maximumAgeMs;

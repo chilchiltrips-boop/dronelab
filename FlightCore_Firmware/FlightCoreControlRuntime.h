@@ -257,6 +257,10 @@ static void zjControlTask(void*){
   std::copy_n(rates,3,next.rates);std::copy_n(gravity,3,next.gravity);
   next.sampleSequence=imuSample.sequence;next.sampleAtUs=imuSample.atUs;next.sampleValid=conditions.imuFresh;
   conditions.attitudeReady=next.attitude.fresh(at);conditions.levelCalibrated=level;
+  if(!preview&&inputFresh&&input.source==ZjReceiverSource::PPM&&input.ch5Mode)
+   next.angle=zjSelectPpmAngle(lease&&lastRequested?previous.angle:next.angle,input.angleMode,
+                             lease!=0,level,conditions.attitudeReady);
+  conditions.angle=next.angle;conditions.acro=!next.angle;
   // PID uses measured dt. Nominal release misses remain diagnostic while
   // dt is usable and the motor driver can renew its separate output lease.
   conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000;
@@ -279,8 +283,9 @@ static void zjControlTask(void*){
    trace.axes[i].measured=std::isfinite(rates[i])?rates[i]:0;
   }
   const bool sourceChanged=lastRequested&&(lastGeneration!=input.generation||lastSource!=input.source);
-  const bool profileChanged=lastRequested&&(previous.generation!=next.generation||previous.angle!=next.angle);
-  if(lastEpoch!=epoch||sourceChanged||profileChanged||lastPreview!=preview){
+  const bool profileChanged=lastRequested&&previous.generation!=next.generation;
+  const bool modeChanged=lastRequested&&previous.angle!=next.angle;
+  if(lastEpoch!=epoch||sourceChanged||profileChanged||modeChanged||lastPreview!=preview){
    resetControllers();
    previous.mix={};
   }
@@ -355,6 +360,7 @@ static void zjControlTask(void*){
    next.mix={};
   }
   next.outputAuthorized=zjFlightLease!=0;
+  zjAppliedFlightMode.store(zjFlightLease?(next.angle?1:2):0,std::memory_order_relaxed);
   const bool newCapture=preview?next.generation!=recordedPreview:
    inputArmEpoch!=recordedInputArm||(lease&&lease!=recordedFlightLease);
   const bool startCapture=requested&&epoch==zjFlightRevokeEpoch&&newCapture&&!zjFlightTrace.active;

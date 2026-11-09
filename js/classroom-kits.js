@@ -479,8 +479,8 @@ function renderHeaderProfileStatus(ready){
  if(message)message.dataset.tone=headerProfileError?'error':active?'good':'info';
  const scan=$('kitTopScan');if(scan)scan.disabled=discovering||otaActive;
 }
-async function disconnect(reason='Disconnected',{automatic=false,releaseDiagnosticControl=true}={}){
- trace('web_disconnect',{transport:state.transport,connected:false,reason:classify(reason)});
+async function disconnect(reason='Disconnected',{automatic=false,releaseDiagnosticControl=true,reasonCode}={}){
+ trace('web_disconnect',{transport:state.transport,connected:false,reason:reasonCode||classify(reason)});
  clearAdminBinding();
  autoReconnectAllowed=automatic;otaActive=false;
  const priorId=state.kitId;pendingNetworkTarget=null;closeReconnectOffer();
@@ -940,7 +940,7 @@ async function readStatus(){
  let d;
  try{d=await deviceRequest('/api/status')}catch(error){if(superseded()||error?.code==='SAFETY_CANCELLED')throw cancelled();throw error}
  if(superseded())throw cancelled();
- trace('web_status',{transport:state.transport,board:d.board,version:d.version,mode:d.mode,
+ trace('web_status',{...root.ZebjusAckDiagnostics?.observeSystem?.(d,{kitId:state.kitId,transport:state.transport}),transport:state.transport,board:d.board,version:d.version,mode:d.mode,
   apActive:d.apActive,staConnected:d.staConnected,staReason:Number(d.staDisconnectReason)||0,
   rssi:Number(d.rssi),seq:Number(d.rc?.seq),accepted:Number(d.rc?.accepted),rejected:Number(d.rc?.rejected),
   ageMs:Number(d.rc?.ageMs),rcOwned:d.rc?.claimed===true,source:d.rc?.source,inputArmed:d.rc?.inputArmed===true,
@@ -1485,7 +1485,7 @@ function onSerial(e){
   usbCandidate.statusRecord=extension;usbCandidate.statusAt=Date.now();usbCandidate.rc=extension.rc;usbCandidate.rcAt=Date.now();
   // Legacy compact USB status synthesized default output flags when
   // absent. The telemetry dashboard only presents explicit output flags.
-  usbCandidate.statusOutputExplicit=line.startsWith('ZJSTATE,1,{')||line.split(',').length===23;
+  usbCandidate.statusOutputExplicit=line.startsWith('ZJSTATE,1,{')||[23,25].includes(line.split(',').length);
  }
  const usbRc=root.ZebjusSerialRcDecoder?.parseSerialRc?.(line);
  if(usbRc&&Number.isInteger(usbCandidate.serialGeneration)&&usbCandidate.serialGeneration===root.DroneLabSerial?.generation?.()){
@@ -2356,7 +2356,7 @@ function init(){
    else{
     const old=connectionTarget();
     audit('3 missed '+(usb?'USB':'Wi-Fi')+' checks • verifying the Kit connection','warn');
-    await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect',{automatic:true});
+    await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect',{automatic:true,reasonCode:'NETWORK'});
     if(!usb&&!document.hidden){
      // Directly verify the previously connected physical kit before scanning unrelated classroom kits.
      void recoverVerifiedLink(old).then(ok=>{if(!ok&&!state.connected&&autoReconnectAllowed)void discoverKits().catch(()=>{})}).catch(e=>audit('Read-only Wi-Fi recovery: '+e.message,'warn'));

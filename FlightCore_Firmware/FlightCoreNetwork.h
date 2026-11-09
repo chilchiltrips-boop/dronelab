@@ -15,6 +15,8 @@ static String zjNetKey,zjApSsid,zjApPass,zjSavedSsid,zjSavedPass,zjMode="auto",z
 static uint32_t zjNetAttempt=0,zjNetNextRetry=0,zjOtaRebootAt=0,zjLastScanSeq=0;
 static bool zjNetTesting=false,zjOtaAuthorized=false;
 static volatile uint8_t zjStaDisconnectReason=0,zjLastStaFailureReason=0;
+static volatile uint8_t zjStaLastDisconnectReason=0;
+static volatile uint32_t zjStaDisconnectCount=0,zjStaLastDisconnectAt=0;
 static volatile uint32_t zjAssociationEpoch=0;static uint32_t zjTestAssociationEpoch=0;
 static const uint32_t ZJ_NET_TEST_TIMEOUT_MS=20000;
 static String zjWifiTestState="idle";
@@ -121,13 +123,15 @@ static String zjStatus(){
  out+=",\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"kitName\":"+zjJson(zjKitName)+",\"rssi\":"+String(sta?WiFi.RSSI():0)+",\"staDisconnectReason\":"+String(zjStaDisconnectReason);
  out+=",\"lastStaFailureReason\":"+String(zjLastStaFailureReason)+",\"wifiTestState\":"+zjJson(zjWifiTestState)+",\"staCredentialsSaved\":"+(zjSavedSsid.length()?String("true"):String("false"));
  const String networkState=zjNetTesting?"STA_TESTING":sta?"STA_CONNECTED":zjPhase=="sta_connecting"?"STA_CONNECTING":zjRcOwned?"AP_JOYSTICK_READY":zjSavedSsid.isEmpty()?"AP_ONBOARDING":"NETWORK_RECOVERY";
- out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"exclusiveWifi\":true";
+ out+=",\"networkState\":"+zjJson(networkState)+",\"flightMode\":"+zjJson(zjActiveFlightMode())+",\"exclusiveWifi\":true";
  out+=",\"radioHandover\":"+zjRadioHandoverStatus();
  out+=",\"imu\":"+zjImuStatus();
  out+=",\"apClientCount\":"+String(WiFi.softAPgetStationNum())+
   ",\"apJoinEvents\":"+String(zjApJoinEvents)+",\"apLeaveEvents\":"+String(zjApLeaveEvents)+
   ",\"apLastLeaveReason\":"+String(zjApLastLeaveReason);
  out+=",\"bootId\":"+zjJson(zjBootId)+",\"channel\":"+String(WiFi.channel())+",\"setupAuthorized\":"+(zjSetupAuthorized()?String("true"):String("false"))+",\"otaAuthorized\":"+(zjAuthAdmin?String("true"):String("false"))+","+zjMotorFlags();
+ out+=",\"uptimeMs\":"+String(millis())+",\"resetReasonCode\":"+String(unsigned(zjBootResetReason))+",\"resetReason\":"+zjJson(zjBootResetName());
+ out+=",\"staLastDisconnectReason\":"+String(zjStaLastDisconnectReason)+",\"staDisconnectCount\":"+String(zjStaDisconnectCount)+",\"staLastDisconnectAtMs\":"+String(zjStaLastDisconnectAt);
  out+=",\"controlAuthorized\":"+((zjAuthAdmin||zjRequestSession>=0&&!zjSessions[zjRequestSession].localSta)?String("true"):String("false"));
  out+=",\"flight\":"+zjFlightStatusJson();
  out+=",\"flightTelemetryVersion\":1,\"flightModeState\":"+zjFlightModeState()+",\"inputArmSupported\":true,\"ledOn\":"+(ledMode!=LED_OFF?String("true"):String("false"));
@@ -214,7 +218,7 @@ static void zjSetupHttp(){
   if(!zjSaveFlightMode(zjPrefs,next)){
    zjReply(500,"{\"error\":\"flight_mode_save_failed\"}");return;
   }
-  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"flightMode\":"+zjJson(zjFlightMode)+",\"flightModeState\":"+zjFlightModeState()+",\"saved\":true,"+zjMotorFlags()+"}");
+  zjReply(200,String("{\"kitId\":")+zjJson(zjKitId)+",\"flightMode\":"+zjJson(zjActiveFlightMode())+",\"flightModeState\":"+zjFlightModeState()+",\"saved\":true,"+zjMotorFlags()+"}");
  });
  zjHttp.on("/api/identify",HTTP_GET,[](){zjReply(200,"{\"kitId\":"+zjJson(zjKitId)+",\"kitCode\":"+zjJson(zjKitCode)+",\"authVersion\":2,\"udpManagement\":\"ZJM1\",\"udpManagementPort\":4211,\"simpleConnection\":true,\"adminSessions\":true,\"exclusiveWifi\":true,\"labelInstalled\":"+(zjLabelSecret.length()?String("true"):String("false"))+",\"name\":"+zjJson(zjKitName)+",\"hostname\":"+zjJson(zjMdnsKitHostname()+".local")+",\"board\":"+zjJson(FC_BOARD)+"}");});
  // AP-local Kit identity maintenance; full immutable Device ID is never changed.
@@ -467,6 +471,7 @@ static void zjNetworkSetup(){
   if(event==ARDUINO_EVENT_WIFI_STA_GOT_IP){zjAssociationEpoch=zjAssociationEpoch+1;zjStaDisconnectReason=0;}
   if(event==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
    zjStaDisconnectReason=info.wifi_sta_disconnected.reason;
+   zjStaLastDisconnectReason=zjStaDisconnectReason;++zjStaDisconnectCount;zjStaLastDisconnectAt=millis();
    if(zjNetTesting&&zjStaDisconnectReason!=36&&zjStaDisconnectReason!=0)zjLastStaFailureReason=zjStaDisconnectReason;
   }
  });
@@ -587,51 +592,11 @@ static bool zjNetSerialCommand(char* line){
  }
  return false;
 }
-#include "FlightCorePpmFallback.h"
-static bool zjPpmFallbackSwitching=false;
-static bool zjPpmFallbackOutputsOff(){
- bool off=!zjMotorEnabled&&!zjMotorArmed&&!zjMotorSessionActive;
-#if defined(CONFIG_IDF_TARGET_ESP32C6)
- off=off&&zjAutoEscOutputsOff();
-#endif
- return off;
-}
-static void zjPpmFallbackLoop(uint32_t now){
- if(zjPpmFallbackSwitching){
-  if(zjHandoverPending&&!zjPpmFallbackOutputsOff()){
-   zjPendingMode="";zjMode=zjHandoverPreviousMode;
-   zjRadioHandoverFailed("OUTPUT_OFF_UNVERIFIED");
-  }
-  if(!zjHandoverPending)zjPpmFallbackSwitching=false;
- }
- if(!zjPpmFallbackPending)return;
- const bool off=zjPpmFallbackOutputsOff();
- const bool busy=zjHandoverPending||zjPendingMode.length()||zjNetTesting||zjOtaAuthorized||
-  zjSecureOtaActive||zjOtaRebootAt||zjUsbScanning||zjMaintenanceActive||zjRcOwned;
- const auto decision=zjDecidePpmFallback(now-zjPpmFallbackAt,zjPpmSignalFresh(now),
-  zjRcControlPath=="PPM"&&WiFi.getMode()==WIFI_STA,off,busy);
- if(decision==ZjPpmFallbackDecision::WAIT)return;
- zjPpmFallbackPending=false;
- if(decision==ZjPpmFallbackDecision::CANCEL)return;
- if(decision==ZjPpmFallbackDecision::BLOCKED){
-  zjHandoverLastReject=off?"PPM_FALLBACK_BUSY":"OUTPUT_OFF_UNVERIFIED";
-  if(!zjHandoverPending){zjHandoverState="FAILED";zjHandoverError=zjHandoverLastReject;}
-  return;
- }
- zjPpmFallbackSwitching=true;
- // Runtime recovery keeps the saved STA profile. An explicit later STA
- // transition still uses the last selected STA input, with a fresh claim.
- zjHandoverPreviousMode=zjMode;zjLastStaInput="PPM";zjMode="ap";
- zjHandoverTargetInput="ANDROID_AP";zjHandoverError="";zjHandoverLastReject="NONE";
- zjRcControlPath="ANDROID_AP";zjRcSelection="ANDROID";
- zjRcPaused=true;zjRcHandoverPaused=true;zjHandoverPending=true;zjHandoverState="PREPARED";
- zjScheduleMode("ap");
-}
 static void zjNetworkLoop(uint32_t now){
  // Service due input before/between management work, not only after HTTP.
  zjUdpLoop(millis());zjAuthResetRequest();zjRpcLoop();zjUdpLoop(millis());
  zjAuthResetRequest();zjHttp.handleClient();now=millis();zjUdpLoop(now);
- zjPpmFallbackLoop(now);zjWifiPolicyLoop(now);now=millis();
+ zjWifiPolicyLoop(now);now=millis();
  zjSecureOtaLoop(now);
  zjPpmLoop(now);
  zjRcLoop(now);

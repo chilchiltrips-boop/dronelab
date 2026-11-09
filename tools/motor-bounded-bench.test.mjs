@@ -34,6 +34,7 @@ static int ledc_stop(int,int channel,int){duties[channel]=0;return 0;}
 static int ledc_set_duty(int,int channel,uint32_t duty){duties[channel]=duty;return 0;}
 static int ledc_update_duty(int,int){return 0;}
 static std::atomic<bool> zjMotorPwmOffAck{true};
+static std::atomic<uint8_t> zjAppliedFlightMode{0};
 static bool zjMotorDriverReady=true,zjMotorEnabled=false,zjMotorArmed=false,zjMotorSessionActive=false,zjMotorInputTest=false;
 ${watch}
 static ZjMotorSafety zjMotor;

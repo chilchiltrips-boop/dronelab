@@ -9,7 +9,9 @@ const classify=error=>window.ZebjusAckDiagnostics?.reasonClass(error)||'OTHER';
 const pending=new Map();let ip='192.168.4.1',staIp='',link='ap',key='',mode='auto',online=false,requestId=0,previewBusy=false,lastPreview=0,lastStatus=0,lastScan=0,autoApTimer=null,nextAutoApAttempt=0,kitCode='',verifiedKitId='',rcSession='',rcClaiming=false,onKitLink=false,rcSeq=0,auth=null,diagnosticKey='',connecting=false,reconnectEnabled=false,firmwareAck=null,otaBusy=false,otaCancelRequested=false,otaPaused=false,otaNeedsRecheck=false,discoveredId='',cachedFallbackIp='',pinIdentity='',pinWaiters=new Map(),discoveryWaiters=new Map();
 const nonRcNativeRequests=new Set();
 let kitFlightMode='angle',kitFlightModeVerified=false,kitFlightModeObserved=false,flightModeSaving=false,kitModeState=null,modeRequestSeq=0,modeTail=Promise.resolve(),lastPreviewClaimAt=-Infinity;
-const validModeState=value=>value?.supported===true&&['angle','acro'].includes(value.saved)&&['angle','acro'].includes(value.active)&&(value.pending===null||value.pending===value.saved)&&((value.pending===null)===(value.saved===value.active));
+const validModeState=value=>value?.supported===true&&['angle','acro'].includes(value.saved)&&['angle','acro'].includes(value.active)&&((value.source==='PPM_CH5'&&value.ch5Supported===true&&['angle','acro'].includes(value.requested))
+    ?(value.pending===null||value.pending===value.requested)&&((value.pending===null)===(value.requested===value.active))
+    :(!value.source||value.source==='SAVED')&&(value.requested===undefined||value.requested===value.saved)&&(value.pending===null||value.pending===value.saved)&&((value.pending===null)===(value.saved===value.active)));
 const modeStatus=d=>validModeState(d?.flightModeState)?{...d.flightModeState}:null;
 const modeTraffic=(route,method)=>route==='/api/flight/mode'&&method==='POST'||(flightModeSaving||ledBusy)&&route==='/api/status'&&method==='GET'||ledBusy&&route==='/api/command'&&method==='POST';
 let statusBusy=false,statusInFlight=null,statusFailures=0,linkEpoch=0,rcEpoch=0,rcInputArmed=false,inputArmSupported=false,controlAuthorized=false,authOpening=null,lastAckDiagnosticAt=0;
@@ -589,7 +591,7 @@ async function status(){
  window.ZebjusAckDiagnostics?.observeImu?.(data.imu,getState());
  window.ZebjusAckDiagnostics?.observeInput?.(kitSnapshot.rc||{},{...getState(),ppm:data.ppm});
  window.dispatchEvent(new CustomEvent('zebjus:kit-status'));
- trace('kit_status',{transport:link,board:data.board,version:data.version,mode:data.mode,
+ trace('kit_status',{...window.ZebjusAckDiagnostics?.observeSystem?.(data,{kitId:verifiedKitId,transport:link}),transport:link,board:data.board,version:data.version,mode:data.mode,
   apActive:data.apActive,staConnected:data.staConnected,staReason:Number(data.staDisconnectReason)||0,
   rssi:Number(data.rssi),seq:Number(data.rc?.seq),accepted:Number(data.rc?.accepted),
   rejected:Number(data.rc?.rejected),ageMs:Number(data.rc?.ageMs),rcOwned:data.rc?.claimed===true,

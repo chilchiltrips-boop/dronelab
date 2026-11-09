@@ -59,9 +59,9 @@
    if(text[10]==='{')d=JSON.parse(text.slice(10));
    else{
     const p=text.split(',');
-    if(![21,23].includes(p.length)||(p.length===23&&!p.slice(21).every(v=>/^[01]$/.test(v)))||!p.slice(6,12).every(pulse)||!p.slice(12,17).every(decimal)||
+    if(![21,23,25].includes(p.length)||(p.length>=23&&!p.slice(21,23).every(v=>/^[01]$/.test(v)))||(p.length===25&&(!['SAVED','PPM_CH5'].includes(p[23])||!['angle','acro'].includes(p[24])))||!p.slice(6,12).every(pulse)||!p.slice(12,17).every(decimal)||
      !/^[01]$/.test(p[17])||!/^(WEB|ANDROID|PPM|NONE)$/.test(p[18])||!/^(USB|AP|STA|PPM|NONE)$/.test(p[19])||!/^[01]$/.test(p[20])||Number(p[12])>7)return null;
-    d={kitId:p[2],flightModeState:{supported:true,stabilizationSupported:false,saved:p[3],active:p[4],pending:p[5]==='none'?null:p[5]},
+    d={kitId:p[2],flightModeState:{supported:true,stabilizationSupported:false,saved:p[3],active:p[4],pending:p[5]==='none'?null:p[5],...(p.length===25?{source:p[23],requested:p[24],ch5Supported:true}:{})},
      ledOn:Number(p[12])!==0,ledEffect:Number(p[12]),rc:{kitId:p[2],throttle:Number(p[6]),roll:Number(p[7]),pitch:Number(p[8]),yaw:Number(p[9]),
       ch5:Number(p[10]),ch6:Number(p[11]),seq:Number(p[13]),ageMs:Number(p[14]),accepted:Number(p[15]),rejected:Number(p[16]),
       inputArmed:p[17]==='1',source:p[18],transport:p[19],active:p[20]==='1',inputValid:p[20]==='1',motorsArmed:p[22]==='1',motorsDisabled:p.length===21||p[21]==='0',flightMode:p[4]}};
@@ -69,7 +69,9 @@
    const m=d.flightModeState,rc=d.rc;
    if(!/^ZFC-A[12]-[A-F0-9]{12}$/.test(d.kitId||'')||!m||m.supported!==true||
     !['angle','acro'].includes(m.saved)||!['angle','acro'].includes(m.active)||
-    !(m.pending===null||m.pending===m.saved)||(m.pending===null)!==(m.saved===m.active)||
+    !((m.source==='PPM_CH5'&&m.ch5Supported===true&&['angle','acro'].includes(m.requested))
+    ?(m.pending===null||m.pending===m.requested)&&((m.pending===null)===(m.requested===m.active))
+    :(!m.source||m.source==='SAVED')&&(m.requested===undefined||m.requested===m.saved)&&(m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active)))||
     typeof d.ledOn!=='boolean'||!rc||rc.kitId!==d.kitId||
     !['throttle','roll','pitch','yaw','ch5','ch6'].every(k=>Number.isInteger(rc[k])&&rc[k]>=1000&&rc[k]<=2000)||
     !Number.isInteger(rc.seq)||rc.seq<0||rc.seq>4294967295||

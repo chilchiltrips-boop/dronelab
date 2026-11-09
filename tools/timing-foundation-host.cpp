@@ -3,7 +3,6 @@
 #include "../FlightCore_Firmware/FlightCoreFlightOutput.h"
 #include "../FlightCore_Firmware/FlightCoreRateTrace.h"
 #include "../FlightCore_Firmware/FlightCoreRatePid.h"
-#include "../FlightCore_Firmware/FlightCorePpmFallback.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -123,12 +122,6 @@ int main(){
  trace.observe(sample);sample.atUs+=120600;trace.observe(sample);
  trace.freeze(sample,ZjRateTraceEvent::EXPORT,ZjFlightFault::NONE);
  assert(trace.size()==4&&trace.read(0,sample)&&sample.event==ZjRateTraceEvent::PREVIEW_START);
- assert(zjDecidePpmFallback(349,false,true,true,false)==ZjPpmFallbackDecision::WAIT);
- assert(zjDecidePpmFallback(349,true,true,true,false)==ZjPpmFallbackDecision::CANCEL);
- assert(zjDecidePpmFallback(350,false,true,true,false)==ZjPpmFallbackDecision::START_AP);
- assert(zjDecidePpmFallback(4999,false,true,false,false)==ZjPpmFallbackDecision::WAIT);
- assert(zjDecidePpmFallback(5000,false,true,false,false)==ZjPpmFallbackDecision::BLOCKED);
- assert(zjDecidePpmFallback(5000,false,false,true,false)==ZjPpmFallbackDecision::CANCEL);
  // Unsigned microsecond rollover is crossed by scheduler, sensors and rates.
  const uint32_t at=0xfffff000U;c.start(at);
  for(uint32_t i=1;i<=500;i++){assert(c.begin(uint32_t(at+i*4000)));c.finish(uint32_t(at+i*4000+10));}

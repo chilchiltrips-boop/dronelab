@@ -11,7 +11,9 @@
  function flightModeState(d){
   const m=d?.flightModeState;
   return m?.supported===true&&['angle','acro'].includes(m.saved)&&['angle','acro'].includes(m.active)&&
-   (m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active))?{...m}:null;
+   ((m.source==='PPM_CH5'&&m.ch5Supported===true&&['angle','acro'].includes(m.requested))
+    ?(m.pending===null||m.pending===m.requested)&&((m.pending===null)===(m.requested===m.active))
+    :(!m.source||m.source==='SAVED')&&(m.requested===undefined||m.requested===m.saved)&&(m.pending===null||m.pending===m.saved)&&((m.pending===null)===(m.saved===m.active)))?{...m}:null;
  }
  function isNetwork(transport){return network.has(String(transport||'').toLowerCase())}
  // Keep signed requests ordered, but let motor control and STOP pass queued

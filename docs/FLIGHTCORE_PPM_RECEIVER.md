@@ -1,4 +1,4 @@
-# FlightCore PPM-SUM receiver — firmware 1.7.3 (hardware verification required)
+# FlightCore PPM-SUM receiver — firmware 1.7.26 (hardware verification required)
 
 ## Wiring — do not confuse D10 with GPIO10
 | Board | Board marking | Real MCU input | FlightCore profile |
@@ -18,7 +18,7 @@ the board 3V3 regulator budget. Never apply receiver supply voltage to D10.
 One PPM-SUM wire carries eight pulse widths, 850–2150 µs. A2 uses the built-in ESP-IDF RMT RX driver at 1 MHz, with 1 µs glitch filtering and a 2.5 ms idle delimiter. Nine separator pulses (80–650 µs) delimit eight channels, for either polarity. A dedicated receiver task rearms capture independently of HTTP/main-loop polling. A1 retains rising-edge GPIO capture with a 3200–30000 µs sync gap. The decoder
 accepts **exactly eight channels** per frame (standard 20–30ms frame).
 Different receiver protocols such as SBUS, CRSF, individual PWM, CPPM
-with >8 channels, or nonstandard PPM timings require another decoder. A1 requires positive PPM. PPM monitoring itself never starts motors; A2 output requires a separate explicitly confirmed bench test.
+with >8 channels, or nonstandard PPM timings require another decoder. A1 requires positive PPM. PPM monitoring itself never starts motors; the standard bench build keeps flight output disabled. The separately selected A2 Experimental build can start physical flight through the saved setup, PID, input ARM and runtime gates.
 
 ### Channel mapping (defaults)
 | Channel | Meaning | Center / default |
@@ -27,7 +27,7 @@ with >8 channels, or nonstandard PPM timings require another decoder. A1 require
 | CH2 | Pitch | 1500 µs |
 | CH3 | Throttle | 1000 µs |
 | CH4 | Yaw | 1500 µs |
-| CH5 | Auxiliary read-only input (not used for PPM ARM) | 1000–2000 µs |
+| CH5 | Flight mode: LOW = Angle, HIGH = Acro; never ARM | LOW ≤1300 / HIGH ≥1700 µs |
 | CH6–CH8 | Auxiliary read-only | 1500 µs |
 
 Calibration: each channel defaults to min=1000 / mid=1500 / max=2000 µs.
@@ -43,10 +43,33 @@ ZJPPM,CAL,3,980,1500,2020
 ZJPPM,MAP,1,2,3,4,5
 ```
 
-`MAP` takes **roll,pitch,throttle,yaw,CH5 auxiliary** receiver channel indexes,
+`MAP` takes **roll,pitch,throttle,yaw,flight-mode auxiliary** receiver channel indexes,
 1..8 with no duplicates. Output: `ZJPPM,ACK,CAL,<ch>` or
 `ZJPPM,ACK,MAP`. After changing config, re-test throttle direction
 and switch thresholds with the receiver on a bench.
+
+## CH5 flight mode
+
+The fifth mapped channel (AUX1, physical CH5 by default) selects **Angle at
+1000–1300 µs** and **Acro at 1700–2000 µs**. A new endpoint must persist across
+fresh frames for at least 60 ms. The centre range holds the last selected mode,
+so a three-position switch does not chatter around its middle position. Before
+an endpoint is accepted, the saved mode is the default. Transmitter reversing
+can swap the physical switch positions; check the displayed pulse and active mode.
+
+Mode switching works while armed, through the independent PPM receiver and
+250 Hz flight worker. It resets the PID integrators but does not issue ARM or
+change the output lease. Acro → Angle waits for saved Level Horizon calibration
+and a fresh valid attitude estimate; status reports the requested Angle mode as
+pending while Acro remains active. Genuine sensor/input/output faults retain
+their existing motor-stop behavior. Saving a mode in the app changes the default;
+CH5 controls the active mode while PPM owns the kit.
+
+`flightModeState` now reports `source` (`PPM_CH5` or `SAVED`), `requested`,
+`active`, `saved`, `pending`, and `ch5Supported`. USB `ZJSTATE,1` appends source
+and requested mode after its motor flags; the WebApp accepts both the old and
+extended records. After remapping AUX1, the displayed auxiliary pulse follows
+the mapped channel.
 
 ## Ownership and failsafe
 - Input source stays **NONE** until three successive valid PPM-SUM frames
@@ -54,15 +77,18 @@ and switch thresholds with the receiver on a bench.
 - A physical PPM owner never silently preempts active WEB/ANDROID/USB
   control. Conversely, WEB/ANDROID may not claim while PPM owns the Kit.
 - After acquisition, centre yaw (1400–1600 µs), keep throttle <=1050 µs,
-  and hold yaw **RIGHT** (>=1900 µs) for **2 seconds** to assert diagnostic
+  and hold yaw **RIGHT** (>=1900 µs) for **2 seconds** to assert
   INPUT ARM. Hold yaw **LEFT** (<=1100 µs) at throttle <=1050 µs for
-  **2 seconds** to DISARM. The gesture changes only diagnostic status; it
-  never activates motor pins. **CH5 is not used for ARM or DISARM.**
+  **2 seconds** to DISARM. On the bench build the gesture changes input status only. On the
+  Experimental A2 build, a fresh ARM edge can authorize physical flight only
+  when the saved setup and runtime gates pass. **CH5 is not used for ARM or DISARM.**
 - Complete frames retain their ISR arrival timestamp; the mailbox keeps the latest
   complete frame. Stale pending frames are discarded. Hardware capture continuity distinguishes a delayed consumer from a real receiver gap. A real gap releases control before accepting any resumed frame, so a stale yaw gesture cannot hide signal loss.
 - On 150ms PPM signal loss, the PPM owner releases, channels return neutral,
-  diagnostic input is disarmed. The existing 350ms/1800ms network/USB
-  RC deadman/lease protections remain unchanged.
+  input is disarmed and the flight output lease is revoked. **PPM selection
+  and STA/AP mode remain unchanged**; receiver loss never requests an automatic
+  switch to Android AP. Read-only STA monitoring can report loss and recovery.
+  The existing 500ms/1800ms network/USB RC deadman/lease protections remain unchanged.
 - A fresh receiver signal alone does not re-arm. It must reacquire at
   low throttle, yaw centred, and the new RIGHT hold. Other sources require their own authorization.
 - `ZJRC,STOP` always cancels existing controller ownership.
@@ -123,11 +149,27 @@ This feature requires a WebApp update, not a firmware or Android APK rebuild.
    reinstate joystick authorization. Test Wix/WordPress with real browser
    delegation; fallback to direct top-level DroneLab if LNA/Serial blocked.
 
+For flight-build bench verification, remove propellers and secure the kit. Confirm
+CH5 LOW/HIGH changes the active mode without changing ARM, and centre holds it.
+With STA connected, interrupt PPM: verify all four outputs go OFF, STA and PPM
+selection stay unchanged, and signal recovery requires the full fresh ARM gesture.
+Repeat at higher motor command only on a suitable secured test stand. Hardware
+acceptance for this revision must be recorded separately.
+
+`/api/status` includes `uptimeMs`, `resetReasonCode`, `resetReason`, and sticky
+`staDisconnectCount`, `staLastDisconnectReason`, `staLastDisconnectAtMs` for the
+current boot. WebApp/Android diagnostics export these fields and a page-local
+`bootEpoch`; a changed boot produces `boot_changed` without exporting raw IDs.
+A network timeout/disconnect is labeled NETWORK/TIMEOUT, not IDENTITY merely
+because the reconnect message mentions identity checking. An actual identity
+mismatch still reports IDENTITY. A detected reboot does not by itself prove a
+brownout; use the firmware reset reason and hardware power measurements.
+
 The authenticated `/api/ppm/status` and USB `ZJPPM,GET` report `armMethod`,
 `armStatus` (ARMED/DISARMED), `armHoldMs`, `throttleLowUs`, `yawRightUs`,
 `yawLeftUs` and `inputArmed`. `/api/rc/snapshot` keeps `inputArmed` for the
-accepted PPM diagnostic status. `motorsArmed` / `motorsDisabled` remain
-separate authoritative motor-output flags, not changed by the yaw gesture.
+accepted PPM input status. `motorsArmed` / `motorsDisabled` remain
+separate authoritative motor-output flags; input ARM alone is not proof of motor output.
 
 **No physical Kit/receiver verification has been performed by the CI pipeline.**
 Successful build/tests establish firmware compatibility, not analog signal

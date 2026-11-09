@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.25",
+  "candidateVersion": "1.7.26",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "The verified bench package is 1.7.19. Candidate 1.7.25 handles closely spaced IMU samples and records attitude fault details. Physical acceptance is NOT_RUN.",
+  "note": "The verified bench package is 1.7.19. Candidate 1.7.26 preserves STA and PPM selection after RX loss, adds CH5 Angle/Acro switching and reset/link diagnostics. Physical acceptance is NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,

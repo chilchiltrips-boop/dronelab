@@ -883,7 +883,8 @@ if(root){
   const angleLabel=m?.stabilizationSupported===false?'Angle · setup setting':'Angle · self-level + Rate PID';
   if(mode.options[1].textContent!==angleLabel)mode.options[1].textContent=angleLabel;
   $('.a2-flight-mode-status').textContent=m?'Saved '+m.saved.toUpperCase()+' · Active '+m.active.toUpperCase()+
-   (m.pending?' · Pending '+m.pending.toUpperCase():'')+(m.stabilizationSupported===false?' · Angle stabilization unavailable on this firmware.':''):
+   (m.source==='PPM_CH5'?' · Controlled by CH5':'')+(m.pending?' · Pending '+m.pending.toUpperCase():'')+
+   (m.ch5Supported&&confirmed==='PPM'?' · CH5 LOW: Angle · HIGH: Acro · centre: hold mode.':'')+(m.stabilizationSupported===false?' · Angle stabilization unavailable on this firmware.':''):
    'Read a verified FC to see its saved mode.';
   mode.disabled=!!working||!k.connected;
   return {k,info,peer,selected,confirmed};
@@ -932,7 +933,7 @@ if(root){
   const armObserved=k.connected&&!input.receiverLost&&input.monitoring&&!input.monitorDelayed&&Date.now()-lastStateAt<1000&&typeof m.inputArmed==='boolean';
   $('.a2-input').textContent=`${input.source} · ${monitoring}${input.reported?' · sample age '+age:''} · Input ${armObserved?(m.inputArmed?'armed':'disarmed'):'arm state unverified'}`;
   const map=verifiedPpmMap(ppm?.map);
-  $('.a2-ppm-mapping').textContent=map?`Receiver channels → Roll ${map[0]} · Pitch ${map[1]} · Throttle ${map[2]} · Yaw ${map[3]} · Aux ${map[4]}`:'Saved PPM mapping unverified.';
+  $('.a2-ppm-mapping').textContent=map?`Receiver channels → Roll ${map[0]} · Pitch ${map[1]} · Throttle ${map[2]} · Yaw ${map[3]} · Flight mode CH${map[4]}`:'Saved PPM mapping unverified.';
   const ppmSelected=observed==='PPM';
   const throttle=input.channels?.[2],freshThrottle=ppmSelected&&input.ppmMap&&input.valid&&!input.monitorDelayed&&Number.isInteger(throttle);
   const throttleStatus=$('.a2-ppm-throttle');

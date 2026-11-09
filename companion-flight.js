@@ -136,7 +136,7 @@ function render(){
  if(directKit()){
   const actual=window.ZebjusNetwork?.flightModeState?.();
   $('flightModeState').textContent=kitModePending?'SAVING • '+mode.toUpperCase():actual?
-   'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):
+   'SAVED '+actual.saved.toUpperCase()+' • ACTIVE '+actual.active.toUpperCase()+(actual.source==='PPM_CH5'?' • CH5':'')+(actual.pending?' • PENDING '+actual.pending.toUpperCase():''):
    (window.ZebjusNetwork?.savedFlightMode?.()?'ACTIVE '+window.ZebjusNetwork.savedFlightMode().toUpperCase()+' • UPDATE FIRMWARE FOR MODE CHANGES':'KIT MODE UNSUPPORTED • UPDATE FIRMWARE');
  }
  $('flightSent').textContent='#'+(directKit()?diagnostic?.sentSeq||diagnostic?.seq||0:seq);
@@ -334,7 +334,7 @@ function bind(){
     try{
      const actual=await window.ZebjusNetwork.setSavedFlightMode(desired);
      if(request!==modeUiSeq)return;
-     mode=actual.saved;updateStatus(actual.pending?'SAVED • PENDING UNTIL KIT DISARM':'SAVED • ACTIVE '+actual.active.toUpperCase());
+     mode=actual.saved;updateStatus(actual.source==='PPM_CH5'?'DEFAULT SAVED • CH5 CONTROLS '+actual.active.toUpperCase():actual.pending?'SAVED • PENDING UNTIL KIT DISARM':'SAVED • ACTIVE '+actual.active.toUpperCase());
     }catch(error){
      if(request!==modeUiSeq)return;
      mode=window.ZebjusNetwork?.savedFlightMode?.()||previous;

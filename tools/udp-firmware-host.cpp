@@ -35,6 +35,10 @@ static constexpr int U_FLASH=0;
 struct {size_t writes=0;bool begin(size_t,int){writes=0;return true;}size_t write(const uint8_t*,size_t n){writes+=n;return n;}void abort(){}bool end(bool){return true;}} Update;
 #include "../FlightCore_Firmware/FlightCoreOta.h"
 static String zjMode="sta",zjPhase="sta_connected",zjApSsid="ZEBJUS",zjWifiTestState="idle",zjSavedSsid="School";
+static const uint8_t zjBootResetReason=1;
+static const char* zjBootResetName(){return "POWERON";}
+static uint8_t zjStaLastDisconnectReason=200;
+static uint32_t zjStaDisconnectCount=2,zjStaLastDisconnectAt=750;
 static bool zjApStarted=true;static int zjStaDisconnectReason=0,zjLastStaFailureReason=0,ledMode=1,LED_OFF=0;
 // Match production status counters when extracting only the status/RPC functions.
 static uint32_t zjApJoinEvents=1,zjApLeaveEvents=0,zjRpcMaxLoopUs=0,zjRpcMaxDispatchUs=0;

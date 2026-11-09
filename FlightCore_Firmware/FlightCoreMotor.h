@@ -43,6 +43,7 @@ static bool zjMotorPwmStopLocked(){
  return off;
 }
 static void zjFlightDriverStopLocked(ZjFlightFault fault){
+ zjAppliedFlightMode.store(0,std::memory_order_relaxed);
  zjFlightDriver={};
  zjFlightDriver.fault=fault;zjFlightDriver.faultAtUs=micros();
  zjFlightDriver.appliedKnown=zjFlightDriver.offAck=zjMotorPwmStopLocked();

@@ -36,8 +36,6 @@ static uint32_t zjPpmConsumedFrames=0,zjPpmCoalescedFrames=0;
 static uint8_t zjPpmSafeFrames=0;
 static bool zjPpmInputAvailable=false,zjPpmReportedLost=false;
 static ZjPpmArmGesture zjPpmArm;
-static bool zjPpmFallbackPending=false;
-static uint32_t zjPpmFallbackAt=0;
 
 struct ZjPpmConfig {
  uint16_t minimum[8],middle[8],maximum[8];
@@ -175,6 +173,7 @@ struct ZjPpmFlightInput {
  FlightReceiverSnapshot frame;
  ZjPpmConfig config;
  ZjPpmArmGesture gesture;
+ ZjPpmModeSwitch mode;
 
  void accept(const volatile uint16_t* raw,uint32_t at){
   if(!frame.valid||!frame.inputArmed||int32_t(at-frame.receivedAtMs)<=0)return;
@@ -182,6 +181,7 @@ struct ZjPpmFlightInput {
   uint16_t channels[8];
   for(unsigned n=0;n<8;n++)channels[n]=zjPpmScale(raw[n],config.minimum[n],config.middle[n],config.maximum[n]);
   zjMapPpmChannels(channels,config.map,frame.channels);
+  mode.accept(frame.channels[4],at);frame.ch5Mode=mode.known;frame.angleMode=mode.angle;
   gesture.accept(frame.channels[2],frame.channels[3],at);
   frame.inputArmed=gesture.armed;
   frame.receivedAtMs=at;
@@ -198,7 +198,7 @@ static ZjFlightFault zjPpmBindFlight(uint32_t lease,FlightReceiverSnapshot& inpu
  portENTER_CRITICAL(&zjPpmMux);
  ZjFlightFault fault=ZjFlightFault::PPM_SIGNAL_LOST;
  if(zjPpmCaptureLosses==zjPpmSeenCaptureLosses&&uint32_t(now-zjPpmCaptureAt)<=ZJ_PPM_LOST_MS){
-  ZjPpmFlightInput next{lease,input,zjPpmCurrentConfig(),zjPpmArm};
+  ZjPpmFlightInput next{lease,input,zjPpmCurrentConfig(),zjPpmArm,zjPpmMode};
   if(zjPpmIsrFrames!=zjPpmFrameSeq)next.accept(zjPpmReady,zjPpmReadyAt);
   if(next.frame.fresh(now,ZJ_PPM_LOST_MS)){
    if(!next.frame.inputArmed)fault=ZjFlightFault::INPUT_DISARMED;
@@ -390,7 +390,8 @@ static void zjPpmLoop(uint32_t now){
   zjPpmInputAvailable=false;++zjPpmLostCount;zjPpmSafeFrames=0;zjPpmReportedLost=false;
   zjPpmArm.reset();
   if(zjRcOwned&&zjRcSource=="PPM"){
-   if(zjRcControlPath=="PPM"){zjPpmFallbackPending=true;zjPpmFallbackAt=now;}
+   // Receiver failsafe stops outputs but preserves PPM selection and Wi-Fi.
+   // Keep STA monitoring available to report the fault and explicit recovery.
    zjRcRelease("PPM_SIGNAL_LOST");
   }
  }
@@ -412,14 +413,16 @@ static void zjPpmLoop(uint32_t now){
    if(!zjRcSourceAllowed("PPM")){
     zjPpmSafeFrames=0;zjPpmArm.reset();
    }else if(zjRcOwned&&zjRcSource=="PPM"){
+    zjPpmMode.accept(zjPpmValues[zjPpmMap[4]],receivedAt);
     zjPpmArm.accept(t,y,receivedAt);
     if(zjRcInputArmed&&!zjPpmArm.armed)zjFlightRevoke("INPUT_DISARMED");
     zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;
     zjRcInputArmed=zjPpmArm.armed;zjRcHasFrame=true;
-    zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];
-    zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);zjApplyPendingFlightMode();
+    zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);
+    zjRcCh5=zjRcPpmChannels[4];zjRcCh6=zjRcPpmChannels[5];zjApplyPendingFlightMode();
     zjRcLast=zjRcReceivedAt=receivedAt;zjRcLeaseAt=receivedAt;++zjRcSeq;if(!zjRcSeq)++zjRcSeq;++zjRcAccepted;
    }else if(!zjRcOwned){
+    zjPpmMode.accept(zjPpmValues[zjPpmMap[4]],receivedAt);
     zjPpmArm.reset(); // no old ARM state crosses an RC ownership release
     if(t<=ZjPpmArmGesture::THROTTLE_LOW_US)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
     else zjPpmSafeFrames=0;
@@ -428,8 +431,8 @@ static void zjPpmLoop(uint32_t now){
      zjRcSession="";zjRcOwnerId="PPM";zjRcLast=zjRcReceivedAt=receivedAt;zjRcLeaseAt=receivedAt;
      zjRcInputArmed=false;zjPpmArm.accept(t,y,receivedAt);
      zjRcThrottle=t;zjRcRoll=r;zjRcPitch=p;zjRcYaw=y;zjRcHasFrame=true;
-     zjRcCh5=zjPpmValues[4];zjRcCh6=zjPpmValues[5];
-    zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);zjApplyPendingFlightMode();
+     zjMapPpmChannels(zjPpmValues,zjPpmMap,zjRcPpmChannels);
+     zjRcCh5=zjRcPpmChannels[4];zjRcCh6=zjRcPpmChannels[5];zjApplyPendingFlightMode();
      zjRcSeq=1;++zjRcAccepted;
     }
    }else {zjPpmSafeFrames=0;zjPpmArm.reset();} // Never steal a WEB/ANDROID session.

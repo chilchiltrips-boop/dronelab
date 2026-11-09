@@ -13,7 +13,7 @@ test('FlightCore saves authenticated Angle/Acro independently from Wi-Fi mode, d
  assert.match(firmware,/zjSaveFlightMode\(zjPrefs,next\)/);
  assert.match(rc,/next!=zjSavedFlightMode/);
  assert.match(rc,/prefs\.getString\("flightMode","angle"\)/);
- assert.match(firmware,/zjJson\(zjFlightMode\)/);
+ assert.match(firmware,/zjJson\(zjActiveFlightMode\(\)\)/);
  assert.match(enrolled,/path=="\/api\/flight\/mode"/);
  assert.match(rc,/static String zjFlightMode="angle"/);
  assert.match(rc,/zjRcInputArmed/);

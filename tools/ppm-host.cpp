@@ -94,6 +94,15 @@ static void verifyFlightInput(){
  auto live=zjPpmFlightReceiver(12);
  assert(live.fresh(clockMs,150)&&live.inputArmed&&live.generation==generation);
  assert(live.channels[2]==1628&&live.accepted==accepted+100&&zjRcAccepted==accepted);
+ assert(live.ch5Mode&&live.angleMode);
+ // CH5 must also switch at high throttle while HTTP blocks the main loop.
+ const uint16_t acro[8]={1500,1500,1628,1500,2000,1500,1500,1500};
+ for(unsigned n=0;n<4;n++){waitMs(20);zjPpmPublishRmtFrame(acro,clockMs);}
+ live=zjPpmFlightReceiver(12);
+ assert(live.ch5Mode&&!live.angleMode&&live.inputArmed&&live.generation==generation);
+ const uint16_t centre[8]={1500,1500,1628,1500,1500,1500,1500,1500};
+ for(unsigned n=0;n<8;n++){waitMs(20);zjPpmPublishRmtFrame(centre,clockMs);}
+ assert(!zjPpmFlightReceiver(12).angleMode&&zjRcAccepted==accepted);
  assert(!zjPpmFlightReceiver(11).valid);
  const IPAddress peer(192,168,4,2);
  assert(!zjRcClaim("ANDROID",zjKitCode,true,peer,"AP"));
@@ -132,7 +141,47 @@ static void verifyFlightInput(){
  assert(!zjRcOwned&&zjRcLastReleaseReason=="PPM_SIGNAL_LOST");
  zjPpmSetup();
 }
+static void verifyModeSelector(){
+ ZjPpmModeSwitch mode;
+ mode.accept(2000,100);mode.accept(2000,120);mode.accept(2000,140);
+ assert(!mode.known&&mode.angle);mode.accept(2000,160);assert(mode.known&&!mode.angle);
+ mode.accept(1500,180);mode.accept(1301,200);assert(!mode.angle); // centre holds
+ mode.accept(1300,220);mode.accept(1300,240);mode.accept(1300,280);assert(mode.angle);
+ mode.accept(1700,300);mode.accept(1700,280);mode.accept(1700,300);assert(mode.angle); // replay
+ mode.accept(1700,470);assert(mode.angle); // gap restarts dwell
+ mode.accept(1700,490);mode.accept(1700,510);mode.accept(1700,530);assert(!mode.angle);
+ mode.reset();mode.accept(2000,0xfffffff0u);mode.accept(2000,4);mode.accept(2000,24);mode.accept(2000,44);
+ assert(mode.known&&!mode.angle); // millis wrap
+ assert(!zjSelectPpmAngle(false,true,true,false,true));
+ assert(!zjSelectPpmAngle(false,true,true,true,false));
+ assert(zjSelectPpmAngle(false,true,true,true,true));
+ assert(!zjSelectPpmAngle(true,false,true,false,false));
+ assert(zjSelectPpmAngle(false,true,false,false,false)); // disarmed readiness reports blockers
+}
+static void verifyMappedModeAndLoss(){
+ zjRcRelease("test");zjRcControlPath="PPM";
+ const auto original=zjPpmCurrentConfig();auto config=original;config.map[4]=5;zjPpmApplyConfig(config);
+ uint16_t raw[8]={1500,1500,1000,1500,1000,2000,1500,1500};
+ for(unsigned n=0;n<6;n++){waitMs(20);zjPpmPublishRmtFrame(raw,clockMs);zjPpmLoop(clockMs);}
+ assert(zjRcOwned&&!zjRcInputArmed&&zjPpmMode.known&&!zjPpmMode.angle);
+ assert(zjRcCh5==2000&&zjRcCh6==1000&&zjFlightMode=="acro");
+ assert(std::string(zjFlightModeState().c_str()).find("\"source\":\"PPM_CH5\"")!=std::string::npos);
+ zjAppliedFlightMode.store(2); // worker holds Acro while Angle is not ready
+ raw[5]=1000;
+ for(unsigned n=0;n<4;n++){waitMs(20);zjPpmPublishRmtFrame(raw,clockMs);zjPpmLoop(clockMs);}
+ assert(zjFlightMode=="angle"&&std::string(zjActiveFlightMode())=="acro");
+ assert(std::string(zjFlightModeState().c_str()).find("\"pending\":\"angle\"")!=std::string::npos);
+ zjAppliedFlightMode.store(0);
+ waitMs(151);zjPpmLoop(clockMs);
+ assert(!zjRcOwned&&!zjRcInputArmed&&zjRcLastReleaseReason=="PPM_SIGNAL_LOST");
+ assert(zjRcControlPath=="PPM");
+ waitMs(600);zjPpmLoop(clockMs);assert(zjRcControlPath=="PPM");
+ for(unsigned n=0;n<6;n++){waitMs(20);zjPpmPublishRmtFrame(raw,clockMs);zjPpmLoop(clockMs);}
+ assert(zjRcOwned&&!zjRcInputArmed); // signal recovery alone never re-arms
+ zjRcRelease("test");zjPpmApplyConfig(original);zjRcControlPath="AUTO";
+}
 int main(){
+ verifyModeSelector();
  clockMs=1000;zjKitId="ZFC-A1-012345ABCDEF";zjKitCode="123456";zjPpmSetup();
  zjKitPrefs.putUShort("ppm1lo",910);
  zjKitPrefs.putString("ppmMap","21345");
@@ -183,6 +232,7 @@ int main(){
  assert(zjRcInputArmed&&zjPpmSignalFresh(clockMs));
  waitMs(151);zjPpmLoop(clockMs);assert(!zjRcOwned&&!zjRcInputArmed);
  verifyFlightInput();
+ verifyMappedModeAndLoss();
  assert(zjRcClaim("ANDROID",zjKitCode,true,IPAddress(192,168,4,2),"AP"));
  frame(1000);frame(1000);frame(1000);
  assert(zjRcOwned&&zjRcSource=="ANDROID"&&!zjRcInputArmed);

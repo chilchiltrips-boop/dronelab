@@ -118,3 +118,18 @@ test('rapid re-arm and compact USB sequence resets never lock the simulator onto
  const reset=packet(1);reset.input.accepted=951;assert.equal(store.acceptKit(reset),true);
  assert.equal(s.running,false);assert.equal(input.snapshot().seq,1);assert.equal(store.acceptKit(reset),false,'same packet cannot refresh freshness');
 });
+
+test('USB extended mode records and Kit interface accept CH5 overrides but reject inconsistent pending modes',()=>{
+ const decode=context.ZebjusSerialRcDecoder.parseSerialStatus;
+ const prefix='ZJSTATE,1,'+kitId+',angle,acro,none,1300,1500,1500,1500,2000,1500,0,10,0,10,0,1,PPM,PPM,1,1,1';
+ assert.equal(decode(prefix),null,'legacy format still requires saved/active coherence');
+ const data=decode(prefix+',PPM_CH5,acro');assert.ok(data);
+ assert.equal(data.flightModeState.active,'acro');assert.equal(data.flightModeState.saved,'angle');
+ assert.equal(data.rc.motorsArmed,true);assert.equal(data.rc.motorsDisabled,false);
+ assert.ok(context.ZebjusKitData.flightModeState(data));
+ assert.equal(decode(prefix+',SAVED,acro'),null);
+ assert.equal(decode(prefix+',PPM_CH5,angle'),null);
+ const pending=decode(prefix.replace(',angle,acro,none,',',angle,acro,angle,')+',PPM_CH5,angle');
+ assert.equal(pending.flightModeState.pending,'angle');
+ assert.ok(context.ZebjusKitData.flightModeState(pending));
+});
