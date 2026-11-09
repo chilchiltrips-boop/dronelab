@@ -256,7 +256,7 @@ static void zjControlTask(void*){
   next.attitude=attitude.value;
   std::copy_n(rates,3,next.rates);std::copy_n(gravity,3,next.gravity);
   next.sampleSequence=imuSample.sequence;next.sampleAtUs=imuSample.atUs;next.sampleValid=conditions.imuFresh;
-  conditions.attitudeReady=next.attitude.valid;conditions.levelCalibrated=level;
+  conditions.attitudeReady=next.attitude.fresh(at);conditions.levelCalibrated=level;
   // PID uses measured dt. Nominal release misses remain diagnostic while
   // dt is usable and the motor driver can renew its separate output lease.
   conditions.timingHealthy=control.intervalUs>=1000&&control.intervalUs<=8000;
@@ -298,7 +298,7 @@ static void zjControlTask(void*){
     next.reason="LOW_THROTTLE";trace.reason=ZjFlightFault::LOW_THROTTLE;
     trace.throttleUsed=1000;
     for(auto& pulse:next.mix.pulse)pulse=ZJ_FLIGHT_ARMED_IDLE_US;
-   }else if(next.angle&&(!level||!next.attitude.valid)){
+   }else if(next.angle&&(!level||!conditions.attitudeReady)){
     next.reason=level?"ATTITUDE_INVALID":"ANGLE_LEVEL_REQUIRED";
     fault=level?ZjFlightFault::ATTITUDE_INVALID:ZjFlightFault::LEVEL_REQUIRED;
    }else{
@@ -336,7 +336,9 @@ static void zjControlTask(void*){
    if(!requested&&fault==ZjFlightFault::NONE)fault=ZjFlightFault::OUTPUT_RESERVED;
    if(profileChanged&&fault==ZjFlightFault::NONE)fault=ZjFlightFault::PROFILE_CHANGED;
    conditions.nowMs=millis();
-   conditions.imuFresh=conditions.imuFresh&&imuSample.fresh(micros(),12000);
+   const uint32_t submitAt=micros();
+   conditions.imuFresh=conditions.imuFresh&&imuSample.fresh(submitAt,12000);
+   conditions.attitudeReady=next.attitude.fresh(submitAt);
    if(fault==ZjFlightFault::NONE&&!zjFlightOutputGate.permit(conditions,ZJ_FLIGHT_OUTPUT_ENABLED))
     fault=zjFlightOutputGate.reason;
    if(fault==ZjFlightFault::NONE){
@@ -397,7 +399,7 @@ static void zjControlTask(void*){
    }
    if(fault!=ZjFlightFault::NONE){
     if(zjTracePendingFault==ZjFlightFault::NONE)trace.triggerUs=triggerAt;
-    zjFlightTrace.freeze(trace,zjTraceTerminalEvent(fault),fault);
+    zjFlightTrace.freeze(trace,zjTraceTerminalEvent(fault),fault,attitude.failure);
    }else zjFlightTrace.observe(trace);
   }
   zjTracePendingFault=ZjFlightFault::NONE;

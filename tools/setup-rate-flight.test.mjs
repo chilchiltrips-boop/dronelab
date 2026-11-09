@@ -75,6 +75,8 @@ static ZjFlightConditions conditions(){
 int main(int argc,char** argv){
  const std::string scenario=argc>1?argv[1]:"normal";
  const bool isolated=scenario=="isolated-ppm",jitter=scenario=="jitter";
+ const bool attitudeGap=scenario=="attitude-gap",attitudeClose=scenario=="attitude-close";
+ const bool normal=scenario=="normal"||attitudeClose;
  if(isolated)limit=110;
  angleMode=argc>2;zjShadowAngle=angleMode;zjImuMailbox.accelModel.level=true;
  static_assert(ZJ_FLIGHT_OUTPUT_ENABLED&&!ZJ_FLIGHT_HARDWARE_QUALIFIED);
@@ -103,6 +105,7 @@ int main(int argc,char** argv){
  zjFlightRevokeHandler=zjControlRevoke;
  zjControlTimerStartedUs=micros()+1000;
  inject=[&](unsigned n){
+  if(attitudeGap&&n<=2)zjImuMailbox.sample.atUs-=n==1?5000:8500;
   if(n==2)assert(zjControl.jitterUs==0);
   if(n<=2)return; // warm scheduler before ARM, as the real firmware requires
   if(scenario=="claim-failure"){
@@ -114,7 +117,11 @@ int main(int argc,char** argv){
    }
    return;
   }
-  if(n==3){assert(zjControlArmFlight()==ZjFlightFault::NONE);}
+  if(n==3){
+   if(attitudeClose)zjImuMailbox.sample.atUs-=3348;
+   assert(zjControlArmFlight()==ZjFlightFault::NONE);
+  }
+  if(attitudeGap&&n>3)return;
   n-=2;
   // Tick 1 is LOW; tick 2 computes real PID/mixer; 4 resets; 5 checks reset.
   if(n==2){for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1000));zjFlightPolicy.input.channels[2]=1400;zjFlightPolicy.input.channels[0]=1600;}
@@ -160,16 +167,16 @@ int main(int argc,char** argv){
    if(n==6)assert(zjControl.missedTicks&&zjFlightLease);
    return;
   }
-  if(n==4&&scenario!="normal"){off();assert(!zjFlightLease);}
+  if(n==4&&!normal){off();assert(!zjFlightLease);}
   if(n==4){zjFlightPolicy.input.channels[2]=1000;zjFlightPolicy.input.channels[0]=1500;}
   if(n==5){
-   if(scenario=="normal"){assert(!zjFlightTrace.last.axes[0].i);for(auto p:zjRateShadow.mix.pulse)assert(p==1000);}
+   if(normal){assert(!zjFlightTrace.last.axes[0].i);for(auto p:zjRateShadow.mix.pulse)assert(p==1000);}
    zjFlightPolicy.input.channels[2]=1400;
   }
-  if(n==6&&scenario=="normal"){for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1400));}
+  if(n==6&&normal){for(auto d:duty)assert(d==ZJ_ESC_PROFILE.duty(1400));}
  };
  try{zjControlTask(nullptr);}catch(const End&){}
- if(scenario!="normal"&&!jitter){
+ if(!normal&&!jitter){
   off();assert(!zjFlightLease&&!zjFlightOutputGate.permit(c,true));
   ++c.input.sequence;assert(!edge.accept(c.input,clockMs,150)); // held ARM never retries
   if(isolated){
@@ -178,6 +185,12 @@ int main(int argc,char** argv){
   }
   if(scenario=="late-write")assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::DEADLINE_MISSED);
   if(scenario=="source")assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::SOURCE_CHANGED);
+  if(attitudeGap){
+   assert(zjFlightOutputGate.reportedReason()==ZjFlightFault::ATTITUDE_INVALID);
+   assert(zjFlightTrace.terminal.flags&ZJ_TRACE_OFF_ACK);
+   assert(std::strcmp(zjFlightTrace.attitudeFault.reason,"SAMPLE_GAP")==0);
+   assert(zjFlightTrace.attitudeFault.sampleIntervalUs==13000);
+  }
  }else{
   assert(zjFlightDriverRead().lease==zjFlightLease&&zjFlightLease!=0);
   failStop=true;
@@ -194,6 +207,8 @@ int main(int argc,char** argv){
   for(const scenario of ['normal','stop','disarm','loss','imu','timing','source','pid','watchdog','driver','isolated-ppm','jitter','late-write','claim-failure']){
    for(const mode of [[],['angle']])assert.match(execFileSync(bin,[scenario,...mode],{encoding:'utf8',timeout:10000}),/PASS production worker/);
   }
+  for(const scenario of ['attitude-close','attitude-gap'])
+   assert.match(execFileSync(bin,[scenario,'angle'],{encoding:'utf8',timeout:10000}),/PASS production worker/);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 

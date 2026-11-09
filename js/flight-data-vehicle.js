@@ -155,14 +155,14 @@ export function createFlightDataVehicle(container) {
   }
 
   function refresh(snap = false) {
-    const live = !preview && tilt;
+    const pose = !preview && tilt;
     const nextCaption = preview
       ? 'Interactive airframe preview · use the arrow buttons to orbit.'
-      : live
-        ? `${tilt.fused ? 'FC attitude' : tilt.stationary ? 'Stationary tilt' : 'Accel reference'} · Roll ${tilt.roll.toFixed(1)}° · Pitch ${tilt.pitch.toFixed(1)}°`
+      : pose
+        ? `${pose.delayed ? 'Monitor delayed · last FC attitude' : pose.fused ? 'FC attitude' : pose.stationary ? 'Stationary tilt' : 'Accel reference'} · Roll ${pose.roll.toFixed(1)}° · Pitch ${pose.pitch.toFixed(1)}°`
         : 'Reference airframe · no tilt data';
     if (caption.textContent !== nextCaption) caption.textContent = nextCaption;
-    const next = { roll: live ? tilt.roll : 0, pitch: live ? tilt.pitch : 0, orbit: preview ? orbit : defaultOrbit };
+    const next = { roll: pose ? pose.roll : 0, pitch: pose ? pose.pitch : 0, orbit: preview ? orbit : defaultOrbit };
     if (!snap && axes.every(axis => next[axis] === target[axis])) return;
     cancelAnimation();
     target = next;

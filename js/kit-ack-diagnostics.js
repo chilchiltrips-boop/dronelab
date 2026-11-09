@@ -12,6 +12,8 @@ const traceReasons=['NONE','UNQUALIFIED','EMERGENCY_STOP','OUTPUT_RESERVED','INP
  'SOURCE_UNSUPPORTED','WIRING_UNVERIFIED','OUTPUT_ERROR','PID_INVALID','LOW_THROTTLE','PROFILE_CHANGED','PPM_SIGNAL_LOST','ESC_UNCONFIRMED','SETUP_INCOMPLETE','PID_NOT_SAVED','ATTITUDE_INVALID','LEVEL_REQUIRED'];
 const traceSources=['NONE','PPM','ANDROID','WEB'],traceOwners=['NONE','ESC_CALIBRATION','BENCH','FLIGHT'];
 const traceProfiles=['aerof450-quad-x','aerof450-quad-plus'];
+const attitudeFaultReasons=new Set(['IMU_INPUT_INVALID','SAMPLE_ORDER','SAMPLE_GAP','GRAVITY_UNAVAILABLE',
+ 'PITCH_LIMIT','NONFINITE_ESTIMATE','GRAVITY_TIMEOUT','ESTIMATE_STALE']);
 const uint=(value,max=0xffffffff)=>Number.isSafeInteger(value)&&value>=0&&value<=max;
 const firmwareVersion=value=>typeof value==='string'&&/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(value);
 function validTraceRow(row){
@@ -25,6 +27,15 @@ function checkedTrace(value){
     !uint(value.receivedAt,8.64e15)||!Array.isArray(value.rows)||value.rows.length<2||value.rows.length>TRACE_MAX_ROWS||
     !value.rows.every(validTraceRow)||![1,2].includes(value.rows[0][3])||value.rows.at(-1)[3]<4)throw Error('Invalid FC flight trace.');
  const {capture,sampleHz,firmwareVersion:version,receivedAt,rows}=value;
+ const detail=value.attitudeFault;
+ if(detail!=null){
+  const {reason,sampleIntervalUs,gravityAgeUs,gravityG}=detail;
+  if(traceReasons[rows.at(-1)[4]]!=='ATTITUDE_INVALID'||!attitudeFaultReasons.has(reason)||
+     !uint(sampleIntervalUs)||gravityAgeUs!==null&&!uint(gravityAgeUs)||
+     gravityG!==null&&(!Number.isFinite(gravityG)||gravityG<0||gravityG>1000000))
+   throw Error('Invalid FC attitude fault detail.');
+  return {capture,sampleHz,firmwareVersion:version,receivedAt,rows,attitudeFault:{reason,sampleIntervalUs,gravityAgeUs,gravityG}};
+ }
  return {capture,sampleHz,firmwareVersion:version,receivedAt,rows};
 }
 let flightTrace=null;
@@ -372,7 +383,7 @@ function observeInput(rc={},kit={}){
 function flightTraceRows(){
  if(!flightTrace)return [];
  const origin=flightTrace.rows[0][0];
- return flightTrace.rows.map(row=>{
+ return flightTrace.rows.map((row,index)=>{
   const flag=mask=>!!(row[15]&mask);
   const event=traceEvents[row[3]],reason=traceReasons[row[4]];
   const data={flightCapture:flightTrace.capture,flightFirmware:flightTrace.firmwareVersion,flightEvent:event,flightReason:reason,
@@ -384,6 +395,13 @@ function flightTraceRows(){
    flightInputArmed:flag(1),flightInputFresh:flag(2),flightImuValid:flag(4),flightPidValid:flag(8),flightArmed:flag(64),
    flightThrottleUsedUs:row[16]||null,flightThrottleCapped:flag(512),flightPidSaturationMask:row[17],flightMixClipMask:row[18],
    flightOutputOwner:traceOwners[row[19]],flightOffAck:flag(32)};
+  if(flightTrace.attitudeFault){
+   const detail=index===flightTrace.rows.length-1?flightTrace.attitudeFault:null;
+   data.flightAttitudeFault=detail?.reason??null;
+   data.flightAttitudeSampleIntervalUs=detail?.sampleIntervalUs??null;
+   data.flightAttitudeGravityAgeUs=detail?.gravityAgeUs??null;
+   data.flightAttitudeGravityG=detail?.gravityG??null;
+  }
   for(const [n,name] of ['Roll','Pitch','Throttle','Yaw'].entries())data['flightInput'+name+'Us']=row[20+n]||null;
   for(let n=0;n<4;n++){
    data['flightRequestedM'+(n+1)+'Us']=row[24+n]||null;
@@ -405,7 +423,7 @@ function flightTraceRows(){
 async function fetchFlightTrace(onProgress){
  const read=root.ZebjusKits?.openFlightTraceReader?.();
  if(!read)throw Error('Connect a verified A2 Kit to read its recorder.');
- let capture=0,total=0,version='';
+ let capture=0,total=0,version='',attitudeFault;
  const rows=[];
  do{
   const page=await read(capture,rows.length);
@@ -416,10 +434,11 @@ async function fetchFlightTrace(onProgress){
   if(!page.capture||page.total<2||!page.rows.length||page.rows.length>8||rows.length+page.rows.length>page.total||
      !page.rows.every(validTraceRow)||capture&&(page.capture!==capture||page.total!==total||page.firmwareVersion!==version))
    throw Error('FC flight trace changed or contains invalid data.');
+  if(!capture)attitudeFault=page.attitudeFault;
   capture=page.capture;total=page.total;version=page.firmwareVersion;
   rows.push(...page.rows);onProgress?.(rows.length,total);
  }while(rows.length<total);
- flightTrace=checkedTrace({capture,sampleHz:50,firmwareVersion:version,receivedAt:Date.now(),rows});
+ flightTrace=checkedTrace({capture,sampleHz:50,firmwareVersion:version,receivedAt:Date.now(),rows,attitudeFault});
  try{localStorage.setItem(TRACE_KEY,JSON.stringify(flightTrace));return true;}
  catch{return false;}
 }
@@ -459,7 +478,9 @@ function init(){
   traceStatus.textContent='Reading the disarmed A2 recorder…';
   try{
    const saved=await fetchFlightTrace((count,total)=>{traceStatus.textContent='Reading FC trace • '+count+'/'+total;});
-   traceStatus.textContent=flightTrace.rows.length+(saved?' FC flight trace rows saved locally.':' FC flight trace rows ready to download. Local storage is full or unavailable.');
+   const detail=flightTrace.attitudeFault;
+   traceStatus.textContent=flightTrace.rows.length+(saved?' FC flight trace rows saved locally.':' FC flight trace rows ready to download. Local storage is full or unavailable.')+
+    (detail?' ATTITUDE_INVALID · '+detail.reason:'');
   }catch(error){
    const msg={DISARM_BEFORE_TRACE_READ:'Disarm input and stop motor tests before fetching the trace.',
     TRACE_STILL_RECORDING:'Wait for the terminal control tick and fetch again.',

@@ -29,19 +29,42 @@ test('duplicate/out-of-order packets never renew sample freshness; reconnect reb
  assert.equal(repeated.sampleObservedAt,1000);
  assert.equal(normalize({...snapshot(),sequence:2},{...binding,connectionGeneration:2},first,1100,20).sampleObservedAt,1100);
 });
-test('AP/STA/USB fused tilt works with transmitter OFF and expires on stale IMU or excessive delay',()=>{
+test('AP/STA/USB fused tilt works with transmitter OFF and short delivery gaps hold only a labeled pose',()=>{
  for(const transport of ['sta','ap','usb']){
-  const data=buildFlightData(kit(transport),1050);
+  const k=kit(transport),data=buildFlightData(k,1050);
   assert.deepEqual(data.tilt,{roll:30,pitch:0,fused:true,stationary:false,levelCalibrated:true});
   assert.equal(data.rc.state,'waiting');assert.equal(data.output.disabled,true);
   assert.equal(data.modeState.saved,'angle');assert.equal(data.imuAgeMs,74);
-  assert.equal(buildFlightData(kit(transport),1550).tilt,null);
+  const delayed=buildFlightData(k,1550);
+  assert.equal(delayed.tilt,null);assert.equal(delayed.rates,null);assert.equal(delayed.sample,null);
+  assert.deepEqual(delayed.lastTilt,{...data.tilt,delayed:true});
+  assert.equal(delayed.health.imu.label,'Monitor delayed');
+  assert.equal(delayed.output.fault,null);assert.equal(delayed.output.disabled,true);
+  assert.equal(buildFlightData(k,3100).lastTilt,null);
+  k.flightTelemetry=normalize({...snapshot(),sequence:101,sampleSequence:99,attitude:[40,5]},k,k.flightTelemetry,3100,20);
+  const recovered=buildFlightData(k,3150);
+  assert.equal(recovered.tilt.roll,40);assert.equal(recovered.lastTilt,null);
  }
  const k=kit();k.flightTelemetry.roundTripMs=400;
- assert.equal(buildFlightData(k,1050).tilt,null);
- for(const patch of [{generation:2},{bootId:'b'.repeat(32)},{transport:'usb'},{valid:false},{attitudeValid:false}]){
-  const k=kit();Object.assign(k.flightTelemetry,patch);assert.equal(buildFlightData(k,1050).tilt,null);
+ const delayed=buildFlightData(k,1050);
+ assert.equal(delayed.tilt,null);assert.equal(delayed.lastTilt.roll,30);assert.equal(delayed.telemetry.delayed,true);
+});
+test('invalid FC estimates and retired bindings never supply a held attitude',()=>{
+ for(const patch of [{generation:2},{bootId:'b'.repeat(32)},{transport:'usb'},{kitId:'ZFC-A2-111111111111'},
+  {valid:false},{ageUs:13000},{attitudeValid:false}]){
+  const k=kit();Object.assign(k.flightTelemetry,patch);
+  for(const now of [1050,1550]){
+   const data=buildFlightData(k,now);
+   assert.equal(data.tilt,null);assert.equal(data.lastTilt,null);
+  }
  }
+ const k=kit();Object.assign(k.flightTelemetry,{attitudeValid:false,state:'FAILSAFE',reason:'ATTITUDE_INVALID'});
+ const fault=buildFlightData(k,1050);
+ assert.equal(fault.health.attitude.label,'FC attitude invalid');assert.equal(fault.health.attitude.state,'error');
+ assert.equal(fault.health.imu.state,'good');assert.equal(fault.output.fault,'ATTITUDE_INVALID');
+ k.flightTelemetry.valid=false;
+ assert.equal(buildFlightData(k,1050).health.imu.label,'FC IMU sample invalid');
+ assert.equal(buildFlightData({...kit(),linkVerified:false},1550).lastTilt,null);
 });
 test('compact output fault and saved pending mode appear immediately, without authorizing control',()=>{
  const k=kit();Object.assign(k.flightTelemetry,{state:'FAILSAFE',reason:'IMU_STALE',flightModeState:{supported:true,saved:'angle',active:'acro',pending:'angle'}});

@@ -23,7 +23,7 @@ test('control alarm rearms on its original phase and the worker uses the fenced 
  assert.doesNotMatch(tick,/Wire|Serial|ledc|zjMotor|zjRcFrame|String|delay/);
  assert.match(tick,/zjFlightDriverSubmit\(lease,trace.requested\)/);
  assert.match(tick,/zjFlightLowThrottle[\s\S]*LOW_THROTTLE[\s\S]*zjStepRatePid/);
- assert.match(tick,/zjFlightTrace.freeze\(trace,zjTraceTerminalEvent\(fault\),fault\)/);
+ assert.match(tick,/zjFlightTrace.freeze\(trace,zjTraceTerminalEvent\(fault\),fault,attitude.failure\)/);
  const motor=readFileSync('FlightCore_Firmware/FlightCoreMotor.h','utf8');
  assert.match(motor,/ZJ_FLIGHT_OUTPUT_ENABLED&&lease&&zjFlightDriver.lease==lease/);
  assert.match(motor,/zjFlightDriverAtUs\)>=ZJ_FLIGHT_OUTPUT_LEASE_US\)[\s\S]*?zjFlightDriverStopLocked\(ZjFlightFault::DEADLINE_MISSED\)/);

@@ -15,7 +15,9 @@ const row=(at,event,reason,flags)=>[
  1600,1500,1500,1500,1480,1500,1510,1500,0,0,0,0,15,3,16.8,.4,-.1,17.1,
  0,0,0,0,0,0,0,0,0,0,0,0
 ];
-const rows=[row(4000,1,0,63),row(4000,0,0,63),row(24000,0,0,63),row(28000,6,19,52)];
+const rows=[row(4000,1,0,63),row(4000,0,0,63),row(24000,0,0,63),row(28000,6,23,52)];
+const legacyRows=[...rows.slice(0,-1),row(28000,6,19,52)];
+const attitudeFault={reason:'SAMPLE_GAP',sampleIntervalUs:13000,gravityAgeUs:13000,gravityG:1.0001};
 const sessions=new Map(),signedReads=[];
 let wrongBoot=false;
 const browser=await chromium.launch(browserOptions);
@@ -49,8 +51,8 @@ await context.exposeFunction('traceBoard',({url,method,headers,body})=>{
  const offset=Number(query.get('offset'));
  assert.equal(query.get('bootId'),boot);assert.equal(Number(query.get('capture')),offset?7:0);
  signedReads.push(offset);
- return response({version:1,kitId:id,bootId:wrongBoot&&offset?'c'.repeat(32):boot,firmwareVersion:'1.7.17',
-  capture:7,offset,total:rows.length,sampleHz:50,rows:rows.slice(offset,offset+2)},s.key,seq);
+ return response({version:1,kitId:id,bootId:wrongBoot&&offset?'c'.repeat(32):boot,firmwareVersion:'1.7.25',
+  capture:7,offset,total:rows.length,sampleHz:50,...(!offset?{attitudeFault}:{}),rows:rows.slice(offset,offset+2)},s.key,seq);
 });
 await context.addInitScript(()=>{
  const native=window.fetch.bind(window);
@@ -73,7 +75,7 @@ try{
  await panel.locator('summary').click();
  await page.evaluate(({id,code})=>window.ZebjusKits.connectDiscoveredKit({kitId:id,kitCode:code,ip:'192.168.1.42',transport:'sta'}),{id,code});
  await page.waitForFunction(()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='sta');
- await fetchTrace.click();await status.filter({hasText:'4 FC flight trace rows saved locally'}).waitFor();
+ await fetchTrace.click();await status.filter({hasText:'ATTITUDE_INVALID · SAMPLE_GAP'}).waitFor();
  assert.deepEqual(signedReads,[0,2]);
 
  for(const format of ['csv','json']){
@@ -81,13 +83,16 @@ try{
   await panel.locator(`[data-diag-export="${format}"]`).click();
   const file=await readFile(await (await download).path(),'utf8');
   assert.doesNotMatch(file,new RegExp(id+'|'+boot));
-  assert.match(file,/PPM_SIGNAL_LOST/);
+  assert.match(file,/ATTITUDE_INVALID/);assert.match(file,/SAMPLE_GAP/);
   if(format==='json'){
    const trace=JSON.parse(file).flightTrace;
    assert.equal(trace.sampleHz,50);assert.equal(trace.rows[1].flightRollErrorDps,12);
    assert.equal(trace.rows[1].flightRequestedM1Us,1480);assert.equal(trace.rows[1].flightAppliedM1Us,0);
    assert.equal(trace.rows[3].flightTriggerUs,28000);
-  }else assert.match(file,/flightRollErrorDps/);
+   assert.deepEqual(trace.attitudeFault,attitudeFault);
+   assert.equal(trace.rows[3].flightAttitudeSampleIntervalUs,13000);
+   assert.equal(trace.rows[1].flightAttitudeFault,null);
+  }else assert.match(file,/flightAttitudeSampleIntervalUs/);
  }
  wrongBoot=true;
  await fetchTrace.click();await status.filter({hasText:'does not match the verified A2 boot'}).waitFor();
@@ -110,13 +115,14 @@ try{
   }};
   document.getElementById('kitTransport').value='usb';
   await window.ZebjusKits.connect();
- },{id,boot,code,rows});
+ },{id,boot,code,rows:legacyRows});
  await page.waitForFunction(()=>window.ZebjusKits.getState().connected&&window.ZebjusKits.getState().transport==='usb');
  await fetchTrace.click();await status.filter({hasText:'4 FC flight trace rows saved locally'}).waitFor();
  assert.deepEqual(await page.evaluate(()=>traceSerialCommands),[['READ',id,'-',0,0],['READ',id,boot,8,2]]);
  await page.reload();
  await page.waitForFunction(()=>window.ZebjusAckDiagnostics);
  assert.equal(await page.evaluate(()=>JSON.parse(window.ZebjusAckDiagnostics.exportData('json')).flightTrace.capture),8);
+ assert.match(await page.evaluate(()=>window.ZebjusAckDiagnostics.exportData('csv')),/PPM_SIGNAL_LOST/);
  assert.deepEqual(errors,[]);
  console.log('PASS A2 trace over signed STA and bound USB fixtures, boot-change rejection, local save, CSV and JSON');
 }finally{await browser.close();}
