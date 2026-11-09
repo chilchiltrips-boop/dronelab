@@ -164,18 +164,22 @@ export function createFlightDataPfd(container) {
   }
 
   function update(data) {
-    const {health, tilt} = data;
+    const {health} = data;
+    const tilt = data.tilt ?? data.lastTilt;
     const hasTilt = tilt && Number.isFinite(tilt.roll) && Number.isFinite(tilt.pitch);
-    main.dataset.tilt = hasTilt ? tilt.fused ? 'fc-attitude' : tilt.stationary ? 'stationary' : 'accel-reference' : 'unavailable';
+    main.dataset.tilt = tilt?.delayed ? 'monitor-delayed'
+      : hasTilt ? tilt.fused ? 'fc-attitude' : tilt.stationary ? 'stationary' : 'accel-reference' : 'unavailable';
     world.setAttribute('visibility', hasTilt ? 'visible' : 'hidden');
     reference.setAttribute('visibility', hasTilt ? 'hidden' : 'visible');
     overlay.hidden = Boolean(hasTilt);
     readout.hidden = !hasTilt;
     if (hasTilt) {
-      const description = tilt.fused ? 'FlightCore gyro and accelerometer fusion' : tilt.stationary ? 'Stationary tilt estimate'
+      const description = tilt.delayed ? 'Last FlightCore attitude. Waiting for a fresh observation.'
+        : tilt.fused ? 'FlightCore gyro and accelerometer fusion' : tilt.stationary ? 'Stationary tilt estimate'
         : 'Accelerometer reference. Motion can distort the estimate.';
       if (readout.title !== description) readout.title = description;
-      set(tiltLabel, tilt.fused ? 'FC ATTITUDE' : tilt.stationary ? 'STATIONARY TILT' : 'ACCEL REFERENCE');
+      set(tiltLabel, tilt.delayed ? 'MONITOR DELAYED · LAST ATTITUDE'
+        : tilt.fused ? 'FC ATTITUDE' : tilt.stationary ? 'STATIONARY TILT' : 'ACCEL REFERENCE');
       orient(tilt);
     } else {
       orient(null);

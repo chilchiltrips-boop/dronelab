@@ -85,9 +85,10 @@ function render() {
   }
   instruments.update(data);
   systemHealth.update(data);
-  vehicle.update({tilt, visible: true});
+  vehicle.update({tilt: tilt ?? data.lastTilt, visible: true});
   axes.forEach((axis, i) => set('rate-' + axis, fixed(data.rates?.[i], ' °/s', 1)));
-  pill(byId('sample-age'), data.rates ? 'Sample age ' + fixed(data.imuAgeMs, ' ms') : 'No fresh sample',
+  pill(byId('sample-age'), data.rates ? 'Sample age ' + fixed(data.imuAgeMs, ' ms')
+    : data.telemetry?.delayed ? 'Monitor delayed' : 'No fresh sample',
     data.rates ? 'good' : health.imu.state);
   renderChart(data, now);
 }

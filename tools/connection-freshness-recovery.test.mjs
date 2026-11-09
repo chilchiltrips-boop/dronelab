@@ -76,6 +76,41 @@ test('late RC replies cannot cross boot, source, or connection generations',asyn
  assert.match(kit,/if\(\+\+pollErrors<3\)/);
  assert.match(kit,/recoverVerifiedLink\(old\)/);
 });
+test('missed status reads recover without sending RC writes; the STOP action still sends them',async()=>{
+ const source=read('js/classroom-kits.js');
+ const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
+ const runtime=[section('async function disconnect(','function waitSerial('),
+  section('function statusReadFailed(','function adoptRcObservation('),
+  section('async function releaseRc(','function toRc('),
+  section(' pollTimer=setInterval(async()=>{',' rcTimer=setInterval(')].join('\n');
+ for(const transport of ['sta','usb']){
+  const state={connected:true,linkState:'connected',heartbeatAt:9900,kitId:'ZFC-A2-123456ABCDEF',
+   transport,owner:true,rcSession:'diagnostic',rcSource:'WEB'};
+  let poll,recoveries=0,readError=Object.assign(Error('Safety request superseded status'),{code:'STATUS_SUPERSEDED'});
+  const writes=[];
+  const ctx=vm.createContext({state,Date:{now:()=>10000},CustomEvent,document:{hidden:false},
+   root:{dispatchEvent(){}},trace(){},classify(){},audit(){},tone(){},render(){},clearAdminBinding(){},closeReconnectOffer(){},
+   motorTrafficBusy:()=>false,backgroundLinkPolicy:()=>({poll:true,penalize:true}),beginMonitorRead:()=>true,
+   advanceConnectionGeneration:()=>++ctx.reconnectTicket,connectionTarget:()=>({transport}),
+   read:async()=>{throw readError;},recoverVerifiedLink:async()=>{recoveries++;return true;},
+   usbWrite:async line=>writes.push(line),deviceRequest:async(route,method)=>writes.push([route,method]),
+   setInterval:callback=>{poll=callback;},pollTimer:null,pollBusy:false,pollErrors:0,FC_MONITOR_INTERVAL_MS:100,
+   nextStatusReadAt:0,lastBackgroundStatusAt:0,foregroundResumedAt:0,autoReconnectAllowed:true,otaActive:false,wifiTesting:false,
+   pendingNetworkTarget:null,controlTicket:0,ownOwnerId:'owner',wifiTestNonce:0,savedNetworks:[],reconnectTicket:1,
+   recoveryTarget:null,usbCandidate:{},authSessions:new Map(),localKitHosts:new Map(),adminKitHosts:new Map()});
+  vm.runInContext(read('js/control-path-policy.js'),ctx);ctx.root.ZebjusControlPaths=ctx.ZebjusControlPaths;
+  vm.runInContext(runtime,ctx);
+  for(let n=0;n<3;n++)await poll();
+  assert.equal(ctx.pollErrors,0);assert.equal(state.owner,true);assert.equal(state.linkState,'connected');
+  readError=Error('Status timeout');
+  for(let n=0;n<3;n++)await poll();
+  assert.equal(state.connected,false);assert.equal(state.owner,false);assert.equal(state.rcSession,'');
+  assert.deepEqual(writes,[]);assert.equal(recoveries,transport==='sta'?1:0);
+  Object.assign(state,{connected:true,transport,owner:true,rcSession:'diagnostic'});
+  await ctx.stop();
+  assert.deepEqual(writes,transport==='usb'?['ZJRC,STOP']:[['/api/rc/stop','POST']]);
+ }
+});
 test('Android background failsafe, resume verification and AP/STA switching have separate explicit gates',()=>{
  const java=read('mobile-android/app/src/main/java/in/zebjus/dronelab/companion/MainActivity.java');
  const network=read('companion-network.js'),ui=read('companion-flight.js'),phone=read('companion.js');
@@ -121,7 +156,7 @@ test('Release verification and metadata derive version from Gradle, with fixed s
  const current=Number(/versionCode\s+(\d+)/.exec(gradle)?.[1]);
  const previous=Number(/VersionCode:\s*(\d+)/.exec(published)?.[1]);
  assert.ok(current>=32&&previous>0&&current>=previous);
- assert.match(gradle,/versionName '1\.8\.40-a2-attitude'/);
+ assert.match(gradle,/versionName '1\.8\.41-a2-attitude'/);
 });
 
 test('minimized STA tab does not tear down selected Kit on throttled network polls',()=>{

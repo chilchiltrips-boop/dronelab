@@ -1,4 +1,5 @@
 #pragma once
+#include "FlightCoreAttitude.h"
 #include "FlightCoreFlightOutput.h"
 
 enum class ZjRateTraceEvent : uint8_t {SAMPLE,INPUT_ARM,PREVIEW_START,FLIGHT_ARM,DISARM,STOP,FAILSAFE,EXPORT};
@@ -36,10 +37,12 @@ struct ZjRateTrace {
  uint32_t capture=0,nextAt=0;
  uint16_t count=0,head=0,armIndex=0;
  bool active=false,frozen=false,haveArm=false;
+ ZjAttitudeFaultDetail attitudeFault;
 
  void begin(const ZjRateTraceSample& value,bool preview){
   if(!++capture)++capture;
   active=true;frozen=haveArm=false;count=head=armIndex=0;
+  attitudeFault={};
   start=value;start.event=preview?ZjRateTraceEvent::PREVIEW_START:ZjRateTraceEvent::INPUT_ARM;
   nextAt=value.atUs;last=value;
  }
@@ -57,9 +60,14 @@ struct ZjRateTrace {
   arm=value;arm.event=ZjRateTraceEvent::FLIGHT_ARM;
   haveArm=true;armIndex=count;
  }
- void freeze(const ZjRateTraceSample& value,ZjRateTraceEvent event,ZjFlightFault reason){
+ void freeze(const ZjRateTraceSample& value,ZjRateTraceEvent event,ZjFlightFault reason,
+             const ZjAttitudeFaultDetail& detail={}){
   if(!active)return;
   terminal=value;terminal.event=event;terminal.reason=reason;
+  if(reason==ZjFlightFault::ATTITUDE_INVALID){
+   attitudeFault=detail;
+   if(!attitudeFault.reason)attitudeFault.reason="ESTIMATE_STALE";
+  }
   active=false;frozen=true;
  }
  uint16_t size()const{return frozen?count+2+(haveArm?1:0):0;}

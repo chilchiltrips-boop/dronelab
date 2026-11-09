@@ -12,6 +12,7 @@ test('measured-dt attitude fusion, ±tilt, repeated samples, calibration changes
 #include "FlightCoreAttitude.h"
 #include "FlightCoreFlightOutput.h"
 #include <cassert>
+#include <cstring>
 #include <iostream>
 int main(){
  float zero[3]={},gravity[3]={0,0,1},rate[3]={20,0,0};
@@ -34,12 +35,22 @@ int main(){
  assert(f.step(previous.sequence,at+4000,rate,gravity,true,true,1));
  assert(f.value.roll==previous.roll&&f.value.atUs==previous.atUs); // no replay/invented freshness
  assert(!f.step(previous.sequence-1,at,zero,gravity,true,true,1));
+ assert(std::strcmp(f.failure.reason,"SAMPLE_ORDER")==0);
+ ZjAttitudeFilter close;
+ assert(close.step(1,4000,zero,gravity,true,true,2));
+ assert(close.step(2,12348,zero,gravity,true,true,2));
+ assert(close.step(3,13000,zero,gravity,true,true,2)); // close reads after a long I2C burst
+ assert(close.value.sequence==2&&close.value.atUs==12348&&close.value.accelAtUs==12348);
+ assert(close.value.fresh(24348)&&!close.value.fresh(24349)); // ignored data cannot renew the estimate
+ assert(close.step(4,16348,zero,gravity,true,true,2)&&close.value.sequence==4);
  assert(f.step(1,4000,zero,gravity,true,true,2));
  assert(!f.step(2,124600,zero,gravity,true,true,2)); // observed boot-sized spike
+ assert(std::strcmp(f.failure.reason,"SAMPLE_GAP")==0&&f.failure.sampleIntervalUs==120600);
  assert(f.step(3,128600,zero,gravity,true,true,2));
  float acceleration[3]={0,0,2}; // reject acceleration as gravity, bounded gyro coast
  for(unsigned n=4;n<129;n++)assert(f.step(n,128600+(n-3)*4000,zero,acceleration,true,true,2));
  assert(!f.step(129,632600,zero,acceleration,true,true,2));
+ assert(std::strcmp(f.failure.reason,"GRAVITY_TIMEOUT")==0&&f.failure.gravityAgeUs==504000);
  assert(f.step(130,636600,zero,gravity,true,true,2));
  assert(!f.step(131,640600,zero,gravity,false,true,2));
  rate[0]=NAN;assert(!f.step(132,644600,rate,gravity,true,true,2));

@@ -479,14 +479,15 @@ function renderHeaderProfileStatus(ready){
  if(message)message.dataset.tone=headerProfileError?'error':active?'good':'info';
  const scan=$('kitTopScan');if(scan)scan.disabled=discovering||otaActive;
 }
-async function disconnect(reason='Disconnected',{automatic=false}={}){
+async function disconnect(reason='Disconnected',{automatic=false,releaseDiagnosticControl=true}={}){
  trace('web_disconnect',{transport:state.transport,connected:false,reason:classify(reason)});
  clearAdminBinding();
  autoReconnectAllowed=automatic;otaActive=false;
  const priorId=state.kitId;pendingNetworkTarget=null;closeReconnectOffer();
  ++controlTicket;ownOwnerId='';++wifiTestNonce;wifiTesting=false;savedNetworks=[];
  advanceConnectionGeneration();recoveryTarget=null;for(const key of Object.keys(usbCandidate))delete usbCandidate[key];state.heartbeatAt=0;state.linkState='disconnected';
- if(state.rcSession||state.owner)await releaseRc().catch(()=>{});
+ // A missed observation or an unverified device must never send an RC write.
+ if(!automatic&&releaseDiagnosticControl&&(state.rcSession||state.owner))await releaseRc().catch(()=>{});
  for(const slot of authSessions.keys())if(slot.startsWith(priorId+'@'))authSessions.delete(slot);
  for(const [host,id] of localKitHosts)if(id===priorId)localKitHosts.delete(host);
  for(const [host,id] of adminKitHosts)if(id===priorId)adminKitHosts.delete(host);
@@ -818,6 +819,7 @@ async function readFlightTelemetry(){
   const observation=(!usb||/^[a-f0-9]{32}$/i.test(data?.bootId||''))&&
    root.ZebjusFlightTelemetry?.normalize(data,observedBinding,state.flightTelemetry,now,now-started);
   if(!observation)throw Error('Invalid FlightCore telemetry');
+  if(observation===state.flightTelemetry)return;
   // Validate the complete observation before adopting a first/new USB boot.
   if(changedBoot){
    advanceConnectionGeneration();++controlTicket;state.owner=false;state.rcSession='';state.rcSource='';ownOwnerId='';
@@ -826,7 +828,9 @@ async function readFlightTelemetry(){
   if(usb)state.bootId=observation.bootId;
   state.flightTelemetry=observation;
   root.dispatchEvent(new CustomEvent('dronelab:flight-telemetry'));
- }catch{nextFlightDataReadAt=Date.now()+1500}
+ }catch(error){
+  if(current()&&error?.code!=='SAFETY_CANCELLED')nextFlightDataReadAt=Date.now()+1500;
+ }
  finally{flightTelemetryPending=false;}
 }
 
@@ -954,7 +958,10 @@ async function readStatus(){
   releaseReason:d.rc?.lastReleaseReason,lastReleaseAtMs:Number(d.rc?.lastReleaseAtMs),
   connectionGeneration:reconnectTicket,...requestScheduler?.metrics?.(),reconnectAttempts,lastRecoveryReason,
   requestQueueWaitMs:d.__requestTiming?.queueMs,requestNetworkWaitMs:d.__requestTiming?.responseWaitMs});
- if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){await disconnect('Device identity changed • RC stopped');throw Error('Hardware identity changed')}
+ if(d.kitId!==state.kitId||d.kitCode!==state.kitCode){
+  await disconnect('Device identity changed • verify the Kit again',{releaseDiagnosticControl:false});
+  throw Error('Hardware identity changed');
+ }
  const actualTransport=verifiedTransport(d);
  state.heartbeatAt=Date.now();state.linkState='connected';
  if(state.transport!=='android-relay')state.transport=actualTransport;
@@ -1558,7 +1565,9 @@ function onSerial(e){
   }
   render();return;
  }
- if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){void disconnect('USB hardware identity changed');return}
+ if(line.startsWith('ZJKIT,ID,')&&line.slice(9)!==state.kitId){
+  void disconnect('USB hardware identity changed',{releaseDiagnosticControl:false});return;
+ }
  // Shared with Readable Serial Monitor: supports RAW ZJRC and 1.4.11+ COMBINED ZJTEL.
  // Only apply USB frames after this physical USB Kit identity has been verified.
  const rc=root.ZebjusSerialRcDecoder?.parseSerialRc(line);
@@ -2237,7 +2246,7 @@ function init(){
  root.addEventListener('dronelab:usb-state',event=>{
   if(event.detail?.connected!==false)return;
   clearAdminBinding();
-  if(state.transport==='usb')void disconnect('Physical USB disconnected • verify the Kit again');
+  if(state.transport==='usb')void disconnect('Physical USB disconnected • verify the Kit again',{releaseDiagnosticControl:false});
   else root.dispatchEvent(new CustomEvent('dronelab:kit-link',{detail:{connected:linkFresh(),transport:state.transport,kitId:state.kitId}}));
  });
  const code=$('kitCodeInput');if(code)code.oninput=()=>{code.value=code.value.replace(/\D/g,'').slice(0,6)};
@@ -2337,6 +2346,7 @@ function init(){
   try{await read();if(ticket===reconnectTicket)pollErrors=0}
   catch(e){
    if(ticket!==reconnectTicket||state.working)return;
+   if(e?.code==='STATUS_SUPERSEDED')return; // A prioritized safety action may cancel the read.
    const health=statusReadFailed(e);if(health.fatal)pollErrors=2;
    // Hidden/just-resumed timer stalls are not three verified Wi-Fi failures.
    if(!backgroundLinkPolicy(document.hidden,Date.now(),lastBackgroundStatusAt,foregroundResumedAt).penalize){
@@ -2345,7 +2355,7 @@ function init(){
    if(++pollErrors<3){audit((usb?'USB':'Wi-Fi')+' check '+pollErrors+'/3 missed • '+e.message,'warn')}
    else{
     const old=connectionTarget();
-    audit('3 missed '+(usb?'USB':'Wi-Fi')+' checks • releasing diagnostic control','warn');
+    audit('3 missed '+(usb?'USB':'Wi-Fi')+' checks • verifying the Kit connection','warn');
     await disconnect(usb?'USB link lost • reconnect and verify the selected kit':'Wi-Fi link lost • automatic identity-checked reconnect',{automatic:true});
     if(!usb&&!document.hidden){
      // Directly verify the previously connected physical kit before scanning unrelated classroom kits.

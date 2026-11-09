@@ -10,13 +10,27 @@ struct ZjAttitudeEstimate {
  float roll=0,pitch=0,varianceRoll=4,variancePitch=4;
  uint32_t sequence=0,atUs=0,accelAtUs=0;
  bool valid=false,accelUsed=false,levelCalibrated=false;
+ bool fresh(uint32_t now)const{return valid&&uint32_t(now-atUs)<=12000;}
+};
+
+struct ZjAttitudeFaultDetail {
+ const char* reason=nullptr;
+ uint32_t sampleIntervalUs=0,gravityAgeUs=UINT32_MAX;
+ float gravitySquared=-1;
 };
 
 struct ZjAttitudeFilter {
  ZjAttitudeEstimate value;
+ ZjAttitudeFaultDetail failure;
  uint32_t previousAtUs=0,calibration=0;
  bool initialized=false;
  void reset(){value={};previousAtUs=0;initialized=false;}
+ bool reject(const char* reason,uint32_t atUs,uint32_t intervalUs,const float (&gravity)[3]){
+  failure={reason,intervalUs,initialized?uint32_t(atUs-value.accelAtUs):UINT32_MAX,
+   gravity[0]*gravity[0]+gravity[1]*gravity[1]+gravity[2]*gravity[2]};
+  reset();
+  return false;
+ }
  static float wrap(float a){return std::remainder(a,360.0f);}
  static bool gravityAngles(const float (&g)[3],float& roll,float& pitch){
   const float norm=g[0]*g[0]+g[1]*g[1]+g[2]*g[2];
@@ -28,18 +42,23 @@ struct ZjAttitudeFilter {
  }
  bool step(uint32_t sequence,uint32_t atUs,const float (&rate)[3],const float (&gravity)[3],
            bool sampleValid,bool level,uint32_t calibrationId){
+  failure={};
   if(calibration!=calibrationId){reset();calibration=calibrationId;}
-  if(!sampleValid||!sequence||!std::isfinite(rate[0])||!std::isfinite(rate[1])||!std::isfinite(rate[2])){
-   reset();return false;
-  }
+  const uint32_t intervalUs=initialized?uint32_t(atUs-previousAtUs):0;
+  if(!sampleValid||!sequence||!std::isfinite(rate[0])||!std::isfinite(rate[1])||!std::isfinite(rate[2]))
+   return reject("IMU_INPUT_INVALID",atUs,intervalUs,gravity);
   if(initialized&&sequence==value.sequence)return value.valid;
-  if(initialized&&int32_t(sequence-value.sequence)<=0){reset();return false;}
+  if(initialized&&int32_t(sequence-value.sequence)<=0)
+   return reject("SAMPLE_ORDER",atUs,intervalUs,gravity);
+  // A delayed I2C read can complete close to the next scheduled read. Keep
+  // the previous estimate and its timestamp until enough real time elapses.
+  if(initialized&&intervalUs<1000)return value.valid;
+  if(initialized&&intervalUs>12000)return reject("SAMPLE_GAP",atUs,intervalUs,gravity);
   float roll=0,pitch=0;
   const bool accel=gravityAngles(gravity,roll,pitch);
-  const float dt=initialized?uint32_t(atUs-previousAtUs)*.000001f:.004f;
-  if(initialized&&(dt<.001f||dt>.012f)){reset();return false;}
+  const float dt=initialized?intervalUs*.000001f:.004f;
   if(!initialized){
-   if(!accel)return false;
+   if(!accel)return reject("GRAVITY_UNAVAILABLE",atUs,intervalUs,gravity);
    value.roll=roll;value.pitch=pitch;value.varianceRoll=value.variancePitch=4;
    value.accelAtUs=atUs;initialized=true;
   }else{
@@ -47,7 +66,7 @@ struct ZjAttitudeFilter {
    // Pitch singularities are outside the supported ±80 degree envelope.
    constexpr float radians=.017453292519943295f;
    const float r=value.roll*radians,p=value.pitch*radians;
-   if(std::fabs(value.pitch)>=80){reset();return false;}
+   if(std::fabs(value.pitch)>=80)return reject("PITCH_LIMIT",atUs,intervalUs,gravity);
    const float rollRate=rate[0]+std::sin(r)*std::tan(p)*rate[1]+std::cos(r)*std::tan(p)*rate[2];
    const float pitchRate=std::cos(r)*rate[1]-std::sin(r)*rate[2];
    value.roll=wrap(value.roll+dt*rollRate);value.pitch+=dt*pitchRate;
@@ -62,9 +81,10 @@ struct ZjAttitudeFilter {
   }
   previousAtUs=atUs;value.sequence=sequence;value.atUs=atUs;
   value.accelUsed=accel;value.levelCalibrated=level;
-  value.valid=std::isfinite(value.roll)&&std::isfinite(value.pitch)&&std::fabs(value.pitch)<80&&
-   uint32_t(atUs-value.accelAtUs)<=500000;
-  if(!value.valid){reset();return false;}
+  if(!std::isfinite(value.roll)||!std::isfinite(value.pitch))return reject("NONFINITE_ESTIMATE",atUs,intervalUs,gravity);
+  if(std::fabs(value.pitch)>=80)return reject("PITCH_LIMIT",atUs,intervalUs,gravity);
+  if(uint32_t(atUs-value.accelAtUs)>500000)return reject("GRAVITY_TIMEOUT",atUs,intervalUs,gravity);
+  value.valid=true;
   return true;
  }
 };
