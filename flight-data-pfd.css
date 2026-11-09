@@ -72,6 +72,7 @@
 .fd-pfd-tilt { bottom: 26%; top: auto; border-color: #a68f61; }
 .fd-pfd-tilt span { color: #e7ded0; }
 .fd-pfd-tilt-readout output { color: #57f3ff; font-variant-numeric: tabular-nums; }
+.fd-pfd-main[data-tilt="monitor-delayed"] .fd-pfd-tilt-readout { color: #ffbd7a; border-color: #ffbd7a; }
 .fd-pfd-pane [hidden] { display: none; }
 .fd-pfd-status {
   display: grid;

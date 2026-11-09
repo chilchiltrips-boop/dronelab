@@ -7,6 +7,9 @@ const usbObservationMs = 2500;
 const usbOutputDisplayMs = 1500;
 const networkOutputDisplayMs = 3000;
 const firmwareImuAgeMs = 12;
+const compactLiveMs = 500;
+const compactMaxRoundTripMs = 350;
+const compactTiltHoldMs = 2000;
 const supportedTransports = ['usb', 'ap', 'sta', 'android-relay'];
 const controllerSources = ['PPM', 'WEB', 'ANDROID'];
 const controlPaths = ['AUTO', 'PPM', 'ANDROID_AP', 'ANDROID_WEBRTC', 'WEB_STA'];
@@ -139,7 +142,9 @@ function outputSnapshot(kit, connected, now) {
 }
 
 export function buildFlightData(kit = {}, now = Date.now()) {
-  const raw = kit.flightTelemetry;
+  const connected = kit.connected === true && kit.linkVerified === true && kit.board === 'ZFC-A2' &&
+    /^ZFC-A2-[A-Fa-f0-9]{12}$/.test(kit.kitId) && supportedTransports.includes(kit.transport);
+  const raw = connected ? kit.flightTelemetry : null;
   const compact = raw && raw.generation === kit.connectionGeneration && raw.transport === kit.transport &&
     within(observationAge(raw.observedAt, now), PPM_OBSERVATION_MS)
     ? globalThis.ZebjusFlightTelemetry.normalize(raw, kit, null, raw.observedAt, raw.roundTripMs) : null;
@@ -163,20 +168,19 @@ export function buildFlightData(kit = {}, now = Date.now()) {
       imuSampleAgeAtObservationMs: compact.ageUs / 1000,
       imuTimingObservedAt: compact.observedAt};
   }
-  const connected = kit.connected === true && kit.linkVerified === true && kit.board === 'ZFC-A2' &&
-    /^ZFC-A2-[A-Fa-f0-9]{12}$/.test(kit.kitId) && supportedTransports.includes(kit.transport);
   const transport = connected ? kit.transport : null;
   const linkState = connected ? kit.linkState : null;
-  const limit = compact ? 500 : transport === 'usb' ? usbObservationMs : PPM_OBSERVATION_MS;
+  const limit = compact ? compactLiveMs : transport === 'usb' ? usbObservationMs : PPM_OBSERVATION_MS;
   const imu = connected && kit.imu?.board === 'A2' ? kit.imu : null;
   const imuObservedAge = observationAge(kit.imuObservedAt, now);
   const sampleAge = observationAge(kit.imuSampleObservedAt, now);
   const boardSampleAge = number(kit.imuSampleAgeAtObservationMs);
   const imuAgeMs = imu && sampleAge !== null && boardSampleAge !== null ? sampleAge + boardSampleAge + (compact?.roundTripMs || 0) : null;
   const imuSequence = counter(imu?.sampleSequence) ? imu.sampleSequence : null;
-  const imuFresh = imu?.state === 'READY' && imu.configValid === true && imu.dataReady === true &&
-    imu.imuValid !== false && imuSequence > 0 && within(boardSampleAge, firmwareImuAgeMs) &&
-    within(imuAgeMs, limit);
+  const imuReady = imu?.state === 'READY' && imu.configValid === true && imu.dataReady === true &&
+    imu.imuValid !== false && imuSequence > 0 && within(boardSampleAge, firmwareImuAgeMs);
+  const imuFresh = imuReady && within(imuAgeMs, limit) && (!compact || compact.roundTripMs <= compactMaxRoundTripMs);
+  const monitorDelayed = Boolean(compact && imuReady && !imuFresh);
   const rates = imuFresh ? vector(imu.corrected, 500) : null;
   // Network status binds gyro and acceleration to a single observation. The
   // USB diagnostic stream currently reports rates without acceleration.
@@ -195,11 +199,18 @@ export function buildFlightData(kit = {}, now = Date.now()) {
     pitch: Math.atan2(-accel[0], Math.hypot(accel[1], accel[2])) * 180 / Math.PI,
     stationary: stationary === true
   } : null;
+  let lastTilt = null;
   if (compact && connected) {
-    tilt = rates && compact.attitudeValid && compact.roundTripMs <= 350 ? {
+    const reportedTilt = imuReady && compact.attitudeValid ? {
       roll: compact.attitude[0], pitch: compact.attitude[1], fused: true,
       stationary: stationary === true, levelCalibrated: compact.levelCalibrated
     } : null;
+    tilt = imuFresh ? reportedTilt : null;
+    // Display only. Keep the last verified pose through a short delivery gap.
+    // An invalid board sample or a retired Kit/boot never supplies a held pose.
+    if (monitorDelayed && reportedTilt && within(imuAgeMs, compactTiltHoldMs)) {
+      lastTilt = {...reportedTilt, delayed: true};
+    }
   }
   const timingFresh = imu && within(observationAge(kit.imuTimingObservedAt, now), limit);
   const timing = {
@@ -218,13 +229,17 @@ export function buildFlightData(kit = {}, now = Date.now()) {
   let imuHealth = healthRow('unknown', 'IMU unconfirmed');
   if (rates) {
     imuHealth = healthRow('good', 'Calibrated gyro', 'Current corrected angular-rate observation.');
+  } else if (monitorDelayed) {
+    imuHealth = healthRow('warning', 'Monitor delayed', 'Waiting for a fresh WebApp observation. FlightCore last reported a valid IMU sample.');
   } else if (imu && within(imuObservedAge, limit)) {
     if (['FAILED', 'SENSOR_ERROR', 'NOT_FOUND', 'READ_ERROR'].includes(imu.state)) {
       imuHealth = healthRow('error', 'IMU fault', reason(imu.error) || imu.state);
     } else if (['STARTING', 'SETTLING', 'CALIBRATING'].includes(imu.state)) {
       imuHealth = healthRow('warning', 'IMU ' + imu.state.toLowerCase(), 'Waiting for fresh calibrated gyro samples.');
     } else if (imu.state === 'READY') {
-      imuHealth = healthRow('warning', 'Gyro sample delayed', 'Waiting for a current, valid rate observation.');
+      imuHealth = compact
+        ? healthRow('warning', 'FC IMU sample invalid', 'FlightCore reported an invalid or stale IMU sample at capture.')
+        : healthRow('warning', 'Gyro sample delayed', 'Waiting for a current, valid rate observation.');
     }
   } else if (imu) {
     imuHealth = healthRow('warning', 'IMU observation delayed');
@@ -261,15 +276,25 @@ export function buildFlightData(kit = {}, now = Date.now()) {
     rc.selectedPath, rc.source
   ]) : null;
   const sample = rates ? {binding, sequence: imuSequence, at: kit.imuSampleObservedAt, rates} : null;
+  let attitudeHealth = healthRow('unknown', 'FC attitude unavailable');
+  if (tilt?.fused) {
+    attitudeHealth = healthRow(tilt.levelCalibrated ? 'good' : 'warning',
+      tilt.levelCalibrated ? 'FC attitude · level calibrated' : 'FC attitude · save Quick Level');
+  } else if (lastTilt) {
+    attitudeHealth = healthRow('warning', 'Monitor delayed', 'Showing the last verified FlightCore attitude.');
+  } else if (connected && compact && !compact.attitudeValid && within(imuObservedAge, compactLiveMs)) {
+    attitudeHealth = healthRow(output.fault === 'ATTITUDE_INVALID' ? 'error' : 'warning', 'FC attitude invalid',
+      'FlightCore reported that its fused roll/pitch estimate was invalid at capture.');
+  }
   return {
     binding, connected, kitId, kitName: connected ? kit.kitName || kit.kitId : null,
     board: connected ? kit.board : null, bootId, version: connected ? kit.version || null : null,
     transport, linkState, mode: connected ? kit.flightMode ?? null : null,
     modeState: connected ? kit.flightModeState || null : null,
-    telemetry: compact ? {ageMs: now - compact.observedAt, roundTripMs: compact.roundTripMs, targetHz: 10} : null, rates, accel, tilt,
+    telemetry: compact ? {ageMs: now - compact.observedAt, roundTripMs: compact.roundTripMs, targetHz: 10, delayed: monitorDelayed} : null,
+    rates, accel, tilt, lastTilt,
     imuAgeMs, imuSequence, sample, rc, output, flight, timing,
-    health: {attitude: tilt?.fused ? healthRow(tilt.levelCalibrated ? 'good' : 'warning',
-        tilt.levelCalibrated ? 'FC attitude · level calibrated' : 'FC attitude · save Quick Level') : healthRow('unknown', 'FC attitude unavailable'),
+    health: {attitude: attitudeHealth,
       stabilization: connected && kit.flightModeState?.stabilizationSupported === true && output.fresh
         ? healthRow(flight?.state === 'FAILSAFE' ? 'error' : 'warning',
           (kit.flightModeState.active === 'angle' ? 'Angle cascade' : 'Acro Rate PID') + (flight?.authorized ? ' active' : ' · disarmed'),

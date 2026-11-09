@@ -33,6 +33,7 @@ static const char* zjFlightTracePage(const String& boot,const String& captureArg
  if(expected&&boot=="-")return "BOOT_CHANGED";
 
  ZjRateTraceSample rows[ZJ_TRACE_NETWORK_PAGE];
+ ZjAttitudeFaultDetail attitudeFault;
  uint32_t capture=0;
  unsigned total=0,count=0;
  const char* error=nullptr;
@@ -51,15 +52,24 @@ static const char* zjFlightTracePage(const String& boot,const String& captureArg
  if(!error){
   count=std::min<unsigned>(limit,total-offset);
   for(unsigned n=0;n<count;n++)zjFlightTrace.read(offset+n,rows[n]);
+  if(!offset)attitudeFault=zjFlightTrace.attitudeFault;
  }
  portEXIT_CRITICAL(&zjTimingMux);
  if(error)return error;
 
- out.reserve(192+count*380);
+ out.reserve(192+count*380+(attitudeFault.reason?120:0));
  out=String("{\"version\":1,\"kitId\":")+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
   ",\"firmwareVersion\":"+zjJson(FW_VERSION)+
   ",\"capture\":"+String(capture)+",\"offset\":"+String(offset)+",\"total\":"+String(total)+
-  ",\"sampleHz\":"+String(ZjRateTrace::SAMPLE_HZ)+",\"rows\":[";
+  ",\"sampleHz\":"+String(ZjRateTrace::SAMPLE_HZ);
+ if(attitudeFault.reason){
+  const auto squared=attitudeFault.gravitySquared;
+  out+=",\"attitudeFault\":{\"reason\":"+zjJson(attitudeFault.reason)+
+   ",\"sampleIntervalUs\":"+String(attitudeFault.sampleIntervalUs)+
+   ",\"gravityAgeUs\":"+(attitudeFault.gravityAgeUs==UINT32_MAX?String("null"):String(attitudeFault.gravityAgeUs))+
+   ",\"gravityG\":"+(std::isfinite(squared)&&squared>=0?String(std::sqrt(squared),4):String("null"))+"}";
+ }
+ out+=",\"rows\":[";
  for(unsigned n=0;n<count;n++){
   if(n)out+=',';
   zjTraceJsonRow(out,rows[n]);

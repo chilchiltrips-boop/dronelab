@@ -28,16 +28,17 @@ function fixture(transport='sta',boot='a'.repeat(32)){
   valid:true,rates:[0,0,0],gravity:[0,0,1],attitude:[0,0],attitudeValid:true,levelCalibrated:true,accelUsed:true,
   offAck:true,authorized:false,deadlineFault:false,owner:0,state:'DISARMED',reason:'NONE',applied:[0,0,0,0],
   dtUs:4000,measuredHz:250,missedTicks:0,flightModeState:{supported:true,saved:'angle',active:'angle',pending:null}};
- let reply,delay,events=0;const calls=[];
+ let reply,delay,failure,events=0;const calls=[];
  const context=vm.createContext({state,Date:{now:()=>1000},CustomEvent,
   root:{ZebjusFlightTelemetry:globalThis.ZebjusFlightTelemetry,dispatchEvent:()=>events++},
   clearImuObservation:()=>{},
   waitSerial:()=>new Promise(resolve=>{reply=resolve;}),
   usbWrite:async line=>{calls.push(line);reply('ZJFD,ACK,'+state.kitId+','+line.split(',')[3]+','+JSON.stringify(packet));},
-  deviceRequest:async(route,method,args,guard)=>{calls.push([route,method]);guard();if(delay)await delay;return packet;}
+  deviceRequest:async(route,method,args,guard)=>{calls.push([route,method]);guard();if(failure)throw failure;if(delay)await delay;return packet;}
  });
  vm.runInContext('let reconnectTicket=1,controlTicket=0,ownOwnerId="",adminUnlockedUntil=9999,lastRecoveryReason="";function advanceConnectionGeneration(){return ++reconnectTicket;}'+client,context);
  return {state,packet,calls,context,events:()=>events,read:()=>vm.runInContext('readFlightTelemetry()',context),
+  fail:error=>{failure=error;},
   hold:()=>{let done;delay=new Promise(resolve=>{done=resolve});return done;}};
 }
 test('USB learns a fully validated boot; network observations remain GET-only',async()=>{
@@ -54,6 +55,18 @@ test('malformed USB packet cannot establish a boot or refresh the view',async()=
   const f=fixture('usb','');Object.assign(f.packet,change);await f.read();
   assert.equal(f.state.bootId,'');assert.equal(f.state.flightTelemetry,undefined);assert.equal(f.events(),0);
  }
+});
+test('duplicates, dropped telemetry and STOP preemption leave the last observation and control state intact',async()=>{
+ const f=fixture();f.state.owner=true;f.state.rcSession='diagnostic';
+ await f.read();const first=f.state.flightTelemetry;
+ await f.read();assert.equal(f.events(),1);
+ f.fail(Object.assign(Error('STOP has priority'),{code:'SAFETY_CANCELLED'}));await f.read();
+ assert.equal(vm.runInContext('nextFlightDataReadAt',f.context),0);
+ f.fail(Error('telemetry request timed out'));await f.read();
+ assert.equal(vm.runInContext('nextFlightDataReadAt',f.context),2500);
+ assert.equal(f.events(),1);assert.equal(f.state.flightTelemetry,first);
+ assert.equal(f.state.owner,true);assert.equal(f.state.rcSession,'diagnostic');
+ assert.ok(f.calls.every(([route,method])=>route==='/api/flight/telemetry'&&method==='GET'));
 });
 test('USB boot change retires control generation and teacher unlock; stale network responses are discarded',async()=>{
  const f=fixture('usb','b'.repeat(32));f.state.owner=true;await f.read();

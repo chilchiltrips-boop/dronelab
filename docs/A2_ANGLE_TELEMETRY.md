@@ -180,6 +180,19 @@ remain available.
 - Verified APP and Factory sizes are 1,367,872 and 4,194,304 bytes respectively.
 - Physical board flashing, timing under load, ESC response and actual flight: **NOT_RUN** for this integration.
 
+## Attitude recovery in 1.7.25
+
+Closely spaced valid IMU samples keep the last valid attitude estimate. The
+next update uses the elapsed time since the last accepted sample. The 12 ms
+sample-age limit and 500 ms gravity-correction limit still apply. Flight Trace
+exports the specific estimator rejection and its timing when the FC revokes
+outputs for `ATTITUDE_INVALID`.
+
+Flight Data labels delayed browser observations `MONITOR DELAYED` and can
+display the last verified pose for up to two seconds. A reported invalid
+estimate clears the pose. Missed reads and automatic reconnection are
+read-only. Physical acceptance for 1.7.25 is **NOT_RUN**.
+
 The control worker derives its first expected tick from timer activation. A
 missed period enters failsafe without replaying old ticks. Live Inputs and the
 Kit header share the accepted RC observation. Motor replies can update raw PPM
