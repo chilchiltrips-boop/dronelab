@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "product": "ZEBJUS_FLIGHTCORE",
-  "version": "1.7.25",
+  "version": "1.7.26",
   "defaultBoardId": "ZFC-A2",
   "boards": [
     {
@@ -12,27 +12,27 @@
       "flashFreq": "80m",
       "flashSize": "4MB",
       "latest": {
-        "version": "1.7.25",
+        "version": "1.7.26",
         "app": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_APP_RATE_EXPERIMENTAL.bin",
-          "sha256": "c77eb3e8029dda265ad8d6fb140a498356daca8afe05a9efe7d0db1f4a4df7a8",
-          "size": 1446272,
-          "builtAt": "2026-11-09T05:37:20Z",
-          "buildId": "1.7.25-ZFC-A2-c77eb3e8029d",
-          "compiledAt": "2026-11-09T05:37:41Z"
+          "sha256": "7d5a432a9d5ecc5d674c1b3b7e19b3812919c2a804c417f26cf1eea64e7ab174",
+          "size": 1447712,
+          "builtAt": "2026-11-09T06:36:06Z",
+          "buildId": "1.7.26-ZFC-A2-7d5a432a9d5e",
+          "compiledAt": "2026-11-09T06:36:26Z"
         },
         "factory": {
           "available": true,
           "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY_RATE_EXPERIMENTAL.bin",
-          "sha256": "f76bb5e8269dbefe03b9a65a37d0f8d216d43d9ad02842bcac0eafd2d3720d95",
+          "sha256": "2c2c374afadae799254df572f1a5528489b23d14020e055a9f7d0bc18f8f1013",
           "size": 4194304,
-          "builtAt": "2026-11-09T05:37:20Z",
-          "buildId": "1.7.25-ZFC-A2-FACTORY-f76bb5e8269d",
-          "compiledAt": "2026-11-09T05:37:41Z"
+          "builtAt": "2026-11-09T06:36:06Z",
+          "buildId": "1.7.26-ZFC-A2-FACTORY-2c2c374afada",
+          "compiledAt": "2026-11-09T06:36:26Z"
         },
-        "builtAt": "2026-11-09T05:37:20Z",
-        "compiledAt": "2026-11-09T05:37:41Z"
+        "builtAt": "2026-11-09T06:36:06Z",
+        "compiledAt": "2026-11-09T06:36:26Z"
       },
       "usbMatch": [
         "ZEBJUS Aerion F1",
@@ -53,7 +53,7 @@
       "recommendedSensor": "MPU6050"
     }
   ],
-  "builtAt": "2026-11-09T05:37:20Z",
+  "builtAt": "2026-11-09T06:36:06Z",
   "releaseScope": "EXPERIMENTAL_PPM_RATE",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
@@ -70,5 +70,5 @@
   "webRtcPhysicalFlight": false,
   "boardPolicy": "A2_ONLY",
   "flightOutputEnabled": true,
-  "sourceCommit": "c00fa717fb42986ec03df92a041cc46c1601e5ee"
+  "sourceCommit": "d578c5062699b12ec0faf04969de17380626c5cd"
 }
