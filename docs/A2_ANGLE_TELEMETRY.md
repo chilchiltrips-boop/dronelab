@@ -168,10 +168,9 @@ Android AP controller keeps its independent 20 ms signed UDP stream and
 
 ## Downloadable 1.7.24 candidate
 
-Firmware Center's **Load 1.7.24 Acro + Angle** action selects the separately
-verified candidate. Ordinary Auto Load retains the 1.7.19 bench rollback.
-The 1.7.15 published images and 1.7.20 through 1.7.23 experimental download URLs
-remain available.
+The separately verified 1.7.24 images remain available at their versioned
+download URLs. Ordinary Auto Load selects the 1.7.19 bench rollback. The
+1.7.15 published images and older experimental download URLs remain available.
 
 - Compiled source `0367d2e5eebb0b7c1f8466a9abd00e900c708e85`
 - Build workflow [42523987273](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42523987273)
@@ -192,6 +191,15 @@ Flight Data labels delayed browser observations `MONITOR DELAYED` and can
 display the last verified pose for up to two seconds. A reported invalid
 estimate clears the pose. Missed reads and automatic reconnection are
 read-only. Physical acceptance for 1.7.25 is **NOT_RUN**.
+
+Select **Load 1.7.25 Acro + Angle** in Firmware Flash for the verified
+experimental APP or Factory image.
+
+- Compiled source `c00fa717fb42986ec03df92a041cc46c1601e5ee`
+- Build workflow [42568128641](https://github.com/chilchiltrips-boop/dronelab/actions/runs/42568128641)
+- APP build ID `1.7.25-ZFC-A2-c77eb3e8029d`
+- APP SHA-256 `c77eb3e8029dda265ad8d6fb140a498356daca8afe05a9efe7d0db1f4a4df7a8`
+- Verified APP and Factory sizes are 1,446,272 and 4,194,304 bytes respectively.
 
 The control worker derives its first expected tick from timer activation. A
 missed period enters failsafe without replaying old ticks. Live Inputs and the
