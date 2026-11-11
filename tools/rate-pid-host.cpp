@@ -77,7 +77,7 @@ int main(){
  ZjAnglePidState outer;
  assert(zjStepAnglePid(outer,{3,0,0},10,0,.004f)==30);
  const auto mix=zjRateMixQuadX(1500,100,20,10);
- assert(mix.pulse[0]==1370&&mix.pulse[1]==1590&&mix.pulse[2]==1610&&mix.pulse[3]==1430);
+ assert(mix.pulse[0]==1590&&mix.pulse[1]==1370&&mix.pulse[2]==1430&&mix.pulse[3]==1610);
  assert(zjRateMixQuadX(1950,300,0,0).residual[0]>0);
  ZjControlScheduler control;
  control.start(0);assert(control.begin(4000));control.finish(4200);

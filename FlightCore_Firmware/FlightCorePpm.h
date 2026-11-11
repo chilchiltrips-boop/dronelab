@@ -357,7 +357,7 @@ static String zjPpmStatus(){
  for(uint8_t i=0;i<5;i++){if(i)output+=',';output+=String(zjPpmMap[i]+1);}output+="]";
  output+=",\"armMethod\":\"THROTTLE_LOW_YAW_GESTURE\",\"armStatus\":"+
    String("\"")+(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?"ARMED":"DISARMED")+"\"";
- output+=",\"armHoldMs\":"+String(ZjPpmArmGesture::HOLD_MS)+",\"throttleLowUs\":1050,\"yawRightUs\":1900,\"yawLeftUs\":1100";
+ output+=",\"disarmHoldMs\":1000,\"autoDisarmMs\":15000,\"modeAngleBelowUs\":1400,\"modeRateAboveUs\":1600,\"armHoldMs\":"+String(ZjPpmArmGesture::HOLD_MS)+",\"throttleLowUs\":1050,\"yawRightUs\":1900,\"yawLeftUs\":1100";
  output+=",\"inputArmed\":"+(good&&zjRcOwned&&zjRcSource=="PPM"&&zjPpmArm.armed?String("true"):String("false"))+","+zjMotorFlags()+"}";
  return output;
 }
@@ -424,7 +424,7 @@ static void zjPpmLoop(uint32_t now){
    }else if(!zjRcOwned){
     zjPpmMode.accept(zjPpmValues[zjPpmMap[4]],receivedAt);
     zjPpmArm.reset(); // no old ARM state crosses an RC ownership release
-    if(t<=ZjPpmArmGesture::THROTTLE_LOW_US)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
+    if(t<ZjPpmArmGesture::THROTTLE_LOW_US)zjPpmSafeFrames=(zjPpmSafeFrames<3?zjPpmSafeFrames+1:3);
     else zjPpmSafeFrames=0;
     if(zjPpmSafeFrames>=3){
      zjRcOwned=true;zjRcNetwork=false;zjRcSource="PPM";zjRcTransport="PPM";

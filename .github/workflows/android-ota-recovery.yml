@@ -3,6 +3,10 @@ on:
   push:
     paths:
       - 'companion-network.js'
+      - 'companion-pid.js'
+      - 'js/flightcore-pid-client.js'
+      - 'js/pid-profiles.js'
+      - 'js/rate-pid.js'
       - 'js/inline-dialogs.js'
       - 'js/kit-network-policy.js'
       - 'android-native-bridge.js'
@@ -21,6 +25,10 @@ on:
   pull_request:
     paths:
       - 'companion-network.js'
+      - 'companion-pid.js'
+      - 'js/flightcore-pid-client.js'
+      - 'js/pid-profiles.js'
+      - 'js/rate-pid.js'
       - 'js/inline-dialogs.js'
       - 'companion.html'
       - 'FlightCore_Firmware/FlightCoreNetwork.h'
@@ -59,10 +67,11 @@ jobs:
       - name: Package exact trusted WebView assets
         run: |
           mkdir -p mobile-android/app/src/main/assets/vendor/crypto mobile-android/app/src/main/assets/js
-          cp companion.html companion.css companion.js companion-network.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js mobile-android/app/src/main/assets/
+          cp companion.html companion.css companion.js companion-network.js companion-pid.js companion-menu.js android-native-bridge.js companion-flight.js flight-input.js pairing-core.js pairing-code.js pairing-qr-ui.js control-path.css mobile-android/app/src/main/assets/
+          cp js/flightcore-pid-client.js js/pid-profiles.js js/rate-pid.js js/flight-telemetry.js js/control-path-policy.js js/control-path-ui.js js/kit-access-policy.js mobile-android/app/src/main/assets/js/
           cp js/kit-auth.js js/kit-network-policy.js js/kit-ack-diagnostics.js js/inline-dialogs.js mobile-android/app/src/main/assets/js/
           cp firmware-catalog.json mobile-android/app/src/main/assets/
           cp vendor/crypto/zfc-crypto.js mobile-android/app/src/main/assets/vendor/crypto/
-          cp vendor/qrgen.js vendor/jsqr.js mobile-android/app/src/main/assets/vendor/
+          cp vendor/qrgen.js vendor/jsqr.js vendor/peerjs.min.js vendor/peerjs.LICENSE mobile-android/app/src/main/assets/vendor/
       - name: Compile bridge, NSD, Wi-Fi callbacks against Android 35
         run: gradle -p mobile-android :app:assembleDebug --no-daemon

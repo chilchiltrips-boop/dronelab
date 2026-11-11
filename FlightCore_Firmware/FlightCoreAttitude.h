@@ -31,17 +31,16 @@ struct ZjAttitudeFilter {
   reset();
   return false;
  }
- static float wrap(float a){return std::remainder(a,360.0f);}
  static bool gravityAngles(const float (&g)[3],float& roll,float& pitch){
   const float norm=g[0]*g[0]+g[1]*g[1]+g[2]*g[2];
-  if(!std::isfinite(norm)||norm<.81f||norm>1.21f)return false;
+  if(!std::isfinite(norm)||norm<=0.000001f)return false;
   constexpr float degrees=57.29577951308232f;
-  roll=std::atan2(g[1],g[2])*degrees;
+  roll=std::atan2(g[1],std::sqrt(g[0]*g[0]+g[2]*g[2]))*degrees;
   pitch=std::atan2(-g[0],std::hypot(g[1],g[2]))*degrees;
   return std::isfinite(roll)&&std::isfinite(pitch);
  }
  bool step(uint32_t sequence,uint32_t atUs,const float (&rate)[3],const float (&gravity)[3],
-           bool sampleValid,bool level,uint32_t calibrationId){
+           bool sampleValid,bool level,uint32_t calibrationId,float loopDt=0){
   failure={};
   if(calibration!=calibrationId){reset();calibration=calibrationId;}
   const uint32_t intervalUs=initialized?uint32_t(atUs-previousAtUs):0;
@@ -56,33 +55,26 @@ struct ZjAttitudeFilter {
   if(initialized&&intervalUs>12000)return reject("SAMPLE_GAP",atUs,intervalUs,gravity);
   float roll=0,pitch=0;
   const bool accel=gravityAngles(gravity,roll,pitch);
-  const float dt=initialized?intervalUs*.000001f:.004f;
+  const float dt=loopDt>0?loopDt:initialized?intervalUs*.000001f:.004f;
+  if(!std::isfinite(dt)||dt<.001f||dt>.012f)return reject("CONTROL_DT",atUs,intervalUs,gravity);
   if(!initialized){
    if(!accel)return reject("GRAVITY_UNAVAILABLE",atUs,intervalUs,gravity);
    value.roll=roll;value.pitch=pitch;value.varianceRoll=value.variancePitch=4;
    value.accelAtUs=atUs;initialized=true;
   }else{
-   // Euler rate conversion couples body rates during simultaneous rotations.
-   // Pitch singularities are outside the supported ±80 degree envelope.
-   constexpr float radians=.017453292519943295f;
-   const float r=value.roll*radians,p=value.pitch*radians;
-   if(std::fabs(value.pitch)>=80)return reject("PITCH_LIMIT",atUs,intervalUs,gravity);
-   const float rollRate=rate[0]+std::sin(r)*std::tan(p)*rate[1]+std::cos(r)*std::tan(p)*rate[2];
-   const float pitchRate=std::cos(r)*rate[1]-std::sin(r)*rate[2];
-   value.roll=wrap(value.roll+dt*rollRate);value.pitch+=dt*pitchRate;
+   // Independent 1D Kalman equations from the working sketch.
+   value.roll+=dt*rate[0];value.pitch+=dt*rate[1];
    value.varianceRoll+=dt*dt*16;value.variancePitch+=dt*dt*16;
    if(accel){
-    // User reference: gyro uncertainty 4 deg/s, acceleration angle noise 3 deg.
     const float kr=value.varianceRoll/(value.varianceRoll+9);
     const float kp=value.variancePitch/(value.variancePitch+9);
-    value.roll=wrap(value.roll+kr*wrap(roll-value.roll));value.pitch+=kp*(pitch-value.pitch);
+    value.roll+=kr*(roll-value.roll);value.pitch+=kp*(pitch-value.pitch);
     value.varianceRoll*=1-kr;value.variancePitch*=1-kp;value.accelAtUs=atUs;
    }
   }
   previousAtUs=atUs;value.sequence=sequence;value.atUs=atUs;
   value.accelUsed=accel;value.levelCalibrated=level;
   if(!std::isfinite(value.roll)||!std::isfinite(value.pitch))return reject("NONFINITE_ESTIMATE",atUs,intervalUs,gravity);
-  if(std::fabs(value.pitch)>=80)return reject("PITCH_LIMIT",atUs,intervalUs,gravity);
   if(uint32_t(atUs-value.accelAtUs)>500000)return reject("GRAVITY_TIMEOUT",atUs,intervalUs,gravity);
   value.valid=true;
   return true;
@@ -91,5 +83,5 @@ struct ZjAttitudeFilter {
 
 inline float zjAngleStick(uint16_t pulse){
  const float offset=float(std::max(1000,std::min(2000,int(pulse))))-1500;
- return std::fabs(offset)<=15?0:offset*.10f; // degrees, bounded ±50°
+ return offset*.10f; // degrees, bounded ±50°
 }

@@ -516,3 +516,5 @@ button{min-height:44px}
 
 #flightAttitude[data-source="flightcore"] #flightAttitudeLadder{transition:transform .10s linear}
 @media(prefers-reduced-motion:reduce){#flightAttitude[data-source="flightcore"] #flightAttitudeLadder{transition:none}}
+
+.kit-pid-table{overflow-x:auto}.kit-pid-table table{width:100%;border-collapse:collapse}.kit-pid-table th,.kit-pid-table td{padding:6px;text-align:left}.kit-pid-table input{width:100%;min-width:62px;box-sizing:border-box}.kit-pid-table th:first-child{min-width:100px}

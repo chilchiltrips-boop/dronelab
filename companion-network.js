@@ -81,7 +81,7 @@ const safeUdpRead=(route,method)=>udpActive&&!rcClaiming&&method==='GET'&&readRo
 const wifiRoutes=new Set(['GET /api/wifi/scan','GET /api/wifi/saved','POST /api/wifi/test','POST /api/wifi/mode']);
 const diagnosticRoutes=new Set(['POST /api/flight/mode','POST /api/command','POST /api/rc/access','POST /api/rc/stop','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 const grantFor=(route,method)=>{const key=method+' '+route;return readRoutes.has(key)?'kitAllowWeb':wifiRoutes.has(key)?'kitGrantWifi':diagnosticRoutes.has(key)?'kitGrantDiagnostic':''};
-const allowed=new Set(['GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','GET /api/flight/telemetry','POST /api/wifi/test','POST /api/rc/access','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
+const allowed=new Set(['GET /api/pid/settings','GET /api/pid/status','POST /api/pid/settings','POST /api/pid/reset','POST /api/pid/apply','GET /api/health','GET /api/identify','GET /api/status','GET /api/wifi/scan','GET /api/wifi/saved','GET /api/telemetry','GET /api/rc/snapshot','GET /api/flight/telemetry','POST /api/wifi/test','POST /api/rc/access','POST /api/rc/stop','POST /api/wifi/mode','POST /api/flight/mode','POST /api/command','POST /api/rc/claim','POST /api/rc/release','POST /api/rc/preview']);
 function show(text,tone=''){
  const v=el('kitNetStatus');if(v){v.textContent=text;v.dataset.state=tone}
  const wifi=el('kitWifiLiveStatus');if(wifi){wifi.textContent=text;wifi.dataset.state=tone}
@@ -1281,7 +1281,24 @@ window.zebjusNativeAppResumed=()=>{
  if(otaBusy){otaPaused=false;otaNeedsRecheck=true;show('App resumed • signed OTA offset must be verified before next write','warn')}
  else {nextAutoApAttempt=0;if(reconnectEnabled)void pollConnection();else scheduleAutoApConnect(350);if(handoverExpectedKit&&link==='sta'){scheduleStaObserver(900);scheduleFallbackCheck(2500)}}
 };
- window.ZebjusNetwork={request,status,pollConnection,armControls,canArm,setSavedFlightMode,getState,selectControlPath,selectedInputAllowsAndroid,
+ async function pidExchange(binding,action,args){
+  const routes={GET:['/api/pid/settings','GET'],SET:['/api/pid/settings','POST'],
+   RESET:['/api/pid/reset','POST'],APPLY:['/api/pid/apply','POST']};
+  const route=routes[action];
+  if(!route)throw Error('Unsupported PID action');
+  const sameKit=()=>{
+   const current=getState();
+   return current.connected&&current.kitId===binding.kitId&&current.bootId===binding.bootId&&
+    current.connectionGeneration===binding.connectionGeneration&&current.transport===binding.transport;
+  };
+  if(!sameKit())throw Error('Kit changed. Read PID settings again.');
+  if(rcInputArmed||rcSession||rcClaiming||previewBusy||otaBusy)
+   throw Error('Disarm and release joystick control before editing PID.');
+  const reply=await request(route[0],route[1],{...args,bootId:binding.bootId});
+  if(!sameKit())throw Error('Kit changed during PID operation. Read the selected Kit.');
+  return reply;
+ }
+ window.ZebjusNetwork={request,pidExchange,status,pollConnection,armControls,canArm,setSavedFlightMode,getState,selectControlPath,selectedInputAllowsAndroid,
   flightModeState:()=>online&&onKitLink&&kitFlightModeVerified?{...kitModeState}:null,
   savedFlightMode:()=>online&&onKitLink&&(kitFlightModeVerified||kitFlightModeObserved)?kitFlightMode:null,inputArmed:()=>rcInputArmed&&(apStreaming()||!!firmwareAck?.inputArmed),scan,command,refreshSavedSta,setMode,toggleLed,previewControls,releaseRc,onWebRequest,networkChanged,selectTransport,selectedTransport:()=>link,hasControl:()=>!!rcSession&&online&&onKitLink&&controlLinkFresh(),feedback:()=>firmwareAck,isConnected:()=>online&&onKitLink&&controlLinkFresh(),mode:()=>mode,
   identity:()=>({kitId:verifiedKitId,transport:link,connected:online&&onKitLink&&controlLinkFresh()})};

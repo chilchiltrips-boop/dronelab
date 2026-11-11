@@ -10,16 +10,13 @@ export function stepRatePid(state,gains,target,actual,dt,mixerResidual=0){
  const error=target-actual;
  if(!Number.isFinite(dt)||dt<.001||dt>.008||!Number.isFinite(error)||!Number.isFinite(mixerResidual)||
     !['p','i','d'].every(key=>validRateGain(gains[key])))return null;
- const raw=state.ready?(actual-state.last)/dt:0;
- const derivative=state.derivative+dt/(.030+dt)*(raw-state.derivative);
- const p=gains.p*error,d=-gains.d*derivative;
- const candidate=clip(state.sum+gains.i*(error+(state.ready?state.error:error))*dt*.5,-400,400);
- const proposed=p+candidate+d;
- if(!Number.isFinite(proposed)||!Number.isFinite(derivative))return null;
- const blocked=proposed>400&&error>0||proposed<-400&&error<0||
-  mixerResidual>.05&&error>0||mixerResidual<-.05&&error<0;
- const i=blocked?state.sum:candidate,total=p+i+d;
+ // Matches pid_equation in the supplied working sketch, including reset history.
+ const p=gains.p*error;
+ const i=clip(state.sum+gains.i*(error+(state.error||0))*dt/2,-400,400);
+ const derivative=(error-(state.error||0))/dt,d=gains.d*derivative;
+ const total=p+i+d;
+ if(!Number.isFinite(total))return null;
  Object.assign(state,{sum:i,error,target,actual,last:actual,derivative,ready:true,p,i,d,
-  output:clip(total,-400,400),saturated:Math.abs(proposed)>400||Math.abs(total)>400});
+  output:clip(total,-400,400),saturated:Math.abs(total)>400});
  return state;
 }

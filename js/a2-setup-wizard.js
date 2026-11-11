@@ -190,7 +190,7 @@ if(root){
  <details class="a2-input-details" id="a2AdvancedAccel"><summary>Advanced ACC calibration · manual offsets</summary>
  <div class="a2-imu-card">
   <div class="a2-imu-card-head"><strong>Accelerometer XYZ</strong><small>Manual offset · g</small></div>
-  <p class="a2-imu-manual-note">Enter the bias to subtract in g, from −0.250 to +0.250. After changing offsets, capture and save Quick Level for Angle.</p>
+  <p class="a2-imu-manual-note">Enter the bias to subtract in g, from −0.250 to +0.250. The working sketch defaults subtract +0.100, −0.030, −0.120 g. Saved offsets and Quick Level trim override the defaults.</p>
   <div class="a2-imu-offset-grid">
    ${['X','Y','Z'].map((axis,i)=>`<label for="a2Manual${axis}">Acc${axis} offset (g)<input id="a2Manual${axis}" data-manual-axis="${i}" type="number" min="-0.250" max="0.250" step="0.001" inputmode="decimal" value="0.000"></label>`).join('')}
   </div>
@@ -204,7 +204,7 @@ if(root){
  <details class="a2-input-details"><summary>Advanced IMU diagnostics</summary><pre class="a2-imu-values"></pre></details>
  <details class="a2-input-details"><summary>Capture validation</summary><p>128 fresh samples per pose; stationary, expected gravity direction, axis stability and bounded fit required. Motor outputs must be OFF.</p></details></section>
  <section data-panel="4"><h3>Output Signal</h3><div class="a2-signal-status" role="status"></div>
- <div class="a2-profile-cards"><article><h4>Standard PWM · 50 Hz</h4><p>Production profile · 20 ms period · 1000–2000 µs. Output Calibration limits the pulse to 1500 µs.</p></article><article><h4>Rapid PWM · 250 Hz</h4><p>4 ms period · 1000–2000 µs. Prepared · hardware validation required.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
+ <div class="a2-profile-cards"><article><h4>Working sketch · 250 Hz / 12-bit</h4><p>D0–D3 · 4 ms period · 1000–2000 µs. Output Calibration limits the pulse to 1500 µs.</p></article><article><h4>Earlier firmware · 50 Hz</h4><p>The connected firmware reports its active output frequency below.</p></article><article><h4>OneShot125</h4><p>Separate protocol · Not supported.</p></article></div></section>
  <section data-panel="5"><div class="a2-panel-heading"><h3>Automatic ESC Calibration</h3></div>${pageStatus(ESC)}
  <p>Prepare once while connected. A2 completes HIGH → LOW → PWM OFF and stores the controller result during the next full power-on; no app connection is needed for the sequence.</p>
  <p class="a2-calibration-summary" role="status"></p>
@@ -296,7 +296,7 @@ if(root){
  const autoPending=()=>['AWAITING_POWER_CYCLE','RUNNING'].includes(saved?.autoEsc?.state)||['AUTO_CAL_HIGH','AUTO_CAL_LOW'].includes(state?.mode);
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending()&&!saved?.autoEsc?.cancelUnverified;
  // Trust the verified board profile, not three repeated UI checkbox proofs.
- const outputChecks=()=>saved?.outputSignal?.profile==='PWM_50HZ_1000_2000'&&saved.outputSignal.hz===50&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
+ const outputChecks=()=>['PWM_50HZ_1000_2000','PWM_250HZ_1000_2000'].includes(saved?.outputSignal?.profile)&&[50,250].includes(saved.outputSignal.hz)&&saved.outputSignal.minUs===1000&&saved.outputSignal.maxUs===2000;
 
  const mask=(motor,all)=>all?15:1<<(motor-1);
  const targetMotors=(motor,all)=>all?motors:[motor];
@@ -884,7 +884,7 @@ if(root){
   if(mode.options[1].textContent!==angleLabel)mode.options[1].textContent=angleLabel;
   $('.a2-flight-mode-status').textContent=m?'Saved '+m.saved.toUpperCase()+' · Active '+m.active.toUpperCase()+
    (m.source==='PPM_CH5'?' · Controlled by CH5':'')+(m.pending?' · Pending '+m.pending.toUpperCase():'')+
-   (m.ch5Supported&&confirmed==='PPM'?' · CH5 LOW: Angle · HIGH: Acro · centre: hold mode.':'')+(m.stabilizationSupported===false?' · Angle stabilization unavailable on this firmware.':''):
+   (m.ch5Supported&&confirmed==='PPM'?' · Mapped AUX <1400 µs: Angle · >1600 µs: Rate/Acro · centre: hold mode.':'')+(m.stabilizationSupported===false?' · Angle stabilization unavailable on this firmware.':''):
    'Read a verified FC to see its saved mode.';
   mode.disabled=!!working||!k.connected;
   return {k,info,peer,selected,confirmed};
@@ -1128,7 +1128,7 @@ if(root){
   show(Math.max(0,Math.min(steps.length-1,next)));
  }
  async function prepare(kind){
-  if(!canStart()||!wiringCompatible()||!outputChecks())throw Error('Save wiring, verify PWM OFF and use the supported 50 Hz ESC profile.');
+  if(!canStart()||!wiringCompatible()||!outputChecks())throw Error('Save wiring, verify PWM OFF and verify the ESC profile reported by this firmware.');
   await motorClient.begin('wizard',null,{...base,mapping:encode(draft)});
  }
  function requireOutputSafety(){

@@ -54,14 +54,14 @@ int main(){
  gate={};assert(gate.arm(c,true,true));
  gate.revoke(ZjFlightFault::EMERGENCY_STOP);
  assert(gate.state==ZjFlightState::FAILSAFE);
- assert(zjFlightArmedLowPulse(1000)==1000&&zjFlightArmedLowPulse(1050)==1000&&zjFlightArmedLowPulse(1051)==0);
+ assert(zjFlightArmedLowPulse(1000)==1000&&zjFlightArmedLowPulse(1049)==1000&&zjFlightArmedLowPulse(1050)==0&&zjFlightArmedLowPulse(1051)==0);
  assert(zjFlightMixThrottle(1900)==1800);
  const auto roll=zjRateMixQuadX(1500,-40,0,0);
- assert(roll.pulse[0]>1500&&roll.pulse[3]>1500&&roll.pulse[1]<1500&&roll.pulse[2]<1500);
+ assert(roll.pulse[0]<1500&&roll.pulse[3]<1500&&roll.pulse[1]>1500&&roll.pulse[2]>1500);
  const auto pitch=zjRateMixQuadX(1500,0,-40,0);
  assert(pitch.pulse[0]>1500&&pitch.pulse[1]>1500&&pitch.pulse[2]<1500&&pitch.pulse[3]<1500);
  const auto yaw=zjRateMixQuadX(1500,0,0,-40);
- assert(yaw.pulse[0]>1500&&yaw.pulse[2]>1500&&yaw.pulse[1]<1500&&yaw.pulse[3]<1500);
+ assert(yaw.pulse[0]<1500&&yaw.pulse[2]<1500&&yaw.pulse[1]>1500&&yaw.pulse[3]>1500);
  std::cout<<"PASS Acro readiness/mixer contract"; }
 `;
   const main=join(tmp,'acro.cpp'),bin=join(tmp,'acro');

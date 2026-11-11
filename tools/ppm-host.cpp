@@ -30,16 +30,16 @@ static void frame(int ch5=1000,bool process=true,int roll=1500,int throttle=1000
  if(process)zjPpmLoop(clockMs);
 }
 static void hold(int yaw,int throttle=1000){
- // >2 s of continuous, individually accepted PPM frames, alternating CH5
+ // >5 s of continuous, individually accepted PPM frames, alternating CH5
  // proves the arm state is entirely independent of the fifth channel.
- for(unsigned n=0;n<140;n++)frame(n%2?2000:1000,true,1500,throttle,yaw);
+ for(unsigned n=0;n<360;n++)frame(n%2?2000:1000,true,1500,throttle,yaw);
 }
 static void acquire(){
  frame(2000);frame(1000);frame(2000);
  assert(zjRcOwned&&zjRcSource=="PPM"&&!zjRcInputArmed);
 }
 static void arm(){
- frame(2000,true,1500,1000,1500); // yaw centre is required before ARM
+ frame(2000,true,1500,1000,1500); // neutral releases the recovery interlock
  hold(2000);
  assert(zjRcInputArmed&&zjPpmArm.armed);
  assert(std::string(zjPpmStatus().c_str()).find("\"armStatus\":\"ARMED\"")!=std::string::npos);
@@ -114,7 +114,7 @@ static void verifyFlightInput(){
 
  // The flight lease sees the same low-throttle yaw DISARM even if the
  // main loop has not consumed any frame of the gesture.
- const uint16_t yawLeft[8]={1500,1500,1000,1100,2000,1500,1500,1500};
+ const uint16_t yawLeft[8]={1500,1500,1000,1000,2000,1500,1500,1500};
  for(unsigned n=0;n<=100;n++){waitMs(20);zjPpmPublishRmtFrame(yawLeft,clockMs);}
  assert(!zjPpmFlightReceiver(12).inputArmed&&zjRcInputArmed);
  zjPpmUnbindFlight(12);zjPpmLoop(clockMs);
@@ -126,7 +126,7 @@ static void verifyFlightInput(){
  zjPpmApplyConfig(config);
  const uint16_t yawRight[8]={1500,1600,1000,1950,1000,1500,1500,1500};
  waitMs(20);zjPpmPublishRmtFrame(neutral,clockMs);zjPpmLoop(clockMs);
- for(unsigned n=0;n<=100;n++){waitMs(20);zjPpmPublishRmtFrame(yawRight,clockMs);zjPpmLoop(clockMs);}
+ for(unsigned n=0;n<=260;n++){waitMs(20);zjPpmPublishRmtFrame(yawRight,clockMs);zjPpmLoop(clockMs);}
  input=zjRcReceiver();assert(input.inputArmed);
  assert(zjPpmBindFlight(13,input,clockMs)==ZjFlightFault::NONE);
  const uint16_t mapped[8]={1600,1900,1628,1500,1000,1500,1500,1500};
@@ -143,20 +143,19 @@ static void verifyFlightInput(){
 }
 static void verifyModeSelector(){
  ZjPpmModeSwitch mode;
- mode.accept(2000,100);mode.accept(2000,120);mode.accept(2000,140);
- assert(!mode.known&&mode.angle);mode.accept(2000,160);assert(mode.known&&!mode.angle);
- mode.accept(1500,180);mode.accept(1301,200);assert(!mode.angle); // centre holds
- mode.accept(1300,220);mode.accept(1300,240);mode.accept(1300,280);assert(mode.angle);
- mode.accept(1700,300);mode.accept(1700,280);mode.accept(1700,300);assert(mode.angle); // replay
- mode.accept(1700,470);assert(mode.angle); // gap restarts dwell
- mode.accept(1700,490);mode.accept(1700,510);mode.accept(1700,530);assert(!mode.angle);
- mode.reset();mode.accept(2000,0xfffffff0u);mode.accept(2000,4);mode.accept(2000,24);mode.accept(2000,44);
+ mode.accept(1600,100);assert(!mode.known&&mode.angle);
+ mode.accept(1601,120);assert(mode.known&&!mode.angle);
+ mode.accept(1500,140);mode.accept(1400,160);assert(!mode.angle);
+ mode.accept(1399,180);assert(mode.angle);
+ mode.accept(2000,170);mode.accept(2000,180);assert(mode.angle); // replay
+ mode.accept(2000,200);assert(!mode.angle);
+ mode.reset();mode.accept(1000,0xfffffff0u);mode.accept(2000,4);
  assert(mode.known&&!mode.angle); // millis wrap
- assert(!zjSelectPpmAngle(false,true,true,false,true));
+ assert(zjSelectPpmAngle(false,true,true,false,true));
  assert(!zjSelectPpmAngle(false,true,true,true,false));
  assert(zjSelectPpmAngle(false,true,true,true,true));
  assert(!zjSelectPpmAngle(true,false,true,false,false));
- assert(zjSelectPpmAngle(false,true,false,false,false)); // disarmed readiness reports blockers
+ assert(zjSelectPpmAngle(false,true,false,false,false));
 }
 static void verifyMappedModeAndLoss(){
  zjRcRelease("test");zjRcControlPath="PPM";
@@ -201,7 +200,7 @@ int main(){
  // Neither CH5=2000 nor high-throttle yaw-right arms diagnostics.
  hold(2000,1200);assert(!zjRcInputArmed);
  arm();
- hold(1100);assert(!zjRcInputArmed&&!zjPpmArm.armed); // yaw-left DISARM
+ hold(1000);assert(!zjRcInputArmed&&!zjPpmArm.armed); // yaw-left DISARM
  assert(zjRcOwned&&zjRcSource=="PPM");
  arm();
  // Hardware mailbox captures during a busy HTTP/main loop without false loss.

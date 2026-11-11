@@ -378,14 +378,14 @@ function initKitPid(host){
   for(const row of rows)for(const field of row.querySelectorAll('input'))
    field.disabled=busy||connected&&(!valid||!banks().includes(row.dataset.pidBank));
   $('tpPidAngleHint').textContent=valid&&!supportsBoth()?'Angle PID on FC requires FlightCore 1.7.16 or newer.':
-   valid?'Bench Angle preview uses the saved IMU level calibration.':'Yaw always uses Rate PID.';
+   valid?'Angle uses the working Kalman estimate and saved accelerometer corrections.':'Yaw always uses Rate PID.';
   const profile=getPidProfile(verified?.active?.profile)?.label;
   const diagnostic=verified?.preview?{
    BENCH_PREVIEW:'IMU diagnostic running',ANGLE_LEVEL_REQUIRED:'Saved upright IMU level calibration required',
    IMU_STALE:'Waiting for a fresh calibrated IMU sample',TIMING_FAULT:'Control timing fault',PID_INVALID:'Invalid controller result'
   }[verified.diagnosticState]:'';
   const base=connected?valid?
-   [profile||'FC Rate PID','revision '+verified.revision,verified.preview?'Live RAM preview · unsaved':
+   [profile||'FC Rate PID',verified.controllerModel==='ZEBJUS_WORKING_20261111'?'Working sketch · 250 Hz / 12-bit':'','revision '+verified.revision,verified.preview?'Live RAM preview · unsaved':
     verified.storageState==='RECOVERED'?'Recovered saved backup':verified.persisted?'Stored on FC':'Defaults',diagnostic,
     !match?'Load a matching profile in Setup Wizard':!authorized?'Read-only · authorize this Kit':''].filter(Boolean).join(' · '):
    supported(kit)?'Read the selected FC to verify PID settings.':'PID settings require a verified A2 Kit over USB, AP or STA.':

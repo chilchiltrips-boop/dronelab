@@ -114,7 +114,7 @@ static bool zjPidLayoutMatches(bool plus){return zjMotorConfigValid&&zjMotorConf
 // This records an operator's confirmation, not sensor detection of ESC tones.
 // Endpoints live in each ESC; this board record survives ordinary power cycles.
 static bool zjMotorCalibrationSaved=false,zjMotorCalibrationPending=false;
-static const char* ZJ_ESC_CALIBRATION_RECORD="PWM_50HZ_1000_2000:TONES_CONFIRMED";
+static const char* ZJ_ESC_CALIBRATION_RECORD="PWM_250HZ_1000_2000:TONES_CONFIRMED";
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
 static ZjWizardConfig zjWizardSaved;
 static ZjMotorConfig zjWizardBenchConfig,zjWizardEscConfig;
@@ -471,7 +471,7 @@ static String zjMotorStatus(){
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   ",\"calibrationSlideKeepsSession\":true"+
 #endif
-  ",\"profile\":\"PWM_50HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":2000,\"maxInputPulseUs\":1200,\"sliderDurationMaxMs\":30000,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
+  ",\"profile\":\"PWM_250HZ_1000_2000\",\"physicalVerified\":false,\"maxTestPulseUs\":2000,\"maxInputPulseUs\":1200,\"sliderDurationMaxMs\":30000,\"inputDurationMaxMs\":30000,\"commandSequence\":"+String(zjMotorCommandSeq)+
   ",\"selectedInput\":"+zjJson(zjRcControlPath)+",\"inputSource\":"+zjJson(rtc?(input.valid?String("ANDROID_WEBRTC"):String("NONE")):zjRcSource)+
   ",\"inputAgeMs\":"+(input.valid?String(uint32_t(millis()-input.receivedMs)):String("null"))+
   ",\"inputValid\":"+(fresh?"true":"false")+",\"throttle\":"+String(input.throttle)+",\"inputArmed\":"+(input.inputArmed?"true":"false")+",\"channels\":";
@@ -523,8 +523,8 @@ static String zjWizardStatus(uint32_t requestSequence=0){
   ",\"state\":"+zjJson(imu.accelCapture.state)+",\"running\":"+(imu.accelCapture.running?"true":"false")+
   ",\"ready\":"+(imu.accelCapture.ready?"true":"false")+",\"mask\":"+String(imu.accelCapture.mask)+
   ",\"samples\":"+String(imu.accelCapture.samples)+",\"target\":128,\"model\":"+zjJson(candidate)+"},"+
-  "\"outputSignal\":{\"profile\":\"PWM_50HZ_1000_2000\",\"hz\":"+String(ZJ_ESC_PROFILE.hz)+
-  ",\"minUs\":1000,\"maxUs\":2000,\"timer\":3,\"resolutionBits\":14,\"rapidPrepared\":true,\"oneShotSupported\":false}}";
+  "\"outputSignal\":{\"profile\":\"PWM_250HZ_1000_2000\",\"hz\":"+String(ZJ_ESC_PROFILE.hz)+
+  ",\"minUs\":1000,\"maxUs\":2000,\"timer\":3,\"resolutionBits\":"+String(ZJ_ESC_PROFILE.bits)+",\"rapidPrepared\":true,\"oneShotSupported\":false}}";
 }
 #endif
 // A single handler serves USB and authenticated network requests. Tokens never
@@ -776,7 +776,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
   if(zjMotor.benchEnabled)return error("motor_setup_already_owned");
   if(!zjMotorOutputsDisabled())return error("output_off_unverified");
   const bool wizard=action=="WIZARD_BEGIN";
-  if(a!="PROPS_REMOVED"||b!="PINS_VERIFIED"||(!wizard&&c!="PWM_50HZ_1000_2000"&&c!="PWM_50HZ_1000_2000_TIMED"))return error("confirm_props_pins_and_esc_profile");
+  if(a!="PROPS_REMOVED"||b!="PINS_VERIFIED"||(!wizard&&c!="PWM_250HZ_1000_2000"&&c!="PWM_250HZ_1000_2000_TIMED"))return error("confirm_props_pins_and_esc_profile");
   if(zjAccessBusy()||zjMaintenanceActive||zjRcInputArmed||zjRcThrottle>1050||!zjPpmAccessSafe())return error("stop_maintenance_lower_throttle_and_disarm_input");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   if(!zjRecoverWizardReadback())return error("wizard_readback_required");
@@ -792,7 +792,7 @@ static String zjMotorCommand(const String& action,const String& caller,const Str
 #else
   if(wizard)return error("a2_motor_driver_required");
 #endif
- zjMotor.disable();zjMotorRtc=ZjMotorInput();if(!zjMotor.prepare(now,true,true,c=="PWM_50HZ_1000_2000_TIMED"||wizard))return error("setup_rejected");
+ zjMotor.disable();zjMotorRtc=ZjMotorInput();if(!zjMotor.prepare(now,true,true,c=="PWM_250HZ_1000_2000_TIMED"||wizard))return error("setup_rejected");
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
   zjWizardBench=wizard;zjWizardCalSlider=false;
  if(wizard)for(auto& pulse:zjMotor.pulses)pulse=0;
@@ -919,9 +919,15 @@ static void zjMotorSetup(){
  if(wizard.length()){
   zjMotorConfigValid=zjWizardSaved.decode(wizard.c_str());
   zjMotorConfig=zjWizardSaved.motor;zjMotorCalibrationSaved=zjWizardSaved.esc;
- }else{zjWizardSaved.motor=zjMotorConfig;zjWizardSaved.esc=zjMotorCalibrationSaved;}
+ }else{
+  zjWizardSaved.motor=zjMotorConfig;zjWizardSaved.esc=zjMotorCalibrationSaved;
+  // Working sensor offsets. A saved calibration explicitly overrides these.
+  zjWizardSaved.accel.manualOffset[0]=100;
+  zjWizardSaved.accel.manualOffset[1]=-30;
+  zjWizardSaved.accel.manualOffset[2]=-120;
+ }
  zjSetAccelModel(zjWizardSaved.accel);
- ledc_timer_config_t timer={};timer.speed_mode=LEDC_LOW_SPEED_MODE;timer.duty_resolution=LEDC_TIMER_14_BIT;timer.timer_num=ZJ_MOTOR_TIMER;timer.freq_hz=50;timer.clk_cfg=LEDC_AUTO_CLK;
+ ledc_timer_config_t timer={};timer.speed_mode=LEDC_LOW_SPEED_MODE;timer.duty_resolution=decltype(timer.duty_resolution)(ZJ_ESC_PROFILE.bits);timer.timer_num=ZJ_MOTOR_TIMER;timer.freq_hz=ZJ_ESC_PROFILE.hz;timer.clk_cfg=LEDC_AUTO_CLK;
  bool ok=ZJ_ESC_PROFILE.deployable()&&ledc_timer_config(&timer)==ESP_OK;
  for(int n=0;n<4;n++){
   ledc_channel_config_t channel={};channel.gpio_num=ZJ_MOTOR_PINS[n];channel.speed_mode=LEDC_LOW_SPEED_MODE;channel.channel=ledc_channel_t(n);channel.timer_sel=ZJ_MOTOR_TIMER;channel.duty=0;

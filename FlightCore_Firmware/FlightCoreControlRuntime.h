@@ -252,7 +252,7 @@ static void zjControlTask(void*){
   next.imuSampleAgeUs=imuSample.valid?imuSample.ageUs(at):UINT32_MAX;
   conditions.imuFresh=imuReady&&imuSample.fresh(at,12000)&&
    std::isfinite(rates[0])&&std::isfinite(rates[1])&&std::isfinite(rates[2]);
-  attitude.step(imuSample.sequence,imuSample.atUs,rates,gravity,conditions.imuFresh,level,attitudeCalibration);
+  attitude.step(imuSample.sequence,imuSample.atUs,rates,gravity,conditions.imuFresh,level,attitudeCalibration,control.intervalUs*.000001f);
   next.attitude=attitude.value;
   std::copy_n(rates,3,next.rates);std::copy_n(gravity,3,next.gravity);
   next.sampleSequence=imuSample.sequence;next.sampleAtUs=imuSample.atUs;next.sampleValid=conditions.imuFresh;
@@ -285,11 +285,12 @@ static void zjControlTask(void*){
   const bool sourceChanged=lastRequested&&(lastGeneration!=input.generation||lastSource!=input.source);
   const bool profileChanged=lastRequested&&previous.generation!=next.generation;
   const bool modeChanged=lastRequested&&previous.angle!=next.angle;
-  if(lastEpoch!=epoch||sourceChanged||profileChanged||modeChanged||lastPreview!=preview){
+  if(lastEpoch!=epoch||sourceChanged||profileChanged||lastPreview!=preview){
    resetControllers();
    previous.mix={};
   }
 
+  if(modeChanged)for(auto& axis:outer)axis={};
   if(requested&&fault==ZjFlightFault::NONE){
    const float angles[2]={next.attitude.roll,next.attitude.pitch};
    if(!preview&&!inputFresh){
@@ -303,9 +304,9 @@ static void zjControlTask(void*){
     next.reason="LOW_THROTTLE";trace.reason=ZjFlightFault::LOW_THROTTLE;
     trace.throttleUsed=1000;
     for(auto& pulse:next.mix.pulse)pulse=ZJ_FLIGHT_ARMED_IDLE_US;
-   }else if(next.angle&&(!level||!conditions.attitudeReady)){
-    next.reason=level?"ATTITUDE_INVALID":"ANGLE_LEVEL_REQUIRED";
-    fault=level?ZjFlightFault::ATTITUDE_INVALID:ZjFlightFault::LEVEL_REQUIRED;
+   }else if(next.angle&&!conditions.attitudeReady){
+    next.reason="ATTITUDE_INVALID";
+    fault=ZjFlightFault::ATTITUDE_INVALID;
    }else{
     const uint32_t computeStarted=micros();
     const float dt=control.intervalUs*.000001f;
@@ -313,6 +314,8 @@ static void zjControlTask(void*){
     for(unsigned i=0;i<3;i++){
      auto& axis=trace.axes[i];
      if(next.angle&&i<2)axis.target=zjStepAnglePid(outer[i],gains[i+3],preview?0:zjAngleStick(commands[i]),angles[i],dt);
+     // Prime roll/pitch error on mode changes and retain the inner integral.
+     if(modeChanged&&i<2)pid[i].error=axis.target-axis.measured;
      const auto pidResult=zjStepRatePid(pid[i],gains[i],axis.target,axis.measured,dt,previous.mix.residual[i]);
      axis.p=pidResult.p;axis.i=pidResult.i;axis.d=pidResult.d;axis.correction=correction[i]=pidResult.output;
      if(pidResult.saturated)trace.pidSaturationMask|=uint8_t(1u<<i);
@@ -328,7 +331,7 @@ static void zjControlTask(void*){
     next.computeMaxUs=std::max(next.computeMaxUs,uint32_t(micros()-computeStarted));
    }
   }
-  for(unsigned i=0;i<4;i++)trace.requested[i]=uint16_t(next.mix.pulse[i]+.5f);
+  for(unsigned i=0;i<4;i++)trace.requested[i]=uint16_t(next.mix.pulse[i]);
   trace.mixClipMask=next.mix.clipMask;
   if(!(trace.flags&ZJ_TRACE_PID_VALID))resetControllers();
 

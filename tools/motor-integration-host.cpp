@@ -24,13 +24,13 @@ static bool contains(const String& s,const char* text){return std::string(s.c_st
 static String token;
 static String cmd(const char* action,const char* a="-",const char* b="-",const char* c="-",const char* owner="USB",bool auth=true){return zjMotorCommand(action,owner,token,a,b,c,auth);}
 static void begin(bool timed=false){
- token="";auto s=cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED",timed?"PWM_50HZ_1000_2000_TIMED":"PWM_50HZ_1000_2000");
+ token="";auto s=cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED",timed?"PWM_250HZ_1000_2000_TIMED":"PWM_250HZ_1000_2000");
  assert(!contains(s,"error"));token=zjMotorToken;assert(token.length()==32);assert(zjMotor.mode==ZjMotorSafety::READY);
 }
 int main(){
  zjKitId="ZFC-A2-012345ABCDEF";zjKitPrefs.begin("test",false);zjMotorDriverReady=true;zjMotorStopHandler=zjMotorStop;
  assert(contains(cmd("SINGLE","1","1100","800"),"motor_session"));
- assert(contains(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000","USB",false),"unlock_usb"));
+ assert(contains(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_250HZ_1000_2000","USB",false),"unlock_usb"));
  begin();assert(!contains(cmd("STATUS"),token.c_str()));
  assert(contains(cmd("SINGLE","1","1100","800","intruder"),"not_owner"));
  assert(contains(cmd("SINGLE","1","2001","800"),"invalid_motor"));

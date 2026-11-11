@@ -10,7 +10,7 @@ static ZjRateCounter zjTelemetryRate;
 
 // ZEBJUS AERION classroom diagnostics; version is emitted by the RUNNING app,
 // not inferred from a downloaded image or an ESP-ROM bootloader message.
-constexpr const char* FW_VERSION="1.7.26";
+constexpr const char* FW_VERSION="1.7.27";
 static const esp_reset_reason_t zjBootResetReason=esp_reset_reason();
 static const char* zjBootResetName(){
  switch(zjBootResetReason){

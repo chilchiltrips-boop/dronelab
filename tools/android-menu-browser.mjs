@@ -49,6 +49,11 @@ try{
    assert.equal(await panel.isVisible(),true,category+' content not reachable');
    assert.equal(await page.locator('.mobile-adaptive-panel:visible').count(),1,'Exactly one active category');
    await panel.locator('details.settings-accordion').evaluateAll(nodes=>nodes.forEach(n=>n.open=true));
+   if(category==='more'){
+    assert.equal(await panel.locator('#kitPidFields input').count(),15);
+    assert.equal(await panel.locator('#kitPidRead').isDisabled(),true,'Disconnected PID must stay read-only');
+    assert.equal(await panel.locator('#kitPidSave').isDisabled(),true);
+   }
    const layout=await page.evaluate(()=>{
     const dialog=document.getElementById('mobileConnection'),main=dialog.querySelector('main'),box=main.getBoundingClientRect(),nav=dialog.querySelector('.mobile-adaptive-nav');
     const clipped=[...main.querySelectorAll('button,input:not([type=hidden]),select,textarea,summary')].filter(e=>e.getClientRects().length).filter(e=>{

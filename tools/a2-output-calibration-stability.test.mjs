@@ -72,7 +72,7 @@ int main(){
  assert(zjWizardSaved.motor.minimumUs[0]==1123);
  zjMotorSetup();off();assert(zjWizardSaved.motor.minimumUs[0]==1123);
  // Existing non-Wizard live SLIDER callers still require their own KEEP.
- token="";cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000");token=zjMotorToken;
+ token="";cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_250HZ_1000_2000");token=zjMotorToken;
  cmd("SLIDER","1","1000","30000");
  advance(500);cmd("SLIDE","1","1100","1");advance(500);cmd("SLIDE","1","1100","2");
  advance(501);cmd("SLIDE","1","1100","3");off();assert(zjMotor.reason==ZjMotorSafety::SESSION_EXPIRED);

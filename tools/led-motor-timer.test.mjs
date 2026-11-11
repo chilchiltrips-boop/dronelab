@@ -45,11 +45,11 @@ int main(){
  setupMotors();
  const auto ledTimer=channels[5].timer_sel;
  assert(timers[ledTimer].freq_hz==5000&&timers[ledTimer].duty_resolution==8);
- for(int n=0;n<4;n++){assert(channels[n].timer_sel!=ledTimer);assert(timers[channels[n].timer_sel].freq_hz==50);assert(timers[channels[n].timer_sel].duty_resolution==14);assert(channels[n].duty==0);}
+ for(int n=0;n<4;n++){assert(channels[n].timer_sel!=ledTimer);assert(timers[channels[n].timer_sel].freq_hz==250);assert(timers[channels[n].timer_sel].duty_resolution==12);assert(channels[n].duty==0);}
  ledLevel(100);assert(channels[5].duty==0);
  ledLevel(50);assert(channels[5].duty==128);
  ledOff();assert(channels[5].duty==(1U<<timers[ledTimer].duty_resolution));
- for(int n=0;n<4;n++)assert(timers[channels[n].timer_sel].freq_hz==50);
+ for(int n=0;n<4;n++)assert(timers[channels[n].timer_sel].freq_hz==250);
  attachmentWorks=false;pinLevel=0;setupLed();assert(!ledAvailable&&pinLevel==HIGH&&ledMode==LED_OFF);
  std::cout<<"PASS independent production LED/ESC timer configuration"<<std::endl;
 }`;

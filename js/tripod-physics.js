@@ -66,13 +66,13 @@ export function setPID(s,bank,params){
  applyPID(s,bank,params);return true;
 }
 function applyPID(s,bank,params){
- const m=s.memory[bank],outer=bank==='angleRoll'||bank==='anglePitch';
+ const m=s.memory[bank];
  // Bumpless gain change where possible: preserve old output by adapting integral state.
- const previous=m.output,nextI=outer?params.i:1;
- const sum=params.i>0?(previous-params.p*m.error+params.d*m.derivative)/nextI:0;
+ const previous=m.output;
+ const sum=params.i>0?previous-params.p*m.error-params.d*m.derivative:0;
  s.pid[bank]={p:params.p,i:params.i,d:params.d};
- if(s.running&&m.ready&&Number.isFinite(sum))m.sum=clamp(sum,outer?-45:-400,outer?45:400);
- // Preserve derivative measurement history; changing D must not introduce a kick.
+ if(s.running&&m.ready&&Number.isFinite(sum))m.sum=clamp(sum,-400,400);
+ // Preserve error history when changing gains in the virtual controller.
  return true;
 }
 export function calibrateLevel(s){s.trimRoll=clamp(s.roll,-45,45);s.trimPitch=clamp(s.pitch,-45,45);clearPID(s)}
@@ -82,16 +82,7 @@ export function startTuningPulse(s,axis='roll',amplitude=14){
  s.pulse={axis,start:s.time,until:s.time+.56,amplitude:clamp(amplitude,3,25)};resetMetrics(s);return true;
 }
 function computeAnglePid(s,bank,target,actual){
- const m=s.memory[bank],g=s.pid[bank],error=target-actual;
- const rate=m.ready?(actual-m.last)/STEP:0;
- m.derivative+=(rate-m.derivative)*(1-Math.exp(-STEP/.10));
- const p=g.p*error,d=-g.d*m.derivative;
- let proposed=clamp(m.sum+error*STEP,-45,45);
- const proposedOut=p+g.i*proposed+d;
- if(Math.abs(proposedOut)>220&&Math.sign(proposedOut)===Math.sign(error))proposed=m.sum;
- Object.assign(m,{sum:proposed,last:actual,ready:true,p,i:g.i*proposed,d,error,target,actual,
-  output:clamp(p+g.i*proposed+d,-220,220),saturated:Math.abs(proposedOut)>220});
- return m.output;
+ return stepRatePid(s.memory[bank],s.pid[bank],target,actual,STEP)?.output||0;
 }
 export function motorMix(base,r,p,y){return [base-r-p-y,base+r-p+y,base+r+p-y,base-r+p+y]}
 export function thrustTorque(forces){

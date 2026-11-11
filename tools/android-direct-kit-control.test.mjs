@@ -7,7 +7,7 @@ const kitId='ZFC-A2-012345ABCDEF';
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 function bench(udp=false,feedbackVersion=1){
  const handlers=new Map(),elements=new Map(),requests=[],events=[],timers=[];
- let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,transport='AP',authorized=true,clockOffset=0,modeData=null,legacyMode=null,modeDelay=null,modeError=null,acceptedArm=false;
+ let failure=null,claimFailure=null,delayStatus=null,delayClaim=null,delayPreview=null,delayPid=null,transport='AP',authorized=true,clockOffset=0,modeData=null,legacyMode=null,modeDelay=null,modeError=null,acceptedArm=false;
  const Clock=class extends Date{static now(){return Date.now()+clockOffset}};
  const element=id=>{
   if(id==='kitRcPreview')return null;
@@ -20,7 +20,7 @@ function bench(udp=false,feedbackVersion=1){
   if(route==='/api/status'){
    if(delayStatus)await delayStatus;
    if(failure)throw failure;
-   return {kitId,kitCode:'123456',board:'ZFC-A2',mode:transport.toLowerCase(),requestTransport:transport,
+   return {kitId,bootId:'a'.repeat(32),kitCode:'123456',board:'ZFC-A2',mode:transport.toLowerCase(),requestTransport:transport,
     apActive:transport==='AP',staConnected:transport==='STA',apSsid:'zebjus_drone_1',ssid:'School',
     inputArmSupported:true,controlAuthorized:authorized,ledOn:false,...(modeData?{flightMode:modeData.active,flightModeState:{...modeData}}:legacyMode?{flightMode:legacyMode}:{})};
   }
@@ -36,6 +36,7 @@ function bench(udp=false,feedbackVersion=1){
   if(route==='/api/rc/release'){acceptedArm=false;if(modeData)modeData={...modeData,active:modeData.saved,pending:null};return {released:true};}
   if(route==='/api/command')return {accepted:true};
   if(route==='/api/telemetry')return {kitId,gyroReady:true,roll:1.25,pitch:0,yaw:0};
+  if(route==='/api/pid/settings'){if(delayPid)await delayPid;return {kitId,supported:true};}
   throw Error('Unexpected route '+route);
  };
  const session=()=>({local:true,scope:transport==='AP'?'ap_diagnostics':'sta_observer',expiresAt:Date.now()+60000,request:response,udpKey:()=>'1'.repeat(64)});
@@ -51,6 +52,8 @@ function bench(udp=false,feedbackVersion=1){
   offerUdp:(channels,inputArmed)=>{acceptedArm=inputArmed;queueMicrotask(()=>win.zebjusNativeUdpEvent({type:'ack',seq:++seq,inputArmed,roundTripMs:2}))},stopUdp(){}
  });}
  const document={readyState:'loading',hidden:false,getElementById:element,addEventListener:(type,fn)=>handlers.set('document:'+type,fn)};
+ const policy={};vm.runInNewContext(readFileSync(new URL('../js/control-path-policy.js',import.meta.url),'utf8'),policy);
+ win.ZebjusControlPaths=policy.ZebjusControlPaths;
  vm.runInNewContext(source,{window:win,document,Date:Clock,performance,URLSearchParams,Promise,Set,Map,
   setTimeout:(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();return t},clearTimeout,setInterval:(fn,ms)=>timers.push({fn,ms}),
   CustomEvent:class{constructor(type,o){this.type=type;this.detail=o?.detail}}});
@@ -60,9 +63,25 @@ function bench(udp=false,feedbackVersion=1){
   async connect(sta=false){if(sta){transport='STA';element('kitLink').value='sta';handlers.get('kitLink:change')();element('kitIp').value='192.168.1.22';handlers.get('kitIp:change')();element('kitKey').value='label'}
    handlers.get('kitConnect:click')();await settle();await settle();assert.equal(win.ZebjusNetwork.isConnected(),true);},
   withLegacyMode:mode=>legacyMode=mode,withMode:(active='angle')=>modeData={supported:true,stabilizationSupported:false,saved:active,active,pending:null},
-  delayMode:p=>modeDelay=p,modeError:e=>modeError=e,
+  delayMode:p=>modeDelay=p,modeError:e=>modeError=e,holdPid:p=>delayPid=p,
   observer:()=>authorized=false,advance:ms=>clockOffset+=ms};
 }
+for(const sta of [false,true])test(`PID transport binds ${sta?'STA':'AP'} identity and blocks joystick ownership`,async()=>{
+ const b=bench();await b.connect(sta);const binding=b.network.getState();
+ assert.equal((await b.network.pidExchange(binding,'GET',{})).supported,true);
+ assert.equal(b.requests.at(-1).route,'/api/pid/settings');
+ assert.equal(b.requests.at(-1).args.bootId,binding.bootId);
+ await b.network.pidExchange(binding,'SET',{expectedRevision:1,bootId:'wrong'});
+ assert.equal(b.requests.at(-1).args.bootId,binding.bootId,'Use the verified boot identity for writes');
+ await b.network.armControls();
+ await assert.rejects(b.network.pidExchange(binding,'SET',{}),/release joystick/);
+ await b.network.releaseRc();
+ let release;b.holdPid(new Promise(resolve=>release=resolve));
+ const pending=b.network.pidExchange(binding,'GET',{});await settle();
+ b.network.networkChanged();release();
+ await assert.rejects(pending,/changed|cancelled|unconfirmed/);
+ await assert.rejects(b.network.pidExchange(binding,'SET',{}),/changed/);
+});
 for(const sta of [false,true])test(`direct ${sta?'STA':'AP'} ARM claims and ACKs without diagnostic toggle; STOP releases`,async()=>{
  const b=bench();await b.connect(sta);assert.equal(b.network.canArm(),true);
  await b.network.armControls();assert.equal(b.network.inputArmed(),true);
