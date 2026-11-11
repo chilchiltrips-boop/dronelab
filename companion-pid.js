@@ -5,7 +5,7 @@ const element=id=>document.getElementById(id);
 const labels=['Rate roll','Rate pitch','Rate yaw','Angle roll','Angle pitch'];
 const fields=element('kitPidFields');
 fields.innerHTML=PID_BANKS.map((bank,index)=>`<tr><th scope="row">${labels[index]}</th>${['p','i','d'].map(term=>
- `<td><input type="number" min="0" max="100" step="0.001" inputmode="decimal" data-bank="${bank}" data-term="${term}" aria-label="${labels[index]} ${term.toUpperCase()}" disabled></td>`).join('')}</tr>`).join('');
+ `<td data-term="${term.toUpperCase()}"><input type="number" min="0" max="100" step="0.001" inputmode="decimal" data-bank="${bank}" data-term="${term}" aria-label="${labels[index]} ${term.toUpperCase()}" disabled></td>`).join('')}</tr>`).join('');
 const inputs=[...fields.querySelectorAll('input')];
 const network=window.ZebjusNetwork;
 const client=createPidClient(network,window);
