@@ -67,3 +67,11 @@ catalog remains the held bench release. The separate experimental build enables
 the integrated flight path without asserting physical qualification. Host and
 software checks do not establish real-board flight acceptance. Physical acceptance
 for this integrated candidate remains **NOT_RUN** until tested on the connected kit.
+
+The 1.7.27 experimental APP and Factory images are compiled and pinned in
+`FlightCore_Firmware/experimental/1.7.27`. Their source is commit
+`35ce8ddf434d7445ce1f7aff78e934a15673b669`; the manifest, binary hashes,
+chip ID, OTA slot bounds and embedded compile date passed verification. The
+APP uses 1,438,896 bytes and the Factory image uses 4,194,304 bytes. The explicit
+Experimental loader selects this candidate after the branch is published.
+No device was flashed during this integration.

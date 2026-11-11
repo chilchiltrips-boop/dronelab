@@ -1,0 +1,74 @@
+{
+  "schema": 2,
+  "product": "ZEBJUS_FLIGHTCORE",
+  "version": "1.7.27",
+  "defaultBoardId": "ZFC-A2",
+  "boards": [
+    {
+      "id": "ZFC-A2",
+      "name": "ZEBJUS AERION A2",
+      "appAddress": "0x10000",
+      "flashMode": "dio",
+      "flashFreq": "80m",
+      "flashSize": "4MB",
+      "latest": {
+        "version": "1.7.27",
+        "app": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A2_APP_RATE_EXPERIMENTAL.bin",
+          "sha256": "3c383532ce933b25c9422ed2220b8e2b7120e36f6ddb626d06dd219dd96499b3",
+          "size": 1438896,
+          "builtAt": "2026-11-11T19:11:43Z",
+          "buildId": "1.7.27-ZFC-A2-3c383532ce93",
+          "compiledAt": "2026-11-11T19:12:06Z"
+        },
+        "factory": {
+          "available": true,
+          "file": "ZEBJUS_FLIGHTCORE_A2_FACTORY_RATE_EXPERIMENTAL.bin",
+          "sha256": "a8ee71bc03c5aa0829db00496c9cf369b792dbcad9f227f0b3484a95291a6e8d",
+          "size": 4194304,
+          "builtAt": "2026-11-11T19:11:43Z",
+          "buildId": "1.7.27-ZFC-A2-FACTORY-a8ee71bc03c5",
+          "compiledAt": "2026-11-11T19:12:06Z"
+        },
+        "builtAt": "2026-11-11T19:11:43Z",
+        "compiledAt": "2026-11-11T19:12:06Z"
+      },
+      "usbMatch": [
+        "ZEBJUS Aerion F1",
+        "ESP32C6"
+      ],
+      "flasher": "serial-loader-v1",
+      "build": {
+        "builder": "arduino-cli",
+        "fqbn": "esp32:esp32:XIAO_ESP32C6"
+      },
+      "imageChipIds": [
+        13
+      ],
+      "supportedSensors": [
+        "MPU6050",
+        "LSM6DS3"
+      ],
+      "recommendedSensor": "MPU6050"
+    }
+  ],
+  "builtAt": "2026-11-11T19:11:43Z",
+  "releaseScope": "EXPERIMENTAL_PPM_RATE",
+  "flightOutputQualified": false,
+  "physicalAcceptance": "NOT_RUN",
+  "controllerContractVersion": 2,
+  "flightModes": [
+    "acro",
+    "angle"
+  ],
+  "physicalInputPaths": [
+    "PPM",
+    "ANDROID_AP",
+    "WEB_STA"
+  ],
+  "webRtcPhysicalFlight": false,
+  "boardPolicy": "A2_ONLY",
+  "flightOutputEnabled": true,
+  "sourceCommit": "35ce8ddf434d7445ce1f7aff78e934a15673b669"
+}
