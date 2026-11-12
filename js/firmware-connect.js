@@ -178,8 +178,9 @@ function render(){
   s.transport==='sta'?'This browser is connected through '+router+'. '+(s.apActive?'Update to FlightCore 1.4.6 to disable AP while STA is connected.':'The kit AP hotspot is off.'):
   s.transport==='usb'?'USB is connected. Test & Save the router, join its Wi-Fi on this computer, then Connect STA.':'The kit is connected through the Android relay. Manage its router/AP settings through the verified kit connection.':'First setup: join the kit AP, connect the kit, then Scan Wi-Fi → Test & Save STA.');
  if($('fwAuthorizeUpdates')){
-  $('fwAuthorizeUpdates').disabled=requesting||!live||!['ap','sta'].includes(s.transport)||s.working||s.owner||!!s.rc?.claimed||s.otaAuthorized||s.authorizationRetryAt>Date.now();
-  $('fwAuthorizeUpdates').title=s.authorizationNotice||'Verify the pairing saved from this physical USB kit';
+  const authorization=kit().authorizationReadiness?.();
+  $('fwAuthorizeUpdates').disabled=requesting||!authorization?.ready||s.otaAuthorized;
+  $('fwAuthorizeUpdates').title=s.authorizationNotice||authorization?.message||'Verify the pairing saved from this physical USB kit';
  }
  if(changed&&live){fillKitName(s.kitName);
    if($('fwKitCachedIp'))$('fwKitCachedIp').value=s.transport==='ap'?'192.168.4.1':s.staIp||''}

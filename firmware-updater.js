@@ -155,6 +155,13 @@ function syncFirmwareControls(){
  const netButton=$('#fwNetworkFlashBtn'),netHelp=$('#fwNetworkFlashHelp');
  if(netButton){netButton.disabled=busy||!network.ready;netButton.textContent='Flash Selected Kit over Wi-Fi';netButton.title=network.message;}
  if(netHelp){netHelp.textContent=network.message;netHelp.classList.toggle('ready',network.ready)}
+ const authorize=$('#fwNetworkAuthorizeBtn'),device=globalThis.ZebjusKits?.getState?.();
+ if(authorize){
+  const authorization=globalThis.ZebjusKits?.authorizationReadiness?.();
+  authorize.hidden=!device?.connected||!['ap','sta'].includes(device.transport)||device.otaAuthorized===true;
+  authorize.disabled=busy||!authorization?.ready;
+  authorize.title=device?.authorizationNotice||authorization?.message||'Verify the pairing saved from this physical USB Kit';
+ }
  for(const [id,ready] of [['#fwReadRunningBtn',serialSupported],['#fwUsbFlashBtn',flash.ready],['#fwDownloadBinBtn',!!fw],['#fwDisconnectUsbBtn',!!loader||!!monitorPort],['#fwSerialResetBtn',!!monitorPort],['#fwConnectUsbBtn',serialSupported],['#fwSerialMonitorBtn',serialSupported],['#fwSerialReconnectBtn',serialSupported]]){const e=$(id);if(e)e.disabled=busy||!ready}
  const flashButton=$('#fwUsbFlashBtn'),flashHelp=$('#fwUsbFlashHelp');
  if(flashButton){flashButton.title=flash.message;
@@ -504,6 +511,16 @@ function startPostFlashWatch(expectedVersion=''){
      if(Date.now()>=deadline){stopPostFlashWatch();log('Background reconnect watch ended after 5 minutes. Firmware flash had already completed successfully.');}
    }finally{checking=false}
  },4500)
+}
+async function authorizeNetworkUpdates(){
+ if(busy)return;
+ setBusy(true);
+ try{
+  await globalThis.ZebjusKits.authorizeNetwork();
+  log('Selected Kit authorized for settings and APP OTA. Choose Flash Selected Kit over Wi-Fi to start the update.');
+ }catch(e){
+  log('Network authorization: '+e.message);badge('#fwOverallBadge','AUTHORIZATION REQUIRED','warn');
+ }finally{setBusy(false)}
 }
 // APP-only OTA through the selected MY KITS authenticated STA/AP session.
 async function flashNetworkApp(){
@@ -1233,7 +1250,7 @@ function bind(){
   });
  }
  setFirmwareTargetMethod('wifi');
- window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('latest'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwLoadPublishedBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad('latest'));const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
+ window.addEventListener('dronelab:kit-network-event',event=>{const msg=event.detail?.message;if(msg)log('[KIT NETWORK] '+String(msg).slice(0,220))});window.addEventListener('dronelab:kit-link',e=>{if(e.detail?.connected)void prepareConnectedFirmware().catch(error=>log('Firmware auto-detect: '+error.message))});initSerialTools();setupSerialConveniences();$('#fwDownloadBinBtn')?.addEventListener('click',downloadFirmware);const fi=$('#fwFileInput');if(fi)fi.onchange=()=>importFile(fi.files?.[0]).catch(e=>log(e.message));$('#fwAutoLoadBtn')?.addEventListener('click',()=>void autoLoad('latest'));$('#fwLoadBenchBtn')?.addEventListener('click',()=>void autoLoad('bench'));$('#fwLoadPublishedBtn')?.addEventListener('click',()=>void autoLoad('published'));$('#fwForgetBtn')?.addEventListener('click',clearCached);$('#fwRefreshKitBtn')?.addEventListener('click',refreshKit);$('#fwConnectUsbBtn')?.addEventListener('click',connectUsb);$('#fwCheckKitBtn')?.addEventListener('click',refreshKit);$('#fwUpgradeModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(false));$('#fwUpgradeEraseModeBtn')?.addEventListener('click',()=>void selectUpgradeMode(true));$('#fwDisconnectUsbBtn')?.addEventListener('click',disconnectAllUsb);$('#fwSerialMonitorBtn')?.addEventListener('click',toggleSerialMonitor);$('#fwSerialClearBtn')?.addEventListener('click',clearSerialOutput);$('#fwUsbFlashBtn')?.addEventListener('click',usbFlash);$('#fwNetworkAuthorizeBtn')?.addEventListener('click',authorizeNetworkUpdates);$('#fwNetworkFlashBtn')?.addEventListener('click',flashNetworkApp);$('#fwRebootBtn')?.addEventListener('click',rebootKit);$('#fwReconnectBtn')?.addEventListener('click',reconnectKit);$('#fwImageType')?.addEventListener('change',()=>void autoLoad());$('#fwBoardProfile')?.addEventListener('change',()=>void autoLoad('latest'));const dz=$('#fwDropZone');if(dz){['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>importFile(e.dataTransfer?.files?.[0]).catch(er=>log(er.message)))}window.addEventListener('beforeunload',()=>{try{monitorReader?.cancel();transport?.disconnect();monitorPort?.close()}catch{}})}
 async function init(){if(!$('#tab-firmware'))return;bind();resetStages();renderFirmware();kitStatus();setInterval(kitStatus,1000);try{await loadCatalog();await targetBoardId(true)}catch(e){log(e.message)}const k=globalThis.ZebjusKits?.getState?.();if(k?.connected&&['sta','ap'].includes(k.transport))await prepareConnectedFirmware();else{if(firmwareTargetMethod==='wifi'&&$('#fwImageType'))$('#fwImageType').value='app';await autoLoad()}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,100));else setTimeout(init,100);
 })();

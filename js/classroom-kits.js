@@ -1978,11 +1978,32 @@ function authorizeNetwork(){
  if(authorizationPending)return authorizationPending;
  authorizationPending=authorizeNetworkAccess().finally(()=>{authorizationPending=null});return authorizationPending;
 }
+function authorizationReadiness(){
+ const blocked=message=>({ready:false,message});
+ if(!linkFresh()||!['ap','sta'].includes(state.transport))return blocked('Connect and verify the same Kit over AP or STA first.');
+ if(state.working||headerModePending||otaActive)return blocked('Wait for the current Kit operation to finish.');
+ if(state.owner)return blocked('Release WebApp RC before authorizing settings and updates.');
+ if(state.rc?.claimed){
+  if(state.rc.source!=='PPM')return blocked('Release the Android/Web controller before authorizing settings and updates.');
+  // Authentication does not claim RC or pause PPM. A disarmed receiver can
+  // remain connected; the separate write/OTA paths still enforce maintenance.
+  if(state.rc.inputArmed!==false||!Number.isFinite(state.rc.throttle)||state.rc.throttle>1050||
+     state.motorsArmed!==false||state.motorsDisabled!==true)
+   return blocked('Disarm PPM, lower throttle to 1050 µs or less and verify motor outputs OFF.');
+  const now=Date.now();
+  if(!state.outputObservedAt||now-state.outputObservedAt>3000||!state.rcObservedAt||now-state.rcObservedAt>3000)
+   return blocked('Refresh Kit status to verify disarmed PPM and motor outputs OFF.');
+ }
+ if((enrollmentCooldowns.get(state.kitId)||0)>Date.now())return blocked('Authorization cooldown: wait before retrying.');
+ return {ready:true,message:'Verify the pairing saved from this physical USB Kit. RC ownership stays unchanged.'};
+}
 async function authorizeNetworkAccess(){
- if(!linkFresh()||!['ap','sta'].includes(state.transport)||state.owner||state.rc?.claimed||state.working)throw Error('Connect an idle AP/STA kit before authorizing updates');
+ let readiness=authorizationReadiness();if(!readiness.ready)throw Error(readiness.message);
  const id=state.kitId,ip=state.ip,ticket=reconnectTicket;
  const key=pairedKeys.get(id)||pairing()?.fromSession?.(id)||await pairing()?.restore?.(id)||'';
  if(!/^[a-fA-F0-9]{32}$/.test(key))throw Error('Connect this kit once using Read Running Firmware over USB to pair this browser, then reconnect AP/STA and authorize updates.');
+ if(ticket!==reconnectTicket||state.kitId!==id)throw Error('Selected Kit changed before authorization');
+ readiness=authorizationReadiness();if(!readiness.ready)throw Error(readiness.message);
  checkEnrollmentAccess(id,key);
  const slot=id+'@'+ip,local=localKitHosts.get(ip),previousKey=state.key,previousSession=authSessions.get(slot);
  state.working=true;render();
@@ -2695,7 +2716,7 @@ function getUsbMonitorState(){
   flightModeState:record?.flightModeState||null,flightMode:record?.flightModeState?.active||null};
 }
 root.ZebjusKits={
- changeRcAccess,selectControlPath,
+ changeRcAccess,selectControlPath,authorizationReadiness,
  connect:expectedId=>connect(expectedId),disconnect,read,observeFlightData,refreshConnection,startSetup,findKitAp,pairNewKitUsb,handoverSta,claim,releaseRc,stop,sendFrame,ingestAndroid,uploadAppFirmware,discoverKits,pairUsb,
  scanWifi,wifiSave,testWifi,applyMode,switchNetworkMode:switchKitNetworkMode,acceptReconnectOffer,declineReconnectOffer,authorizeNetwork,toggleControl:toggleHeaderControl,connectTransport:connectHeaderNetwork,reconnect:reconnectSelected,reboot:rebootConnectedKit,
  setFlightMode,pidExchange,openFlightTraceReader,getMonitorPaths,getUsbMonitorState,connectSetupUsb,readUsbSetup,saveUsbSetup,usbSetupState,getDiscovered:()=>discoveredKits.map(k=>({...k})),getDiscoveryReport:()=>({...discoveryReport}),connectDiscoveredKit,connectNamedKit,renameConnectedKit,

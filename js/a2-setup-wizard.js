@@ -4,6 +4,14 @@ import {motorClient,cancelMotorConfirmations,confirmMotor} from './motor-setup.j
 import {createSetupCues} from './setup-cues.js';
 import {setupMonitorSample} from './input-monitor.js';
 import {layouts,stepVisual,updateMotorDiagram,wizardVisual,imuCalibrationVisual,updateImuCalibrationVisual} from './a2-setup-visuals.js';
+export function wizardConnectionState(k,saved,readError=''){
+ if(!k.connected)return {readable:false,needsAuthorization:false,capability:'Waiting for verified A2',message:'Connect your A2 over USB, AP or STA, then refresh the board.'};
+ if(k.transport==='sta'&&k.controlAuthorized!==true)return {readable:false,needsAuthorization:true,capability:'Authorization required · STA observer',message:'STA is connected for monitoring. Authorize setup using this browser’s saved USB pairing. If it is not paired, use Read Running Firmware over USB once, then reconnect STA.'};
+ if(readError)return {readable:true,needsAuthorization:false,capability:saved?.pageSaveVersion===1?'Supported · refresh delayed':'Status unavailable · retry',message:'Wizard status could not be read: '+readError+'. Refresh board to retry.'};
+ if(saved?.wizardVersion===1&&(saved.supported===false||saved.pageSaveVersion!==1))return {readable:true,needsAuthorization:false,capability:'Page saves unsupported by this firmware',message:'The board response does not support Wizard page saves. Update to FlightCore 1.7.9 or newer.'};
+ if(saved?.pageSaveVersion===1)return {readable:true,needsAuthorization:false,capability:'Supported · page saves',message:''};
+ return {readable:true,needsAuthorization:false,capability:'Checking Wizard API',message:'Waiting for the selected board’s Wizard status.'};
+}
 const root=document.getElementById('a2SetupRoot');
 if(root){
  const steps=['Board','Wiring','Inputs','ACC / Gyro Calibration','Output Signal','ESC Calibration','Output Calibration','Report'];
@@ -92,6 +100,7 @@ if(root){
  const soundButton='<button class="btn ghost" data-action="sound" aria-pressed="true">Sound on</button>';
  root.innerHTML=`<header class="a2-title"><div class="a2-toolbar-main"><h2>A2 Setup Wizard</h2><div class="a2-status" role="status">Waiting for controller</div>
  <nav class="a2-steps" aria-label="Setup steps">${steps.map((s,i)=>`<button data-step="${i}" aria-label="${s}"><span class="a2-step-number">${i+1}</span><span class="a2-step-long">${s}</span><span class="a2-step-short">${shortSteps[i]}</span></button>`).join('')}</nav></div><button class="btn danger" data-action="stop">STOP outputs</button></header>
+ <div class="a2-connection-notice"><p class="a2-connection-message" role="status" aria-live="polite"></p><button class="btn primary" data-action="authorize" hidden>Authorize setup over STA</button></div>
  <div class="a2-columns"><main class="a2-content">
  <section data-panel="0"><h3>Board connection</h3><div class="a2-identity"></div><div class="a2-actions"><button class="btn" data-action="detect">Refresh board</button><button class="btn ghost" data-action="connect">Open connection</button></div></section>
  <section data-panel="1"><h3>Frame &amp; wiring</h3>${pageStatus(1)}
@@ -292,7 +301,7 @@ if(root){
  const outputCalibrationSupported=()=>saved?.calibrationSlideKeepsSession===true;
  const outputOff=s=>s?.mode==='DISABLED'&&s.motorsDisabled===true&&s.pulseUs?.length===4&&s.pulseUs.every(p=>p===0);
  const observedOff=()=>outputOff(state)&&Date.now()-lastStateAt<2400&&!motorClient.busy;
- const boardReady=()=>kit().connected&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
+ const boardReady=()=>wizardConnectionState(kit(),saved).readable&&saved?.wizardVersion===1&&saved.pageSaveVersion===1&&saved.supported&&saved.configVerified!==false&&base?.bootId===saved.bootId&&!conflict&&!ambiguousSave;
  const autoPending=()=>['AWAITING_POWER_CYCLE','RUNNING'].includes(saved?.autoEsc?.state)||['AUTO_CAL_HIGH','AUTO_CAL_LOW'].includes(state?.mode);
  const canStart=()=>boardReady()&&observedOff()&&saved.configValid&&wiringValid()&&!autoPending()&&!saved?.autoEsc?.cancelUnverified;
  // Trust the verified board profile, not three repeated UI checkbox proofs.
@@ -1005,7 +1014,7 @@ if(root){
    }else if(verified){
     status='✓ Saved on board';
    }else if(!boardReady()){
-    status='Connect A2 with page-save firmware';
+    status=wizardConnectionState(kit(),saved,readError).message||'Refresh the board to verify page-save readiness';
    }
    if(node.textContent!==status)node.textContent=status;
   });
@@ -1013,11 +1022,18 @@ if(root){
  function render(){
   refreshIdentity();
   const k=kit(),m=state||{};
+  const connection=wizardConnectionState(k,saved,readError),authorization=window.ZebjusKits?.authorizationReadiness?.();
+  $('.a2-connection-notice').hidden=!connection.message;
+  $('.a2-connection-message').textContent=connection.message;
+  $('[data-action="authorize"]').hidden=!connection.needsAuthorization;
+  $('[data-action="authorize"]').disabled=!!working||!authorization?.ready;
+  $('[data-action="authorize"]').title=k.authorizationNotice||authorization?.message||'';
+  $('[data-action="detect"]').disabled=!!working||!connection.readable;
   $('.a2-status').textContent=k.connected?`${k.kitName||k.board||'A2'} · ${k.transport?.toUpperCase()} · ${k.version||'—'}`:'No Kit connected';
   $('.a2-status').title=$('.a2-status').textContent;
   $('.a2-identity').innerHTML=view('Verified board',[
    ['Board',k.board||'Not detected'],['Kit',k.kitId||'—'],['Firmware',k.version||'—'],['Connection',k.connected?k.transport?.toUpperCase():'OFFLINE'],
-   ['Wizard API',saved?.pageSaveVersion===1?'Supported · page saves':k.connected?'FlightCore 1.7.9+ required for page saves':'Waiting for verified A2'],
+   ['Wizard API',connection.capability],
    ['USB Teacher',k.transport==='usb'?(k.adminUnlocked?'UNLOCKED':'Unlock in Devices & Firmware'):'—']
   ]);
   layouts[draft.layout].positions.forEach((p,i)=>$('[data-position="'+i+'"]').textContent=p);
@@ -1285,6 +1301,11 @@ if(root){
    message(profile.label+' · Rate and Angle gains saved and verified on FC.');return;
   }
   if(name==='connect'){location.hash='firmware';window.ZebjusDevicesWorkspace?.open('connection');return;}
+  if(name==='authorize'){
+   await window.ZebjusKits.authorizeNetwork();ensureOperation(run);
+   await motorClient.wizardStatus();ensureOperation(run);
+   nextPollAt=0;readFailures=0;message('STA setup authorized · board status verified.');return;
+  }
   if(name==='select-input'){
    inputSaveError='';
    const before=kit(),choice=inputChoice,policy=window.ZebjusControlPaths;
@@ -1306,6 +1327,8 @@ if(root){
    return;
   }
   if(name==='detect'||name==='auto-read'){
+   const connection=wizardConnectionState(kit(),saved);
+   if(!connection.readable)throw Error(connection.message);
    if(conflict)resetContext();
    await motorClient.wizardStatus();message('Verified board status refreshed.');return;
   }
@@ -1434,6 +1457,7 @@ if(root){
   const run=operation;working=name;operationError='';render();
   act(name,run).catch(async e=>{
    if(run!==operation&&name!=='stop')return;
+   if(['authorize','detect','auto-read'].includes(name))readError=e.message;
    if(name==='select-input')inputSaveError=e.message;
    operationError=e.message;message(e.message);
    if(['cal-slider'].includes(name)){
@@ -1506,7 +1530,7 @@ if(root){
    captureRequest=null;
   }
   render();
-  if(!kit().connected||polling||motorClient.busy||working||Date.now()<nextPollAt)return;
+  if(!wizardConnectionState(kit(),saved).readable||polling||motorClient.busy||working||Date.now()<nextPollAt)return;
   polling=true;const started=Date.now();
   const imuPolling=step===IMU||!!captureRequest;
   const inputPolling=step===INPUTS&&!imuPolling;

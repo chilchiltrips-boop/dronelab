@@ -16,8 +16,8 @@ try{
  await wizard.locator('[data-step="0"]').waitFor();
  assert.deepEqual(await wizard.locator('[data-step]').evaluateAll(buttons=>buttons.map(b=>b.getAttribute('aria-label'))),
   ['Board','Wiring','Inputs','ACC / Gyro Calibration','Output Signal','ESC Calibration','Output Calibration','Report']);
- const installFixture=({savedBoard={},boot='testboot'}={})=>{
-  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.21',controlAuthorized:true,
+ const installFixture=({savedBoard={},boot='testboot',authorized=true}={})=>{
+  const kit={connected:true,kitId:'ZFC-A2-012345ABCDEF',kitName:'A2 fixture',transport:'sta',bootId:boot,connectionGeneration:1,board:'ZFC-A2',version:'1.7.21',controlAuthorized:authorized,
    rcAccess:{version:1,pathVersion:1,controlPath:'PPM',selection:'PPM',paused:false},
    rc:{inputArmed:false,throttle:1000},hostname:'a2-fixture.local',
    flightModeState:{supported:true,stabilizationSupported:true,saved:'angle',active:'angle',pending:null}};
@@ -43,7 +43,10 @@ try{
     ppmFresh:true,inputArmed:false,inputSource:'PPM',inputAgeMs:2,throttleUs:blocker==='THROTTLE_HIGH'?1350:1000,
     gyroFresh:true,timingHealthy:true,controlHz:249.8,outputsOffAck:true,benchActive:false,escCalibrationActive:false};
   };
-  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),selectControlPath:async(path,options)=>{
+  window.ZebjusKits={...window.ZebjusKits,getState:()=>({...kit}),
+   authorizationReadiness:()=>({ready:true,message:'Fixture USB pairing verified'}),
+   authorizeNetwork:async()=>{f.authorizations=(f.authorizations||0)+1;kit.controlAuthorized=kit.otaAuthorized=true;},
+   selectControlPath:async(path,options)=>{
    f.inputSaves.push({path,options});
    if(f.rejectInputSave)throw Error('Simulated input save rejection');
    const source=path==='PPM'?'PPM':path==='WEB_STA'?'WEB':'ANDROID';
@@ -59,6 +62,7 @@ try{
     return value;
    }
    if(route!=='/api/motor')throw Error('Unexpected fixture request');
+   if(!kit.controlAuthorized)throw Error('Fixture STA observer cannot request motor/setup routes');
    f.calls.push({...a});const b=f.board;let extra={};
    if(a.action==='WIZARD_STATUS'&&f.failStatus)throw Error('Simulated unavailable readback');
    switch(a.action){
@@ -164,7 +168,7 @@ try{
   };
 
  };
- await page.evaluate(installFixture);
+ await page.evaluate(installFixture,{authorized:false});
  const button=action=>wizard.locator(`[data-action="${action}"]`);
  const step=index=>wizard.locator(`[data-step="${index}"]`);
  const nav=value=>wizard.locator(`[data-nav="${value}"]`);
@@ -173,6 +177,19 @@ try{
  const expectText=async(selector,value)=>page.waitForFunction(({selector,value})=>document.querySelector(selector)?.textContent.includes(value),{selector,value});
  const expectSaved=async(index,value=true)=>page.waitForFunction(({index,value})=>document.querySelector(`[data-save-page="${index}"]`)?.dataset.saved===String(value),{index,value});
  const fixture=fn=>page.evaluate(fn);
+ await expectText('.a2-identity','Authorization required');
+ assert.equal(await button('detect').isDisabled(),true);
+ assert.equal(await button('authorize').isVisible(),true);
+ assert.deepEqual(await fixture(()=>__wizard.calls),[],'STA observer does not poll a forbidden setup route');
+ await button('authorize').click();await expectText('.a2-message','STA setup authorized');
+ await expectText('.a2-identity','Supported · page saves');
+ assert.equal(await fixture(()=>__wizard.authorizations),1);
+ assert.equal(await fixture(()=>__wizard.writes),0,'authorization never writes settings or starts motors');
+ assert.equal(await button('authorize').isVisible(),false);
+ await fixture(()=>{__wizard.failStatus=true;});await button('detect').click();
+ await expectText('.a2-connection-message','Simulated unavailable readback');
+ assert.doesNotMatch(await wizard.locator('.a2-identity').textContent(),/unsupported|1\.7\.9/);
+ await fixture(()=>{__wizard.failStatus=false;});
  await button('detect').click();await expectText('.a2-identity','page saves');
  await step(1).click();
  await wizard.locator('#a2Layout').selectOption('A2_QUAD_PLUS');
