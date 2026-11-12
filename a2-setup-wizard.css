@@ -421,3 +421,7 @@
 @media(max-width:560px) {
  .a2-input-source-values dl { grid-template-columns:1fr; }
 }
+.a2-connection-notice { padding:12px 16px; border:1px solid var(--line,#34445d); border-radius:12px; margin-bottom:12px; }
+.a2-connection-notice[hidden] { display:none; }
+.a2-connection-message { margin:0; overflow-wrap:anywhere; }
+.a2-connection-notice button { margin-top:10px; }

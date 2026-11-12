@@ -404,6 +404,38 @@ test('AP remains scoped setup until a USB-paired browser explicitly authorizes u
   await f.api.authorizeNetwork();assert.equal(f.api.getState().otaAuthorized,true);assert.equal(f.api.getState().owner,false);
  }finally{f.dispose()}
 });
+test('safe disarmed PPM permits paired AP/STA authorization without claiming, pausing or releasing RC',async()=>{
+ for(const mode of ['ap','sta']){const f=fixture({mode,paired:mode==='ap',initialize:true,encrypted:true});try{
+  const rc={claimed:true,active:true,source:'PPM',seq:12,inputArmed:false,throttle:1000,motorsDisabled:true};
+  f.status({rc,motorsDisabled:true,motorsArmed:false});await f.api.connect();
+  if(mode==='sta')f.usbPair(key);
+  assert.equal(f.api.getState().otaAuthorized,false);
+  assert.equal(f.api.authorizationReadiness().ready,true);
+  const start=f.requests.length;await f.api.authorizeNetwork();
+  const s=f.api.getState();assert.equal(s.otaAuthorized,true);assert.equal(s.controlAuthorized,true);
+  assert.equal(s.rc.source,'PPM');assert.equal(s.rc.claimed,true);assert.equal(s.rc.inputArmed,false);assert.equal(s.owner,false);
+  assert.equal(s.rcAccess.paused,false);assert.equal(f.authAttempts(),1);
+  assert.ok(!f.requests.slice(start).some(r=>/^\/api\/(rc|motor|firmware)/.test(r.route)),'authorization must not change inputs or outputs');
+ }finally{f.dispose()}}
+});
+test('PPM authorization still requires physical pairing, fresh disarm and verified outputs off',async()=>{
+ const safeRc={claimed:true,source:'PPM',inputArmed:false,throttle:1000};
+ for(const patch of [
+  {rc:{...safeRc,inputArmed:true}},{rc:{...safeRc,inputArmed:undefined}},
+  {rc:{...safeRc,throttle:1300}},{rc:{...safeRc,throttle:null}},
+  {rc:{...safeRc,source:'ANDROID'}},{motorsDisabled:false},{motorsDisabled:undefined},{motorsArmed:true}
+ ]){const f=fixture({mode:'ap',paired:true,encrypted:true});try{
+  f.status({rc:safeRc,motorsDisabled:true,motorsArmed:false,...patch});await f.api.connect();
+  assert.equal(f.api.authorizationReadiness().ready,false,JSON.stringify(patch));
+  await assert.rejects(f.api.authorizeNetwork());assert.equal(f.authAttempts(),0);
+ }finally{f.dispose()}}
+ const f=fixture({mode:'ap'});try{
+  f.status({rc:safeRc,motorsDisabled:true,motorsArmed:false});await f.api.connect();
+  await assert.rejects(f.api.authorizeNetwork(),/physical USB|over USB/);assert.equal(f.authAttempts(),0);
+  f.advance(3100);assert.equal(f.api.authorizationReadiness().ready,false);
+  await assert.rejects(f.api.authorizeNetwork());assert.equal(f.authAttempts(),0);
+ }finally{f.dispose()}
+});
 test('header and Firmware page control use one grant; release neutralizes the same owner',async()=>{
  const f=fixture({paired:true});try{
   await f.api.connect();await f.api.toggleControl();assert.equal(f.api.getState().owner,true);

@@ -83,3 +83,15 @@ test('OTA image guard and USB factory erase confirmation remain active',()=>{
  assert.match(src,/fwNetworkFlashBtn.*flashNetworkApp/);
  assert.match(src,/fwUpgradeEraseModeBtn.*selectUpgradeMode\(true\)/);
 });
+test('Wi-Fi authorization action never starts flashing or maintenance and releases UI after errors',async()=>{
+ const start=src.indexOf('async function authorizeNetworkUpdates()'),end=src.indexOf('// APP-only OTA',start);
+ assert.ok(start>=0&&end>start);
+ let attempts=0,fail=false;const logs=[],ctx={busy:false,
+  ZebjusKits:{authorizeNetwork:async()=>{attempts++;if(fail)throw Error('USB pairing required');}},
+  log:message=>logs.push(message),badge(){},setBusy:value=>{ctx.busy=value;}};
+ vm.runInNewContext(src.slice(start,end),ctx);
+ await ctx.authorizeNetworkUpdates();assert.equal(attempts,1);assert.equal(ctx.busy,false);
+ assert.match(logs.at(-1),/Choose Flash/);
+ fail=true;await ctx.authorizeNetworkUpdates();assert.equal(ctx.busy,false);assert.match(logs.at(-1),/USB pairing required/);
+ ctx.busy=true;await ctx.authorizeNetworkUpdates();assert.equal(attempts,2);
+});
