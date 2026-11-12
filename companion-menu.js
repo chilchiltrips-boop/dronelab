@@ -61,6 +61,7 @@
  const controlLive=make('p','mobile-control-live','Kit RX: no ACK • joystick preview only');controlLive.id='mobileControlKitAck';groups.get('control').append(controlLive);
  const kit=$('kitNetworkCard');
  if(!kit||kit.parentElement!==main)throw Error('Missing original Android Kit workspace');
+ const pid=$('kitPidPanel');if(pid)place(pid,'more');
  const sub=[...kit.children].filter(el=>el.matches('details.settings-accordion'));
  if(sub.length!==5)throw Error('Expected five existing Kit disclosures, found '+sub.length);
  // My Kits remains inside the original Kit card. Other original disclosures

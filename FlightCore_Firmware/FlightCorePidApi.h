@@ -15,6 +15,7 @@ static String zjPidReply(const String& requestId=""){
  const char* storage=zjPidStorageCorrupt?"CORRUPT":!zjPidSettings.persisted?"DEFAULTS":
   zjPidLoadedSlot>=0&&zjPidLoadedSlot!=zjPidHead.slot?"RECOVERED":"VERIFIED";
  return String("{\"version\":1,\"schemaVersion\":2,\"supported\":")+(zjPidSupported()?"true":"false")+
+  ",\"controllerModel\":\"ZEBJUS_WORKING_20261111\",\"escHz\":250,\"escBits\":12,\"armHoldMs\":5000,\"disarmHoldMs\":1000,\"autoDisarmMs\":15000"+
   ",\"actuating\":"+(shadow.actuating?"true":"false")+",\"kitId\":"+zjJson(zjKitId)+",\"bootId\":"+zjJson(zjBootId)+
   ",\"revision\":"+String(zjPidSettings.revision)+",\"persisted\":"+(zjPidSettings.persisted?"true":"false")+
   ",\"requestId\":"+zjJson(requestId)+",\"savedRequestId\":"+zjJson(zjPidSettings.requestId)+

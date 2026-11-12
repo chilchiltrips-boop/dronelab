@@ -18,18 +18,15 @@ inline ZjRatePidResult zjStepRatePid(ZjRatePidState& state,const ZjRateGains& ga
     !zjRateGainValid(gains.p)||!zjRateGainValid(gains.i)||!zjRateGainValid(gains.d)){
   state={};return {};
  }
- const float raw=state.ready?(actual-state.rate)/dt:0;
- const float derivative=state.derivative+dt/(.030f+dt)*(raw-state.derivative);
- const float p=gains.p*error,d=-gains.d*derivative;
- const float candidate=zjRateClamp(state.integral+gains.i*(error+(state.ready?state.error:error))*dt*.5f,-400,400);
- const float proposed=p+candidate+d;
- if(!std::isfinite(proposed)||!std::isfinite(derivative)){state={};return {};}
- const bool blocked=(proposed>400&&error>0)||(proposed<-400&&error<0)||
-  (mixerResidual>.05f&&error>0)||(mixerResidual<-.05f&&error<0);
- const float integral=blocked?state.integral:candidate;
+ // Same pid_equation as reference/ZebjusWorkingFlight.ino.txt.
+ const float p=gains.p*error;
+ const float integral=zjRateClamp(state.integral+gains.i*(error+state.error)*dt/2.0f,-400,400);
+ const float derivative=(error-state.error)/dt;
+ const float d=gains.d*derivative;
  const float total=p+integral+d;
+ if(!std::isfinite(total)){state={};return {};}
  state={integral,error,actual,derivative,true};
- return {zjRateClamp(total,-400,400),p,integral,d,true,std::fabs(proposed)>400||std::fabs(total)>400};
+ return {zjRateClamp(total,-400,400),p,integral,d,true,std::fabs(total)>400};
 }
 
 struct ZjRateMix {
@@ -39,45 +36,34 @@ struct ZjRateMix {
  uint8_t clipMask=0;
 };
 
-// Quad X M1..M4: front left, front right, back right, back left.
+// Working sketch M1..M4 in D0..D3 order. Keep signs and output order together.
 inline ZjRateMix zjRateMixQuadX(float throttle,float roll,float pitch,float yaw){
- const float requested[]={throttle-roll-pitch-yaw,throttle+roll-pitch+yaw,
-                          throttle+roll+pitch-yaw,throttle-roll+pitch+yaw};
+ const float requested[]={throttle+roll-pitch+yaw,throttle-roll-pitch-yaw,
+                          throttle-roll+pitch+yaw,throttle+roll+pitch-yaw};
  ZjRateMix mix;
  float removed[4];
  for(unsigned i=0;i<4;i++){
-  mix.pulse[i]=zjRateClamp(requested[i],1000,2000);
+  mix.pulse[i]=zjRateClamp(requested[i],1180,1999);
   removed[i]=requested[i]-mix.pulse[i];
   if(removed[i]!=0)mix.clipMask|=uint8_t(1u<<i);
  }
  mix.saturated=mix.clipMask!=0;
- mix.residual[0]=(-removed[0]+removed[1]+removed[2]-removed[3])*.25f;
+ mix.residual[0]=(removed[0]-removed[1]-removed[2]+removed[3])*.25f;
  mix.residual[1]=(-removed[0]-removed[1]+removed[2]+removed[3])*.25f;
- mix.residual[2]=(-removed[0]+removed[1]-removed[2]+removed[3])*.25f;
+ mix.residual[2]=(removed[0]-removed[1]+removed[2]-removed[3])*.25f;
  return mix;
 }
 inline float zjRateStick(uint16_t pulse){
  const float offset=zjRateClamp(pulse,1000,2000)-1500;
- return std::fabs(offset)<=15?0:offset*.15f;
+ return offset*.15f;
 }
 
-struct ZjAnglePidState {float sum=0,angle=0,derivative=0;bool ready=false;};
+using ZjAnglePidState = ZjRatePidState;
 
-// Angle outer loop matches the educational simulator's gain units and limits.
+// The working sketch uses this equation for both cascaded PID loops.
 inline float zjStepAnglePid(ZjAnglePidState& state,const ZjRateGains& gains,float target,float measured,float dt){
- if(!std::isfinite(target)||!std::isfinite(measured)||!std::isfinite(dt)||dt<.001f||dt>.008f||
-    !zjRateGainValid(gains.p)||!zjRateGainValid(gains.i)||!zjRateGainValid(gains.d)){
-  state={};return std::numeric_limits<float>::quiet_NaN();
- }
- const float error=target-measured;
- const float rate=state.ready?(measured-state.angle)/dt:0;
- state.derivative+=(rate-state.derivative)*(1-std::exp(-dt/.1f));
- const float p=gains.p*error,d=-gains.d*state.derivative;
- const float candidate=zjRateClamp(state.sum+error*dt,-45,45);
- const float proposed=p+gains.i*candidate+d;
- if(!((proposed>220&&error>0)||(proposed<-220&&error<0)))state.sum=candidate;
- state.angle=measured;state.ready=true;
- return zjRateClamp(p+gains.i*state.sum+d,-220,220);
+ const auto result=zjStepRatePid(state,gains,target,measured,dt);
+ return result.valid?result.output:std::numeric_limits<float>::quiet_NaN();
 }
 
 // Bench estimate from the calibrated gravity vector. Suppress it when tilted

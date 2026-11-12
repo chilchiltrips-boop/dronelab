@@ -53,7 +53,7 @@ struct ZjFlightDriverState {
  bool offAck=false,appliedKnown=false;
 };
 
-inline bool zjFlightLowThrottle(uint16_t throttle){return throttle<=ZJ_FLIGHT_STOP_THROTTLE_US;}
+inline bool zjFlightLowThrottle(uint16_t throttle){return throttle<ZJ_FLIGHT_STOP_THROTTLE_US;}
 inline uint16_t zjFlightArmedLowPulse(uint16_t throttle){return zjFlightLowThrottle(throttle)?ZJ_FLIGHT_ARMED_IDLE_US:0;}
 inline uint16_t zjFlightMixThrottle(uint16_t throttle){
  return throttle>ZJ_FLIGHT_THROTTLE_CAP_US?ZJ_FLIGHT_THROTTLE_CAP_US:throttle;
@@ -79,7 +79,6 @@ struct ZjFlightOutputGate {
   if(c.escCalibration||c.benchActive||c.maintenance)return ZjFlightFault::OUTPUT_RESERVED;
   if(!enabled)return ZjFlightFault::UNQUALIFIED;
   if(!c.acro&&!c.angle)return ZjFlightFault::MODE_UNSUPPORTED;
-  if(c.angle&&!c.levelCalibrated)return ZjFlightFault::LEVEL_REQUIRED;
   if(c.angle&&!c.attitudeReady)return ZjFlightFault::ATTITUDE_INVALID;
   if(!c.driverReady)return ZjFlightFault::OUTPUT_ERROR;
   if(!c.setupComplete)return ZjFlightFault::SETUP_INCOMPLETE;

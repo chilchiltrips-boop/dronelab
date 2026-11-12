@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "candidateVersion": "1.7.26",
+  "candidateVersion": "1.7.27",
   "releaseScope": "BENCH_DIAGNOSTIC",
   "flightOutputQualified": false,
   "physicalAcceptance": "NOT_RUN",
-  "note": "The verified bench package is 1.7.19. Candidate 1.7.26 preserves STA and PPM selection after RX loss, adds CH5 Angle/Acro switching and reset/link diagnostics. Physical acceptance is NOT_RUN.",
+  "note": "Candidate 1.7.27 integrates the supplied working flight equations, D10 PPM, 250 Hz / 12-bit ESC output, CH5 modes and persistent PID settings. The verified bench package remains 1.7.19. Physical acceptance of this integrated candidate is NOT_RUN.",
   "benchArtifact": {
     "version": "1.7.19",
     "id": 13536561970,

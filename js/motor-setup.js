@@ -99,7 +99,9 @@ export function createMotorClient({getKit,request,now=()=>Date.now(),setTimer=se
    guard();
    const beginAt=now();
    const action=wiring?'WIZARD_BEGIN':'BEGIN';
-   const profile=status.timedBenchSupported===true?'PWM_50HZ_1000_2000_TIMED':'PWM_50HZ_1000_2000';
+   const signalProfile=status.profile||'PWM_50HZ_1000_2000';
+   if(!['PWM_50HZ_1000_2000','PWM_250HZ_1000_2000'].includes(signalProfile))throw Error('Unsupported ESC output profile');
+   const profile=signalProfile+(status.timedBenchSupported===true?'_TIMED':'');
    const c=wiring?`${wiring.bootId}|${wiring.revision}|${wiring.mapping}`:profile;
    const r=await request(getKit(binding),{action,session:'',a:'PROPS_REMOVED',b:'PINS_VERIFIED',c},guard);
    if(r.error)throw Error(r.error);

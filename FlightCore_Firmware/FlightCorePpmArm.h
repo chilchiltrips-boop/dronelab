@@ -1,48 +1,38 @@
 #pragma once
 #include <stdint.h>
+#include <stdlib.h>
 
-// Diagnostic PPM stick ARM/DISARM only. Never writes motor pins, changes
-// motor bench ownership, or grants an actuator permission.
+// Working sketch arm_disarm, driven by ordered fresh PPM capture frames.
+// The caller resets this state on physical receiver loss or source changes.
 struct ZjPpmArmGesture {
- static constexpr uint16_t THROTTLE_LOW_US=1050;
- static constexpr uint16_t YAW_LEFT_US=1100,YAW_RIGHT_US=1900;
- static constexpr uint16_t YAW_CENTER_MIN_US=1400,YAW_CENTER_MAX_US=1600;
- static constexpr uint32_t HOLD_MS=2000;
- bool armed=false,neutralSeen=false,holding=false;
- uint8_t holdDirection=0; // 1=ARM, 2=DISARM
- uint32_t holdAt=0,lastAt=0;
+ static constexpr uint16_t THROTTLE_LOW_US=1050,YAW_LEFT_US=1100,YAW_RIGHT_US=1900;
+ static constexpr uint32_t HOLD_MS=5000,DISARM_HOLD_MS=1000,AUTO_DISARM_MS=15000;
+ bool armed=false,consumed=false,haveFrame=false,rearmBlocked=false;
+ uint8_t holdDirection=0;
+ uint32_t holdAt=0,lastAt=0,movementAt=0;
+ uint16_t lastThrottle=1000;
 
- void reset(){
-  armed=false;neutralSeen=false;holding=false;holdDirection=0;holdAt=0;lastAt=0;
- }
+ void reset(){*this=ZjPpmArmGesture{};rearmBlocked=true;}
  void accept(uint16_t throttle,uint16_t yaw,uint32_t capturedAt){
-  // Only new, chronologically ordered complete PPM frames count toward a
-  // gesture. Physical receiver loss is reset by the PPM mailbox owner.
-  if(lastAt&&int32_t(capturedAt-lastAt)<=0)return;
-  // The caller uses hardware capture continuity to detect a physical loss.
-  // A busy HTTP/main loop may coalesce many valid frames into one mailbox
-  // observation; that is NOT a receiver gap and must not clear ARM.
-  lastAt=capturedAt;
-  if(throttle>THROTTLE_LOW_US){
-   holding=false;holdDirection=0;
-   if(!armed)neutralSeen=false;
-   return;
+  if(haveFrame&&int32_t(capturedAt-lastAt)<=0)return;
+  haveFrame=true;lastAt=capturedAt;
+  if(rearmBlocked){
+   if(throttle<THROTTLE_LOW_US&&yaw>=1400&&yaw<=1600)rearmBlocked=false;
+   else return;
   }
-  if(yaw>=YAW_CENTER_MIN_US&&yaw<=YAW_CENTER_MAX_US){
-   holding=false;holdDirection=0;
-   if(!armed)neutralSeen=true;
-   return;
+  const uint8_t gesture=throttle<THROTTLE_LOW_US?(yaw>YAW_RIGHT_US?1:yaw<YAW_LEFT_US?2:0):0;
+  if(gesture!=holdDirection){holdDirection=gesture;holdAt=capturedAt;consumed=false;}
+  const uint32_t holdMs=gesture==1?HOLD_MS:DISARM_HOLD_MS;
+  if(gesture&&!consumed&&uint32_t(capturedAt-holdAt)>=holdMs){
+   if(gesture==1&&!armed){movementAt=capturedAt;lastThrottle=throttle;}
+   armed=gesture==1;consumed=true;
   }
-  // ARM requires yaw centre first; DISARM is always available at low
-  // throttle. CH5 is deliberately not inspected here.
-  const uint8_t direction=!armed&&neutralSeen&&yaw>=YAW_RIGHT_US?1:
-                           armed&&yaw<=YAW_LEFT_US?2:0;
-  if(!direction){holding=false;holdDirection=0;return;}
-  if(!holding||holdDirection!=direction){
-   holding=true;holdDirection=direction;holdAt=capturedAt;return;
+  if(!armed)return;
+  if(throttle>=THROTTLE_LOW_US||lastThrottle>=THROTTLE_LOW_US||abs(int(throttle)-int(lastThrottle))>=20){
+   lastThrottle=throttle;movementAt=capturedAt;
   }
-  if(uint32_t(capturedAt-holdAt)>=HOLD_MS){
-   armed=direction==1;neutralSeen=false;holding=false;holdDirection=0;
+  if(throttle<THROTTLE_LOW_US&&uint32_t(capturedAt-movementAt)>=AUTO_DISARM_MS){
+   armed=false;consumed=true;
   }
  }
 };

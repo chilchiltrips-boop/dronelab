@@ -21,11 +21,11 @@ test('board-specific PPM pin mapping: A1 GPIO10, A2 XIAO D10=GPIO18',()=>{
 test('PPM arbitration uses throttle-low and 2-second yaw gestures, never CH5 or motor pins',()=>{
  const f=read('FlightCore_Firmware/FlightCorePpm.h'),rc=read('FlightCore_Firmware/FlightCoreClassroom.h');
  const gesture=read('FlightCore_Firmware/FlightCorePpmArm.h');
- for(const token of ['zjPpmSafeFrames>=3','t<=ZjPpmArmGesture::THROTTLE_LOW_US','else if(!zjRcOwned)',
+ for(const token of ['zjPpmSafeFrames>=3','t<ZjPpmArmGesture::THROTTLE_LOW_US','else if(!zjRcOwned)',
   'zjRcSource="PPM"','zjRcTransport="PPM"','zjPpmArm.accept(t,y,receivedAt)','zjRcInputArmed=zjPpmArm.armed',
   'THROTTLE_LOW_YAW_GESTURE'])assert.ok(f.includes(token),token);
  for(const token of ['THROTTLE_LOW_US=1050','YAW_LEFT_US=1100,YAW_RIGHT_US=1900',
-  'HOLD_MS=2000','if(!armed)neutralSeen=true','armed=direction==1'])assert.ok(gesture.includes(token),token);
+  'HOLD_MS=5000','DISARM_HOLD_MS=1000','AUTO_DISARM_MS=15000','armed=gesture==1'])assert.ok(gesture.includes(token),token);
  assert.doesNotMatch(f,/armLow|armHigh|zjPpmInputSwitchArmed/);
  assert.match(f,/if\(zjRcOwned&&zjRcSource=="PPM"\)/);
  assert.match(f,/zjRcRelease\("PPM_SIGNAL_LOST"\)/);

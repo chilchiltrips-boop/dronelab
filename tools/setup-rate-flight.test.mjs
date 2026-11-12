@@ -69,6 +69,7 @@ static ZjFlightConditions conditions(){
  c.driverReady=c.wiringVerified=true;c.setupComplete=zjWizardSetupComplete();c.pidSaved=true;
  c.escSequenceComplete=zjAutoEscStoredResult();
  c.input.source=ZjReceiverSource::PPM;c.input.valid=c.input.selected=true;c.input.availableMask=255;
+ c.input.channels[4]=angleMode?1000:2000;
  c.input.generation=1;c.input.sequence=1;c.input.receivedAtMs=clockMs;
  return c;
 }
@@ -128,7 +129,7 @@ int main(int argc,char** argv){
   if(n==3){
    assert(zjRateShadow.outputAuthorized&&zjRateShadow.actuating);
    assert(std::fabs(zjFlightTrace.last.axes[0].target-(angleMode?30:15))<.001f&&zjFlightTrace.last.axes[0].correction>0);
-   assert(duty[0]<duty[1]&&duty[3]<duty[2]);
+   assert(duty[0]>duty[1]&&duty[3]>duty[2]);
    assert(zjWizardSetupComplete()); // PWM ON must not erase setup readiness
    zjMotorLoop();assert(zjFlightDriverRead().lease==zjFlightLease&&zjFlightLease!=0); // bench loop cannot steal owner
    assert(!zjSaveFlightMode(zjKitPrefs,"angle")); // no NVS writes during flight

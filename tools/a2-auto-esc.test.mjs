@@ -40,7 +40,7 @@ int main(){
  assert(zjAutoEscRecord.state==ZjAutoEscRecord::PENDING&&!zjMotorCalibrationSaved);
  assert(zjWizardSaved.revision==revision+1&&zjWizardSaved.accel.manualOffset[0]==30);for(auto p:zjMotorConfig.minimumUs)assert(!p);
  const auto writes=zjKitPrefs.writes;assert(!has(prepare(),"error"));assert(zjKitPrefs.writes==writes);off();
- assert(has(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_50HZ_1000_2000_TIMED"),"automatic_esc_calibration_pending"));
+ assert(has(cmd("BEGIN","PROPS_REMOVED","PINS_VERIFIED","PWM_250HZ_1000_2000_TIMED"),"automatic_esc_calibration_pending"));
  assert(has(page("WIRING","X:0123:0101:0:0:0:0"),"automatic_esc_calibration_pending"));
  zjKitPrefs.failNextWrite=true;
  assert(has(cmd("WIZARD_AUTO_ESC_CANCEL","CONFIRM_CANCEL","-",zjBootId),"cancel_save_failed"));

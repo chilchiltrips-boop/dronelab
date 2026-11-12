@@ -21,7 +21,7 @@ int main(){
   float g[3]={-std::sin(p),std::sin(r)*std::cos(p),std::cos(r)*std::cos(p)};
   ZjAttitudeFilter filter;
   assert(filter.step(1,4000,zero,g,true,true,1));
-  assert(std::fabs(filter.value.roll-roll)<.001&&std::fabs(filter.value.pitch-pitch)<.001);
+  assert(std::fabs(filter.value.roll-std::asin(std::sin(r)*std::cos(p))*57.2957795f)<.001&&std::fabs(filter.value.pitch-pitch)<.001);
  }
  ZjAttitudeFilter f;assert(f.step(1,4000,zero,gravity,true,true,1));
  uint32_t at=4000;float actual=0;
@@ -47,7 +47,7 @@ int main(){
  assert(!f.step(2,124600,zero,gravity,true,true,2)); // observed boot-sized spike
  assert(std::strcmp(f.failure.reason,"SAMPLE_GAP")==0&&f.failure.sampleIntervalUs==120600);
  assert(f.step(3,128600,zero,gravity,true,true,2));
- float acceleration[3]={0,0,2}; // reject acceleration as gravity, bounded gyro coast
+ float acceleration[3]={0,0,0}; // no usable gravity vector, bounded gyro coast
  for(unsigned n=4;n<129;n++)assert(f.step(n,128600+(n-3)*4000,zero,acceleration,true,true,2));
  assert(!f.step(129,632600,zero,acceleration,true,true,2));
  assert(std::strcmp(f.failure.reason,"GRAVITY_TIMEOUT")==0&&f.failure.gravityAgeUs==504000);
@@ -58,10 +58,10 @@ int main(){
  assert(f.step(133,648600,zero,tilt,true,true,2));
  assert(f.step(134,652600,zero,gravity,true,true,3));
  assert(f.value.roll==0); // saved level calibration re-seeds, no old tilt memory
- assert(zjAngleStick(1500)==0&&zjAngleStick(1515)==0&&zjAngleStick(1485)==0);
+ assert(zjAngleStick(1500)==0&&zjAngleStick(1515)==1.5f&&zjAngleStick(1485)==-1.5f);
  assert(zjAngleStick(1000)==-50&&zjAngleStick(2000)==50&&zjAngleStick(1516)>0);
  ZjFlightConditions c;c.angle=true;c.levelCalibrated=false;
- assert(ZjFlightOutputGate{}.fault(c,true)==ZjFlightFault::LEVEL_REQUIRED);
+ assert(ZjFlightOutputGate{}.fault(c,true)==ZjFlightFault::ATTITUDE_INVALID);
  c.levelCalibrated=true;
  assert(ZjFlightOutputGate{}.fault(c,true)==ZjFlightFault::ATTITUDE_INVALID);
  std::cout<<"PASS attitude";

@@ -80,7 +80,7 @@ int main(){
  flight.outputOffAck=false;assert(!gate.arm(flight,true,true)&&gate.reason==ZjFlightFault::OFF_UNVERIFIED);
  flight.outputOffAck=true;
  flight.input.channels[2]=1051;assert(!gate.arm(flight,true,true)&&gate.reason==ZjFlightFault::THROTTLE_HIGH);
- flight.input.channels[2]=1050;assert(gate.arm(flight,true,true)&&gate.permit(flight,true));
+ flight.input.channels[2]=1049;assert(gate.arm(flight,true,true)&&gate.permit(flight,true));
  assert(c.begin(124600)&&c.intervalUs==120600&&c.missedTicks==29);
  flight.timingHealthy=false;
  assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::DEADLINE_MISSED);
@@ -90,9 +90,9 @@ int main(){
  ++flight.input.generation;assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::SOURCE_CHANGED);
  assert(gate.arm(flight,true,true));flight.imuFresh=false;
  assert(!gate.permit(flight,true)&&gate.reason==ZjFlightFault::IMU_STALE);
- assert(zjFlightLowThrottle(1050)&&!zjFlightLowThrottle(1051));
+ assert(zjFlightLowThrottle(1049)&&!zjFlightLowThrottle(1050));
  assert(zjFlightMixThrottle(1750)==1750&&zjFlightMixThrottle(2000)==1800);
- assert(zjRateMixQuadX(1800,300,0,0).clipMask==6);
+ assert(zjRateMixQuadX(1800,300,0,0).clipMask==9);
  assert(zjRateMixQuadPlus(1800,300,0,0).clipMask==2);
 
  // 250 Hz tick jitter does not drift the 50 Hz sample grid or replay a stall.
@@ -135,18 +135,18 @@ int main(){
  assert(rate.known&&std::fabs(rate.actual(uint32_t(at+1000000))-50)<0.01);
  assert(rate.actual(uint32_t(at+2000000))==0);
  for(uint16_t hz:{50,250}){
-  ZjEscProfile p{hz,14};assert(p.valid());assert(p.deployable()==(hz==50));
+  ZjEscProfile p{hz,uint8_t(hz==250?12:14)};assert(p.valid()&&p.deployable());
   for(uint16_t pulse:{1000,1500,2000}){
-   const auto duty=p.duty(pulse);const double actualUs=double(duty)*1000000/(16384*hz);
-   assert(actualUs<=pulse&&pulse-actualUs<1000000.0/(16384*hz));
+   const auto duty=p.duty(pulse);const double actualUs=double(duty)*1000000/((1<<p.bits)*hz);
+   assert(std::fabs(pulse-actualUs)<1000000.0/((1<<p.bits)*hz));
   }
   assert(!p.duty(999)&&!p.duty(2001));
  }
- assert(ZJ_ESC_PROFILE.deployable()&&ZJ_ESC_PROFILE.hz==50);
+ assert(ZJ_ESC_PROFILE.deployable()&&ZJ_ESC_PROFILE.hz==250);
  assert(ZjEscProfile({50,14}).duty(1000)==819);
  assert(ZjEscProfile({50,14}).duty(2000)==1638);
- assert(ZjEscProfile({250,14}).duty(1000)==4096);
- assert(ZjEscProfile({250,14}).duty(2000)==8192);
+ assert(ZjEscProfile({250,12}).duty(1000)==1024);
+ assert(ZjEscProfile({250,12}).duty(2000)==2048);
  assert(!ZjEscProfile({60,14}).duty(1000)&&!ZjEscProfile({250,32}).duty(1000));
- std::cout<<"PASS production scheduler nominal 250Hz, jitter, overload/coalescing, rollover, held sensors, measured rates; 50/250Hz ESC profiles (250Hz disabled)\n";
+ std::cout<<"PASS production scheduler nominal 250Hz, jitter, overload/coalescing, rollover, held sensors, measured rates; 50Hz/14-bit and working 250Hz/12-bit ESC profiles\n";
 }
